@@ -54,9 +54,9 @@ loads the in-tree `libucs`/`libuct`/`libucp`. Driven from
 - New tests must be listed in the relevant `Makefile.am` source list.
   The Makefile already adds `lsan.supp`/`valgrind.supp` and ASAN env
   setup — don't redefine those locally.
-- The default env (`UCX_HANDLE_ERRORS=freeze`) freezes a process on
-  fatal error so a debugger can attach. Don't rely on test-process
-  termination for cleanup.
+- The default env (`UCX_HANDLE_ERRORS=bt`) prints a backtrace on fatal
+  error and lets the process die, so unattended runs never block. Use
+  `UCX_HANDLE_ERRORS=freeze` or `=debug` to attach a debugger instead.
 - `GTEST_FILTER=...` and `GTEST_EXTRA_ARGS=...` are the supported knobs
   for running a subset; use them via `make test`.
 - Use `UCS_TEST_MESSAGE` to print useful diagnostic information during

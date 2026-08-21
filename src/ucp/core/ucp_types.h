@@ -43,6 +43,7 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 #define UCP_MAX_LANES_LEGACY         16
 #define UCP_MAX_LANES                64
 #define UCP_MAX_FAST_PATH_LANES      5
+#define UCP_MAX_FAST_PATH_LANES_MASK UCS_MASK(UCP_MAX_FAST_PATH_LANES)
 
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
@@ -157,7 +158,12 @@ typedef enum {
     UCP_OP_ID_RNDV_RECV_DROP,
     UCP_OP_ID_RNDV_LAST,
 
-    UCP_OP_ID_LAST = UCP_OP_ID_RNDV_LAST
+    /* Internal failover replay operations */
+    UCP_OP_ID_FAILOVER_FIRST    = UCP_OP_ID_RNDV_LAST,
+    UCP_OP_ID_FAILOVER_AM_BCOPY = UCP_OP_ID_FAILOVER_FIRST,
+    UCP_OP_ID_FAILOVER_LAST,
+
+    UCP_OP_ID_LAST = UCP_OP_ID_FAILOVER_LAST
 } ucp_operation_id_t;
 
 

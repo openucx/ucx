@@ -9,6 +9,7 @@
 extern "C" {
 #include <ucs/sys/stubs.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 
 extern ucs_list_link_t uct_ib_mlx5_ext_plugins;
 }
@@ -19,7 +20,15 @@ public:
     void init() override
     {
         save_plugins();
-        test_rc::init();
+        uct_test::init();
+
+        m_e1 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e1);
+        check_skip_test();
+
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+        connect();
     }
 
     void cleanup() override
@@ -117,6 +126,37 @@ protected:
         *static_cast<bool*>(arg) = true;
     }
 
+    static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        auto *self = static_cast<test_uct_ib_mlx5_ext_rc*>(arg);
+        uct_ep_outstanding_purge_params_t purge_params = {};
+        uct_ep_invalidate_params_t invalidate_params   = {};
+        uint64_t rx_token_value                        = rx_token();
+
+        ++self->m_err_handler_count;
+
+        invalidate_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+        invalidate_params.flags = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
+        status                  = uct_ep_invalidate(ep, &invalidate_params);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                                  UCT_EP_OUTSTANDING_FIELD_CB |
+                                  UCT_EP_OUTSTANDING_FIELD_ARG;
+        purge_params.rx_token   = &rx_token_value;
+        purge_params.cb         = purge_cb;
+        purge_params.arg        = &self->m_purge_cb_invoked;
+        return uct_ep_outstanding_purge(ep, &purge_params);
+    }
+
+    static size_t am_pack_cb(void *dest, void*)
+    {
+        *static_cast<uint8_t*>(dest) = 0;
+        return sizeof(uint8_t);
+    }
+
     static void
     register_plugin(const char *name,
                     uct_ib_mlx5_ext_iface_query_func_t iface_query_cb = NULL,
@@ -132,7 +172,8 @@ protected:
         ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
     }
 
-private:
+    int m_err_handler_count         = 0;
+    bool m_purge_cb_invoked         = false;
     ucs_list_link_t m_saved_plugins = UCS_LIST_INITIALIZER(&m_saved_plugins,
                                                            &m_saved_plugins);
 };
@@ -192,7 +233,6 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     uint64_t rx_token_value                  = rx_token();
     bool callback_invoked                    = false;
     uct_ep_outstanding_purge_params_t params = {};
-
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
@@ -213,8 +253,29 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     params.cb         = purge_cb;
     params.arg        = &callback_invoked;
 
+    ASSERT_EQ(static_cast<ssize_t>(sizeof(uint8_t)),
+              uct_ep_am_bcopy(m_e1->ep(0), 0, am_pack_cb, NULL, 0));
     ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
     EXPECT_TRUE(callback_invoked);
+}
+
+UCS_TEST_P(test_uct_ib_mlx5_ext_rc, err_handler_outstanding_purge)
+{
+    uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+
+    register_plugin("token", iface_query, ep_query, purge);
+
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), 0));
+    ASSERT_EQ(static_cast<ssize_t>(sizeof(uint8_t)),
+              uct_ep_am_bcopy(m_e1->ep(0), 0, am_pack_cb, NULL, 0));
+    wait_for_value(&m_err_handler_count, 1, true);
+
+    EXPECT_EQ(1, m_err_handler_count);
+    EXPECT_TRUE(m_purge_cb_invoked);
+    EXPECT_FALSE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
+
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_ib_mlx5_ext_rc, rc_mlx5)

@@ -53,7 +53,7 @@ enum {
     UCP_WIREUP_MSG_REPLY_RECONFIG,
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
-
+    UCP_WIREUP_MSG_LANES_ADDR_ACK,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -155,7 +155,13 @@ typedef struct ucp_wireup_msg {
 typedef struct ucp_wireup_msg_lanes_info_t {
     ucp_lane_map_t         requested_lane_map; /* lanes the sender asked about */
     ucp_lane_map_t         provided_lane_map;  /* lanes actually carried here */
-    /* packed addresses follow */
+    uint64_t               request_id;         /* recovery generation id */
+    ucp_lane_map_t         tx_token_map;       /* lanes with TX tokens in payload */
+    ucp_lane_map_t         rx_token_map;       /* lanes with RX tokens in payload */
+    uint32_t               address_length;     /* packed address size after tokens */
+    /* uint8_t tx_token_lengths[popcount(tx_token_map)] + tx tokens[],
+     * then uint8_t rx_token_lengths[popcount(rx_token_map)] + rx tokens[],
+     * then packed addresses of address_length follow */
 } UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
 
 typedef struct {
@@ -166,6 +172,11 @@ typedef struct {
     ucp_rsc_index_t rsc_index;
     uint8_t         priority;
 } ucp_wireup_select_info_t;
+
+
+/* ADDR_REQ/REP/ACK carry TX/RX tokens (replaces QUERY_LANE_STATE/LANE_STATE). */
+#define UCP_WIREUP_ADDR_TOKEN_MIN_VERSION 23
+#define UCP_WIREUP_LANE_STATE_MIN_VERSION UCP_WIREUP_ADDR_TOKEN_MIN_VERSION
 
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
@@ -194,14 +205,13 @@ const char* ucp_wireup_msg_str(uint8_t msg_type);
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
-ucs_status_t
-ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
-                       const ucp_tl_bitmap_t *tl_bitmap,
-                       const ucp_lane_index_t *lanes2remote,
-                       ucp_lane_map_t requested_lane_map,
-                       ucp_lane_map_t provided_lane_map,
-                       ucp_wireup_msg_t *msg_hdr, void **address_p,
-                       size_t *address_length_p);
+ucs_status_t ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
+                                    const ucp_tl_bitmap_t *tl_bitmap,
+                                    const ucp_lane_index_t *lanes2remote,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map,
+                                    ucp_wireup_msg_t *msg_hdr, void **payload_p,
+                                    size_t *payload_length_p);
 
 int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
@@ -260,12 +270,19 @@ unsigned ucp_wireup_eps_progress(void *arg);
 
 
 /**
- * Send a LANES_ADDR_REQUEST/REPLY wireup message over the AM lane, packing
- * addresses for the lanes in @a provided_lane_map.
+ * Send a LANES_ADDR_REQUEST/REPLY/ACK over the AM lane.
+ * @a peer_tx_map / lengths / tokens are the peer's TX from the prior message,
+ * used to derive local RX tokens for REP/ACK (may be empty).
  */
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
-                                    ucp_lane_map_t provided_lane_map);
+                                    ucp_lane_map_t provided_lane_map,
+                                    uint64_t request_id,
+                                    ucp_lane_map_t tx_token_map,
+                                    ucp_lane_map_t rx_token_map,
+                                    ucp_lane_map_t peer_tx_map,
+                                    const uint8_t *peer_tx_lengths,
+                                    const void *peer_tx_tokens);
 
 
 /**

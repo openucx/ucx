@@ -13,8 +13,8 @@
 #  include <infiniband/driver.h>
 #endif
 
-#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -48,6 +48,30 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     return UCS_OK;
 }
 
+
+void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uint16_t available;
+
+    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
+    available = txwq->bb_max - (txwq->prev_sw_pi - txwq->hw_ci);
+    ucs_assert(available >= uct_rc_txqp_available(&ep->super.txqp));
+    if (available > uct_rc_txqp_available(&ep->super.txqp)) {
+        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, txwq->hw_ci);
+    }
+}
+
+
+
+ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+
+    ep->super.failover_flags |= UCT_RC_EP_FAILOVER_FLAG_ENABLED;
+    return UCS_OK;
+}
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_base_ep_put_short_inline(
         uct_ep_h tl_ep, const void *buffer, unsigned length,
@@ -299,6 +323,10 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+
+    for (i = 0; i < count; i++) {
+        uct_rc_mlx5_txwq_record_token(iface, txwq, lengths[i]);
+    }
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -748,6 +776,16 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return status;
     }
 
+    if ((flags & UCT_FLUSH_FLAG_CANCEL) &&
+        (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+        /* The in-flight operations are owned by the caller which armed
+         * DEFER_COMPLETIONS and are not completed from the CQ, so this flush
+         * could never be satisfied. Report the operations as canceled, since
+         * that is what destroying the endpoint does to them. */
+        ucs_debug("ep %p cancel flush while completions are deferred", ep);
+        return UCS_ERR_CANCELED;
+    }
+
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
         UCT_RC_CHECK_RES(&iface->super, &ep->super);
         uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
@@ -774,13 +812,53 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
-                                            const uct_ep_invalidate_params_t *params)
+ucs_status_t
+uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                               const uct_ep_invalidate_params_t *params)
 {
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+    int defer_requested;
+    ucs_status_t status;
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                       IBV_QPS_ERR);
+    defer_requested = (params != NULL) &&
+                      (params->field_mask &
+                       UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
+                      (params->flags &
+                       UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS);
+
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
+                                         IBV_QPS_ERR);
+
+    /* Arm DEFER even if the QP was already ERR (e.g. prior invalidate without
+     * DEFER, or a second arm from failover_add_lanes). */
+    if (defer_requested &&
+        !(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+        txwq->ft_ci      = txwq->hw_ci;
+        ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
+                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+    }
+
+    if ((status != UCS_OK) && !defer_requested) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+    if (status == UCS_OK) {
+        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+    }
+
+    return status;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -1219,6 +1297,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->flags        = 0;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
@@ -1283,8 +1362,17 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
             self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
+    int deferred = self->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
     uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
     uint16_t outstanding, wqe_count;
+
+    if (deferred) {
+        /* A failover-owned endpoint is closed directly after purge instead of
+         * being flushed. Reconcile the CQ completion boundary before cleanup
+         * derives the outstanding WQE count from TXQP resources. Keep DEFER
+         * armed: endpoint destruction, not normal CQ progress, owns teardown. */
+        uct_rc_mlx5_ep_update_tx_res(&self->super.super.super.super);
+    }
 
     cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
     ucs_assert_always(cleanup_ctx != NULL);
@@ -1292,8 +1380,11 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     cleanup_ctx->tm_qp = self->tm_qp;
     cleanup_ctx->reg   = self->super.tx.wq.reg;
 
+    /* Operations still owned by a deferred-completions caller are canceled here
+     * by the endpoint destruction itself, so they are not an accounting error. */
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
-                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi,
+                                  !deferred);
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);

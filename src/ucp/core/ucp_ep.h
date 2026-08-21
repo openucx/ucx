@@ -25,6 +25,8 @@
 
 #define UCP_MAX_IOV                16UL
 
+typedef struct ucp_ep_failover_ctx ucp_ep_failover_ctx_t;
+
 
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
@@ -513,6 +515,8 @@ typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
     uint8_t                 state;
+    /* ADDR handshake generation for TX/RX token correlation */
+    uint64_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
@@ -581,6 +585,11 @@ typedef struct ucp_ep_ext {
      * Map of system devices that require a flush operation
      */
     ucp_sys_dev_map_t             flush_sys_dev_map;
+
+    struct {
+        uint8_t               progress_scheduled;
+        ucp_ep_failover_ctx_t *ctx;
+    } failover;
 } ucp_ep_ext_t;
 
 
