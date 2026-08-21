@@ -203,26 +203,34 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
+    /* Persist the CQE completion boundary before invoking the error handler.
+     * When completions are deferred, the invalidate caller will purge them. */
+    uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
-    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
-                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        goto out;
+    if ((ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) ||
+        (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+        goto purge;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-    uct_rc_fc_restore_wnd(iface, &ep->super.fc);
 
+    uct_rc_fc_restore_wnd(iface, &ep->super.fc);
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
+
+purge:
+    if ((ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) ||
+        !(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+    }
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
@@ -1166,7 +1174,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_atomic32_fetch        = uct_rc_mlx5_base_ep_atomic32_fetch,
     .ep_pending_add           = uct_rc_ep_pending_add,
     .ep_pending_purge         = uct_rc_ep_pending_purge,
-    .ep_flush                 = uct_rc_mlx5_base_ep_flush,
+    .ep_flush                 = uct_rc_mlx5_ep_flush,
     .ep_fence                 = uct_rc_mlx5_base_ep_fence,
     .ep_check                 = uct_rc_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),

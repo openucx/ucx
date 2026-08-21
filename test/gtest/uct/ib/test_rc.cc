@@ -144,6 +144,236 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
+#ifdef HAVE_MLX5_DV
+class test_rc_mlx5_psn : public test_rc {
+protected:
+    static ucs_status_t query_qp_psn(uct_ib_mlx5_qp_t *qp, uint32_t *psn)
+    {
+        if (qp->type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+            struct ibv_qp_attr qp_attr           = {};
+            struct ibv_qp_init_attr qp_init_attr = {};
+            int ret;
+
+            ret = ibv_query_qp(qp->verbs.qp, &qp_attr, IBV_QP_SQ_PSN,
+                               &qp_init_attr);
+            if (ret != 0) {
+                return UCS_ERR_IO_ERROR;
+            }
+
+            *psn = qp_attr.sq_psn;
+            return UCS_OK;
+        }
+
+#if HAVE_DEVX
+        if (qp->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
+            char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
+            char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
+            void *qpc;
+            int ret;
+
+            UCT_IB_MLX5DV_SET(query_qp_in, in, opcode,
+                              UCT_IB_MLX5_CMD_OP_QUERY_QP);
+            UCT_IB_MLX5DV_SET(query_qp_in, in, qpn, qp->qp_num);
+            ret = mlx5dv_devx_obj_query(qp->devx.obj, in, sizeof(in), out,
+                                        sizeof(out));
+            if (ret != 0) {
+                return UCS_ERR_IO_ERROR;
+            }
+
+            qpc  = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+            *psn = UCT_IB_MLX5DV_GET(qpc, qpc, next_send_psn);
+            return UCS_OK;
+        }
+#endif
+
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    size_t mtu() const
+    {
+        auto *iface = ucs_derived_of(m_e1->iface(), uct_rc_mlx5_iface_common_t);
+        return uct_ib_mtu_value(iface->super.super.config.path_mtu);
+    }
+
+    size_t multi_packet_length(size_t min_length, size_t max_length) const
+    {
+        return ucs_min(ucs_max(mtu() + 1, min_length), max_length);
+    }
+
+    void check_psn(const char *operation)
+    {
+        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+        uint32_t qp_psn;
+
+        flush();
+        ASSERT_UCS_OK(query_qp_psn(&ep->super.tx.wq.super, &qp_psn));
+        EXPECT_EQ(qp_psn, ep->super.tx.wq.next_token) << operation;
+    }
+
+    static size_t pack_cb(void *dest, void *arg)
+    {
+        const mapped_buffer *buffer = static_cast<const mapped_buffer*>(arg);
+
+        memcpy(dest, buffer->ptr(), buffer->length());
+        return buffer->length();
+    }
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+};
+
+UCS_TEST_P(test_rc_mlx5_psn, initial)
+{
+    check_psn("initial");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, am,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_AM_BCOPY |
+                                 UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_e1->iface_attr();
+    size_t length;
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    check_psn("am_short");
+
+    length = multi_packet_length(0, attr.cap.am.max_bcopy);
+    mapped_buffer bcopy_buffer(length, 0, *m_e1);
+    ASSERT_EQ(static_cast<ssize_t>(length),
+              uct_ep_am_bcopy(m_e1->ep(0), 0, pack_cb, &bcopy_buffer, 0));
+    check_psn("am_bcopy");
+
+    length = multi_packet_length(attr.cap.am.min_zcopy, attr.cap.am.max_zcopy);
+    mapped_buffer zcopy_buffer(length, 0, *m_e1);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_am_zcopy(m_e1->ep(0), 0, NULL, 0,
+                                                zcopy_buffer.iov(), 1, 0,
+                                                NULL));
+    check_psn("am_zcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, put,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
+                                 UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_e1->iface_attr();
+    size_t length                = ucs_min(mtu() + 1, attr.cap.put.max_bcopy);
+    mapped_buffer send_buffer(length, 0, *m_e1);
+    mapped_buffer recv_buffer(length, 0, *m_e2);
+
+    ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), send_buffer.ptr(),
+                                   ucs_min(length, attr.cap.put.max_short),
+                                   recv_buffer.addr(), recv_buffer.rkey()));
+    check_psn("put_short");
+
+    ASSERT_EQ(static_cast<ssize_t>(length),
+              uct_ep_put_bcopy(m_e1->ep(0), pack_cb, &send_buffer,
+                               recv_buffer.addr(), recv_buffer.rkey()));
+    check_psn("put_bcopy");
+
+    length = multi_packet_length(attr.cap.put.min_zcopy,
+                                 attr.cap.put.max_zcopy);
+    mapped_buffer send_zcopy(length, 0, *m_e1);
+    mapped_buffer recv_zcopy(length, 0, *m_e2);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(m_e1->ep(0), send_zcopy.iov(),
+                                                 1, recv_zcopy.addr(),
+                                                 recv_zcopy.rkey(), NULL));
+    check_psn("put_zcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, get,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY |
+                                 UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_e1->iface_attr();
+    size_t length = multi_packet_length(0, attr.cap.get.max_bcopy);
+    mapped_buffer local_buffer(length, 0, *m_e1);
+    mapped_buffer remote_buffer(length, 0, *m_e2);
+
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                             local_buffer.ptr(), length, remote_buffer.addr(),
+                             remote_buffer.rkey(), NULL));
+    check_psn("get_bcopy");
+
+    length = multi_packet_length(attr.cap.get.min_zcopy,
+                                 attr.cap.get.max_zcopy);
+    mapped_buffer local_zcopy(length, 0, *m_e1);
+    mapped_buffer remote_zcopy(length, 0, *m_e2);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_get_zcopy(m_e1->ep(0), local_zcopy.iov(),
+                                                 1, remote_zcopy.addr(),
+                                                 remote_zcopy.rkey(), NULL));
+    check_psn("get_zcopy");
+}
+
+UCS_TEST_P(test_rc_mlx5_psn, put_sgl)
+{
+    uct_iface_attr_v2_t attr = {};
+    uct_completion_t comp    = {completion_cb, 1, UCS_OK};
+    const size_t lengths[]   = {mtu() + 1, 1};
+    const size_t count       = sizeof(lengths) / sizeof(lengths[0]);
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+        (attr.max_put_sgl_zcopy_count < count)) {
+        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    }
+
+    mapped_buffer send0(lengths[0], 0, *m_e1);
+    mapped_buffer send1(lengths[1], 0, *m_e1);
+    mapped_buffer recv0(lengths[0], 0, *m_e2);
+    mapped_buffer recv1(lengths[1], 0, *m_e2);
+    void *buffers[]               = {send0.ptr(), send1.ptr()};
+    const uct_mem_h memhs[]       = {send0.memh(), send1.memh()};
+    const uint64_t remote_addrs[] = {recv0.addr(), recv1.addr()};
+    const uct_rkey_t rkeys[]      = {recv0.rkey(), recv1.rkey()};
+
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   remote_addrs, rkeys, NULL, NULL, count,
+                                   &comp));
+    check_psn("put_sgl_zcopy");
+    EXPECT_EQ(0, comp.count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, atomic,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64) ||
+                             !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD) |
+                                                    UCS_BIT(UCT_ATOMIC_OP_CSWAP),
+                                            FOP64))
+{
+    mapped_buffer remote_buffer(sizeof(uint64_t), 0, *m_e2);
+    uct_completion_t comp = {completion_cb, 1, UCS_OK};
+    uint64_t result;
+
+    ASSERT_UCS_OK(uct_ep_atomic64_post(m_e1->ep(0), UCT_ATOMIC_OP_ADD, 1,
+                                       remote_buffer.addr(),
+                                       remote_buffer.rkey()));
+    check_psn("atomic_post");
+
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_atomic64_fetch(m_e1->ep(0), UCT_ATOMIC_OP_ADD, 1, &result,
+                                  remote_buffer.addr(), remote_buffer.rkey(),
+                                  &comp));
+    check_psn("atomic_fetch");
+    EXPECT_EQ(0, comp.count);
+
+    comp.count  = 1;
+    comp.status = UCS_OK;
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_atomic_cswap64(m_e1->ep(0), 0, 1, remote_buffer.addr(),
+                                  remote_buffer.rkey(), &result, &comp));
+    check_psn("atomic_cswap");
+    EXPECT_EQ(0, comp.count);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_psn, rc_mlx5)
+#endif
+
 
 class test_rc_max_wr : public test_rc {
 protected:

@@ -729,6 +729,7 @@ uct_gga_mlx5_ep_is_connected(uct_ep_h tl_ep,
            uct_rc_mlx5_base_ep_is_connected(tl_ep, params);
 }
 
+
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .super = {
         .super = {
