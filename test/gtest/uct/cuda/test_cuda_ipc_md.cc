@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -152,8 +152,8 @@ protected:
                unpack_rkey(unpack_params);
 
                // No context and some valid sys_dev is provided
-               ucs_sys_device_t sys_dev = uct_cuda_get_sys_dev(0);
-               unpack_params.sys_device = sys_dev;
+               EXPECT_UCS_OK(
+                       uct_cuda_get_sys_dev(0, &unpack_params.sys_device));
                unpack_rkey(unpack_params);
            } catch (...) {
                thread_exception = std::current_exception();
