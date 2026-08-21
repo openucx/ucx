@@ -171,6 +171,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(params->iface,
                                                 uct_dc_mlx5_iface_t);
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super.super);
     const uct_ib_address_t *ib_addr;
     const uct_dc_mlx5_iface_addr_t *if_addr;
     uct_dc_mlx5_dci_config_t dci_config;
@@ -201,13 +202,23 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
         return UCS_ERR_INVALID_ADDR;
     }
 
+    if (md->relaxed_order_required) {
+        if (is_global) {
+            return UCS_CLASS_NEW(uct_dc_mlx5_fence_grh_ep_t, ep_p, iface,
+                                 if_addr, &av, path_index, &grh_av, &dci_config);
+        }
+
+        return UCS_CLASS_NEW(uct_dc_mlx5_fence_ep_t, ep_p, iface, if_addr, &av,
+                             path_index, &dci_config);
+    }
+
     if (is_global) {
         return UCS_CLASS_NEW(uct_dc_mlx5_grh_ep_t, ep_p, iface, if_addr, &av,
                              path_index, &grh_av, &dci_config);
-    } else {
-        return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av,
-                             path_index, &dci_config);
     }
+
+    return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av,
+                         path_index, &dci_config);
 }
 
 /*
@@ -259,6 +270,15 @@ static int uct_dc_mlx5_iface_is_full_handshake(uct_dc_mlx5_iface_t *iface)
            !(iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT);
 }
 
+static int uct_dc_mlx5_iface_flush_rkey_enabled(uct_dc_mlx5_iface_t *iface)
+{
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super.super);
+
+    return uct_ib_md_is_flush_rkey_valid(md->flush_rkey) &&
+           (iface->super.super.config.flush_remote ||
+            md->relaxed_order_required);
+}
+
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
@@ -291,9 +311,11 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->ep_addr_len    = 0;
     iface_attr->max_conn_priv  = 0;
-    iface_attr->iface_addr_len = uct_rc_iface_flush_rkey_enabled(&iface->super.super) ?
-                                 sizeof(uct_dc_mlx5_iface_flush_addr_t) :
-                                 sizeof(uct_dc_mlx5_iface_addr_t);
+    if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
+        iface_attr->iface_addr_len = sizeof(uct_dc_mlx5_iface_flush_addr_t);
+    } else {
+        iface_attr->iface_addr_len = sizeof(uct_dc_mlx5_iface_addr_t);
+    }
     iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
 
     if (uct_dc_mlx5_iface_is_full_handshake(iface)) {
@@ -1054,6 +1076,7 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                   const uct_iface_is_reachable_params_t *params)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_ib_md_t *md            = uct_ib_iface_md(&iface->super.super.super);
     const uct_dc_mlx5_iface_addr_t *addr;
     int same_tm, same_version;
 
@@ -1080,6 +1103,13 @@ uct_dc_mlx5_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                                               "sw_tm");
             return 0;
         }
+
+        if (md->relaxed_order_required &&
+            !(addr->flags & UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY)) {
+            uct_iface_fill_info_str_buf(params,
+                                        "remote flush rkey is required");
+            return 0;
+        }
     }
 
     return uct_ib_iface_is_reachable_v2(tl_iface, params);
@@ -1101,7 +1131,7 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
         addr->super.flags |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
     }
 
-    if (uct_rc_iface_flush_rkey_enabled(&iface->super.super)) {
+    if (uct_dc_mlx5_iface_flush_rkey_enabled(iface)) {
         addr->flush_rkey_hi = md->flush_rkey >> 16;
         addr->super.flags  |= UCT_DC_MLX5_IFACE_ADDR_FLUSH_RKEY;
     }
@@ -1647,6 +1677,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     ucs_trace_func("");
 
+    if (md->super.relaxed_order_required &&
+        !uct_ib_md_is_flush_rkey_valid(md->super.flush_rkey)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     self->tx.policy = config->tx_policy;
     self->tx.ndci   = uct_dc_mlx5_iface_is_hw_dcs(self) ? 1 : config->ndci;
 
@@ -1867,6 +1902,16 @@ uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
 
     if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
         return UCS_ERR_NO_DEVICE;
+    }
+
+    if (ib_md->relaxed_order_required &&
+        !uct_ib_md_is_flush_rkey_valid(ib_md->flush_rkey)) {
+        ucs_debug("%s: dc_mlx5 does not support relaxed-only memory keys "
+                  "without a valid flush rkey",
+                  uct_ib_device_name(&ib_md->dev));
+        *tl_devices_p     = NULL;
+        *num_tl_devices_p = 0;
+        return UCS_OK;
     }
 
     flags = UCT_IB_DEVICE_FLAG_SRQ | UCT_IB_DEVICE_FLAG_MLX5_PRM |
