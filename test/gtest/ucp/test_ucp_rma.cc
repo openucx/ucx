@@ -318,6 +318,45 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
                    64 * UCS_KBYTE);
 }
 
+UCS_TEST_P(test_ucp_rma, put_nbx_nonblock_map_user_memh)
+{
+    constexpr size_t size = 512 * UCS_KBYTE;
+    mem_buffer sendbuf(size, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer rbuf(size, receiver(), UCP_MEM_MAP_NONBLOCK);
+    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+    ucp_mem_map_params_t mem_map_params = {0};
+    ucp_request_param_t param           = {0};
+    ucp_mem_h memh;
+    ucs_status_ptr_t request;
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_map_params.address    = sendbuf.ptr();
+    mem_map_params.length     = sendbuf.size();
+    mem_map_params.flags      = UCP_MEM_MAP_NONBLOCK;
+    ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &mem_map_params, &memh));
+
+    ucs::handle<ucp_mem_h, ucp_context_h> send_memh(
+            memh,
+            [](ucp_mem_h memh, ucp_context_h context) {
+                static_cast<void>(ucp_mem_unmap(context, memh));
+            },
+            sender().ucph());
+
+    mem_buffer::pattern_fill(sendbuf.ptr(), size, ucs::rand());
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+    param.memh         = send_memh;
+    request            = ucp_put_nbx(sender().ep(), sendbuf.ptr(), size,
+                                     (uint64_t)rbuf.ptr(), rkey, &param);
+    ASSERT_UCS_OK(request_wait(request));
+    flush_worker(sender());
+
+    EXPECT_TRUE(mem_buffer::compare(sendbuf.ptr(), rbuf.ptr(), size,
+                                    UCS_MEMORY_TYPE_HOST));
+}
+
 UCS_TEST_P(test_ucp_rma, proto_disabled_unsupported, "PROTO_ENABLE=n")
 {
     constexpr size_t size = 8;
