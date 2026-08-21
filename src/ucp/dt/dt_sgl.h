@@ -47,4 +47,19 @@ ucs_status_t ucp_dt_sgl_check_same_mem_info(ucp_context_h context,
 ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
                                                size_t count);
 
+
+/**
+ * Check that the local and the remote SGL elements have matching lengths
+ *
+ * @param [in]     local_lengths  Array of local buffer lengths
+ * @param [in]     remote_lengths Array of remote buffer lengths
+ * @param [in]     count          Number of entries in the lengths arrays
+ *
+ * @return UCS_OK if every local length is equal to the respective remote
+ *         length, otherwise return UCS_ERR_INVALID_PARAM
+ */
+ucs_status_t ucp_dt_sgl_check_matching_lengths(const size_t *local_lengths,
+                                               const size_t *remote_lengths,
+                                               size_t count);
+
 #endif
