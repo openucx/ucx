@@ -44,6 +44,7 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     struct mlx5_wqe_av  mlx5_av;
     struct ibv_ah_attr  ah_attr;
     enum ibv_mtu        path_mtu;
+    int                 ret;
 
     status = uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, path_index,
                                                  &ah_attr, &path_mtu);
@@ -51,7 +52,9 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
         return status;
     }
 
-    status = uct_ib_iface_create_ah(iface, &ah_attr, usage, &ah);
+    status = uct_ib_device_create_ah_uncached(
+            uct_ib_iface_device(iface), &ah_attr, uct_ib_iface_md(iface)->pd,
+            usage, &ah);
     if (status != UCS_OK) {
         return status;
     }
@@ -76,6 +79,11 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
         ucs_assert_always(grh_av != NULL);
         memcpy(grh_av, mlx5_av_grh(&mlx5_av), sizeof(*grh_av));
     }
+
+    ret = ibv_destroy_ah(ah);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_ah() returned %d: %m", ret);
+    }
+
     return UCS_OK;
 }
-

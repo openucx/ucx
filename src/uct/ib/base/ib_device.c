@@ -1442,10 +1442,11 @@ const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
     return ibv_wc_status_str(wc_status);
 }
 
-static ucs_status_t
-uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
-                        struct ibv_pd *pd, const char *usage,
-                        struct ibv_ah **ah_p)
+ucs_status_t
+uct_ib_device_create_ah_uncached(uct_ib_device_t *dev,
+                                 struct ibv_ah_attr *ah_attr,
+                                 struct ibv_pd *pd, const char *usage,
+                                 struct ibv_ah **ah_p)
 {
     struct ibv_ah *ah;
     char buf[128];
@@ -1502,7 +1503,8 @@ uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
     if (iter == kh_end(&dev->ah_hash)) {
         /* new AH */
-        status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, ah_p);
+        status = uct_ib_device_create_ah_uncached(dev, ah_attr, pd, usage,
+                                                  ah_p);
         if (status != UCS_OK) {
             goto unlock;
         }

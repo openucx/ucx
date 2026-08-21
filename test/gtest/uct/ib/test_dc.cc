@@ -12,6 +12,7 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/ib/base/ib_iface.h>
 #include <uct/ib/mlx5/dc/dc_mlx5.h>
 #include <uct/ib/mlx5/dc/dc_mlx5_ep.h>
 }
@@ -19,6 +20,14 @@ extern "C" {
 
 #define UCT_DC_INSTANTIATE_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
+
+
+static size_t ah_cache_size(uct_iface_h tl_iface)
+{
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
+
+    return kh_size(&uct_ib_iface_device(iface)->ah_hash);
+}
 
 
 class test_dc : public test_rc {
@@ -525,6 +534,27 @@ UCS_TEST_SKIP_COND_P(test_dc, stress_iface_ops,
     test_iface_ops(dc_iface(m_e1)->tx.bb_max);
 }
 
+UCS_TEST_P(test_dc, connect_uses_uncached_ah)
+{
+    size_t ah_count_before[] = {ah_cache_size(m_e1->iface()),
+                                ah_cache_size(m_e2->iface())};
+
+    connect();
+    EXPECT_EQ(ah_count_before[0], ah_cache_size(m_e1->iface()));
+    EXPECT_EQ(ah_count_before[1], ah_cache_size(m_e2->iface()));
+    send_am_messages(m_e1, 1, UCS_OK);
+    flush();
+
+    m_e1->destroy_ep(0);
+    m_e2->destroy_ep(0);
+    connect();
+
+    EXPECT_EQ(ah_count_before[0], ah_cache_size(m_e1->iface()));
+    EXPECT_EQ(ah_count_before[1], ah_cache_size(m_e2->iface()));
+    send_am_messages(m_e1, 1, UCS_OK);
+    flush();
+}
+
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc)
 
 
@@ -640,10 +670,17 @@ public:
 
 UCS_TEST_P(test_dc_flow_control, general_enabled)
 {
+    size_t ah_count_before[] = {ah_cache_size(m_e1->iface()),
+                                ah_cache_size(m_e2->iface())};
+
     /* Do not set FC hard thresh bigger than 1, because DC decreases
      * the window by one when it sends fc grant request. So some checks
      * may fail if threshold is bigger than 1. */
     test_general(8, 4, 1, true);
+
+    /* The pure grant uses its AH only to copy the AV into the send WQE. */
+    EXPECT_EQ(ah_count_before[0], ah_cache_size(m_e1->iface()));
+    EXPECT_EQ(ah_count_before[1], ah_cache_size(m_e2->iface()));
 }
 
 UCS_TEST_P(test_dc_flow_control, general_disabled)

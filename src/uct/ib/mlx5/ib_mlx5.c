@@ -381,6 +381,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
     enum ibv_mtu        path_mtu;
+    int                 ret;
 
     /* coverity[result_independent_of_operands] */
     ib_addr = ucs_alloca((size_t)iface->addr_size);
@@ -398,7 +399,9 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     }
 
     ah_attr.is_global = iface->config.force_global_addr;
-    status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
+    status = uct_ib_device_create_ah_uncached(
+            uct_ib_iface_device(iface), &ah_attr, uct_ib_iface_md(iface)->pd,
+            "compact AV check", &ah);
     if (status != UCS_OK) {
         return status;
     }
@@ -408,6 +411,12 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
      * the device supports compact address vector. */
     *compact_av = !(mlx5_av_base(&mlx5_av)->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
+
+    ret = ibv_destroy_ah(ah);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_ah() returned %d: %m", ret);
+    }
+
     return UCS_OK;
 }
 #endif
