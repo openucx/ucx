@@ -868,11 +868,16 @@ uct_rc_mlx5_ep_get_send_op(uct_rc_txqp_t *txqp, uint16_t sn)
         return NULL;
     }
 
-    op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
-                                       uct_rc_iface_send_op_t, queue);
-    ucs_assertv(UCS_CIRCULAR_COMPARE16(op->sn, >=, sn),
-                "outstanding op sn %u precedes WQE ci %u", op->sn, sn);
-    return (op->sn == sn) ? op : NULL;
+    ucs_queue_for_each(op, &txqp->outstanding, queue) {
+        if (op->sn == sn) {
+            return op;
+        }
+        if (UCS_CIRCULAR_COMPARE16(op->sn, >, sn)) {
+            break;
+        }
+    }
+
+    return NULL;
 }
 
 static void uct_rc_mlx5_ep_release_send_ops(uct_rc_iface_t *iface,
@@ -881,8 +886,8 @@ static void uct_rc_mlx5_ep_release_send_ops(uct_rc_iface_t *iface,
 {
     uct_rc_iface_send_op_t *op;
 
-    while ((op = uct_rc_mlx5_ep_get_send_op(txqp, sn)) != NULL) {
-        ucs_queue_pull_non_empty(&txqp->outstanding);
+    ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         uct_rc_mlx5_ep_send_op_release(iface, op, status, complete);
     }
 }
