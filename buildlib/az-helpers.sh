@@ -97,9 +97,8 @@ function add_timestamp() {
 }
 
 function az_init_modules() {
-    # Some containers (e.g. public Intel oneAPI images) do not ship the
-    # Environment Modules system.  Skip initialisation gracefully so that
-    # subsequent az_module_load calls simply return "module not found".
+    # Public vendor images (e.g. the Intel oneAPI ZE builder) do not ship the
+    # Environment Modules system. Nothing to initialize there.
     [ -f /etc/profile.d/modules.sh ] || return 0
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
@@ -253,11 +252,12 @@ check_release_build() {
 
     elif [ "${build_reason}" == "PullRequest" ]
     then
-        # In case of pull request, HEAD^ is the branch commit we merge with
-        range="$(git rev-parse HEAD^)..${build_sourceversion}"
-        for sha1 in `git log $range --format="%h"`
+        base_revision=$(git rev-parse "${build_sourceversion}^1")
+        head_revision=$(git rev-parse "${build_sourceversion}^2")
+        for sha1 in $(git log --first-parent --no-merges \
+                         "${base_revision}..${head_revision}" --format="%h")
         do
-            title=`git log -1 --format="%s" $sha1`
+            title=$(git log -1 --format="%s" $sha1)
             [[ "$title" == "${title_mask}"* ]] && launch=True;
         done
     fi
