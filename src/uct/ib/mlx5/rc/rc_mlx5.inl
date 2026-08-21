@@ -25,7 +25,7 @@
 
 
 static UCS_F_ALWAYS_INLINE size_t
-uct_rc_mlx5_base_put_sgl_zcopy_max_count(uct_rc_mlx5_iface_common_t *iface)
+uct_rc_mlx5_base_sgl_zcopy_max_count(uct_rc_mlx5_iface_common_t *iface)
 {
     size_t max_count;
 
