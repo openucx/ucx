@@ -624,7 +624,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE |
                              UCP_EP_INIT_CM_WIREUP_CLIENT |
-                             ucp_ep_err_mode_init_flags(msg->err_mode);
+                             ucp_ep_err_mode_init_flags(msg->err_mode, 0);
     unsigned addr_indices[UCP_MAX_LANES];
     int am_need_flush;
     ucs_status_t status;
@@ -670,7 +670,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     uint64_t remote_uuid      = remote_address->uuid;
     int send_reply            = 0;
-    unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
+    unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode, 0);
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
@@ -1976,6 +1976,7 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                             unsigned *addr_indices, ucp_ep_config_key_t *key,
                             ucp_rsc_index_t *dst_md_storage)
 {
+    unsigned select_ep_init_flags;
     ucs_status_t status;
 
     ucp_ep_config_key_reset(key);
@@ -1984,7 +1985,14 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     key->dst_version  = remote_address->dst_version;
     key->dst_md_cmpts = dst_md_storage;
 
-    status = ucp_wireup_select_lanes(ep, ep_init_flags, *tl_bitmap,
+    /* Preserve the requested error mode in the endpoint configuration, but do
+     * not impose peer-failure transport requirements on a same-worker EP. */
+    select_ep_init_flags =
+            (ep_init_flags & ~UCP_EP_INIT_ERR_MODE_FAILOVER_MASK) |
+            ucp_ep_err_mode_init_flags(
+                    key->err_mode,
+                    remote_address->uuid == ep->worker->uuid);
+    status = ucp_wireup_select_lanes(ep, select_ep_init_flags, *tl_bitmap,
                                      remote_address, addr_indices, key, 1);
     if (status != UCS_OK) {
         return status;
@@ -2471,7 +2479,8 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
     }
 
     return flags |
-           ucp_ep_err_mode_init_flags(ucp_ep_params_err_handling_mode(params));
+           ucp_ep_err_mode_init_flags(
+                   ucp_ep_params_err_handling_mode(params), 0);
 }
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface)

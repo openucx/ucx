@@ -997,7 +997,7 @@ ucp_sa_data_v1_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    *ep_init_flags_p = ucp_ep_err_mode_init_flags(sa_data->header);
+    *ep_init_flags_p = ucp_ep_err_mode_init_flags(sa_data->header, 0);
     *worker_addr_p   = sa_data_v1 + 1;
     return UCS_OK;
 }
@@ -1973,7 +1973,9 @@ ucp_ep_recovery_create_aux(ucp_ep_h ep, ucp_lane_index_t lane,
     ucp_context_h context    = worker->context;
     ucp_rsc_index_t lane_rsc = ucp_ep_get_rsc_index(ep, lane);
     unsigned ep_init_flags   =
-            ucp_ep_err_mode_init_flags(ucp_ep_config(ep)->key.err_mode) |
+            ucp_ep_err_mode_init_flags(
+                    ucp_ep_config(ep)->key.err_mode,
+                    remote_address->uuid == worker->uuid) |
             UCP_EP_INIT_RECOVERY;
     ucp_wireup_select_info_t select_info;
     const ucp_address_entry_t *peer_ae;
@@ -4796,13 +4798,14 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
     ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
-unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)
+unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode,
+                                    int is_self)
 {
     switch (err_mode) {
     case UCP_ERR_HANDLING_MODE_NONE:
         return 0;
     case UCP_ERR_HANDLING_MODE_PEER:
-        return UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+        return is_self ? 0 : UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     case UCP_ERR_HANDLING_MODE_FAILOVER:
         return UCP_EP_INIT_ERR_MODE_FAILOVER_MASK;
     default:
