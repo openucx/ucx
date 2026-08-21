@@ -1042,11 +1042,11 @@ static void uct_rc_mlx5_iface_fill_ext_query_attr(
     }
 }
 
+#if HAVE_DEVX
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
                                  uct_iface_attr_v2_t *iface_attr)
 {
-#if HAVE_DEVX
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
     const uct_rc_mlx5_tx_token_t *tx_token;
@@ -1056,6 +1056,16 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
     uct_rc_ep_t *rc_ep;
     ucs_status_t status;
     void *qpc;
+
+    if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN)) {
+        ucs_error("rc mlx5: tx token is required to query rx token");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((iface_attr->tx_token == NULL) || (iface_attr->rx_token == NULL)) {
+        ucs_error("rc mlx5: tx token or rx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     tx_token = iface_attr->tx_token;
     iface    = ucs_derived_of(tl_iface, uct_rc_iface_t);
@@ -1069,18 +1079,18 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
     status = uct_ib_mlx5_devx_query_qp(&ep->tx.wq.super, in, sizeof(in), out,
                                        sizeof(out));
     if (status != UCS_OK) {
-        ucs_error("rc mlx5: failed to query qp: %s", ucs_status_string(status));
+        ucs_error("rc mlx5: iface %p failed to query rx token: %s", tl_iface,
+                  ucs_status_string(status));
         return status;
     }
 
     qpc      = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
     rx_token = iface_attr->rx_token;
     rx_token->receiver_next_psn = UCT_IB_MLX5DV_GET(qpc, qpc, next_rcv_psn);
+
     return UCS_OK;
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
+#endif
 
 static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
@@ -1095,20 +1105,8 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
 #if HAVE_DEVX
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
-        if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN)) {
-            ucs_error("rc mlx5: tx token is required to query rx token");
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        if ((iface_attr->rx_token == NULL) || (iface_attr->tx_token == NULL)) {
-            ucs_error("rc mlx5: tx token or rx token is NULL");
-            return UCS_ERR_INVALID_PARAM;
-        }
-
         status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
         if (status != UCS_OK) {
-            ucs_error("rc mlx5: failed to query rx token: %s",
-                      ucs_status_string(status));
             return status;
         }
     }

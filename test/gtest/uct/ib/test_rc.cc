@@ -1325,6 +1325,8 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 class test_rc_mlx5_token_query : public test_rc {
 protected:
+    static constexpr uint32_t NUM_MESSAGES = 10;
+
     static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
     {
         ++*static_cast<uint32_t*>(arg);
@@ -1354,37 +1356,34 @@ protected:
     }
 };
 
+constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
+
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
     uct_rc_mlx5_tx_token_t tx_token = {};
     uct_rc_mlx5_rx_token_t rx_token = {};
-    const uint32_t num_message      = 10;
-    uint32_t ep1_rx_count           = 0;
-    uint32_t ep2_rx_count           = 0;
+    uct_rc_mlx5_base_ep_t *e2_ep;
+    uint32_t rx_count = 0;
+    ucs_status_t status;
 
-    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e1->iface(), 0, am_handler,
-                                           &ep1_rx_count, 0));
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
-                                           &ep2_rx_count, 0));
+                                           &rx_count, 0));
 
-    for (uint32_t i = 0; i < num_message; ++i) {
-        ucs_status_t status;
-
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
         UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(m_e1->ep(0), 0, i, NULL, 0),
-                                    status);
-        ASSERT_UCS_OK(status);
-        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(m_e2->ep(0), 0, i, NULL, 0),
                                     status);
         ASSERT_UCS_OK(status);
     }
 
-    wait_for_value(&ep1_rx_count, num_message, true);
-    wait_for_value(&ep2_rx_count, num_message, true);
+    wait_for_value(&rx_count, NUM_MESSAGES, true);
 
     query_tx_token(m_e1->ep(0), &tx_token);
     query_rx_token(m_e2->iface(), &tx_token, &rx_token);
-    EXPECT_EQ(num_message, rx_token.receiver_next_psn);
+
+    e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
+    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, tx_token.remote_qpn);
+    EXPECT_EQ(NUM_MESSAGES, rx_token.receiver_next_psn);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
