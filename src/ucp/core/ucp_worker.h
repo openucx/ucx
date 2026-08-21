@@ -427,6 +427,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                            const ucs_sys_dev_distance_t *lanes_distance,
                            ucp_worker_cfg_index_t *cfg_index_p);
 
+ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker);
+
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface);
 
