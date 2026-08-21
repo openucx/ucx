@@ -31,6 +31,6 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
 
 void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache);
 
-ucs_status_t uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key,
-                                              void **mapped_addr);
+ucs_status_t
+uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
 #endif
