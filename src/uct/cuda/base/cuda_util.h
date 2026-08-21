@@ -51,13 +51,29 @@ const char *uct_cuda_cu_get_error_string(CUresult result);
 
 
 /**
+ * Get the system device and PCI bus id from the CUDA device.
+ *
+ * @param [in]  cuda_device CUDA device.
+ * @param [out] sys_dev_p   System device corresponding to the CUDA device.
+ * @param [out] bus_id_p    If non-NULL, PCI bus id of the CUDA device.
+ *
+ * @return UCS_OK on success, or an error code otherwise.
+ */
+ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
+                                             ucs_sys_device_t *sys_dev_p,
+                                             ucs_sys_bus_id_t *bus_id_p);
+
+
+/**
  * Get the system device from the CUDA device.
  *
  * @param [in]  cuda_device CUDA device.
+ * @param [out] sys_dev_p   System device corresponding to the CUDA device.
  *
- * @return System device corresponding to the CUDA device.
+ * @return UCS_OK on success, or an error code otherwise.
  */
-ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device);
+ucs_status_t
+uct_cuda_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
 
 
 /**

@@ -47,35 +47,39 @@ ucs_status_t uct_cuda_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     return UCS_OK;
 }
 
-ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device)
+ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
+                                             ucs_sys_device_t *sys_dev_p,
+                                             ucs_sys_bus_id_t *bus_id_p)
 {
-    ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    ucs_sys_device_t sys_dev;
     ucs_sys_bus_id_t bus_id;
-    CUresult cu_err;
     int attrib;
     ucs_status_t status;
 
     /* PCI domain id */
-    cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID,
-                                  cuda_device);
-    if (cu_err != CUDA_SUCCESS) {
-        goto err;
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID,
+                                 cuda_device));
+    if (status != UCS_OK) {
+        return status;
     }
     bus_id.domain = (uint16_t)attrib;
 
     /* PCI bus id */
-    cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
-                                  cuda_device);
-    if (cu_err != CUDA_SUCCESS) {
-        goto err;
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
+                                 cuda_device));
+    if (status != UCS_OK) {
+        return status;
     }
     bus_id.bus = (uint8_t)attrib;
 
     /* PCI slot id */
-    cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
-                                  cuda_device);
-    if (cu_err != CUDA_SUCCESS) {
-        goto err;
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
+                                 cuda_device));
+    if (status != UCS_OK) {
+        return status;
     }
     bus_id.slot = (uint8_t)attrib;
 
@@ -85,23 +89,31 @@ ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device)
     status = ucs_topo_find_device_by_bus_id_and_user_value(
             &bus_id, (uintptr_t)cuda_device, &sys_dev);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
     status = ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
     status = ucs_topo_sys_device_enable_aux_path(sys_dev);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
-    return sys_dev;
+    *sys_dev_p = sys_dev;
+    if (bus_id_p != NULL) {
+        *bus_id_p = bus_id;
+    }
 
-err:
-    return UCS_SYS_DEVICE_ID_UNKNOWN;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_cuda_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p)
+{
+    return uct_cuda_get_sys_dev_and_bus_id(cuda_device, sys_dev_p, NULL);
 }
 
 CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev)
@@ -148,9 +160,9 @@ uct_cuda_enum_gpus_internal(ucs_sys_device_t *sys_devs, unsigned *count_p)
                 return status;
             }
 
-            sys_dev = uct_cuda_get_sys_dev(cuda_dev);
-            if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-                return UCS_ERR_NO_DEVICE;
+            status = uct_cuda_get_sys_dev(cuda_dev, &sys_dev);
+            if (status != UCS_OK) {
+                return status;
             }
 
             sys_devs[cuda_idx] = sys_dev;
