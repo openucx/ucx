@@ -1327,6 +1327,28 @@ class test_rc_mlx5_token_query : public test_rc {
 protected:
     static constexpr uint32_t NUM_MESSAGES = 10;
 
+    struct pack_arg {
+        const void *buffer;
+        size_t     length;
+    };
+
+    static size_t pack_cb(void *dest, void *arg)
+    {
+        pack_arg *pack = static_cast<pack_arg*>(arg);
+
+        memcpy(dest, pack->buffer, pack->length);
+        return pack->length;
+    }
+
+    static void unpack_cb(void *arg, const void *data, size_t length)
+    {
+        memcpy(arg, data, length);
+    }
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
     static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
     {
         ++*static_cast<uint32_t*>(arg);
@@ -1354,6 +1376,33 @@ protected:
         attr.rx_token   = rx_token;
         ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
     }
+
+    static size_t test_length(size_t min_length, size_t max_length)
+    {
+        return ucs_min(max_length, ucs_max(min_length, 16ul * UCS_KBYTE));
+    }
+
+    void wait_for_completion(uct_completion_t *comp)
+    {
+        wait_for_value(&comp->count, 0, true);
+        EXPECT_EQ(UCS_OK, comp->status);
+    }
+
+    void check_token(const char *protocol)
+    {
+        uct_rc_mlx5_tx_token_t tx_token = {};
+        uct_rc_mlx5_rx_token_t rx_token = {};
+        uct_rc_mlx5_base_ep_t *ep;
+
+        SCOPED_TRACE(protocol);
+        flush();
+
+        query_tx_token(m_e1->ep(0), &tx_token);
+        query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+
+        ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        EXPECT_EQ(rx_token.receiver_next_psn, ep->tx.wq.next_first_psn);
+    }
 };
 
 constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
@@ -1361,10 +1410,7 @@ constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    uct_rc_mlx5_tx_token_t tx_token = {};
-    uct_rc_mlx5_rx_token_t rx_token = {};
     uint32_t rx_count = 0;
-    uct_rc_mlx5_base_ep_t *e2_ep;
     ucs_status_t status;
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
@@ -1378,12 +1424,305 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 
     wait_for_value(&rx_count, NUM_MESSAGES, true);
 
-    query_tx_token(m_e1->ep(0), &tx_token);
-    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+    check_token("am_short");
+}
 
-    e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
-    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, tx_token.remote_qpn);
-    EXPECT_EQ(NUM_MESSAGES, rx_token.receiver_next_psn);
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short_iov,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    uint32_t rx_count = 0;
+    uint64_t value    = 0;
+    uct_iov_t iov     = {&value, sizeof(value), UCT_MEM_HANDLE_NULL, 0, 1};
+    ucs_status_t status;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
+                                           &rx_count, 0));
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short_iov(m_e1->ep(0), 0, &iov,
+                                                        1),
+                                    status);
+        ASSERT_UCS_OK(status);
+    }
+
+    wait_for_value(&rx_count, NUM_MESSAGES, true);
+    check_token("am_short_iov");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    uint32_t rx_count = 0;
+    size_t length     = test_length(0, m_e1->iface_attr().cap.am.max_bcopy);
+    mapped_buffer buffer(length, *m_e1);
+    pack_arg pack = {buffer.ptr(), length};
+    ssize_t packed;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
+                                           &rx_count, 0));
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_bcopy(m_e1->ep(0), 0, pack_cb,
+                                                    &pack, 0),
+                                    packed);
+        ASSERT_EQ(static_cast<ssize_t>(length), packed);
+    }
+
+    wait_for_value(&rx_count, NUM_MESSAGES, true);
+    check_token("am_bcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    uint32_t rx_count     = 0;
+    uct_completion_t comp = {completion_cb, NUM_MESSAGES, UCS_OK};
+    size_t length         = test_length(m_e1->iface_attr().cap.am.min_zcopy,
+                                        m_e1->iface_attr().cap.am.max_zcopy);
+    mapped_buffer buffer(length, *m_e1);
+    ucs_status_t status;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
+                                           &rx_count, 0));
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_zcopy(m_e1->ep(0), 0, NULL, 0,
+                                                    buffer.iov(), 1, 0, &comp),
+                                    status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_value(&rx_count, NUM_MESSAGES, true);
+    wait_for_completion(&comp);
+    check_token("am_zcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_short,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    size_t length = m_e1->iface_attr().cap.put.max_short;
+    mapped_buffer local(length, *m_e1);
+    mapped_buffer remote(length, *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_short(m_e1->ep(0), local.ptr(),
+                                                     length, remote.addr(),
+                                                     remote.rkey()),
+                                    status);
+        ASSERT_UCS_OK(status);
+    }
+
+    check_token("put_short");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    size_t length = test_length(0, m_e1->iface_attr().cap.put.max_bcopy);
+    mapped_buffer local(length, *m_e1);
+    mapped_buffer remote(length, *m_e2);
+    pack_arg pack = {local.ptr(), length};
+    ssize_t packed;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_bcopy(m_e1->ep(0), pack_cb,
+                                                     &pack, remote.addr(),
+                                                     remote.rkey()),
+                                    packed);
+        ASSERT_EQ(static_cast<ssize_t>(length), packed);
+    }
+
+    check_token("put_bcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    uct_completion_t comp = {completion_cb, NUM_MESSAGES, UCS_OK};
+    size_t length         = test_length(m_e1->iface_attr().cap.put.min_zcopy,
+                                        m_e1->iface_attr().cap.put.max_zcopy);
+    mapped_buffer local(length, *m_e1);
+    mapped_buffer remote(length, *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_zcopy(m_e1->ep(0), local.iov(),
+                                                     1, remote.addr(),
+                                                     remote.rkey(), &comp),
+                                    status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_completion(&comp);
+    check_token("put_zcopy");
+}
+
+UCS_TEST_P(test_rc_mlx5_token_query, put_sgl_zcopy)
+{
+    const uct_iface_attr_t &attr = m_e1->iface_attr();
+    uct_iface_attr_v2_t attr_v2  = {};
+    uct_completion_t comp        = {completion_cb, NUM_MESSAGES, UCS_OK};
+
+    attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                         UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr_v2));
+    if (!(attr_v2.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY)) {
+        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    }
+
+    const size_t count  = ucs_min(2ul, attr_v2.max_put_sgl_zcopy_count);
+    const size_t length = test_length(attr.cap.put.min_zcopy,
+                                      attr.cap.put.max_zcopy);
+    mapped_buffer local1(length, *m_e1);
+    mapped_buffer local2(length, *m_e1);
+    mapped_buffer remote1(length, *m_e2);
+    mapped_buffer remote2(length, *m_e2);
+    void *buffers[]         = {local1.ptr(), local2.ptr()};
+    size_t lengths[]        = {length, length};
+    uct_mem_h memhs[]       = {local1.memh(), local2.memh()};
+    uint64_t remote_addrs[] = {remote1.addr(), remote2.addr()};
+    uct_rkey_t rkeys[]      = {remote1.rkey(), remote2.rkey()};
+    ucs_status_t status;
+
+    ASSERT_GT(count, 0ul);
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers,
+                                                         lengths, memhs,
+                                                         remote_addrs, rkeys,
+                                                         NULL, NULL, count,
+                                                         &comp),
+                                    status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_completion(&comp);
+    check_token("put_sgl_zcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, get_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_completion_t comp = {completion_cb, NUM_MESSAGES, UCS_OK};
+    size_t length = test_length(1, m_e1->iface_attr().cap.get.max_bcopy);
+    mapped_buffer local(length, *m_e1);
+    mapped_buffer remote(length, *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_get_bcopy(m_e1->ep(0), unpack_cb,
+                                                     local.ptr(), length,
+                                                     remote.addr(),
+                                                     remote.rkey(), &comp),
+                                    status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_completion(&comp);
+    check_token("get_bcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    uct_completion_t comp = {completion_cb, NUM_MESSAGES, UCS_OK};
+    size_t length         = test_length(m_e1->iface_attr().cap.get.min_zcopy,
+                                        m_e1->iface_attr().cap.get.max_zcopy);
+    mapped_buffer local(length, *m_e1);
+    mapped_buffer remote(length, *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_get_zcopy(m_e1->ep(0), local.iov(),
+                                                     1, remote.addr(),
+                                                     remote.rkey(), &comp),
+                                    status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_completion(&comp);
+    check_token("get_zcopy");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, atomic_post,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64))
+{
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_atomic64_post(m_e1->ep(0),
+                                                         UCT_ATOMIC_OP_ADD, 1,
+                                                         remote.addr(),
+                                                         remote.rkey()),
+                                    status);
+        ASSERT_UCS_OK(status);
+    }
+
+    check_token("atomic_post");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, atomic_fetch,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64))
+{
+    uint64_t atomic_result = 0;
+    uct_completion_t comp  = {completion_cb, NUM_MESSAGES, UCS_OK};
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_atomic64_fetch(m_e1->ep(0),
+                                                          UCT_ATOMIC_OP_ADD, 1,
+                                                          &atomic_result,
+                                                          remote.addr(),
+                                                          remote.rkey(), &comp),
+                                    status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_completion(&comp);
+    check_token("atomic_fetch");
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, atomic_cswap,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64))
+{
+    uint64_t atomic_result = 0;
+    uct_completion_t comp  = {completion_cb, NUM_MESSAGES, UCS_OK};
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    ucs_status_t status;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(
+                uct_ep_atomic_cswap64(m_e1->ep(0), 0, 1, remote.addr(),
+                                      remote.rkey(), &atomic_result, &comp),
+                status);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            comp.count--;
+        }
+    }
+
+    wait_for_completion(&comp);
+    check_token("atomic_cswap");
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
