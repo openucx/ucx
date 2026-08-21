@@ -897,6 +897,19 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
     }, key, 0);
 }
 
+UCS_TEST_P(test_ucp_proto_mock_rcx, no_ctrl_features, "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context = sender().ucph();
+
+    EXPECT_EQ(uint64_t(0), context->config.ctrl_features);
+    EXPECT_EQ(context->config.features, context->config.all_features);
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->data_tl_bitmap));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(context->ctrl_tl_bitmap));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(
+            UCS_STATIC_BITMAP_XOR(context->tl_bitmap,
+                                  context->data_tl_bitmap)));
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
 
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
@@ -2307,6 +2320,236 @@ UCS_TEST_P(test_ucp_proto_mock_keepalive_tiebreak,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
                               "rc_x")
 
+
+/*
+ * Verify the transport scope split introduced by ctrl_features. The data
+ * feature (RMA) is confined to the transports allowed by UCX_TLS (the mocked
+ * rc_mlx5 device), while a feature requested only via ctrl_features (AM) uses
+ * the unrestricted "control" scope, which opens every device-enabled transport
+ * regardless of UCX_TLS.
+ */
+class test_ucp_proto_mock_ctrl_features_am : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_ctrl_features_am()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        ucp_params_t params   = {};
+        params.field_mask     = UCP_PARAM_FIELD_FEATURES |
+                                UCP_PARAM_FIELD_CTRL_FEATURES;
+        params.features       = UCP_FEATURE_RMA;
+        params.ctrl_features  = UCP_FEATURE_AM;
+        add_variant(variants, params);
+    }
+
+    virtual void init() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        });
+        test_ucp_proto_mock::init();
+    }
+
+    void check_features(uint64_t data, uint64_t ctrl)
+    {
+        ucp_context_h context = sender().ucph();
+        EXPECT_EQ(data, context->config.features);
+        EXPECT_EQ(ctrl, context->config.ctrl_features);
+        EXPECT_EQ(data | ctrl, context->config.all_features);
+    }
+
+    void expect_lane_scope(ucp_ep_config_t *config, ucp_lane_index_t lane,
+                           bool ctrl_only)
+    {
+        ASSERT_NE(UCP_NULL_LANE, lane);
+        ucp_context_h context = sender().ucph();
+        ucp_rsc_index_t rsc   = config->key.lanes[lane].rsc_index;
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc));
+        if (ctrl_only) {
+            EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rsc));
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, ctrl_feature_tl_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+    ucp_rsc_index_t rsc_index;
+
+    /* AM is enabled even though it is not a data feature, because control
+     * features are merged into all_features. */
+    check_features(UCP_FEATURE_RMA, UCP_FEATURE_AM);
+
+    /* UCX_TLS=rc_x restricts the data scope to the mocked rc_mlx5 device, while
+     * the control scope is unrestricted (every device-enabled transport). The
+     * control bitmap is therefore a strict superset of the data bitmap. */
+    size_t num_data_tls = UCS_STATIC_BITMAP_POPCOUNT(context->data_tl_bitmap);
+    size_t num_ctrl_tls = UCS_STATIC_BITMAP_POPCOUNT(context->ctrl_tl_bitmap);
+    EXPECT_GE(num_data_tls, 1u);
+    EXPECT_GT(num_ctrl_tls, num_data_tls);
+
+    /* Every data transport is also a control transport, and at least one
+     * control-only transport exists - precisely the device-enabled transports
+     * that UCX_TLS=rc_x excludes from the data scope. */
+    bool has_ctrl_only = false;
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        bool in_data  = UCS_STATIC_BITMAP_GET(context->data_tl_bitmap,
+                                              rsc_index);
+        bool in_ctrl  = UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap,
+                                              rsc_index);
+        if (in_data) {
+            EXPECT_TRUE(in_ctrl); /* data is a subset of control */
+        } else if (in_ctrl) {
+            has_ctrl_only = true;
+            EXPECT_STRNE("rc_mlx5",
+                         context->tl_rscs[rsc_index].tl_rsc.tl_name);
+        }
+    }
+    EXPECT_TRUE(has_ctrl_only);
+
+    /* The RMA data lane is confined to the UCX_TLS-allowed mocked rc_mlx5. */
+    ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
+    ASSERT_NE(UCP_NULL_LANE, rma_lane);
+    ucp_rsc_index_t rma_rsc = ep_config->key.lanes[rma_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rma_rsc));
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
+    EXPECT_STREQ("mock", ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->dev_name);
+
+    /* AM is a control-only feature, so its lane is selected with the control
+     * (unrestricted) TL scope and may use any control transport. Here the best
+     * reachable transport is the mocked rc_mlx5, which is part of the control
+     * scope. */
+    ucp_lane_index_t am_lane = ep_config->key.am_lane;
+    ASSERT_NE(UCP_NULL_LANE, am_lane);
+    ucp_rsc_index_t am_rsc = ep_config->key.lanes[am_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, am_rsc));
+}
+
+/*
+ * Verify that AM bandwidth lanes follow the same TL scope as the AM lane.
+ */
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, am_bw_lane_ctrl_scope,
+           "MAX_EAGER_LANES=2")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* With dev_num_paths=2 and MAX_EAGER_LANES=2 there must be at least one
+     * AM_BW lane. */
+    ASSERT_NE(UCP_NULL_LANE, ep_config->key.am_bw_lanes[0])
+            << "no am_bw_lanes found; check dev_num_paths and MAX_EAGER_LANES";
+
+    for (ucp_lane_index_t i = 0; i < UCP_MAX_LANES; ++i) {
+        ucp_lane_index_t lane = ep_config->key.am_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            break;
+        }
+        ucp_rsc_index_t rsc = ep_config->key.lanes[lane].rsc_index;
+        EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc))
+                << "am_bw_lanes[" << (int)i << "] TL not in ctrl_tl_bitmap";
+    }
+}
+
+/*
+ * Verify that the wireup message lane comes from ctrl_tl_bitmap. When
+ * ctrl_features != 0, ucp_wireup_select_aux_transport() sets the aux
+ * criteria scope to CTRL so that wireup handshake is not blocked by
+ * UCX_TLS restrictions.
+ */
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, wireup_msg_lane_ctrl_scope,
+           "IB_NUM_PATHS?=1")
+{
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    /* The wireup msg lane is the dedicated wireup lane, or falls back to
+     * am_lane when not explicitly set (see ucp_ep_get_wireup_msg_lane()). */
+    ucp_lane_index_t wireup_lane = ep_config->key.wireup_msg_lane;
+    if (wireup_lane == UCP_NULL_LANE) {
+        wireup_lane = ep_config->key.am_lane;
+    }
+
+    ASSERT_NE(UCP_NULL_LANE, wireup_lane);
+    ucp_rsc_index_t wireup_rsc = ep_config->key.lanes[wireup_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, wireup_rsc))
+            << "wireup msg lane TL not in ctrl_tl_bitmap";
+}
+
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, explicit_ctrl_features_tls,
+           "IB_NUM_PATHS?=1", "CTRL_FEATURES_TLS=rc_x")
+{
+    ucp_context_h context       = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    check_features(UCP_FEATURE_RMA, UCP_FEATURE_AM);
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->data_tl_bitmap));
+    EXPECT_TRUE(UCS_STATIC_BITMAP_IS_ZERO(
+            UCS_STATIC_BITMAP_XOR(context->data_tl_bitmap,
+                                  context->ctrl_tl_bitmap)));
+
+    ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
+    ASSERT_NE(UCP_NULL_LANE, rma_lane);
+    ucp_rsc_index_t rma_rsc = ep_config->key.lanes[rma_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rma_rsc));
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
+
+    ucp_lane_index_t am_lane = ep_config->key.am_lane;
+    ASSERT_NE(UCP_NULL_LANE, am_lane);
+    expect_lane_scope(ep_config, am_lane, false);
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(
+            context->data_tl_bitmap,
+            ep_config->key.lanes[am_lane].rsc_index));
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), am_lane)->tl_name);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, disjoint_tls,
+           "IB_NUM_PATHS?=1", "TLS=rc_x", "CTRL_FEATURES_TLS=tcp")
+{
+    ucp_context_h context       = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
+
+    check_features(UCP_FEATURE_RMA, UCP_FEATURE_AM);
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->data_tl_bitmap));
+    EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->ctrl_tl_bitmap));
+    for (ucp_rsc_index_t rsc = 0; rsc < context->num_tls; ++rsc) {
+        EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rsc) &&
+                     UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc));
+    }
+
+    ucp_lane_index_t rma_lane = ep_config->key.rma_lanes[0];
+    ASSERT_NE(UCP_NULL_LANE, rma_lane);
+    ucp_rsc_index_t rma_rsc = ep_config->key.lanes[rma_lane].rsc_index;
+    EXPECT_TRUE(UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rma_rsc));
+    EXPECT_FALSE(UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rma_rsc));
+    EXPECT_STREQ("rc_mlx5",
+                 ucp_ep_get_tl_rsc(sender().ep(), rma_lane)->tl_name);
+
+    ucp_lane_index_t am_lane = ep_config->key.am_lane;
+    ASSERT_NE(UCP_NULL_LANE, am_lane);
+    expect_lane_scope(ep_config, am_lane, true);
+    EXPECT_STREQ("tcp",
+                 ucp_ep_get_tl_rsc(sender().ep(), am_lane)->tl_name);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_ctrl_features_am, rcx,
+                              "rc_x")
 
 #if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
 
