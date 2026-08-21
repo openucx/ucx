@@ -409,6 +409,9 @@ static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
         pci_id_p->device = UCS_SYS_PCI_ID_DEVICE_UNDEFINED;
     }
 
+    ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
+              dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);
+
 out_free_path:
     ucs_free(path);
 }
@@ -1184,20 +1187,17 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
 ucs_status_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev,
                                             ucs_sys_pci_id_t *pci_id_p)
 {
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if ((sys_dev >= ucs_topo_global_ctx.num_devices) ||
-        (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        status    = UCS_ERR_NO_ELEM;
-        *pci_id_p = UCS_SYS_PCI_ID_UNDEFINED;
-        goto out;
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        status = UCS_ERR_NO_ELEM;
+    } else {
+        *pci_id_p = ucs_topo_global_ctx.devices[sys_dev].pci_id;
+        status    = UCS_OK;
     }
-
-    *pci_id_p = ucs_topo_global_ctx.devices[sys_dev].pci_id;
-
-out:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
     return status;
 }
 

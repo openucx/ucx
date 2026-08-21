@@ -219,7 +219,7 @@ typedef struct uct_ib_device {
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
-    ucs_sys_pci_id_t            pci_id; /* PCI identifiers */
+    ucs_sys_pci_id_t            pci_id;          /* PCI identifiers */
     ucs_sys_device_t            sys_dev;         /* System device id */
     double                      pci_bw;          /* Supported PCI bandwidth */
     unsigned                    flags;
