@@ -41,11 +41,52 @@ public:
 
 UCS_TEST_P(test_devx, dbrec)
 {
-    uct_ib_mlx5_dbrec_t *dbrec;
+    uct_ib_mlx5_dbrec_t *dbrec1;
+    uct_ib_mlx5_dbrec_t *dbrec2;
+    uct_ib_mlx5_dbrec_t *dbrec3;
+    uintptr_t db1;
+    uintptr_t db2;
+    ptrdiff_t db_delta;
+    ptrdiff_t offset_delta;
+    uint32_t mem_id;
+    uint64_t offset;
 
-    dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md()->dbrec_pool);
-    ASSERT_FALSE(dbrec == NULL);
-    ucs_mpool_put_inline(dbrec);
+    dbrec1 = uct_ib_mlx5_get_dbrec(md());
+    ASSERT_NE(nullptr, dbrec1);
+    dbrec2 = uct_ib_mlx5_get_dbrec(md());
+    ASSERT_NE(nullptr, dbrec2);
+
+    EXPECT_NE(nullptr, dbrec1->db);
+    EXPECT_NE(nullptr, dbrec2->db);
+    EXPECT_EQ(dbrec1->mem_id, dbrec2->mem_id);
+    EXPECT_NE(dbrec1->offset, dbrec2->offset);
+
+    db1          = (uintptr_t)dbrec1->db;
+    db2          = (uintptr_t)dbrec2->db;
+    db_delta     = (db1 > db2) ? (db1 - db2) : (db2 - db1);
+    offset_delta = (dbrec1->offset > dbrec2->offset) ?
+                   (dbrec1->offset - dbrec2->offset) :
+                   (dbrec2->offset - dbrec1->offset);
+    EXPECT_GT(db_delta, 0);
+    EXPECT_EQ(db_delta, offset_delta);
+    EXPECT_EQ(0ul, db_delta % sizeof(*dbrec1->db));
+
+    mem_id = dbrec1->mem_id;
+    offset = dbrec1->offset;
+    dbrec1->db[MLX5_SND_DBR] = 0xdeadbeef;
+    dbrec1->db[MLX5_RCV_DBR] = 0xcafef00d;
+    EXPECT_EQ(mem_id, dbrec1->mem_id);
+    EXPECT_EQ(offset, dbrec1->offset);
+    EXPECT_EQ(md(), dbrec1->md);
+
+    uct_ib_mlx5_put_dbrec(dbrec1);
+    uct_ib_mlx5_put_dbrec(dbrec2);
+
+    dbrec3 = uct_ib_mlx5_get_dbrec(md());
+    ASSERT_NE(nullptr, dbrec3);
+    EXPECT_EQ(0u, dbrec3->db[MLX5_SND_DBR]);
+    EXPECT_EQ(0u, dbrec3->db[MLX5_RCV_DBR]);
+    uct_ib_mlx5_put_dbrec(dbrec3);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_devx);
