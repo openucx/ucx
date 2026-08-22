@@ -25,10 +25,42 @@
 #include "rc_mlx5.inl"
 
 
+#if HAVE_DEVX
+static ucs_status_t UCS_F_ALWAYS_INLINE
+uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
+{
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
+    uct_rc_mlx5_tx_token_t *tx_token;
+    ucs_status_t status;
+    void *qpc;
+
+    if (ep_attr->tx_token == NULL) {
+        ucs_error("rc mlx5: tx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    tx_token = ep_attr->tx_token;
+    status = uct_ib_mlx5_devx_query_qp(&ep->tx.wq.super, in, sizeof(in), out,
+                                       sizeof(out));
+    if (status != UCS_OK) {
+        ucs_error("rc mlx5: ep %p failed to query tx token: %s", ep,
+                  ucs_status_string(status));
+        return status;
+    }
+
+    qpc                  = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    tx_token->remote_qpn = UCT_IB_MLX5DV_GET(qpc, qpc, remote_qpn);
+
+    return UCS_OK;
+}
+#endif
+
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
-    uct_ib_mlx5_ext_ep_query_attr_t attr = {};
-    ucs_status_t status;
+#if HAVE_DEVX
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+#endif
 
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                                UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
@@ -36,13 +68,11 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     }
 
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
-        attr.field_mask |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN;
-        attr.tx_token    = ep_attr->tx_token;
-
-        status = uct_ib_mlx5_ext_ep_query(tl_ep, &attr);
-        if (status != UCS_OK) {
-            return status;
-        }
+#if HAVE_DEVX
+        return uct_rc_mlx5_ep_query_tx_token(ep, ep_attr);
+#else
+        return UCS_ERR_UNSUPPORTED;
+#endif
     }
 
     return UCS_OK;
