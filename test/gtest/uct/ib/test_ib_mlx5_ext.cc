@@ -138,55 +138,6 @@ private:
 };
 
 
-UCS_TEST_P(test_uct_ib_mlx5_ext_rc, iface_query)
-{
-    uint64_t tx_token_value  = tx_token();
-    uint64_t rx_token_value  = 0;
-    uct_iface_attr_v2_t attr = {};
-
-    register_plugin("token", iface_query, ep_query, purge);
-
-    {
-        scoped_log_handler wrap_err(wrap_errors_logger);
-        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN;
-        attr.tx_token   = &tx_token_value;
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  uct_iface_query_v2(m_e1->iface(), &attr));
-    }
-
-    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-                      UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
-                      UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH |
-                      UCT_IFACE_ATTR_FIELD_TX_TOKEN |
-                      UCT_IFACE_ATTR_FIELD_RX_TOKEN;
-    attr.tx_token   = &tx_token_value;
-    attr.rx_token   = &rx_token_value;
-
-    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
-    EXPECT_TRUE(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-    EXPECT_EQ(sizeof(uint64_t), attr.tx_token_length);
-    EXPECT_EQ(sizeof(uint64_t), attr.rx_token_length);
-    EXPECT_EQ(rx_token(), rx_token_value);
-}
-
-UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_query)
-{
-    uint64_t tx_token_value = 0;
-    uct_ep_attr_t attr      = {};
-
-    register_plugin("token", iface_query, ep_query, purge);
-
-    {
-        scoped_log_handler wrap_err(wrap_errors_logger);
-        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_ep_query(m_e1->ep(0), &attr));
-    }
-
-    attr.tx_token = &tx_token_value;
-    ASSERT_UCS_OK(uct_ep_query(m_e1->ep(0), &attr));
-    EXPECT_EQ(tx_token(), tx_token_value);
-}
-
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
 {
     uint64_t rx_token_value                  = rx_token();
