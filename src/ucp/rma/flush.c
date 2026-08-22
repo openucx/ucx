@@ -269,7 +269,8 @@ static int ucp_flush_check_completion(ucp_request_t *req)
         return 0;
     }
 
-    ucp_trace_req(req, "flush ep %p completed", req->send.ep);
+    ucs_debug("flush ep %p req %p transport completed status %s",
+              req->send.ep, req + 1, ucs_status_string(req->status));
     ucs_callbackq_remove_oneshot(&worker->uct->progress_q, req,
                                  ucp_ep_flush_slow_path_remove_filter, req);
     status = ucp_ep_flush_mem_start(req);
@@ -496,10 +497,10 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     ucs_status_t status;
     ucp_request_t *req;
 
-    ucs_debug("%s ep %p", debug_name, ep);
-
     req = ucp_request_get_param(ep->worker, param,
                                 {return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);});
+
+    ucs_debug("%s ep %p req %p", debug_name, ep, req + 1);
 
     /*
      * Flush operation can be queued on the pending queue of only one of the
@@ -527,8 +528,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
         status = ucp_ep_flush_mem_start(req);
         if (status == UCS_OK) {
             status = req->status;
-            ucp_trace_req(req, "releasing flush ep %p, returning status %s", ep,
-                          ucs_status_string(status));
+            ucs_debug("%s ep %p req %p completed immediately status %s",
+                      debug_name, ep, req + 1, ucs_status_string(status));
             ucp_request_put_param(param, req);
             return UCS_STATUS_PTR(status);
         }
@@ -540,6 +541,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
 
 static void ucp_ep_flushed_callback(ucp_request_t *req)
 {
+    ucs_debug("flush ep %p req %p completed status %s", req->send.ep, req + 1,
+              ucs_status_string(req->status));
     ucp_request_complete_send(req, req->status);
 }
 

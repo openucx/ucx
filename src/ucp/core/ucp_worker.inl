@@ -335,9 +335,9 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
         \
         __status = ucp_worker_get_ep_by_id(_worker, _ep_id, _ep_p); \
         if (ucs_unlikely(__status != UCS_OK)) { \
-            ucs_trace_data("worker %p: ep id 0x%" PRIx64 \
-                           " was not found, drop" _fmt_str, \
-                           _worker, _ep_id, ##__VA_ARGS__); \
+            ucs_debug("worker %p: ep id 0x%" PRIx64 \
+                      " was not found, drop" _fmt_str, \
+                      _worker, _ep_id, ##__VA_ARGS__); \
             _action; \
         } \
     }
@@ -348,9 +348,9 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
         UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, \
                                 ##__VA_ARGS__); \
         if (ucs_unlikely((*(_ep_p))->flags & UCP_EP_FLAG_CLOSED)) { \
-            ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was already closed" \
-                           " ep %p, drop " _fmt_str, \
-                           _worker, _ep_id, *(_ep_p), ##__VA_ARGS__); \
+            ucs_debug("worker %p: ep id 0x%" PRIx64 " was already closed" \
+                      " ep %p, drop " _fmt_str, \
+                      _worker, _ep_id, *(_ep_p), ##__VA_ARGS__); \
             _action; \
         } \
     }

@@ -180,6 +180,9 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
             ucp_request_mem_free(proxy_req);
         }
     } else {
+        ucs_debug("ep %p: wireup_ep %p queue pending req %p flags 0x%x",
+                  ucp_ep, wireup_ep,
+                  ucs_container_of(req, ucp_request_t, send.uct) + 1, flags);
         ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));
         ucp_worker_flush_ops_count_add(worker, +1);
         status = UCS_OK;
@@ -201,6 +204,8 @@ void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
 
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
+        ucs_debug("ep %p: wireup_ep %p purge pending req %p",
+                  wireup_ep->super.ucp_ep, wireup_ep, ucp_req + 1);
         UCS_ASYNC_BLOCK(&worker->async);
         ucp_worker_flush_ops_count_add(worker, -1);
         UCS_ASYNC_UNBLOCK(&worker->async);
@@ -371,6 +376,13 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
         }
         return UCS_OK;
     }
+
+    ucs_debug("ep %p: flush blocked on wireup_ep %p flush_flags 0x%x "
+              "wireup_flags 0x%x wireup_pending_count %u "
+              "next_ep %p aux_ep %p",
+              wireup_ep->super.ucp_ep, wireup_ep, flags, wireup_ep->flags,
+              wireup_ep->pending_count, wireup_ep->super.uct_ep,
+              wireup_ep->aux_ep);
     return UCS_ERR_NO_RESOURCE;
 }
 
@@ -417,8 +429,10 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
                                       flags, comp);
     }
 
-    ucs_trace("ep %p: wireup_ep %p skipping keepalive, flags 0x%x", ucp_ep,
-              wireup_ep, wireup_ep->flags);
+    ucs_debug("ep %p: wireup_ep %p skipping keepalive flags 0x%x "
+              "next_ep %p aux_ep %p",
+              ucp_ep, wireup_ep, wireup_ep->flags, wireup_ep->super.uct_ep,
+              wireup_ep->aux_ep);
     return UCS_OK;
 }
 
@@ -468,8 +482,10 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     ucp_worker_flush_ops_count_add(ucp_ep->worker, +1);
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 
-    ucs_trace("ep %p: created wireup ep %p to %s ", ucp_ep, self,
-              ucp_ep_peer_name(ucp_ep));
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %d: created wireup ep %p to %s",
+              ucp_ep, ucp_ep->ext->local_ep_id, ucp_ep->ext->remote_ep_id,
+              ucp_ep->conn_sn, self, ucp_ep_peer_name(ucp_ep));
     return UCS_OK;
 }
 
@@ -481,7 +497,12 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
 
-    ucs_debug("ep %p: destroy wireup ep %p", ucp_ep, self);
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %d: destroy wireup ep %p flags 0x%x next_ep %p "
+              "aux_ep %p pending_count %u",
+              ucp_ep, ucp_ep->ext->local_ep_id, ucp_ep->ext->remote_ep_id,
+              ucp_ep->conn_sn, self, self->flags, self->super.uct_ep,
+              self->aux_ep, self->pending_count);
 
     if (self->aux_ep != NULL) {
         /* No pending operations should be scheduled */
@@ -681,8 +702,12 @@ unsigned ucp_wireup_ep_pending_extract(ucp_wireup_ep_t *wireup_ep,
 {
     unsigned count = 0;
     uct_pending_req_t *uct_req;
+    ucp_request_t *ucp_req;
 
     ucs_queue_for_each_extract(uct_req, &wireup_ep->pending_q, priv, 1) {
+        ucp_req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        ucs_debug("ep %p: wireup_ep %p extract pending req %p",
+                  wireup_ep->super.ucp_ep, wireup_ep, ucp_req + 1);
         ucs_queue_push(queue, ucp_wireup_ep_req_priv(uct_req));
         ++count;
     }

@@ -3610,6 +3610,11 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
+        ucs_debug("worker %p: keepalive no resource on ep %p "
+                  "local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+                  " lane[%d] %p flags 0x%x",
+                  worker, ep, ep->ext->local_ep_id, ep->ext->remote_ep_id,
+                  lane, uct_ep, ep->flags);
         return 0;
     } else if (UCS_STATUS_IS_ERR(status)) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,

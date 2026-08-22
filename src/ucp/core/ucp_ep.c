@@ -449,7 +449,10 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_refcount_add(ep, create);
 
     *ep_p = ep;
-    ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
+    ucs_debug("created ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %u cfg_index %u flags 0x%x to %s %s",
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->cfg_index, ep->flags, ucp_ep_peer_name(ep), message);
     return UCS_OK;
 
 err_ep_deallocate:
@@ -1162,6 +1165,12 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
             goto err_destroy_ep;
         }
 
+        ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+                  " conn_sn %u flags 0x%x: API adopted unexpected ep "
+                  "uuid 0x%" PRIx64,
+                  ep, ep->ext->local_ep_id, ep->ext->remote_ep_id,
+                  ep->conn_sn, ep->flags, remote_address.uuid);
+
         ucp_stream_ep_activate(ep);
         goto out_resolve_remote_id;
     }
@@ -1356,7 +1365,10 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
 
 void ucp_ep_destroy_internal(ucp_ep_h ep)
 {
-    ucs_debug("ep %p: destroy", ep);
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %u cfg_index %u flags 0x%x: destroy",
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->cfg_index, ep->flags);
     ucp_ep_cleanup_lanes(ep);
     ucp_ep_delete(ep);
 }
@@ -4158,6 +4170,148 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     }
 }
 
+static void
+ucp_ep_print_lane_state(FILE *stream, ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_rsc_index_t aux_rsc_index;
+
+    if (uct_ep == NULL) {
+        fprintf(stream, "#     lane[%u] state: uct_ep <null>\n", lane);
+        return;
+    }
+
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        fprintf(stream, "#     lane[%u] state: uct_ep %p type failed\n", lane,
+                uct_ep);
+        return;
+    }
+
+    wireup_ep = ucp_wireup_ep(uct_ep);
+    if (wireup_ep == NULL) {
+        fprintf(stream,
+                "#     lane[%u] state: uct_ep %p type transport iface %p\n",
+                lane, uct_ep, uct_ep->iface);
+        return;
+    }
+
+    aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(uct_ep);
+    fprintf(stream,
+            "#     lane[%u] state: uct_ep %p type wireup flags 0x%x "
+            "ready %d local_connected %d remote_connected %d\n",
+            lane, uct_ep, wireup_ep->flags,
+            !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY),
+            !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED),
+            !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED));
+    fprintf(stream,
+            "#       next_ep %p next_rsc %u owner %d aux_ep %p aux_rsc %u "
+            "aux_p2p %d pending_wireup %u pending_ops %zu ep_init_flags 0x%x\n",
+            wireup_ep->super.uct_ep, wireup_ep->super.rsc_index,
+            wireup_ep->super.is_owner, wireup_ep->aux_ep, aux_rsc_index,
+            !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_AUX_P2P),
+            wireup_ep->pending_count,
+            ucs_queue_length(&wireup_ep->pending_q), wireup_ep->ep_init_flags);
+}
+
+static void ucp_ep_print_state(FILE *stream, ucp_ep_h ep)
+{
+    ucp_ep_config_t *config      = ucp_ep_config(ep);
+    ucp_lane_map_t all_lanes     = UCS_MASK(config->key.num_lanes);
+    ucp_lane_map_t live_lanes    = 0;
+    ucp_lane_map_t failed_lanes  = 0;
+    ucp_ep_flush_state_t *flush_state;
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        if (ucp_is_uct_ep_failed(uct_ep)) {
+            failed_lanes |= UCS_BIT(lane);
+        } else {
+            live_lanes |= UCS_BIT(lane);
+        }
+    }
+
+    fprintf(stream,
+            "#              state: ep %p worker %p cfg_index %u conn_sn %u "
+            "flags 0x%x refcount %u\n",
+            ep, ep->worker, ep->cfg_index, ep->conn_sn, ep->flags,
+            ep->refcount);
+    fprintf(stream,
+            "#                 ids: local 0x%" PRIx64 " remote 0x%" PRIx64
+            " remote_id_valid %d user_data %p\n",
+            ep->ext->local_ep_id, ep->ext->remote_ep_id,
+            !!(ep->flags & UCP_EP_FLAG_REMOTE_ID), ep->ext->user_data);
+    fprintf(stream,
+            "#               flags: local_connected %d remote_connected %d "
+            "failed %d closed %d used %d internal %d block_flush %d "
+            "err_handler_invoked %d\n",
+            !!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED),
+            !!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED),
+            !!(ep->flags & UCP_EP_FLAG_FAILED),
+            !!(ep->flags & UCP_EP_FLAG_CLOSED),
+            !!(ep->flags & UCP_EP_FLAG_USED),
+            !!(ep->flags & UCP_EP_FLAG_INTERNAL),
+            !!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH),
+            !!(ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED));
+    fprintf(stream,
+            "#           handshake: req_queued %d req_sent %d rep_sent %d "
+            "ack_sent %d req_ignored %d pre_req_queued %d pre_req_sent %d\n",
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED),
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_SENT),
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT),
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_ACK_SENT),
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_IGNORED),
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED),
+            !!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_SENT));
+    fprintf(stream,
+            "#                lanes: num %u all 0x%" PRIx64
+            " live 0x%" PRIx64
+            " failed 0x%" PRIx64 " p2p 0x%" PRIx64
+            " proto 0x%" PRIx64 " unflushed 0x%" PRIx64 "\n",
+            config->key.num_lanes, (uint64_t)all_lanes,
+            (uint64_t)live_lanes, (uint64_t)failed_lanes,
+            (uint64_t)config->p2p_lanes, (uint64_t)config->proto_lane_map,
+            (uint64_t)ep->ext->unflushed_lanes);
+    fprintf(stream,
+            "#           lane roles: am %u wireup %u keepalive %u cm %u "
+            "tag %u rkey_ptr %u error_mode %u\n",
+            config->key.am_lane, config->key.wireup_msg_lane,
+            config->key.keepalive_lane, config->key.cm_lane,
+            config->key.tag_lane, config->key.rkey_ptr_lane,
+            config->key.err_mode);
+
+    if (ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) {
+        flush_state = &ep->ext->flush_state;
+        fprintf(stream,
+                "#                flush: valid 1 send_sn %u cmpl_sn %u "
+                "mem_in_progress %u waiting_remote %d proto_reqs_empty %d "
+                "flush_sys_dev_map 0x%" PRIx64 "\n",
+                flush_state->send_sn, flush_state->cmpl_sn,
+                flush_state->mem_in_progress,
+                !ucs_hlist_is_empty(&flush_state->reqs),
+                ucs_hlist_is_empty(&ep->ext->proto_reqs),
+                (uint64_t)ep->ext->flush_sys_dev_map);
+    } else {
+        fprintf(stream,
+                "#                flush: valid 0 on_match_ctx %d "
+                "proto_reqs_empty %d flush_sys_dev_map 0x%" PRIx64 "\n",
+                !!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX),
+                ucs_hlist_is_empty(&ep->ext->proto_reqs),
+                (uint64_t)ep->ext->flush_sys_dev_map);
+    }
+
+    fprintf(stream, "#        actual lanes:\n");
+    for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        ucp_ep_print_lane_state(stream, ep, lane);
+    }
+}
+
 static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
                                        FILE *stream)
 {
@@ -4174,6 +4328,8 @@ static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
     fprintf(stream, "# UCP endpoint %s\n", name);
     fprintf(stream, "#\n");
     fprintf(stream, "#               peer: %s\n", ucp_ep_peer_name(ep));
+    ucp_ep_print_state(stream, ep);
+    fprintf(stream, "#\n");
 
     /* if there is a wireup lane, set aux_rsc_index to the stub ep resource */
     aux_rsc_index   = UCP_NULL_RESOURCE;

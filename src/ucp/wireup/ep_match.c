@@ -76,8 +76,21 @@ int ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
                               (ucs_conn_sn_t)conn_sn,
                               &ep->ext->ep_match.conn_match, conn_queue_type)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_ON_MATCH_CTX, 0);
+        ucs_debug("ep %p local_id 0x%" PRIx64 " conn_sn %u flags 0x%x: "
+                  "insert %s match uuid 0x%" PRIx64,
+                  ep, ep->ext->local_ep_id, conn_sn, ep->flags,
+                  (conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) ?
+                          "unexpected" : "expected",
+                  dest_uuid);
         return 1;
     }
+
+    ucs_debug("ep %p local_id 0x%" PRIx64 " conn_sn %u flags 0x%x: "
+              "did not insert %s match uuid 0x%" PRIx64,
+              ep, ep->ext->local_ep_id, conn_sn, ep->flags,
+              (conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) ?
+                      "unexpected" : "expected",
+              dest_uuid);
 
     /* EP was not added to EP matching, make EP's flush state valid */
     ucp_ep_flush_state_reset(ep);
@@ -100,6 +113,11 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
                                          (ucs_conn_sn_t)conn_sn,
                                          conn_queue_type, 1);
     if (conn_match == NULL) {
+        ucs_debug("worker %p: %s match miss uuid 0x%" PRIx64 " conn_sn %u",
+                  worker,
+                  (conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) ?
+                          "unexpected" : "expected",
+                  dest_uuid, conn_sn);
         return NULL;
     }
 
@@ -113,6 +131,14 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_ON_MATCH_CTX);
     ucp_ep_flush_state_reset(ep);
 
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %u flags 0x%x: retrieve %s match uuid 0x%" PRIx64,
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, conn_sn,
+              ep->flags,
+              (conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) ?
+                      "unexpected" : "expected",
+              dest_uuid);
+
     return ep;
 }
 
@@ -123,6 +149,13 @@ void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
     }
 
     ucs_assert(ep->conn_sn != UCP_EP_MATCH_CONN_SN_MAX);
+
+    ucs_debug("ep %p local_id 0x%" PRIx64 " remote_id 0x%" PRIx64
+              " conn_sn %u flags 0x%x: remove %s match uuid 0x%" PRIx64,
+              ep, ep->ext->local_ep_id, ep->ext->remote_ep_id, ep->conn_sn,
+              ep->flags, (ep->flags & UCP_EP_FLAG_REMOTE_ID) ?
+                      "unexpected" : "expected",
+              ep->ext->ep_match.dest_uuid);
 
     ucs_conn_match_remove_elem(&worker->conn_match_ctx,
                                &ep->ext->ep_match.conn_match,
