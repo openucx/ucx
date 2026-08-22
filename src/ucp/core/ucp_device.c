@@ -497,14 +497,17 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
     return UCP_NULL_LANE;
 }
 
-static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
-                                     ucp_tl_bitmap_t *tl_bitmap)
+static int ucp_device_ep_select_lanes(const ucp_device_mem_list_elem_t *elem,
+                                      const ucp_tl_bitmap_t *tl_bitmap,
+                                      ucp_tl_bitmap_t *selected_tl_bitmap)
 {
     ucp_ep_h ep                      = elem->ep;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane;
     ucp_rsc_index_t tl_id;
+    ucp_md_index_t dst_md_index;
 
+    UCS_STATIC_BITMAP_RESET_ALL(selected_tl_bitmap);
     if (UCS_STATIC_BITMAP_POPCOUNT(*tl_bitmap) == 0) {
         return 0;
     }
@@ -512,16 +515,18 @@ static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
         lane = ucp_device_ep_find_lane(ep, tl_id);
         if (lane == UCP_NULL_LANE) {
-            return 0;
+            continue;
         }
 
-        if (!(UCS_BIT(ep_config->key.lanes[lane].dst_md_index) &
-              elem->rkey->md_map)) {
-            return 0;
+        dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+        if (!(UCS_BIT(dst_md_index) & elem->rkey->md_map)) {
+            continue;
         }
+
+        UCS_STATIC_BITMAP_SET(selected_tl_bitmap, tl_id);
     }
 
-    return 1;
+    return !UCS_STATIC_BITMAP_IS_ZERO(*selected_tl_bitmap);
 }
 
 static ucs_status_t ucp_device_remote_mem_list_element_pack(
@@ -635,6 +640,9 @@ static ucs_status_t ucp_device_remote_mem_list_fill(
 
             tl_element = UCS_PTR_TYPE_OFFSET(tl_element, *tl_element);
             i++;
+            if (i == num_lanes) {
+                return UCS_OK;
+            }
         }
     }
 
@@ -654,6 +662,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
     ucp_device_remote_mem_list_t *handle;
     uct_device_remote_mem_elem_t *uct_element;
     size_t i, num_lanes;
+    ucp_tl_bitmap_t selected_tl_bitmap;
     ucs_status_t status;
     int tl_type;
 
@@ -690,8 +699,9 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         if (!UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
                  tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
-                if (ucp_device_ep_check_lanes(ucp_element,
-                                              &tl_bitmap[tl_type])) {
+                if (ucp_device_ep_select_lanes(ucp_element,
+                                               &tl_bitmap[tl_type],
+                                               &selected_tl_bitmap)) {
                     break;
                 }
             }
@@ -703,7 +713,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
             }
 
             status = ucp_device_remote_mem_list_fill(ucp_element,
-                                                     &tl_bitmap[tl_type],
+                                                     &selected_tl_bitmap,
                                                      num_lanes, uct_element,
                                                      release_handles);
             if (status != UCS_OK) {
