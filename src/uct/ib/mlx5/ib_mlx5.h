@@ -64,6 +64,7 @@
 #define UCT_IB_MLX5_CQ_SET_CI            0
 #define UCT_IB_MLX5_CQ_ARM_DB            1
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE     30
+#define UCT_IB_MLX5_PSN_BITS             24
 #define UCT_IB_MLX5_ATOMIC_MODE_COMP     1
 #define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
@@ -686,6 +687,7 @@ typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
+    uint32_t                    next_first_psn; /* First PSN of the next WQE */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
@@ -693,8 +695,11 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+    uint16_t                    ft_ci;      /* CI for last FT-completed WQE */
+    /* First BB index of the last HW-completed WQE.
+     * Updated under assert on the normal path; always on the FT path. */
+    uint16_t                    hw_ci;
 #if UCS_ENABLE_ASSERT
-    uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
@@ -904,6 +909,23 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 
 /* Get pointer to a WQE by producer index */
 void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
+
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl);
+
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl);
+
+uint16_t uct_ib_mlx5_txwq_next_ci(uint16_t ci, size_t wqe_size);
+
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
+                                void *dst, size_t length);
+
+size_t uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
+                                      const struct mlx5_wqe_ctrl_seg *ctrl,
+                                      size_t wqe_size);
+
+ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
+                                             uint32_t receiver_next_psn,
+                                             uint32_t num_packets);
 
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,

@@ -703,3 +703,8 @@ uct_ib_mlx5_get_atomic_mode(uct_ib_iface_t *iface)
     return uct_ib_iface_device(iface)->ext_atomic_arg_sizes ?
         UCT_IB_MLX5_ATOMIC_MODE_EXT : UCT_IB_MLX5_ATOMIC_MODE_COMP;
 }
+
+static UCS_F_ALWAYS_INLINE uint32_t uct_ib_mlx5_psn_24b(uint32_t psn)
+{
+    return psn & UCS_MASK(UCT_IB_MLX5_PSN_BITS);
+}
