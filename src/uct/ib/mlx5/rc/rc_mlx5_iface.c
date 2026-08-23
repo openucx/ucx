@@ -227,7 +227,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 purge:
     if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
         uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
-        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0,
+                                      0);
     }
 
 out:

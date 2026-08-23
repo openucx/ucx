@@ -149,6 +149,19 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 #ifdef HAVE_MLX5_DV
 
 class test_rc_mlx5_invalidate : public test_rc {
+protected:
+    struct tracked_completion {
+        uct_completion_t uct;
+        unsigned         callback_count;
+    };
+
+    static void completion_cb(uct_completion_t *comp)
+    {
+        tracked_completion *tracked = ucs_container_of(comp,
+                                                       tracked_completion, uct);
+
+        ++tracked->callback_count;
+    }
 };
 
 UCS_TEST_P(test_rc_mlx5_invalidate, no_completions)
@@ -168,6 +181,38 @@ UCS_TEST_P(test_rc_mlx5_invalidate, no_completions)
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
                   uct_ep_invalidate(m_e1->ep(0), &params));
     }
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_invalidate,
+                     destroy_preserves_completion_ownership,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const size_t length = 32;
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+
+    completion.uct.func  = completion_cb;
+    completion.uct.count = 1;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &completion.uct));
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+
+    m_e1->destroy_ep(0);
+
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+    uct_iface_progress_enable(m_e1->iface(), UCT_PROGRESS_SEND);
 }
 
 UCS_TEST_P(test_rc_mlx5_invalidate,
@@ -273,7 +318,8 @@ protected:
             /* This fixture validates CQE processing, not EP retirement. */
             if (!ucs_queue_is_empty(&txqp->outstanding)) {
                 uct_rc_txqp_purge_outstanding(&iface->super, txqp,
-                                              UCS_ERR_CANCELED, txwq->sw_pi, 0);
+                                              UCS_ERR_CANCELED, txwq->sw_pi, 0,
+                                              1);
             }
 
             if (txwq->hw_ci == txwq->prev_sw_pi) {

@@ -466,7 +466,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
     uct_ib_dereg_mr(self->dma_opaque.mr);
     ucs_free(self->dma_opaque.buf);
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
-                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1,
+                                  0);
     uct_rc_iface_remove_qp(&iface->super, self->super.tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(md, &self->super.tx.wq.super);
     uct_ib_mlx5_qp_mmio_cleanup(&self->super.tx.wq.super, self->super.tx.wq.reg);

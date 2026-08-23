@@ -286,7 +286,8 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                                   ucs_status_t status, uint16_t sn, int warn);
+                                   ucs_status_t status, uint16_t sn, int warn,
+                                   int suppress_completion);
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
@@ -458,16 +459,10 @@ uct_rc_txqp_no_completion_cb(uct_completion_t *comp)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
-                          int suppress_completion)
+uct_rc_txqp_invoke_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
+                                 int suppress_completion)
 {
     uct_completion_t dummy_comp = {uct_rc_txqp_no_completion_cb, 1, UCS_OK};
-
-    ucs_trace_poll("complete op %p sn %d handler %s", op, op->sn,
-                   ucs_debug_get_symbol_name((void*)op->handler));
-    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
-    op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
-                   UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
 
     /* Send handlers invoke user_comp synchronously. Let them perform their
      * internal response processing and cleanup without completing the
@@ -478,6 +473,19 @@ uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
     }
 
     op->handler(op, resp);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
+                          int suppress_completion)
+{
+    ucs_trace_poll("complete op %p sn %d handler %s", op, op->sn,
+                   ucs_debug_get_symbol_name((void*)op->handler));
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
+    op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
+                   UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+
+    uct_rc_txqp_invoke_completion_op(op, resp, suppress_completion);
 }
 
 static UCS_F_ALWAYS_INLINE void

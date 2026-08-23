@@ -454,7 +454,8 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 }
 
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                                   ucs_status_t status, uint16_t sn, int warn)
+                                   ucs_status_t status, uint16_t sn, int warn,
+                                   int suppress_completion)
 {
     uct_rc_iface_send_op_t *op;
     uct_rc_iface_send_desc_t *desc;
@@ -463,14 +464,14 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
             /* Allow clean flush cancel op from destroy flow */
-            if (warn &&
+            if (warn && !suppress_completion &&
                 (op->handler != uct_rc_ep_flush_op_completion_handler)) {
                 ucs_warn("destroying txqp %p with uncompleted operation %p"
                          " handler %s",
                          txqp, op, ucs_debug_get_symbol_name(op->handler));
             }
 
-            if (op->user_comp != NULL) {
+            if (!suppress_completion && (op->user_comp != NULL)) {
                 /* This must be uct_rc_ep_get_bcopy_handler,
                  * uct_rc_ep_get_bcopy_handler_no_completion,
                  * uct_rc_ep_get_zcopy_completion_handler,
@@ -510,7 +511,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
         } else {
             op->status = status;
             op->flags |= UCT_RC_IFACE_SEND_OP_STATUS;
-            op->handler(op, NULL);
+            uct_rc_txqp_invoke_completion_op(op, NULL,
+                                             suppress_completion);
         }
     }
 }
