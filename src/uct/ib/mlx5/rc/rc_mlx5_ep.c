@@ -826,71 +826,118 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_ep_send_op_release(uct_rc_iface_t *iface,
-                                           uct_rc_iface_send_op_t *op,
-                                           ucs_status_t status, int complete)
+static void
+uct_rc_mlx5_ep_release_am_bcopy_op(uct_rc_iface_send_op_t *op)
 {
-    uct_rc_iface_send_desc_t *desc;
+    uct_rc_iface_send_desc_t *desc =
+            ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
+    ucs_assert((void*)op->handler == (void*)ucs_mpool_put);
     op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
-
-    if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
-        op->iface->tx.reads_completed += op->length;
-        uct_rc_op_release_iov_get_zcopy(op);
-        uct_rc_iface_update_reads(iface);
-    }
-
-    if (complete && (op->user_comp != NULL)) {
-        uct_invoke_completion(op->user_comp, status);
-    }
-
-    if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
-        (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
-        uct_rc_iface_put_send_op(op);
-    } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
-        ucs_mpool_put(op);
-    } else if (((void*)op->handler == (void*)ucs_mpool_put) ||
-               (op->handler == uct_rc_ep_am_zcopy_handler)) {
-        desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-        ucs_mpool_put(desc);
-    } else {
-        ucs_warn("unsupported completed op release: op=%p handler=%s", op,
-                 ucs_debug_get_symbol_name((void*)op->handler));
-    }
+    ucs_mpool_put(desc);
 }
 
-static uct_rc_iface_send_op_t *
-uct_rc_mlx5_ep_get_send_op(uct_rc_txqp_t *txqp, uint16_t sn)
+static unsigned
+uct_rc_mlx5_ep_get_send_ops(uct_rc_txqp_t *txqp, uint16_t sn,
+                            uct_rc_iface_send_op_t **first_op_p)
 {
     uct_rc_iface_send_op_t *op;
+    unsigned count = 0;
 
-    if (ucs_queue_is_empty(&txqp->outstanding)) {
-        return NULL;
-    }
+    *first_op_p = NULL;
 
     ucs_queue_for_each(op, &txqp->outstanding, queue) {
         if (op->sn == sn) {
-            return op;
+            if (count++ == 0) {
+                *first_op_p = op;
+            }
+            continue;
         }
+
         if (UCS_CIRCULAR_COMPARE16(op->sn, >, sn)) {
             break;
         }
     }
 
-    return NULL;
+    return count;
 }
 
-static void uct_rc_mlx5_ep_release_send_ops(uct_rc_iface_t *iface,
-                                            uct_rc_txqp_t *txqp, uint16_t sn,
-                                            ucs_status_t status, int complete)
+static uct_rc_iface_send_op_t *
+uct_rc_mlx5_ep_detach_send_op(uct_rc_txqp_t *txqp, uint16_t sn)
 {
+    uct_rc_iface_send_op_t *detached_op = NULL;
     uct_rc_iface_send_op_t *op;
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_mlx5_ep_send_op_release(iface, op, status, complete);
+                               op->sn == sn) {
+        ucs_assert(detached_op == NULL);
+        detached_op = op;
     }
+
+    return detached_op;
+}
+
+static void uct_rc_mlx5_ep_advance_ft_ci(uct_ib_mlx5_txwq_t *txwq,
+                                         uct_rc_txqp_t *txqp, uint16_t ci)
+{
+    int16_t prev_available = uct_rc_txqp_available(txqp);
+    uint16_t available;
+
+    txwq->ft_ci = ci;
+    available   = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
+    if (available > prev_available) {
+        uct_rc_txqp_available_add(txqp, available - prev_available);
+    }
+
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+}
+
+static ucs_status_t uct_rc_mlx5_ep_validate_purge_wqe(
+        uct_ib_mlx5_txwq_t *txwq, uct_rc_txqp_t *txqp,
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size, uint16_t ci,
+        ucs_status_t delivery_status, uct_ep_op_info_t *info, int *skip_p,
+        void *callback_data)
+{
+    uct_rc_iface_send_op_t *op;
+    unsigned op_count;
+    ucs_status_t status;
+
+    /* Validate the AM short/bcopy scope before changing recovery state. */
+    op_count = uct_rc_mlx5_ep_get_send_ops(txqp, ci, &op);
+    if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_NOP) {
+        return (op_count == 0) ? UCS_OK : UCS_ERR_UNSUPPORTED;
+    }
+
+    if (uct_ib_mlx5_wqe_opcode(ctrl) != MLX5_OPCODE_SEND) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (delivery_status == UCS_OK) {
+        if ((op_count == 0) ||
+            ((op_count == 1) &&
+             ((void*)op->handler == (void*)ucs_mpool_put))) {
+            return UCS_OK;
+        }
+
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_rc_mlx5_fill_am_op_info(txwq, op, ctrl, wqe_size, skip_p,
+                                         info, callback_data);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (*skip_p || (info->operation == UCT_EP_OP_AM_SHORT)) {
+        return (op_count == 0) ? UCS_OK : UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((info->operation == UCT_EP_OP_AM_BCOPY) && (op_count == 1)) {
+        return UCS_OK;
+    }
+
+    return UCS_ERR_UNSUPPORTED;
 }
 
 static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
@@ -924,7 +971,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uct_rc_txqp_t *txqp       = &ep->super.txqp;
     uct_rc_mlx5_iface_common_t *mlx5_iface =
             ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *iface     = &mlx5_iface->super;
     const uct_rc_mlx5_ft_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_rc_iface_send_op_t *op;
@@ -935,9 +981,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint8_t opcode;
     size_t payload_length, wqe_size;
     int skip;
-    int16_t prev_available;
-    uint16_t available;
-    ucs_status_t status;
+    ucs_status_t delivery_status, status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
     if (status != UCS_OK) {
@@ -946,6 +990,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
     if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS) {
+        return UCS_ERR_BUSY;
     }
 
     /* Purge only after HW ownership reaches the saved SW tail. */
@@ -975,8 +1023,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
          ci = uct_ib_mlx5_txwq_next_ci(ci, wqe_size)) {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
         wqe_size = uct_ib_mlx5_wqe_size(ctrl);
-        if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_NOP) {
+        opcode   = uct_ib_mlx5_wqe_opcode(ctrl);
+        if (opcode == MLX5_OPCODE_NOP) {
             continue;
+        }
+
+        if (opcode != MLX5_OPCODE_SEND) {
+            ucs_error("unsupported outstanding op ep %p ci %u opcode 0x%x",
+                      tl_ep, ci, opcode);
+            return UCS_ERR_UNSUPPORTED;
         }
 
         payload_length = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size);
@@ -996,64 +1051,77 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         wqe_size = uct_ib_mlx5_wqe_size(ctrl);
         opcode   = uct_ib_mlx5_wqe_opcode(ctrl);
         if (opcode == MLX5_OPCODE_NOP) {
-            txwq->ft_ci = ci;
+            delivery_status = UCS_OK;
+        } else {
+            payload_length  = uct_ib_mlx5_wqe_payload_length(txwq, ctrl,
+                                                             wqe_size);
+            num_packets     = uct_rc_mlx5_num_packets(mlx5_iface,
+                                                      payload_length);
+            delivery_status = uct_ib_mlx5_psn_delivery_status(
+                    first_psn, receiver_next_psn, num_packets);
+            if (delivery_status == UCS_ERR_INVALID_PARAM) {
+                ucs_diag("invalid PSN interval ep %p first_psn %u "
+                         "num_packets %u receiver_next_psn %u ci %u",
+                         tl_ep, first_psn, num_packets, receiver_next_psn, ci);
+                return delivery_status;
+            }
+
+            first_psn = uct_ib_mlx5_psn_24b(first_psn + num_packets);
+        }
+
+        status = uct_rc_mlx5_ep_validate_purge_wqe(
+                txwq, txqp, ctrl, wqe_size, ci, delivery_status, &info, &skip,
+                callback_data);
+        if (status != UCS_OK) {
+            ucs_error("unsupported outstanding op ep %p ci %u opcode 0x%x "
+                      "status %s",
+                      tl_ep, ci, opcode, ucs_status_string(status));
+            return status;
+        }
+    }
+
+    first_psn = uct_ib_mlx5_psn_24b(txwq->next_first_psn - total_packets);
+    ep->flags |= UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
+
+    for (ci = start_ci; ci != end_ci;
+         ci = uct_ib_mlx5_txwq_next_ci(ci, wqe_size)) {
+        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        opcode   = uct_ib_mlx5_wqe_opcode(ctrl);
+        if (opcode == MLX5_OPCODE_NOP) {
+            uct_rc_mlx5_ep_advance_ft_ci(txwq, txqp, ci);
             continue;
         }
 
-        payload_length = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size);
-        num_packets    = uct_rc_mlx5_num_packets(mlx5_iface, payload_length);
-        status = uct_ib_mlx5_psn_delivery_status(first_psn, receiver_next_psn,
-                                                 num_packets);
-        if (status == UCS_ERR_INVALID_PARAM) {
-            ucs_diag("invalid PSN interval ep %p first_psn %u num_packets %u "
-                     "receiver_next_psn %u ci %u",
-                     tl_ep, first_psn, num_packets, receiver_next_psn, ci);
-            goto out;
-        }
+        payload_length  = uct_ib_mlx5_wqe_payload_length(txwq, ctrl, wqe_size);
+        num_packets     = uct_rc_mlx5_num_packets(mlx5_iface, payload_length);
+        delivery_status = uct_ib_mlx5_psn_delivery_status(
+                first_psn, receiver_next_psn, num_packets);
+        ucs_assert(delivery_status != UCS_ERR_INVALID_PARAM);
 
         first_psn = uct_ib_mlx5_psn_24b(first_psn + num_packets);
-        if (status == UCS_OK) {
-            uct_rc_mlx5_ep_release_send_ops(iface, txqp, ci, UCS_OK, 1);
-
-            txwq->ft_ci = ci;
-            continue;
-        }
-
-        op = uct_rc_mlx5_ep_get_send_op(txqp, ci);
-        if (opcode == MLX5_OPCODE_SEND) {
+        (void)uct_rc_mlx5_ep_get_send_ops(txqp, ci, &op);
+        skip = 1;
+        if (delivery_status != UCS_OK) {
             status = uct_rc_mlx5_fill_am_op_info(txwq, op, ctrl, wqe_size,
                                                  &skip, &info, callback_data);
-        } else {
-            status = UCS_ERR_UNSUPPORTED;
+            ucs_assert(status == UCS_OK);
         }
 
-        if (status != UCS_OK) {
-            ucs_error("failed to fill outstanding op info ep %p ci %u "
-                      "opcode 0x%x op %p status %s",
-                      tl_ep, ci, opcode, op, ucs_status_string(status));
-            goto out;
-        }
+        op = uct_rc_mlx5_ep_detach_send_op(txqp, ci);
+        uct_rc_mlx5_ep_advance_ft_ci(txwq, txqp, ci);
 
-        if (!skip) {
+        if ((delivery_status != UCS_OK) && !skip) {
             params->cb(&info, params->arg);
         }
 
-        uct_rc_mlx5_ep_release_send_ops(iface, txqp, ci, UCS_OK, 0);
-
-        txwq->ft_ci = ci;
+        if (op != NULL) {
+            uct_rc_mlx5_ep_release_am_bcopy_op(op);
+        }
     }
 
-    status = UCS_OK;
-
-out:
-    prev_available = uct_rc_txqp_available(txqp);
-    available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
-    if (available > prev_available) {
-        uct_rc_txqp_available_add(txqp, available - prev_available);
-        ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
-    }
-
-    return status;
+    ep->flags &= ~UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
