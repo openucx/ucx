@@ -550,6 +550,11 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     khiter_t khiter;
     int khret;
 
+    ucs_assert(!ucs_async_is_from_async(&worker->async));
+
+    /* Initialize short-circuit thresholds on the relevant endpoint config */
+    ucp_ep_config_proto_short_lazy_init(worker, ep_cfg_index);
+
     key.param = *select_param;
     khiter    = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
     if (khiter != kh_end(proto_select->hash)) {
