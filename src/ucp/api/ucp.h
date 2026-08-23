@@ -1416,7 +1416,7 @@ typedef struct ucp_worker_attr {
      * with this device name. If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is
      * also set, its filters are applied in addition to this one. Consequently,
      * combining @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY with a non-network
-     * device name matches no resources.
+     * device name will result in an error.
      *
      * @note This is an input attribute.
      */
