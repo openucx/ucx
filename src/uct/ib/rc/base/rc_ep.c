@@ -255,15 +255,22 @@ uct_rc_op_release_reads_get_zcopy(uct_rc_iface_send_op_t *op)
     uct_rc_op_release_iov_get_zcopy(op);
 }
 
-void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+static void
+uct_rc_ep_get_bcopy_process_resp(uct_rc_iface_send_op_t *op, const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
 
-    desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
-
     uct_rc_op_release_get_bcopy(op);
+    desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
+}
+
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+
+    uct_rc_ep_get_bcopy_process_resp(op, resp);
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
     ucs_mpool_put(desc);
 }
@@ -273,10 +280,7 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
-    VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
-
-    desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
-    uct_rc_op_release_get_bcopy(op);
+    uct_rc_ep_get_bcopy_process_resp(op, resp);
     ucs_mpool_put(desc);
 }
 
@@ -453,6 +457,74 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
     return status;
 }
 
+void uct_rc_txqp_completion_no_completion(uct_rc_iface_t *iface,
+                                          uct_rc_txqp_t *txqp,
+                                          const void *resp, uint16_t sn)
+{
+    uct_rc_iface_send_op_t *get_bcopy_op = NULL;
+    const void *get_bcopy_resp = NULL;
+    uct_rc_iface_send_op_t *op;
+    const void *op_resp;
+    int is_get_bcopy, is_atomic;
+
+    ucs_trace_poll("txqp %p retain completions up to sn %d", txqp, sn);
+    ucs_queue_for_each(op, &txqp->outstanding, queue) {
+        if (UCS_CIRCULAR_COMPARE16(op->sn, >, sn)) {
+            break;
+        }
+
+        /* Keep the original descriptor and completion queued for recovery.
+         * Only response data and internal read resources are handled here. */
+        if (op->handler == (uct_rc_send_handler_t)ucs_mpool_put) {
+            continue;
+        }
+
+        ucs_trace_poll("retain op %p sn %d handler %s", op, op->sn,
+                       ucs_debug_get_symbol_name((void*)op->handler));
+        ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
+        if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
+            uct_rc_op_release_reads_get_zcopy(op);
+            op->handler = uct_rc_ep_send_op_completion_handler;
+            continue;
+        }
+
+        is_get_bcopy = (op->handler == uct_rc_ep_get_bcopy_handler) ||
+                       (op->handler ==
+                        uct_rc_ep_get_bcopy_handler_no_completion);
+        is_atomic    = (op->handler == iface->config.atomic32_ext_handler) ||
+                       (op->handler == iface->config.atomic64_ext_handler) ||
+                       (op->handler == iface->config.atomic64_handler);
+        if (is_get_bcopy || is_atomic) {
+            op_resp = (resp == NULL) ?
+                              ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1 :
+                              resp;
+            if (resp != NULL) {
+                ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY));
+            }
+
+            if (is_get_bcopy) {
+                ucs_assert(get_bcopy_op == NULL);
+                op->handler = (op->user_comp == NULL) ?
+                                      (uct_rc_send_handler_t)ucs_mpool_put :
+                                      uct_rc_ep_am_zcopy_handler;
+                get_bcopy_op   = op;
+                get_bcopy_resp = op_resp;
+            } else {
+                op->flags |= UCT_RC_IFACE_SEND_OP_FLAG_RETAIN;
+                op->handler(op, op_resp);
+                op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_RETAIN;
+                op->handler = uct_rc_ep_am_zcopy_handler;
+            }
+        }
+    }
+
+    /* Do not invoke user code while the outstanding queue iterator is
+     * active. */
+    if (get_bcopy_op != NULL) {
+        uct_rc_ep_get_bcopy_process_resp(get_bcopy_op, get_bcopy_resp);
+    }
+}
+
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                    ucs_status_t status, uint16_t sn, int warn,
                                    int suppress_completion)
@@ -483,17 +555,20 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
             /* Need to release rdma_read resources taken by get operations  */
             if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
-                (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
+                (op->handler ==
+                 uct_rc_ep_get_bcopy_handler_no_completion)) {
                 uct_rc_op_release_get_bcopy(op);
                 uct_rc_iface_update_reads(iface);
-            } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
+            } else if (op->handler ==
+                       uct_rc_ep_get_zcopy_completion_handler) {
                 uct_rc_op_release_reads_get_zcopy(op);
                 uct_rc_iface_update_reads(iface);
             }
         }
 
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
-                       UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+                       UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY |
+                       UCT_RC_IFACE_SEND_OP_FLAG_RETAIN);
 
         if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
             (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
@@ -688,6 +763,10 @@ int uct_rc_ep_is_connected(uct_rc_ep_t *ep, struct ibv_ah_attr *ah_attr,
             *dest = be64toh(*value); \
         } else { \
             *dest = *value; \
+        } \
+        \
+        if (ucs_unlikely(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_RETAIN)) { \
+            return; \
         } \
         \
         uct_invoke_completion(desc->super.user_comp, UCS_OK); \

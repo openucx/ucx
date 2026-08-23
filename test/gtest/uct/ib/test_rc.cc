@@ -386,6 +386,20 @@ protected:
                (txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp));
     }
 
+    static void check_retained_op(uct_rc_txqp_t *txqp,
+                                  uct_rc_iface_send_op_t *expected_op,
+                                  uct_completion_t *expected_comp)
+    {
+        uct_rc_iface_send_op_t *op;
+
+        ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+        op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
+                                           uct_rc_iface_send_op_t, queue);
+        EXPECT_EQ(expected_op, op);
+        EXPECT_EQ(expected_comp, op->user_comp);
+        EXPECT_FALSE(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_RETAIN);
+    }
+
     static struct mlx5_cqe64 *get_cqe(uct_ib_mlx5_cq_t *cq, unsigned cqe_index)
     {
         return reinterpret_cast<struct mlx5_cqe64*>(
@@ -438,6 +452,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
     mapped_buffer recvbuf(64, 0ul, *m_e2);
     tracked_completion completion     = {};
     uct_ep_invalidate_params_t params = {};
+    uct_rc_iface_send_op_t *send_op;
     struct mlx5_cqe64 *cqe;
     unsigned old_cq_ci;
     uint16_t old_hw_ci, old_logical_ci, cqe_pi;
@@ -459,6 +474,9 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
     ASSERT_EQ(UCS_INPROGRESS,
               uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
                                recvbuf.rkey(), &completion.uct));
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    send_op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
+                                            uct_rc_iface_send_op_t, queue);
 
     old_cq_ci = cq->cq_ci;
     cqe       = wait_for_cqe(cq, old_cq_ci);
@@ -487,6 +505,9 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
               iface->super.tx.cq_available);
     EXPECT_EQ(txwq->prev_sw_pi, txwq->hw_ci);
     EXPECT_LT(txqp->available, txwq->bb_max);
+    check_retained_op(txqp, send_op, &completion.uct);
+    uct_rc_txqp_purge_outstanding(&iface->super, txqp, UCS_ERR_CANCELED,
+                                  txwq->sw_pi, 0, 1);
     EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
     EXPECT_EQ(1, completion.uct.count);
     EXPECT_EQ(0u, completion.callback_count);
@@ -508,6 +529,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
     mapped_buffer remotebuf(length, 0ul, *m_e2);
     tracked_completion completion     = {};
     uct_ep_invalidate_params_t params = {};
+    uct_rc_iface_send_op_t *send_op;
     struct mlx5_cqe64 *cqe;
     unsigned old_cq_ci;
     uint16_t old_logical_ci, cqe_pi;
@@ -535,6 +557,8 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
                                remotebuf.rkey(), &completion.uct));
     old_logical_ci = logical_ci(ep);
     ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    send_op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
+                                            uct_rc_iface_send_op_t, queue);
     ASSERT_LT(iface->super.tx.reads_available, initial_reads_available);
 
     cqe = wait_for_cqe(cq, old_cq_ci);
@@ -552,13 +576,19 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
     EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
     EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
     EXPECT_EQ(0, memcmp(localbuf.ptr(), remotebuf.ptr(), length));
-    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    check_retained_op(txqp, send_op, &completion.uct);
+    EXPECT_EQ(uct_rc_ep_am_zcopy_handler, send_op->handler);
     EXPECT_EQ(1, completion.uct.count);
     EXPECT_EQ(0u, completion.callback_count);
     EXPECT_EQ(initial_reads_available, iface->super.tx.reads_available);
     EXPECT_EQ(initial_reads_completed, iface->super.tx.reads_completed);
     EXPECT_EQ(old_logical_ci, logical_ci(ep));
     EXPECT_EQ(cqe_pi, txwq->hw_ci);
+    uct_rc_txqp_purge_outstanding(&iface->super, txqp, UCS_ERR_CANCELED,
+                                  txwq->sw_pi, 0, 1);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(initial_reads_available, iface->super.tx.reads_available);
+    EXPECT_EQ(initial_reads_completed, iface->super.tx.reads_completed);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe,

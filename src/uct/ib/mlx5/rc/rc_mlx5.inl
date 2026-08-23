@@ -63,18 +63,34 @@ uct_rc_mlx5_ep_fence_get(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp,
-                                struct mlx5_cqe64 *cqe, uint16_t hw_ci,
-                                int suppress_completion)
+                                struct mlx5_cqe64 *cqe, uint16_t hw_ci)
 {
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-        uct_rc_txqp_completion_inl_resp(txqp, cqe, hw_ci,
-                                        suppress_completion);
+        uct_rc_txqp_completion_inl_resp(txqp, cqe, hw_ci);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
-        uct_rc_txqp_completion_inl_resp(txqp, cqe - 1, hw_ci,
-                                        suppress_completion);
+        uct_rc_txqp_completion_inl_resp(txqp, cqe - 1, hw_ci);
     } else {
-        uct_rc_txqp_completion_desc(txqp, hw_ci, suppress_completion);
+        uct_rc_txqp_completion_desc(txqp, hw_ci);
     }
+}
+
+static UCS_F_NOINLINE void
+uct_rc_mlx5_txqp_process_tx_cqe_no_completion(uct_rc_iface_t *iface,
+                                              uct_rc_txqp_t *txqp,
+                                              struct mlx5_cqe64 *cqe,
+                                              uint16_t hw_ci)
+{
+    const void *resp;
+
+    if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
+        resp = cqe;
+    } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
+        resp = cqe - 1;
+    } else {
+        resp = NULL;
+    }
+
+    uct_rc_txqp_completion_no_completion(iface, txqp, resp, hw_ci);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -1994,10 +2010,11 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 
     uct_rc_mlx5_iface_update_cq_res(&iface->super, ep, hw_ci);
     if (ucs_unlikely(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
-        uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci, 1);
+        uct_rc_mlx5_txqp_process_tx_cqe_no_completion(
+                &iface->super, &ep->super.txqp, cqe, hw_ci);
         uct_rc_iface_update_reads(&iface->super);
     } else {
-        uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci, 0);
+        uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
                                    &ep->super.arb_group);
         uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
