@@ -843,6 +843,34 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
+void uct_rc_mlx5_ep_destroy(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep,
+                                               uct_rc_mlx5_base_ep_t);
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS) {
+        ep->flags |= UCT_RC_MLX5_EP_FLAG_DESTROY_PENDING;
+        return;
+    }
+
+    uct_rc_mlx5_ep_t_delete(tl_ep);
+}
+
+static ucs_status_t
+uct_rc_mlx5_ep_outstanding_purge_complete(uct_ep_h tl_ep, ucs_status_t status)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep,
+                                               uct_rc_mlx5_base_ep_t);
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DESTROY_PENDING) {
+        uct_rc_mlx5_ep_t_delete(tl_ep);
+    } else {
+        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
+    }
+
+    return status;
+}
+
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
@@ -857,11 +885,16 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS) {
+        return UCS_ERR_BUSY;
+    }
+
     /* Purge only after HW ownership reaches the saved SW tail. */
     if (txwq->hw_ci != txwq->prev_sw_pi) {
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ep->flags |= UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
     status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
     prev_available = uct_rc_txqp_available(txqp);
@@ -871,7 +904,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     }
 
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
-    return status;
+    return uct_rc_mlx5_ep_outstanding_purge_complete(tl_ep, status);
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

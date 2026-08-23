@@ -1177,7 +1177,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_fence                 = uct_rc_mlx5_base_ep_fence,
     .ep_check                 = uct_rc_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
+    .ep_destroy               = uct_rc_mlx5_ep_destroy,
     .ep_get_address           = uct_rc_mlx5_ep_get_address,
     .ep_connect_to_ep         = uct_base_ep_connect_to_ep,
 #if IBV_HW_TM

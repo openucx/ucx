@@ -46,7 +46,11 @@ enum {
 
 enum {
     /* The caller owns outstanding operations after EP invalidation. */
-    UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS = UCS_BIT(0)
+    UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS   = UCS_BIT(0),
+    /* Outstanding purge is executing provider code. */
+    UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS = UCS_BIT(1),
+    /* Endpoint destruction was requested during outstanding purge. */
+    UCT_RC_MLX5_EP_FLAG_DESTROY_PENDING  = UCS_BIT(2)
 };
 
 
@@ -214,6 +218,8 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params);
+
+void uct_rc_mlx5_ep_destroy(uct_ep_h tl_ep);
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req);
