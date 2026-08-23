@@ -808,6 +808,19 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         if (UCT_RC_MLX5_TM_ENABLED(iface)) {
             return UCS_ERR_UNSUPPORTED;
         }
+
+        /* Cover an unsignaled tail with a final CQE before moving the QP to
+         * error. */
+        if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
+            UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
+            uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
+                                         &ep->super.txqp, txwq,
+                                         MLX5_OPCODE_NOP, NULL, 0,
+                                         0, 0, 0,
+                                         0, 0,
+                                         0, 0,
+                                         0, INT_MAX);
+        }
     }
 
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
@@ -839,6 +852,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     int16_t prev_available;
     uint16_t available;
     ucs_status_t status;
+
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* Purge only after HW ownership reaches the saved SW tail. */
+    if (txwq->hw_ci != txwq->prev_sw_pi) {
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
