@@ -1444,8 +1444,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                                       &self->super.tx.wq.super, IBV_QPS_ERR);
 
     /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
-       overflow. These CQ credits will be released by error CQE handler. */
-    outstanding = self->super.tx.wq.bb_max - self->super.super.txqp.available;
+     * overflow. These CQ credits will be released by error CQE handler.
+     * TXQP credits may intentionally lag behind hardware progress after
+     * completions are disabled. Count outstanding BBs from the HW frontier. */
+    outstanding = self->super.tx.wq.prev_sw_pi - self->super.tx.wq.hw_ci;
     wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
                                                    outstanding);
     ucs_assert(outstanding >= wqe_count);

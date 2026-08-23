@@ -322,10 +322,6 @@ protected:
                                               1);
             }
 
-            if (txwq->hw_ci == txwq->prev_sw_pi) {
-                uct_rc_txqp_available_set(txqp, txwq->bb_max);
-            }
-
             uct_iface_progress_enable(m_entity->iface(), UCT_PROGRESS_SEND);
             scoped_log_handler hide_warn(hide_warns_logger);
             m_entity->destroy_ep(0);
@@ -479,6 +475,8 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
     EXPECT_EQ(post_available, txqp->available);
     EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
               iface->super.tx.cq_available);
+    EXPECT_EQ(txwq->prev_sw_pi, txwq->hw_ci);
+    EXPECT_LT(txqp->available, txwq->bb_max);
     EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
     EXPECT_EQ(1, completion.uct.count);
     EXPECT_EQ(0u, completion.callback_count);
