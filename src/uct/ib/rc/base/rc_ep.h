@@ -473,6 +473,7 @@ uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
      * internal response processing and cleanup without completing the
      * operation after completion ownership has moved to recovery. */
     if (suppress_completion) {
+        /* cppcheck-suppress autoVariables */
         op->user_comp = &dummy_comp;
     }
 
