@@ -681,6 +681,129 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
     EXPECT_EQ(0u, completion.callback_count);
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, flush_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &ep->super.txqp;
+    mapped_buffer sendbuf(32, 0ul, *m_e1);
+    mapped_buffer recvbuf(32, 0ul, *m_e2);
+    tracked_completion operation_completion = {};
+    tracked_completion flush_completion     = {};
+    uct_ep_invalidate_params_t params        = {};
+
+    flush();
+    operation_completion.uct.func   = completion_cb;
+    operation_completion.uct.count  = 1;
+    operation_completion.uct.status = UCS_OK;
+    flush_completion.uct.func       = completion_cb;
+    flush_completion.uct.count      = 1;
+    flush_completion.uct.status     = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &operation_completion.uct));
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+
+    const uint16_t sw_pi        = txwq->sw_pi;
+    const uint16_t prev_sw_pi   = txwq->prev_sw_pi;
+    const uint16_t sig_pi       = txwq->sig_pi;
+    const uint16_t unsignaled   = txqp->unsignaled;
+    const int16_t available     = txqp->available;
+    const signed cq_available   = iface->super.tx.cq_available;
+    const size_t outstanding    = ucs_queue_length(&txqp->outstanding);
+    const uint8_t mlx5_ep_flags = ep->flags;
+    const uint8_t rc_ep_flags   = ep->super.flags;
+
+    ASSERT_GT(outstanding, 0ul);
+    EXPECT_EQ(UCS_ERR_CANCELED,
+              uct_ep_flush(m_e1->ep(0), 0, &flush_completion.uct));
+    EXPECT_EQ(1, flush_completion.uct.count);
+    EXPECT_EQ(UCS_OK, flush_completion.uct.status);
+    EXPECT_EQ(0u, flush_completion.callback_count);
+    EXPECT_EQ(1, operation_completion.uct.count);
+    EXPECT_EQ(UCS_OK, operation_completion.uct.status);
+    EXPECT_EQ(0u, operation_completion.callback_count);
+    EXPECT_EQ(sw_pi, txwq->sw_pi);
+    EXPECT_EQ(prev_sw_pi, txwq->prev_sw_pi);
+    EXPECT_EQ(sig_pi, txwq->sig_pi);
+    EXPECT_EQ(unsignaled, txqp->unsignaled);
+    EXPECT_EQ(available, txqp->available);
+    EXPECT_EQ(cq_available, iface->super.tx.cq_available);
+    EXPECT_EQ(outstanding, ucs_queue_length(&txqp->outstanding));
+    EXPECT_EQ(mlx5_ep_flags, ep->flags);
+    EXPECT_EQ(rc_ep_flags, ep->super.flags);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, ep_check_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &ep->super.txqp;
+    tracked_completion check_completion = {};
+    uct_ep_invalidate_params_t params    = {};
+
+    flush();
+    check_completion.uct.func   = completion_cb;
+    check_completion.uct.count  = 1;
+    check_completion.uct.status = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_TRUE(ucs_arbiter_group_is_empty(&ep->super.arb_group));
+    ASSERT_FALSE(ucs_arbiter_group_is_scheduled(&ep->super.arb_group));
+
+    const signed saved_cq_available = iface->super.tx.cq_available;
+    iface->super.tx.cq_available    = 0;
+
+    const uint16_t sw_pi        = txwq->sw_pi;
+    const uint16_t prev_sw_pi   = txwq->prev_sw_pi;
+    const uint16_t sig_pi       = txwq->sig_pi;
+    const uint16_t unsignaled   = txqp->unsignaled;
+    const int16_t available     = txqp->available;
+    const size_t outstanding    = ucs_queue_length(&txqp->outstanding);
+    const uint8_t mlx5_ep_flags = ep->flags;
+    const uint8_t rc_ep_flags   = ep->super.flags;
+
+    EXPECT_EQ(UCS_ERR_CANCELED,
+              uct_ep_check(m_e1->ep(0), 0, &check_completion.uct));
+    EXPECT_EQ(1, check_completion.uct.count);
+    EXPECT_EQ(UCS_OK, check_completion.uct.status);
+    EXPECT_EQ(0u, check_completion.callback_count);
+    EXPECT_EQ(sw_pi, txwq->sw_pi);
+    EXPECT_EQ(prev_sw_pi, txwq->prev_sw_pi);
+    EXPECT_EQ(sig_pi, txwq->sig_pi);
+    EXPECT_EQ(unsignaled, txqp->unsignaled);
+    EXPECT_EQ(available, txqp->available);
+    EXPECT_EQ(0, iface->super.tx.cq_available);
+    EXPECT_EQ(outstanding, ucs_queue_length(&txqp->outstanding));
+    EXPECT_EQ(mlx5_ep_flags, ep->flags);
+    EXPECT_EQ(rc_ep_flags, ep->super.flags);
+    EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->super.arb_group));
+    EXPECT_FALSE(ucs_arbiter_group_is_scheduled(&ep->super.arb_group));
+
+    iface->super.tx.cq_available = saved_cq_available;
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_late_cqe, rc_mlx5)
 
 

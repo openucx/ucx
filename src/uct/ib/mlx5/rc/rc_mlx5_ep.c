@@ -672,6 +672,20 @@ ucs_status_t uct_rc_mlx5_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi);
 }
 
+ucs_status_t uct_rc_mlx5_base_ep_check(uct_ep_h tl_ep, unsigned flags,
+                                       uct_completion_t *comp)
+{
+    uct_rc_mlx5_base_ep_t *ep =
+            ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
+        return uct_rc_ep_check(tl_ep, flags, comp);
+    }
+
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
+    return UCS_ERR_CANCELED;
+}
+
 ucs_status_t
 uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
@@ -734,15 +748,13 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
-    if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
-        ucs_diag(
-                "ep %p flushing in invalidated state with disabled completions",
-                ep);
-    }
-
     UCT_CHECK_PARAM(!ucs_test_all_flags(flags, UCT_FLUSH_FLAG_CANCEL |
                                                UCT_FLUSH_FLAG_REMOTE),
                     "flush flags CANCEL and REMOTE are mutually exclusive");
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+        return UCS_ERR_CANCELED;
+    }
 
     if (flags & UCT_FLUSH_FLAG_REMOTE) {
         UCT_RC_IFACE_CHECK_FLUSH_REMOTE(
