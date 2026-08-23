@@ -537,7 +537,9 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
     ssize_t observed_reads_available, observed_reads_completed;
     uint8_t saved_ep_flags;
     int16_t saved_fc_wnd;
+#ifdef ENABLE_STATS
     uint64_t saved_fc_wnd_stat;
+#endif
     bool outstanding_preserved;
 #if UCS_ENABLE_ASSERT
     uint8_t saved_txwq_flags;
@@ -581,8 +583,10 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
     saved_err_handler_arg = base_iface->err_handler_arg;
     saved_ep_flags        = ep->super.flags;
     saved_fc_wnd          = ep->super.fc.fc_wnd;
-    saved_fc_wnd_stat     = UCS_STATS_GET_COUNTER(ep->super.fc.stats,
-                                                  UCT_RC_FC_STAT_FC_WND);
+#ifdef ENABLE_STATS
+    saved_fc_wnd_stat = UCS_STATS_GET_COUNTER(ep->super.fc.stats,
+                                              UCT_RC_FC_STAT_FC_WND);
+#endif
 #if UCS_ENABLE_ASSERT
     saved_txwq_flags = txwq->flags;
 #endif
@@ -606,8 +610,10 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
     base_iface->err_handler_arg = saved_err_handler_arg;
     ep->super.flags             = saved_ep_flags;
     ep->super.fc.fc_wnd         = saved_fc_wnd;
+#ifdef ENABLE_STATS
     UCS_STATS_SET_COUNTER(ep->super.fc.stats, UCT_RC_FC_STAT_FC_WND,
                           saved_fc_wnd_stat);
+#endif
 #if UCS_ENABLE_ASSERT
     txwq->flags = saved_txwq_flags;
 #endif
