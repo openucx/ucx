@@ -1,70 +1,16 @@
 # UCX code owners
 #
-# Each line is a file pattern followed by one or more owners. The owners of the
-# last matching pattern are automatically requested for review when a pull
-# request touches a matching file.
-#
 # Notes:
-# - Order matters: for a given file, only the last matching pattern applies.
-#   Keep general patterns above the more specific ones that refine them.
+# - Only the last matching pattern applies, so the ROCm and ZE entries below
+#   refine the '*' default.
 # - GitHub ignores owners that do not have write access to this repository.
 # - This file only routes review requests. Requiring code-owner approval is a
 #   separate branch protection setting and is not affected by this file.
-#
-# TODO: maintainers, please replace @openucx/MAINTAINERS-TEAM with the correct
-# team slug, and add per-subsystem reviewers where you want narrower routing.
-# The individual owners below are self-nominations, not confirmed assignments.
 #
 # See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Default owners
 * @openucx/MAINTAINERS-TEAM
-
-# Build system and packaging
-/Makefile.am        @openucx/MAINTAINERS-TEAM
-/autogen.sh         @openucx/MAINTAINERS-TEAM
-/configure.ac       @openucx/MAINTAINERS-TEAM
-/cmake/             @openucx/MAINTAINERS-TEAM
-/config/            @openucx/MAINTAINERS-TEAM
-/ucx.pc.in          @openucx/MAINTAINERS-TEAM
-/ucx.spec.in        @openucx/MAINTAINERS-TEAM
-/debian/            @openucx/MAINTAINERS-TEAM
-
-# CI
-/.ci/               @openucx/MAINTAINERS-TEAM
-/.github/           @openucx/MAINTAINERS-TEAM
-/buildlib/          @openucx/MAINTAINERS-TEAM
-/contrib/           @openucx/MAINTAINERS-TEAM
-
-# This file
-/.github/CODEOWNERS @openucx/MAINTAINERS-TEAM
-
-# Documentation
-/docs/              @openucx/MAINTAINERS-TEAM
-
-# Core layers
-/src/ucs/           @openucx/MAINTAINERS-TEAM
-/src/ucm/           @openucx/MAINTAINERS-TEAM
-/src/ucp/           @openucx/MAINTAINERS-TEAM
-/src/uct/           @openucx/MAINTAINERS-TEAM
-
-# Tools
-/src/tools/         @openucx/MAINTAINERS-TEAM
-
-# Bindings
-/bindings/          @openucx/MAINTAINERS-TEAM
-
-# Tests and examples
-/test/              @openucx/MAINTAINERS-TEAM
-/examples/          @openucx/MAINTAINERS-TEAM
-
-# GPU backends - listed after the generic layers above so they take precedence
-
-# CUDA
-/config/m4/cuda.m4    @openucx/MAINTAINERS-TEAM
-/src/ucm/cuda/        @openucx/MAINTAINERS-TEAM
-/src/uct/cuda/        @openucx/MAINTAINERS-TEAM
-/src/tools/perf/cuda/ @openucx/MAINTAINERS-TEAM
 
 # ROCm
 /config/m4/rocm.m4    @edgargabriel @mshanthagit @openucx/MAINTAINERS-TEAM
