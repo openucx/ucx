@@ -294,8 +294,11 @@ protected:
 
     struct error_context {
         uct_rc_mlx5_base_ep_t *ep;
+        tracked_completion    *completion;
         uint16_t              observed_hw_ci;
+        int16_t               observed_available;
         unsigned              observed_outstanding;
+        unsigned              observed_completion_count;
         unsigned              callback_count;
     };
 
@@ -362,8 +365,15 @@ protected:
         EXPECT_EQ(&context->ep->super.super.super, ep);
         EXPECT_EQ(UCS_ERR_CANCELED, status);
         context->observed_hw_ci       = context->ep->tx.wq.hw_ci;
+        context->observed_available   = uct_rc_txqp_available(
+                &context->ep->super.txqp);
         context->observed_outstanding = ucs_queue_length(
                 &context->ep->super.txqp.outstanding);
+        if (context->completion != NULL) {
+            context->observed_completion_count =
+                    context->completion->callback_count;
+        }
+
         ++context->callback_count;
         return UCS_OK;
     }
@@ -549,6 +559,79 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
     EXPECT_EQ(initial_reads_completed, iface->super.tx.reads_completed);
     EXPECT_EQ(old_logical_ci, logical_ci(ep));
     EXPECT_EQ(cqe_pi, txwq->hw_ci);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe,
+                     error_cqe_cleanup_before_callback,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep    = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_base_iface_t *base_iface = &iface->super.super.super;
+    uct_ib_mlx5_txwq_t *txwq     = &ep->tx.wq;
+    uct_rc_txqp_t *txqp          = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq         = &iface->cq[UCT_IB_DIR_TX];
+    const size_t length          = 32;
+    mapped_buffer localbuf(length, 0ul, *m_e1);
+    mapped_buffer remotebuf(length, 0ul, *m_e2);
+    tracked_completion completion = {};
+    error_context context         = {};
+    struct mlx5_cqe64 error_cqe;
+    struct mlx5_cqe64 *cqe;
+    uct_error_handler_t saved_err_handler;
+    void *saved_err_handler_arg;
+    unsigned old_cq_ci;
+    uint16_t cqe_pi;
+    int16_t expected_available;
+
+    flush();
+    completion.uct.func   = completion_cb;
+    completion.uct.count  = 1;
+    completion.uct.status = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    old_cq_ci = cq->cq_ci;
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                               localbuf.ptr(), length, remotebuf.addr(),
+                               remotebuf.rkey(), &completion.uct));
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+
+    cqe = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+    cqe_pi = ntohs(cqe->wqe_counter);
+
+    saved_err_handler     = base_iface->err_handler;
+    saved_err_handler_arg = base_iface->err_handler_arg;
+    context.ep                  = ep;
+    context.completion          = &completion;
+    base_iface->err_handler     = observe_error_cb;
+    base_iface->err_handler_arg = &context;
+
+    error_cqe         = make_error_cqe(txwq->super.qp_num, cqe_pi);
+    error_cqe.op_own |= cqe->op_own & MLX5_CQE_OWNER_MASK;
+    memcpy(cqe, &error_cqe, sizeof(*cqe));
+    uct_ib_mlx5_check_completion_with_err(&iface->super.super, cq, cqe);
+
+    base_iface->err_handler     = saved_err_handler;
+    base_iface->err_handler_arg = saved_err_handler_arg;
+    expected_available          = txwq->bb_max -
+                                  (txwq->prev_sw_pi - cqe_pi);
+
+    EXPECT_EQ(1u, context.callback_count);
+    EXPECT_EQ(cqe_pi, context.observed_hw_ci);
+    EXPECT_EQ(0u, context.observed_outstanding);
+    EXPECT_EQ(expected_available, context.observed_available);
+    EXPECT_EQ(1u, context.observed_completion_count);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(0, completion.uct.count);
+    EXPECT_EQ(UCS_ERR_CANCELED, completion.uct.status);
+    EXPECT_EQ(1u, completion.callback_count);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
