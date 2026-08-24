@@ -579,7 +579,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
     EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
     EXPECT_EQ(0, memcmp(localbuf.ptr(), remotebuf.ptr(), length));
     check_retained_op(txqp, send_op, &completion.uct);
-    EXPECT_EQ(uct_rc_ep_am_zcopy_handler, send_op->handler);
+    EXPECT_EQ(&uct_rc_ep_am_zcopy_handler, send_op->handler);
     EXPECT_EQ(1, completion.uct.count);
     EXPECT_EQ(0u, completion.callback_count);
     EXPECT_EQ(initial_reads_available, iface->super.tx.reads_available);
