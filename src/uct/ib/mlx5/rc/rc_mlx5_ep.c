@@ -842,14 +842,10 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     }
 
     if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
-        txwq->ft_ci      = txwq->prev_sw_pi -
-                           (txwq->bb_max -
-                            uct_rc_txqp_available(&ep->super.txqp));
-        ep->flags       |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+        ep->flags |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
 
-        ucs_debug("ep %p disable completions WQE range (%u, %u) "
-                  "next_first_psn %u",
-                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
+        ucs_debug("ep %p disable completions at WQE tail %u next_first_psn %u",
+                  ep, txwq->sw_pi, txwq->next_first_psn);
     }
 
     return UCS_OK;
@@ -910,10 +906,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     status     = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
     if (status == UCS_OK) {
-        /* A purge callback may post new WQEs, so restore only the WQEs covered
-         * by the pre-callback HW completion boundary. */
-        uct_rc_txqp_available_add(txqp, purge_ci - txwq->ft_ci);
-        txwq->ft_ci = purge_ci;
+        /* A purge callback may post new WQEs. Keep the credits consumed by
+         * those WQEs while restoring all credits covered by purge_ci. */
+        uct_rc_txqp_available_set(
+                txqp, txwq->bb_max - (txwq->prev_sw_pi - purge_ci));
     }
 
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
