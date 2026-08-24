@@ -107,7 +107,7 @@ ucp_proto_request_zcopy_complete_cb(ucp_request_t *req, ucs_status_t status,
 
     if (ucs_unlikely(status != UCS_OK) &&
         ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
-        !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
+        !ucp_ep_is_failing(req->send.ep)) {
         ucp_proto_request_restart(req);
     } else {
         if (complete_cb != NULL) {

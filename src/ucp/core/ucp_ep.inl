@@ -331,4 +331,12 @@ static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_live_lanes(ucp_ep_h ep)
     return lane_map;
 }
 
+/* The endpoint has failed, or its failure was already decided and its lanes are
+ * being torn down. In both cases operations must not be restarted on it, since
+ * the endpoint has no lane left to carry them. */
+static UCS_F_ALWAYS_INLINE int ucp_ep_is_failing(ucp_ep_h ep)
+{
+    return ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_FAILURE_PENDING);
+}
+
 #endif

@@ -398,7 +398,7 @@ static void ucp_am_eager_multi_zcopy_psn_completion(uct_completion_t *self)
                                           send.state.uct_comp);
 
     if (ucs_likely(self->status == UCS_OK) ||
-        (req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
+        ucp_ep_is_failing(req->send.ep)) {
         ucp_am_eager_zcopy_completion(self);
     } else {
         /* NOTE: do not release the user header to allow the request to be

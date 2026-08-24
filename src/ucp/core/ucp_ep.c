@@ -1686,6 +1686,12 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         return UCS_OK;
     }
 
+    /* Establish the endpoint-wide failure state before aborting failover:
+     * closing the failover lanes purges their outstanding operations, and the
+     * resulting completions must terminate their requests rather than restart
+     * them on an endpoint which is already going down. */
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
+
     /* Drop in-flight failover extraction so worker flush_ops can drain. */
     ucp_ep_failover_abort(ucp_ep, status);
 
@@ -1775,7 +1781,9 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
     const unsigned ep_init_flags = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
                                     UCP_EP_INIT_FLAG_INTERNAL : 0;
+    ucs_status_t am_lane_status  = UCS_OK;
     int port_speed_changed       = 0;
+    int reactivate               = 0;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
     ucp_worker_cfg_index_t new_cfg_index;
@@ -1804,7 +1812,14 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
         (ep->worker->context->config.features & UCP_FEATURE_AM)) {
         ucs_diag("ep %p: AM lane not found after reconfiguration with "
                  "failed lanes 0x%lx", ep, failed_lanes);
-        return UCS_ERR_UNREACHABLE;
+        /* Apply the configuration anyway, so the failed lanes are visible to
+         * protocol selection before the caller fails the endpoint: a request
+         * restarted while failover is being aborted must not be able to select
+         * a lane whose transmit queue is already dead. Reactivate the ifaces
+         * here, because the caller discards lanes without the previous
+         * configuration index. */
+        am_lane_status = UCS_ERR_UNREACHABLE;
+        reactivate     = 1;
     }
 
     if (port_speed_changed) {
@@ -1821,9 +1836,9 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
         return status;
     }
 
-    ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
+    ucp_ep_set_cfg_index(ep, new_cfg_index, reactivate);
 out:
-    return UCS_OK;
+    return am_lane_status;
 }
 
 ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
@@ -2559,6 +2574,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     if (ucp_ep_config(ep)->key.am_lane == UCP_NULL_LANE) {
         if (ucp_ep_failover_pending_rx_lanes(ep) != 0) {
             ucs_error("ep %p: no AM lane for ADDR token handshake", ep);
+            ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
             ucp_ep_failover_abort(ep, UCS_ERR_UNREACHABLE);
             ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_UNREACHABLE);
             ret = 1;
@@ -2578,6 +2594,10 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 exhausted:
     /* Token extract cannot finish without ADDR replies; release failover
      * ownership so flush_ops_count can reach zero on teardown. */
+    if (ucp_ep_get_live_lanes(ep) == 0) {
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
+    }
+
     ucp_ep_failover_abort(ep, UCS_ERR_ENDPOINT_TIMEOUT);
 
     if (ucp_ep_get_live_lanes(ep) == 0) {
@@ -2616,13 +2636,10 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
-        ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
-                    "ep %p: cfg_index %u -> %u after reconfiguration error %s",
-                    ucp_ep, old_cfg_index, ucp_ep->cfg_index,
-                    ucs_status_string(status));
         /* No AM lane (or other reconfig failure): fail the whole EP so all
          * lanes are discarded and flush can complete. Do not arm recovery.
          * Abort any already-armed failover from earlier lane failures. */
+        ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
         ucp_ep_failover_abort(ucp_ep, status);
         return status;
     }
