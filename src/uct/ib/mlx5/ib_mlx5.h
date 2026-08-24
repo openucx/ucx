@@ -687,8 +687,6 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
     uint32_t                    next_first_psn; /* First PSN of next WQE */
-    uint16_t                    path_mtu_mask;  /* Path MTU in bytes - 1 */
-    uint8_t                     path_mtu_shift; /* log2(path MTU in bytes) */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
@@ -696,6 +694,8 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+    uint16_t                    path_mtu_mask;  /* Path MTU in bytes - 1 */
+    uint8_t                     path_mtu_shift; /* log2(path MTU in bytes) */
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
