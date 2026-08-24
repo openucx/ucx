@@ -881,11 +881,11 @@ public:
     void check_address_by_device(const std::string &address_device_name,
                                  const uint32_t address_flags)
     {
-        const auto worker  = sender().worker();
-        const auto context = worker->context;
+        const auto worker                        = sender().worker();
+        const auto context                       = worker->context;
+        const ucp_address_entry_t *address_entry = nullptr;
         ucp_worker_attr_t worker_attr{};
         ucp_unpacked_address_t unpacked_address{};
-        const ucp_address_entry_t *address_entry = nullptr;
         ucp_tl_bitmap_t tl_bitmap;
         ucp_rsc_index_t tl_id;
         ucs_status_t status;
@@ -914,7 +914,9 @@ public:
 
         status = ucp_worker_query(worker, &worker_attr);
         ASSERT_UCS_OK(status);
-        ASSERT_NE(nullptr, worker_attr.address);
+        if (worker_attr.address == nullptr) {
+            UCS_TEST_ABORT("ucp_worker_query() returned a null address");
+        }
 
         status = ucp_address_unpack(worker, worker_attr.address,
                                     ucp_worker_default_address_pack_flags(
@@ -992,7 +994,7 @@ UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device_net_only)
                             UCP_WORKER_ADDRESS_FLAG_NET_ONLY);
 }
 
-UCS_TEST_P(test_ucp_worker_address_query, query_address_by_intersection)
+UCS_TEST_P(test_ucp_worker_address_query, empty_intersection)
 {
     const auto address_device_name =
             find_address_device(address_device_type::non_net);
