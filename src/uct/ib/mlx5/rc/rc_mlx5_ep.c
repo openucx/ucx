@@ -889,8 +889,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
     uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
     uct_rc_txqp_t *txqp       = &ep->super.txqp;
-    int16_t prev_available;
-    uint16_t available;
+    uint16_t purge_ci;
     ucs_status_t status;
 
     if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
@@ -906,13 +905,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         return UCS_ERR_NO_RESOURCE;
     }
 
+    purge_ci  = txwq->prev_sw_pi;
     ep->flags |= UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
-    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+    status     = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
-    prev_available = uct_rc_txqp_available(txqp);
-    available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
-    if (available > prev_available) {
-        uct_rc_txqp_available_add(txqp, available - prev_available);
+    if (status == UCS_OK) {
+        /* A purge callback may post new WQEs, so restore only the WQEs covered
+         * by the pre-callback HW completion boundary. */
+        uct_rc_txqp_available_add(txqp, purge_ci - txwq->ft_ci);
+        txwq->ft_ci = purge_ci;
     }
 
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
