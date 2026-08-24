@@ -580,20 +580,20 @@ unsigned ucs_topo_num_devices(void);
  * The caller takes ownership of the returned group data and must release it
  * with @ref ucs_topo_release_groups.
  *
- * @param [out] groups_p  Initialized topology groups.
+ * @param [out] groups_p  Pointer to initialized topology groups.
  *
  * @return UCS_OK on success, or an error status if topology group
  *         initialization failed.
  */
-ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p);
+ucs_status_t ucs_topo_init_groups(const ucs_topo_groups_t **groups_p);
 
 
 /**
  * Release topology groups returned by @ref ucs_topo_init_groups.
  *
- * @param [inout] groups  Topology groups to release and reset.
+ * @param [in] groups  Topology groups to release.
  */
-void ucs_topo_release_groups(ucs_topo_groups_t *groups);
+void ucs_topo_release_groups(const ucs_topo_groups_t *groups);
 
 
 /**

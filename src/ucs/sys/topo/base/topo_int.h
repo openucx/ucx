@@ -11,7 +11,6 @@
 
 BEGIN_C_DECLS
 
-
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */

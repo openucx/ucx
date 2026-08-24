@@ -9,7 +9,7 @@
 #endif
 
 #include "topo_int.h"
-#include <ucs/sys/topo/vr/vr.h>
+#include "topo_groups.h"
 
 #include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
@@ -1303,61 +1303,26 @@ static void ucs_topo_release_devices()
     }
 }
 
-static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
+ucs_status_t ucs_topo_init_groups(const ucs_topo_groups_t **groups_p)
 {
-    switch (type) {
-    case UCS_TOPO_GROUPS_TYPE_UNKNOWN:
-        return "unknown";
-    case UCS_TOPO_GROUPS_TYPE_VERA_RUBIN:
-        return "vera-rubin";
-    default:
-        return "<invalid>";
-    }
-}
-
-ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p)
-{
-    ucs_cpu_model_t cpu_model   = ucs_arch_get_cpu_model();
-    ucs_topo_groups_type_t type = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
-    ucs_topo_group_t *groups    = NULL;
-    size_t num_groups           = 0;
-    ucs_status_t status         = UCS_OK;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (cpu_model == UCS_CPU_MODEL_NVIDIA_VERA) {
-        status = ucs_topo_vr_init_groups(ucs_topo_global_ctx.devices,
-                                         ucs_topo_global_ctx.num_devices,
-                                         &groups, &num_groups);
-        type   = UCS_TOPO_GROUPS_TYPE_VERA_RUBIN;
-    }
-
-    if (status != UCS_OK) {
-        goto out_unlock;
-    }
-
-    ucs_debug("initialized groups of type %s with %zu groups",
-              ucs_topo_groups_type_str(type), num_groups);
-
-out_unlock:
+    status = ucs_topo_init_groups_inner(ucs_topo_global_ctx.devices,
+                                        ucs_topo_global_ctx.num_devices,
+                                        groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    if (status == UCS_OK) {
-        groups_p->type       = type;
-        groups_p->groups     = groups;
-        groups_p->num_groups = num_groups;
-    }
 
     return status;
 }
 
-static void ucs_topo_release_group(ucs_topo_group_t *group)
+static void ucs_topo_release_group(const ucs_topo_group_t *group)
 {
     ucs_free(group->nics_boards);
     ucs_free(group->gpus);
 }
 
-
-void ucs_topo_release_groups(ucs_topo_groups_t *groups)
+void ucs_topo_release_groups(const ucs_topo_groups_t *groups)
 {
     size_t i;
 
@@ -1366,12 +1331,8 @@ void ucs_topo_release_groups(ucs_topo_groups_t *groups)
     }
 
     ucs_free(groups->groups);
-
-    groups->type       = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
-    groups->groups     = NULL;
-    groups->num_groups = 0;
+    ucs_free((void*)groups);
 }
-
 
 ucs_global_state_t *ucs_topo_extract_state(void)
 {
