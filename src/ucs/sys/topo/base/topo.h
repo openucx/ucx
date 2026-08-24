@@ -11,6 +11,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/memory/numa.h>
 #include <ucs/type/cpu_set.h>
+#include <ucs/datastruct/array.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -123,26 +124,17 @@ typedef struct {
 } ucs_topo_nic_t;
 
 
-/**
- * @ingroup UCS_RESOURCE
- * Board containing physical NICs represented in a topology group.
- */
-typedef struct {
-    ucs_topo_nic_t nics[UCS_TOPO_MAX_NICS_PER_BOARD];
-    size_t         num_nics;
-} ucs_topo_nics_board_t;
+UCS_ARRAY_DECLARE_TYPE(ucs_topo_gpu_array_t, size_t, ucs_topo_gpu_t);
+UCS_ARRAY_DECLARE_TYPE(ucs_topo_nic_array_t, size_t, ucs_topo_nic_t);
 
 
 /**
  * @ingroup UCS_RESOURCE
- * Group of GPUs, NICs, and NIC boards sharing a topology locality.
+ * Group of GPUs and NICs sharing a topology locality.
  */
 typedef struct {
-    ucs_numa_node_t       numa_node;
-    ucs_topo_gpu_t        *gpus;
-    size_t                num_gpus;
-    ucs_topo_nics_board_t *nics_boards;
-    size_t                num_nics_boards;
+    ucs_topo_gpu_array_t gpus;
+    ucs_topo_nic_array_t nics;
 } ucs_topo_group_t;
 
 
