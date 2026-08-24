@@ -31,14 +31,7 @@
 
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_sys_dev_array_t, size_t,
                        ucs_sys_device_t);
-UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_gpu_array_t, size_t, ucs_topo_gpu_t);
-UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_nic_array_t, size_t, ucs_topo_nic_t);
 
-
-typedef struct {
-    ucs_topo_groups_gpu_array_t gpus;
-    ucs_topo_groups_nic_array_t nics;
-} ucs_topo_groups_inventory_t;
 
 static int
 ucs_topo_groups_sys_dev_cmp(const void *elem1, const void *elem2, void *arg)
@@ -292,7 +285,7 @@ static int ucs_topo_groups_bus_id_equal(const ucs_sys_bus_id_t *bus_id1,
 static ucs_status_t
 ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
                            const ucs_topo_groups_sys_dev_array_t *acc_devices,
-                           ucs_topo_groups_gpu_array_t *gpus)
+                           ucs_topo_gpu_array_t *gpus)
 {
     const ucs_sys_bus_id_t *gpu_bus_id = NULL;
     const ucs_sys_bus_id_t *dev_bus_id;
@@ -328,7 +321,7 @@ ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
 static ucs_status_t
 ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
                            const ucs_topo_groups_sys_dev_array_t *net_devices,
-                           ucs_topo_groups_nic_array_t *nics)
+                           ucs_topo_nic_array_t *nics)
 {
     const ucs_sys_bus_id_t *nic_bus_id = NULL;
     const ucs_sys_bus_id_t *dev_bus_id;
@@ -366,12 +359,12 @@ static ucs_status_t
 ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
                                 unsigned num_devices,
                                 ucs_topo_groups_type_t type,
-                                ucs_topo_groups_inventory_t *inventory_p)
+                                ucs_topo_group_t *inventory_p)
 {
     ucs_topo_groups_sys_dev_array_t acc_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucs_topo_groups_sys_dev_array_t net_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucs_topo_groups_gpu_array_t gpus = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucs_topo_groups_nic_array_t nics = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucs_topo_gpu_array_t gpus = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucs_topo_nic_array_t nics = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucs_status_t status;
 
     status = ucs_topo_groups_devices_collect(devices, num_devices, &acc_devices,
@@ -422,15 +415,14 @@ err_free_arrays:
     return status;
 }
 
-static void
-ucs_topo_groups_inventory_cleanup(ucs_topo_groups_inventory_t *inventory)
+static void ucs_topo_group_cleanup(ucs_topo_group_t *group)
 {
-    ucs_array_cleanup_dynamic(&inventory->nics);
-    ucs_array_cleanup_dynamic(&inventory->gpus);
+    ucs_array_cleanup_dynamic(&group->nics);
+    ucs_array_cleanup_dynamic(&group->gpus);
 }
 
 static ucs_status_t
-ucs_topo_groups_build_groups(const ucs_topo_groups_inventory_t *inventory,
+ucs_topo_groups_build_groups(const ucs_topo_group_t *inventory,
                              ucs_topo_groups_t *groups)
 {
     /* TODO: Build groups from inventory. */
@@ -456,7 +448,7 @@ ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
                            const ucs_topo_groups_t **groups_p)
 {
     ucs_cpu_model_t cpu_model = ucs_arch_get_cpu_model();
-    ucs_topo_groups_inventory_t inventory;
+    ucs_topo_group_t inventory;
     ucs_topo_groups_t *groups;
     ucs_status_t status;
 
@@ -487,7 +479,7 @@ ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
         goto err_cleanup_inventory;
     }
 
-    ucs_topo_groups_inventory_cleanup(&inventory);
+    ucs_topo_group_cleanup(&inventory);
 
 out:
     ucs_debug("initialized topo groups of type %s with %zu groups",
@@ -497,7 +489,7 @@ out:
     return UCS_OK;
 
 err_cleanup_inventory:
-    ucs_topo_groups_inventory_cleanup(&inventory);
+    ucs_topo_group_cleanup(&inventory);
 err_free_groups:
     ucs_free(groups);
     return status;
