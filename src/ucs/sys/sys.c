@@ -33,6 +33,7 @@
 #include <dirent.h>
 #include <sched.h>
 #include <ctype.h>
+#include <limits.h>
 #ifdef HAVE_SYS_THR_H
 #include <sys/thr.h>
 #endif
@@ -675,17 +676,20 @@ static ssize_t ucs_get_meminfo_entry(const char* pattern, int is_kb)
 {
     char buf[256];
     char final_pattern[80];
-    int val = 0;
+    long long val;
+    long long scale = is_kb ? 1024 : 1;
     ssize_t val_b = -1;
     FILE *f;
 
     f = fopen("/proc/meminfo", "r");
     if (f != NULL) {
         snprintf(final_pattern, sizeof(final_pattern), "%s: %s%s", pattern,
-                 "%d", is_kb ? " kB" : "");
+                 "%lld", is_kb ? " kB" : "");
         while (fgets(buf, sizeof(buf), f)) {
             if (sscanf(buf, final_pattern, &val) == 1) {
-                val_b = val * (is_kb ? 1024ull : 1);
+                if ((val >= 0) && (val <= (SSIZE_MAX / scale))) {
+                    val_b = val * scale;
+                }
                 break;
             }
         }

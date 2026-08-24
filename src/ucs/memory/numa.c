@@ -197,7 +197,7 @@ ucs_numa_node_t ucs_numa_node_of_cpu(int cpu)
 
 ucs_numa_node_t ucs_numa_node_of_device(const char *dev_path)
 {
-    long parsed_node;
+    long parsed_node = -1;
     ucs_status_t status;
 
     status = ucs_read_file_number(&parsed_node, 1, "%s/numa_node", dev_path);
