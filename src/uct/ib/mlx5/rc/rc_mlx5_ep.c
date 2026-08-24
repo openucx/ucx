@@ -49,8 +49,8 @@ uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
         return status;
     }
 
-    qpc                  = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
-    tx_token->remote_qpn = UCT_IB_MLX5DV_GET(qpc, qpc, remote_qpn);
+    qpc       = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    *tx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, remote_qpn));
 
     return UCS_OK;
 }

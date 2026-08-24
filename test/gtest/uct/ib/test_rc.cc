@@ -1327,9 +1327,9 @@ class test_rc_mlx5_token_query : public test_rc {
 protected:
     static constexpr uint32_t NUM_MESSAGES = 10;
 
-    static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
+    static ucs_status_t am_handler(void *rx_count, void*, size_t, unsigned)
     {
-        ++*static_cast<uint32_t*>(arg);
+        ++*static_cast<uint32_t*>(rx_count);
         return UCS_OK;
     }
 
@@ -1363,7 +1363,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 {
     uct_rc_mlx5_tx_token_t tx_token = {};
     uct_rc_mlx5_rx_token_t rx_token = {};
-    uint32_t rx_count = 0;
+    uint32_t rx_count               = 0;
     uct_rc_mlx5_base_ep_t *e2_ep;
     ucs_status_t status;
 
@@ -1382,8 +1382,8 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
     query_rx_token(m_e2->iface(), &tx_token, &rx_token);
 
     e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
-    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, tx_token.remote_qpn);
-    EXPECT_EQ(NUM_MESSAGES, rx_token.receiver_next_psn);
+    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, be32toh(tx_token));
+    EXPECT_EQ(NUM_MESSAGES, be32toh(rx_token));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)

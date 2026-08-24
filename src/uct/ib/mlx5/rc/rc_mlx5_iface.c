@@ -1055,6 +1055,7 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
     uct_rc_mlx5_base_ep_t *ep;
     uct_rc_ep_t *rc_ep;
     ucs_status_t status;
+    uint32_t remote_qpn;
     void *qpc;
 
     if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN)) {
@@ -1067,11 +1068,12 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    tx_token = iface_attr->tx_token;
-    iface    = ucs_derived_of(tl_iface, uct_rc_iface_t);
-    rc_ep    = uct_rc_iface_lookup_ep(iface, tx_token->remote_qpn);
+    tx_token   = iface_attr->tx_token;
+    iface      = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    remote_qpn = be32toh(*tx_token);
+    rc_ep      = uct_rc_iface_lookup_ep(iface, remote_qpn);
     if (rc_ep == NULL) {
-        ucs_error("rc mlx5: no ep for QPN %u", tx_token->remote_qpn);
+        ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1086,7 +1088,7 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
 
     qpc      = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
     rx_token = iface_attr->rx_token;
-    rx_token->receiver_next_psn = UCT_IB_MLX5DV_GET(qpc, qpc, next_rcv_psn);
+    *rx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, next_rcv_psn));
 
     return UCS_OK;
 }
