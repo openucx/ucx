@@ -195,10 +195,10 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_first_psn,
     uct_completion_t comp;
     ucs_status_t status;
 
-    EXPECT_EQ(0, wq->next_first_psn);
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_first_psn(wq));
 
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
-    EXPECT_EQ(1, wq->next_first_psn);
+    EXPECT_EQ(1, uct_ib_mlx5_txwq_get_next_first_psn(wq));
 
     comp.func   = [](uct_completion_t*) {};
     comp.count  = 1;
@@ -211,7 +211,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_first_psn,
     ASSERT_UCS_OK_OR_INPROGRESS(status);
 
     /* The RC QP uses the peer's 512-byte path MTU, so 513 bytes use 2 PSNs. */
-    EXPECT_EQ(3, wq->next_first_psn);
+    EXPECT_EQ(3, uct_ib_mlx5_txwq_get_next_first_psn(wq));
 
     if (status == UCS_INPROGRESS) {
         wait_for_value(&comp.count, 0, true);
@@ -219,7 +219,8 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_first_psn,
 
     wq->next_first_psn = UCS_MASK(24);
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
-    EXPECT_EQ(0, wq->next_first_psn);
+    EXPECT_EQ(UCS_BIT(24), wq->next_first_psn);
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_first_psn(wq));
 
     flush();
 }

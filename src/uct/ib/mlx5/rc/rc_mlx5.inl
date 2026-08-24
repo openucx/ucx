@@ -479,8 +479,7 @@ uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_add_psn(uct_ib_mlx5_txwq_t *txwq, uint32_t num_packets)
 {
-    txwq->next_first_psn =
-            (txwq->next_first_psn + num_packets) & UCS_MASK(24);
+    txwq->next_first_psn += num_packets;
 }
 
 static UCS_F_ALWAYS_INLINE void
