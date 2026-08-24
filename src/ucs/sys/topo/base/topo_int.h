@@ -7,7 +7,7 @@
 #ifndef UCS_TOPO_INT_H
 #define UCS_TOPO_INT_H
 
-#include "topo_groups.h"
+#include "topo.h"
 
 BEGIN_C_DECLS
 
@@ -59,10 +59,6 @@ typedef struct {
 ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
                                            char *path, size_t max);
 
-
-ucs_status_t
-ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
-                           unsigned num_devices, ucs_topo_groups_t *groups_p);
 
 END_C_DECLS
 

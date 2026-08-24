@@ -7,7 +7,7 @@
 #ifndef UCS_TOPO_GROUPS_H
 #define UCS_TOPO_GROUPS_H
 
-#include "topo.h"
+#include "topo_int.h"
 
 #include <ucs/datastruct/array.h>
 
@@ -113,6 +113,21 @@ void ucs_topo_init_group(ucs_topo_group_t *group);
  * @param [in] group  Group to release.
  */
 void ucs_topo_release_group(ucs_topo_group_t *group);
+
+
+/**
+ * Initialize topology groups.
+ *
+ * @param [in]  devices      Array of registered system devices.
+ * @param [in]  num_devices  Number of elements in @a devices.
+ * @param [out] groups_p     Initialized topology groups.
+ *
+ * @return UCS_OK on success, or an error status if topology group
+ *         initialization failed.
+ */
+ucs_status_t
+ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
+                           unsigned num_devices, ucs_topo_groups_t *groups_p);
 
 END_C_DECLS
 
