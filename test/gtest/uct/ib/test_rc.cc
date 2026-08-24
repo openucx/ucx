@@ -493,10 +493,13 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
     params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
     params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
     ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_EQ(old_logical_ci, txwq->ft_ci);
+
     EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
     EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
     EXPECT_EQ(cqe_pi, txwq->hw_ci);
     EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(old_logical_ci, txwq->ft_ci);
     EXPECT_EQ(post_available, txqp->available);
     EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
               iface->super.tx.cq_available);
@@ -569,6 +572,8 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
     params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
     params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
     ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_EQ(old_logical_ci, txwq->ft_ci);
+
 
     EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
     EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
@@ -776,6 +781,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
     EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
     EXPECT_EQ(cqe_pi, txwq->hw_ci);
     EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(old_logical_ci, txwq->ft_ci);
     EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
               observed_cq_available);
     EXPECT_EQ(post_available, observed_available);
