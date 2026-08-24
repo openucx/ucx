@@ -5,14 +5,17 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
-#include "vr_inventory.h"
+#include "topo_groups.h"
 
 #include <ucs/algorithm/qsort_r.h>
+#include <ucs/arch/cpu.h>
+#include <ucs/datastruct/array.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 
@@ -24,6 +27,15 @@
 #define UCS_TOPO_VR_CX9_DEVICE_ID     0x1025
 #define UCS_TOPO_VR_MLX5_VF_DEVICE_ID 0x101e
 #define UCS_TOPO_VR_FW_VER_MAX        64
+
+
+UCS_ARRAY_DECLARE_TYPE(ucs_topo_vr_sys_dev_array_t, size_t, ucs_sys_device_t);
+
+
+typedef struct {
+    ucs_topo_vr_sys_dev_array_t gpus;
+    ucs_topo_vr_sys_dev_array_t cx9_ports;
+} ucs_topo_vr_inventory_t;
 
 
 static int
@@ -264,7 +276,7 @@ ucs_topo_vr_devices_collect(const ucs_topo_sys_device_info_t *devices,
 }
 
 
-ucs_status_t
+static ucs_status_t
 ucs_topo_vr_inventory_build(const ucs_topo_sys_device_info_t *devices,
                             unsigned num_devices,
                             ucs_topo_vr_inventory_t *inventory_p)
@@ -301,8 +313,71 @@ err_free_arrays:
 }
 
 
-void ucs_topo_vr_inventory_cleanup(ucs_topo_vr_inventory_t *inventory)
+static void ucs_topo_vr_inventory_cleanup(ucs_topo_vr_inventory_t *inventory)
 {
     ucs_array_cleanup_dynamic(&inventory->cx9_ports);
     ucs_array_cleanup_dynamic(&inventory->gpus);
+}
+
+
+static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
+{
+    switch (type) {
+    case UCS_TOPO_GROUPS_TYPE_UNKNOWN:
+        return "unknown";
+    case UCS_TOPO_GROUPS_TYPE_VERA_RUBIN:
+        return "vera-rubin";
+    default:
+        return "<invalid>";
+    }
+}
+
+
+ucs_status_t
+ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
+                           unsigned num_devices,
+                           const ucs_topo_groups_t **groups_p)
+{
+    ucs_cpu_model_t cpu_model = ucs_arch_get_cpu_model();
+    ucs_topo_vr_inventory_t inventory;
+    ucs_topo_groups_t *groups;
+    ucs_status_t status;
+
+    groups = ucs_malloc(sizeof(*groups), "topo_groups");
+    if (groups == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    groups->type       = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+    groups->groups     = NULL;
+    groups->num_groups = 0;
+
+    if (cpu_model == UCS_CPU_MODEL_NVIDIA_VERA) {
+        status = ucs_topo_vr_inventory_build(devices, num_devices, &inventory);
+        if (status != UCS_OK) {
+            goto err_free_groups;
+        }
+
+        ucs_debug("built vera-rubin inventory with %zu gpus and %zu cx9 "
+                  "functions",
+                  (size_t)ucs_array_length(&inventory.gpus),
+                  (size_t)ucs_array_length(&inventory.cx9_ports));
+
+        groups->type = UCS_TOPO_GROUPS_TYPE_VERA_RUBIN;
+
+        /* TODO: Build groups from inventory. */
+
+        ucs_topo_vr_inventory_cleanup(&inventory);
+    }
+
+    ucs_debug("initialized topo groups of type %s with %zu groups",
+              ucs_topo_groups_type_str(groups->type), groups->num_groups);
+
+    *groups_p = groups;
+
+    return UCS_OK;
+
+err_free_groups:
+    ucs_free(groups);
+    return status;
 }
