@@ -944,7 +944,7 @@ UCS_TEST_P(test_ud, stale_private_ep_reuse, "UD_LINGER_TIMEOUT=1s",
     uct_ud_ep_t *private_ep = find_private_ep(m_e2, old_id);
     ASSERT_TRUE(private_ep != NULL);
 
-    uint32_t private_index = uct_ud_ep_id_index(private_ep->ep_id);
+    uint32_t private_index = uct_ud_ep_id_to_index(private_ep->ep_id);
     m_e1->destroy_ep(0);
 
     /* The second connection makes m_e2 hold 2 private endpoints, where the
@@ -953,7 +953,7 @@ UCS_TEST_P(test_ud, stale_private_ep_reuse, "UD_LINGER_TIMEOUT=1s",
     flush();
     ASSERT_NE(old_id, ep(m_e1)->ep_id);
 
-    wait_for_ep_destroyed(iface(m_e1), uct_ud_ep_id_index(old_id));
+    wait_for_ep_destroyed(iface(m_e1), uct_ud_ep_id_to_index(old_id));
 
     /* The peer of the stale private endpoint is gone, so it must be released */
     wait_for_ep_destroyed(iface(m_e2), private_index);
@@ -980,7 +980,7 @@ UCS_TEST_P(test_ud, private_ep_keepalive, "UD_TIMEOUT=1s") {
     uct_ud_ep_t *private_ep = find_private_ep(m_e2, ep(m_e1)->ep_id);
     ASSERT_TRUE(private_ep != NULL);
 
-    uint32_t private_index = uct_ud_ep_id_index(private_ep->ep_id);
+    uint32_t private_index = uct_ud_ep_id_to_index(private_ep->ep_id);
 
     /* Stay idle for several peer timeouts, the peer is alive and must be
      * detected as such */
