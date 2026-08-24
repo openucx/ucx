@@ -36,8 +36,11 @@
 /**
  * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
  */
-#define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
-#define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
+#define UCT_IB_NDR_READ_PATH_BANDWIDTH            38e9
+#define UCT_IB_XDR_READ_PATH_BANDWIDTH            35e9
+#define UCT_IB_HIGH_SPEED_NUM_PATHS               2
+#define UCT_IB_PORT_SPEED_UNIT_GBPS               0.1
+#define UCT_IB_MULTIPLANE_FULL_BANDWIDTH_GBPS     800.0
 
 /**
  * Minimal NDR single path ratio.
@@ -1401,8 +1404,7 @@ static double
 uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 {
 #if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    const double port_speed_unit_gbps = 0.1;
-    uct_ib_device_t *dev              = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_log_level_t log_level;
     uint64_t port_speed;
     int ret;
@@ -1419,7 +1421,7 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
         return 0.0;
     }
 
-    return port_speed * port_speed_unit_gbps;
+    return port_speed * UCT_IB_PORT_SPEED_UNIT_GBPS;
 #else
     return 0.0;
 #endif
@@ -1427,25 +1429,22 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 
 int uct_ib_iface_is_multiplane_full_bw(uct_ib_iface_t *iface)
 {
-    const double full_bandwidth_speed_gbps = 800.0;
-    uct_ib_device_t *dev                   = uct_ib_iface_device(iface);
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
     return (dev->flags & UCT_IB_DEVICE_FLAG_MULTIPLANE) &&
            (uct_ib_iface_query_port_speed_gbps(iface) ==
-            full_bandwidth_speed_gbps);
+            UCT_IB_MULTIPLANE_FULL_BANDWIDTH_GBPS);
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
-    const unsigned high_speed_num_paths = 2;
-
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
             if (uct_ib_iface_is_multiplane_full_bw(iface)) {
-                iface->num_paths = high_speed_num_paths;
+                iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
             }
         } else {
             /* IB - number of paths is LMC level */
@@ -1455,7 +1454,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
-            iface->num_paths = high_speed_num_paths;
+            iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
         }
     } else {
         iface->num_paths = config->num_paths;
