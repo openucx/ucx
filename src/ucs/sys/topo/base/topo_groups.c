@@ -363,9 +363,10 @@ ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
 {
     ucs_topo_groups_sys_dev_array_t acc_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucs_topo_groups_sys_dev_array_t net_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucs_topo_gpu_array_t gpus = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucs_topo_nic_array_t nics = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucs_topo_group_t inventory;
     ucs_status_t status;
+
+    ucs_topo_init_group(&inventory);
 
     status = ucs_topo_groups_devices_collect(devices, num_devices, &acc_devices,
                                              &net_devices);
@@ -383,42 +384,34 @@ ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
         ucs_topo_groups_cx9_filter(devices, &net_devices);
     }
 
-    status = ucs_topo_groups_gpus_build(devices, &acc_devices, &gpus);
+    status = ucs_topo_groups_gpus_build(devices, &acc_devices, &inventory.gpus);
     if (status != UCS_OK) {
         goto err_free_arrays;
     }
 
-    status = ucs_topo_groups_nics_build(devices, &net_devices, &nics);
+    status = ucs_topo_groups_nics_build(devices, &net_devices, &inventory.nics);
     if (status != UCS_OK) {
         goto err_free_arrays;
     }
 
     ucs_debug("built inventory with %zu physical gpus (%zu devices) and %zu "
               "physical nics (%zu devices)",
-              (size_t)ucs_array_length(&gpus),
+              (size_t)ucs_array_length(&inventory.gpus),
               (size_t)ucs_array_length(&acc_devices),
-              (size_t)ucs_array_length(&nics),
+              (size_t)ucs_array_length(&inventory.nics),
               (size_t)ucs_array_length(&net_devices));
 
     ucs_array_cleanup_dynamic(&net_devices);
     ucs_array_cleanup_dynamic(&acc_devices);
 
-    inventory_p->gpus = gpus;
-    inventory_p->nics = nics;
+    *inventory_p = inventory;
     return UCS_OK;
 
 err_free_arrays:
-    ucs_array_cleanup_dynamic(&nics);
-    ucs_array_cleanup_dynamic(&gpus);
+    ucs_topo_release_group(&inventory);
     ucs_array_cleanup_dynamic(&net_devices);
     ucs_array_cleanup_dynamic(&acc_devices);
     return status;
-}
-
-static void ucs_topo_group_cleanup(ucs_topo_group_t *group)
-{
-    ucs_array_cleanup_dynamic(&group->nics);
-    ucs_array_cleanup_dynamic(&group->gpus);
 }
 
 static ucs_status_t
@@ -475,7 +468,7 @@ ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
         goto err_cleanup_inventory;
     }
 
-    ucs_topo_group_cleanup(&inventory);
+    ucs_topo_release_group(&inventory);
 
 out:
     ucs_debug("initialized topo groups of type %s with %zu groups",
@@ -485,6 +478,6 @@ out:
     return UCS_OK;
 
 err_cleanup_inventory:
-    ucs_topo_group_cleanup(&inventory);
+    ucs_topo_release_group(&inventory);
     return status;
 }
