@@ -7,7 +7,7 @@
 #ifndef UCS_TOPO_GROUPS_H
 #define UCS_TOPO_GROUPS_H
 
-#include <ucs/sys/topo/base/topo_int.h>
+#include "topo_int.h"
 
 BEGIN_C_DECLS
 
