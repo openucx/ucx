@@ -353,6 +353,22 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
     return (info.netmask_len > -1);
 }
 
+int ucs_netlink_route_exists_with_default_fallback(
+        int if_index, const struct sockaddr *sa_remote)
+{
+    int netmask_len;
+
+    if (!ucs_netlink_route_exists(if_index, sa_remote, &netmask_len)) {
+        return 0;
+    }
+
+    if (netmask_len > 0) {
+        return 1;
+    }
+
+    return ucs_netlink_max_netmask_len(sa_remote) == 0;
+}
+
 int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
 {
     int best_netmask_len = -1;
