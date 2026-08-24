@@ -879,7 +879,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     struct mlx5_wqe_inl_data_seg *inl;
     uct_rc_mlx5_hdr_t            *rch;
     unsigned                     wqe_size, inl_seg_size, ctrl_av_size;
-    size_t                       message_length;
+    size_t                       iov_length, message_length;
     void                         *next_seg;
     uint8_t                      opmod;
 #if HAVE_MLX5_MMO
@@ -902,9 +902,6 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(*rch) + am_hdr_len,
                                              UCT_IB_MLX5_WQE_SEG_SIZE);
 
-        ucs_assert(uct_iov_total_length(iov, iovcnt) + sizeof(*rch) + am_hdr_len <=
-                   iface->super.super.config.seg_size);
-
         /* Inline segment with AM ID and header */
         inl              = next_seg;
         inl->byte_count  = htonl((sizeof(*rch) + am_hdr_len) | MLX5_INLINE_SEG);
@@ -915,12 +912,13 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 
         /* Data segment with payload */
         dptr             = (struct mlx5_wqe_data_seg *)((char *)inl + inl_seg_size);
-        wqe_size         = ctrl_av_size + inl_seg_size +
-                           uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt);
-        opmod            = 0;
-        message_length   = uct_iov_total_length(iov, iovcnt) + sizeof(*rch) +
-                           am_hdr_len;
+        wqe_size       = ctrl_av_size + inl_seg_size +
+                         uct_ib_mlx5_set_data_seg_iov_length(
+                                 txwq, dptr, iov, iovcnt, &iov_length);
+        opmod          = 0;
+        message_length = iov_length + sizeof(*rch) + am_hdr_len;
 
+        ucs_assert(message_length <= iface->super.super.config.seg_size);
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
         break;
 
@@ -932,11 +930,11 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         inl              = next_seg;
         inl->byte_count  = htonl(sizeof(struct ibv_tmh) | MLX5_INLINE_SEG);
         dptr             = uct_ib_mlx5_txwq_wrap_exact(txwq, (char *)inl + inl_seg_size);
-        wqe_size         = ctrl_av_size + inl_seg_size +
-                           uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt);
-        opmod            = 0;
-        message_length   = uct_iov_total_length(iov, iovcnt) +
-                           sizeof(struct ibv_tmh);
+        wqe_size       = ctrl_av_size + inl_seg_size +
+                         uct_ib_mlx5_set_data_seg_iov_length(
+                                 txwq, dptr, iov, iovcnt, &iov_length);
+        opmod          = 0;
+        message_length = iov_length + sizeof(struct ibv_tmh);
 
         uct_rc_mlx5_fill_tmh((struct ibv_tmh*)(inl + 1), tag, app_ctx,
                              IBV_TMH_EAGER);
@@ -949,17 +947,16 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
-        ucs_assert(uct_iov_total_length(iov, iovcnt) <= UCT_IB_MAX_MESSAGE_SIZE);
-
         raddr            = next_seg;
         uct_ib_mlx5_ep_set_rdma_seg(raddr, remote_addr, rkey);
 
         /* Data segment */
-        wqe_size         = ctrl_av_size + sizeof(*raddr) +
-                           uct_ib_mlx5_set_data_seg_iov(txwq, (void*)(raddr + 1),
-                                                        iov, iovcnt);
-        opmod            = 0;
-        message_length   = uct_iov_total_length(iov, iovcnt);
+        wqe_size       = ctrl_av_size + sizeof(*raddr) +
+                         uct_ib_mlx5_set_data_seg_iov_length(
+                                 txwq, (void*)(raddr + 1), iov, iovcnt,
+                                 &message_length);
+        opmod          = 0;
+        ucs_assert(message_length <= UCT_IB_MAX_MESSAGE_SIZE);
         break;
 
 #if HAVE_MLX5_MMO
