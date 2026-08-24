@@ -204,6 +204,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     uct_rc_mlx5_iface_update_cq_res(iface, ep, pi);
+    /* Pending purge applies to both paths. Regular failure cleanup requires
+     * outstanding purge -> pending purge -> TX resource restoration. */
     if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0,
                                       0);
