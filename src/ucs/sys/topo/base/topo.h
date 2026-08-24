@@ -92,7 +92,7 @@ typedef enum {
 /**
  * @ingroup UCS_RESOURCE
  * Physical GPU represented in a topology group.
- * WHen MPS MLOParts is enabled, the list contains the uGPUs under the same GPU.
+ * When MPS MLOParts is enabled, the list contains the uGPUs under the same GPU.
  * When MPS MLOParts is disabled, the list contains only one device.
  */
 typedef struct {
