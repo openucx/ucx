@@ -439,6 +439,9 @@ static ucs_status_t ucp_am_eager_multi_zcopy_psn_reset(ucp_request_t *req)
     ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_CONTIG_IOV);
     /* Restart the request from the very first fragment */
     req->send.msg_proto.am.internal_flags &= ~UCP_REQUEST_AM_FLAG_HEADER_SENT;
+    /* Mark restart as a retransmit so the receiver can evict any orphan
+     * partial first_rdesc left by the previous attempt. */
+    req->send.msg_proto.am.flags |= UCP_AM_HDR_FLAG_RESEND;
     if (status != UCS_OK) {
         return status;
     }

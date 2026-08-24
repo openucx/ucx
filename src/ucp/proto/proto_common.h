@@ -27,7 +27,7 @@
 
 
 #define UCP_PROTO_LANE_FMT \
-    "lane[%d] " UCT_TL_RESOURCE_DESC_FMT " bw " UCP_PROTO_PERF_FUNC_BW_FMT \
+    "lane[%d] " UCT_TL_RESOURCE_DESC_FMT UCP_PROTO_BW_FMT(bw) \
     UCP_PROTO_TIME_FMT(latency)
 
 
@@ -36,7 +36,7 @@
     UCT_TL_RESOURCE_DESC_ARG( \
         &(_params)->worker->context->tl_rscs[ \
             ucp_proto_common_get_rsc_index(_params, _lane)].tl_rsc), \
-    (_lane_perf)->bandwidth / UCS_MBYTE, \
+    UCP_PROTO_BW_ARG((_lane_perf)->bandwidth), \
     UCP_PROTO_TIME_ARG((_lane_perf)->latency)
 
 

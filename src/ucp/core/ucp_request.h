@@ -56,15 +56,20 @@ enum {
     UCP_REQUEST_FLAG_USER_HEADER_COPIED    = UCS_BIT(19),
     UCP_REQUEST_FLAG_USAGE_TRACKED         = UCS_BIT(20),
     UCP_REQUEST_FLAG_FENCE_REQUIRED        = UCS_BIT(21),
+    UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL    = UCS_BIT(22),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(22),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(23),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(24),
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(23),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(24),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(25),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0,
 #endif
+    UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
+    UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
+    UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
 };
 
 
@@ -196,7 +201,10 @@ struct ucp_request {
             } state;
 
             union {
-                ucp_wireup_msg_t  wireup;
+                struct {
+                    ucp_wireup_msg_t            msg_hdr;
+                    ucp_wireup_msg_lanes_info_t lanes_info;
+                } UCS_S_PACKED wireup;
 
                 struct {
                     /* Used to identify matching parts of a large message */
@@ -476,6 +484,13 @@ struct ucp_request {
                     size_t                         elem_size;
                     size_t                         length; /* Completion info to fill */
                 } stream;
+
+                struct {
+                    /* Remote endpoint ID used to send internal completions */
+                    uint64_t               ep_id;
+                    /* Completion callback for internal RNDV receives */
+                    ucp_request_callback_t complete_cb;
+                } rndv;
 
                  struct {
                     ucp_am_recv_data_nbx_callback_t cb;    /* Completion callback */

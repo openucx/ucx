@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -17,6 +17,7 @@
 #include <ucp/tag/tag_rndv.h>
 #include <ucp/tag/tag_match.inl>
 #include <ucp/tag/offload.h>
+#include <ucp/rma/rma_rndv.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 
@@ -175,6 +176,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         /* pack rkey, ask target to do get_zcopy */
         mem_info.type         = sreq->send.mem_type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+        mem_info.flags        = sreq->send.state.dt_iter.mem_info.flags;
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
@@ -220,6 +222,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         rndv_rtr_hdr->offset  = rndv_req->send.rndv.rtr.offset;
         mem_info.type         = rreq->recv.dt_iter.mem_info.type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+        mem_info.flags        = rreq->recv.dt_iter.mem_info.flags;
 
         packed_rkey_size = ucp_rkey_pack_memh(
                 ep->worker->context, rndv_req->send.rndv.md_map,
@@ -422,6 +425,7 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
     }
 
     ucp_request_send_buffer_dereg(sreq);
+    ucp_request_rndv_flush_complete(sreq);
     ucp_request_complete_send(sreq, status);
 }
 
@@ -1759,9 +1763,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 
     if (ucp_rndv_rts_is_am(rts_hdr)) {
         return ucp_am_rndv_process_rts(arg, data, length, tl_flags);
-    } else {
-        ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
+    } else if (ucp_rndv_rts_is_tag(rts_hdr)) {
         return ucp_tag_rndv_process_rts(worker, rts_hdr, length, tl_flags);
+    } else {
+        ucs_assert(ucp_rndv_rts_is_rma(rts_hdr));
+        return ucp_rma_rndv_process_rts(worker, data, length);
     }
 }
 
@@ -1888,6 +1894,7 @@ static void ucp_rndv_am_zcopy_send_req_complete(ucp_request_t *req,
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
     ucp_request_send_buffer_dereg(req);
+    ucp_request_rndv_flush_complete(req);
     ucp_request_complete_send(req, status);
 }
 
@@ -2436,7 +2443,9 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 {
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
     const ucp_rndv_rts_hdr_t *rndv_rts_hdr    = data;
+    const ucp_rma_rndv_rts_hdr_t *rma_rts     = data;
     const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr    = data;
+    const ucp_rndv_rtr_req_hdr_t *rtr_req     = data;
     const ucp_request_data_hdr_t *rndv_data   = data;
     const ucp_rndv_ack_hdr_t *ack_hdr         = data;
     const ucp_reply_hdr_t *rep_hdr            = data;
@@ -2449,13 +2458,19 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         if (ucp_rndv_rts_is_am(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&strb, "am_id %u",
                                       ucp_am_hdr_from_rts(rndv_rts_hdr)->am_id);
-        } else {
-            ucs_assert(ucp_rndv_rts_is_tag(rndv_rts_hdr));
+            rkey_buf = rndv_rts_hdr + 1;
+        } else if (ucp_rndv_rts_is_tag(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&strb, "tag %" PRIx64,
                                       ucp_tag_hdr_from_rts(rndv_rts_hdr)->tag);
+            rkey_buf = rndv_rts_hdr + 1;
+        } else {
+            ucs_assert(ucp_rndv_rts_is_rma(rndv_rts_hdr));
+            ucs_string_buffer_appendf(
+                    &strb, "RMA_RTS dst 0x%" PRIx64 " %s", rma_rts->address,
+                    ucs_memory_type_names[rma_rts->mem_type]);
+            rkey_buf = rma_rts + 1;
         }
 
-        rkey_buf = rndv_rts_hdr + 1;
         ucs_string_buffer_appendf(&strb,
                                   " ep_id 0x%" PRIx64 " sreq_id 0x%" PRIx64
                                   " address 0x%" PRIx64 " size %zu",
@@ -2477,6 +2492,22 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         }
         break;
     case UCP_AM_ID_RNDV_RTR:
+        if ((rndv_rtr_hdr->sreq_id == UCS_PTR_MAP_KEY_INVALID) &&
+            (length >= sizeof(*rtr_req))) {
+            ucs_string_buffer_appendf(
+                    &strb, "RNDV_RTR_REQ src 0x%" PRIx64 " dst 0x%" PRIx64
+                    " rreq_id 0x%" PRIx64 " ep_id 0x%" PRIx64 " size %zu"
+                    " offset %zu %s", rtr_req->address,
+                    rtr_req->super.address, rtr_req->super.rreq_id,
+                    rtr_req->req.ep_id, rtr_req->super.size,
+                    rtr_req->super.offset,
+                    ucs_memory_type_names[rtr_req->mem_type]);
+            if (rtr_req->super.address != 0) {
+                ucp_rndv_dump_rkey(rtr_req + 1, data_end, &strb);
+            }
+            break;
+        }
+
         ucs_string_buffer_appendf(&strb,
                                   "RNDV_RTR sreq_id 0x%" PRIx64
                                   " rreq_id 0x%" PRIx64 " address 0x%" PRIx64
@@ -2509,13 +2540,18 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 }
 
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM, UCP_AM_ID_RNDV_RTS,
-                         ucp_rndv_rts_handler, ucp_rndv_dump, 0);
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM, UCP_AM_ID_RNDV_ATS,
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                         UCP_AM_ID_RNDV_RTS, ucp_rndv_rts_handler,
+                         ucp_rndv_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                         UCP_AM_ID_RNDV_ATS,
                          ucp_rndv_ats_handler, ucp_rndv_dump, 0);
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM, UCP_AM_ID_RNDV_ATP,
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                         UCP_AM_ID_RNDV_ATP,
                          ucp_rndv_atp_handler, ucp_rndv_dump, 0);
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM, UCP_AM_ID_RNDV_RTR,
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                         UCP_AM_ID_RNDV_RTR,
                          ucp_rndv_rtr_handler, ucp_rndv_dump, 0);
-UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM, UCP_AM_ID_RNDV_DATA,
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                         UCP_AM_ID_RNDV_DATA,
                          ucp_rndv_data_handler, ucp_rndv_dump, 0);

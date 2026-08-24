@@ -17,17 +17,168 @@
 #include <ucp/tag/offload.h>
 
 
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_rndv_cfg_thresh(ucp_context_h context, uint64_t rndv_modes)
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force_enabled(ucp_context_h context)
 {
-    ucp_rndv_mode_t mode = context->config.ext.rndv_mode;
+    const ucp_context_config_t *cfg = &context->config.ext;
+
+    return cfg->rndv_shm_cuda_staging_force &&
+           cfg->rndv_shm_ppln_enable &&
+           cfg->rndv_mode == UCP_RNDV_MODE_AUTO;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force_scope(
+        const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id,
+        ucs_memory_type_t remote_mem_type)
+{
+    uint8_t op_flags;
+
+    /* Check that the force policy is effectively enabled. */
+    if (!ucp_proto_rndv_shm_pipeline_force_enabled(
+                init_params->worker->context)) {
+        return 0;
+    }
+
+    op_flags = ucp_proto_select_op_flags(init_params->select_param);
+
+    /* Check that this is explicitly tagged rendezvous traffic. */
+    if (!(op_flags & UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV)) {
+        return 0;
+    }
+
+    /* Check that the requested rendezvous operation is supported. */
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id))) {
+        return 0;
+    }
+
+    /* Check that the endpoint is intra-node. */
+    if (!(init_params->ep_config_key->flags &
+          UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE)) {
+        return 0;
+    }
+
+    /* Check that the selected local memory type is CUDA. */
+    if (init_params->select_param->mem_type != UCS_MEMORY_TYPE_CUDA) {
+        return 0;
+    }
+
+    /* Check that remote-key information is available. */
+    if (init_params->rkey_config_key == NULL) {
+        return 0;
+    }
+
+    /* Check that the remote-key memory type matches the required type. */
+    if (init_params->rkey_config_key->mem_type != remote_mem_type) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_rndv_shm_pipeline_force_scope(
+            init_params, UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_rndv_shm_pipeline_force_scope(
+            init_params, UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_HOST);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_proto_rndv_ctrl_init_flags(
+        const ucp_proto_rndv_ctrl_init_params_t *params)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+
+    /* Check that the force policy applies to this control protocol. */
+    if (!ucp_proto_rndv_shm_pipeline_force(init_params)) {
+        return 0;
+    }
+
+    /* Check that this control protocol selects a pipeline fragment. */
+    if (!(ucp_proto_select_op_flags(init_params->select_param) &
+          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)) {
+        return 0;
+    }
+
+    /* Check that this is the receiver-side rendezvous operation. */
+    if (ucp_proto_select_op_id(init_params->select_param) !=
+        UCP_OP_ID_RNDV_RECV) {
+        return 0;
+    }
+
+    /* Check that the child uses host memory staging. */
+    if (params->super.reg_mem_info.type != UCS_MEMORY_TYPE_HOST) {
+        return 0;
+    }
+
+    /* Check that the protocol threshold is selected automatically. */
+    if (params->super.cfg_thresh != UCS_MEMUNITS_AUTO) {
+        return 0;
+    }
+
+    return UCP_PROTO_RNDV_CTRL_FLAG_FORCE_SHM_PIPELINE_CHILD;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_cfg_thresh(const ucp_proto_init_params_t *init_params,
+                          uint64_t rndv_modes)
+{
+    const ucp_context_h context = init_params->worker->context;
+    ucp_rndv_mode_t mode        = context->config.ext.rndv_mode;
+
     ucs_assert(!(rndv_modes & UCS_BIT(UCP_RNDV_MODE_AUTO)));
+
+    if (ucp_proto_rndv_shm_pipeline_force(init_params)) {
+        return (rndv_modes & UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE)) ?
+               UCS_MEMUNITS_AUTO : UCS_MEMUNITS_INF;
+    }
 
     if ((mode == UCP_RNDV_MODE_AUTO) || (rndv_modes & UCS_BIT(mode))) {
         return UCS_MEMUNITS_AUTO;
     }
 
     return UCS_MEMUNITS_INF; /* used only as last resort */
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_proto_rndv_ctrl_variant_cfg_priority(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        size_t remote_cfg_thresh, unsigned remote_cfg_priority,
+        int force_shm_pipeline)
+{
+    unsigned cfg_priority = params->super.cfg_priority;
+
+    if (force_shm_pipeline && (remote_cfg_thresh != UCS_MEMUNITS_AUTO) &&
+        (remote_cfg_thresh != UCS_MEMUNITS_INF)) {
+        cfg_priority = ucs_max(cfg_priority, remote_cfg_priority);
+    }
+
+    return cfg_priority;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_ctrl_variant_cfg_thresh(
+        const ucp_proto_rndv_ctrl_init_params_t *params,
+        size_t remote_cfg_thresh, int force_shm_pipeline)
+{
+    if (force_shm_pipeline) {
+        return ((params->flags &
+                 UCP_PROTO_RNDV_CTRL_FLAG_FORCE_SHM_PIPELINE_CHILD) &&
+                (remote_cfg_thresh != UCS_MEMUNITS_INF)) ?
+               remote_cfg_thresh : UCS_MEMUNITS_INF;
+    }
+
+    return (remote_cfg_thresh == UCS_MEMUNITS_AUTO) ?
+           params->super.cfg_thresh : remote_cfg_thresh;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -79,7 +230,7 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
         ucp_tag_offload_cancel_rndv(req);
     }
 
-    if (length >= sizeof(*ats)) {
+    if ((status == UCS_OK) && (length >= sizeof(*ats))) {
         /* ATS message carries a size field */
         ats = ucs_derived_of(rephdr, ucp_rndv_ack_hdr_t);
         if (!ucp_proto_common_frag_complete(req, ats->size, "rndv_ats")) {
@@ -89,9 +240,33 @@ ucp_proto_rndv_ats_handler(void *arg, void *data, size_t length, unsigned flags)
 
     ucp_send_request_id_release(req);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1, UCP_DT_MASK_ALL);
+    ucp_request_rndv_flush_complete(req);
     ucp_request_complete_send(req, status);
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_request_zcopy_complete_cb(req, status,
+                                        ucp_request_rndv_flush_complete);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_request_zcopy_complete_success(ucp_request_t *req)
+{
+    ucp_proto_rndv_request_zcopy_complete(req, UCS_OK);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_request_zcopy_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_rndv_request_zcopy_complete(req, req->send.state.uct_comp.status);
 }
 
 static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
@@ -152,15 +327,29 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {
     ucs_assert(req->send.rndv.rkey != NULL);
-    ucp_rkey_destroy(req->send.rndv.rkey);
+
+    /* RMA GET/RNDV borrows the user rkey for its internal RNDV receive. */
+    if (!(req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ)) {
+        ucp_rkey_destroy(req->send.rndv.rkey);
+    }
+
     req->send.rndv.rkey = NULL;
 }
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_recv_complete(ucp_request_t *req);
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_recv_complete_with_ats(ucp_request_t *req, uint8_t ats_stage)
 {
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        /* RMA GET/RNDV has no peer RTS request to acknowledge. */
+        ucp_proto_rndv_recv_complete(req);
+        return;
     }
 
     ucp_proto_request_set_stage(req, ats_stage);
@@ -182,6 +371,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
 
     ucp_proto_request_send_init(freq, req->send.ep, UCP_REQUEST_FLAG_RNDV_FRAG);
     ucp_request_set_super(freq, req);
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_GET_REQ) {
+        freq->flags |= UCP_REQUEST_FLAG_RNDV_GET_REQ;
+    }
 
     *freq_p = freq;
     return UCS_OK;
@@ -360,7 +552,10 @@ ucp_proto_rndv_recv_req_complete(ucp_request_t *recv_req, ucs_status_t status)
     ucp_trace_req(recv_req, "rndv_recv_req_complete status '%s'",
                   ucs_status_string(status));
 
-    if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+    if (recv_req->flags & UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL) {
+        recv_req->status = status;
+        recv_req->recv.rndv.complete_cb(recv_req);
+    } else if (recv_req->flags & UCP_REQUEST_FLAG_RECV_AM) {
         ucp_request_complete_am_recv(recv_req, status);
     } else {
         ucs_assert(recv_req->flags & UCP_REQUEST_FLAG_RECV_TAG);

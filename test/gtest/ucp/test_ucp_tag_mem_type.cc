@@ -40,6 +40,8 @@ public:
 
             m_env.push_back(
                     new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+            m_env.push_back(
+                    new ucs::scoped_setenv("UCX_GGA_GPU_DIRECT_RDMA", "n"));
         }
 
         if (variant_flags & VARIANT_TAG_OFFLOAD) {

@@ -4,6 +4,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
 * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -502,10 +503,13 @@ protected:
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
     cuda_copy,              \
-    gdr_copy
+    gdr_copy,               \
+    cuda_ipc
 
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
+
+#define UCT_TEST_ZE_MEM_TYPE_TLS ze_copy
 
 #define UCT_TEST_NO_GPU_MEM_TYPE_TLS \
     UCT_TEST_NO_SELF_TLS, \
@@ -584,6 +588,16 @@ protected:
 
 
 /**
+ * Instantiate the parametrized test case for ZE copy transport.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_ZE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, \
+                   UCT_TEST_ZE_MEM_TYPE_TLS)
+
+
+/**
  * Instantiate the parametrized test case for all sockaddr CMs.
  *
  * @param _test_case  Test case class, derived from @ref test_uct_sockaddr.
@@ -616,16 +630,6 @@ protected:
 #define UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(_test_case) \
     UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, gga_mlx5)
-
-
-/**
- * Instantiate the parametrized test case for CUDA_IPC.
- * TODO: add cuda_ipc to UCT_INSTANTIATE_TEST_CASE.
- *
- * @param _test_case  Test case class, derived from uct_test.
- */
-#define UCT_INSTANTIATE_CUDA_IPC_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, cuda_ipc)
 
 
 /**
