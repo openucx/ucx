@@ -312,7 +312,7 @@ UCS_TEST_F(test_rwlock, shared_state) {
 
 UCS_TEST_F(test_rwlock, publish) {
     /* One writer and two readers looping in parallel. The writer stores seq
-     * then payloada and readers load payload then seq. Seeing the new payload
+     * then payload and readers load payload then seq. Seeing the new payload
      * is allowed only if seq was stored too.
      */
     const int niters       = 10000000;
