@@ -222,6 +222,20 @@ UCS_TEST_F(test_topo, pci_id) {
     EXPECT_EQ(expected_device, pci_id.device);
 }
 
+UCS_TEST_F(test_topo, pci_id_nonexistent_bdf) {
+    static const char *bdf = "ffff:ff:ff.1";
+    ucs_sys_device_t sys_dev;
+    ucs_sys_pci_id_t pci_id;
+
+    /* NOTE: Nonexistent BDF is still registered as a sys_dev */
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bdf_name(bdf, &sys_dev));
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_get_pci_id(sys_dev, &pci_id));
+    EXPECT_EQ(UCS_SYS_PCI_ID_VENDOR_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_DEVICE_UNDEFINED, pci_id.device);
+}
+
 UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     static const uintptr_t user_value1 = 17;
     static const uintptr_t user_value2 = 42;

@@ -352,26 +352,25 @@ out:
     return status;
 }
 
-static ucs_status_t
+static uint16_t
 ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
-                           const char *file_name, uint16_t *value_p)
+                           const char *file_name)
 {
     long value;
     ucs_status_t status;
 
     status = ucs_read_file_number(&value, 1, "%s/%s", sysfs_path, file_name);
     if (status != UCS_OK) {
-        return status;
+        return UCS_SYS_PCI_ID_VENDOR_UNDEFINED;
     }
 
     if ((value < 0) || (value > UINT16_MAX)) {
         ucs_debug("%s: value %ld in '%s/%s' is out of range", dev_name, value,
                   sysfs_path, file_name);
-        return UCS_ERR_INVALID_PARAM;
+        return UCS_SYS_PCI_ID_VENDOR_UNDEFINED;
     }
 
-    *value_p = (uint16_t)value;
-    return UCS_OK;
+    return (uint16_t)value;
 }
 
 static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
@@ -397,17 +396,8 @@ static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
 
     *numa_node_p = ucs_numa_node_of_device(path);
 
-    status = ucs_topo_read_pci_id_value(dev_name, path, "vendor",
-                                        &pci_id_p->vendor);
-    if (status != UCS_OK) {
-        pci_id_p->vendor = UCS_SYS_PCI_ID_VENDOR_UNDEFINED;
-    }
-
-    status = ucs_topo_read_pci_id_value(dev_name, path, "device",
-                                        &pci_id_p->device);
-    if (status != UCS_OK) {
-        pci_id_p->device = UCS_SYS_PCI_ID_DEVICE_UNDEFINED;
-    }
+    pci_id_p->vendor = ucs_topo_read_pci_id_value(dev_name, path, "vendor");
+    pci_id_p->device = ucs_topo_read_pci_id_value(dev_name, path, "device");
 
     ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
               dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);
@@ -511,10 +501,14 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
-            ucs_debug("added sys_dev %d for bus id %s", *sys_dev_p, name);
+            ucs_debug(
+                    "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT,
+                    *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id));
         } else {
-            ucs_debug("added sys_dev %d for bus id %s with user value %"
-                      PRIuPTR, *sys_dev_p, name, user_value);
+            ucs_debug(
+                    "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT
+                    "with user value %" PRIuPTR,
+                    *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id), user_value);
         }
 
         kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) =
