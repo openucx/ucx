@@ -3138,7 +3138,7 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
     if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
-            if ((iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) == 0) {
+            if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE)) {
                 UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
             }
         }
