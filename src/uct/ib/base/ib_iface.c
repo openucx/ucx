@@ -2152,11 +2152,9 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ib_iface_t *ib_iface                          =
-            ucs_derived_of(iface, uct_ib_iface_t);
-    uct_ep_operation_t op                             =
-            UCT_ATTR_VALUE(PERF, perf_attr, operation, OPERATION,
-                           UCT_EP_OP_LAST);
+    uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
+    uct_ep_operation_t op    = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                              OPERATION, UCT_EP_OP_LAST);
     const uct_ib_iface_send_overhead_t *send_overhead =
             &ib_iface->config.send_overhead;
     uct_iface_attr_t iface_attr;
