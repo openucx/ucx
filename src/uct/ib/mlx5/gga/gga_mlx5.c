@@ -458,7 +458,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
     uint16_t outstanding;
     uint16_t wqe_count;
 
-    outstanding = self->super.tx.wq.bb_max - self->super.super.txqp.available;
+    outstanding = self->super.tx.wq.prev_sw_pi - self->super.tx.wq.hw_ci;
+    ucs_assert(outstanding ==
+               self->super.tx.wq.bb_max -
+                       uct_rc_txqp_available(&self->super.super.txqp));
     wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
                                                    outstanding);
     ucs_assert(outstanding >= wqe_count);
