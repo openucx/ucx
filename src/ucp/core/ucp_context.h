@@ -278,7 +278,7 @@ struct ucp_config {
      *  This array holds four lists - network devices, shared memory devices,
      *  acceleration devices and loop-back devices */
     ucs_config_allow_list_t                devices[UCT_DEVICE_TYPE_LAST];
-    /** Array of transport names to use */
+    /** Array of transport names available to data features */
     ucs_config_allow_list_t                tls;
     /** Array of transport names available to control features */
     ucs_config_allow_list_t                ctrl_features_tls;

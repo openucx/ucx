@@ -437,9 +437,9 @@ ucp_wireup_feature_tl_scope(ucp_context_h context, uint64_t features)
 
 static const ucp_tl_bitmap_t*
 ucp_wireup_tl_scope_bitmap(ucp_context_h context,
-                           const ucp_wireup_criteria_t *criteria)
+                           ucp_wireup_tl_scope_t tl_scope)
 {
-    return (criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
+    return (tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
                    &context->ctrl_tl_bitmap :
                    &context->data_tl_bitmap;
 }
@@ -463,6 +463,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_context_h context                          = worker->context;
     const int has_tiebreak                         =
             (criteria->calc_tiebreak != NULL);
+    const uint8_t rsc_aux_flag                     =
+            (criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
+                    UCP_TL_RSC_FLAG_CTRL_AUX : UCP_TL_RSC_FLAG_AUX;
     ucp_proto_select_info_array_t candidates_array =
             UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucp_wireup_select_info_t candidate_info        = {0};
@@ -502,7 +505,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap, context->tl_bitmap);
     UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap,
                                   *ucp_wireup_tl_scope_bitmap(context,
-                                                              criteria));
+                                                              criteria->tl_scope));
     show_error   = (select_params->show_error && show_error);
 
     /* Check which remote addresses satisfy the criteria */
@@ -573,9 +576,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         md_attr        = &context->tl_mds[md_index].attr;
         cmpt_attr      = ucp_cmpt_attr_by_md_index(context, md_index);
 
-        if ((context->tl_rscs[rsc_index].flags &
-             ((criteria->tl_scope == UCP_WIREUP_TL_SCOPE_CTRL) ?
-                      UCP_TL_RSC_FLAG_CTRL_AUX : UCP_TL_RSC_FLAG_AUX)) &&
+        if ((context->tl_rscs[rsc_index].flags & rsc_aux_flag) &&
             !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
             continue;
         }
@@ -2486,7 +2487,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
 
     criteria.tl_scope = ucp_wireup_feature_tl_scope(context, UCP_FEATURE_AM);
-    scope_bitmap = ucp_wireup_tl_scope_bitmap(context, &criteria);
+    scope_bitmap = ucp_wireup_tl_scope_bitmap(context, criteria.tl_scope);
     for (lane = 0; lane < num_lanes; ++lane) {
         if (lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) {
             continue;

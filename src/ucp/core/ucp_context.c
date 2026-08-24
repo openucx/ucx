@@ -673,7 +673,8 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, devices[UCT_DEVICE_TYPE_SELF]), UCS_CONFIG_TYPE_ALLOW_LIST_WITH_RANGES},
 
   {"TLS", UCP_RSC_CONFIG_ALL,
-   "Comma-separated list of transports to use. The order is not meaningful.\n"
+   "Comma-separated list of transports available to data features.\n"
+   "The order is not meaningful.\n"
    " - all     : use all the available transports.\n"
    " - sm/shm  : all shared memory transports (mm, cma, knem).\n"
    " - mm      : shared memory transports - only memory mappers.\n"
@@ -1294,9 +1295,10 @@ ucp_is_resource_in_transports_list(const char *tl_name,
     return 1;
 }
 
-static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
-                                   const ucp_config_t *config,
-                                   uint64_t dev_cfg_masks[])
+static int
+ucp_is_resource_device_enabled(const uct_tl_resource_desc_t *resource,
+                               const ucp_config_t *config,
+                               uint64_t dev_cfg_masks[])
 {
     return ucp_is_resource_in_device_list(
             resource, config->devices, &dev_cfg_masks[resource->dev_type],
@@ -1436,8 +1438,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                             context->tl_cmpts[md->cmpt_index].attr.name);
         ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
 
-        device_enabled = ucp_is_resource_enabled(&tl_resources[i], config,
-                                                 dev_cfg_masks);
+        device_enabled = ucp_is_resource_device_enabled(&tl_resources[i],
+                                                        config, dev_cfg_masks);
         data_rsc_flags = 0;
         data_enabled   = device_enabled &&
                          ucp_is_resource_in_transports_list(
@@ -1574,9 +1576,9 @@ static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
     return UCS_OK;
 }
 
-static int ucp_context_md_has_tl_bitmap(ucp_context_h context,
-                                        ucp_md_index_t md_index,
-                                        const ucp_tl_bitmap_t *tl_bitmap)
+static int ucp_tl_bitmap_has_md(ucp_context_h context,
+                                ucp_md_index_t md_index,
+                                const ucp_tl_bitmap_t *tl_bitmap)
 {
     ucp_rsc_index_t tl_idx;
 
@@ -1907,8 +1909,8 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
 
         avail_mds--;
 
-        if (ucp_context_md_has_tl_bitmap(context, md_index,
-                                         &context->data_tl_bitmap)) {
+        if (ucp_tl_bitmap_has_md(context, md_index,
+                                 &context->data_tl_bitmap)) {
             /* List of detect memory type MDs */
             if (~detect_mem_type_mask & md_attr->detect_mem_types) {
                 context->mem_type_detect_mds[
@@ -2131,8 +2133,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     const uct_md_attr_v2_t *md_attr;
 
     for (md_index = 0; md_index < context->num_mds; ++md_index) {
-        if (!ucp_context_md_has_tl_bitmap(context, md_index,
-                                          &context->data_tl_bitmap)) {
+        if (!ucp_tl_bitmap_has_md(context, md_index,
+                                  &context->data_tl_bitmap)) {
             continue;
         }
 
@@ -2152,8 +2154,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
         reg_block_md_map    = 0;
         reg_nonblock_md_map = 0;
         for (md_index = 0; md_index < context->num_mds; ++md_index) {
-            if (!ucp_context_md_has_tl_bitmap(context, md_index,
-                                              &context->data_tl_bitmap)) {
+            if (!ucp_tl_bitmap_has_md(context, md_index,
+                                      &context->data_tl_bitmap)) {
                 continue;
             }
 
