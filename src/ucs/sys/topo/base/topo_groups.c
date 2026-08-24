@@ -235,6 +235,7 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
             }
         }
 
+        /* TODO: Use UCS_SYS_PCI_ID_FMT when it's merged. */
         ucs_trace("ignoring network device " UCS_SYS_BUS_ID_FMT
                   " (pci id %04x:%04x)",
                   UCS_SYS_BUS_ID_ARG(&devices[sys_dev].bus_id), vendor_id,
