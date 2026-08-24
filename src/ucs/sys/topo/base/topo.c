@@ -15,13 +15,14 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
-
+#include <ucs/datastruct/array.h>
 #include <ucs/config/global_opts.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+
 #include <inttypes.h>
 
 
@@ -1301,7 +1302,7 @@ static void ucs_topo_release_devices()
     }
 }
 
-ucs_status_t ucs_topo_init_groups(const ucs_topo_groups_t **groups_p)
+ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
 
@@ -1314,22 +1315,21 @@ ucs_status_t ucs_topo_init_groups(const ucs_topo_groups_t **groups_p)
     return status;
 }
 
-static void ucs_topo_release_group(const ucs_topo_group_t *group)
+static void ucs_topo_release_group(ucs_topo_group_t *group)
 {
-    ucs_free(group->nics_boards);
-    ucs_free(group->gpus);
+    ucs_array_cleanup_dynamic(&group->nics);
+    ucs_array_cleanup_dynamic(&group->gpus);
 }
 
-void ucs_topo_release_groups(const ucs_topo_groups_t *groups)
+void ucs_topo_release_groups(ucs_topo_groups_t *groups)
 {
     size_t i;
 
-    for (i = 0; i < groups->num_groups; ++i) {
-        ucs_topo_release_group(&groups->groups[i]);
+    for (i = 0; i < ucs_array_length(&groups->groups); ++i) {
+        ucs_topo_release_group(&ucs_array_elem(&groups->groups, i));
     }
 
-    ucs_free(groups->groups);
-    ucs_free((void*)groups);
+    ucs_array_cleanup_dynamic(&groups->groups);
 }
 
 ucs_global_state_t *ucs_topo_extract_state(void)

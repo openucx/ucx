@@ -38,9 +38,6 @@ BEGIN_C_DECLS
 /* Maximal number of ports per NIC */
 #define UCS_TOPO_MAX_PORTS_PER_NIC 2
 
-/* Maximal number of NICs per board */
-#define UCS_TOPO_MAX_NICS_PER_BOARD 2
-
 /* Maximal number of devices (uGPUs) per physical GPU */
 #define UCS_TOPO_MAX_DEVICES_PER_GPU 2
 
@@ -137,6 +134,7 @@ typedef struct {
     ucs_topo_nic_array_t nics;
 } ucs_topo_group_t;
 
+UCS_ARRAY_DECLARE_TYPE(ucs_topo_group_array_t, size_t, ucs_topo_group_t);
 
 /**
  * @ingroup UCS_RESOURCE
@@ -144,8 +142,7 @@ typedef struct {
  */
 typedef struct {
     ucs_topo_groups_type_t type;
-    ucs_topo_group_t       *groups;
-    size_t                 num_groups;
+    ucs_topo_group_array_t groups;
 } ucs_topo_groups_t;
 
 
@@ -584,12 +581,12 @@ unsigned ucs_topo_num_devices(void);
  * The caller takes ownership of the returned group data and must release it
  * with @ref ucs_topo_release_groups.
  *
- * @param [out] groups_p  Pointer to initialized topology groups.
+ * @param [out] groups_p  Initialized topology groups.
  *
  * @return UCS_OK on success, or an error status if topology group
  *         initialization failed.
  */
-ucs_status_t ucs_topo_init_groups(const ucs_topo_groups_t **groups_p);
+ucs_status_t ucs_topo_init_groups(ucs_topo_groups_t *groups_p);
 
 
 /**
@@ -597,7 +594,7 @@ ucs_status_t ucs_topo_init_groups(const ucs_topo_groups_t **groups_p);
  *
  * @param [in] groups  Topology groups to release.
  */
-void ucs_topo_release_groups(const ucs_topo_groups_t *groups);
+void ucs_topo_release_groups(ucs_topo_groups_t *groups);
 
 
 /**
