@@ -697,8 +697,8 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"CTRL_FEATURES_TLS", UCP_RSC_CONFIG_ALL,
    "Comma-separated list of transports available to control features.\n"
-   "The syntax and transport aliases are the same as for UCX_TLS. This setting\n"
-   "does not affect data-path transport selection.",
+   "The syntax and transport aliases are the same as for UCX_TLS.\n"
+   "This setting does not affect data-path transport selection.",
    ucs_offsetof(ucp_config_t, ctrl_features_tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"PROTOS", UCP_RSC_CONFIG_ALL,
