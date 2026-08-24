@@ -356,6 +356,23 @@ ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
     return UCS_OK;
 }
 
+void ucs_topo_init_group(ucs_topo_group_t *group)
+{
+    ucs_array_init_dynamic(&group->gpus);
+    ucs_array_init_dynamic(&group->nics);
+}
+
+void ucs_topo_init_groups(ucs_topo_groups_t *groups)
+{
+    groups->type = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+    ucs_array_init_dynamic(&groups->groups);
+}
+
+void ucs_topo_release_groups(ucs_topo_groups_t *groups)
+{
+    ucs_array_cleanup_dynamic(&groups->groups);
+}
+
 static ucs_status_t
 ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
                                 unsigned num_devices,
@@ -450,6 +467,8 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
     ucs_topo_group_t inventory;
     ucs_topo_groups_t groups;
     ucs_status_t status;
+
+    ucs_topo_init_groups(&groups);
 
     if (cpu_model != UCS_CPU_MODEL_NVIDIA_VERA) {
         /* Currently only Vera Rubin is supported. */

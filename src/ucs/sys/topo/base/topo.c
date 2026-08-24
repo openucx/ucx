@@ -1315,12 +1315,6 @@ ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
     return status;
 }
 
-void ucs_topo_init_group(ucs_topo_group_t *group)
-{
-    ucs_array_init_dynamic(&group->gpus);
-    ucs_array_init_dynamic(&group->nics);
-}
-
 void ucs_topo_release_group(ucs_topo_group_t *group)
 {
     ucs_array_cleanup_dynamic(&group->nics);
