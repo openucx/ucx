@@ -693,9 +693,12 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
-    txwq->curr       = txwq->qstart;
-    txwq->sw_pi      = 0;
-    txwq->prev_sw_pi = UINT16_MAX;
+    txwq->curr            = txwq->qstart;
+    txwq->sw_pi           = 0;
+    txwq->prev_sw_pi      = UINT16_MAX;
+    txwq->next_first_psn  = 0;
+    txwq->path_mtu_mask   = 0;
+    txwq->path_mtu_shift  = 0;
 #if UCS_ENABLE_ASSERT
     txwq->hw_ci      = 0xFFFF;
     txwq->flags      = 0;
@@ -721,6 +724,9 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "sw_pi");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
                             &txwq->prev_sw_pi, UCS_VFS_TYPE_U16, "prev_sw_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txwq->next_first_psn, UCS_VFS_TYPE_U32,
+                            "next_first_psn");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qstart,
                             UCS_VFS_TYPE_POINTER, "qstart");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qend,
