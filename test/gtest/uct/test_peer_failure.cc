@@ -778,4 +778,3 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_rma_zcopy, get,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_rma_zcopy, cma)
-

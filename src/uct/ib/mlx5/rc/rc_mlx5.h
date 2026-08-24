@@ -44,6 +44,12 @@ enum {
 };
 
 
+enum {
+    /* The caller owns outstanding operations after EP invalidation. */
+    UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
+};
+
+
 /**
  * RC base remote endpoint
  */
@@ -52,6 +58,7 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
+    uint8_t flags;
 } uct_rc_mlx5_base_ep_t;
 
 
@@ -202,6 +209,9 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                        uct_completion_t *comp);
 
 ucs_status_t
+uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
+ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params);
 
@@ -257,6 +267,8 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
+
+void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep);
 
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 

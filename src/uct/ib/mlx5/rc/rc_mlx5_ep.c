@@ -13,8 +13,8 @@
 #  include <infiniband/driver.h>
 #endif
 
-#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -46,6 +46,21 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     }
 
     return UCS_OK;
+}
+
+
+void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uint16_t available;
+
+    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
+    available = txwq->bb_max - (txwq->prev_sw_pi - txwq->hw_ci);
+    ucs_assert(available >= uct_rc_txqp_available(&ep->super.txqp));
+    if (available > uct_rc_txqp_available(&ep->super.txqp)) {
+        uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, txwq->hw_ci);
+    }
 }
 
 
@@ -299,6 +314,10 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+
+    for (i = 0; i < count; i++) {
+        uct_rc_mlx5_txwq_record_token(iface, txwq, lengths[i]);
+    }
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -774,13 +793,50 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
-                                            const uct_ep_invalidate_params_t *params)
+ucs_status_t
+uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_rc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    ucs_status_t status;
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                       IBV_QPS_ERR);
+    status = uct_rc_mlx5_base_ep_flush(tl_ep, flags, comp);
+    if (flags & UCT_FLUSH_FLAG_CANCEL) {
+        /* Cancel owns completions even when the flush has to be retried. */
+        if (ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
+            uct_rc_mlx5_ep_update_tx_res(tl_ep);
+        }
+        ep->super.flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+    }
+
+    return status;
+}
+
+ucs_status_t
+uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                               const uct_ep_invalidate_params_t *params)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
+                                         IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((params != NULL) &&
+        (params->field_mask & UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS) &&
+        (params->flags & UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS) &&
+        !(ep->super.super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) &&
+        !(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
+        ep->super.flags |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+        txwq->ft_ci      = txwq->hw_ci;
+        ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
+                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -1219,6 +1275,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->flags        = 0;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
