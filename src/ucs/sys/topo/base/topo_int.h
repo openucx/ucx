@@ -7,7 +7,7 @@
 #ifndef UCS_TOPO_INT_H
 #define UCS_TOPO_INT_H
 
-#include "topo.h"
+#include "topo_groups.h"
 
 BEGIN_C_DECLS
 
@@ -60,20 +60,9 @@ ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
                                            char *path, size_t max);
 
 
-/**
- * Initialize a topology group.
- *
- * @param [out] group  Group to initialize.
- */
-void ucs_topo_init_group(ucs_topo_group_t *group);
-
-
-/**
- * Release resources allocated by a topology group.
- *
- * @param [in] group  Group to release.
- */
-void ucs_topo_release_group(ucs_topo_group_t *group);
+ucs_status_t
+ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
+                           unsigned num_devices, ucs_topo_groups_t *groups_p);
 
 END_C_DECLS
 

@@ -9,6 +9,7 @@
 #endif
 
 #include "topo_groups.h"
+#include "topo_int.h"
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/arch/cpu.h>
