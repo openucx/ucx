@@ -31,11 +31,13 @@
 
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_sys_dev_array_t, size_t,
                        ucs_sys_device_t);
+UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_gpu_array_t, size_t, ucs_topo_gpu_t);
+UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_nic_array_t, size_t, ucs_topo_nic_t);
 
 
 typedef struct {
-    ucs_topo_groups_sys_dev_array_t gpus;
-    ucs_topo_groups_sys_dev_array_t nics;
+    ucs_topo_groups_gpu_array_t gpus;
+    ucs_topo_groups_nic_array_t nics;
 } ucs_topo_groups_inventory_t;
 
 static int
@@ -273,6 +275,93 @@ ucs_topo_groups_devices_collect(const ucs_topo_sys_device_info_t *devices,
     return UCS_OK;
 }
 
+static int ucs_topo_groups_bus_id_same_slot(const ucs_sys_bus_id_t *bus_id1,
+                                            const ucs_sys_bus_id_t *bus_id2)
+{
+    return (bus_id1->domain == bus_id2->domain) &&
+           (bus_id1->bus == bus_id2->bus) && (bus_id1->slot == bus_id2->slot);
+}
+
+static int ucs_topo_groups_bus_id_equal(const ucs_sys_bus_id_t *bus_id1,
+                                        const ucs_sys_bus_id_t *bus_id2)
+{
+    return ucs_topo_groups_bus_id_same_slot(bus_id1, bus_id2) &&
+           (bus_id1->function == bus_id2->function);
+}
+
+static ucs_status_t
+ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
+                           const ucs_topo_groups_sys_dev_array_t *acc_devices,
+                           ucs_topo_groups_gpu_array_t *gpus)
+{
+    const ucs_sys_bus_id_t *gpu_bus_id = NULL;
+    const ucs_sys_bus_id_t *dev_bus_id;
+    ucs_sys_device_t sys_dev;
+    ucs_topo_gpu_t *gpu;
+    size_t i;
+
+    for (i = 0; i < ucs_array_length(acc_devices); ++i) {
+        sys_dev    = ucs_array_elem(acc_devices, i);
+        dev_bus_id = &devices[sys_dev].bus_id;
+
+        /* Start a new GPU if the bus ids differ. */
+        if ((gpu_bus_id == NULL) ||
+            !ucs_topo_groups_bus_id_equal(gpu_bus_id, dev_bus_id)) {
+            gpu = ucs_array_append(gpus, return UCS_ERR_NO_MEMORY);
+            memset(gpu, 0, sizeof(*gpu));
+            gpu_bus_id = dev_bus_id;
+        }
+
+        if (gpu->num_devices >= UCS_TOPO_MAX_DEVICES_PER_GPU) {
+            ucs_error("too many accelerator devices (%zu) with bus "
+                      "id " UCS_SYS_BUS_ID_FMT,
+                      gpu->num_devices, UCS_SYS_BUS_ID_ARG(dev_bus_id));
+            return UCS_ERR_EXCEEDS_LIMIT;
+        }
+
+        gpu->devices[gpu->num_devices++] = sys_dev;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
+                           const ucs_topo_groups_sys_dev_array_t *net_devices,
+                           ucs_topo_groups_nic_array_t *nics)
+{
+    const ucs_sys_bus_id_t *nic_bus_id = NULL;
+    const ucs_sys_bus_id_t *dev_bus_id;
+    ucs_sys_device_t sys_dev;
+    ucs_topo_nic_t *nic;
+    size_t i;
+
+    for (i = 0; i < ucs_array_length(net_devices); ++i) {
+        sys_dev    = ucs_array_elem(net_devices, i);
+        dev_bus_id = &devices[sys_dev].bus_id;
+
+        /* Start a new NIC if the bus ids differ (excluding the function). */
+        if ((nic_bus_id == NULL) ||
+            !ucs_topo_groups_bus_id_same_slot(nic_bus_id, dev_bus_id)) {
+            nic = ucs_array_append(nics, return UCS_ERR_NO_MEMORY);
+            memset(nic, 0, sizeof(*nic));
+            nic_bus_id = dev_bus_id;
+        }
+
+        if (nic->num_ports >= UCS_TOPO_MAX_PORTS_PER_NIC) {
+            ucs_error(
+                    "too many network devices (%zu) in pci slot %04x:%02x:%02x",
+                    nic->num_ports, (unsigned)dev_bus_id->domain,
+                    (unsigned)dev_bus_id->bus, (unsigned)dev_bus_id->slot);
+            return UCS_ERR_EXCEEDS_LIMIT;
+        }
+
+        nic->ports[nic->num_ports++] = sys_dev;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
                                 unsigned num_devices,
@@ -281,11 +370,9 @@ ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
 {
     ucs_topo_groups_sys_dev_array_t acc_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucs_topo_groups_sys_dev_array_t net_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucs_topo_groups_gpu_array_t gpus = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucs_topo_groups_nic_array_t nics = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucs_status_t status;
-
-    if (num_devices == 0) {
-        goto out;
-    }
 
     status = ucs_topo_groups_devices_collect(devices, num_devices, &acc_devices,
                                              &net_devices);
@@ -303,17 +390,33 @@ ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
         ucs_topo_groups_cx9_filter(devices, &net_devices);
     }
 
-out:
+    status = ucs_topo_groups_gpus_build(devices, &acc_devices, &gpus);
+    if (status != UCS_OK) {
+        goto err_free_arrays;
+    }
 
-    ucs_debug("built inventory with %zu gpus and %zu nics",
+    status = ucs_topo_groups_nics_build(devices, &net_devices, &nics);
+    if (status != UCS_OK) {
+        goto err_free_arrays;
+    }
+
+    ucs_debug("built inventory with %zu physical gpus (%zu devices) and %zu "
+              "physical nics (%zu devices)",
+              (size_t)ucs_array_length(&gpus),
               (size_t)ucs_array_length(&acc_devices),
+              (size_t)ucs_array_length(&nics),
               (size_t)ucs_array_length(&net_devices));
 
-    inventory_p->gpus = acc_devices;
-    inventory_p->nics = net_devices;
+    ucs_array_cleanup_dynamic(&net_devices);
+    ucs_array_cleanup_dynamic(&acc_devices);
+
+    inventory_p->gpus = gpus;
+    inventory_p->nics = nics;
     return UCS_OK;
 
 err_free_arrays:
+    ucs_array_cleanup_dynamic(&nics);
+    ucs_array_cleanup_dynamic(&gpus);
     ucs_array_cleanup_dynamic(&net_devices);
     ucs_array_cleanup_dynamic(&acc_devices);
     return status;
@@ -324,6 +427,15 @@ ucs_topo_groups_inventory_cleanup(ucs_topo_groups_inventory_t *inventory)
 {
     ucs_array_cleanup_dynamic(&inventory->nics);
     ucs_array_cleanup_dynamic(&inventory->gpus);
+}
+
+static ucs_status_t
+ucs_topo_groups_build_groups(const ucs_topo_groups_inventory_t *inventory,
+                             ucs_topo_groups_t *groups)
+{
+    /* TODO: Build groups from inventory. */
+
+    return UCS_OK;
 }
 
 static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
@@ -370,7 +482,10 @@ ucs_topo_init_groups_inner(const ucs_topo_sys_device_info_t *devices,
         goto err_free_groups;
     }
 
-    /* TODO: Build groups from inventory. */
+    status = ucs_topo_groups_build_groups(&inventory, groups);
+    if (status != UCS_OK) {
+        goto err_cleanup_inventory;
+    }
 
     ucs_topo_groups_inventory_cleanup(&inventory);
 
@@ -381,6 +496,8 @@ out:
     *groups_p = groups;
     return UCS_OK;
 
+err_cleanup_inventory:
+    ucs_topo_groups_inventory_cleanup(&inventory);
 err_free_groups:
     ucs_free(groups);
     return status;
