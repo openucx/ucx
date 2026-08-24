@@ -40,7 +40,7 @@
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH            35e9
 #define UCT_IB_HIGH_SPEED_NUM_PATHS               2
 #define UCT_IB_PORT_SPEED_UNIT_GBPS               0.1
-#define UCT_IB_MULTIPLANE_FULL_BANDWIDTH_GBPS     800.0
+#define UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS      800.0
 
 /**
  * Minimal NDR single path ratio.
@@ -1427,13 +1427,13 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 #endif
 }
 
-int uct_ib_iface_is_multiplane_full_bw(uct_ib_iface_t *iface)
+int uct_ib_iface_is_multiplane_xdr_bw(uct_ib_iface_t *iface)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
     return (dev->flags & UCT_IB_DEVICE_FLAG_MULTIPLANE) &&
            (uct_ib_iface_query_port_speed_gbps(iface) ==
-            UCT_IB_MULTIPLANE_FULL_BANDWIDTH_GBPS);
+            UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS);
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
@@ -1443,7 +1443,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
-            if (uct_ib_iface_is_multiplane_full_bw(iface)) {
+            if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
                 iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
             }
         } else {
@@ -2115,7 +2115,7 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     if (uct_ib_iface_is_roce(iface) &&
         (uct_ib_iface_roce_lag_level(iface) > 1)) {
         if (uct_ep_op_is_get(op) &&
-            uct_ib_iface_is_multiplane_full_bw(iface)) {
+            uct_ib_iface_is_multiplane_xdr_bw(iface)) {
             max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
             path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
         } else {
@@ -2152,9 +2152,11 @@ uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
-    uct_ib_iface_t *ib_iface = ucs_derived_of(iface, uct_ib_iface_t);
-    uct_ep_operation_t op    = UCT_ATTR_VALUE(PERF, perf_attr, operation,
-                                              OPERATION, UCT_EP_OP_LAST);
+    uct_ib_iface_t *ib_iface                          =
+            ucs_derived_of(iface, uct_ib_iface_t);
+    uct_ep_operation_t op                             =
+            UCT_ATTR_VALUE(PERF, perf_attr, operation, OPERATION,
+                           UCT_EP_OP_LAST);
     const uct_ib_iface_send_overhead_t *send_overhead =
             &ib_iface->config.send_overhead;
     uct_iface_attr_t iface_attr;
@@ -2189,7 +2191,7 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                                                                &iface_attr);
         if (uct_ep_op_is_get(op) &&
             (uct_ib_iface_port_is_xdr(ib_iface) ||
-             uct_ib_iface_is_multiplane_full_bw(ib_iface))) {
+             uct_ib_iface_is_multiplane_xdr_bw(ib_iface))) {
             max_bandwidth = perf_attr->bandwidth.shared *
                             iface_attr.dev_num_paths * UCT_IB_XDR_READ_PATH_RATIO;
             perf_attr->bandwidth.shared = ucs_min(perf_attr->bandwidth.shared,
