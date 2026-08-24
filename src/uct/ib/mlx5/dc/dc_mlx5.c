@@ -356,7 +356,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface, int poll_flags)
     ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d", iface,
                    dci_index, &dci->txqp, hw_ci);
 
-    uct_rc_mlx5_txqp_process_tx_cqe(&dci->txqp, cqe, hw_ci, 0);
+    uct_rc_mlx5_txqp_process_tx_cqe(&dci->txqp, cqe, hw_ci);
     uct_dc_mlx5_update_tx_res(iface, dci_index, hw_ci);
 
     /**
