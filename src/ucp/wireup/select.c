@@ -425,10 +425,12 @@ ucp_wireup_max_lanes(const ucp_wireup_select_params_t *select_params,
 }
 
 static ucp_wireup_tl_scope_t
-ucp_wireup_feature_tl_scope(ucp_context_h context, uint64_t features)
+ucp_wireup_feature_tl_scope(ucp_context_h context, uint64_t feature)
 {
-    if ((context->config.features & features) ||
-        !(context->config.ctrl_features & features)) {
+    ucs_assert(ucs_is_pow2(feature));
+
+    if ((context->config.features & feature) ||
+        !(context->config.ctrl_features & feature)) {
         return UCP_WIREUP_TL_SCOPE_DATA;
     }
 
