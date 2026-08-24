@@ -857,8 +857,8 @@ public:
 
     std::string find_address_device(const address_device_type device_type)
     {
-        const auto worker  = sender().worker();
-        const auto context = worker->context;
+        ucp_worker_h worker   = sender().worker();
+        ucp_context_h context = worker->context;
         ucp_rsc_index_t tl_id;
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
@@ -881,8 +881,8 @@ public:
     void check_address_by_device(const std::string &address_device_name,
                                  const uint32_t address_flags)
     {
-        const auto worker                        = sender().worker();
-        const auto context                       = worker->context;
+        ucp_worker_h worker                      = sender().worker();
+        ucp_context_h context                    = worker->context;
         const ucp_address_entry_t *address_entry = nullptr;
         ucp_worker_attr_t worker_attr{};
         ucp_unpacked_address_t unpacked_address{};
@@ -998,12 +998,13 @@ UCS_TEST_P(test_ucp_worker_address_query, empty_intersection)
 {
     const auto address_device_name =
             find_address_device(address_device_type::non_net);
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucp_worker_attr_t worker_attr;
 
     if (address_device_name.empty()) {
         UCS_TEST_SKIP_R("no non-network device");
     }
 
-    ucp_worker_attr_t worker_attr{};
     worker_attr.field_mask          = UCP_WORKER_ATTR_FIELD_ADDRESS |
                                       UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS |
                                       UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
@@ -1016,7 +1017,9 @@ UCS_TEST_P(test_ucp_worker_address_query, empty_intersection)
 
 UCS_TEST_P(test_ucp_worker_address_query, query_address_unknown_device)
 {
-    ucp_worker_attr_t worker_attr{};
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucp_worker_attr_t worker_attr;
+
     worker_attr.field_mask          = UCP_WORKER_ATTR_FIELD_ADDRESS |
                                       UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
     worker_attr.address_device_name = "no-such-ucx-device";

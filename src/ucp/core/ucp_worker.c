@@ -3119,7 +3119,7 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
 {
     ucp_context_h context = worker->context;
     unsigned flags        = ucp_worker_default_address_pack_flags(worker);
-    ucp_tl_bitmap_t tl_bitmap, net_tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t tl_id;
     const uct_iface_attr_t *iface_attr;
 
@@ -3132,24 +3132,23 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
     if (address_device_name != NULL) {
         ucp_context_dev_tl_bitmap(context, address_device_name, &tl_bitmap);
     } else {
-        UCS_STATIC_BITMAP_SET_ALL(&tl_bitmap);
+        tl_bitmap = context->tl_bitmap;
     }
 
     if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-        UCS_STATIC_BITMAP_RESET_ALL(&net_tl_bitmap);
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) {
-                UCS_STATIC_BITMAP_SET(&net_tl_bitmap, tl_id);
+            if ((iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) == 0) {
+                UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
             }
         }
-
-        UCS_STATIC_BITMAP_AND_INPLACE(&tl_bitmap, net_tl_bitmap);
     }
 
     if ((address_device_name != NULL) && UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap)) {
-        ucs_debug("worker %p: device %s has no addressable resources", worker,
-                  address_device_name);
+        ucs_error("worker %p: no addressable resources for device %s with "
+                  "network-only flag %c", worker, address_device_name,
+                  ((address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) != 0) ?
+                          'y' : 'n');
         return UCS_ERR_NO_DEVICE;
     }
 
