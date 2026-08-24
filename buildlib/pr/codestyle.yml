@@ -49,11 +49,10 @@ jobs:
       - bash: |
           source ./buildlib/az-helpers.sh
           set -x
-          git log -1 HEAD
-          git log -1 HEAD^
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
-          echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
-          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+          base_revision=$(git rev-parse "${BUILD_SOURCEVERSION}^1")
+          head_revision=$(git rev-parse "${BUILD_SOURCEVERSION}^2")
+          echo "Checking code format on diff ${base_revision}..${head_revision}"
+          git-clang-format --diff ${base_revision} ${head_revision} > format.patch
           echo "Generated patch file:"
           cat format.patch
           if [ "`cat format.patch`" = "no modified files to format" ]; then
