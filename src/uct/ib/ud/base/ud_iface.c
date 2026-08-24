@@ -852,7 +852,7 @@ void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     uint8_t *gen;
 
     if (ep->ep_id != UCT_UD_EP_NULL_ID) {
-        ep_index = uct_ud_ep_id_index(ep->ep_id);
+        ep_index = uct_ud_ep_id_to_index(ep->ep_id);
         ucs_trace("iface(%p) remove " UCT_UD_EP_FMT, iface, UCT_UD_EP_ARG(ep));
         /* Increment generation for the next iteration. */
         gen  = &ucs_array_elem(&iface->ep_gen, ep_index);

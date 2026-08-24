@@ -897,12 +897,12 @@ UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
     short_progress_loop();
 
     uint32_t ep_id    = ep(m_e1)->ep_id;
-    uint32_t ep_index = uct_ud_ep_id_index(ep_id);
+    uint32_t ep_index = uct_ud_ep_id_to_index(ep_id);
     m_e1->destroy_ep(0);
     wait_for_ep_destroyed(iface(m_e1), ep_index);
 
     m_e1->connect_to_iface(0, *e3);
-    ASSERT_EQ(ep_index, uct_ud_ep_id_index(ep(m_e1)->ep_id));
+    ASSERT_EQ(ep_index, uct_ud_ep_id_to_index(ep(m_e1)->ep_id));
     ASSERT_NE(ep_id, ep(m_e1)->ep_id);
 
     /* Deliver the old CREP to the endpoint which reused its ep_id. */

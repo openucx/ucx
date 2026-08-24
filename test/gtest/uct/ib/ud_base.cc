@@ -97,12 +97,8 @@ void ud_base_test::disable_async(entity *e)
 
 void ud_base_test::wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_id)
 {
-    ucs_time_t deadline = ucs_get_time() +
-                          ucs_time_from_sec(60) * ucs::test_time_multiplier();
-    void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
-
-    while ((ucs_get_time() < deadline) &&
-           ucs_ptr_array_lookup(&iface->eps, ep_id, ud_ep)) {
-        usleep(1000);
-    }
+    wait_for_cond([iface, ep_id]() {
+        void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
+        return !ucs_ptr_array_lookup(&iface->eps, ep_id, ud_ep);
+    }, []() { usleep(1000); }, 60.0);
 }

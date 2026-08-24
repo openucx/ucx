@@ -26,7 +26,7 @@
 #define UCT_UD_EP_GEN_MASK       UCS_MASK(UCT_UD_EP_GEN_BITS)
 #define UCT_UD_EP_INDEX_MAX      (UCT_UD_EP_INDEX_MASK - 1)
 
-#define UCT_UD_EP_ID_FMT "0x%x(gen_id=%u ep_index=%u)"
+#define UCT_UD_EP_ID_FMT "0x%x(%u|%u)"
 #define UCT_UD_EP_ID_ARG(_id) \
     (unsigned)(_id), (unsigned)((_id) >> UCT_UD_EP_INDEX_BITS), \
     (unsigned)((_id) & UCT_UD_EP_INDEX_MASK)
@@ -35,8 +35,8 @@
 #define UCT_UD_EP_ARG(_ep) \
     (_ep), UCT_UD_EP_ID_ARG((_ep)->ep_id), (unsigned)((_ep)->conn_sn)
 
-#define UCT_UD_EP_DEST_FMT UCT_UD_EP_FMT " -> dest_ep_id=" UCT_UD_EP_ID_FMT
-#define UCT_UD_EP_DEST_ARG(_ep) \
+#define UCT_UD_EP_TO_DEST_FMT UCT_UD_EP_FMT " -> dest_ep_id=" UCT_UD_EP_ID_FMT
+#define UCT_UD_EP_TO_DEST_ARG(_ep) \
     UCT_UD_EP_ARG(_ep), UCT_UD_EP_ID_ARG((_ep)->dest_ep_id)
 
 typedef uint32_t uct_ud_ep_conn_sn_t;
@@ -406,9 +406,9 @@ uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
            ((ep->tx.pending.ops & ~ops) == 0);
 }
 
-static UCS_F_ALWAYS_INLINE uint32_t uct_ud_ep_id_index(uint32_t dest_id)
+static UCS_F_ALWAYS_INLINE uint32_t uct_ud_ep_id_to_index(uint32_t ep_id)
 {
-    return dest_id & UCT_UD_EP_INDEX_MASK;
+    return ep_id & UCT_UD_EP_INDEX_MASK;
 }
 
 /* TODO: rely on window check instead. max_psn = psn  */
