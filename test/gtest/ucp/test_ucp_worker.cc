@@ -859,44 +859,19 @@ public:
     {
         const auto worker  = sender().worker();
         const auto context = worker->context;
-        ucp_tl_bitmap_t tl_bitmap;
-        ucp_rsc_index_t tl_id, dev_tl_id;
+        ucp_rsc_index_t tl_id;
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+            const auto &resource   = context->tl_rscs[tl_id].tl_rsc;
             const auto &iface_attr =
                     *ucp_worker_iface_get_attr(worker, tl_id);
-            if (!iface_can_connect(iface_attr)) {
-                continue;
-            }
+            const auto is_network  =
+                    (iface_attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) != 0;
 
-            const auto device_name = std::string{
-                    context->tl_rscs[tl_id].tl_rsc.dev_name};
-            if (device_type == address_device_type::any) {
-                return device_name;
-            }
-
-            auto has_network_resource             = false;
-            auto has_addressable_network_resource = false;
-            ucp_context_dev_tl_bitmap(context, device_name.c_str(),
-                                      &tl_bitmap);
-            UCS_STATIC_BITMAP_FOR_EACH_BIT(dev_tl_id, &tl_bitmap) {
-                const auto &device_iface_attr =
-                        *ucp_worker_iface_get_attr(worker, dev_tl_id);
-
-                if ((device_iface_attr.cap.flags &
-                     UCT_IFACE_FLAG_INTER_NODE) != 0) {
-                    has_network_resource = true;
-                    has_addressable_network_resource =
-                            has_addressable_network_resource ||
-                            iface_can_connect(device_iface_attr);
-                }
-            }
-
-            if (((device_type == address_device_type::net) &&
-                 has_addressable_network_resource) ||
-                ((device_type == address_device_type::non_net) &&
-                 !has_network_resource)) {
-                return device_name;
+            if (iface_can_connect(iface_attr) &&
+                ((device_type == address_device_type::any) ||
+                 ((device_type == address_device_type::net) == is_network))) {
+                return resource.dev_name;
             }
         }
 
@@ -906,28 +881,28 @@ public:
     void check_address_by_device(const std::string &address_device_name,
                                  const uint32_t address_flags)
     {
-        const auto worker   = sender().worker();
-        const auto context  = worker->context;
-        auto expected_count = 0u;
+        const auto worker  = sender().worker();
+        const auto context = worker->context;
+        ucp_worker_attr_t worker_attr{};
+        ucp_unpacked_address_t unpacked_address{};
+        const ucp_address_entry_t *address_entry = nullptr;
         ucp_tl_bitmap_t tl_bitmap;
         ucp_rsc_index_t tl_id;
+        ucs_status_t status;
 
         ucp_context_dev_tl_bitmap(context, address_device_name.c_str(),
                                   &tl_bitmap);
-        ASSERT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
-
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             const auto &iface_attr =
                     *ucp_worker_iface_get_attr(worker, tl_id);
 
-            if (iface_matches_address_flags(iface_attr, address_flags)) {
-                ++expected_count;
+            if (!iface_matches_address_flags(iface_attr, address_flags)) {
+                UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
             }
         }
 
-        ASSERT_GT(expected_count, 0u);
+        ASSERT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
 
-        ucp_worker_attr_t worker_attr{};
         worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS |
                                  UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
         if (address_flags != 0) {
@@ -936,29 +911,26 @@ public:
         }
 
         worker_attr.address_device_name = address_device_name.c_str();
-        auto status = ucp_worker_query(worker, &worker_attr);
+
+        status = ucp_worker_query(worker, &worker_attr);
         ASSERT_UCS_OK(status);
         ASSERT_NE(nullptr, worker_attr.address);
 
-        ucp_unpacked_address_t unpacked_address{};
         status = ucp_address_unpack(worker, worker_attr.address,
                                     ucp_worker_default_address_pack_flags(
                                             worker),
                                     &unpacked_address);
         ASSERT_UCS_OK(status);
-        EXPECT_EQ(expected_count, unpacked_address.address_count);
+        EXPECT_EQ(UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap),
+                  unpacked_address.address_count);
 
-        const ucp_address_entry_t *address_entry = nullptr;
         ucp_unpacked_address_for_each(address_entry, &unpacked_address) {
             auto found = false;
 
             UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
-                const auto &resource   = context->tl_rscs[tl_id];
-                const auto &iface_attr =
-                        *ucp_worker_iface_get_attr(worker, tl_id);
+                const auto &resource = context->tl_rscs[tl_id];
 
-                if (iface_matches_address_flags(iface_attr, address_flags) &&
-                    (resource.md_index == address_entry->md_index) &&
+                if ((resource.md_index == address_entry->md_index) &&
                     (resource.tl_name_csum == address_entry->tl_name_csum)) {
                     found = true;
                     break;
@@ -981,14 +953,14 @@ public:
 
 UCS_TEST_P(test_ucp_worker_address_query, query)
 {
-    ucp_worker_attr_t worker_attr{};
+    ucp_worker_attr_t worker_attr = {};
 
     worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS;
-    auto status = ucp_worker_query(sender().worker(), &worker_attr);
+    ucs_status_t status    = ucp_worker_query(sender().worker(), &worker_attr);
     ASSERT_EQ(UCS_OK, status);
-    ASSERT_NE(nullptr, worker_attr.address);
+    ASSERT_TRUE(worker_attr.address != NULL);
 
-    ucp_worker_address_attr_t address_attr{};
+    ucp_worker_address_attr_t address_attr = {};
     address_attr.field_mask = UCP_WORKER_ADDRESS_ATTR_FIELD_UID;
     status                  = ucp_worker_address_query(worker_attr.address,
                                                        &address_attr);
@@ -1020,8 +992,7 @@ UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device_net_only)
                             UCP_WORKER_ADDRESS_FLAG_NET_ONLY);
 }
 
-UCS_TEST_P(test_ucp_worker_address_query,
-           query_address_by_non_net_device_net_only)
+UCS_TEST_P(test_ucp_worker_address_query, query_address_by_intersection)
 {
     const auto address_device_name =
             find_address_device(address_device_type::non_net);
