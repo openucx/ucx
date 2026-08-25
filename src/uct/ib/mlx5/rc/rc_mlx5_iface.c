@@ -1063,11 +1063,6 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((iface_attr->tx_token == NULL) || (iface_attr->rx_token == NULL)) {
-        ucs_error("rc mlx5: tx token or rx token is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     tx_token   = iface_attr->tx_token;
     iface      = ucs_derived_of(tl_iface, uct_rc_iface_t);
     remote_qpn = be32toh(*tx_token);
@@ -1086,8 +1081,8 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
         return status;
     }
 
-    qpc      = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
-    rx_token = iface_attr->rx_token;
+    qpc       = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    rx_token  = iface_attr->rx_token;
     *rx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, next_rcv_psn));
 
     return UCS_OK;

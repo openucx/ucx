@@ -1327,9 +1327,11 @@ class test_rc_mlx5_token_query : public test_rc {
 protected:
     static constexpr uint32_t NUM_MESSAGES = 10;
 
-    static ucs_status_t am_handler(void *rx_count, void*, size_t, unsigned)
+    static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
     {
-        ++*static_cast<uint32_t*>(rx_count);
+        uint32_t *rx_count = static_cast<uint32_t*>(arg);
+
+        ++*rx_count;
         return UCS_OK;
     }
 
