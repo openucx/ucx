@@ -12,7 +12,6 @@
 #include "ib_device.h"
 #include "ib_md.h"
 
-#include <ucs/sys/topo/base/topo.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
