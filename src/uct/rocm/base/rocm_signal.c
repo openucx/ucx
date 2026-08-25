@@ -52,7 +52,7 @@ unsigned uct_rocm_base_progress(ucs_queue_head_t *signal_queue)
     ucs_queue_for_each_extract(rocm_signal, signal_queue, queue,
                                ((signal_value = hsa_signal_load_scacquire(
                                          rocm_signal->signal)) <= 0) &&
-                               (count < max_signals)) {
+                                       (count < max_signals)) {
         if (signal_value < 0) {
             ucs_error("rocm async copy failed with signal value %ld",
                       (long)signal_value);

@@ -16,8 +16,8 @@ class test_rocm_signal : public ucs::test {
 protected:
     struct completion : uct_completion_t {
         completion() :
-            uct_completion_t({.func   = completion_cb,
-                              .count  = 1,
+            uct_completion_t({.func = completion_cb,
+                              .count = 1,
                               .status = UCS_OK}),
             callback_count(0)
         {
@@ -66,8 +66,7 @@ protected:
 };
 
 
-UCS_TEST_F(test_rocm_signal, async_error)
-{
+UCS_TEST_F(test_rocm_signal, async_error) {
     uct_rocm_base_signal_desc_t *signal_desc;
     completion comp;
 
