@@ -453,14 +453,16 @@ enum ucp_context_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_attr_field {
-    UCP_WORKER_ATTR_FIELD_THREAD_MODE     = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_ATTR_FIELD_ADDRESS         = UCS_BIT(1), /**< UCP address */
-    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS   = UCS_BIT(2), /**< UCP address flags */
-    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER   = UCS_BIT(3), /**< Maximum header size
-                                                             used by UCP AM API */
-    UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
-    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
-                                                             info string */
+    UCP_WORKER_ATTR_FIELD_THREAD_MODE         = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_ATTR_FIELD_ADDRESS             = UCS_BIT(1), /**< UCP address */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS       = UCS_BIT(2), /**< UCP address flags */
+    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER       = UCS_BIT(3), /**< Maximum header size
+                                                                 used by UCP AM API */
+    UCP_WORKER_ATTR_FIELD_NAME                = UCS_BIT(4), /**< UCP worker name */
+    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING     = UCS_BIT(5), /**< Maximum size of
+                                                                 info string */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME = UCS_BIT(6)  /**< UCP address device
+                                                                 name */
 };
 
 
@@ -511,8 +513,12 @@ enum ucp_conn_request_attr_field {
 enum ucp_dt_type {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
-    UCP_DATATYPE_IOV     = 2,      /**< Scatter-gather list with multiple pointers */
-    UCP_DATATYPE_SGL     = 4,      /**< Scatter-gather list datatype */
+    UCP_DATATYPE_IOV     = 2,      /**< List of local buffers, see
+                                        @ref ucp_dt_iov_t */
+    UCP_DATATYPE_SGL     = 4,      /**< Scatter-gather list of both local and
+                                        remote buffers, see
+                                        @ref ucp_dt_local_sgl_t and
+                                        @ref ucp_dt_remote_sgl_t */
     UCP_DATATYPE_GENERIC = 7,      /**< Generic datatype with
                                         user-defined pack/unpack routines */
     UCP_DATATYPE_SHIFT   = 3,      /**< Number of bits defining
@@ -853,16 +859,22 @@ enum ucp_am_handler_param_field {
 
 /**
  * @ingroup UCP_DATATYPE
- * @brief Generate an identifier for Scatter-gather IOV data type.
+ * @brief Generate an identifier for IOV data type.
  *
- * This macro creates an identifier for datatype of scatter-gather list
- * with multiple pointers
+ * This macro creates an identifier for datatype of a list of local buffers,
+ * passed as an array of @ref ucp_dt_iov_t elements
  *
  * @return Data-type identifier.
  *
  * @note In the event of partial receive, @ref ucp_dt_iov_t::buffer can be
  *       filled with any number of bytes according to its
  *       @ref ucp_dt_iov_t::length.
+ *
+ * @note In RMA operations, all the buffers in the list are transferred to or
+ *       from a single remote memory region, described by the @a remote_addr
+ *       and @a rkey parameters of the operation. In order to provide a
+ *       separate remote address and remote key per buffer, use
+ *       @ref ucp_dt_make_sgl().
  */
 #define ucp_dt_make_iov() ((ucp_datatype_t)UCP_DATATYPE_IOV)
 
@@ -878,9 +890,9 @@ enum ucp_am_handler_param_field {
  * - When passed via @ref ucp_request_param_t::remote_datatype, the
  *   @ref ucp_request_param_t::remote field should point to a
  *   @ref ucp_dt_remote_sgl_t descriptor.
- * The @a count parameter of @ref ucp_put_nbx specifies the number of
- * local elements, and @ref ucp_request_param_t::remote_count specifies
- * the number of remote elements.
+ * The @a count parameter of @ref ucp_put_nbx or @ref ucp_get_nbx specifies
+ * the number of local elements, and @ref ucp_request_param_t::remote_count
+ * specifies the number of remote elements.
  *
  * @return Data-type identifier.
  */
@@ -947,8 +959,8 @@ enum ucp_dt_remote_sgl_field {
  * @a buffers, @a lengths, @a memhs, @a counts, and @a strides are not copied
  * and must remain valid until the data transfer request is completed.
  *
- * Pass as the @a buffer parameter to @ref ucp_put_nbx with
- * @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_sgl().
+ * Pass as the @a buffer parameter to @ref ucp_put_nbx or @ref ucp_get_nbx
+ * with @ref ucp_request_param_t::datatype set to @ref ucp_dt_make_sgl().
  *
  * @note Currently only N->N mapping is supported: both sides must use
  *       the SGL datatype with equal counts and matching lengths.
@@ -1266,8 +1278,7 @@ typedef struct ucp_params {
      * OpenSHMEM libraries, this number will specify the local identificator on
      * a single node in the job. Does not affect semantics, only transport
      * selection criteria and the resulting performance.
-     * The value can be also set by the UCX_LOCAL_NODE_ID environment variable,
-     * which will override the id set by @e node_local_id
+     * A numeric UCX_NODE_LOCAL_ID environment value overrides @e node_local_id.
      */
     size_t                             node_local_id;
 } ucp_params_t;
@@ -1403,6 +1414,25 @@ typedef struct ucp_worker_attr {
      * Maximum debug string size that can be filled with @ref ucp_request_query.
      */
     size_t                max_debug_string;
+
+    /**
+     * Name of the communication device whose resources should be included in
+     * the worker address. It must exactly match the full name reported in the
+     * "Device:" field by @c ucx_info @c -d for a resource enabled in the
+     * worker's context. The selector can name network, shared-memory,
+     * accelerator, or loopback devices.
+     *
+     * Setting @ref UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME without
+     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS has no effect. If both fields are set
+     * in @ref field_mask, the resulting address is restricted to resources
+     * with this device name. If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is
+     * also set, its filters are applied in addition to this one. Consequently,
+     * combining @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY with a non-network
+     * device name will result in an error.
+     *
+     * @note This is an input attribute.
+     */
+    const char            *address_device_name;
 } ucp_worker_attr_t;
 
 
@@ -3904,8 +3934,17 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the source remote memory address
  *                           to read from.
+ *                           When @ref ucp_request_param_t::remote_datatype is
+ *                           @ref ucp_dt_make_sgl(), this should be set to
+ *                           @ref UCP_REMOTE_ADDR_INVALID, as remote addresses
+ *                           are specified in @ref ucp_request_param_t::remote
+ *                           instead.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address.
+ *                           When @ref ucp_request_param_t::remote_datatype is
+ *                           @ref ucp_dt_make_sgl(), this should be set to
+ *                           @ref UCP_RKEY_INVALID, as remote keys are specified
+ *                           in @ref ucp_request_param_t::remote instead.
  * @param [in]  param        Operation parameters, see @ref ucp_request_param_t.
  *
  * @return UCS_OK               - The operation was completed immediately.
@@ -3917,8 +3956,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
  *
- * @note Only the datatype ucp_dt_make_contig(1) is supported
- * for @a param->datatype, see @ref ucp_dt_make_contig.
+ * @note Supported datatypes for @a param->datatype are
+ * @ref ucp_dt_make_contig, @ref ucp_dt_make_iov, and @ref ucp_dt_make_sgl.
  */
 ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,

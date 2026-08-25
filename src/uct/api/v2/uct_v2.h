@@ -50,6 +50,7 @@ typedef enum uct_ep_operation {
     UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous */
     UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
     UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
+    UCT_EP_OP_FLUSH,        /**< Flush */
     UCT_EP_OP_LAST
 } uct_ep_operation_t;
 
@@ -226,7 +227,8 @@ typedef struct {
 typedef enum {
     UCT_MD_MEM_REG_FIELD_FLAGS         = UCS_BIT(0),
     UCT_MD_MEM_REG_FIELD_DMABUF_FD     = UCS_BIT(1),
-    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2)
+    UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET = UCS_BIT(2),
+    UCT_MD_MEM_REG_FIELD_MEM_TYPE      = UCS_BIT(3)
 } uct_md_mem_reg_field_mask_t;
 
 
@@ -275,9 +277,7 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::remote_address */
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
-    /** Enables @ref uct_ep_attr::rx_token */
-    UCT_EP_ATTR_FIELD_RX_TOKEN        = UCS_BIT(3)
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2)
 };
 
 
@@ -429,14 +429,6 @@ struct uct_ep_attr {
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
-
-    /**
-     * Opaque RX token buffer.
-     * Valid when @ref UCT_EP_ATTR_FIELD_RX_TOKEN is set in @ref field_mask.
-     * Caller allocates a buffer of @ref uct_iface_attr_v2_t::rx_token_length
-     * bytes and sets this pointer; callee fills the buffer with the token.
-     */
-    void                    *rx_token;
 };
 
 
@@ -514,6 +506,13 @@ typedef struct uct_md_mem_reg_params {
      * dmabuf region, then this field must be omitted or set to 0.
      */
     size_t                       dmabuf_offset;
+
+    /**
+     * Memory type of the region to register.
+     *
+     * If not set, it's assumed to be @ref UCS_MEMORY_TYPE_HOST.
+     */
+    ucs_memory_type_t            mem_type;
 } uct_md_mem_reg_params_t;
 
 
@@ -1164,14 +1163,17 @@ enum uct_iface_attr_field {
     /** Enables @ref uct_iface_attr_v2_t::max_put_sgl_zcopy_count */
     UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT = UCS_BIT(0),
 
+    /** Enables @ref uct_iface_attr_v2_t::max_get_sgl_zcopy_count */
+    UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT = UCS_BIT(1),
+
     /** Enables @ref uct_iface_attr_v2_t::cap */
-    UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(1),
+    UCT_IFACE_ATTR_FIELD_CAP_FLAGS               = UCS_BIT(2),
 
     /** Enables @ref uct_iface_attr_v2_t::tx_token_length. */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(2),
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH         = UCS_BIT(3),
 
     /** Enables @ref uct_iface_attr_v2_t::rx_token_length. */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(3),
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH         = UCS_BIT(4),
 
     /**
      * Enables the RX token derivation path.
@@ -1179,7 +1181,7 @@ enum uct_iface_attr_field {
      * When both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
      * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(4),
+    UCT_IFACE_ATTR_FIELD_TX_TOKEN                = UCS_BIT(5),
 
     /**
      * Enables the RX token derivation path.
@@ -1187,7 +1189,7 @@ enum uct_iface_attr_field {
      * when both set, @ref uct_iface_attr_v2_t::tx_token is input (from sender),
      * and @ref uct_iface_attr_v2_t::rx_token is output (derived by receiver).
      */
-    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(5)
+    UCT_IFACE_ATTR_FIELD_RX_TOKEN                = UCS_BIT(6)
 };
 
 
@@ -1204,7 +1206,14 @@ enum uct_iface_attr_field {
  */
         /* PUT capabilities */
 #define UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY       UCS_BIT(0)  /**< Zero-copy SGL put */
-#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(1)  /**< Interface supports token query */
+        /* GET capabilities */
+#define UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY       UCS_BIT(1)  /**< Zero-copy SGL get */
+        /* Interface capabilities */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(2)  /**< @ref uct_iface_query_v2
+                                                               and @ref uct_ep_query
+                                                               support token query, and
+                                                               @ref uct_ep_outstanding_purge
+                                                               is supported. */
 /**
  * @}
  */
@@ -1226,6 +1235,12 @@ typedef struct {
      * @anchor uct_iface_attr_v2_max_put_sgl_zcopy_count
      */
     size_t   max_put_sgl_zcopy_count;
+
+    /**
+     * Maximal number of elements in @ref uct_ep_get_sgl_zcopy.
+     * @anchor uct_iface_attr_v2_max_get_sgl_zcopy_count
+     */
+    size_t   max_get_sgl_zcopy_count;
 
     /** Interface capabilities (v2 flags) */
     struct {
@@ -1487,6 +1502,49 @@ uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
 
 
 /**
+ * @ingroup UCT_RMA
+ * @brief Scatter-gather list (SGL) zero-copy get: read multiple remote
+ *        addresses into multiple local buffers while avoiding local memory
+ *        copy.
+ *
+ * Each element @a i transfers @a lengths[i] bytes from remote address
+ * @a remote_addrs[i] (with remote key @a rkeys[i]) to local buffer
+ * @a buffers[i] (with memory handle @a memhs[i]).
+ *
+ * @param [in] ep           Destination endpoint handle.
+ * @param [in] buffers      Array of local buffer pointers.
+ * @param [in] lengths      Array of transfer lengths in bytes.
+ * @param [in] memhs        Array of local memory handles, obtained from
+ *                          @ref ::uct_md_mem_reg.
+ * @param [in] remote_addrs Array of remote addresses.
+ * @param [in] rkeys        Array of remote keys, obtained from
+ *                          @ref ::uct_rkey_unpack.
+ * @param [in] counts       Array of repetition counts per element, or NULL.
+ *                          When provided, element @a i represents @a counts[i]
+ *                          blocks of @a lengths[i] bytes, each separated by
+ *                          @a strides[i] bytes, starting at @a buffers[i] /
+ *                          @a remote_addrs[i]. When NULL, each element is
+ *                          transferred once (equivalent to count=1, stride=0).
+ * @param [in] strides      Array of strides in bytes per element, or NULL.
+ * @param [in] count        Number of elements in the arrays. Must not exceed
+ *                          @ref uct_iface_attr_v2_max_get_sgl_zcopy_count
+ *                          "uct_iface_attr_v2_t::max_get_sgl_zcopy_count".
+ * @param [in] comp         Completion handle as defined by
+ *                          @ref ::uct_completion_t.
+ *
+ * @return UCS_INPROGRESS   Some communication operations are still in progress.
+ *                          If non-NULL @a comp is provided, it will be updated
+ *                          upon completion of these operations.
+ */
+ucs_status_t
+uct_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                     const size_t *lengths, uct_mem_h const *memhs,
+                     const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
+                     const size_t *counts, const size_t *strides,
+                     size_t count, uct_completion_t *comp);
+
+
+/**
  * @ingroup UCT_MD
  *
  * @brief This routine compares two remote keys.
@@ -1540,15 +1598,387 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  * @ingroup UCT_MD
  * @brief Pack a memh and rkey into a device memory element structure.
  *
- * @param [in]  md           Memory domain.
- * @param [in]  memh         Memory handle to pack (can be NULL).
- * @param [in]  rkey         Remote key to pack (can be UCT_INVALID_RKEY).
- * @param [out] mem_elem     Filled with the packed memh and rkey.
+ * @param [in]  md                Memory domain.
+ * @param [in]  memh              Memory handle to pack (can be NULL).
+ * @param [in]  rkey              Remote key to pack (can be UCT_INVALID_RKEY).
+ * @param [out] mem_elem          Filled with the packed memh and rkey.
+ * @param [out] release_handle_p  Handle for releasing resources allocated
+ *                                during packing.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
-                                  uct_device_mem_elem_t *mem_elem);
+                                  uct_device_mem_elem_t *mem_elem,
+                                  void **release_handle_p);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Release resources allocated by @ref uct_md_mem_elem_pack.
+ *
+ * @param [in] md              Memory domain.
+ * @param [in] release_handle  Handle for releasing resources.
+ */
+void uct_md_mem_elem_release(uct_md_h md, void *release_handle);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT outstanding operation info field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_ep_op_info_t are
+ * present, for backward compatibility support.
+ */
+typedef enum uct_ep_op_info_field {
+    /** Enables @ref uct_ep_op_info_t::operation. */
+    UCT_EP_OP_INFO_FIELD_OPERATION = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_op_info_t::comp. */
+    UCT_EP_OP_INFO_FIELD_COMP      = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::am. */
+    UCT_EP_OP_INFO_FIELD_AM        = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_op_info_t::rma. */
+    UCT_EP_OP_INFO_FIELD_RMA       = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::flush. */
+    UCT_EP_OP_INFO_FIELD_FLUSH     = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::atomic. */
+    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(5),
+} uct_ep_op_info_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::am.
+ *
+ * The enumeration allows specifying which fields in the @c am group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /** Enables @ref uct_ep_op_info_t::am::am_id. */
+    UCT_EP_OP_INFO_AM_FIELD_AM_ID         = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_op_info_t::am::flags. */
+    UCT_EP_OP_INFO_AM_FIELD_FLAGS         = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::am::header.value. */
+    UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE  = UCS_BIT(2),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::am::header.zcopy.buffer and
+     * @ref uct_ep_op_info_t::am::header.zcopy.length.
+     */
+    UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY  = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::am::payload::data. */
+    UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA  = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::am::payload::zcopy. */
+    UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY = UCS_BIT(5),
+} uct_ep_op_info_am_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::rma.
+ *
+ * The enumeration allows specifying which fields in the @c rma group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /**
+     * Enables @ref uct_ep_op_info_t::rma::remote_addr.
+     * Must be set together with @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY.
+     */
+    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR    = UCS_BIT(0),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::rma::rkey.
+     * Must be set together with @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR.
+     */
+    UCT_EP_OP_INFO_RMA_FIELD_RKEY           = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_op_info_t::rma::payload::data. */
+    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA   = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_op_info_t::rma::payload::zcopy. */
+    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY  = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::rma::payload::unpack. */
+    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK = UCS_BIT(4),
+} uct_ep_op_info_rma_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::flush.
+ *
+ * The enumeration allows specifying which fields in the @c flush group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /** Enables @ref uct_ep_op_info_t::flush::flags. */
+    UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS = UCS_BIT(0),
+} uct_ep_op_info_flush_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_op_info_t::atomic.
+ *
+ * The enumeration allows specifying which fields in the @c atomic group are
+ * present, for backward compatibility support.
+ */
+typedef enum {
+    /** Enables @ref uct_ep_op_info_t::atomic::op. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_OP          = UCS_BIT(0),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::atomic::remote_addr.
+     * Must be set together with @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY.
+     */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR = UCS_BIT(1),
+
+    /**
+     * Enables @ref uct_ep_op_info_t::atomic::rkey.
+     * Must be set together with @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR.
+     */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY        = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::value. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE       = UCS_BIT(3),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::compare. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE     = UCS_BIT(4),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::result. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT      = UCS_BIT(5),
+
+    /** Enables @ref uct_ep_op_info_t::atomic::size. */
+    UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE        = UCS_BIT(6),
+} uct_ep_op_info_atomic_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Descriptor for a single outstanding (undelivered) operation.
+ *
+ * Passed to the callback registered with @ref uct_ep_outstanding_purge.
+ * @ref UCT_EP_OP_INFO_FIELD_OPERATION is required for every operation. The
+ * following operation-specific field groups are also required:
+ *
+ * - AM_SHORT: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_AM_ID | @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA.
+ * - AM_BCOPY: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_AM_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA.
+ * - AM_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_AM with @a am.field_mask =
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_AM_ID | @ref UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+ *   @ref UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY.
+ * - PUT_SHORT and PUT_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA.
+ * - PUT_ZCOPY and GET_ZCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY.
+ * - GET_SHORT: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA.
+ * - GET_BCOPY: @ref UCT_EP_OP_INFO_FIELD_RMA with @a rma.field_mask =
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_RMA_FIELD_RKEY | @ref UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK.
+ * - ATOMIC_POST: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with @a atomic.field_mask =
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE.
+ * - ATOMIC_FETCH: @ref UCT_EP_OP_INFO_FIELD_ATOMIC with @a atomic.field_mask =
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE | @ref UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT |
+ *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE. If @a atomic.op is
+ *   @ref UCT_ATOMIC_OP_CSWAP, @ref UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE is
+ *   required as well.
+ * - FLUSH: @ref UCT_EP_OP_INFO_FIELD_FLUSH with @a flush.field_mask =
+ *   @ref UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS.
+ *
+ * Operation-specific groups live in a single tail union so future fields can be
+ * appended inside the active group without shifting the fixed header fields.
+ */
+typedef struct uct_ep_op_info {
+    /**
+     * Mask of valid field groups in this structure, using bits from
+     * @ref uct_ep_op_info_field_t. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t           field_mask;
+
+    /**
+     * Operation type from @ref uct_ep_operation_t (e.g. UCT_EP_OP_AM_SHORT,
+     * UCT_EP_OP_PUT_ZCOPY, UCT_EP_OP_FLUSH, etc.).
+     */
+    uct_ep_operation_t operation;
+
+    /* Original completion. */
+    uct_completion_t   *comp;
+
+    union {
+        /* AM operation parameters. */
+        struct {
+            /* Bits from @ref uct_ep_op_info_am_field_t */
+            uint16_t field_mask;
+            /* AM handler ID. */
+            uint8_t  am_id;
+            /* Flags passed to the AM operation. */
+            unsigned flags;
+            union {
+                /* AM short: 64-bit inline header word. */
+                uint64_t value;
+
+                /* AM zcopy: header buffer and its length. */
+                struct {
+                    const void *buffer;
+                    size_t     length;
+                } zcopy;
+            } header;
+            union {
+                /* Contiguous AM payload, valid only inside the callback. */
+                struct {
+                    void   *buffer;
+                    size_t length;
+                } data;
+
+                /* Zcopy AM IOV, pointing to user's original registered buffers. */
+                struct {
+                    const uct_iov_t *iov;
+                    size_t          iovcnt;
+                } zcopy;
+            } payload;
+        } am;
+
+        /* Remote target for PUT and GET operations. */
+        struct {
+            /* Bits from @ref uct_ep_op_info_rma_field_t */
+            uint16_t   field_mask;
+            /* Remote address. */
+            uint64_t   remote_addr;
+            /* Remote key. */
+            uct_rkey_t rkey;
+            union {
+                /* Contiguous RMA payload, valid only inside the callback. */
+                struct {
+                    void   *buffer;
+                    size_t length;
+                } data;
+
+                /* Zcopy RMA IOV, pointing to user's original registered buffers. */
+                struct {
+                    const uct_iov_t *iov;
+                    size_t          iovcnt;
+                } zcopy;
+
+                /* GET bcopy destination callback. */
+                struct {
+                    uct_unpack_callback_t unpack_cb;
+                    void                  *arg;
+                    size_t                length;
+                } unpack;
+            } payload;
+        } rma;
+
+        /* Flush operation parameters. */
+        struct {
+            /* Bits from @ref uct_ep_op_info_flush_field_t */
+            uint16_t field_mask;
+            /* Flush flags. */
+            unsigned flags;
+        } flush;
+
+        /* Atomic operation parameters. */
+        struct {
+            /* Bits from @ref uct_ep_op_info_atomic_field_t */
+            uint16_t        field_mask;
+            /* Atomic operation type. */
+            uct_atomic_op_t op;
+            /* Remote address. */
+            uint64_t        remote_addr;
+            /* Remote key. */
+            uct_rkey_t      rkey;
+            /* Value or swap operand. */
+            uint64_t        value;
+            /* Compare operand for CSWAP. */
+            uint64_t        compare;
+            /* Fetch result destination. */
+            void            *result;
+            /* Operand size. */
+            size_t          size;
+        } atomic;
+    };
+} uct_ep_op_info_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback invoked for each undelivered outstanding operation.
+ */
+typedef void (*uct_ep_outstanding_purge_callback_t)(
+        const uct_ep_op_info_t *op_info, void *arg);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_ep_outstanding_purge_params_t. Fields not
+ * specified by this mask are ignored, unless documented as required.
+ */
+typedef enum {
+    UCT_EP_OUTSTANDING_FIELD_RX_TOKEN = UCS_BIT(0),
+    UCT_EP_OUTSTANDING_FIELD_CB       = UCS_BIT(1),
+    UCT_EP_OUTSTANDING_FIELD_ARG      = UCS_BIT(2)
+} uct_ep_outstanding_purge_field_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for @ref uct_ep_outstanding_purge.
+ */
+typedef struct {
+    /** Mask of valid fields, using bits from @ref
+     *  uct_ep_outstanding_purge_field_t. @ref
+     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
+     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
+    uint64_t                            field_mask;
+
+    /**
+     * Opaque RX token received from the remote peer.
+     */
+    const void                          *rx_token;
+
+    /** Callback invoked once per undelivered outstanding operation. */
+    uct_ep_outstanding_purge_callback_t cb;
+
+    /**
+     * Opaque argument passed to @ref cb.
+     * Valid when @ref UCT_EP_OUTSTANDING_FIELD_ARG is set.
+     */
+    void                                *arg;
+} uct_ep_outstanding_purge_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Purge outstanding (undelivered) operations from an endpoint.
+ *
+ * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
+ * undelivered outstanding operation, in the original endpoint posting order.
+ */
+ucs_status_t
+uct_ep_outstanding_purge(uct_ep_h ep,
+                         const uct_ep_outstanding_purge_params_t *params);
+
 
 END_C_DECLS
 

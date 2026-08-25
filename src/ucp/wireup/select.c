@@ -1,6 +1,7 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1162,6 +1163,22 @@ ucp_wireup_aux_seg_size_score_func(const ucp_worker_iface_t *wiface,
     return ucp_wireup_aux_seg_size(&wiface->attr, remote_addr);
 }
 
+static uint64_t
+ucp_wireup_aux_local_mandatory_flags(unsigned ep_init_flags)
+{
+    uint64_t flags = 0;
+
+    if (!ucp_ep_init_flags_has_cm(ep_init_flags)) {
+        flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    }
+
+    if (ep_init_flags & UCP_EP_INIT_RECOVERY) {
+        flags |= UCT_IFACE_FLAG_EP_CHECK;
+    }
+
+    return flags;
+}
+
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
                                          unsigned ep_init_flags,
                                          uint64_t mandatory_flags)
@@ -1174,13 +1191,15 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     ucp_wireup_init_select_flags(&criteria->remote_iface_flags,
                                  UCP_ADDR_IFACE_FLAG_AM_SYNC, 0);
 
+    criteria->local_iface_flags.mandatory |=
+        ucp_wireup_aux_local_mandatory_flags(ep_init_flags);
+
     /* CM lane doesn't require to use CONNECT_TO_IFACE for auxiliary lane */
     if (!ucp_ep_init_flags_has_cm(ep_init_flags)) {
-        criteria->local_iface_flags.mandatory  |=
-                UCT_IFACE_FLAG_CONNECT_TO_IFACE;
         criteria->remote_iface_flags.mandatory |=
                 UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE | mandatory_flags;
     }
+
     criteria->local_cmpt_flags   = 0;
     criteria->local_event_flags  = 0;
     criteria->remote_event_flags = 0;
@@ -2602,7 +2621,8 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_bw_info_t bw_info = {};
     const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA),
                                            UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                                   UCS_BIT(UCS_MEMORY_TYPE_HOST)};
+                                                   UCS_BIT(UCS_MEMORY_TYPE_HOST),
+                                           UCS_BIT(UCS_MEMORY_TYPE_ROCM)};
     int found_lane                      = 0;
     size_t i;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
@@ -3043,15 +3063,16 @@ static ucs_status_t
 ucp_wireup_select_aux_transport_by_seg_size(
         const ucp_wireup_select_context_t *select_ctx,
         const ucp_wireup_select_params_t *select_params,
-        const ucp_wireup_criteria_t *criteria, int show_error,
+        const ucp_wireup_criteria_t *criteria, uint64_t local_dev_bitmap,
+        uint64_t remote_dev_bitmap, int show_error,
         ucp_wireup_select_info_t *select_info)
 {
     ucs_status_t status;
 
     status = ucp_wireup_select_transport(select_ctx, select_params, criteria,
                                          ucp_tl_bitmap_max, UINT64_MAX,
-                                         UINT64_MAX, UINT64_MAX, show_error,
-                                         select_info);
+                                         local_dev_bitmap, remote_dev_bitmap,
+                                         show_error, select_info);
     if (status != UCS_OK) {
         return status;
     }
@@ -3070,6 +3091,8 @@ ucs_status_t
 ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 ucp_tl_bitmap_t tl_bitmap,
                                 const ucp_unpacked_address_t *remote_address,
+                                uint64_t local_dev_bitmap,
+                                uint64_t remote_dev_bitmap,
                                 ucp_wireup_select_info_t *select_info)
 {
     ucp_wireup_select_context_t select_ctx = {};
@@ -3085,7 +3108,9 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
     status = ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
                                                          &select_params,
-                                                         &criteria, 0,
+                                                         &criteria,
+                                                         local_dev_bitmap,
+                                                         remote_dev_bitmap, 0,
                                                          select_info);
     if (status == UCS_OK) {
         return UCS_OK;
@@ -3096,6 +3121,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags, 0);
     return ucp_wireup_select_aux_transport_by_seg_size(&select_ctx,
                                                        &select_params,
-                                                       &criteria, 1,
+                                                       &criteria,
+                                                       local_dev_bitmap,
+                                                       remote_dev_bitmap, 1,
                                                        select_info);
 }

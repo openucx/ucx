@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -20,6 +20,7 @@
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucp/wireup/wireup_lane_info.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/stream/stream.h>
@@ -799,6 +800,10 @@ static uint8_t ucp_worker_iface_port_speed(const ucp_worker_iface_t *wiface)
     ucs_status_t status;
     double ratio;
 
+    if (wiface->attr.bandwidth.shared == 0.0) {
+        return 0;
+    }
+
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
     status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {
@@ -871,7 +876,9 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucs_trace_func("async_cb for iface=%p flags=%u", wiface->iface, flags);
 
     if (flags & UCT_EVENT_SPEED_CHANGE) {
+        UCS_ASYNC_BLOCK(&wiface->worker->async);
         ucp_worker_iface_handle_port_speed_event(wiface);
+        UCS_ASYNC_UNBLOCK(&wiface->worker->async);
         return;
     }
 
@@ -2230,6 +2237,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
     }
 
     ucp_worker_print_used_tls(worker, ep_cfg_index);
+    ucp_wireup_log_ep_lanes(worker, key, ep_cfg_index);
 
 out:
     *cfg_index_p = ep_cfg_index;

@@ -982,13 +982,6 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
             goto out_ctx;
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuMemsetD8((CUdeviceptr)ep->channel_block->gpu_ptr, 0,
-                           dev_ep_host_size));
-        if (status != UCS_OK) {
-            goto out_free;
-        }
-
         dev_ep->atomic_va    = iface->atomic_buff;
         dev_ep->atomic_lkey  = htonl(iface->atomic_mr->lkey);
         dev_ep->sq_wqe_num   = uct_ib_mlx5_devx_sq_length(
@@ -1042,7 +1035,7 @@ out_unreg:
         (void)cuMemHostUnregister(
                 ep->channel_block->channels[i].qp.reg->addr.ptr);
     } while (i-- > 0);
-out_free:
+
     ucs_free(dev_ep);
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
@@ -1066,9 +1059,10 @@ static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
             .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_gdaki_ep_is_connected,
             .ep_get_device_ep       = uct_rc_gdaki_ep_get_device_ep,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq  = uct_rc_gdaki_create_cq,
         .destroy_cq = (uct_ib_iface_destroy_cq_func_t)ucs_empty_function_return_success,
@@ -1398,7 +1392,7 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
     return UCS_OK;
 }
 
-uct_gdaki_dev_matrix_elem_t *
+static uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
@@ -1526,39 +1520,29 @@ out_dev:
     return dmat;
 }
 
-static ucs_status_t
-uct_gdaki_query_tl_devices(uct_md_h tl_md,
-                           uct_tl_device_resource_t **tl_devices_p,
-                           unsigned *num_tl_devices_p)
+ucs_status_t
+uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
+                               uct_tl_device_resource_t **tl_devices_p,
+                               unsigned *num_tl_devices_p)
 {
-    uct_ib_mlx5_md_t *ib_mlx5_md     = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    uct_ib_md_t *ib_md               = &ib_mlx5_md->super;
-    static ucs_init_once_t dmat_once = UCS_INIT_ONCE_INITIALIZER;
+    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
     static uct_gdaki_dev_matrix_elem_t *dmat;
     static size_t dmat_length;
-    unsigned num_tl_devices;
+    const uct_gdaki_dev_matrix_elem_t *ibdesc;
     uct_tl_device_resource_t *tl_devices;
+    unsigned num_tl_devices;
     ucs_status_t status;
     CUdevice device;
     int i;
-    uct_gdaki_dev_matrix_elem_t *ibdesc;
 
-    if (!(uct_gdaki_get_driver_features(ib_md) & UCT_GDAKI_SUPPORTED)) {
-        ucs_debug("%s: GDAKI is not supported",
-                  uct_ib_device_name(&ib_md->dev));
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-
-    UCS_INIT_ONCE(&dmat_once) {
+    UCS_INIT_ONCE(&once) {
         dmat = uct_gdaki_dev_matrix_init(ib_md, &dmat_length);
     }
 
     if (dmat == NULL) {
-        ucs_debug("%s: global device matrix initialization failed",
+        ucs_debug("%s: device matrix initialization failed",
                   uct_ib_device_name(&ib_md->dev));
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
+        return UCS_ERR_NO_DEVICE;
     }
 
     for (ibdesc = dmat; ibdesc - dmat < dmat_length; ibdesc++) {
@@ -1567,21 +1551,22 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
         }
     }
 
-    ucs_assertv(ibdesc - dmat < dmat_length, "dev %s",
-                uct_ib_device_name(&ib_md->dev));
+    if (ibdesc - dmat == dmat_length) {
+        ucs_debug("%s: IB device not found in device matrix",
+                  uct_ib_device_name(&ib_md->dev));
+        return UCS_ERR_NO_DEVICE;
+    }
 
     if (ibdesc->cuda_map == 0) {
-        ucs_debug("%s: no assigned gpu found", uct_ib_device_name(&ib_md->dev));
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
+        ucs_debug("%s: no assigned GPU found", uct_ib_device_name(&ib_md->dev));
+        return UCS_ERR_NO_DEVICE;
     }
 
     tl_devices = ucs_malloc(sizeof(*tl_devices) *
                                     ucs_popcount(ibdesc->cuda_map),
                             "gdaki_tl_devices");
     if (tl_devices == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
+        return UCS_ERR_NO_MEMORY;
     }
 
     num_tl_devices = 0;
@@ -1606,8 +1591,25 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 
 err:
     ucs_free(tl_devices);
-out:
     return status;
+}
+
+static ucs_status_t
+uct_gdaki_query_tl_devices(uct_md_h tl_md,
+                           uct_tl_device_resource_t **tl_devices_p,
+                           unsigned *num_tl_devices_p)
+{
+    uct_ib_mlx5_md_t *ib_mlx5_md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_md_t *ib_md           = &ib_mlx5_md->super;
+
+    if (!(uct_gdaki_get_driver_features(ib_md) & UCT_GDAKI_SUPPORTED)) {
+        ucs_debug("%s: GDAKI is not supported",
+                  uct_ib_device_name(&ib_md->dev));
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    return uct_gdaki_fill_cuda_tl_devices(ib_md, tl_devices_p,
+                                          num_tl_devices_p);
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_gda, uct_gdaki_query_tl_devices,
