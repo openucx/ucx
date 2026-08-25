@@ -20,7 +20,8 @@ extern "C" {
  */
 class test_ze_ipc_md : public ucs::test {
 protected:
-    void SetUp() override {
+    void SetUp() override
+    {
         ucs::test::SetUp();
         if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
             UCS_TEST_SKIP_R("Level Zero runtime not available");
@@ -31,29 +32,28 @@ protected:
     }
 
     /* Query MD resources via the component API used by the rest of UCT. */
-    static ucs_status_t query_md_resources(uct_md_resource_desc_t **resources_p,
-                                           unsigned *num_p)
+    static ucs_status_t
+    query_md_resources(uct_md_resource_desc_t **resources_p, unsigned *num_p)
     {
         uct_component_attr_t attr;
-        ucs_status_t         status;
+        ucs_status_t status;
 
         attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
-        status = uct_component_query(&uct_ze_ipc_component, &attr);
+        status          = uct_component_query(&uct_ze_ipc_component, &attr);
         if (status != UCS_OK) {
             return status;
         }
 
-        unsigned count = attr.md_resource_count;
-        uct_md_resource_desc_t *res = (uct_md_resource_desc_t *)
-                ucs_calloc(count, sizeof(uct_md_resource_desc_t),
-                           "ze_ipc_md_resources");
+        unsigned count              = attr.md_resource_count;
+        uct_md_resource_desc_t *res = (uct_md_resource_desc_t*)ucs_calloc(
+                count, sizeof(uct_md_resource_desc_t), "ze_ipc_md_resources");
         if ((res == NULL) && (count > 0)) {
             return UCS_ERR_NO_MEMORY;
         }
 
         attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
         attr.md_resources = res;
-        status = uct_component_query(&uct_ze_ipc_component, &attr);
+        status            = uct_component_query(&uct_ze_ipc_component, &attr);
         if (status != UCS_OK) {
             ucs_free(res);
             return status;
@@ -64,9 +64,10 @@ protected:
         return UCS_OK;
     }
 
-    static uct_md_h open_first_md() {
+    static uct_md_h open_first_md()
+    {
         uct_md_resource_desc_t *resources = NULL;
-        unsigned                num       = 0;
+        unsigned num                      = 0;
 
         if (query_md_resources(&resources, &num) != UCS_OK) {
             return NULL;
@@ -85,8 +86,8 @@ protected:
         }
 
         uct_md_h md = NULL;
-        status = uct_md_open(&uct_ze_ipc_component, resources[0].md_name,
-                             md_config, &md);
+        status      = uct_md_open(&uct_ze_ipc_component, resources[0].md_name,
+                                  md_config, &md);
         uct_config_release(md_config);
         ucs_free(resources);
 
@@ -102,7 +103,7 @@ UCS_TEST_F(test_ze_ipc_md, component_is_registered) {
 
 UCS_TEST_F(test_ze_ipc_md, query_md_resources_returns_at_least_one) {
     uct_md_resource_desc_t *resources = NULL;
-    unsigned                num       = 0;
+    unsigned num                      = 0;
 
     EXPECT_UCS_OK(query_md_resources(&resources, &num));
     EXPECT_GE(num, 1u);
@@ -118,7 +119,7 @@ UCS_TEST_F(test_ze_ipc_md, open_close_md) {
 
     /* The post-merge ze_ipc_md must populate device + context. */
     auto *ze_md = ucs_derived_of(md, uct_ze_ipc_md_t);
-    EXPECT_TRUE(ze_md->ze_device  != NULL);
+    EXPECT_TRUE(ze_md->ze_device != NULL);
     EXPECT_TRUE(ze_md->ze_context != NULL);
 
     uct_md_close(md);
@@ -156,9 +157,9 @@ UCS_TEST_F(test_ze_ipc_md, mem_reg_pack_dereg_device) {
     }
     auto *ze_md = ucs_derived_of(md, uct_ze_ipc_md_t);
 
-    const size_t                size     = 4096;
-    void                       *dev_ptr  = NULL;
-    ze_device_mem_alloc_desc_t  dev_desc = {};
+    const size_t size                   = 4096;
+    void *dev_ptr                       = NULL;
+    ze_device_mem_alloc_desc_t dev_desc = {};
     dev_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
 
     ASSERT_EQ(ZE_RESULT_SUCCESS,

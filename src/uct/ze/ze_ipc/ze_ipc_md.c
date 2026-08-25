@@ -4,10 +4,11 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "ze_ipc_md.h"
+#include "ze_ipc_cache.h"
 
 #include <uct/ze/base/ze_base.h>
 #include <uct/api/v2/uct_v2.h>
@@ -24,11 +25,11 @@
 /* Helper function to compute a simple checksum of IPC handle for verification */
 static uint32_t uct_ze_ipc_handle_checksum(const ze_ipc_mem_handle_t *handle)
 {
-    const unsigned char *bytes = (const unsigned char *)handle;
-    uint32_t sum = 0;
+    const unsigned char *bytes = (const unsigned char*)handle;
+    uint32_t sum               = 0;
     for (size_t i = 0; i < sizeof(ze_ipc_mem_handle_t); i++) {
         sum += bytes[i];
-        sum = (sum << 1) | (sum >> 31);  /* rotate left */
+        sum  = (sum << 1) | (sum >> 31); /* rotate left */
     }
     return sum;
 }
@@ -39,36 +40,31 @@ static void uct_ze_ipc_print_handle(const char *prefix,
                                     const ze_ipc_mem_handle_t *handle,
                                     uintptr_t addr, size_t len, int dev_num)
 {
-    const unsigned char *bytes = (const unsigned char *)handle;
-    uint32_t checksum = uct_ze_ipc_handle_checksum(handle);
+    const unsigned char *bytes = (const unsigned char*)handle;
+    uint32_t checksum          = uct_ze_ipc_handle_checksum(handle);
 
     /* Print first 16 bytes of handle + checksum for quick comparison */
     ucs_info("%s: addr=0x%lx len=%zu dev=%d checksum=0x%08x "
              "handle[0-15]=%02x%02x%02x%02x%02x%02x%02x%02x"
              "%02x%02x%02x%02x%02x%02x%02x%02x",
-             prefix, (unsigned long)addr, len, dev_num, checksum,
-             bytes[0], bytes[1], bytes[2], bytes[3],
-             bytes[4], bytes[5], bytes[6], bytes[7],
-             bytes[8], bytes[9], bytes[10], bytes[11],
-             bytes[12], bytes[13], bytes[14], bytes[15]);
+             prefix, (unsigned long)addr, len, dev_num, checksum, bytes[0],
+             bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+             bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12],
+             bytes[13], bytes[14], bytes[15]);
 }
 
 
 static ucs_config_field_t uct_ze_ipc_md_config_table[] = {
-    {"", "", NULL,
-     ucs_offsetof(uct_ze_ipc_md_config_t, super),
+    {"", "", NULL, ucs_offsetof(uct_ze_ipc_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
-    {"DEVICE_ORDINAL", "0",
-     "Ordinal of the GPU device to use for IPC.",
-     ucs_offsetof(uct_ze_ipc_md_config_t, device_ordinal),
-     UCS_CONFIG_TYPE_INT},
+    {"DEVICE_ORDINAL", "0", "Ordinal of the GPU device to use for IPC.",
+     ucs_offsetof(uct_ze_ipc_md_config_t, device_ordinal), UCS_CONFIG_TYPE_INT},
 
     {NULL}
 };
 
-static ucs_status_t
-uct_ze_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
+static ucs_status_t uct_ze_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     uct_md_base_md_query(md_attr);
     md_attr->rkey_packed_size = sizeof(uct_ze_ipc_key_t);
@@ -98,23 +94,24 @@ uct_ze_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
 }
 
 
-static ucs_status_t
-uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address, size_t length,
-                    uct_ze_ipc_key_t *key)
+static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
+                                        size_t length, uct_ze_ipc_key_t *key)
 {
     ze_memory_allocation_properties_t props = {
         .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
     };
-    ze_device_handle_t alloc_device = NULL;
+    ze_device_handle_t alloc_device         = NULL;
     void *base_address;
     size_t alloc_size;
+    unsigned long proc_create_time;
     ze_result_t ret;
     ucs_status_t status;
     int dev_ordinal;
 
     /* Get memory allocation properties to verify this is ZE device memory
      * Also get the device where memory was allocated */
-    ret = zeMemGetAllocProperties(md->ze_context, address, &props, &alloc_device);
+    ret = zeMemGetAllocProperties(md->ze_context, address, &props,
+                                  &alloc_device);
     if ((ret != ZE_RESULT_SUCCESS) || (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
         ucs_error("failed to get allocation properties for %p", address);
         return UCS_ERR_INVALID_ADDR;
@@ -136,6 +133,15 @@ uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address, size_t length,
         return UCS_ERR_INVALID_ADDR;
     }
 
+    /* Resolve this before exporting the handle: without it the importer cannot
+     * tell our allocations from those of a dead process whose PID we reused,
+     * and exporting a key it must then distrust is worse than failing here */
+    proc_create_time = ucs_sys_get_proc_create_time(getpid());
+    if (proc_create_time == 0) {
+        ucs_error("failed to get process creation time for pid %d", getpid());
+        return UCS_ERR_IO_ERROR;
+    }
+
     /* Get IPC handle for the memory */
     status = UCT_ZE_FUNC_LOG_ERR(
             zeMemGetIpcHandle(md->ze_context, base_address, &key->ipc_handle));
@@ -144,10 +150,12 @@ uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address, size_t length,
         return status;
     }
 
-    key->pid     = getpid();
-    key->address = (uintptr_t)base_address;
-    key->length  = alloc_size;
-    key->dev_num = dev_ordinal;
+    key->pid              = getpid();
+    key->address          = (uintptr_t)base_address;
+    key->length           = alloc_size;
+    key->dev_num          = dev_ordinal;
+    key->alloc_id         = props.id;
+    key->proc_create_time = proc_create_time;
 
     ucs_trace("packed IPC handle for %p base=%p len=%zu dev=%d pid=%d", address,
               base_address, alloc_size, dev_ordinal, key->pid);
@@ -164,7 +172,8 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uct_ze_ipc_key_t *key;
     ucs_status_t status;
 
-    ucs_info("ze_ipc_md: mem_reg called address=%p length=%zu", address, length);
+    ucs_info("ze_ipc_md: mem_reg called address=%p length=%zu", address,
+             length);
 
     key = ucs_malloc(sizeof(*key), "uct_ze_ipc_key_t");
     if (key == NULL) {
@@ -180,7 +189,8 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return status;
     }
 
-    ucs_info("ze_ipc_md: mem_reg succeeded address=%p key->address=0x%lx key->length=%zu",
+    ucs_info("ze_ipc_md: mem_reg succeeded address=%p key->address=0x%lx "
+             "key->length=%zu",
              address, (unsigned long)key->address, key->length);
 
     *memh_p = key;
@@ -189,13 +199,21 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
 
 static ucs_status_t
-uct_ze_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
+uct_ze_ipc_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 {
+    uct_ze_ipc_md_t *md = ucs_derived_of(uct_md, uct_ze_ipc_md_t);
     uct_ze_ipc_key_t *key;
+    ze_result_t ret;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     key = params->memh;
+
+    ret = zeMemPutIpcHandle(md->ze_context, key->ipc_handle);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_warn("zeMemPutIpcHandle failed with error 0x%x", ret);
+    }
+
     ucs_free(key);
     return UCS_OK;
 }
@@ -206,7 +224,7 @@ uct_ze_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
                        const uct_rkey_unpack_params_t *params,
                        uct_rkey_t *rkey_p, void **handle_p)
 {
-    uct_ze_ipc_key_t *packed = (uct_ze_ipc_key_t *)rkey_buffer;
+    uct_ze_ipc_key_t *packed = (uct_ze_ipc_key_t*)rkey_buffer;
     uct_ze_ipc_key_t *key;
 
     /* Print handle info for verification - compare with mkey_pack output */
@@ -227,12 +245,11 @@ uct_ze_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 }
 
 
-static ucs_status_t
-uct_ze_ipc_rkey_release(uct_component_t *component, uct_rkey_t rkey,
-                        void *handle)
+static ucs_status_t uct_ze_ipc_rkey_release(uct_component_t *component,
+                                            uct_rkey_t rkey, void *handle)
 {
     ucs_assert(handle == NULL);
-    ucs_free((void *)rkey);
+    ucs_free((void*)rkey);
     return UCS_OK;
 }
 
@@ -242,6 +259,7 @@ static void uct_ze_ipc_md_close(uct_md_h uct_md)
     uct_ze_ipc_md_t *md = ucs_derived_of(uct_md, uct_ze_ipc_md_t);
 
     if (md->ze_context != NULL) {
+        uct_ze_ipc_purge_cache_by_context(md->ze_context);
         zeContextDestroy(md->ze_context);
     }
     ucs_free(md);
@@ -252,18 +270,24 @@ static ucs_status_t
 uct_ze_ipc_md_open(uct_component_h component, const char *md_name,
                    const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
-    static uct_md_ops_t md_ops = {
+    static uct_md_ops_t md_ops     = {
         .close              = uct_ze_ipc_md_close,
         .query              = uct_ze_ipc_md_query,
-        .mem_alloc          = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
-        .mem_free           = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
-        .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_alloc          = (uct_md_mem_alloc_func_t)
+                ucs_empty_function_return_unsupported,
+        .mem_free           = (uct_md_mem_free_func_t)
+                ucs_empty_function_return_unsupported,
+        .mem_advise         = (uct_md_mem_advise_func_t)
+                ucs_empty_function_return_unsupported,
         .mem_reg            = uct_ze_ipc_mem_reg,
         .mem_dereg          = uct_ze_ipc_mem_dereg,
-        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)
+                ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ze_ipc_mkey_pack,
-        .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
-        .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
+        .mem_attach         = (uct_md_mem_attach_func_t)
+                ucs_empty_function_return_unsupported,
+        .detect_memory_type = (uct_md_detect_memory_type_func_t)
+                ucs_empty_function_return_unsupported,
     };
     uct_ze_ipc_md_config_t *config = ucs_derived_of(uct_md_config,
                                                     uct_ze_ipc_md_config_t);
@@ -308,21 +332,24 @@ uct_ze_ipc_md_open(uct_component_h component, const char *md_name,
 uct_component_t uct_ze_ipc_component = {
     .query_md_resources = uct_ze_base_query_md_resources,
     .md_open            = uct_ze_ipc_md_open,
-    .cm_open            = (uct_component_cm_open_func_t)ucs_empty_function_return_unsupported,
+    .cm_open            = (uct_component_cm_open_func_t)
+            ucs_empty_function_return_unsupported,
     .rkey_unpack        = uct_ze_ipc_rkey_unpack,
-    .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
+    .rkey_ptr           = (uct_component_rkey_ptr_func_t)
+            ucs_empty_function_return_unsupported,
     .rkey_release       = uct_ze_ipc_rkey_release,
     .rkey_compare       = uct_base_rkey_compare,
     .name               = "ze_ipc",
-    .md_config          = {
-        .name           = "ZE-IPC memory domain",
-        .prefix         = "ZE_IPC_",
-        .table          = uct_ze_ipc_md_config_table,
-        .size           = sizeof(uct_ze_ipc_md_config_t),
-    },
-    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ze_ipc_component),
-    .flags              = 0,
-    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
+    .md_config =
+            {
+                    .name   = "ZE-IPC memory domain",
+                    .prefix = "ZE_IPC_",
+                    .table  = uct_ze_ipc_md_config_table,
+                    .size   = sizeof(uct_ze_ipc_md_config_t),
+            },
+    .cm_config   = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
+    .tl_list     = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ze_ipc_component),
+    .flags       = 0,
+    .md_vfs_init = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ze_ipc_component);

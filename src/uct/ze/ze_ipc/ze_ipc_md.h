@@ -17,9 +17,9 @@ extern uct_component_t uct_ze_ipc_component;
  * @brief ze ipc MD descriptor
  */
 typedef struct uct_ze_ipc_md {
-    uct_md_t            super;      /**< Domain info */
+    uct_md_t            super; /**< Domain info */
     ze_context_handle_t ze_context; /**< Level Zero context */
-    ze_device_handle_t  ze_device;  /**< Level Zero device */
+    ze_device_handle_t  ze_device; /**< Level Zero device */
 } uct_ze_ipc_md_t;
 
 
@@ -37,10 +37,15 @@ typedef struct uct_ze_ipc_md_config {
  */
 typedef struct uct_ze_ipc_key {
     ze_ipc_mem_handle_t ipc_handle; /**< IPC memory handle */
-    pid_t               pid;        /**< Remote process ID (for cache) */
-    uintptr_t           address;    /**< Base address of the allocation */
-    size_t              length;     /**< Size of the allocation */
-    int                 dev_num;    /**< GPU device number */
+    uint64_t            alloc_id; /**< Driver allocation id, distinguishes
+                                       allocations that reuse a VA */
+    uint64_t            proc_create_time; /**< Remote process creation time,
+                                               distinguishes processes that
+                                               reuse a PID */
+    pid_t               pid; /**< Remote process ID (for cache) */
+    uintptr_t           address; /**< Base address of the allocation */
+    size_t              length; /**< Size of the allocation */
+    int                 dev_num; /**< GPU device number */
 } uct_ze_ipc_key_t;
 
 

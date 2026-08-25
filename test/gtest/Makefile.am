@@ -347,6 +347,7 @@ gtest_SOURCES += \
 	uct/ze/test_ze_base.cc \
 	uct/ze/test_ze_ipc_md.cc \
 	uct/ze/test_ze_ipc_cache.cc \
+	uct/ze/test_ze_ipc_rma.cc \
 	uct/ze/test_ze_copy_md.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)

@@ -13,22 +13,22 @@
 #include "ze_ipc_md.h"
 
 
-typedef struct uct_ze_ipc_cache        uct_ze_ipc_cache_t;
+typedef struct uct_ze_ipc_cache uct_ze_ipc_cache_t;
 typedef struct uct_ze_ipc_cache_region uct_ze_ipc_cache_region_t;
-typedef struct uct_ze_ipc_iface        uct_ze_ipc_iface_t;
+typedef struct uct_ze_ipc_iface uct_ze_ipc_iface_t;
 
 
 /**
  * Cache region structure for storing mapped IPC handles
  */
 struct uct_ze_ipc_cache_region {
-    ucs_pgt_region_t        super;        /**< Base class - page table region */
-    ucs_list_link_t         list;         /**< List element */
-    uct_ze_ipc_key_t        key;          /**< Remote memory key */
-    void                    *mapped_addr; /**< Local mapped address */
-    uint64_t                refcount;     /**< Track in-flight ops before unmapping*/
-    ze_context_handle_t     ze_context;   /**< Level Zero context */
-    int                     dup_fd;       /**< Duplicated file descriptor */
+    ucs_pgt_region_t    super; /**< Base class - page table region */
+    ucs_list_link_t     list; /**< List element */
+    uct_ze_ipc_key_t    key; /**< Remote memory key */
+    void                *mapped_addr; /**< Local mapped address */
+    uint64_t            refcount; /**< Track in-flight ops before unmapping*/
+    ze_context_handle_t ze_context; /**< Level Zero context */
+    int                 dup_fd; /**< Duplicated file descriptor */
 };
 
 
@@ -36,9 +36,12 @@ struct uct_ze_ipc_cache_region {
  * Cache structure for managing IPC handle mappings
  */
 struct uct_ze_ipc_cache {
-    pthread_rwlock_t      lock;       /**< Protects the page table */
-    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
-    char                  *name;      /**< Name for debugging */
+    pthread_rwlock_t lock; /**< Protects the page table and orphan list */
+    ucs_pgtable_t    pgtable; /**< Page table to hold the regions */
+    ucs_list_link_t  orphan_list; /**< Regions dropped from the page table
+                                       while still referenced by in-flight
+                                       operations */
+    char             *name; /**< Name for debugging */
 };
 
 
@@ -49,8 +52,8 @@ struct uct_ze_ipc_cache {
  * @param name      Name for the cache (for debugging)
  * @return UCS_OK on success, error code otherwise
  */
-ucs_status_t uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache,
-                                     const char *name);
+ucs_status_t
+uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache, const char *name);
 
 
 /**
@@ -74,8 +77,7 @@ void uct_ze_ipc_destroy_cache(uct_ze_ipc_cache_t *cache);
 ucs_status_t uct_ze_ipc_map_memhandle(uct_ze_ipc_key_t *key,
                                       ze_context_handle_t ze_context,
                                       ze_device_handle_t ze_device,
-                                      void **mapped_addr,
-                                      int *dup_fd);
+                                      void **mapped_addr, int *dup_fd);
 
 
 /**
@@ -94,5 +96,22 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
                                         ze_context_handle_t ze_context,
                                         int dup_fd, int cache_enabled);
 
-#endif /* UCT_ZE_IPC_CACHE_H_ */
 
+/**
+ * Purge and free all remote cache entries keyed by the given local Level Zero
+ * context, so that a closed context does not leave behind cache entries that
+ * would later be used with a destroyed context.
+ *
+ * Mappings are closed regardless of refcount, and cache descriptors are freed.
+ * The caller must therefore have quiesced this context: all operations issued
+ * against it must have completed, and no thread may enter map/unmap for it
+ * concurrently. This matches the UCT requirement that a memory domain have no
+ * outstanding operations at uct_md_close(), which is the only caller - and it is
+ * not an extra constraint, since md_close() destroys the context immediately
+ * afterwards and would invalidate any in-flight copy anyway.
+ *
+ * @param ze_context   Level Zero context being closed
+ */
+void uct_ze_ipc_purge_cache_by_context(ze_context_handle_t ze_context);
+
+#endif /* UCT_ZE_IPC_CACHE_H_ */
