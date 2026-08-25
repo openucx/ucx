@@ -1063,7 +1063,7 @@ static int ucp_ep_failover_lanes_complete(ucp_ep_h ep)
     ucs_status_t status;
 
     ctx = ep->ext->failover.ctx;
-    if ((ctx == NULL)) {
+    if (ctx == NULL) {
         return 0;
     }
 
