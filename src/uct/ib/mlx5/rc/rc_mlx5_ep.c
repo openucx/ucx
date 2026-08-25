@@ -786,10 +786,10 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
     ucs_status_t status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
-    uct_rc_mlx5_iface_update_tx_qp_res(&iface->super, ep, ep->tx.wq.ft_ci);
+    uct_rc_mlx5_ep_update_tx_qp_res(ep, ep->tx.wq.ft_ci);
 
     return status;
 }

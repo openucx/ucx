@@ -203,14 +203,13 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_mlx5_iface_update_tx_cq_res(iface, ep, pi);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        goto out;
+        goto out_update_tx_cq_res;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
@@ -224,8 +223,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
     if (status == UCS_OK) {
-        uct_rc_mlx5_iface_update_tx_qp_res(iface, ep, pi);
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+        uct_rc_mlx5_ep_update_tx_qp_res(ep, pi);
     } else if (status == UCS_INPROGRESS) {
         ep->tx.wq.ft_ci = ep->tx.wq.prev_sw_pi -
                           (ep->tx.wq.bb_max -
@@ -233,6 +232,9 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         ucs_debug("ep %p preserve outstanding WQE range (%u, %u)", ep,
                   ep->tx.wq.ft_ci, ep->tx.wq.sw_pi);
     }
+
+out_update_tx_cq_res:
+    uct_rc_mlx5_iface_update_tx_cq_res(iface, ep, pi);
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
