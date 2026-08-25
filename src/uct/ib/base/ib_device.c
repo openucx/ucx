@@ -102,6 +102,7 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 };
 #endif
 
+/* clang-format off */
 static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"ConnectX-3", {0x15b3, 4099},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
@@ -179,9 +180,10 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {"BlueField 3", {0x15b3, 0xa2dc},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 61},
-  {"Generic HCA", {0, 0}, 0, 0},
+  {"Generic HCA", UCS_SYS_PCI_ID_UNDEFINED, 0, 0},
   {NULL}
 };
+/* clang-format on */
 
 static void
 uct_ib_device_get_locality(const char *dev_name, ucs_sys_cpuset_t *cpu_mask)

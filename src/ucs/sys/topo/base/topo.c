@@ -361,15 +361,15 @@ ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
 
     status = ucs_read_file_number(&value, 1, "%s/%s", sysfs_path, file_name);
     if (status != UCS_OK) {
-        ucs_debug("failed to read PCI ID value from %s/%s: %s", sysfs_path,
-                  file_name, ucs_status_string(status));
-        return UCS_SYS_PCI_ID_VENDOR_UNDEFINED;
+        ucs_warn("failed to read PCI ID value from %s/%s: %s", sysfs_path,
+                 file_name, ucs_status_string(status));
+        return UCS_SYS_PCI_ID_VALUE_UNDEFINED;
     }
 
     if ((value < 0) || (value > UINT16_MAX)) {
-        ucs_debug("%s: value %ld in '%s/%s' is out of range", dev_name, value,
-                  sysfs_path, file_name);
-        return UCS_SYS_PCI_ID_VENDOR_UNDEFINED;
+        ucs_warn("%s: value %ld in '%s/%s' is out of range", dev_name, value,
+                 sysfs_path, file_name);
+        return UCS_SYS_PCI_ID_VALUE_UNDEFINED;
     }
 
     return (uint16_t)value;
@@ -509,7 +509,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         } else {
             ucs_debug(
                     "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT
-                    "with user value %" PRIuPTR,
+                    " with user value %" PRIuPTR,
                     *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id), user_value);
         }
 

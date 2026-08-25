@@ -35,13 +35,12 @@ BEGIN_C_DECLS
 #define UCS_SYS_BDF_NAME_MAX 16
 
 /* Special values for undefined PCI identifiers */
-#define UCS_SYS_PCI_ID_VENDOR_UNDEFINED UINT16_MAX
-#define UCS_SYS_PCI_ID_DEVICE_UNDEFINED UINT16_MAX
+#define UCS_SYS_PCI_ID_VALUE_UNDEFINED 0x0000
 #define UCS_SYS_PCI_ID_UNDEFINED \
     (ucs_sys_pci_id_t) \
     { \
-        .vendor = UCS_SYS_PCI_ID_VENDOR_UNDEFINED, \
-        .device = UCS_SYS_PCI_ID_DEVICE_UNDEFINED \
+        .vendor = UCS_SYS_PCI_ID_VALUE_UNDEFINED, \
+        .device = UCS_SYS_PCI_ID_VALUE_UNDEFINED \
     }
 
 /* String formatting for PCI identifiers */
