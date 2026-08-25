@@ -203,15 +203,13 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        goto out;
+        goto out_update_tx_res;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
@@ -223,6 +221,24 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                ep_status);
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
+
+    if (status == UCS_OK) {
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+    } else if (status == UCS_INPROGRESS) {
+        ep->flags      |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+        ep->tx.wq.ft_ci = ep->tx.wq.prev_sw_pi -
+                          (ep->tx.wq.bb_max -
+                           uct_rc_txqp_available(&ep->super.txqp));
+        ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
+                  ep->tx.wq.sw_pi);
+    }
+
+out_update_tx_res:
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
+        uct_rc_mlx5_ep_update_tx_qp_res(ep, pi);
+    }
+
+    uct_rc_mlx5_iface_update_tx_cq_res(iface, ep, pi);
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
@@ -1132,7 +1148,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
