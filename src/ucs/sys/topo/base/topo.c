@@ -1180,21 +1180,23 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     return numa_node;
 }
 
-ucs_status_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev,
-                                            ucs_sys_pci_id_t *pci_id_p)
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev)
 {
-    ucs_status_t status;
+    ucs_sys_pci_id_t pci_id;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_SYS_PCI_ID_UNDEFINED;
+    }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        status = UCS_ERR_NO_ELEM;
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        pci_id = ucs_topo_global_ctx.devices[sys_dev].pci_id;
     } else {
-        *pci_id_p = ucs_topo_global_ctx.devices[sys_dev].pci_id;
-        status    = UCS_OK;
+        pci_id = UCS_SYS_PCI_ID_UNDEFINED;
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
-    return status;
+    return pci_id;
 }
 
 ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,

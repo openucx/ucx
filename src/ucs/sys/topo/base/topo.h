@@ -461,14 +461,12 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
 /**
  * Get the PCI identifier of a given system device.
  *
- * @param [in]  sys_dev   System device index.
- * @param [out] pci_id_p  PCI identifier.
+ * @param [in] sys_dev System device index.
  *
- * @return UCS_OK on success, or UCS_ERR_NO_ELEM if the system device is
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if the system device is
  *         invalid or its PCI identifier is unavailable.
  */
-ucs_status_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev,
-                                            ucs_sys_pci_id_t *pci_id_p);
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev);
 
 
 /**

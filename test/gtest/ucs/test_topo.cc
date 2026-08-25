@@ -217,7 +217,7 @@ UCS_TEST_F(test_topo, pci_id) {
 
     sys_dev = register_device("pci_device", bdf);
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
-    ASSERT_UCS_OK(ucs_topo_sys_device_get_pci_id(sys_dev, &pci_id));
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
     EXPECT_EQ(expected_vendor, pci_id.vendor);
     EXPECT_EQ(expected_device, pci_id.device);
 }
@@ -231,7 +231,25 @@ UCS_TEST_F(test_topo, pci_id_nonexistent_bdf) {
     ASSERT_UCS_OK(ucs_topo_find_device_by_bdf_name(bdf, &sys_dev));
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
 
-    ASSERT_UCS_OK(ucs_topo_sys_device_get_pci_id(sys_dev, &pci_id));
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VENDOR_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_DEVICE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_unknown_sys_dev) {
+    const ucs_sys_pci_id_t pci_id = ucs_topo_sys_device_get_pci_id(
+            UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    EXPECT_EQ(UCS_SYS_PCI_ID_VENDOR_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_DEVICE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_invalid_sys_dev) {
+    const unsigned num_devices = ucs_topo_num_devices();
+
+    ASSERT_LT(num_devices, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const ucs_sys_pci_id_t pci_id = ucs_topo_sys_device_get_pci_id(
+            static_cast<ucs_sys_device_t>(num_devices));
     EXPECT_EQ(UCS_SYS_PCI_ID_VENDOR_UNDEFINED, pci_id.vendor);
     EXPECT_EQ(UCS_SYS_PCI_ID_DEVICE_UNDEFINED, pci_id.device);
 }
