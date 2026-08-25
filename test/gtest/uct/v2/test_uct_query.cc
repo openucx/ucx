@@ -16,6 +16,9 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/base/uct_iface.h>
+#if HAVE_DEVX
+#include <uct/ib/mlx5/ib_mlx5.h>
+#endif
 }
 
 
@@ -118,17 +121,21 @@ UCS_TEST_P(test_uct_query, query_token_support)
 {
     uct_iface_attr_v2_t attr = {};
     uint64_t iface_cap_flags = 0;
+    uct_ib_mlx5_md_t *md;
 
     attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
     attr.cap.flags  = UINT64_MAX;
 
     ASSERT_UCS_OK(uct_iface_query_v2(get_iface(), &attr));
 
-#if HAVE_DEVX
     if (has_transport("rc_mlx5")) {
-        iface_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        md = uct_ib_mlx5_iface_md(ucs_derived_of(get_iface(), uct_ib_iface_t));
+
+        if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+            iface_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        }
     }
-#endif
+
     EXPECT_EQ(iface_cap_flags, attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
 }
 

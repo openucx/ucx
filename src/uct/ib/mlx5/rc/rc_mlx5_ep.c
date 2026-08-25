@@ -24,10 +24,10 @@
 #include "rc_mlx5.inl"
 
 
-#if HAVE_DEVX
 static ucs_status_t
 uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
 {
+#if HAVE_DEVX
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
     uct_rc_mlx5_tx_token_t *tx_token;
@@ -52,23 +52,28 @@ uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
     *tx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, remote_qpn));
 
     return UCS_OK;
-}
+#else
+    return UCS_ERR_UNSUPPORTED;
 #endif
+}
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
+    uct_ib_mlx5_md_t *md;
+
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                                UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
-#if HAVE_DEVX
+        md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_ep->iface, uct_ib_iface_t));
+        if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
         return uct_rc_mlx5_ep_query_tx_token(
                 ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t), ep_attr);
-#else
-        return UCS_ERR_UNSUPPORTED;
-#endif
     }
 
     return UCS_OK;

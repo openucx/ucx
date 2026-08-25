@@ -1042,11 +1042,11 @@ static void uct_rc_mlx5_iface_fill_ext_query_attr(
     }
 }
 
-#if HAVE_DEVX
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
                                  uct_iface_attr_v2_t *iface_attr)
 {
+#if HAVE_DEVX
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
     const uct_rc_mlx5_tx_token_t *tx_token;
@@ -1070,7 +1070,12 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
     tx_token   = iface_attr->tx_token;
     iface      = ucs_derived_of(tl_iface, uct_rc_iface_t);
     remote_qpn = be32toh(*tx_token);
-    rc_ep      = uct_rc_iface_lookup_ep(iface, remote_qpn);
+    if (remote_qpn >= UCS_BIT(UCT_IB_QPN_ORDER)) {
+        ucs_error("rc mlx5: remote QPN %u is out of range", remote_qpn);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    rc_ep = uct_rc_iface_lookup_ep(iface, remote_qpn);
     if (rc_ep == NULL) {
         ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
         return UCS_ERR_INVALID_PARAM;
@@ -1090,8 +1095,10 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
     *rx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, next_rcv_psn));
 
     return UCS_OK;
-}
+#else
+    return UCS_ERR_UNSUPPORTED;
 #endif
+}
 
 static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
@@ -1099,38 +1106,40 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 {
     uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {0};
     uct_rc_mlx5_iface_common_t *mlx5_iface;
+    uct_ib_mlx5_md_t *md;
     size_t max_sgl;
     ucs_status_t status;
 
     uct_iface_query_v2_init(tl_iface, iface_attr);
 
-#if HAVE_DEVX
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
-        status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
-        if (status != UCS_OK) {
-            return status;
+    md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
+            status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
+            iface_attr->tx_token_length = sizeof(uct_rc_mlx5_tx_token_t);
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
+            iface_attr->rx_token_length = sizeof(uct_rc_mlx5_rx_token_t);
+        }
+    } else {
+        if (iface_attr->field_mask &
+            (UCT_IFACE_ATTR_FIELD_TX_TOKEN | UCT_IFACE_ATTR_FIELD_RX_TOKEN |
+             UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
+             UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH)) {
+            return UCS_ERR_UNSUPPORTED;
         }
     }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
-    }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
-        iface_attr->tx_token_length = sizeof(uct_rc_mlx5_tx_token_t);
-    }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
-        iface_attr->rx_token_length = sizeof(uct_rc_mlx5_rx_token_t);
-    }
-#else
-    if (iface_attr->field_mask &
-        (UCT_IFACE_ATTR_FIELD_TX_TOKEN | UCT_IFACE_ATTR_FIELD_RX_TOKEN |
-         UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
-         UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-#endif
 
     if (iface_attr->field_mask &
         (UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
