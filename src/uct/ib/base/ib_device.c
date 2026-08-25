@@ -5,7 +5,6 @@
 * See file LICENSE for terms.
 */
 
-#include "ucs/sys/topo/base/topo.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -13,6 +12,7 @@
 #include "ib_device.h"
 #include "ib_md.h"
 
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
