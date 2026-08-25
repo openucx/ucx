@@ -46,7 +46,7 @@ BEGIN_C_DECLS
 
 /* String formatting for PCI identifiers */
 #define UCS_SYS_PCI_ID_FMT         "[%04x:%04x]"
-#define UCS_SYS_PCI_ID_ARG(pci_id) ((pci_id)->vendor), ((pci_id)->device)
+#define UCS_SYS_PCI_ID_ARG(_pci_id) ((_pci_id)->vendor), ((_pci_id)->device)
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */

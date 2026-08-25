@@ -361,6 +361,8 @@ ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
 
     status = ucs_read_file_number(&value, 1, "%s/%s", sysfs_path, file_name);
     if (status != UCS_OK) {
+        ucs_debug("failed to read PCI ID value from %s/%s: %s", sysfs_path,
+                  file_name, ucs_status_string(status));
         return UCS_SYS_PCI_ID_VENDOR_UNDEFINED;
     }
 
