@@ -14,7 +14,6 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>

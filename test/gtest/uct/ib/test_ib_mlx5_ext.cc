@@ -7,7 +7,6 @@
 #include "test_rc.h"
 
 extern "C" {
-#include <ucs/sys/stubs.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
 
 extern ucs_list_link_t uct_ib_mlx5_ext_plugins;
@@ -59,44 +58,6 @@ protected:
     }
 
     static ucs_status_t
-    iface_query(uct_iface_h, uct_ib_mlx5_ext_iface_query_attr_t *attr)
-    {
-        if (attr->field_mask &
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS) {
-            attr->cap.flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
-        }
-
-        if (attr->field_mask &
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN) {
-            attr->tx_token_len = sizeof(uint64_t);
-        }
-
-        if (attr->field_mask &
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN) {
-            attr->rx_token_len = sizeof(uint64_t);
-        }
-
-        if (attr->field_mask &
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN) {
-            if ((attr->tx_token == NULL) || (attr->rx_token == NULL)) {
-                ADD_FAILURE() << "token buffers must be non-NULL";
-                return UCS_ERR_INVALID_PARAM;
-            }
-            *static_cast<uint64_t*>(attr->rx_token) =
-                    *static_cast<const uint64_t*>(attr->tx_token) + 1;
-        }
-
-        return UCS_OK;
-    }
-
-    static ucs_status_t
-    ep_query(uct_ep_h, uct_ib_mlx5_ext_ep_query_attr_t *attr)
-    {
-        *static_cast<uint64_t*>(attr->tx_token) = tx_token();
-        return UCS_OK;
-    }
-
-    static ucs_status_t
     purge_fail(uct_ep_h, const uct_ep_outstanding_purge_params_t*)
     {
         return UCS_ERR_UNSUPPORTED;
@@ -119,15 +80,11 @@ protected:
 
     static void
     register_plugin(const char *name,
-                    uct_ib_mlx5_ext_iface_query_func_t iface_query_cb = NULL,
-                    uct_ib_mlx5_ext_ep_query_func_t ep_query_cb = NULL,
                     uct_ep_outstanding_purge_func_t purge_cb = NULL)
     {
         uct_ib_mlx5_ext_ops_t ops = {};
 
         ucs_strncpy_zero(ops.name, name, sizeof(ops.name));
-        ops.iface_query          = iface_query_cb;
-        ops.ep_query             = ep_query_cb;
         ops.ep_outstanding_purge = purge_cb;
         ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
     }
@@ -150,12 +107,9 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
                   uct_ep_outstanding_purge(m_e1->ep(0), &params));
     }
 
-    register_plugin("stub",
-                    (uct_ib_mlx5_ext_iface_query_func_t)
-                            ucs_empty_function_return_unsupported,
-                    NULL, NULL);
-    register_plugin("fail", NULL, NULL, purge_fail);
-    register_plugin("token", iface_query, ep_query, purge);
+    register_plugin("stub");
+    register_plugin("fail", purge_fail);
+    register_plugin("token", purge);
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                         UCT_EP_OUTSTANDING_FIELD_CB |
