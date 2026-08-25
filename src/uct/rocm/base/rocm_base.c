@@ -115,6 +115,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
                               uct_rocm_base_agents.num_gpu);
             ucs_topo_sys_device_set_name(sys_dev, device_name,
                                          sys_device_priority);
+            ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
         }
         ucs_trace("found gpu agent %lu", agent.handle);
         uct_rocm_base_agents.num_gpu++;

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -1044,6 +1044,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                                   path_buffer);
         sys_dev    = ucs_topo_get_sysfs_dev((*entry)->d_name, sysfs_path,
                                             sys_device_priority);
+        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
+        }
 
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name), "%s",
