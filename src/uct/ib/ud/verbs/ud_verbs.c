@@ -55,13 +55,30 @@ UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params)
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super, params);
-    self->peer_address.ah = NULL;
+    self->ah = NULL;
     return UCS_OK;
+}
+
+static void uct_ud_verbs_ep_destroy_ah(uct_ud_verbs_ep_t *ep)
+{
+    int ret;
+
+    if (ep->ah == NULL) {
+        return;
+    }
+
+    ret = ibv_destroy_ah(ep->ah);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_ah() returned %d: %m", ret);
+    }
+
+    ep->ah = NULL;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
 {
     ucs_trace_func("");
+    uct_ud_verbs_ep_destroy_ah(self);
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_ep_t, uct_ud_ep_t);
@@ -95,7 +112,7 @@ uct_ud_verbs_post_send(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     }
 
     wr->wr.ud.remote_qpn = ep->peer_address.dest_qpn;
-    wr->wr.ud.ah         = ep->peer_address.ah;
+    wr->wr.ud.ah         = ep->ah;
 
     UCT_UD_EP_HOOK_CALL_TX(&ep->super, (uct_ud_neth_t*)iface->tx.sge[0].addr);
     ret = ibv_post_send(iface->super.qp, wr, &bad_wr);
@@ -591,26 +608,19 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
     uct_ib_iface_t *ib_iface                     = &iface->super;
     uct_ud_verbs_ep_peer_address_t *peer_address =
         (uct_ud_verbs_ep_peer_address_t*)address_p;
-    struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     ucs_status_t status;
 
     memset(peer_address, 0, sizeof(*peer_address));
 
     status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                                 &ah_attr, &path_mtu);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
-                                    &peer_address->ah);
+                                                 &peer_address->ah_attr,
+                                                 &path_mtu);
     if (status != UCS_OK) {
         return status;
     }
 
     peer_address->dest_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
-
     return UCS_OK;
 }
 
@@ -620,20 +630,48 @@ static void *uct_ud_verbs_ep_get_peer_address(uct_ud_ep_t *ud_ep)
     return &ep->peer_address;
 }
 
+/* Creates the ep's real, ep-owned AH (see uct_ud_verbs_ep_t::ah) from the
+ * ah_attr that unpack_peer_address() already filled into ep->peer_address.
+ * Uncached so it always reflects the current L2 resolution; destroyed
+ * explicitly in the ep's cleanup. */
+static ucs_status_t uct_ud_verbs_ep_resolve_peer_address(uct_ud_ep_t *ud_ep)
+{
+    uct_ud_verbs_ep_t *ep    = ucs_derived_of(ud_ep, uct_ud_verbs_ep_t);
+    uct_ib_iface_t *ib_iface = ucs_derived_of(ud_ep->super.super.iface,
+                                              uct_ib_iface_t);
+
+    /* Release any AH from a previous resolve (e.g. on reconnect) before
+     * creating the new one, so it never leaks. */
+    uct_ud_verbs_ep_destroy_ah(ep);
+
+    return uct_ib_device_create_ah(uct_ib_iface_device(ib_iface),
+                                   &ep->peer_address.ah_attr,
+                                   uct_ib_iface_md(ib_iface)->pd,
+                                   "UD verbs connect", &ep->ah);
+}
+
 int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
                                  const uct_ep_is_connected_params_t *params)
 {
-    uct_ud_verbs_ep_t *ep     = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
-    uct_ib_iface_t *ib_iface  = ucs_derived_of(tl_ep->iface, uct_ib_iface_t);
-    uct_ib_address_t *ib_addr = (uct_ib_address_t*)params->device_addr;
+    uct_ud_verbs_ep_t *ep             = ucs_derived_of(tl_ep,
+                                                        uct_ud_verbs_ep_t);
+    uct_ib_address_t *ib_addr         = (uct_ib_address_t*)
+                                        params->device_addr;
+    const struct ibv_ah_attr *ah_attr = &ep->peer_address.ah_attr;
+
+    ucs_assert(ep->ah != NULL);
 
     if (!uct_ud_ep_is_connected_to_addr(&ep->super, params,
                                         ep->peer_address.dest_qpn)) {
         return 0;
     }
 
-    return uct_ib_iface_is_connected(ib_iface, ib_addr, ep->super.path_index,
-                                     ep->peer_address.ah);
+    /* Compare the resolved peer identity (LID/GID) directly, same as
+     * UD mlx5 does with its av/grh_av - no AH pointer/cache lookup
+     * involved. */
+    return uct_ib_iface_is_same_device(ib_addr, ah_attr->dlid,
+                                       ah_attr->is_global ?
+                                       &ah_attr->grh.dgid : NULL);
 }
 
 static size_t uct_ud_verbs_get_peer_address_length()
@@ -648,9 +686,12 @@ uct_ud_verbs_iface_peer_address_str(const uct_ud_iface_t *iface,
 {
     const uct_ud_verbs_ep_peer_address_t *peer_address =
         (const uct_ud_verbs_ep_peer_address_t*)address;
+    size_t len;
 
-    ucs_snprintf_zero(str, max_size, "ah=%p dest_qpn=%u",
-                      peer_address->ah, peer_address->dest_qpn);
+    ucs_snprintf_zero(str, max_size, "dest_qpn=%u ",
+                      peer_address->dest_qpn);
+    len = strlen(str);
+    uct_ib_ah_attr_str(str + len, max_size - len, &peer_address->ah_attr);
     return str;
 }
 
@@ -687,6 +728,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .create_qp               = uct_ib_iface_create_qp,
     .destroy_qp              = uct_ud_verbs_iface_destroy_qp,
     .unpack_peer_address     = uct_ud_verbs_iface_unpack_peer_address,
+    .ep_resolve_peer_address = uct_ud_verbs_ep_resolve_peer_address,
     .ep_get_peer_address     = uct_ud_verbs_ep_get_peer_address,
     .get_peer_address_length = uct_ud_verbs_get_peer_address_length,
     .peer_address_str        = uct_ud_verbs_iface_peer_address_str,
