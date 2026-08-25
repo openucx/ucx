@@ -108,29 +108,50 @@ protected:
 
         return perf_attr;
     }
+
+    void check_get_put_bandwidth(bool expect_equal_bandwidth)
+    {
+        uct_ib_iface_t *iface    = ucs_derived_of(m_e1->iface(),
+                                                  uct_ib_iface_t);
+        uct_perf_attr_t get_perf = init_perf_attr(UCT_EP_OP_GET_ZCOPY);
+        uct_perf_attr_t put_perf = init_perf_attr(UCT_EP_OP_PUT_ZCOPY);
+
+        if (!(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) ||
+            !(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            UCS_TEST_SKIP_R("requires PUT and GET zcopy");
+        }
+
+        ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &get_perf));
+        ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &put_perf));
+
+        if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
+            if (expect_equal_bandwidth) {
+                EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
+                                 get_perf.bandwidth.shared);
+                EXPECT_DOUBLE_EQ(put_perf.path_bandwidth.shared,
+                                 get_perf.path_bandwidth.shared);
+            } else {
+                EXPECT_GT(put_perf.bandwidth.shared,
+                          get_perf.bandwidth.shared);
+                EXPECT_GT(put_perf.path_bandwidth.shared,
+                          get_perf.path_bandwidth.shared);
+            }
+        } else {
+            EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
+                             get_perf.bandwidth.shared);
+        }
+    }
 };
 
 UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth, "IB_NUM_PATHS?=auto")
 {
-    uct_ib_iface_t *iface    = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
-    uct_perf_attr_t get_perf = init_perf_attr(UCT_EP_OP_GET_ZCOPY);
-    uct_perf_attr_t put_perf = init_perf_attr(UCT_EP_OP_PUT_ZCOPY);
+    check_get_put_bandwidth(false);
+}
 
-    if (!(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) ||
-        !(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY)) {
-        UCS_TEST_SKIP_R("requires PUT and GET zcopy");
-    }
-
-    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &get_perf));
-    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &put_perf));
-
-    if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
-        EXPECT_GT(put_perf.bandwidth.shared, get_perf.bandwidth.shared);
-        EXPECT_GT(put_perf.path_bandwidth.shared,
-                  get_perf.path_bandwidth.shared);
-    } else {
-        EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared, get_perf.bandwidth.shared);
-    }
+UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth_explicit_num_paths,
+           "IB_NUM_PATHS=4")
+{
+    check_get_put_bandwidth(true);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_perf);
