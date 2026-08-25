@@ -693,7 +693,7 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-    uint16_t                    ft_ci;      /* Last recovery-classified WQE */
+    uint16_t                    ft_ci;      /* CI for last ft completed WQE */
     uint16_t                    hw_ci;      /* First BB index of last completed WQE */
 #if UCS_ENABLE_ASSERT
     uint8_t                     flags; /* Debug flags */

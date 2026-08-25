@@ -1876,7 +1876,7 @@ uct_rc_mlx5_iface_common_atomic_data(unsigned opcode, unsigned size, uint64_t va
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_iface_update_iface_res(uct_rc_iface_t *rc_iface,
+uct_rc_mlx5_iface_update_tx_cq_res(uct_rc_iface_t *rc_iface,
                                    uct_rc_mlx5_base_ep_t *ep, uint16_t hw_ci)
 {
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
@@ -1892,7 +1892,7 @@ uct_rc_mlx5_iface_update_iface_res(uct_rc_iface_t *rc_iface,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
+uct_rc_mlx5_iface_update_tx_qp_res(uct_rc_iface_t *rc_iface,
                                 uct_rc_mlx5_base_ep_t *ep, uint16_t sw_ci)
 {
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
@@ -1935,10 +1935,10 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
                    ep, qp_num, hw_ci);
 
-    uct_rc_mlx5_iface_update_iface_res(&iface->super, ep, hw_ci);
+    uct_rc_mlx5_iface_update_tx_cq_res(&iface->super, ep, hw_ci);
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
-    uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
+    uct_rc_mlx5_iface_update_tx_qp_res(&iface->super, ep, hw_ci);
     uct_rc_iface_arbiter_dispatch(&iface->super);
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
 

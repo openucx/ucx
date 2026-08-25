@@ -786,22 +786,11 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
-    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
-    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
-    uct_rc_txqp_t *txqp       = &ep->super.txqp;
-    int16_t prev_available;
-    uint16_t available;
-    ucs_status_t status;
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    ucs_status_t status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
-    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+    uct_rc_mlx5_iface_update_tx_qp_res(&iface->super, ep, ep->tx.wq.ft_ci);
 
-    prev_available = uct_rc_txqp_available(txqp);
-    available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
-    if (available > prev_available) {
-        uct_rc_txqp_available_add(txqp, available - prev_available);
-    }
-
-    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
     return status;
 }
 
