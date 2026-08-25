@@ -18,6 +18,22 @@ typedef struct uct_ze_ipc_cache_region uct_ze_ipc_cache_region_t;
 typedef struct uct_ze_ipc_iface uct_ze_ipc_iface_t;
 
 
+typedef ucs_status_t
+(*uct_ze_ipc_cache_open_func_t)(uct_ze_ipc_key_t *key,
+                                ze_context_handle_t ze_context,
+                                ze_device_handle_t ze_device,
+                                void **mapped_addr, int *dup_fd);
+
+typedef ucs_status_t
+(*uct_ze_ipc_cache_close_func_t)(ze_context_handle_t ze_context,
+                                 void *mapped_addr, int dup_fd);
+
+typedef struct uct_ze_ipc_cache_ops {
+    uct_ze_ipc_cache_open_func_t  open;
+    uct_ze_ipc_cache_close_func_t close;
+} uct_ze_ipc_cache_ops_t;
+
+
 /**
  * Cache region structure for storing mapped IPC handles
  */
@@ -36,12 +52,13 @@ struct uct_ze_ipc_cache_region {
  * Cache structure for managing IPC handle mappings
  */
 struct uct_ze_ipc_cache {
-    pthread_rwlock_t lock; /**< Protects the page table and orphan list */
-    ucs_pgtable_t    pgtable; /**< Page table to hold the regions */
-    ucs_list_link_t  orphan_list; /**< Regions dropped from the page table
-                                       while still referenced by in-flight
-                                       operations */
-    char             *name; /**< Name for debugging */
+    pthread_rwlock_t       lock; /**< Protects the page table and orphan list */
+    ucs_pgtable_t          pgtable; /**< Page table to hold the regions */
+    ucs_list_link_t        orphan_list; /**< Regions dropped from the page table
+                                            while still referenced by in-flight
+                                            operations */
+    uct_ze_ipc_cache_ops_t ops; /**< Mapping operations */
+    char                   *name; /**< Name for debugging */
 };
 
 
@@ -70,6 +87,7 @@ void uct_ze_ipc_destroy_cache(uct_ze_ipc_cache_t *cache);
  * @param key          Remote memory key containing IPC handle
  * @param ze_context   Level Zero context
  * @param ze_device    Level Zero device
+ * @param ops          Mapping operations, or NULL to use Level Zero
  * @param mapped_addr  Pointer to store the mapped address
  * @param dup_fd       Pointer to store the duplicated file descriptor
  * @return UCS_OK on success, error code otherwise
@@ -77,6 +95,7 @@ void uct_ze_ipc_destroy_cache(uct_ze_ipc_cache_t *cache);
 ucs_status_t uct_ze_ipc_map_memhandle(uct_ze_ipc_key_t *key,
                                       ze_context_handle_t ze_context,
                                       ze_device_handle_t ze_device,
+                                      const uct_ze_ipc_cache_ops_t *ops,
                                       void **mapped_addr, int *dup_fd);
 
 
