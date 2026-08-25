@@ -783,6 +783,28 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                        IBV_QPS_ERR);
 }
 
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    int16_t prev_available;
+    uint16_t available;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+
+    prev_available = uct_rc_txqp_available(txqp);
+    available      = txwq->bb_max - (txwq->prev_sw_pi - txwq->ft_ci);
+    if (available > prev_available) {
+        uct_rc_txqp_available_add(txqp, available - prev_available);
+    }
+
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+    return status;
+}
+
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req)
 {
