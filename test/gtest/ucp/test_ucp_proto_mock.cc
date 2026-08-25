@@ -13,6 +13,7 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -865,6 +866,71 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
         {0,    2048, "short",     "rc_mlx5/mock_1:1"},
         {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
     }, key, 0);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_remote_sys_dev_namespace,
+           "IB_NUM_PATHS?=1", "RNDV_SCHEME=put_zcopy")
+{
+    constexpr size_t select_size = UCS_MBYTE;
+    uint8_t remote               = 0;
+    auto memh                    = mem_map(receiver(), &remote,
+                                           sizeof(remote));
+    auto rkey_packed             = rkey_pack(receiver(), memh);
+    auto rkey                    = rkey_unpack(sender().ep(), rkey_packed);
+    ucp_worker_h worker          = sender().worker();
+    ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
+    const ucs_sys_device_t remote_sys_dev =
+            get_mock_sys_dev_by_name("mock_0:1");
+    const ucp_rkey_config_t *base_rkey_config =
+            &ucs_array_elem(&worker->rkey_config, rkey->cfg_index);
+    const ucp_ep_config_t *ep_config =
+            ucp_worker_ep_config(worker, ep_cfg_index);
+    ucp_rkey_config_key_t rkey_config_key = base_rkey_config->key;
+    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t *rkey_config;
+    ucp_proto_select_param_t select_param;
+    ucp_memory_info_t mem_info;
+    const ucp_proto_select_elem_t *select_elem;
+    const ucp_proto_threshold_elem_t *threshold;
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
+    ucp_lane_index_t lane;
+
+    ASSERT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, rkey_config_key.sys_dev);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, remote_sys_dev);
+
+    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        lanes_distance[lane] = base_rkey_config->lanes_distance[lane];
+    }
+
+    /* Simulate an rkey received from a peer whose process-local sys_dev value
+     * happens to name a device in this process as well. */
+    rkey_config_key.sys_dev = remote_sys_dev;
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                             lanes_distance,
+                                             &rkey_cfg_index));
+
+    mem_info.type    = UCS_MEMORY_TYPE_HOST;
+    mem_info.sys_dev = get_mock_sys_dev_by_name("mock_1:1");
+    mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    rkey_config = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+    select_elem = ucp_proto_select_lookup_slow(
+            worker, &rkey_config->proto_select, 1, ep_cfg_index,
+            rkey_cfg_index, &select_param);
+    ASSERT_NE(nullptr, select_elem);
+
+    threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                  select_size);
+    ASSERT_STREQ("rndv/rtr", threshold->proto_config.proto->name);
+    rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t *>(
+            threshold->proto_config.priv);
+
+    EXPECT_EQ(remote_sys_dev, rkey_config->key.sys_dev);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+              rpriv->remote_proto_config.select_param.sys_dev);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
