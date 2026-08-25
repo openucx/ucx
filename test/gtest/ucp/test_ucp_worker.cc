@@ -828,12 +828,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_thread_mode, all, "all")
 
 class test_ucp_worker_address_query : public ucp_test {
 public:
-    enum class address_device_type {
-        any,
-        net,
-        non_net
-    };
-
     test_ucp_worker_address_query()
     {
         if (get_variant_value(0)) {
@@ -841,19 +835,18 @@ public:
         }
     }
 
-    static bool iface_can_connect(const uct_iface_attr_t &attrs)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        return (attrs.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                   UCT_IFACE_FLAG_CONNECT_TO_EP)) != 0;
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "unified");
     }
 
-    static bool iface_matches_address_flags(const uct_iface_attr_t &iface_attr,
-                                            const uint32_t address_flags)
-    {
-        return iface_can_connect(iface_attr) &&
-               (((address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) == 0) ||
-                ((iface_attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) != 0));
-    }
+protected:
+    enum class address_device_type {
+        any,
+        net,
+        non_net
+    };
 
     std::string find_address_device(const address_device_type device_type)
     {
@@ -863,10 +856,9 @@ public:
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
             const auto &resource   = context->tl_rscs[tl_id].tl_rsc;
-            const auto &iface_attr =
-                    *ucp_worker_iface_get_attr(worker, tl_id);
-            const auto is_network  =
-                    (iface_attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) != 0;
+            const auto &iface_attr = *ucp_worker_iface_get_attr(worker, tl_id);
+            const auto is_network  = (iface_attr.cap.flags &
+                                      UCT_IFACE_FLAG_INTER_NODE) != 0;
 
             if (iface_can_connect(iface_attr) &&
                 ((device_type == address_device_type::any) ||
@@ -893,8 +885,7 @@ public:
         ucp_context_dev_tl_bitmap(context, address_device_name.c_str(),
                                   &tl_bitmap);
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
-            const auto &iface_attr =
-                    *ucp_worker_iface_get_attr(worker, tl_id);
+            const auto &iface_attr = *ucp_worker_iface_get_attr(worker, tl_id);
 
             if (!iface_matches_address_flags(iface_attr, address_flags)) {
                 UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
@@ -906,8 +897,8 @@ public:
         worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS |
                                  UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
         if (address_flags != 0) {
-            worker_attr.field_mask    |= UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS;
-            worker_attr.address_flags  = address_flags;
+            worker_attr.field_mask   |= UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS;
+            worker_attr.address_flags = address_flags;
         }
 
         worker_attr.address_device_name = address_device_name.c_str();
@@ -946,10 +937,19 @@ public:
         ucp_worker_release_address(worker, worker_attr.address);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+private:
+    static bool iface_can_connect(const uct_iface_attr_t &attrs)
     {
-        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "unified");
+        return (attrs.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                   UCT_IFACE_FLAG_CONNECT_TO_EP)) != 0;
+    }
+
+    static bool iface_matches_address_flags(const uct_iface_attr_t &iface_attr,
+                                            const uint32_t address_flags)
+    {
+        return iface_can_connect(iface_attr) &&
+               (((address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) == 0) ||
+                ((iface_attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) != 0));
     }
 };
 
@@ -974,8 +974,8 @@ UCS_TEST_P(test_ucp_worker_address_query, query)
 
 UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device)
 {
-    const auto address_device_name =
-            find_address_device(address_device_type::any);
+    const auto address_device_name = find_address_device(
+            address_device_type::any);
 
     ASSERT_FALSE(address_device_name.empty());
     check_address_by_device(address_device_name, 0);
@@ -983,8 +983,8 @@ UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device)
 
 UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device_net_only)
 {
-    const auto address_device_name =
-            find_address_device(address_device_type::net);
+    const auto address_device_name = find_address_device(
+            address_device_type::net);
 
     if (address_device_name.empty()) {
         UCS_TEST_SKIP_R("no network device");
@@ -996,8 +996,8 @@ UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device_net_only)
 
 UCS_TEST_P(test_ucp_worker_address_query, empty_intersection)
 {
-    const auto address_device_name =
-            find_address_device(address_device_type::non_net);
+    const auto address_device_name = find_address_device(
+            address_device_type::non_net);
     scoped_log_handler wrap_err(wrap_errors_logger);
     ucp_worker_attr_t worker_attr;
 

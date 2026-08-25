@@ -3111,11 +3111,10 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker);
 }
 
-static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
-                                            uint32_t address_flags,
-                                            const char *address_device_name,
-                                            size_t *address_length_p,
-                                            void **address_p)
+static ucs_status_t
+ucp_worker_address_pack(ucp_worker_h worker, uint32_t address_flags,
+                        const char *address_device_name,
+                        size_t *address_length_p, void **address_p)
 {
     ucp_context_h context = worker->context;
     unsigned flags        = ucp_worker_default_address_pack_flags(worker);
@@ -3146,9 +3145,11 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
 
     if ((address_device_name != NULL) && UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap)) {
         ucs_error("worker %p: no addressable resources for device %s with "
-                  "network-only flag %c", worker, address_device_name,
+                  "network-only flag %c",
+                  worker, address_device_name,
                   ((address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) != 0) ?
-                          'y' : 'n');
+                          'y' :
+                          'n');
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -3160,8 +3161,8 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
-    const char *address_device_name;
     ucs_status_t status = UCS_OK;
+    const char *address_device_name;
     uint32_t address_flags;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
@@ -3173,10 +3174,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
                                        ADDRESS_FLAGS, 0);
         address_device_name = UCP_ATTR_VALUE(WORKER, attr, address_device_name,
                                              ADDRESS_DEVICE_NAME, NULL);
-        status        = ucp_worker_address_pack(worker, address_flags,
-                                                address_device_name,
-                                                &attr->address_length,
-                                                (void**)&attr->address);
+        status              = ucp_worker_address_pack(worker, address_flags,
+                                                      address_device_name,
+                                                      &attr->address_length,
+                                                      (void**)&attr->address);
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
