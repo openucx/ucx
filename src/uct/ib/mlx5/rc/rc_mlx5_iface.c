@@ -1058,6 +1058,10 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
     uint32_t remote_qpn;
     void *qpc;
 
+    /* suppress coverity false-positive */
+    ucs_assert((iface_attr->tx_token != NULL) &&
+               (iface_attr->rx_token != NULL));
+
     if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN)) {
         ucs_error("rc mlx5: tx token is required to query rx token");
         return UCS_ERR_INVALID_PARAM;
