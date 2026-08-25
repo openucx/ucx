@@ -659,12 +659,12 @@ int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
                                         params->device_addr;
     const struct ibv_ah_attr *ah_attr = &ep->peer_address.ah_attr;
 
-    ucs_assert(ep->ah != NULL);
-
     if (!uct_ud_ep_is_connected_to_addr(&ep->super, params,
                                         ep->peer_address.dest_qpn)) {
         return 0;
     }
+
+    ucs_assert(ep->ah != NULL);
 
     /* Compare the resolved peer identity (LID/GID) directly, same as
      * UD mlx5 does with its av/grh_av - no AH pointer/cache lookup
