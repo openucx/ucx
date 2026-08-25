@@ -290,13 +290,11 @@ ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
 {
     const ucs_sys_bus_id_t *gpu_bus_id = NULL;
     const ucs_sys_bus_id_t *dev_bus_id;
-    ucs_sys_device_t sys_dev;
+    const ucs_sys_device_t *sys_dev;
     ucs_topo_gpu_t *gpu;
-    size_t i;
 
-    for (i = 0; i < ucs_array_length(acc_devices); ++i) {
-        sys_dev    = ucs_array_elem(acc_devices, i);
-        dev_bus_id = &devices[sys_dev].bus_id;
+    ucs_array_for_each(sys_dev, acc_devices) {
+        dev_bus_id = &devices[*sys_dev].bus_id;
 
         /* Start a new GPU if the bus ids differ. */
         if ((gpu_bus_id == NULL) ||
@@ -313,7 +311,7 @@ ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
             return UCS_ERR_EXCEEDS_LIMIT;
         }
 
-        gpu->devices[gpu->num_devices++] = sys_dev;
+        gpu->devices[gpu->num_devices++] = *sys_dev;
     }
 
     return UCS_OK;
@@ -326,13 +324,11 @@ ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
 {
     const ucs_sys_bus_id_t *nic_bus_id = NULL;
     const ucs_sys_bus_id_t *dev_bus_id;
-    ucs_sys_device_t sys_dev;
+    const ucs_sys_device_t *sys_dev;
     ucs_topo_nic_t *nic;
-    size_t i;
 
-    for (i = 0; i < ucs_array_length(net_devices); ++i) {
-        sys_dev    = ucs_array_elem(net_devices, i);
-        dev_bus_id = &devices[sys_dev].bus_id;
+    ucs_array_for_each(sys_dev, net_devices) {
+        dev_bus_id = &devices[*sys_dev].bus_id;
 
         /* Start a new NIC if the bus ids differ (excluding the function). */
         if ((nic_bus_id == NULL) ||
@@ -350,7 +346,7 @@ ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
             return UCS_ERR_EXCEEDS_LIMIT;
         }
 
-        nic->ports[nic->num_ports++] = sys_dev;
+        nic->ports[nic->num_ports++] = *sys_dev;
     }
 
     return UCS_OK;
@@ -366,11 +362,6 @@ void ucs_topo_init_groups(ucs_topo_groups_t *groups)
 {
     groups->type = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
     ucs_array_init_dynamic(&groups->groups);
-}
-
-void ucs_topo_release_groups(ucs_topo_groups_t *groups)
-{
-    ucs_array_cleanup_dynamic(&groups->groups);
 }
 
 static ucs_status_t
