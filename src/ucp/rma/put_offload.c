@@ -16,8 +16,6 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
-#include <ucp/wireup/wireup.h>
-#include <uct/base/uct_iface.h>
 
 static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self)
 {

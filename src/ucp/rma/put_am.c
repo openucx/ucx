@@ -15,7 +15,6 @@
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
-#include <ucp/wireup/wireup.h>
 
 
 static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
