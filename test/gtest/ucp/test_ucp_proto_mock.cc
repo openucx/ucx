@@ -711,8 +711,7 @@ protected:
 
     ucp_worker_cfg_index_t
     send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                  unsigned rkey_cfg_index = 1)
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -746,12 +745,7 @@ protected:
             send_buf.pattern_check(1);
         }
 
-        auto actual_rkey_cfg_index = rkey->cfg_index;
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            EXPECT_EQ(actual_rkey_cfg_index, rkey_cfg_index);
-        }
-
-        return actual_rkey_cfg_index;
+        return rkey->cfg_index;
     }
 };
 
@@ -885,7 +879,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
 UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
 {
-    send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    auto rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE,
+                                        UCP_OP_ID_PUT);
 
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_PUT;
@@ -894,7 +889,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
     check_rkey_config(sender(), {
         {0,    2048, "short",     "rc_mlx5/mock_1:1"},
         {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
-    }, key, 0);
+    }, key, rkey_cfg_index);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
@@ -2421,8 +2416,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT, UCS_MEMORY_TYPE_HOST,
-                      rkey_cfg_index);
+        EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT),
+                  rkey_cfg_index);
     }, UCP_OP_ID_PUT);
 }
 
@@ -2430,8 +2425,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET, UCS_MEMORY_TYPE_HOST,
-                      rkey_cfg_index);
+        EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET),
+                  rkey_cfg_index);
     }, UCP_OP_ID_GET);
 }
 
