@@ -387,6 +387,17 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
+/**
+ * Create an address handle without adding it to the device cache.
+ *
+ * The caller owns the returned address handle and must destroy it with
+ * ibv_destroy_ah().
+ */
+ucs_status_t
+uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                        struct ibv_pd *pd, const char *usage,
+                        struct ibv_ah **ah_p);
+
 ucs_status_t
 uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
