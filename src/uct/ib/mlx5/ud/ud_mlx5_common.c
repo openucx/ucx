@@ -44,6 +44,7 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     struct mlx5_wqe_av  mlx5_av;
     struct ibv_ah_attr  ah_attr;
     enum ibv_mtu        path_mtu;
+    int                 ret;
 
     status = uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, path_index,
                                                  &ah_attr, &path_mtu);
@@ -51,13 +52,23 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
         return status;
     }
 
-    status = uct_ib_iface_create_ah(iface, &ah_attr, usage, &ah);
+    /* Create the AH transiently (uncached), since it is only used to
+     * extract the AV bytes below and caching it risks retaining a stale
+     * resolved L2 address if the peer's IP-to-MAC mapping changes. */
+    status = uct_ib_device_create_ah(uct_ib_iface_device(iface), &ah_attr,
+                                     uct_ib_iface_md(iface)->pd, usage, &ah);
     if (status != UCS_OK) {
         return status;
     }
     *is_global = ah_attr.is_global;
 
     uct_ib_mlx5_get_av(ah, &mlx5_av);
+
+    ret = ibv_destroy_ah(ah);
+    if (ret != 0) {
+        ucs_warn("%s: ibv_destroy_ah() failed with error %d: %m",
+                 uct_ib_device_name(uct_ib_iface_device(iface)), ret);
+    }
 
     base_av->stat_rate_sl = mlx5_av_base(&mlx5_av)->stat_rate_sl;
     base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;

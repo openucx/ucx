@@ -1121,7 +1121,10 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                 "ep->dci: %u dcis length: %u", ep->dci,
                 ucs_array_length(&iface->tx.dcis));
 
-    /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
+    /* TODO: look at common code with uct_ud_mlx5_iface_get_av. That path
+     * now creates its AH uncached to avoid retaining a stale resolved L2
+     * address; this one still relies on the AH cache and should move to
+     * the uncached uct_ib_device_create_ah() too. */
     if (fc_req->sender.payload.is_global) {
         uct_ib_iface_fill_ah_attr_from_gid_lid(
                 ib_iface, fc_req->lid,
