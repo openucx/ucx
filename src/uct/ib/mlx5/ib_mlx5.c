@@ -715,7 +715,6 @@ void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq)
     uct_ib_mlx5_set_ctrl_qpn_ds(uct_ib_mlx5_txwq_get_wqe(txwq, 0xffff), 0, 1);
 }
 
-
 static void
 uct_ib_mlx5_txwq_vfs_show_next_first_psn(void *obj,
                                          ucs_string_buffer_t *strb,
@@ -726,7 +725,6 @@ uct_ib_mlx5_txwq_vfs_show_next_first_psn(void *obj,
     ucs_string_buffer_appendf(
             strb, "%u\n", uct_ib_mlx5_txwq_get_next_first_psn(txwq));
 }
-
 
 void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
 {

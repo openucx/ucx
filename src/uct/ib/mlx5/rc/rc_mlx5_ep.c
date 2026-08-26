@@ -881,7 +881,7 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 }
 
 void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
-                                    enum ibv_mtu path_mtu)
+                                   enum ibv_mtu path_mtu)
 {
     size_t mtu = uct_ib_mtu_value(path_mtu);
 
