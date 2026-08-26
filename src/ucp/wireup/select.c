@@ -428,13 +428,15 @@ static ucp_wireup_tl_scope_t
 ucp_wireup_feature_tl_scope(ucp_context_h context, uint64_t feature)
 {
     ucs_assert(ucs_is_pow2(feature));
+    /* Data and control features are mutually exclusive, checked at init */
+    ucs_assert(!((context->config.features & feature) &&
+                 (context->config.ctrl_features & feature)));
 
-    if ((context->config.features & feature) ||
-        !(context->config.ctrl_features & feature)) {
-        return UCP_WIREUP_TL_SCOPE_DATA;
-    }
-
-    return UCP_WIREUP_TL_SCOPE_CTRL;
+    /* Features which are not requested by the user, but are still used
+     * internally (for example AM for wireup or RMA emulation), use the data
+     * transport policy. */
+    return (context->config.ctrl_features & feature) ?
+                   UCP_WIREUP_TL_SCOPE_CTRL : UCP_WIREUP_TL_SCOPE_DATA;
 }
 
 static const ucp_tl_bitmap_t*
@@ -2903,7 +2905,10 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     /* Failover mode: promote each user-data lane that supports AM to AM_BW,
      * so recovery always has a backup am_lane. Infrastructure lanes are not
      * promoted. Promotion happens before constructing the key to keep
-     * lane_types consistent. */
+     * lane_types consistent.
+     * TODO: Promotion ignores am_tl_scope, so with control-only AM and a
+     * disjoint control policy the promoted data lanes may carry AM traffic.
+     * Failover is not supported together with control features yet. */
     if (key->err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) {
         const uint64_t am_caps                = UCT_IFACE_FLAG_AM_BCOPY |
                                                 UCT_IFACE_FLAG_AM_SHORT |

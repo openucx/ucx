@@ -1839,23 +1839,20 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
                                         const ucp_config_t *config)
 {
     char info_str[128];
-    unsigned num_usable_data_tls, num_usable_ctrl_tls;
 
     /* Error check: Make sure there is at least one transport that is not
      * auxiliary */
-    num_usable_data_tls = ucp_count_usable_tls(context,
-                                               &context->data_tl_bitmap,
-                                               UCP_TL_RSC_FLAG_AUX);
-    if ((context->config.features != 0) && (num_usable_data_tls == 0)) {
+    if ((context->config.features != 0) &&
+        (ucp_count_usable_tls(context, &context->data_tl_bitmap,
+                              UCP_TL_RSC_FLAG_AUX) == 0)) {
         ucp_resource_config_str(config, info_str, sizeof(info_str));
         ucs_error("no usable transports/devices (asked %s)", info_str);
         return UCS_ERR_NO_DEVICE;
     }
 
-    num_usable_ctrl_tls = ucp_count_usable_tls(context,
-                                               &context->ctrl_tl_bitmap,
-                                               UCP_TL_RSC_FLAG_CTRL_AUX);
-    if ((context->config.ctrl_features != 0) && (num_usable_ctrl_tls == 0)) {
+    if ((context->config.ctrl_features != 0) &&
+        (ucp_count_usable_tls(context, &context->ctrl_tl_bitmap,
+                              UCP_TL_RSC_FLAG_CTRL_AUX) == 0)) {
         ucs_error("no usable control transports/devices");
         return UCS_ERR_NO_DEVICE;
     }

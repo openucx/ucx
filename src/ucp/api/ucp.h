@@ -1284,6 +1284,11 @@ typedef struct ucp_params {
      * @ref ucp_params_t::features describes data-path features, and this field
      * describes control-path features that use the transport policy configured by
      * UCX_CTRL_FEATURES_TLS. This field defaults to 0 if not specified.
+     * @note A control-path feature is enabled for the API in the same way as a
+     *       data-path feature. This field only changes which transports are
+     *       selected for it.
+     * @note Currently only @ref UCP_FEATURE_AM is supported as a control-path
+     *       feature
      * @note Intersected sets of data-path and control-path features are not supported
      */
     uint64_t                           ctrl_features;
