@@ -14,7 +14,122 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/mpool.h>
 #include <ucs/profile/profile.h>
+#include <endian.h>
+#include <string.h>
+
+
+static ucs_status_t
+uct_rc_mlx5_fill_am_inline_info(const uct_ib_mlx5_txwq_t *txwq,
+                                const struct mlx5_wqe_inl_data_seg *inl,
+                                size_t wqe_size, uct_ep_op_info_t *info,
+                                int *skip_p, void *callback_data)
+{
+    size_t inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
+    uct_rc_mlx5_am_short_hdr_t *am;
+
+    ucs_assert(inline_length >= sizeof(uct_rc_mlx5_hdr_t));
+    ucs_assert(wqe_size ==
+               sizeof(struct mlx5_wqe_ctrl_seg) +
+                       ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                         UCT_IB_MLX5_WQE_SEG_SIZE));
+
+    uct_ib_mlx5_txwq_copy_segs(txwq, inl + 1, callback_data, inline_length);
+
+    am = callback_data;
+    if ((am->rc_hdr.rc_hdr.am_id & UCT_RC_EP_FC_MASK) ==
+        UCT_RC_EP_FC_PURE_GRANT) {
+        *skip_p = 1;
+        return UCS_OK;
+    }
+
+    ucs_assert(inline_length >= sizeof(*am));
+
+    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION | UCT_EP_OP_INFO_FIELD_AM;
+    info->operation  = UCT_EP_OP_AM_SHORT;
+    info->am.field_mask   = UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                            UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+                            UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+    info->am.am_id        = am->rc_hdr.rc_hdr.am_id & ~UCT_RC_EP_FC_MASK;
+    info->am.header.value = am->am_hdr;
+    info->am.payload.data.buffer = am + 1;
+    info->am.payload.data.length = inline_length - sizeof(*am);
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_rc_mlx5_fill_am_bcopy_info(const uct_ib_mlx5_txwq_t *txwq,
+                               const struct mlx5_wqe_ctrl_seg *ctrl,
+                               uct_ep_op_info_t *info, int *skip_p)
+{
+    const struct mlx5_wqe_data_seg *dptr;
+    uct_rc_mlx5_hdr_t *rch;
+    size_t length;
+    void *buffer;
+
+    dptr   = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                       (void*)(ctrl + 1));
+    length = ntohl(dptr->byte_count);
+    buffer = (void*)(uintptr_t)be64toh(dptr->addr);
+
+    ucs_assert(buffer != NULL);
+    ucs_assert(length >= sizeof(uct_rc_mlx5_hdr_t));
+
+    rch = buffer;
+    if ((rch->rc_hdr.am_id & UCT_RC_EP_FC_MASK) == UCT_RC_EP_FC_PURE_GRANT) {
+        *skip_p = 1;
+        return UCS_OK;
+    }
+
+    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION | UCT_EP_OP_INFO_FIELD_AM;
+    info->operation  = UCT_EP_OP_AM_BCOPY;
+    info->am.field_mask          = UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                                   UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                                   UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+    info->am.am_id               = rch->rc_hdr.am_id & ~UCT_RC_EP_FC_MASK;
+    info->am.flags               = 0;
+    info->am.payload.data.buffer = rch + 1;
+    info->am.payload.data.length = length - sizeof(*rch);
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_fill_am_op_info(const uct_ib_mlx5_txwq_t *txwq,
+                                         uct_rc_iface_send_op_t *op,
+                                         const struct mlx5_wqe_ctrl_seg *ctrl,
+                                         size_t wqe_size, int *skip_p,
+                                         uct_ep_op_info_t *info,
+                                         void *callback_data)
+{
+    const struct mlx5_wqe_inl_data_seg *inl;
+    size_t inline_length, inline_wqe_size;
+
+    memset(info, 0, sizeof(*info));
+    *skip_p = 0;
+
+    inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                    (void*)(ctrl + 1));
+    if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
+        inline_length   = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
+        inline_wqe_size = sizeof(*ctrl) +
+                          ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                            UCT_IB_MLX5_WQE_SEG_SIZE);
+        ucs_assert(inline_wqe_size <= wqe_size);
+
+        if (inline_wqe_size == wqe_size) {
+            return uct_rc_mlx5_fill_am_inline_info(txwq, inl, wqe_size, info,
+                                                   skip_p, callback_data);
+        }
+
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((op != NULL) && ((void*)op->handler == (void*)ucs_mpool_put)) {
+        return uct_rc_mlx5_fill_am_bcopy_info(txwq, ctrl, info, skip_p);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {

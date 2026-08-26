@@ -44,6 +44,14 @@ enum {
 };
 
 
+enum {
+    /* The caller owns outstanding operations after EP invalidation. */
+    UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS   = UCS_BIT(0),
+    /* Outstanding purge owns recovery state. */
+    UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS = UCS_BIT(1)
+};
+
+
 /**
  * RC base remote endpoint
  */
@@ -52,6 +60,7 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
+    uint8_t flags;
 } uct_rc_mlx5_base_ep_t;
 
 
@@ -204,6 +213,9 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params);
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params);
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req);

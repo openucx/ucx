@@ -693,12 +693,14 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
-    txwq->curr       = txwq->qstart;
-    txwq->sw_pi      = 0;
-    txwq->prev_sw_pi = UINT16_MAX;
+    txwq->curr           = txwq->qstart;
+    txwq->sw_pi          = 0;
+    txwq->prev_sw_pi     = UINT16_MAX;
+    txwq->ft_ci          = UINT16_MAX;
+    txwq->next_first_psn = 0;
+    txwq->hw_ci          = UINT16_MAX;
 #if UCS_ENABLE_ASSERT
-    txwq->hw_ci      = 0xFFFF;
-    txwq->flags      = 0;
+    txwq->flags          = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
 }
@@ -729,10 +731,15 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "bb_max");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->sig_pi,
                             UCS_VFS_TYPE_U16, "sig_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->ft_ci,
+                            UCS_VFS_TYPE_U16, "ft_ci");
 #if UCS_ENABLE_ASSERT
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->hw_ci,
                             UCS_VFS_TYPE_U16, "hw_ci");
 #endif
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txwq->next_first_psn, UCS_VFS_TYPE_U32,
+                            "next_first_psn");
 }
 
 ucs_status_t
@@ -840,6 +847,116 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
     return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
 }
 
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    return ctrl->opmod_idx_opcode >> 24;
+}
+
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    uint8_t ds = ntohl(ctrl->qpn_ds) & UINT8_MAX;
+
+    ucs_assert(ds > 0);
+    ucs_assert((ds * UCT_IB_MLX5_WQE_SEG_SIZE) <=
+               UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
+    return ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+}
+
+uint16_t uct_ib_mlx5_txwq_next_ci(uint16_t ci, size_t wqe_size)
+{
+    return ci + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+}
+
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
+                                void *dst, size_t length)
+{
+    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
+
+    memcpy(dst, src, copy_len);
+
+    if (copy_len < length) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
+               length - copy_len);
+    }
+}
+
+size_t uct_ib_mlx5_wqe_payload_length(const uct_ib_mlx5_txwq_t *txwq,
+                                      const struct mlx5_wqe_ctrl_seg *ctrl,
+                                      size_t wqe_size)
+{
+    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+    const struct mlx5_wqe_inl_data_seg *seg;
+    size_t remaining, seg_size, length, total;
+    uint32_t byte_count;
+
+    if ((opcode != MLX5_OPCODE_SEND) && (opcode != MLX5_OPCODE_SEND_IMM) &&
+        (opcode != MLX5_OPCODE_RDMA_WRITE) &&
+        (opcode != MLX5_OPCODE_RDMA_READ)) {
+        return 0;
+    }
+
+    seg       = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                          (void*)(ctrl + 1));
+    remaining = wqe_size - sizeof(*ctrl);
+    if ((opcode == MLX5_OPCODE_RDMA_WRITE) ||
+        (opcode == MLX5_OPCODE_RDMA_READ)) {
+        ucs_assert(remaining >= sizeof(struct mlx5_wqe_raddr_seg));
+
+        seg        = uct_ib_mlx5_txwq_wrap_any(
+                (uct_ib_mlx5_txwq_t*)txwq,
+                (void*)((const struct mlx5_wqe_raddr_seg*)seg + 1));
+        remaining -= sizeof(struct mlx5_wqe_raddr_seg);
+    }
+
+    total = 0;
+    while (remaining >= sizeof(*seg)) {
+        byte_count = ntohl(seg->byte_count);
+        if (byte_count & MLX5_INLINE_SEG) {
+            length   = byte_count & ~MLX5_INLINE_SEG;
+            seg_size = ucs_align_up_pow2(sizeof(*seg) + length,
+                                         UCT_IB_MLX5_WQE_SEG_SIZE);
+        } else {
+            length   = byte_count;
+            seg_size = sizeof(struct mlx5_wqe_data_seg);
+        }
+
+        ucs_assert(seg_size <= remaining);
+
+        total     += length;
+        remaining -= seg_size;
+        seg        = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                               UCS_PTR_BYTE_OFFSET((void*)seg,
+                                                                   seg_size));
+    }
+
+    ucs_assert(remaining == 0);
+
+    return total;
+}
+
+ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
+                                             uint32_t receiver_next_psn,
+                                             uint32_t num_packets)
+{
+    const uint32_t psn_half = UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1);
+    uint32_t diff;
+
+    ucs_assert(num_packets > 0);
+
+    diff = uct_ib_mlx5_psn_24b(receiver_next_psn - first_psn);
+    if (diff == psn_half) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    /* delivered */
+    if ((diff > 0) && (diff < psn_half) && (diff >= num_packets)) {
+        return UCS_OK;
+    }
+
+    /* undelivered or partial */
+    return UCS_INPROGRESS;
+}
+
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {
@@ -855,8 +972,8 @@ uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(pi == txwq->hw_ci);
     do {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
-        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-        pi      += (wqe_size + MLX5_SEND_WQE_BB - 1) / MLX5_SEND_WQE_BB;
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        pi       = uct_ib_mlx5_txwq_next_ci(pi, wqe_size);
         ++count;
     } while (pi != txwq->sw_pi);
 
