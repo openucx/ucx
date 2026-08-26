@@ -665,6 +665,7 @@ ucp_memh_register_internal(ucp_context_h context, ucp_mem_h memh,
                     context->reg_md_map[mem_type],
                     context->reg_block_md_map[mem_type]);
 
+        /* coverity[uninit_use] */
         md_reg_params = reg_params;
         if (dmabuf_md_map & UCS_BIT(md_index)) {
             /* If this MD can consume a dmabuf and we have it - provide it */

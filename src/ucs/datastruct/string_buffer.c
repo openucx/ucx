@@ -89,6 +89,7 @@ void ucs_string_buffer_vappendf(ucs_string_buffer_t *strb, const char *fmt,
         }
 
         max_print = ucs_array_available_length(strb);
+        /* coverity[uninit_use_in_call] */
         ret       = vsnprintf(ucs_array_end(strb), max_print, fmt, ap_retry);
 
         /* since we've grown the buffer, it should be sufficient now */

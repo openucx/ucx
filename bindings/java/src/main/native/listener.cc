@@ -67,6 +67,7 @@ Java_org_openucx_jucx_ucp_UcpListener_queryAddressNative(JNIEnv *env,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
+    /* coverity[uninit_use_in_call] */
     return c2jInetSockAddr(env, &listener_attr.sockaddr);
 }
 

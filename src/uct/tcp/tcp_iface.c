@@ -490,6 +490,7 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
 
     for (;;) {
         addrlen = sizeof(peer_addr);
+        /* coverity[uninit_use_in_call] */
         status  = ucs_socket_accept(iface->listen_fd, (struct sockaddr*)&peer_addr,
                                     &addrlen, &fd);
         if (status != UCS_OK) {
@@ -1002,6 +1003,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         goto out;
     }
 
+    /* coverity[uninit_use] */
     ucs_carray_for_each(entry, entries, n) {
         /* According to the sysfs(5) manual page, all of entries
          * has to be a symbolic link representing one of the real

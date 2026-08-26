@@ -780,6 +780,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
             continue;
         }
 
+        /* coverity[overrun-buffer-val] */
         rte_call(perf, recv, i, buffer, buffer_size, req);
 
         remote_info = buffer;
@@ -1056,6 +1057,7 @@ ucx_perf_test_exchange_status(ucx_perf_context_t *perf, ucs_status_t status)
     rte_call(perf, exchange_vec, req);
 
     for (i = 0; i < group_size; ++i) {
+        /* coverity[overrun-buffer-val] */
         rte_call(perf, recv, i, &status, sizeof(status), req);
         if (status != UCS_OK) {
             collective_status = status;
@@ -1818,6 +1820,7 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
         }
 
         component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+        /* coverity[uninit_use] */
         component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
                                              component_attr.md_resource_count);
         status = uct_component_query(uct_components[cmpt_index], &component_attr);

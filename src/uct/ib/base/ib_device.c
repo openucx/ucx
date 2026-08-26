@@ -543,6 +543,7 @@ uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
 
     status = ucs_sys_read_sysfs_file(dev_name, sysfs_path, "device", pci_id_str,
                                      sizeof(pci_id_str), UCS_LOG_LEVEL_WARN);
+    /* coverity[string_null] */
     dev->pci_id.device = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
 
     ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),

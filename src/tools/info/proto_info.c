@@ -216,6 +216,7 @@ static ucs_status_t create_listener(ucp_worker_h worker,
         goto out_destroy_listener;
     }
 
+    /* coverity[uninit_use_in_call] */
     status = ucs_sockaddr_get_port((struct sockaddr*)&listen_attr.sockaddr,
                                    listen_port_p);
     if (status != UCS_OK) {

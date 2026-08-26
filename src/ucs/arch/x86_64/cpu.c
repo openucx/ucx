@@ -718,6 +718,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
                                           ucs_unaligned_ptr(&line_info.reg),
                                           &sets, ucs_unaligned_ptr(&reg.edx));
 
+                        /* coverity[uninit_use] */
                         if (cache_info.type == 0) {
                             /* we are done - nothing found, go to next register */
                             break;
@@ -734,6 +735,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
                                     break;
                                 }
 
+                                /* coverity[uninit_use] */
                                 cache_sizes[c] = (line_info.associativity + 1) *
                                                  (line_info.partitions + 1)    *
                                                  (line_info.size + 1)          *
