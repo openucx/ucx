@@ -90,10 +90,25 @@ enum {
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
     uct_rc_ep_atomic_handler_##_num_bits##_be##_is_be
 
+#define UCT_RC_EP_MUST_BLOCK_SEND(_ep) \
+    (!(_ep)->in_pending && \
+     (!ucs_arbiter_group_is_empty(&(_ep)->arb_group) || \
+      (((_ep)->cq_reserve | (_ep)->txqp_reserve) != 0)))
+
+#define UCT_RC_CHECK_PENDING_RET(_ep, _ret) \
+    if (ucs_unlikely(UCT_RC_EP_MUST_BLOCK_SEND(_ep))) { \
+        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
+        return _ret; \
+    }
+
+#define UCT_RC_CHECK_PENDING(_ep) \
+    UCT_RC_CHECK_PENDING_RET(_ep, UCS_ERR_NO_RESOURCE)
+
 /*
  * Check for send resources
  */
 #define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
+    UCT_RC_CHECK_PENDING_RET(_ep, _ret) \
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
         (signed)(_iface)->config.tx_moderation)) { \
@@ -201,8 +216,7 @@ enum {
 
 #define UCT_RC_CHECK_RES_AND_FC(_iface, _ep, _am_id) \
     UCT_RC_CHECK_RES(_iface, _ep) \
-    UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
-    uct_rc_iface_check_pending(_iface, &(_ep)->arb_group);
+    UCT_RC_CHECK_FC(_iface, _ep, _am_id)
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
@@ -233,6 +247,7 @@ struct uct_rc_ep {
     uint16_t            cq_reserve;
     uint8_t             path_index;
     uint8_t             flags;
+    uint8_t             in_pending;
 };
 
 
@@ -352,6 +367,12 @@ static UCS_F_ALWAYS_INLINE void uct_rc_fc_restore_wnd(uct_rc_iface_t *iface,
 {
     fc->fc_wnd = iface->config.fc_wnd_size;
     UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
+}
+
+static UCS_F_ALWAYS_INLINE void uct_rc_ep_reset_reserve(uct_rc_ep_t *ep)
+{
+    ep->txqp_reserve = 0;
+    ep->cq_reserve   = 0;
 }
 
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
