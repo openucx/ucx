@@ -995,6 +995,12 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                                  opcode_flags & UCT_RC_MLX5_OPCODE_MASK, opmod,
                                  fm_ce_se, dci_channel, wqe_size, ib_imm_be,
                                  max_log_sge, NULL);
+#if HAVE_MLX5_MMO
+    if ((opcode_flags & UCT_RC_MLX5_OPCODE_MASK) == MLX5_OPCODE_MMO) {
+        return;
+    }
+#endif
+
     uct_rc_mlx5_txwq_update_psn(txwq, qp_type, message_length);
 }
 
