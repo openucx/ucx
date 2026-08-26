@@ -541,15 +541,6 @@ size_t uct_ib_mlx5_set_data_seg_iov_length(uct_ib_mlx5_txwq_t *txwq,
 }
 
 
-static UCS_F_ALWAYS_INLINE
-size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
-                                    struct mlx5_wqe_data_seg *dptr,
-                                    const uct_iov_t *iov, size_t iovcnt)
-{
-    return uct_ib_mlx5_set_data_seg_iov_length(txwq, dptr, iov, iovcnt, NULL);
-}
-
-
 static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
                                                        void * restrict src)
 {
