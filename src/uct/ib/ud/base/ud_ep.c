@@ -666,7 +666,7 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto err_ep_disconnect;
     }
 
-    status = uct_ud_ep_resolve_peer_address(ep);
+    status = uct_ud_ep_resolve_peer_address(ep, ib_addr);
     if (status != UCS_OK) {
         goto err_ep_disconnect;
     }
@@ -736,7 +736,7 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return status;
     }
 
-    return uct_ud_ep_resolve_peer_address(ep);
+    return uct_ud_ep_resolve_peer_address(ep, ib_addr);
 }
 
 static UCS_F_ALWAYS_INLINE void

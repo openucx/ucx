@@ -15,10 +15,11 @@
 
 
 typedef struct {
-    uint32_t                          dest_qpn;
-    struct ibv_ah_attr                ah_attr; /* Used for connection
-                                                * matching, is_connected(),
-                                                * and creating the AH */
+    uint32_t      dest_qpn;
+    uint16_t      dlid;
+    uint8_t       is_global;
+    union ibv_gid dgid; /* Valid only if is_global. Used for connection
+                         * matching and is_connected() */
 } uct_ud_verbs_ep_peer_address_t;
 
 
