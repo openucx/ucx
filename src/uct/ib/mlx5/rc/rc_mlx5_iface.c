@@ -222,9 +222,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
-    if (status == UCS_OK) {
-        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
-    } else if (status == UCS_INPROGRESS) {
+    if (status == UCS_INPROGRESS) {
         ep->flags      |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
         ep->tx.wq.ft_ci = ep->tx.wq.prev_sw_pi -
                           (ep->tx.wq.bb_max -
@@ -235,6 +233,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
 out_update_tx_res:
     if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
         uct_rc_mlx5_ep_update_tx_qp_res(ep, pi);
     }
 
