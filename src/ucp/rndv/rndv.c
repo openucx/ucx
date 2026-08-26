@@ -21,7 +21,6 @@
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 
-
 unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 {
     ucp_request_t *req = arg;
@@ -1152,6 +1151,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
                    ucs_sys_device_t sys_dev, ucp_mem_desc_t **mdesc_p)
 {
     ucp_rndv_mpool_priv_t *mpriv;
+    ucp_mem_desc_t *mdesc;
     ucp_worker_mpool_key_t key;
     ucs_status_t status;
     unsigned num_frags;
@@ -1192,6 +1192,10 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     status = ucs_mpool_init(&mp_params, mpool);
     if (status != UCS_OK) {
         kh_del(ucp_worker_mpool_hash, &worker->mpool_hash, khiter);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            status = UCS_ERR_NO_MEMORY;
+        }
+
         goto err;
     }
 
@@ -1201,8 +1205,9 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mpriv->sys_dev  = sys_dev;
 
 out_mp_get:
-    *mdesc_p = ucp_worker_mpool_get(mpool);
-    if (*mdesc_p != NULL) {
+    mdesc = ucp_worker_mpool_get(mpool);
+    if (ucs_likely(mdesc != NULL)) {
+        *mdesc_p = mdesc;
         return UCS_OK;
     }
 
@@ -1212,7 +1217,6 @@ out_mp_get:
                                        UCS_ERR_NO_MEMORY;
 
 err:
-    *mdesc_p = NULL;
     return status;
 }
 

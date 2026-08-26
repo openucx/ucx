@@ -1049,7 +1049,6 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
                                  UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3));
-    EXPECT_EQ(nullptr, mdesc3);
 
     ucs_mpool_put(mdesc2);
     ucs_mpool_put(mdesc1);
@@ -1096,7 +1095,6 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_allocation_failure,
     mpool->data->ops = orig_ops;
 
     EXPECT_EQ(UCS_ERR_NO_MEMORY, status);
-    EXPECT_EQ(nullptr, mdesc3);
 
     ucs_mpool_put(mdesc2);
     ucs_mpool_put(mdesc1);

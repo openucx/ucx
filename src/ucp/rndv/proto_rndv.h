@@ -37,6 +37,8 @@ ucp_proto_rndv_rts_tag_op_flags(ucp_rndv_rts_opcode_t opcode)
     return (opcode == UCP_RNDV_RTS_TAG_OK) ?
            UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV : 0;
 }
+
+
 /**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
