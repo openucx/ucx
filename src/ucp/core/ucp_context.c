@@ -1799,34 +1799,48 @@ ucp_fill_sockaddr_prio_list(ucp_context_h context, const ucp_config_t *config)
                                     num_sockaddr_tls);
 }
 
+static unsigned ucp_count_usable_tls(ucp_context_h context,
+                                     const ucp_tl_bitmap_t *tl_bitmap,
+                                     uint8_t aux_flag)
+{
+    const ucp_tl_resource_desc_t *resource;
+    ucp_rsc_index_t tl_id;
+    unsigned count;
+
+    count = 0;
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+        ucs_assert(context->tl_rscs != NULL);
+        resource = &context->tl_rscs[tl_id];
+        if ((resource->tl_rsc.dev_type != UCT_DEVICE_TYPE_ACC) &&
+            !(resource->flags & aux_flag)) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
 static ucs_status_t ucp_check_resources(ucp_context_h context,
                                         const ucp_config_t *config)
 {
     char info_str[128];
-    ucp_rsc_index_t tl_id;
-    ucp_tl_resource_desc_t *resource;
-    unsigned num_usable_data_tls, num_ctrl_tls;
+    unsigned num_usable_data_tls, num_usable_ctrl_tls;
 
     /* Error check: Make sure there is at least one transport that is not
      * auxiliary */
-    num_usable_data_tls = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->data_tl_bitmap) {
-        ucs_assert(context->tl_rscs != NULL);
-        resource = &context->tl_rscs[tl_id];
-        if ((resource->tl_rsc.dev_type != UCT_DEVICE_TYPE_ACC) &&
-            !(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
-            num_usable_data_tls++;
-        }
-    }
-
+    num_usable_data_tls = ucp_count_usable_tls(context,
+                                               &context->data_tl_bitmap,
+                                               UCP_TL_RSC_FLAG_AUX);
     if ((context->config.features != 0) && (num_usable_data_tls == 0)) {
         ucp_resource_config_str(config, info_str, sizeof(info_str));
         ucs_error("no usable transports/devices (asked %s)", info_str);
         return UCS_ERR_NO_DEVICE;
     }
 
-    num_ctrl_tls = UCS_STATIC_BITMAP_POPCOUNT(context->ctrl_tl_bitmap);
-    if ((context->config.ctrl_features != 0) && (num_ctrl_tls == 0)) {
+    num_usable_ctrl_tls = ucp_count_usable_tls(context,
+                                               &context->ctrl_tl_bitmap,
+                                               UCP_TL_RSC_FLAG_CTRL_AUX);
+    if ((context->config.ctrl_features != 0) && (num_usable_ctrl_tls == 0)) {
         ucs_error("no usable control transports/devices");
         return UCS_ERR_NO_DEVICE;
     }
