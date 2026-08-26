@@ -18,21 +18,12 @@
 #include <endian.h>
 #include <string.h>
 
-#define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
-    ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - \
-      ((_av_size) + sizeof(struct mlx5_wqe_raddr_seg) + \
-       sizeof(struct mlx5_wqe_ctrl_seg))) / \
-     sizeof(struct mlx5_wqe_data_seg))
-
-typedef struct {
-    union {
-        uint8_t data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
-        struct {
-            uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-            uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-        };
-    };
-} uct_rc_mlx5_op_callback_data_t;
+static int uct_rc_mlx5_op_info_is_flush(const uct_rc_iface_send_op_t *op)
+{
+    return (op != NULL) &&
+           ((op->handler == uct_rc_ep_flush_op_completion_handler) ||
+            (op->handler == uct_rc_ep_flush_remote_handler));
+}
 
 static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
                                               uct_rc_iface_send_op_t *op)
@@ -43,20 +34,9 @@ static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
     }
 }
 
-static int uct_rc_mlx5_op_info_is_flush(const uct_rc_iface_send_op_t *op)
+static void uct_rc_mlx5_op_info_fill_flush(uct_ep_op_info_t *info,
+                                           uct_rc_iface_send_op_t *op)
 {
-    return (op != NULL) &&
-           ((op->handler == uct_rc_ep_flush_op_completion_handler) ||
-            (op->handler == uct_rc_ep_flush_remote_handler));
-}
-
-static ucs_status_t uct_rc_mlx5_op_info_fill_flush(uct_ep_op_info_t *info,
-                                                   uct_rc_iface_send_op_t *op)
-{
-    if (!uct_rc_mlx5_op_info_is_flush(op)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     info->field_mask       = UCT_EP_OP_INFO_FIELD_OPERATION |
                              UCT_EP_OP_INFO_FIELD_FLUSH;
     info->operation        = UCT_EP_OP_FLUSH;
@@ -66,8 +46,6 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_flush(uct_ep_op_info_t *info,
                                           UCT_FLUSH_FLAG_LOCAL;
 
     uct_rc_mlx5_op_info_try_fill_comp(info, op);
-
-    return UCS_OK;
 }
 
 ucs_status_t
@@ -77,16 +55,16 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          int *skip_p,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    UCS_UNUSED(txwq);
-    UCS_UNUSED(wqe_size);
-    UCS_UNUSED(callback_data);
-
     *skip_p = 0;
 
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_NOP:
     case MLX5_OPCODE_RDMA_READ:
-        return uct_rc_mlx5_op_info_fill_flush(info, op);
+        if (uct_rc_mlx5_op_info_is_flush(op)) {
+            uct_rc_mlx5_op_info_fill_flush(info, op);
+
+            return UCS_OK;
+        }
     default:
         ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
         return UCS_ERR_UNSUPPORTED;
