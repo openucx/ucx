@@ -1,6 +1,8 @@
 leak:libcuda
 leak:dlopen
 leak:dlsym
+# glibc caches error string in TLS only freed on pthread key destructor,
+# which never runs for the main thread.
 leak:dlerror
 leak:nvmlInitWithFlags
 leak:bfd_map_over_sections
