@@ -1432,8 +1432,8 @@ int uct_ib_iface_is_multiplane_xdr_bw(uct_ib_iface_t *iface)
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
     return (dev->flags & UCT_IB_DEVICE_FLAG_MULTIPLANE) &&
-           (uct_ib_iface_query_port_speed_gbps(iface) ==
-            UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS);
+           (ucs_fp_compare(uct_ib_iface_query_port_speed_gbps(iface),
+                           UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS) == 0);
 }
 
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
