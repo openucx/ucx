@@ -2489,8 +2489,6 @@ UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, explicit_ctrl_features_tls,
     ucp_context_h context      = sender().ucph();
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
-    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
-                                                       ep_config_index(sender()));
 
     check_features(UCP_FEATURE_RMA, UCP_FEATURE_AM);
     EXPECT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(context->data_tl_bitmap));
@@ -2519,8 +2517,6 @@ UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, disjoint_tls,
            "IB_NUM_PATHS?=1", "TLS=rc_x", "CTRL_FEATURES_TLS=tcp")
 {
     ucp_context_h context      = sender().ucph();
-    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
-                                                       ep_config_index(sender()));
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
 
