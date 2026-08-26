@@ -9,7 +9,10 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
 
 - `wireup.[ch]` — the wireup state machine. Defines the on-wire message
   types `UCP_WIREUP_MSG_{PRE_REQUEST, REQUEST, REPLY, ACK, EP_CHECK,
-  EP_REMOVED, REPLY_RECONFIG}` and drives transitions on send/recv.
+  EP_REMOVED, REPLY_RECONFIG, LANES_ADDR_REQUEST, LANES_ADDR_REPLY,
+  LANES_ADDR_ACK}` and drives transitions on send/recv. The `LANES_ADDR`
+  family re-exchanges the addresses of failed lanes during recovery, and
+  carries the trailer of the UCT lane tokens used to purge them.
 - `address.[ch]` — packing and unpacking of `ucp_address_t`: per-device
   records, per-iface records, atomic capability bits, system-device IDs,
   and connection info. ABI-sensitive: any layout change must add a version
@@ -41,6 +44,13 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
   through reserved bits/length fields, never field reordering. See the
   `UCP_WIREUP_MSG_*` constants in `wireup.h` and the matching pack/unpack
   in `wireup.c`.
+- A payload section appended to an already released message must be gated
+  by a `*_MIN_DST_VERSION` constant checked against
+  `ucp_ep_config(ep)->key.dst_version`, and must carry its own length so
+  the rest of the payload stays parsable. `LANES_ADDR` token trailers work
+  this way, see `UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION`. Their lanes are
+  taken from the lane maps of `ucp_wireup_msg_lanes_info_t` rather than from
+  maps of their own, so keep the two in sync when changing either.
 - New transport capabilities advertised via address records require both
   a packer in `address.c` and a consumer in `select.c`. Forgetting one
   half silently disables the capability for the new build vs. old peers.

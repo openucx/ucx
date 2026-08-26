@@ -2274,8 +2274,12 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
     ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
               " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
 
-    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
-                                   failed_lanes, recovery_lanes);
+    /* A request answers no other message, so it asks about no lanes: the
+     * requested lanes of a LANES_ADDR message are the lanes its token trailer
+     * answers. */
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST, 0,
+                                   recovery_lanes,
+                                   ++ep->ext->recovery_arg->request_id);
     return 1;
 }
 
