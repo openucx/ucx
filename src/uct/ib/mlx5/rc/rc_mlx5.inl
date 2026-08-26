@@ -452,18 +452,6 @@ uct_rc_mlx5_ep_fm_cq_update(uct_rc_mlx5_iface_common_t *iface,
     return fm_ce_se;
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
-                              enum ibv_mtu path_mtu)
-{
-    size_t mtu = uct_ib_mtu_value(path_mtu);
-
-    ucs_assert(mtu <= UINT16_MAX);
-    ucs_assert(ucs_is_pow2(mtu));
-
-    txwq->path_mtu_shift = ucs_ilog2(mtu);
-}
-
 static UCS_F_ALWAYS_INLINE uint32_t
 uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
                         size_t message_length)

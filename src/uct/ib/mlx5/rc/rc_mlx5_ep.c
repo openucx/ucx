@@ -880,6 +880,17 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
                           valid_length, buffer, max);
 }
 
+void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
+                                    enum ibv_mtu path_mtu)
+{
+    size_t mtu = uct_ib_mtu_value(path_mtu);
+
+    ucs_assert(mtu <= UINT16_MAX);
+    ucs_assert(ucs_is_pow2(mtu));
+
+    txwq->path_mtu_shift = ucs_ilog2(mtu);
+}
+
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
