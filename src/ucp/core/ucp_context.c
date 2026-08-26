@@ -1455,24 +1455,22 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                                         config, dev_cfg_masks);
         data_enabled   = device_enabled &&
                          ucp_is_resource_in_transports_list(
-                                 tl_resources[i].tl_name, &config->tls, aux_tls,
-                                 UCP_TL_RSC_FLAG_AUX, &rsc_flags, tl_cfg_mask);
+                               tl_resources[i].tl_name, &config->tls, aux_tls,
+                               UCP_TL_RSC_FLAG_AUX, &rsc_flags, tl_cfg_mask);
 
         /* Control features use the transport selection policy configured by
          * UCX_CTRL_FEATURES_TLS, independently of UCX_TLS data selection. */
-        ctrl_enabled   = device_enabled &&
-                         (context->config.ctrl_features != 0) &&
-                         ucp_is_resource_in_transports_list(
-                                 tl_resources[i].tl_name,
-                                 &config->ctrl_features_tls, aux_tls,
-                                 UCP_TL_RSC_FLAG_CTRL_AUX, &rsc_flags,
-                                 ctrl_tl_cfg_mask);
+        ctrl_enabled = device_enabled && (context->config.ctrl_features != 0) &&
+                       ucp_is_resource_in_transports_list(
+                               tl_resources[i].tl_name,
+                               &config->ctrl_features_tls, aux_tls,
+                               UCP_TL_RSC_FLAG_CTRL_AUX, &rsc_flags,
+                               ctrl_tl_cfg_mask);
 
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                   " is %sabled for data, %sabled for ctrl",
                   UCT_TL_RESOURCE_DESC_ARG(&tl_resources[i]),
-                  data_enabled ? "en" : "dis",
-                  ctrl_enabled ? "en" : "dis");
+                  data_enabled ? "en" : "dis", ctrl_enabled ? "en" : "dis");
 
         if (!data_enabled && !ctrl_enabled) {
             continue;
