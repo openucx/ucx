@@ -444,8 +444,8 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
         ret = ibv_destroy_ah(ah);
         if (ret != 0) {
-            ucs_warn("%s: ibv_destroy_ah() for qp 0x%x failed: %m",
-                     uct_ib_mlx5_dev_name(md), qp->qp_num);
+            ucs_warn("%s: ibv_destroy_ah() for qp 0x%x failed with error "
+                     "%d: %m", uct_ib_mlx5_dev_name(md), qp->qp_num, ret);
         }
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
