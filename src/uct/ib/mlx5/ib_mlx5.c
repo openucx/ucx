@@ -697,6 +697,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->sw_pi          = 0;
     txwq->prev_sw_pi     = UINT16_MAX;
     txwq->next_first_psn = 0;
+    txwq->path_mtu_mask  = 0;
     txwq->path_mtu_shift = 0;
 #if UCS_ENABLE_ASSERT
     txwq->hw_ci          = 0xFFFF;

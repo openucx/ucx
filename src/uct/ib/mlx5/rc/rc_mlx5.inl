@@ -460,7 +460,7 @@ uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
 
     ucs_assert(txwq->path_mtu_shift > 0);
 
-    num_packets = (message_length + UCS_MASK(txwq->path_mtu_shift)) >>
+    num_packets = (message_length + txwq->path_mtu_mask) >>
                   txwq->path_mtu_shift;
     ucs_assert(num_packets > 0);
     return num_packets;

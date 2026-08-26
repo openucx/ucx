@@ -888,6 +888,7 @@ void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(mtu <= UINT16_MAX);
     ucs_assert(ucs_is_pow2(mtu));
 
+    txwq->path_mtu_mask  = mtu - 1;
     txwq->path_mtu_shift = ucs_ilog2(mtu);
 }
 
