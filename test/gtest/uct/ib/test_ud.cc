@@ -884,6 +884,36 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     EXPECT_EQ(1U, ud_ep->ep_id);
 }
 
+/* Delayed CREP must not affect an endpoint which reused its ep_id */
+UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
+    entity *e3 = uct_test::create_entity(0);
+    m_entities.push_back(e3);
+
+    /* Hold the old CREP and keep the new connection in progress. */
+    iface(m_e2)->tx.available = 0;
+    iface(e3)->tx.available   = 0;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    short_progress_loop();
+
+    uint32_t ep_id    = ep(m_e1)->ep_id;
+    uint32_t ep_index = uct_ud_ep_id_to_index(ep_id);
+    m_e1->destroy_ep(0);
+    wait_for_ep_destroyed(iface(m_e1), ep_index);
+
+    m_e1->connect_to_iface(0, *e3);
+    ASSERT_EQ(ep_index, uct_ud_ep_id_to_index(ep(m_e1)->ep_id));
+    ASSERT_NE(ep_id, ep(m_e1)->ep_id);
+
+    /* Deliver the old CREP to the endpoint which reused its ep_id. */
+    iface(m_e2)->tx.available = 128;
+    short_progress_loop();
+
+    EXPECT_EQ(UCT_UD_EP_NULL_ID, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(UCT_UD_INITIAL_PSN - 1, ep(m_e1)->tx.acked_psn);
+    EXPECT_FALSE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
+}
+
 #if UCT_UD_EP_DEBUG_HOOKS
 /* Simulate loss of ctl packets during simultaneous CREQs.
  * Use-case: CREQ and CREP packets from m_e2 to m_e1 are lost.

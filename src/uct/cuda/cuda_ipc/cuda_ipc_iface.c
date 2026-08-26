@@ -382,14 +382,12 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
     uct_cuda_ipc_event_desc_t *cuda_ipc_event = ucs_derived_of(cuda_event,
                                                                uct_cuda_ipc_event_desc_t);
 
-#if CUDA_VERSION >= 13000
     if (cuda_ipc_event->sgl_mapping != NULL) {
         uct_cuda_ipc_sgl_mapping_destroy(
                 cuda_ipc_event->sgl_mapping, cuda_ipc_event->cuda_device,
                 uct_cuda_ipc_component.enable_remote_cache);
         return;
     }
-#endif
 
     uct_cuda_ipc_unmap_memhandle(cuda_ipc_event->pid, cuda_ipc_event->pid_ns,
                                  cuda_ipc_event->d_bptr,
@@ -492,11 +490,16 @@ uct_cuda_ipc_iface_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr)
 
 #if CUDA_VERSION >= 13000
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY;
     }
 
     if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
         iface_attr->max_put_sgl_zcopy_count = SIZE_MAX;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT) {
+        iface_attr->max_get_sgl_zcopy_count = SIZE_MAX;
     }
 #endif
 
@@ -515,8 +518,10 @@ static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .ep_get_device_ep       = uct_cuda_ipc_ep_get_device_ep,
 #if CUDA_VERSION >= 13000
     .ep_put_sgl_zcopy       = uct_cuda_ipc_ep_put_sgl_zcopy,
+    .ep_get_sgl_zcopy       = uct_cuda_ipc_ep_get_sgl_zcopy,
 #else
     .ep_put_sgl_zcopy       = (uct_ep_put_sgl_zcopy_func_t)ucs_empty_function_return_unsupported,
+    .ep_get_sgl_zcopy       = (uct_ep_get_sgl_zcopy_func_t)ucs_empty_function_return_unsupported,
 #endif
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };

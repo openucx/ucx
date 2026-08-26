@@ -26,8 +26,9 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
     p    = buffer;
     endp = buffer + max;
 
-    snprintf(p, endp - p, " dst %d psn %u apsn %u %c%c",
-             uct_ud_neth_get_dest_id(neth), neth->psn, neth->ack_psn,
+    snprintf(p, endp - p, " dst " UCT_UD_EP_ID_FMT " psn %u apsn %u %c%c",
+             UCT_UD_EP_ID_ARG(uct_ud_neth_get_dest_id(neth)), neth->psn,
+             neth->ack_psn,
              (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) ? 'r' : '-',
              (neth->packet_type & UCT_UD_PACKET_FLAG_ECN)     ? 'e' : '-');
     p += strlen(p);
@@ -49,17 +50,20 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
         switch (ctlh->type) {
         case UCT_UD_PACKET_CREQ:
             snprintf(p, endp - p,
-                     " CREQ from %s:%d qpn 0x%x %s epid %d cid %d path %d",
+                     " CREQ from %s:%d qpn 0x%x %s epid "
+                     UCT_UD_EP_ID_FMT " cid %d path %d",
                      ctlh->peer.name, ctlh->peer.pid,
                      uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.iface_addr.qp_num),
                      uct_ib_address_str(uct_ud_creq_ib_addr(ctlh), buf, sizeof(buf)),
-                     uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.ep_id),
+                     UCT_UD_EP_ID_ARG(uct_ib_unpack_uint24(
+                             ctlh->conn_req.ep_addr.ep_id)),
                      ctlh->conn_req.conn_sn, ctlh->conn_req.path_index);
             break;
         case UCT_UD_PACKET_CREP:
-            snprintf(p, endp - p, " CREP from %s:%d src_ep_id %d",
+            snprintf(p, endp - p, " CREP from %s:%d src_ep_id "
+                     UCT_UD_EP_ID_FMT,
                      ctlh->peer.name, ctlh->peer.pid,
-                     ctlh->conn_rep.src_ep_id);
+                     UCT_UD_EP_ID_ARG(ctlh->conn_rep.src_ep_id));
             break;
         default:
             snprintf(p, endp - p, " <unknown control packet %d> from %s:%d",

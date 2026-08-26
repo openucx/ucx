@@ -17,9 +17,27 @@
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/time/timer_wheel.h>
 
-#define UCT_UD_EP_NULL_ID     ((1<<24)-1)
-#define UCT_UD_EP_ID_MAX      UCT_UD_EP_NULL_ID
-#define UCT_UD_EP_CONN_ID_MAX UCT_UD_EP_ID_MAX
+/* Wire endpoint id: [ generation | endpoint index ] */
+#define UCT_UD_EP_GEN_BITS       2
+#define UCT_UD_EP_INDEX_BITS \
+    (UCT_UD_PACKET_DEST_ID_SHIFT - UCT_UD_EP_GEN_BITS)
+#define UCT_UD_EP_NULL_ID        UCS_MASK(UCT_UD_PACKET_DEST_ID_SHIFT)
+#define UCT_UD_EP_INDEX_MASK     UCS_MASK(UCT_UD_EP_INDEX_BITS)
+#define UCT_UD_EP_GEN_MASK       UCS_MASK(UCT_UD_EP_GEN_BITS)
+#define UCT_UD_EP_INDEX_MAX      (UCT_UD_EP_INDEX_MASK - 1)
+
+#define UCT_UD_EP_ID_FMT "0x%x(%u|%u)"
+#define UCT_UD_EP_ID_ARG(_id) \
+    (unsigned)(_id), (unsigned)((_id) >> UCT_UD_EP_INDEX_BITS), \
+    (unsigned)((_id) & UCT_UD_EP_INDEX_MASK)
+
+#define UCT_UD_EP_FMT "ep=%p(id=" UCT_UD_EP_ID_FMT " conn_sn=%u)"
+#define UCT_UD_EP_ARG(_ep) \
+    (_ep), UCT_UD_EP_ID_ARG((_ep)->ep_id), (unsigned)((_ep)->conn_sn)
+
+#define UCT_UD_EP_TO_DEST_FMT UCT_UD_EP_FMT " -> dest_ep_id=" UCT_UD_EP_ID_FMT
+#define UCT_UD_EP_TO_DEST_ARG(_ep) \
+    UCT_UD_EP_ARG(_ep), UCT_UD_EP_ID_ARG((_ep)->dest_ep_id)
 
 typedef uint32_t uct_ud_ep_conn_sn_t;
 
@@ -386,6 +404,11 @@ uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
      * all ops not given are not set */
     return (ep->tx.pending.ops & ops) &&
            ((ep->tx.pending.ops & ~ops) == 0);
+}
+
+static UCS_F_ALWAYS_INLINE uint32_t uct_ud_ep_id_to_index(uint32_t ep_id)
+{
+    return ep_id & UCT_UD_EP_INDEX_MASK;
 }
 
 /* TODO: rely on window check instead. max_psn = psn  */
