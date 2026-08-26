@@ -531,6 +531,9 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    /* Failover progress callback is already scheduled. Placed here to fit in
+     * the padding after cm_idx. */
+    uint8_t                       failover_progress_scheduled;
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -589,7 +592,6 @@ typedef struct ucp_ep_ext {
     ucp_sys_dev_map_t             flush_sys_dev_map;
 
     struct {
-        uint8_t               progress_scheduled;
         ucp_ep_failover_ctx_t *ctx;
     } failover;
 } ucp_ep_ext_t;

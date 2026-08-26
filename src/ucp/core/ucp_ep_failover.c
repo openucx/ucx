@@ -255,7 +255,7 @@ void ucp_ep_failover_init(ucp_ep_h ep)
         return;
     }
 
-    ep->ext->failover.progress_scheduled = 0;
+    ep->ext->failover_progress_scheduled = 0;
     ep->ext->failover.ctx                = NULL;
 }
 
@@ -711,7 +711,7 @@ void ucp_ep_failover_cleanup(ucp_ep_h ep)
 
     ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
                                  ucp_ep_failover_progress_remove_filter, ep);
-    ep->ext->failover.progress_scheduled = 0;
+    ep->ext->failover_progress_scheduled = 0;
 
     ctx = ep->ext->failover.ctx;
     if (ctx != NULL) {
@@ -1103,7 +1103,7 @@ static unsigned ucp_ep_failover_progress_cb(void *arg)
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ep->ext->failover.progress_scheduled = 0;
+    ep->ext->failover_progress_scheduled = 0;
 
     if ((ep->ext->failover.ctx != NULL) &&
         (ep->ext->failover.ctx->flags & UCP_EP_FAILOVER_FLAG_ABORTED)) {
@@ -1134,11 +1134,11 @@ out:
 
 static void ucp_ep_failover_schedule(ucp_ep_h ep)
 {
-    if ((ep->ext == NULL) || ep->ext->failover.progress_scheduled) {
+    if ((ep->ext == NULL) || ep->ext->failover_progress_scheduled) {
         return;
     }
 
-    ep->ext->failover.progress_scheduled = 1;
+    ep->ext->failover_progress_scheduled = 1;
     ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                               ucp_ep_failover_progress_cb, ep);
 }

@@ -2359,16 +2359,20 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
 
     ep->ext->recovery_arg->request_id = request_id;
     ucp_ep_failover_set_request_id(ep, request_id);
+
     tx_token_map = ucp_ep_failover_pending_rx_lanes(ep);
 
     ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
-              " recovery=0x%" PRIx64 " req_id=0x%" PRIx64 " tx=0x%" PRIx64,
-              ep, failed_lanes, recovery_lanes, request_id,
-              (uint64_t)tx_token_map);
+              " recovery=0x%" PRIx64 " tx=0x%" PRIx64 " req_id=0x%" PRIx64,
+              ep, failed_lanes, recovery_lanes, (uint64_t)tx_token_map,
+              request_id);
 
+    /* The request has no RX tokens to return, so it provides the addresses of
+     * the lanes it asks the peer to rebuild, plus the TX tokens of every lane
+     * awaiting an exchange. */
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
-                                   failed_lanes, recovery_lanes, request_id,
-                                   tx_token_map, 0, 0, NULL, NULL);
+                                   recovery_lanes, tx_token_map, 0, request_id,
+                                   NULL, NULL);
     return 1;
 }
 
@@ -4516,7 +4520,7 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_idx);
 
     status = ucp_wireup_msg_prepare(ucp_ep, UCP_WIREUP_MSG_EP_CHECK,
-                                    &tl_bitmap, NULL, 0, 0, &wireup_msg,
+                                    &tl_bitmap, NULL, &wireup_msg,
                                     &wireup_msg_iov[1].iov_base,
                                     &wireup_msg_iov[1].iov_len);
     if (status != UCS_OK) {

@@ -295,16 +295,15 @@ out:
 ucs_status_t ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                                     const ucp_tl_bitmap_t *tl_bitmap,
                                     const ucp_lane_index_t *lanes2remote,
-                                    ucp_lane_map_t requested_lane_map,
-                                    ucp_lane_map_t provided_lane_map,
                                     ucp_wireup_msg_t *msg_hdr, void **payload_p,
                                     size_t *payload_length_p)
 {
     ucp_context_h context = ep->worker->context;
     unsigned pack_flags   = ucp_worker_default_address_pack_flags(ep->worker) |
                             UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
-    ucp_wireup_msg_lanes_info_t *lanes_info;
     ucs_status_t status;
+
+    ucs_assert(!ucp_wireup_msg_is_lanes_addr(type));
 
     msg_hdr->type      = type;
     msg_hdr->err_mode  = ucp_ep_config(ep)->key.err_mode;
@@ -316,18 +315,6 @@ ucs_status_t ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
         /* Destination UCP endpoint ID must be packed in case of CM */
         ucs_assert(!ucp_ep_has_cm_lane(ep));
         msg_hdr->dst_ep_id = UCS_PTR_MAP_KEY_INVALID;
-    }
-
-    if (ucp_wireup_msg_is_lanes_addr(type)) {
-        lanes_info = (ucp_wireup_msg_lanes_info_t *)(msg_hdr + 1);
-        lanes_info->requested_lane_map = requested_lane_map;
-        lanes_info->provided_lane_map  = provided_lane_map;
-        lanes_info->request_id         = 0;
-        lanes_info->tx_token_map       = 0;
-        lanes_info->rx_token_map       = 0;
-        lanes_info->address_length     = 0;
-    } else {
-        ucs_assert((requested_lane_map == 0) && (provided_lane_map == 0));
     }
 
     /* pack all addresses */
@@ -376,7 +363,7 @@ static ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
     req->send.buffer = payload;
     req->send.length = payload_length;
 
-    status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote, 0, 0,
+    status = ucp_wireup_msg_prepare(ep, type, tl_bitmap, lanes2remote,
                                     &req->send.wireup.msg_hdr,
                                     &req->send.buffer, &req->send.length);
     if (status != UCS_OK) {
@@ -1073,60 +1060,71 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
     }
 }
 
-/* Collect TX tokens for @a lane_map into contiguous length+blob buffers. */
+/* TX token length of @a lane, 0 if the lane cannot provide one. */
+static uint8_t
+ucp_wireup_lane_tx_token_length(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    ucp_worker_iface_t *wiface;
+    uct_iface_attr_v2_t attr;
+    ucs_status_t status;
+
+    if (rsc_index == UCP_NULL_RESOURCE) {
+        return 0;
+    }
+
+    /* Failover must be armed to have a token to hand over. */
+    if (ucp_ep_failover_get_uct_ep(ep, lane) == NULL) {
+        return 0;
+    }
+
+    wiface          = ucp_worker_iface(ep->worker, rsc_index);
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
+    status          = uct_iface_query_v2(wiface->iface, &attr);
+    if ((status != UCS_OK) ||
+        !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
+        (attr.tx_token_length == 0) || (attr.tx_token_length > UINT8_MAX)) {
+        return 0;
+    }
+
+    return (uint8_t)attr.tx_token_length;
+}
+
+/* Collect TX tokens for @a lane_map into contiguous length+blob buffers. Only
+ * the lanes which can provide a token are announced, in @a collected_map_p. */
 static ucs_status_t
 ucp_wireup_collect_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
                              uint8_t *lengths_out, void **tokens_out,
                              size_t *tokens_size_out,
                              ucp_lane_map_t *collected_map_p)
 {
-    uint8_t lengths[UCP_MAX_LANES];
-    unsigned token_index = 0;
-    size_t tokens_size   = 0;
-    size_t token_offset  = 0;
-    ucp_lane_map_t collected = 0;
+    uint8_t lengths[UCP_MAX_LANES] = {0};
+    ucp_lane_map_t collected       = 0;
+    unsigned token_index           = 0;
+    size_t tokens_size             = 0;
+    size_t token_offset            = 0;
     ucp_lane_index_t lane;
-    ucp_rsc_index_t rsc_index;
-    ucp_worker_iface_t *wiface;
-    uct_iface_attr_v2_t attr;
     uct_ep_attr_t ep_attr;
-    uct_ep_h uct_ep;
     void *tokens;
     ucs_status_t status;
 
-    *tokens_out       = NULL;
-    *tokens_size_out  = 0;
-    *collected_map_p  = 0;
+    *tokens_out      = NULL;
+    *tokens_size_out = 0;
+    *collected_map_p = 0;
 
     if (lane_map == 0) {
         return UCS_OK;
     }
 
     ucs_for_each_bit(lane, lane_map) {
-        rsc_index = ucp_ep_get_rsc_index(ep, lane);
-        if (rsc_index == UCP_NULL_RESOURCE) {
+        lengths[token_index] = ucp_wireup_lane_tx_token_length(ep, lane);
+        if (lengths[token_index] == 0) {
             continue;
         }
 
-        wiface          = ucp_worker_iface(ep->worker, rsc_index);
-        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-                          UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
-        status          = uct_iface_query_v2(wiface->iface, &attr);
-        if ((status != UCS_OK) ||
-            !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
-            (attr.tx_token_length == 0) || (attr.tx_token_length > UINT8_MAX)) {
-            continue;
-        }
-
-        uct_ep = ucp_ep_failover_get_uct_ep(ep, lane);
-        if (uct_ep == NULL) {
-            /* Failover not armed yet for this lane - leave it out. */
-            continue;
-        }
-
-        lengths[token_index++] = (uint8_t)attr.tx_token_length;
-        tokens_size           += attr.tx_token_length;
-        collected             |= UCS_BIT(lane);
+        collected     |= UCS_BIT(lane);
+        tokens_size   += lengths[token_index++];
     }
 
     if (collected == 0) {
@@ -1140,10 +1138,10 @@ ucp_wireup_collect_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
 
     token_index = 0;
     ucs_for_each_bit(lane, collected) {
-        uct_ep                 = ucp_ep_failover_get_uct_ep(ep, lane);
-        ep_attr.field_mask     = UCT_EP_ATTR_FIELD_TX_TOKEN;
-        ep_attr.tx_token       = UCS_PTR_BYTE_OFFSET(tokens, token_offset);
-        status                 = uct_ep_query(uct_ep, &ep_attr);
+        ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        ep_attr.tx_token   = UCS_PTR_BYTE_OFFSET(tokens, token_offset);
+        status             = uct_ep_query(ucp_ep_failover_get_uct_ep(ep, lane),
+                                          &ep_attr);
         if (status != UCS_OK) {
             ucs_debug("ep %p: lane %u: tx token query failed: %s", ep, lane,
                       ucs_status_string(status));
@@ -1161,59 +1159,79 @@ ucp_wireup_collect_tx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
     return UCS_OK;
 }
 
-/* Derive RX tokens from peer TX (same lane_map / length order as peer TX). */
-static ucs_status_t
-ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
-                            const uint8_t *tx_lengths, const void *tx_tokens,
-                            uint8_t *rx_lengths_out, void **rx_tokens_out,
-                            size_t *rx_tokens_size_out)
+/* RX token length of @a lane, 0 if the lane cannot provide one. */
+static uint8_t
+ucp_wireup_lane_rx_token_length(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    uint8_t rx_lengths[UCP_MAX_LANES];
-    unsigned token_index   = 0;
-    size_t rx_token_offset = 0;
-    size_t tx_token_offset = 0;
-    size_t rx_tokens_size  = 0;
+    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    ucp_worker_iface_t *wiface;
+    uct_iface_attr_v2_t attr;
+    ucs_status_t status;
+
+    if (rsc_index == UCP_NULL_RESOURCE) {
+        return 0;
+    }
+
+    wiface          = ucp_worker_iface(ep->worker, rsc_index);
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
+    status          = uct_iface_query_v2(wiface->iface, &attr);
+    if ((status != UCS_OK) ||
+        !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
+        (attr.rx_token_length == 0) || (attr.rx_token_length > UINT8_MAX)) {
+        return 0;
+    }
+
+    return (uint8_t)attr.rx_token_length;
+}
+
+/* Derive RX tokens from the TX tokens the peer sent for @a peer_lane_map. The
+ * RX map covers the lanes whose TX token arrived, and a zero RX length in it
+ * tells the peer that derivation failed, so the lane has to fall back. */
+static ucs_status_t
+ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t peer_lane_map,
+                            const uint8_t *tx_lengths, const void *tx_tokens,
+                            ucp_lane_map_t *rx_map_p, uint8_t *rx_lengths_out,
+                            void **rx_tokens_out, size_t *rx_tokens_size_out)
+{
+    uint8_t rx_lengths[UCP_MAX_LANES] = {0};
+    ucp_lane_map_t rx_map             = 0;
+    unsigned peer_index               = 0;
+    unsigned rx_index                 = 0;
+    size_t rx_token_offset            = 0;
+    size_t tx_token_offset            = 0;
+    size_t rx_tokens_size             = 0;
     ucp_lane_index_t lane;
-    ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *wiface;
     uct_iface_attr_v2_t attr;
     void *rx_tokens;
     ucs_status_t status;
 
+    *rx_map_p           = 0;
     *rx_tokens_out      = NULL;
     *rx_tokens_size_out = 0;
 
-    if (lane_map == 0) {
+    if ((peer_lane_map == 0) || (tx_lengths == NULL)) {
         return UCS_OK;
     }
 
-    ucs_for_each_bit(lane, lane_map) {
-        rsc_index = ucp_ep_get_rsc_index(ep, lane);
-        if (rsc_index == UCP_NULL_RESOURCE) {
-            rx_lengths[token_index++] = 0;
-            tx_token_offset          += tx_lengths[token_index - 1];
+    ucs_for_each_bit(lane, peer_lane_map) {
+        if (tx_lengths[peer_index++] == 0) {
             continue;
         }
 
-        wiface          = ucp_worker_iface(ep->worker, rsc_index);
-        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-                          UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
-        status          = uct_iface_query_v2(wiface->iface, &attr);
-        if ((status != UCS_OK) ||
-            !(attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
-            (attr.rx_token_length == 0) || (attr.rx_token_length > UINT8_MAX)) {
-            rx_lengths[token_index++] = 0;
-            tx_token_offset          += tx_lengths[token_index - 1];
-            continue;
-        }
+        rx_map                |= UCS_BIT(lane);
+        rx_lengths[rx_index]   = ucp_wireup_lane_rx_token_length(ep, lane);
+        rx_tokens_size        += rx_lengths[rx_index++];
+    }
 
-        rx_lengths[token_index++] = (uint8_t)attr.rx_token_length;
-        rx_tokens_size           += attr.rx_token_length;
-        tx_token_offset          += tx_lengths[token_index - 1];
+    if (rx_map == 0) {
+        return UCS_OK;
     }
 
     if (rx_tokens_size == 0) {
-        memcpy(rx_lengths_out, rx_lengths, token_index * sizeof(*rx_lengths));
+        memcpy(rx_lengths_out, rx_lengths, rx_index * sizeof(*rx_lengths));
+        *rx_map_p = rx_map;
         return UCS_OK;
     }
 
@@ -1222,13 +1240,16 @@ ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         return UCS_ERR_NO_MEMORY;
     }
 
-    token_index     = 0;
-    tx_token_offset = 0;
-    ucs_for_each_bit(lane, lane_map) {
-        if (rx_lengths[token_index] == 0) {
-            tx_token_offset += tx_lengths[token_index];
-            ++token_index;
+    peer_index = 0;
+    rx_index   = 0;
+    ucs_for_each_bit(lane, peer_lane_map) {
+        if (tx_lengths[peer_index] == 0) {
+            ++peer_index;
             continue;
+        }
+
+        if (rx_lengths[rx_index] == 0) {
+            goto next_lane;
         }
 
         wiface          = ucp_worker_iface(ep->worker,
@@ -1241,19 +1262,19 @@ ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         if (status != UCS_OK) {
             ucs_debug("ep %p: lane %u: rx token query failed: %s", ep, lane,
                       ucs_status_string(status));
-            rx_lengths[token_index] = 0;
-            tx_token_offset        += tx_lengths[token_index];
-            ++token_index;
-            continue;
+            rx_lengths[rx_index] = 0;
+            goto next_lane;
         }
 
-        tx_token_offset += tx_lengths[token_index];
-        rx_token_offset += rx_lengths[token_index];
-        ++token_index;
+        rx_token_offset += rx_lengths[rx_index];
+
+next_lane:
+        tx_token_offset += tx_lengths[peer_index++];
+        ++rx_index;
     }
 
-    /* Compact out zero-length slots that failed derivation: keep map/order. */
-    memcpy(rx_lengths_out, rx_lengths, token_index * sizeof(*rx_lengths));
+    memcpy(rx_lengths_out, rx_lengths, rx_index * sizeof(*rx_lengths));
+    *rx_map_p           = rx_map;
     *rx_tokens_out      = rx_tokens;
     *rx_tokens_size_out = rx_token_offset;
     return UCS_OK;
@@ -1312,12 +1333,10 @@ ucp_wireup_build_addr_payload(ucp_lane_map_t tx_map, const uint8_t *tx_lengths,
 }
 
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
-                                    ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map,
-                                    uint64_t request_id,
                                     ucp_lane_map_t tx_token_map,
-                                    ucp_lane_map_t rx_token_map,
                                     ucp_lane_map_t peer_tx_map,
+                                    uint64_t request_id,
                                     const uint8_t *peer_tx_lengths,
                                     const void *peer_tx_tokens)
 {
@@ -1330,7 +1349,8 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
     void *rx_tokens                    = NULL;
     size_t tx_tokens_size              = 0;
     size_t rx_tokens_size              = 0;
-    ucp_lane_map_t collected_tx        = 0;
+    ucp_lane_map_t requested_lane_map  = 0;
+    ucp_lane_map_t collected_tx_map    = 0;
     void *payload                      = NULL;
     size_t payload_length              = 0;
     int support_tokens;
@@ -1358,50 +1378,40 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
         }
     }
 
-    if (support_tokens && (tx_token_map != 0)) {
+    if (support_tokens) {
         status = ucp_wireup_collect_tx_tokens(ep, tx_token_map, tx_lengths,
                                               &tx_tokens, &tx_tokens_size,
-                                              &collected_tx);
+                                              &collected_tx_map);
         if (status != UCS_OK) {
             ucs_diag("ep %p: failed to collect TX tokens for %s: %s", ep,
                      ucp_wireup_msg_str(msg_type), ucs_status_string(status));
-            collected_tx = 0;
             ucs_free(tx_tokens);
             tx_tokens      = NULL;
             tx_tokens_size = 0;
+            memset(tx_lengths, 0, sizeof(tx_lengths));
         }
-        tx_token_map = collected_tx;
-    } else {
-        tx_token_map = 0;
-    }
 
-    if (support_tokens && (rx_token_map != 0) && (peer_tx_map != 0) &&
-        (peer_tx_lengths != NULL) && (peer_tx_tokens != NULL)) {
-        /* RX map tracks the peer TX lanes we derived from. */
-        rx_token_map = peer_tx_map & rx_token_map;
-        if (rx_token_map == 0) {
-            rx_token_map = peer_tx_map;
-        }
+        tx_token_map = collected_tx_map;
 
         status = ucp_wireup_derive_rx_tokens(ep, peer_tx_map, peer_tx_lengths,
-                                             peer_tx_tokens, rx_lengths,
+                                             peer_tx_tokens,
+                                             &requested_lane_map, rx_lengths,
                                              &rx_tokens, &rx_tokens_size);
         if (status != UCS_OK) {
             ucs_diag("ep %p: failed to derive RX tokens for %s: %s", ep,
                      ucp_wireup_msg_str(msg_type), ucs_status_string(status));
-            rx_token_map = 0;
             ucs_free(rx_tokens);
-            rx_tokens      = NULL;
-            rx_tokens_size = 0;
-        } else {
-            rx_token_map = peer_tx_map;
+            rx_tokens          = NULL;
+            rx_tokens_size     = 0;
+            requested_lane_map = 0;
+            memset(rx_lengths, 0, sizeof(rx_lengths));
         }
     } else {
-        rx_token_map = 0;
+        tx_token_map = 0;
     }
 
     payload = ucp_wireup_build_addr_payload(tx_token_map, tx_lengths, tx_tokens,
-                                            tx_tokens_size, rx_token_map,
+                                            tx_tokens_size, requested_lane_map,
                                             rx_lengths, rx_tokens,
                                             rx_tokens_size, address,
                                             address_length, &payload_length);
@@ -1447,17 +1457,15 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
 
     req->send.wireup.lanes_info.requested_lane_map = requested_lane_map;
     req->send.wireup.lanes_info.provided_lane_map  = provided_lane_map;
-    req->send.wireup.lanes_info.request_id         = request_id;
     req->send.wireup.lanes_info.tx_token_map       = tx_token_map;
-    req->send.wireup.lanes_info.rx_token_map       = rx_token_map;
-    req->send.wireup.lanes_info.address_length     = (uint32_t)address_length;
+    req->send.wireup.lanes_info.request_id         = request_id;
 
     ucs_debug("ep %p: send %s requested=0x%" PRIx64 " provided=0x%" PRIx64
-              " req_id=0x%" PRIx64 " tx=0x%" PRIx64 " rx=0x%" PRIx64
-              " addr_len=%u",
+              " tx_token=0x%" PRIx64 " req_id=0x%" PRIx64
+              " tx_tokens=%zu rx_tokens=%zu addr_len=%zu",
               ep, ucp_wireup_msg_str(msg_type), (uint64_t)requested_lane_map,
-              (uint64_t)provided_lane_map, request_id, (uint64_t)tx_token_map,
-              (uint64_t)rx_token_map, (unsigned)address_length);
+              (uint64_t)provided_lane_map, (uint64_t)tx_token_map, request_id,
+              tx_tokens_size, rx_tokens_size, address_length);
 
     ucp_request_send(req);
 }
@@ -1470,7 +1478,6 @@ ucp_wireup_process_lanes_addr_request(
         const ucp_unpacked_address_t *remote_address)
 {
     ucp_lane_map_t peer_unaware, to_rebuild, peer_provided;
-    ucp_lane_map_t tx_map, rx_map;
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
@@ -1518,22 +1525,25 @@ ucp_wireup_process_lanes_addr_request(
 
     ucs_debug("ep %p: LANES_ADDR_REQ requested=0x%" PRIx64
               " provided=0x%" PRIx64 " to_rebuild=0x%" PRIx64
-              " rebuilt=0x%" PRIx64 " req_id=0x%" PRIx64,
+              " rebuilt=0x%" PRIx64 " pending_rx=0x%" PRIx64
+              " req_id=0x%" PRIx64,
               ep, lanes_info->requested_lane_map, lanes_info->provided_lane_map,
-              to_rebuild, peer_provided, lanes_info->request_id);
+              to_rebuild, peer_provided,
+              (uint64_t)ucp_ep_failover_pending_rx_lanes(ep),
+              lanes_info->request_id);
 
     if (peer_provided != 0) {
         ucp_wireup_eps_progress_sched(ep);
     }
 
-    tx_map = ucp_ep_failover_pending_rx_lanes(ep);
-    rx_map = lanes_info->tx_token_map;
-
-    /* Always reply so the initiator knows we handled the request. */
+    /* Always reply so the initiator knows we handled the request. The reply
+     * returns RX tokens for the lanes whose TX tokens the request carried, and
+     * TX tokens for every lane awaiting an exchange here. */
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REPLY,
-                                   lanes_info->requested_lane_map, peer_provided,
-                                   lanes_info->request_id, tx_map, rx_map,
-                                   lanes_info->tx_token_map, peer_tx_lengths,
+                                   peer_provided,
+                                   ucp_ep_failover_pending_rx_lanes(ep),
+                                   lanes_info->tx_token_map,
+                                   lanes_info->request_id, peer_tx_lengths,
                                    peer_tx_tokens);
 }
 
@@ -1563,17 +1573,16 @@ ucp_wireup_process_lanes_addr_reply(
         ucp_wireup_eps_progress_sched(ep);
     }
 
-    if (lanes_info->rx_token_map != 0) {
+    if (lanes_info->requested_lane_map != 0) {
         (void)ucp_ep_failover_apply_rx_tokens(ep, lanes_info->request_id,
-                                              lanes_info->rx_token_map,
+                                              lanes_info->requested_lane_map,
                                               peer_rx_lengths, peer_rx_tokens);
     }
 
     /* ACK carries RX derived from peer TX in REP (Decision 2). */
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_ACK, 0, 0,
-                                   lanes_info->request_id, 0,
                                    lanes_info->tx_token_map,
-                                   lanes_info->tx_token_map, peer_tx_lengths,
+                                   lanes_info->request_id, peer_tx_lengths,
                                    peer_tx_tokens);
 }
 
@@ -1586,11 +1595,11 @@ ucp_wireup_process_lanes_addr_ack(
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
     ucs_debug("ep %p: LANES_ADDR_ACK req_id=0x%" PRIx64 " rx=0x%" PRIx64, ep,
-              lanes_info->request_id, (uint64_t)lanes_info->rx_token_map);
+              lanes_info->request_id, (uint64_t)lanes_info->requested_lane_map);
 
-    if (lanes_info->rx_token_map != 0) {
+    if (lanes_info->requested_lane_map != 0) {
         (void)ucp_ep_failover_apply_rx_tokens(ep, lanes_info->request_id,
-                                              lanes_info->rx_token_map,
+                                              lanes_info->requested_lane_map,
                                               peer_rx_lengths, peer_rx_tokens);
     }
 }
@@ -1650,27 +1659,21 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ptr    = UCS_PTR_BYTE_OFFSET(ptr, consumed);
         remain -= consumed;
 
-        status = ucp_wireup_token_section_skip(lanes_info->rx_token_map, ptr,
-                                               remain, &consumed, &rx_lengths,
-                                               &rx_tokens);
+        status = ucp_wireup_token_section_skip(lanes_info->requested_lane_map,
+                                               ptr, remain, &consumed,
+                                               &rx_lengths, &rx_tokens);
         if (status != UCS_OK) {
             ucs_warn("ep %p: invalid RX token trailer in %s", ep,
                      ucp_wireup_msg_str(msg->type));
             goto out;
         }
 
+        /* Whatever follows the token sections is the packed address. */
         ptr    = UCS_PTR_BYTE_OFFSET(ptr, consumed);
         remain -= consumed;
 
-        if (remain < lanes_info->address_length) {
-            ucs_warn("ep %p: truncated address in %s remain %zu expected %u", ep,
-                     ucp_wireup_msg_str(msg->type), remain,
-                     lanes_info->address_length);
-            goto out;
-        }
-
         memset(&remote_address, 0, sizeof(remote_address));
-        if (lanes_info->address_length != 0) {
+        if (remain != 0) {
             status = ucp_address_unpack(worker, ptr, UCP_ADDRESS_PACK_FLAGS_ALL,
                                         &remote_address);
             if (status != UCS_OK) {
