@@ -1112,6 +1112,17 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
     uct_iface_query_v2_init(tl_iface, iface_attr);
 
+    if (ucs_test_flags(iface_attr->field_mask,
+                       UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                               UCT_IFACE_ATTR_FIELD_RX_TOKEN) &&
+        !ucs_test_all_flags(iface_attr->field_mask,
+                            UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                    UCT_IFACE_ATTR_FIELD_RX_TOKEN)) {
+        ucs_error("rc mlx5: tx and rx token fields must be set together");
+
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
@@ -1133,10 +1144,11 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
             iface_attr->rx_token_length = sizeof(uct_rc_mlx5_rx_token_t);
         }
     } else {
-        if (iface_attr->field_mask &
-            (UCT_IFACE_ATTR_FIELD_TX_TOKEN | UCT_IFACE_ATTR_FIELD_RX_TOKEN |
-             UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
-             UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH)) {
+        if (ucs_test_flags(iface_attr->field_mask,
+                           UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                   UCT_IFACE_ATTR_FIELD_RX_TOKEN |
+                                   UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
+                                   UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH)) {
             return UCS_ERR_UNSUPPORTED;
         }
     }
