@@ -2486,7 +2486,9 @@ UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, wireup_msg_lane_ctrl_scope,
 UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, explicit_ctrl_features_tls,
            "IB_NUM_PATHS?=1", "CTRL_FEATURES_TLS=rc_x")
 {
-    ucp_context_h context       = sender().ucph();
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
 
@@ -2516,7 +2518,9 @@ UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, explicit_ctrl_features_tls,
 UCS_TEST_P(test_ucp_proto_mock_ctrl_features_am, disjoint_tls,
            "IB_NUM_PATHS?=1", "TLS=rc_x", "CTRL_FEATURES_TLS=tcp")
 {
-    ucp_context_h context       = sender().ucph();
+    ucp_context_h context      = sender().ucph();
+    ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                       ep_config_index(sender()));
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
                                                        ep_config_index(sender()));
 
