@@ -1006,8 +1006,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
     static void get_base_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AM,
-                    MULTI_THREAD_WORKER);
+        add_variant(variants, UCP_FEATURE_RMA);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -1662,7 +1661,21 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
             REMOTE_MASK_DEFAULT, 2, UCS_ERR_UNSUPPORTED);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_am_pending)
+class test_ucp_rma_sgl_am_pending : public test_ucp_rma_sgl {
+public:
+    static void get_base_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_RMA | UCP_FEATURE_AM,
+                    MULTI_THREAD_WORKER);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_base_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_HOST));
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_am_pending, put)
 {
     /* size, count, repeat, num_threads */
     static const size_t cases[][4] = {
@@ -1772,3 +1785,4 @@ UCS_TEST_P(test_ucp_rma_sgl, put_am_pending)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_am_pending, all, "all")
