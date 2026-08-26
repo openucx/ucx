@@ -326,6 +326,8 @@ static void
 ucp_proto_rndv_get_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context = init_params->worker->context;
+    ucp_proto_init_params_t mtype_init_params;
+    ucp_proto_select_param_t mtype_select_param;
     ucs_memory_type_t frag_mem_type;
     ucp_md_map_t mdesc_md_map;
     ucs_status_t status;
@@ -347,7 +349,10 @@ ucp_proto_rndv_get_mtype_probe(const ucp_proto_init_params_t *init_params)
             continue;
         }
 
-        ucp_proto_rndv_get_common_probe(init_params,
+        ucp_proto_rndv_mtype_init_params_copy(init_params, &frag_mem_info,
+                                              &mtype_select_param,
+                                              &mtype_init_params);
+        ucp_proto_rndv_get_common_probe(&mtype_init_params,
                                         UCS_BIT(UCP_RNDV_MODE_GET_PIPELINE),
                                         frag_size, UCT_EP_OP_PUT_ZCOPY, 0,
                                         mdesc_md_map, 1, &frag_mem_info);
