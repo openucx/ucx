@@ -1,6 +1,7 @@
 leak:libcuda
 leak:dlopen
 leak:dlsym
+leak:dlerror
 leak:nvmlInitWithFlags
 leak:bfd_map_over_sections
 # see https://github.com/openucx/ucx/blob/ec4407f08dbed639409d796e42bfab1ff718fda5/src/uct/ib/base/ib_md.c#L1392
