@@ -2493,15 +2493,15 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
             continue;
         }
 
-        rsc_index  = lane_descs[lane].rsc_index;
+        rsc_index = lane_descs[lane].rsc_index;
+        if (!UCS_STATIC_BITMAP_GET(*scope_bitmap, rsc_index)) {
+            continue;
+        }
+
         addr_index = lane_descs[lane].addr_index;
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         attrs      = ucp_worker_iface_get_attr(worker, rsc_index);
         seg_size   = ucp_wireup_aux_seg_size(attrs, &address_list[addr_index]);
-
-        if (!UCS_STATIC_BITMAP_GET(*scope_bitmap, rsc_index)) {
-            continue;
-        }
 
         /* Select a lane which satisfies the wireup criteria and with the
          * highest effective seg_size and use it for wireup.

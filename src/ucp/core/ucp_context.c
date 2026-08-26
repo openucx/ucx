@@ -1935,6 +1935,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
 
         avail_mds--;
 
+        /* Memory type detection and allocation serve the data path only */
         if (ucp_tl_bitmap_has_md(context, md_index,
                                  &context->data_tl_bitmap)) {
             /* List of detect memory type MDs */

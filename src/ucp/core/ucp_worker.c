@@ -1002,13 +1002,19 @@ static int ucp_worker_iface_support_keepalive(ucp_worker_iface_t *wiface)
                               UCT_IFACE_FLAG_EP_KEEPALIVE);
 }
 
+/* Transport policies which use the resource */
+enum {
+    UCP_WORKER_TL_USAGE_FLAG_DATA = UCS_BIT(0),
+    UCP_WORKER_TL_USAGE_FLAG_CTRL = UCS_BIT(1)
+};
+
 static uint8_t ucp_worker_tl_usage_flags(ucp_context_h context,
                                          ucp_rsc_index_t rsc_index)
 {
     return (UCS_STATIC_BITMAP_GET(context->data_tl_bitmap, rsc_index) ?
-                    UCS_BIT(0) : 0) |
+                    UCP_WORKER_TL_USAGE_FLAG_DATA : 0) |
            (UCS_STATIC_BITMAP_GET(context->ctrl_tl_bitmap, rsc_index) ?
-                    UCS_BIT(1) : 0);
+                    UCP_WORKER_TL_USAGE_FLAG_CTRL : 0);
 }
 
 /* Compare 'compare_attr' atomic capabilities to 'test_attr',
