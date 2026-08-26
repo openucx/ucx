@@ -988,6 +988,7 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     if (status != UCS_OK) {
         return status;
     }
+
     uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
 
     ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(

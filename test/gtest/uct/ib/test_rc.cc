@@ -185,7 +185,7 @@ UCS_TEST_P(test_rc_mlx5_psn, path_mtu_from_rc_qp)
     EXPECT_EQ(9, txwq()->path_mtu_shift);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_first_psn,
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
 {
     static const size_t length = 513;
@@ -195,10 +195,10 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_first_psn,
     uct_completion_t comp;
     ucs_status_t status;
 
-    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_first_psn(wq));
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
 
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
-    EXPECT_EQ(1, uct_ib_mlx5_txwq_get_next_first_psn(wq));
+    EXPECT_EQ(1, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
 
     comp.func   = [](uct_completion_t*) {};
     comp.count  = 1;
@@ -211,16 +211,16 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_first_psn,
     ASSERT_UCS_OK_OR_INPROGRESS(status);
 
     /* The RC QP uses the peer's 512-byte path MTU, so 513 bytes use 2 PSNs. */
-    EXPECT_EQ(3, uct_ib_mlx5_txwq_get_next_first_psn(wq));
+    EXPECT_EQ(3, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
 
     if (status == UCS_INPROGRESS) {
         wait_for_value(&comp.count, 0, true);
     }
 
-    wq->next_first_psn = UCS_MASK(24);
+    wq->next_wqe_psn = UCS_MASK(24);
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
-    EXPECT_EQ(UCS_BIT(24), wq->next_first_psn);
-    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_first_psn(wq));
+    EXPECT_EQ(UCS_BIT(24), wq->next_wqe_psn);
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
 
     flush();
 }

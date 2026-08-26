@@ -467,7 +467,7 @@ uct_rc_mlx5_txwq_add_psn(uct_ib_mlx5_txwq_t *txwq, int qp_type,
                          uint32_t num_packets)
 {
     if (qp_type == IBV_QPT_RC) {
-        txwq->next_first_psn += num_packets;
+        txwq->next_wqe_psn += num_packets;
     }
 }
 

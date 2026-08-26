@@ -686,7 +686,8 @@ typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
-    uint32_t                    next_first_psn; /* Free-running PSN counter */
+    uint32_t                    next_wqe_psn; /* 1st PSN of the next WQE to be
+                                                posted */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
@@ -705,9 +706,9 @@ typedef struct uct_ib_mlx5_txwq {
 
 
 static UCS_F_ALWAYS_INLINE uint32_t
-uct_ib_mlx5_txwq_get_next_first_psn(const uct_ib_mlx5_txwq_t *txwq)
+uct_ib_mlx5_txwq_get_next_wqe_psn(const uct_ib_mlx5_txwq_t *txwq)
 {
-    return txwq->next_first_psn & UCS_MASK(24);
+    return txwq->next_wqe_psn & UCS_MASK(24);
 }
 
 
