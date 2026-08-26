@@ -320,7 +320,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     /* set iov to dptr */
     if (iovcnt > 0) {
         wqe_size  = ucs_align_up_pow2(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
-        wqe_size += uct_ib_mlx5_set_data_seg_iov_length(
+        wqe_size += uct_ib_mlx5_set_data_seg_iov(
                 &iface->tx.wq, UCS_PTR_BYTE_OFFSET(ctrl, wqe_size), iov,
                 iovcnt, NULL);
     }

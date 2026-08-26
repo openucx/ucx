@@ -507,10 +507,10 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
 
 
 static UCS_F_ALWAYS_INLINE
-size_t uct_ib_mlx5_set_data_seg_iov_length(uct_ib_mlx5_txwq_t *txwq,
-                                           struct mlx5_wqe_data_seg *dptr,
-                                           const uct_iov_t *iov, size_t iovcnt,
-                                           size_t *iov_length_p)
+size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
+                                    struct mlx5_wqe_data_seg *dptr,
+                                    const uct_iov_t *iov, size_t iovcnt,
+                                    size_t *iov_length_p)
 {
     size_t iov_length = 0;
     size_t wqe_size   = 0;

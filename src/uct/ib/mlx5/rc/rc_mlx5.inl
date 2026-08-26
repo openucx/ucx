@@ -900,7 +900,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         /* Data segment with payload */
         dptr             = (struct mlx5_wqe_data_seg *)((char *)inl + inl_seg_size);
         wqe_size         = ctrl_av_size + inl_seg_size +
-                           uct_ib_mlx5_set_data_seg_iov_length(
+                           uct_ib_mlx5_set_data_seg_iov(
                                    txwq, dptr, iov, iovcnt, &iov_length);
         opmod            = 0;
         message_length   = iov_length + sizeof(*rch) + am_hdr_len;
@@ -918,7 +918,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         inl->byte_count  = htonl(sizeof(struct ibv_tmh) | MLX5_INLINE_SEG);
         dptr             = uct_ib_mlx5_txwq_wrap_exact(txwq, (char *)inl + inl_seg_size);
         wqe_size         = ctrl_av_size + inl_seg_size +
-                           uct_ib_mlx5_set_data_seg_iov_length(
+                           uct_ib_mlx5_set_data_seg_iov(
                                    txwq, dptr, iov, iovcnt, &iov_length);
         opmod            = 0;
         message_length   = iov_length + sizeof(struct ibv_tmh);
@@ -939,7 +939,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 
         /* Data segment */
         wqe_size = ctrl_av_size + sizeof(*raddr) +
-                   uct_ib_mlx5_set_data_seg_iov_length(
+                   uct_ib_mlx5_set_data_seg_iov(
                            txwq, (void*)(raddr + 1), iov, iovcnt,
                            &message_length);
         opmod    = 0;
