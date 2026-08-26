@@ -117,13 +117,13 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
  * @param [out]    alloc_handle_p  Filled with information about the allocated
  *                                 memory
  */
-ucs_status_t uct_cuda_mem_alloc(
-        ucs_log_level_t log_level, ucs_memory_type_t mem_type,
-        ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
-        size_t length, size_t *granularity_p,
-        uct_cuda_copy_alloc_handle_t *alloc_handle_p);
+ucs_status_t
+uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
+                   ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
+                   size_t length, size_t *granularity_p,
+                   uct_cuda_copy_alloc_handle_t *alloc_handle_p);
 
-        
+
 /**
  * Release the memory allocated by @ref uct_cuda_mem_alloc.
  *

@@ -209,8 +209,9 @@ uct_cuda_copy_mem_alloc_fabric(ucs_log_level_t log_level, CUdevice cu_device,
     prop.allocFlags.gpuDirectRDMACapable = 1;
 
     if (*granularity == SIZE_MAX) {
-        status = UCT_CUDADRV_FUNC(cuMemGetAllocationGranularity(
-                granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM),
+        status = UCT_CUDADRV_FUNC(
+                cuMemGetAllocationGranularity(granularity, &prop,
+                                              CU_MEM_ALLOC_GRANULARITY_MINIMUM),
                 log_level);
         if (status != UCS_OK) {
             return status;
@@ -226,9 +227,9 @@ uct_cuda_copy_mem_alloc_fabric(ucs_log_level_t log_level, CUdevice cu_device,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(
-                                     &alloc_handle->ptr, alloc_handle->length,
-                                     *granularity, 0, 0),
+    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(&alloc_handle->ptr,
+                                                  alloc_handle->length,
+                                                  *granularity, 0, 0),
                               log_level);
     if (status != UCS_OK) {
         goto err_mem_release;
@@ -1112,11 +1113,12 @@ uct_component_t uct_cuda_copy_component = {
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);
 
-ucs_status_t uct_cuda_mem_alloc(
-        ucs_log_level_t log_level, ucs_memory_type_t mem_type,
-        ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
-        size_t length, size_t *granularity_p,
-        uct_cuda_copy_alloc_handle_t *alloc_handle_p) {
+ucs_status_t
+uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
+                   ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
+                   size_t length, size_t *granularity_p,
+                   uct_cuda_copy_alloc_handle_t *alloc_handle_p)
+{
     CUdeviceptr ptr;
     ucs_status_t status;
     ucs_log_level_t log_level_fabric;
@@ -1145,7 +1147,7 @@ ucs_status_t uct_cuda_mem_alloc(
     if (enable_fabric != UCS_NO) {
         log_level_fabric = (enable_fabric == UCS_TRY) ? UCS_LOG_LEVEL_DEBUG :
                                                         log_level;
-        status = uct_cuda_copy_mem_alloc_fabric(log_level_fabric, cu_device, 
+        status = uct_cuda_copy_mem_alloc_fabric(log_level_fabric, cu_device,
                                                 length, granularity_p,
                                                 alloc_handle_p);
         if (status == UCS_OK) {
