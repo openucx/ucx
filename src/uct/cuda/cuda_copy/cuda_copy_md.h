@@ -104,4 +104,32 @@ uct_cuda_copy_md_dmabuf_t uct_cuda_copy_md_get_dmabuf(const void *address,
                                                       size_t length,
                                                       ucs_sys_device_t sys_dev);
 
+
+/**
+ * Allocate CUDA device memory, optionally using fabric VMM allocation.
+ *
+ * @param [in]     log_level       Log level for CUDA driver API failures
+ * @param [in]     mem_type        Memory type to allocate
+ * @param [in]     enable_fabric   Controls fabric VMM allocation
+ * @param [in]     cu_device       CUDA device to allocate memory on
+ * @param [in]     length          The minimal size to allocate
+ * @param [in,out] granularity_p   Allocation granularity,if fabric VMM is used
+ * @param [out]    alloc_handle_p  Filled with information about the allocated
+ *                                 memory
+ */
+ucs_status_t uct_cuda_mem_alloc(
+        ucs_log_level_t log_level, ucs_memory_type_t mem_type,
+        ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
+        size_t length, size_t *granularity_p,
+        uct_cuda_copy_alloc_handle_t *alloc_handle_p);
+
+        
+/**
+ * Release the memory allocated by @ref uct_cuda_mem_alloc.
+ *
+ * @param [in] alloc_handle  Description of allocated memory, as returned from
+ *                           @ref uct_cuda_mem_alloc
+ */
+void uct_cuda_mem_free(uct_cuda_copy_alloc_handle_t alloc_handle);
+
 #endif
