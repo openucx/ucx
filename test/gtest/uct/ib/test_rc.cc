@@ -181,7 +181,6 @@ UCS_TEST_P(test_rc_mlx5_psn, path_mtu_from_rc_qp)
 
     EXPECT_EQ(IBV_MTU_4096, local_iface->config.path_mtu);
     EXPECT_EQ(IBV_MTU_512, peer_iface->config.path_mtu);
-    EXPECT_EQ(511, txwq()->path_mtu_mask);
     EXPECT_EQ(9, txwq()->path_mtu_shift);
 }
 

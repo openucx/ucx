@@ -461,7 +461,6 @@ uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(mtu <= UINT16_MAX);
     ucs_assert(ucs_is_pow2(mtu));
 
-    txwq->path_mtu_mask  = mtu - 1;
     txwq->path_mtu_shift = ucs_ilog2(mtu);
 }
 
@@ -469,11 +468,14 @@ static UCS_F_ALWAYS_INLINE uint32_t
 uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
                         size_t message_length)
 {
+    uint32_t num_packets;
+
     ucs_assert(txwq->path_mtu_shift > 0);
 
-    return ucs_max((size_t)1,
-                   (message_length + txwq->path_mtu_mask) >>
-                           txwq->path_mtu_shift);
+    num_packets = (message_length + UCS_MASK(txwq->path_mtu_shift)) >>
+                  txwq->path_mtu_shift;
+    ucs_assert(num_packets > 0);
+    return num_packets;
 }
 
 static UCS_F_ALWAYS_INLINE void
