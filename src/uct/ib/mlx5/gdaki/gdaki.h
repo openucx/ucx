@@ -8,7 +8,6 @@
 
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/base/uct_iface.h>
-#include <uct/cuda/base/cuda_mem.h>
 #include <ucs/datastruct/mpool.h>
 
 #include <cuda.h>
@@ -31,7 +30,7 @@ typedef struct {
 
 typedef struct {
     void                    *gpu_mem;
-    uct_cuda_mem_t          cuda_mem;
+    CUdeviceptr             gpu_raw;
     struct mlx5dv_devx_umem *umem;
 } uct_rc_gdaki_channel_block_mem_t;
 
