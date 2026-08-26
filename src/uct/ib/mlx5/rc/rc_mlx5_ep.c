@@ -212,10 +212,10 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
+    uint32_t num_packets           = 0;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
     size_t wqe_size, i;
-    uint32_t num_packets = 0;
     uint8_t fm_ce_se, fence_flag;
     uint16_t sn, pi, res_count;
     uint64_t addr;
