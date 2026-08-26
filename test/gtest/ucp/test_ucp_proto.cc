@@ -60,10 +60,10 @@ protected:
                                                 uint8_t flag)
     {
         size_t count = 0;
-        ucp_rkey_config_t *rkey_config;
+        ucp_rkey_config_t **rkey_config_p;
 
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            count += !!(rkey_config->key.flags & flag);
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            count += !!((*rkey_config_p)->key.flags & flag);
         }
 
         return count;
@@ -175,8 +175,8 @@ protected:
         if (status != UCS_OK) {
             return nullptr;
         }
-        auto proto_select =
-                &ucs_array_elem(&worker()->rkey_config, rkey_cfg_index).proto_select;
+        auto proto_select = &ucs_array_elem(&worker()->rkey_config,
+                                            rkey_cfg_index)->proto_select;
 
         ucp_proto_select_param_init(
                 &select_param, UCP_OP_ID_RNDV_RECV, 0,
@@ -245,7 +245,7 @@ protected:
         }
 
         proto_select = &ucs_array_elem(&worker()->rkey_config,
-                                       rkey_cfg_index).proto_select;
+                                       rkey_cfg_index)->proto_select;
         ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_SEND, 0,
                                     rndv_op_flag, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
@@ -342,8 +342,8 @@ protected:
         if (status != UCS_OK) {
             return nullptr;
         }
-        proto_select =
-                &ucs_array_elem(&worker()->rkey_config, rkey_cfg_index).proto_select;
+        proto_select = &ucs_array_elem(&worker()->rkey_config,
+                                       rkey_cfg_index)->proto_select;
         ucp_proto_select_param_init(&select_param, op_id, 0, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
         select_elem = ucp_proto_select_lookup_slow(
@@ -386,8 +386,9 @@ protected:
         }
 
         key.param    = remote_proto_config->select_param;
-        proto_select = &ucs_array_elem(&worker()->rkey_config,
-                                       remote_proto_config->rkey_cfg_index).proto_select;
+        proto_select = &ucs_array_elem(
+                                &worker()->rkey_config,
+                                remote_proto_config->rkey_cfg_index)->proto_select;
         EXPECT_NE(kh_end(proto_select->hash),
                   kh_get(ucp_proto_select_hash, proto_select->hash, key.u64));
     }
