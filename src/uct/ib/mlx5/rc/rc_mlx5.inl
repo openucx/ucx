@@ -456,14 +456,10 @@ static UCS_F_ALWAYS_INLINE uint32_t
 uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
                         size_t message_length)
 {
-    uint32_t num_packets;
-
     ucs_assert(txwq->path_mtu_shift > 0);
 
-    num_packets = (message_length + txwq->path_mtu_mask) >>
-                  txwq->path_mtu_shift;
-    ucs_assert(num_packets > 0);
-    return num_packets;
+    return ucs_max(1u, (message_length + txwq->path_mtu_mask) >>
+                       txwq->path_mtu_shift);
 }
 
 static UCS_F_ALWAYS_INLINE void
