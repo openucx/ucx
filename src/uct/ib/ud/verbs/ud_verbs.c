@@ -55,6 +55,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params)
 
     ucs_trace_func("");
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super, params);
+    memset(&self->peer_address, 0, sizeof(self->peer_address));
     self->ah = NULL;
     return UCS_OK;
 }
@@ -663,8 +664,6 @@ int uct_ud_verbs_ep_is_connected(const uct_ep_h tl_ep,
                                         ep->peer_address.dest_qpn)) {
         return 0;
     }
-
-    ucs_assert(ep->ah != NULL);
 
     /* Compare the resolved peer identity (LID/GID) directly, same as
      * UD mlx5 does with its av/grh_av - no AH pointer/cache lookup

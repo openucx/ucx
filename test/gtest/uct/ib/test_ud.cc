@@ -978,6 +978,8 @@ UCS_TEST_P(test_ud_verbs_is_connected, mismatched_device_addr)
                          UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
     params.device_addr = (uct_device_addr_t*)dev_addr.data();
     params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
+    /* Not in field_mask, kept non-NULL to avoid a Coverity false positive. */
+    params.ep_addr     = (uct_ep_addr_t*)iface_addr.data();
 
     EXPECT_TRUE(uct_ep_is_connected(m_e1->ep(0), &params));
 
