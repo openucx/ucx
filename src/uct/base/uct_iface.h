@@ -1048,7 +1048,7 @@ ucs_log_level_t uct_base_iface_failure_log_level(uct_base_iface_t *iface,
                                                  ucs_status_t err_handler_status,
                                                  ucs_status_t status)
 {
-    if (err_handler_status != UCS_OK) {
+    if (UCS_STATUS_IS_ERR(err_handler_status)) {
         return UCS_LOG_LEVEL_FATAL;
     } else if ((status == UCS_ERR_ENDPOINT_TIMEOUT) ||
                (status == UCS_ERR_CONNECTION_RESET)) {

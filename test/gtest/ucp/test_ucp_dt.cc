@@ -323,8 +323,10 @@ protected:
 
         m_remote = {};
         m_remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS;
         m_remote.remote_addrs = m_remote_addrs.data();
+        m_remote.lengths      = m_lengths.data();
         m_remote.rkeys        = m_rkeys.data();
 
         ucp_request_param_t param = {};
