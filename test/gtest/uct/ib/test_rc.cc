@@ -196,6 +196,9 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 
     uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
