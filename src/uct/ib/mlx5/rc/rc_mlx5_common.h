@@ -268,6 +268,13 @@ void uct_rc_mlx5_op_info_fill_rma_zcopy(
         size_t wqe_size, uct_ep_operation_t operation,
         uct_rc_mlx5_op_callback_data_t *callback_data);
 
+ucs_status_t
+uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+                         uct_rc_iface_send_op_t *op,
+                         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+                         int *skip_p,
+                         uct_rc_mlx5_op_callback_data_t *callback_data);
+
 static UCS_F_ALWAYS_INLINE int
 uct_rc_mlx5_mp_hash_equal(uct_rc_mlx5_mp_hash_key_t key1,
                           uct_rc_mlx5_mp_hash_key_t key2)

@@ -97,6 +97,76 @@ void uct_rc_mlx5_op_info_fill_rma_zcopy(
     info->operation   = operation;
 }
 
+static void
+uct_rc_mlx5_op_info_fill_get_bcopy(uct_ep_op_info_t *info,
+                                   uct_rc_iface_send_op_t *op,
+                                   const struct mlx5_wqe_raddr_seg *raddr)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
+                                                    uct_rc_iface_send_desc_t);
+
+    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
+    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+
+    info->field_mask                    |= UCT_EP_OP_INFO_FIELD_OPERATION;
+    info->operation                      = UCT_EP_OP_GET_BCOPY;
+    info->rma.field_mask                |=
+            UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK;
+    info->rma.payload.unpack.unpack_cb   = desc->unpack_cb;
+    info->rma.payload.unpack.arg         = op->unpack_arg;
+    info->rma.payload.unpack.length      = op->length;
+}
+
+static ucs_status_t uct_rc_mlx5_op_info_fill_get(
+        uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_ctrl_seg *ctrl,
+        size_t wqe_size, uct_rc_mlx5_op_callback_data_t *callback_data)
+{
+    const struct mlx5_wqe_raddr_seg *raddr;
+
+    ucs_assert(wqe_size >= (sizeof(*ctrl) + sizeof(*raddr)));
+
+    raddr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                      (void*)(ctrl + 1));
+    if ((op != NULL) &&
+        ((op->handler == uct_rc_ep_get_bcopy_handler) ||
+         (op->handler == uct_rc_ep_get_bcopy_handler_no_completion))) {
+        uct_rc_mlx5_op_info_fill_get_bcopy(info, op, raddr);
+        return UCS_OK;
+    }
+
+    if ((op == NULL) ||
+        (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
+        uct_rc_mlx5_op_info_fill_rma_zcopy(
+                info, txwq, op, raddr, wqe_size, UCT_EP_OP_GET_ZCOPY,
+                callback_data);
+        return UCS_OK;
+    }
+
+    ucs_diag("unsupported get op %p handler %s", op,
+             ucs_debug_get_symbol_name((void*)op->handler));
+    return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t
+uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+                         uct_rc_iface_send_op_t *op,
+                         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+                         int *skip_p,
+                         uct_rc_mlx5_op_callback_data_t *callback_data)
+{
+    *skip_p = 0;
+
+    switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
+    case MLX5_OPCODE_RDMA_READ:
+        return uct_rc_mlx5_op_info_fill_get(info, txwq, op, ctrl, wqe_size,
+                                            callback_data);
+    default:
+        ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
