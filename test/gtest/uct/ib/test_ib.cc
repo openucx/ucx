@@ -1145,6 +1145,8 @@ UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, non_equal_mtu,
 UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);
 
 
+/* Also creates connected entities for the relevant transports, exercising
+ * their AH create/destroy path. */
 class test_uct_ib_ah_cache : public test_uct_ib {
 public:
     uct_ib_iface_t *ib_iface()
@@ -1170,6 +1172,11 @@ public:
     {
         return uct_ib_iface_create_ah(ib_iface(), ah_attr, "test", ah_p);
     }
+
+    void release_ah(struct ibv_ah *ah)
+    {
+        uct_ib_iface_release_ah(ib_iface(), ah);
+    }
 };
 
 UCS_TEST_P(test_uct_ib_ah_cache, ttl_inf_reuses_ah)
@@ -1180,6 +1187,8 @@ UCS_TEST_P(test_uct_ib_ah_cache, ttl_inf_reuses_ah)
     ASSERT_UCS_OK(create_ah(&ah_attr, &ah1));
     ASSERT_UCS_OK(create_ah(&ah_attr, &ah2));
     EXPECT_EQ(ah1, ah2);
+    release_ah(ah1);
+    release_ah(ah2);
 }
 
 UCS_TEST_P(test_uct_ib_ah_cache, ttl_zero_disables_cache, "IB_AH_CACHE_TTL=0")
@@ -1190,6 +1199,8 @@ UCS_TEST_P(test_uct_ib_ah_cache, ttl_zero_disables_cache, "IB_AH_CACHE_TTL=0")
     ASSERT_UCS_OK(create_ah(&ah_attr, &ah1));
     ASSERT_UCS_OK(create_ah(&ah_attr, &ah2));
     EXPECT_NE(ah1, ah2);
+    release_ah(ah1);
+    release_ah(ah2);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_ah_cache);

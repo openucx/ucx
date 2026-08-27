@@ -1121,6 +1121,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                 "ep->dci: %u dcis length: %u", ep->dci,
                 ucs_array_length(&iface->tx.dcis));
 
+    /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
     if (fc_req->sender.payload.is_global) {
         uct_ib_iface_fill_ah_attr_from_gid_lid(
                 ib_iface, fc_req->lid,
