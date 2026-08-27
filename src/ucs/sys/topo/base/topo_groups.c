@@ -188,35 +188,32 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
                            ucs_topo_groups_sys_dev_array_t *nics)
 {
     char fw_ver[UCS_TOPO_GROUPS_FW_VER_MAX];
-    uint16_t vendor_id, device_id;
-    ucs_sys_device_t sys_dev;
+    ucs_topo_sys_device_info_t *device;
+    ucs_sys_device_t *sys_dev;
+    ucs_sys_pci_id_t *pci_id;
     ucs_status_t status;
-    size_t i;
 
     ucs_log_indent(1);
 
-    for (i = 0; i < ucs_array_length(nics); ++i) {
-        sys_dev = ucs_array_elem(nics, i);
+    ucs_array_for_each(sys_dev, nics) {
+        device = &devices[*sys_dev];
+        pci_id = &device->pci_id;
 
         ucs_log_indent(-1);
 
         ucs_trace("cx9_filter: processing network device " UCS_SYS_BUS_ID_FMT,
-                  UCS_SYS_BUS_ID_ARG(&devices[sys_dev].bus_id));
+                  UCS_SYS_BUS_ID_ARG(&device->bus_id));
 
         ucs_log_indent(1);
 
-        /* TODO: Read directly from devices[sys_dev].pci_id when available. */
-        vendor_id = UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID;
-        device_id = UCS_TOPO_GROUPS_MLX5_VF_DEVICE_ID;
-
-        if (vendor_id == UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID) {
-            if (device_id == UCS_TOPO_GROUPS_CX9_DEVICE_ID) {
+        if (pci_id->vendor == UCS_SYS_PCI_ID_VENDOR_MELLANOX) {
+            if (pci_id->device == UCS_TOPO_GROUPS_CX9_DEVICE_ID) {
                 ucs_trace("cx9 device found (device id)");
                 continue;
-            } else if (device_id == UCS_TOPO_GROUPS_MLX5_VF_DEVICE_ID) {
+            } else if (pci_id->device == UCS_TOPO_GROUPS_MLX5_VF_DEVICE_ID) {
                 ucs_trace("mlx5 VF device found");
-                status = ucs_topo_groups_read_ib_fw_ver(
-                        &devices[sys_dev].bus_id, fw_ver, sizeof(fw_ver));
+                status = ucs_topo_groups_read_ib_fw_ver(&device->bus_id, fw_ver,
+                                                        sizeof(fw_ver));
                 if (status == UCS_OK) {
                     if (strncmp(fw_ver, "82.", 3) == 0) {
                         ucs_trace("cx9 device found (firmware version)");
@@ -231,12 +228,11 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
             }
         }
 
-        /* TODO: Use UCS_SYS_PCI_ID_FMT when it's merged. */
         ucs_trace("ignoring network device " UCS_SYS_BUS_ID_FMT
-                  " (pci id %04x:%04x)",
-                  UCS_SYS_BUS_ID_ARG(&devices[sys_dev].bus_id), vendor_id,
-                  device_id);
-        ucs_array_elem(nics, i) = UCS_SYS_DEVICE_ID_UNKNOWN;
+                  " (pci id " UCS_SYS_PCI_ID_FMT ")",
+                  UCS_SYS_BUS_ID_ARG(&device->bus_id),
+                  UCS_SYS_PCI_ID_ARG(pci_id));
+        *sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
     ucs_log_indent(-1);
@@ -483,7 +479,8 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
 
 out:
     ucs_debug("initialized topo groups of type %s with %zu groups",
-              ucs_topo_groups_type_str(groups.type), ucs_array_length(&groups.groups));
+              ucs_topo_groups_type_str(groups.type),
+              ucs_array_length(&groups.groups));
 
     *groups_p = groups;
     return UCS_OK;
