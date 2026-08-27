@@ -168,6 +168,92 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_GE(ucs_topo_num_devices(), 2);
 }
 
+UCS_TEST_F(test_topo, pci_id_equal) {
+    const ucs_sys_pci_id_t pci_id0 = {0x15b3, 0x101b};
+    const ucs_sys_pci_id_t pci_id1 = {0x15b3, 0x101b};
+    const ucs_sys_pci_id_t pci_id2 = {0xabcd, 0x101b};
+    const ucs_sys_pci_id_t pci_id3 = {0x15b3, 0xabcd};
+    const ucs_sys_pci_id_t pci_id4 = {0xdead, 0xbeef};
+
+    EXPECT_TRUE(ucs_topo_pci_id_equal(&pci_id0, &pci_id0));
+    EXPECT_TRUE(ucs_topo_pci_id_equal(&pci_id0, &pci_id1));
+    EXPECT_FALSE(ucs_topo_pci_id_equal(&pci_id0, &pci_id2));
+    EXPECT_FALSE(ucs_topo_pci_id_equal(&pci_id0, &pci_id3));
+    EXPECT_FALSE(ucs_topo_pci_id_equal(&pci_id0, &pci_id4));
+}
+
+UCS_TEST_F(test_topo, pci_id) {
+    static const char *pci_devices_path = "/sys/bus/pci/devices";
+    std::string bdf;
+    long expected_vendor, expected_device;
+    ucs_sys_device_t sys_dev;
+    ucs_sys_pci_id_t pci_id;
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir(pci_devices_path);
+    if (dir == NULL) {
+        UCS_TEST_SKIP_R("PCI devices sysfs directory is unavailable");
+    }
+
+    /* Find a device with a valid vendor and device ID */
+    while ((entry = readdir(dir)) != NULL) {
+        const std::string sysfs_path = std::string(pci_devices_path) + "/" +
+                                       entry->d_name;
+
+        if ((ucs_read_file_number(&expected_vendor, 1, "%s/vendor",
+                                  sysfs_path.c_str()) == UCS_OK) &&
+            (ucs_read_file_number(&expected_device, 1, "%s/device",
+                                  sysfs_path.c_str()) == UCS_OK)) {
+            bdf = entry->d_name;
+            break;
+        }
+    }
+
+    closedir(dir);
+    if (bdf.empty()) {
+        UCS_TEST_SKIP_R("No PCI device with vendor and device IDs found");
+    }
+
+    sys_dev = register_device("pci_device", bdf);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
+    EXPECT_EQ(expected_vendor, pci_id.vendor);
+    EXPECT_EQ(expected_device, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_nonexistent_bdf) {
+    static const char *bdf = "ffff:ff:ff.1";
+    ucs_sys_device_t sys_dev;
+    ucs_sys_pci_id_t pci_id;
+
+    /* NOTE: Nonexistent BDF is still registered as a sys_dev */
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bdf_name(bdf, &sys_dev));
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_unknown_sys_dev) {
+    const ucs_sys_pci_id_t pci_id = ucs_topo_sys_device_get_pci_id(
+            UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_invalid_sys_dev) {
+    const unsigned num_devices = ucs_topo_num_devices();
+
+    ASSERT_LT(num_devices, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const ucs_sys_pci_id_t pci_id = ucs_topo_sys_device_get_pci_id(
+            static_cast<ucs_sys_device_t>(num_devices));
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
+}
+
 UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     static const uintptr_t user_value1 = 17;
     static const uintptr_t user_value2 = 42;
