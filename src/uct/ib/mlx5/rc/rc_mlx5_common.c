@@ -83,12 +83,15 @@ void uct_rc_mlx5_op_info_fill_rma_zcopy(
     header_size = sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(*raddr);
     ucs_assert(wqe_size >= header_size);
 
-    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1,
-                                       wqe_size - header_size, &iovcnt);
+    if (wqe_size > header_size) {
+        uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1,
+                                           wqe_size - header_size, &iovcnt);
 
-    info->rma.payload.zcopy.iov    = callback_data->iov;
-    info->rma.payload.zcopy.iovcnt = iovcnt;
-    info->rma.field_mask          |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+        info->rma.payload.zcopy.iov    = callback_data->iov;
+        info->rma.payload.zcopy.iovcnt = iovcnt;
+        info->rma.field_mask          |=
+                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+    }
 
     uct_rc_mlx5_op_info_try_fill_comp(info, op);
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
