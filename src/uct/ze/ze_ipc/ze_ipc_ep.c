@@ -228,7 +228,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uct_iov_t *iov,
 
     /* Use cache to map IPC handle */
     status = uct_ze_ipc_map_memhandle(key, iface->ze_context, remote_device,
-                                      &mapped_addr, &local_fd);
+                                      NULL, &mapped_addr, &local_fd);
     if (status != UCS_OK) {
         ucs_error("ze_ipc_ep: uct_ze_ipc_map_memhandle failed");
         return status;

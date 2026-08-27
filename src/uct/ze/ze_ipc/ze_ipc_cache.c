@@ -55,6 +55,11 @@ typedef struct uct_ze_ipc_remote_cache {
 static uct_ze_ipc_remote_cache_t uct_ze_ipc_remote_cache;
 
 
+static ucs_status_t
+uct_ze_ipc_create_cache_with_ops(uct_ze_ipc_cache_t **cache, const char *name,
+                                 const uct_ze_ipc_cache_ops_t *ops);
+
+
 static ucs_pgt_dir_t *
 uct_ze_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
@@ -108,10 +113,11 @@ static ucs_status_t uct_ze_ipc_close_mapping(ze_context_handle_t ze_context,
 
 
 static ucs_status_t
-uct_ze_ipc_close_memhandle(uct_ze_ipc_cache_region_t *region)
+uct_ze_ipc_close_memhandle(uct_ze_ipc_cache_t *cache,
+                           uct_ze_ipc_cache_region_t *region)
 {
-    return uct_ze_ipc_close_mapping(region->ze_context, region->mapped_addr,
-                                    region->dup_fd);
+    return cache->ops.close(region->ze_context, region->mapped_addr,
+                            region->dup_fd);
 }
 
 
@@ -129,7 +135,7 @@ static void uct_ze_ipc_cache_region_put(uct_ze_ipc_cache_t *cache,
         return;
     }
 
-    uct_ze_ipc_close_memhandle(region);
+    uct_ze_ipc_close_memhandle(cache, region);
     ucs_free(region);
 }
 
@@ -158,7 +164,7 @@ static void uct_ze_ipc_cache_purge(uct_ze_ipc_cache_t *cache)
     ucs_pgtable_purge(&cache->pgtable, uct_ze_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        uct_ze_ipc_close_memhandle(region);
+        uct_ze_ipc_close_memhandle(cache, region);
         ucs_free(region);
     }
 
@@ -168,7 +174,7 @@ static void uct_ze_ipc_cache_purge(uct_ze_ipc_cache_t *cache)
      * because the caller must be quiesced - see uct_ze_ipc_purge_cache_by_context() */
     ucs_list_for_each_safe(region, tmp, &cache->orphan_list, list) {
         ucs_list_del(&region->list);
-        uct_ze_ipc_close_memhandle(region);
+        uct_ze_ipc_close_memhandle(cache, region);
         ucs_free(region);
     }
 
@@ -218,6 +224,12 @@ static ucs_status_t uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
 }
 
 
+static const uct_ze_ipc_cache_ops_t uct_ze_ipc_cache_default_ops = {
+    .open  = uct_ze_ipc_open_memhandle,
+    .close = uct_ze_ipc_close_mapping
+};
+
+
 static void uct_ze_ipc_cache_invalidate_regions(uct_ze_ipc_cache_t *cache,
                                                 void *from, void *to)
 {
@@ -245,9 +257,10 @@ static void uct_ze_ipc_cache_invalidate_regions(uct_ze_ipc_cache_t *cache,
 }
 
 
-static ucs_status_t uct_ze_ipc_get_remote_cache(pid_t pid,
-                                                ze_context_handle_t ze_context,
-                                                uct_ze_ipc_cache_t **cache)
+static ucs_status_t
+uct_ze_ipc_get_remote_cache(pid_t pid, ze_context_handle_t ze_context,
+                            const uct_ze_ipc_cache_ops_t *ops,
+                            uct_ze_ipc_cache_t **cache)
 {
     ucs_status_t status = UCS_OK;
     char target_name[64];
@@ -267,7 +280,9 @@ static ucs_status_t uct_ze_ipc_get_remote_cache(pid_t pid,
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_snprintf_safe(target_name, sizeof(target_name), "dest:%d:%p",
                           key.pid, key.ze_context);
-        status = uct_ze_ipc_create_cache(cache, target_name);
+        status = uct_ze_ipc_create_cache_with_ops(
+                cache, target_name,
+                (ops == NULL) ? &uct_ze_ipc_cache_default_ops : ops);
         if (status != UCS_OK) {
             kh_del(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash, khiter);
             ucs_error("could not create ze ipc cache: %s",
@@ -299,7 +314,7 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
     uct_ze_ipc_cache_region_t *region;
     int orphaned;
 
-    status = uct_ze_ipc_get_remote_cache(pid, ze_context, &cache);
+    status = uct_ze_ipc_get_remote_cache(pid, ze_context, NULL, &cache);
     if (status != UCS_OK) {
         return status;
     }
@@ -345,7 +360,7 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
             }
         }
 
-        status = uct_ze_ipc_close_memhandle(region);
+        status = uct_ze_ipc_close_memhandle(cache, region);
         ucs_free(region);
     }
 
@@ -355,9 +370,11 @@ ucs_status_t uct_ze_ipc_unmap_memhandle(pid_t pid, uintptr_t address,
 
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
-                 (key, ze_context, ze_device, mapped_addr, dup_fd),
+                 (key, ze_context, ze_device, ops, mapped_addr, dup_fd),
                  uct_ze_ipc_key_t *key, ze_context_handle_t ze_context,
-                 ze_device_handle_t ze_device, void **mapped_addr, int *dup_fd)
+                 ze_device_handle_t ze_device,
+                 const uct_ze_ipc_cache_ops_t *ops, void **mapped_addr,
+                 int *dup_fd)
 {
     uct_ze_ipc_cache_t *cache;
     ucs_status_t status;
@@ -365,7 +382,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     uct_ze_ipc_cache_region_t *region;
     int ret;
 
-    status = uct_ze_ipc_get_remote_cache(key->pid, ze_context, &cache);
+    status = uct_ze_ipc_get_remote_cache(key->pid, ze_context, ops, &cache);
     if (status != UCS_OK) {
         return status;
     }
@@ -414,8 +431,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
         uct_ze_ipc_cache_region_put(cache, region);
     }
 
-    status = uct_ze_ipc_open_memhandle(key, ze_context, ze_device, mapped_addr,
-                                       dup_fd);
+    status = cache->ops.open(key, ze_context, ze_device, mapped_addr, dup_fd);
     if (ucs_unlikely(status != UCS_OK)) {
         goto err;
     }
@@ -466,7 +482,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_ze_ipc_map_memhandle,
     return UCS_OK;
 
 err_close:
-    uct_ze_ipc_close_mapping(ze_context, *mapped_addr, *dup_fd);
+    cache->ops.close(ze_context, *mapped_addr, *dup_fd);
     *mapped_addr = NULL;
     *dup_fd      = -1;
 err:
@@ -475,12 +491,15 @@ err:
 }
 
 
-ucs_status_t
-uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache, const char *name)
+static ucs_status_t
+uct_ze_ipc_create_cache_with_ops(uct_ze_ipc_cache_t **cache, const char *name,
+                                 const uct_ze_ipc_cache_ops_t *ops)
 {
     ucs_status_t status;
     uct_ze_ipc_cache_t *cache_desc;
     int ret;
+
+    ucs_assert((ops != NULL) && (ops->open != NULL) && (ops->close != NULL));
 
     cache_desc = ucs_malloc(sizeof(uct_ze_ipc_cache_t), "uct_ze_ipc_cache_t");
     if (cache_desc == NULL) {
@@ -509,6 +528,7 @@ uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache, const char *name)
     }
 
     ucs_list_head_init(&cache_desc->orphan_list);
+    cache_desc->ops = *ops;
 
     *cache = cache_desc;
     return UCS_OK;
@@ -518,6 +538,14 @@ err_destroy_rwlock:
 err:
     free(cache_desc);
     return status;
+}
+
+
+ucs_status_t
+uct_ze_ipc_create_cache(uct_ze_ipc_cache_t **cache, const char *name)
+{
+    return uct_ze_ipc_create_cache_with_ops(cache, name,
+                                            &uct_ze_ipc_cache_default_ops);
 }
 
 
