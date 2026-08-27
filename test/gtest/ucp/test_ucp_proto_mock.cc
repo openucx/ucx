@@ -558,25 +558,16 @@ protected:
     }
 
     void
-    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                 ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN)
+    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         /* Prepare receiver data handler */
         mem_buffer recv_buf(size, mem_type);
-        ucs::handle<ucp_mem_h, ucp_context_h> recv_memh;
-        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            recv_memh = mem_map(receiver(), recv_buf);
-            recv_memh->sys_dev = sys_dev;
-        }
-
         struct ctx_t {
             mem_buffer                     *buf;
             bool                            received;
             ucp_worker_h                    worker;
             ucp_am_recv_data_nbx_callback_t cmpl;
-            ucp_mem_h                       memh;
-        } ctx = {&recv_buf, false, receiver().worker(), nullptr,
-                 recv_memh.get()};
+        } ctx = {&recv_buf, false, receiver().worker()};
 
         ctx.cmpl = [](void *req, ucs_status_t status, size_t len, void *arg) {
             ((ctx_t *)arg)->received = true;
@@ -599,10 +590,6 @@ protected:
                                   UCP_OP_ATTR_FIELD_USER_DATA;
             params.user_data    = arg;
             params.cb.recv_am   = ctx->cmpl;
-            if (ctx->memh != nullptr) {
-                params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-                params.memh          = ctx->memh;
-            }
 
             auto sptr = ucp_am_recv_data_nbx(ctx->worker, data, ctx->buf->ptr(),
                                              len, &params);
@@ -624,15 +611,7 @@ protected:
 
         /* Send data */
         mem_buffer buf(size, mem_type);
-        ucs::handle<ucp_mem_h, ucp_context_h> send_memh;
         ucp_request_param_t param = {};
-        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            send_memh = mem_map(sender(), buf);
-            send_memh->sys_dev = sys_dev;
-            param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
-            param.memh         = send_memh;
-        }
-
         auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
                                     buf.size(), &param);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
@@ -1387,17 +1366,8 @@ public:
         add_mock_iface("mock_1:1", iface_attr_func);
         test_ucp_proto_mock::init();
 
-        s_first_nic_sys_dev = get_mock_sys_dev_by_name("mock_0:1");
-        s_frag_sys_dev      = add_mock_sys_dev(0, "mock_frag");
-        s_user_sys_dev      = add_mock_sys_dev(1, "mock_user");
-
-        const ucs_sys_topo_ops_t topo_ops = {
-            .get_distance                   = get_distance,
-            .get_memory_distance            = get_memory_distance,
-            .get_memory_distance_for_cpuset = get_memory_distance_for_cpuset
-        };
-        ASSERT_UCS_OK(ucs_sys_topo_provider_push(&topo_ops));
-        m_topo_provider_pushed = true;
+        s_user_sys_dev = add_mock_sys_dev(0, "mock_user");
+        s_frag_sys_dev = add_mock_sys_dev(1, "mock_frag");
 
         set_frag_sys_dev(sender());
         set_frag_sys_dev(receiver());
@@ -1405,55 +1375,70 @@ public:
 
     virtual void cleanup() override
     {
-        if (m_topo_provider_pushed) {
-            ucs_sys_topo_provider_pop();
-            m_topo_provider_pushed = false;
+        if (s_user_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
+                    s_user_sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN));
+        }
+        if (s_frag_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
+                    s_frag_sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN));
         }
 
-        s_first_nic_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        s_frag_sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-        s_user_sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+        s_frag_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        s_user_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         test_ucp_proto_mock::cleanup();
     }
 
 protected:
-    void check_mtype_uses_frag_sys_dev(const char *operation_desc)
+    void check_mtype_uses_frag_sys_dev(ucp_operation_id_t op_id,
+                                       const char *proto_name)
     {
-        static constexpr size_t msg_size = UCS_MBYTE;
+        static constexpr size_t msg_size = UCS_KBYTE;
+        uint8_t remote                   = 0;
+        auto memh                        = mem_map(receiver(), &remote,
+                                                   sizeof(remote));
+        auto rkey_packed                 = rkey_pack(receiver(), memh);
+        auto rkey                        = rkey_unpack(sender().ep(),
+                                                       rkey_packed);
+        ucp_worker_h worker              = sender().worker();
+        ucp_worker_cfg_index_t ep_cfg_index =
+                ep_config_index(sender());
+        ucp_rkey_config_t *rkey_config = &ucs_array_elem(
+                &worker->rkey_config, rkey->cfg_index);
+        ucp_memory_info_t mem_info;
+        ucp_proto_select_param_t select_param;
+        const ucp_proto_select_elem_t *select_elem;
+        const ucp_proto_threshold_elem_t *threshold;
+        ucp_proto_query_attr_t attr;
+        unsigned user_ordinal, frag_ordinal;
 
         ASSERT_NE(s_user_sys_dev, s_frag_sys_dev);
-        ASSERT_NE(s_first_nic_sys_dev, s_frag_sys_dev);
-        send_recv_am(msg_size, UCS_MEMORY_TYPE_CUDA_MANAGED, s_user_sys_dev);
+        user_ordinal = ucs_topo_sys_device_get_bdf_class_ordinal(
+                s_user_sys_dev);
+        frag_ordinal = ucs_topo_sys_device_get_bdf_class_ordinal(
+                s_frag_sys_dev);
+        ASSERT_NE(UCS_SYS_DEVICE_ORDINAL_INVALID, user_ordinal);
+        ASSERT_NE(UCS_SYS_DEVICE_ORDINAL_INVALID, frag_ordinal);
+        ASSERT_NE(user_ordinal % 2, frag_ordinal % 2);
 
-        const ucp_ep_config_t *ep_config = ucp_worker_ep_config(
-                sender().worker(), ep_config_index(sender()));
-        ucp_proto_select_key_t select_key;
-        ucp_proto_select_elem_t select_elem;
-        bool found = false;
+        mem_info.type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        mem_info.sys_dev = s_user_sys_dev;
+        mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(
+                worker, &rkey_config->proto_select, 1, ep_cfg_index,
+                rkey->cfg_index, &select_param);
+        ASSERT_NE(nullptr, select_elem);
 
-        kh_foreach(ep_config->proto_select.hash, select_key.u64, select_elem, {
-            if ((select_key.param.op_id_flags == UCP_OP_ID_AM_SEND) &&
-                (select_key.param.op_attr == 0) &&
-                (select_key.param.dt_class == UCP_DATATYPE_CONTIG) &&
-                (select_key.param.mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) &&
-                (select_key.param.sys_dev == s_user_sys_dev)) {
-                const ucp_proto_threshold_elem_t *threshold =
-                        ucp_proto_thresholds_search_slow(select_elem.thresholds,
-                                                         msg_size);
-                ucp_proto_query_attr_t attr;
-
-                ASSERT_STREQ("am/rndv", threshold->proto_config.proto->name);
-                ucp_proto_config_query(sender().worker(),
-                                       &threshold->proto_config, msg_size,
-                                       &attr);
-                EXPECT_NE(std::string::npos,
-                          std::string(attr.desc).find(operation_desc));
-                EXPECT_STREQ("rc_mlx5/mock_1:1", attr.config);
-                found = true;
-            }
-        })
-
-        EXPECT_TRUE(found);
+        threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                      msg_size);
+        ASSERT_STREQ(proto_name, threshold->proto_config.proto->name);
+        ucp_proto_config_query(worker, &threshold->proto_config, msg_size,
+                               &attr);
+        EXPECT_STREQ((frag_ordinal % 2) ? "rc_mlx5/mock_1:1" :
+                                        "rc_mlx5/mock_0:1",
+                     attr.config);
     }
 
 private:
@@ -1470,6 +1455,8 @@ private:
 
         EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
         EXPECT_UCS_OK(ucs_topo_sys_device_set_name(sys_dev, name, 10));
+        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
+                sys_dev, UCS_TOPO_DEVICE_CLASS_ACC));
         return sys_dev;
     }
 
@@ -1484,41 +1471,10 @@ private:
         e.ucph()->alloc_md[UCS_MEMORY_TYPE_HOST].sys_dev = s_frag_sys_dev;
     }
 
-    static ucs_status_t get_distance(ucs_sys_device_t device1,
-                                     ucs_sys_device_t device2,
-                                     ucs_sys_dev_distance_t *distance)
-    {
-        *distance = ucs_topo_default_distance;
-        if (((device1 == s_frag_sys_dev) &&
-             (device2 == s_first_nic_sys_dev)) ||
-            ((device2 == s_frag_sys_dev) &&
-             (device1 == s_first_nic_sys_dev))) {
-            distance->latency = 1e-3;
-        }
-        return UCS_OK;
-    }
-
-    static void
-    get_memory_distance(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
-    {
-        *distance = ucs_topo_default_distance;
-    }
-
-    static void
-    get_memory_distance_for_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
-                                   ucs_sys_dev_distance_t *distance)
-    {
-        *distance = ucs_topo_default_distance;
-    }
-
-    bool m_topo_provider_pushed{false};
-    static ucs_sys_device_t s_first_nic_sys_dev;
     static ucs_sys_device_t s_frag_sys_dev;
     static ucs_sys_device_t s_user_sys_dev;
 };
 
-ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_first_nic_sys_dev =
-        UCS_SYS_DEVICE_ID_UNKNOWN;
 ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_frag_sys_dev =
         UCS_SYS_DEVICE_ID_UNKNOWN;
 ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_user_sys_dev =
@@ -1529,7 +1485,7 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_uses_frag_sys_dev,
            "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K",
            "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
-    check_mtype_uses_frag_sys_dev("read from remote");
+    check_mtype_uses_frag_sys_dev(UCP_OP_ID_RNDV_RECV, "rndv/get/mtype");
 }
 
 UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_uses_frag_sys_dev,
@@ -1537,7 +1493,7 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_uses_frag_sys_dev,
            "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K",
            "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
-    check_mtype_uses_frag_sys_dev("write to remote");
+    check_mtype_uses_frag_sys_dev(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_mtype_sys_dev, rcx_gpu,
