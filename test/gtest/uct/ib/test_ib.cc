@@ -1143,3 +1143,53 @@ UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, non_equal_mtu,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);
+
+
+class test_uct_ib_ah_cache : public test_uct_ib {
+public:
+    uct_ib_iface_t *ib_iface()
+    {
+        return ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    }
+
+    /* AH pointing back at m_e1's own port, so a real AH gets created */
+    struct ibv_ah_attr self_ah_attr()
+    {
+        uct_ib_iface_t *iface = ib_iface();
+        uint16_t lid          = uct_ib_iface_port_attr(iface)->lid;
+        struct ibv_ah_attr ah_attr;
+
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid,
+                                               &iface->gid_info.gid,
+                                               iface->gid_info.gid_index, 0,
+                                               &ah_attr);
+        return ah_attr;
+    }
+
+    ucs_status_t create_ah(struct ibv_ah_attr *ah_attr, struct ibv_ah **ah_p)
+    {
+        return uct_ib_iface_create_ah(ib_iface(), ah_attr, "test", ah_p);
+    }
+};
+
+UCS_TEST_P(test_uct_ib_ah_cache, ttl_inf_reuses_ah)
+{
+    struct ibv_ah_attr ah_attr = self_ah_attr();
+    struct ibv_ah *ah1, *ah2;
+
+    ASSERT_UCS_OK(create_ah(&ah_attr, &ah1));
+    ASSERT_UCS_OK(create_ah(&ah_attr, &ah2));
+    EXPECT_EQ(ah1, ah2);
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, ttl_zero_disables_cache, "IB_AH_CACHE_TTL=0")
+{
+    struct ibv_ah_attr ah_attr = self_ah_attr();
+    struct ibv_ah *ah1, *ah2;
+
+    ASSERT_UCS_OK(create_ah(&ah_attr, &ah1));
+    ASSERT_UCS_OK(create_ah(&ah_attr, &ah2));
+    EXPECT_NE(ah1, ah2);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_ah_cache);
