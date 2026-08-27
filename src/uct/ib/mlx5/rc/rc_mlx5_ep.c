@@ -793,8 +793,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
     if (status != UCS_OK) {
         ucs_trace("ep %p purge outstanding range (%u, %u) status %s", ep,
-                  ep->tx.wq.ft_ci, ep->tx.wq.prev_sw_pi,
-                  ucs_status_string(status));
+                  ep->tx.wq.ft_ci, ep->tx.wq.sw_pi, ucs_status_string(status));
 
         return status;
     }
