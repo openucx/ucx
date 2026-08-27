@@ -91,9 +91,7 @@ enum {
     uct_rc_ep_atomic_handler_##_num_bits##_be##_is_be
 
 #define UCT_RC_EP_MUST_BLOCK_SEND(_ep) \
-    (!(_ep)->in_pending && \
-     (!ucs_arbiter_group_is_empty(&(_ep)->arb_group) || \
-      (((_ep)->cq_reserve | (_ep)->txqp_reserve) != 0)))
+    (!(_ep)->in_pending && !ucs_arbiter_group_is_empty(&(_ep)->arb_group))
 
 #define UCT_RC_CHECK_PENDING_RET(_ep, _ret) \
     if (ucs_unlikely(UCT_RC_EP_MUST_BLOCK_SEND(_ep))) { \
