@@ -45,6 +45,11 @@ ucm_global_config_t ucm_global_opts = {
                                   UCS_BIT(UCM_MMAP_HOOK_BISTRO) |
 #endif
                                   UCS_BIT(UCM_MMAP_HOOK_RELOC),
+    .rocm_hook_modes            =
+#if UCM_BISTRO_HOOKS
+                                  UCS_BIT(UCM_MMAP_HOOK_BISTRO) |
+#endif
+                                  UCS_BIT(UCM_MMAP_HOOK_RELOC),
     .enable_dynamic_mmap_thresh = 1,
     .alloc_alignment            = 16,
     .dlopen_process_rpath       = 1,
