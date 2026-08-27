@@ -465,7 +465,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     if ((dt_iter->type.sgl.frag_offset != 0) ||
         !ucp_proto_put_sgl_elem_fits(lengths[start_index], max_frag_length)) {
         return ucp_proto_put_sgl_offload_send_frag(req, lpriv, max_frag_length,
-                                                  next_iter);
+                                                   next_iter);
     }
 
     uct_rkeys = ucs_alloc_on_stack(uct_rkeys_size, "uct_sgl_rkeys");
@@ -489,7 +489,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                 sgl_memhs[idx]->uct[md_index] :
                                 UCT_MEM_HANDLE_NULL;
         uct_rkeys[elem_count] = ucp_rkey_get_tl_rkey(sgl_rkeys[idx],
-                                                    rkey_index);
+                                                     rkey_index);
     }
 
     next_iter->offset               = start_index + elem_count;
