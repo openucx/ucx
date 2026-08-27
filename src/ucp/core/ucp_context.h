@@ -364,14 +364,14 @@ typedef struct ucp_tl_md {
     uct_md_resource_desc_t rsc;
 
     /**
-     * Memory domain attributes
-     */
-    uct_md_attr_v2_t       attr;
-
-    /**
      * Flags mask parameter for @ref uct_md_mkey_pack_v2
      */
     unsigned               pack_flags_mask;
+
+    /**
+     * Memory domain attributes
+     */
+    uct_md_attr_v2_t       attr;
 
     /**
      * Global VA memory handle

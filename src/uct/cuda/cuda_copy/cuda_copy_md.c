@@ -302,6 +302,8 @@ static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
     static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
     CUdriverProcAddressQueryResult sym_status;
+    ucs_status_t status;
+    unsigned ctx_flags;
     CUresult cu_err;
 
     if (cuda_cuCtxSetFlags_func ==
@@ -316,6 +318,17 @@ static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
     }
 
     if (cuda_cuCtxSetFlags_func != NULL) {
+        /* CU_CTX_SYNC_MEMOPS is sticky and context-wide, but cuCtxSetFlags()
+         * takes the context write-lock, which deadlocks a progress thread
+         * against an application thread inside cudaLaunchKernel(). This is the
+         * hazard described at the uct_cuda_copy_md_open() call site, which only
+         * covers the context that is current at MD open. Read the flag first
+         * and take the write-lock only when it still has to be set. */
+        status = UCT_CUDADRV_FUNC(cuCtxGetFlags(&ctx_flags), log_level);
+        if ((status == UCS_OK) && (ctx_flags & CU_CTX_SYNC_MEMOPS)) {
+            return UCS_OK;
+        }
+
         /* Synchronize future DMA operations for all memory types */
         UCT_CUDADRV_FUNC(cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS),
                          log_level);
