@@ -715,7 +715,8 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 0;
     }
 
-    if (ucs_netlink_route_matches(ndev_index, sa_remote, 1)) {
+    if (ucs_netlink_route_matches(ndev_index, sa_remote,
+                                  UCS_NETLINK_ROUTE_CHECK_RELAXED)) {
         return 1;
     }
 

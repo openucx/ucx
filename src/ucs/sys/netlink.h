@@ -14,6 +14,11 @@
 
 BEGIN_C_DECLS
 
+typedef enum {
+    UCS_NETLINK_ROUTE_CHECK_BEST,
+    UCS_NETLINK_ROUTE_CHECK_RELAXED
+} ucs_netlink_route_check_t;
+
 /**
  * Callback function for parsing individual netlink messages.
  *
@@ -77,15 +82,15 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
  *
  * @param [in]  if_index         Network interface index.
  * @param [in]  sa_remote        Pointer to the destination address.
- * @param [in]  relaxed_check    If nonzero, accept any non-default route and
- *                               accept a default route only if no better route
- *                               exists through another interface. Otherwise,
- *                               accept only a best route.
+ * @param [in]  route_check      When set to UCS_NETLINK_ROUTE_CHECK_RELAXED,
+ *                               accept any non-default route, or a default
+ *                               route if nothing better exists. Otherwise,
+ *                               accept only the best route.
  *
  * @return 1 if the route is accepted by the requested policy, or 0 otherwise.
  */
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
-                              int relaxed_check);
+                              ucs_netlink_route_check_t route_check);
 
 END_C_DECLS
 

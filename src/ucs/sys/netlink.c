@@ -375,17 +375,24 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
 }
 
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
-                              int relaxed_check)
+                              ucs_netlink_route_check_t route_check)
 {
     int netmask_len;
 
+    /* If there is no route to the destination through this interface, not even
+     * a default route, return 0. */
     if (!ucs_netlink_route_exists(if_index, sa_remote, &netmask_len)) {
         return 0;
     }
 
-    if (relaxed_check && (netmask_len > 0)) {
+    /* Relaxed mode accepts any matching non-default route. */
+    if ((route_check == UCS_NETLINK_ROUTE_CHECK_RELAXED) &&
+        (netmask_len > 0)) {
         return 1;
     }
 
+    /* Accept the route if it is the best match. In relaxed mode, this check is
+     * reached only for a default route, so the default is accepted only when
+     * no interface has a more specific route. */
     return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
 }
