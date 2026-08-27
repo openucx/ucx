@@ -305,10 +305,11 @@ ucp_wireup_pack_token_payload(ucp_ep_h ep, ucp_lane_map_t requested_lane_map,
     /* One length byte per lane of the TX section and of the RX section */
     size_t num_lengths    = ucs_popcount(provided_lane_map) +
                             ucs_popcount(requested_lane_map);
-    size_t payload_length = sizeof(ucp_wireup_msg_tokens_info_t) +
-                            num_lengths + address_length;
     ucp_wireup_msg_tokens_info_t *tokens_info;
+    size_t payload_length;
     void *payload, *ptr;
+
+    payload_length = sizeof(*tokens_info) + num_lengths + address_length;
 
     payload = ucs_malloc(payload_length, "wireup_lanes_addr_payload");
     if (payload == NULL) {

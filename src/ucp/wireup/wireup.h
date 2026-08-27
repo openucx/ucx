@@ -63,7 +63,7 @@ enum {
  * Minimal peer release version which understands the token trailer of the
  * LANES_ADDR messages. Older peers get the messages without any token.
  */
-#define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 23
+#define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
 /**
@@ -161,11 +161,11 @@ typedef struct ucp_wireup_msg {
 
 
 typedef struct ucp_wireup_msg_lanes_info_t {
-    /* Lanes the sender asked about, which are also the lanes the peer provided
-     * in the message being answered, so the RX tokens of the trailer belong to
-     * them. Empty in a REQUEST, which answers nothing. */
+    /* Lanes the sender asked about. Empty in a REQUEST, which answers nothing.
+     * When the token trailer is present, these are also the RX-token lanes. */
     ucp_lane_map_t         requested_lane_map;
-    /* Lanes whose addresses and TX tokens are carried here */
+    /* Lanes whose addresses are carried here. When the token trailer is
+     * present, these are also the TX-token lanes. */
     ucp_lane_map_t         provided_lane_map;
     /* @ref ucp_wireup_msg_tokens_info_t (only towards peers of release version
      * UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION and above), then packed addresses
@@ -303,19 +303,7 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     uint64_t request_id);
 
 
-/**
- * Measure one token section of a LANES_ADDR message, holding one length byte
- * per lane of @a lane_map followed by the tokens themselves.
- *
- * @param [in]  lane_map    Lanes the section describes, in ascending order.
- * @param [in]  section     Start of the section.
- * @param [in]  avail       Bytes left in the message from @a section on.
- * @param [out] consumed_p  Size of the section.
- *
- * @return UCS_ERR_MESSAGE_TRUNCATED if the section does not fit in @a avail.
- *
- * Exposed for gtest, which feeds it crafted sections.
- */
+/* Size of one token section (gtest feeds it crafted buffers). */
 ucs_status_t
 ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
                               size_t avail, size_t *consumed_p);

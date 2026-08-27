@@ -46,11 +46,13 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
   in `wireup.c`.
 - A payload section appended to an already released message must be gated
   by a `*_MIN_DST_VERSION` constant checked against
-  `ucp_ep_config(ep)->key.dst_version`, and must carry its own length so
-  the rest of the payload stays parsable. `LANES_ADDR` token trailers work
-  this way, see `UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION`. Their lanes are
-  taken from the lane maps of `ucp_wireup_msg_lanes_info_t` rather than from
-  maps of their own, so keep the two in sync when changing either.
+  `ucp_ep_config(ep)->key.dst_version`. Variable-length pieces go before
+  the rest of the payload so an older peer, which never sees them, still
+  finds the original contents. `LANES_ADDR` token trailers work this way,
+  see `UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION`: each token is prefixed by
+  its own length, and the addresses stay last. Trailer lanes are taken
+  from `ucp_wireup_msg_lanes_info_t` rather than from maps of their own,
+  so keep the two in sync when changing either.
 - New transport capabilities advertised via address records require both
   a packer in `address.c` and a consumer in `select.c`. Forgetting one
   half silently disables the capability for the new build vs. old peers.
