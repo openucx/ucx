@@ -741,6 +741,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         /* Data segment */
         if (length == 0) {
             wqe_size     = ctrl_av_size + sizeof(*raddr);
+            uct_rc_mlx5_txwq_add_psn(txwq, qp_type, 1);
         } else {
             /* dptr cannot wrap, because ctrl+av could be either 2 or 4 segs */
             dptr         = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
@@ -844,11 +845,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK), opmod,
                                  fm_ce_se, dci_channel, wqe_size, imm_val_be,
                                  max_log_sge, log_sge);
-    if (length == 0) {
-        uct_rc_mlx5_txwq_add_psn(txwq, qp_type, 1);
-    } else {
-        uct_rc_mlx5_txwq_update_psn(txwq, qp_type, length);
-    }
+    uct_rc_mlx5_txwq_update_psn(txwq, qp_type, length);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -1000,10 +997,11 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     }
 #endif
 
-    if (message_length == 0) {
-        uct_rc_mlx5_txwq_add_psn(txwq, qp_type, 1);
-    } else {
-        uct_rc_mlx5_txwq_update_psn(txwq, qp_type, message_length);
+    uct_rc_mlx5_txwq_update_psn(txwq, qp_type, message_length);
+    if (opcode_flags == MLX5_OPCODE_RDMA_WRITE) {
+        /* opcode_flags is constant after inlining, so only zero-length
+         * PUT_ZCOPY gets the branchless one-PSN adjustment. */
+        uct_rc_mlx5_txwq_add_psn(txwq, qp_type, !message_length);
     }
 }
 
