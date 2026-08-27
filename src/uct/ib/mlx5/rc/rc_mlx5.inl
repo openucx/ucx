@@ -458,8 +458,7 @@ uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
 {
     ucs_assert(txwq->path_mtu_shift > 0);
 
-    return ucs_max(1u, (message_length + txwq->path_mtu_mask) >>
-                       txwq->path_mtu_shift);
+    return (message_length + txwq->path_mtu_mask) >> txwq->path_mtu_shift;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -845,7 +844,11 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                                  (opcode_flags & UCT_RC_MLX5_OPCODE_MASK), opmod,
                                  fm_ce_se, dci_channel, wqe_size, imm_val_be,
                                  max_log_sge, log_sge);
-    uct_rc_mlx5_txwq_update_psn(txwq, qp_type, length);
+    if (length == 0) {
+        uct_rc_mlx5_txwq_add_psn(txwq, qp_type, 1);
+    } else {
+        uct_rc_mlx5_txwq_update_psn(txwq, qp_type, length);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -997,7 +1000,11 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     }
 #endif
 
-    uct_rc_mlx5_txwq_update_psn(txwq, qp_type, message_length);
+    if (message_length == 0) {
+        uct_rc_mlx5_txwq_add_psn(txwq, qp_type, 1);
+    } else {
+        uct_rc_mlx5_txwq_update_psn(txwq, qp_type, message_length);
+    }
 }
 
 /*

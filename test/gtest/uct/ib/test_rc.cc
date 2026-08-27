@@ -192,6 +192,7 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
     uct_ib_mlx5_txwq_t *wq    = txwq();
     mapped_buffer sendbuf(length, 0ul, *m_e1);
     mapped_buffer recvbuf(length, 0ul, *m_e2);
+    uct_iov_t zero_iov = {};
     uct_completion_t comp;
     ucs_status_t status;
 
@@ -212,6 +213,23 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
 
     /* The RC QP uses the peer's 512-byte path MTU, so 513 bytes use 2 PSNs. */
     EXPECT_EQ(3, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    if (status == UCS_INPROGRESS) {
+        wait_for_value(&comp.count, 0, true);
+    }
+
+    zero_iov.buffer = sendbuf.ptr();
+    zero_iov.length = 0;
+    zero_iov.memh   = sendbuf.memh();
+    zero_iov.stride = 0;
+    zero_iov.count  = 1;
+    comp.count      = 1;
+    comp.status     = UCS_OK;
+
+    status = uct_ep_put_zcopy(m_e1->ep(0), &zero_iov, 1, recvbuf.addr(),
+                              recvbuf.rkey(), &comp);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    EXPECT_EQ(4, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
 
     if (status == UCS_INPROGRESS) {
         wait_for_value(&comp.count, 0, true);
