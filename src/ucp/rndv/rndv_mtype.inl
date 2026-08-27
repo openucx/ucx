@@ -54,9 +54,10 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     ucp_worker_h worker = req->send.ep->worker;
     ucs_status_t status;
 
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
-    status = ucp_rndv_mpool_get(worker, frag_mem_type, frag_sys_dev,
-                                &req->send.rndv.mdesc);
+    req->send.rndv.mdesc = NULL;
+    status               = ucp_rndv_mpool_get(worker, frag_mem_type,
+                                              frag_sys_dev,
+                                              &req->send.rndv.mdesc);
     if (status != UCS_ERR_NO_RESOURCE) {
         return status;
     }
@@ -276,6 +277,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_mdesc_release(ucp_request_t *req)
 {
     ucs_mpool_put_inline(req->send.rndv.mdesc);
+    req->send.rndv.mdesc = NULL;
     ucp_proto_rndv_mtype_fc_reschedule_pending(req);
 }
 

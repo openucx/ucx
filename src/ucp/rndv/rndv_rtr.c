@@ -359,7 +359,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rtr_mtype_complete(ucp_request_t *req, int abort)
 {
-    if (!abort || (req->send.rndv.mdesc != NULL)) {
+    if (!abort || (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_rndv_mtype_mdesc_release(req);
     }
 
@@ -393,7 +393,6 @@ static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
 {
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucp_proto_rndv_mtype_mdesc_release(req);
-        req->send.rndv.mdesc = NULL;
     }
 
     return ucp_proto_request_zcopy_id_reset(req);

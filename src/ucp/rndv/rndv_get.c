@@ -381,7 +381,6 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
     }
 
     ucp_proto_rndv_mtype_mdesc_release(req);
-    req->send.rndv.mdesc = NULL;
     req->flags          &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
     if ((req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_FETCH) &&
@@ -390,13 +389,6 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
     }
 
     return UCS_OK;
-}
-
-static void
-ucp_proto_rndv_get_mtype_abort(ucp_request_t *req, ucs_status_t status)
-{
-    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_GET);
-    ucp_proto_abort_fatal_not_implemented(req, status);
 }
 
 ucp_proto_t ucp_rndv_get_mtype_proto = {
@@ -410,6 +402,6 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort    = ucp_proto_rndv_get_mtype_abort,
+    .abort    = ucp_proto_abort_fatal_not_implemented,
     .reset    = ucp_proto_rndv_get_mtype_reset
 };
