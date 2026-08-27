@@ -209,100 +209,30 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
-    size_t total                   = 0;
-    struct mlx5_wqe_ctrl_seg *ctrl = NULL;
-    struct mlx5_wqe_raddr_seg *raddr;
-    struct mlx5_wqe_data_seg *dptr;
-    size_t wqe_size, i;
-    uint8_t fm_ce_se, fence_flag;
-    uint16_t sn, pi, res_count;
-    uint64_t addr;
-    uct_rkey_t rkey;
-    void *curr;
     size_t UCS_V_UNUSED max_count;
+    uint8_t fence_flag;
+    ucs_status_t status;
+    size_t UCS_V_UNUSED total;
     int fence;
 
-    max_count = uct_rc_mlx5_base_put_sgl_zcopy_max_count(iface);
-    UCT_CHECK_PARAM(count <= max_count,
-                    "put_sgl_zcopy count(%zu) should be limited by %zu", count,
-                    max_count);
-    ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
-
-    /* TODO: add strided elements support */
-    if (ucs_unlikely((counts != NULL) || (strides != NULL))) {
-        ucs_error("put_sgl_zcopy does not support strided elements");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
+    max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
+    UCT_RC_MLX5_CHECK_SGL_ZCOPY(count, counts, strides, max_count,
+                                "put_sgl_zcopy");
     UCT_SKIP_ZERO_LENGTH(count);
 
-    /* Validate all lengths before resource checks and fence state */
-    for (i = 0; i < count; i++) {
-        UCT_CHECK_LENGTH(lengths[i], 0, UCT_IB_MAX_MESSAGE_SIZE,
-                         "put_sgl_zcopy");
+    status = uct_rc_mlx5_base_ep_sgl_zcopy_check(iface, ep, lengths, count, 0,
+                                                 UCT_IB_MAX_MESSAGE_SIZE,
+                                                 "put_sgl_zcopy");
+    if (status != UCS_OK) {
+        return status;
     }
 
-    UCT_RC_CHECK_CQE_VALUE_RET(&iface->super, &ep->super,
-                               UCS_ERR_NO_RESOURCE, count - 1);
-
-    UCT_RC_CHECK_NUM_RDMA_READ_RET(&iface->super, UCS_ERR_NO_RESOURCE);
-    UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
-                                UCS_ERR_NO_RESOURCE, count - 1);
-
-    wqe_size = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*dptr);
-    sn       = txwq->sw_pi;
-
-    ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
-    ucs_assert(ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB) == 1);
-
-    pi   = sn;
-    curr = txwq->curr;
-
-    fence      = uct_rc_ep_fm(&iface->super, &txwq->fi, 1);
+    fence      = uct_rc_ep_fm(&iface->super, &ep->tx.wq.fi, 1);
     fence_flag = fence ? iface->config.put_fence_flag : 0;
-
-    for (i = 0; i < count; i++) {
-        fm_ce_se = ((i == 0) ? fence_flag : 0) |
-                   ((i == count - 1) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
-        ctrl     = curr;
-
-        uct_ib_mlx5_set_ctrl_seg(ctrl, pi, MLX5_OPCODE_RDMA_WRITE, 0,
-                                 txwq->super.qp_num, fm_ce_se, 0, wqe_size);
-
-        addr = remote_addrs[i];
-        if (fence) {
-            rkey = uct_ib_resolve_atomic_rkey(
-                    rkeys[i], ep->super.atomic_mr_offset, &addr);
-        } else {
-            rkey = uct_ib_md_direct_rkey(rkeys[i]);
-        }
-
-        raddr = uct_ib_mlx5_txwq_wrap_none(txwq, ctrl + 1);
-        uct_ib_mlx5_ep_set_rdma_seg(raddr, addr, rkey);
-
-        dptr = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
-        uct_ib_mlx5_set_data_seg(dptr, buffers[i], lengths[i],
-                                 uct_ib_memh_get_lkey(memhs[i]));
-
-        curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
-        curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
-        pi++;
-        total += lengths[i];
-    }
-
-    res_count         = pi - 1 - txwq->prev_sw_pi;
-    txwq->prev_sw_pi += res_count;
-    txwq->sw_pi       = pi;
-    txwq->curr        = curr;
-    txwq->sig_pi      = txwq->prev_sw_pi;
-
-    uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
-    uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
-
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
-                              uct_rc_ep_send_op_completion_handler, comp, sn,
-                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL, 0, total);
+    total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(
+            ep, buffers, lengths, memhs, remote_addrs, rkeys, count,
+            MLX5_OPCODE_RDMA_WRITE, fence_flag, fence,
+            uct_rc_ep_send_op_completion_handler, comp);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total);
     uct_rc_ep_enable_flush_remote(&ep->super);
@@ -365,6 +295,46 @@ ucs_status_t uct_rc_mlx5_base_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
         UCT_RC_RDMA_READ_POSTED(&iface->super, total_length);
     }
     return status;
+}
+
+ucs_status_t
+uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
+                                  const size_t *lengths, uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, const size_t *counts,
+                                  const size_t *strides, size_t count,
+                                  uct_completion_t *comp)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    size_t UCS_V_UNUSED max_count;
+    uint8_t fence_flag;
+    ucs_status_t status;
+    size_t total;
+
+    max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
+    UCT_RC_MLX5_CHECK_SGL_ZCOPY(count, counts, strides, max_count,
+                                "get_sgl_zcopy");
+    UCT_SKIP_ZERO_LENGTH(count);
+
+    status = uct_rc_mlx5_base_ep_sgl_zcopy_check(
+            iface, ep, lengths, count,
+            iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
+            iface->super.config.max_get_zcopy, "get_sgl_zcopy");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    fence_flag = uct_rc_ep_fm(&iface->super, &ep->tx.wq.fi,
+                              iface->config.atomic_fence_flag);
+    total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(
+            ep, buffers, lengths, memhs, remote_addrs, rkeys, count,
+            MLX5_OPCODE_RDMA_READ, fence_flag, 0,
+            uct_rc_ep_get_zcopy_completion_handler, comp);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, total);
+    UCT_RC_RDMA_READ_POSTED(&iface->super, total);
+
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_am_short(uct_ep_h tl_ep, uint8_t id,

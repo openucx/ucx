@@ -25,6 +25,18 @@
                                    UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
+#define UCT_RC_MLX5_CHECK_SGL_ZCOPY(_count, _counts, _strides, _max_count, \
+                                    _name) \
+    UCT_CHECK_PARAM((_count) <= (_max_count), \
+                    "%s count(%zu) should be limited by %zu", (_name), \
+                    (size_t)(_count), (size_t)(_max_count)); \
+    /* TODO: add strided elements support */ \
+    if (ucs_unlikely(((_counts) != NULL) || ((_strides) != NULL))) { \
+        ucs_error("%s does not support strided elements", (_name)); \
+        return UCS_ERR_UNSUPPORTED; \
+    }
+
+
 enum {
     UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
 
@@ -140,6 +152,14 @@ ucs_status_t uct_rc_mlx5_base_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                            size_t iovcnt, uint64_t remote_addr,
                                            uct_rkey_t rkey,
                                            uct_completion_t *comp);
+
+ucs_status_t
+uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
+                                  const size_t *lengths, uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, const size_t *counts,
+                                  const size_t *strides, size_t count,
+                                  uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_base_ep_am_short(uct_ep_h tl_ep, uint8_t id,
                                           uint64_t header, const void *payload,
