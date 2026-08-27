@@ -132,4 +132,12 @@ uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
  */
 void uct_cuda_mem_free(uct_cuda_copy_alloc_handle_t alloc_handle);
 
+
+/**
+ * Set the context flag to synchronize DMA operations.
+ *
+ * @param [in] log_level  Log level for CUDA driver API failures
+ */
+ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level);
+
 #endif

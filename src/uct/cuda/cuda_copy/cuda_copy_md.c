@@ -288,7 +288,7 @@ err_mem_release:
 
 typedef CUresult (*uct_cuda_cuCtxSetFlags_t)(unsigned);
 
-static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
+ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
 {
 #if HAVE_CUDA_FABRIC
     static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
@@ -394,6 +394,8 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
         ucs_free(alloc_handle);
         goto out;
     }
+
+    uct_cuda_copy_sync_memops(alloc_handle->ptr, alloc_handle->is_vmm);
 
     /* Cache memory flags as part of uct_cuda_copy_md_mem_query() before
      * restoring the CUDA context.
@@ -1150,11 +1152,7 @@ uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
         status = uct_cuda_copy_mem_alloc_fabric(log_level_fabric, cu_device,
                                                 length, granularity_p,
                                                 alloc_handle_p);
-        if (status == UCS_OK) {
-            goto sync_memops;
-        }
-
-        if (enable_fabric == UCS_YES) {
+        if ((status == UCS_OK) || (enable_fabric == UCS_YES)) {
             return status;
         }
     }
@@ -1169,8 +1167,6 @@ set_non_vmm:
     alloc_handle_p->length = length;
     alloc_handle_p->is_vmm = 0;
 
-sync_memops:
-    uct_cuda_copy_sync_memops(alloc_handle_p->ptr, alloc_handle_p->is_vmm);
     return UCS_OK;
 }
 
