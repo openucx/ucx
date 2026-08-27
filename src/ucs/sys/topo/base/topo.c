@@ -11,7 +11,6 @@
 #include "topo_int.h"
 #include "topo_groups.h"
 
-#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
