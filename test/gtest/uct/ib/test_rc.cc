@@ -1401,4 +1401,175 @@ UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
 
+class test_rc_purge_outstanding : public test_rc {
+protected:
+    struct purge_ctx {
+        uct_ep_operation_t operation;
+        uint64_t           remote_addr;
+        uct_rkey_t         rkey;
+        const void         *buffer;
+        size_t             length;
+        const uct_iov_t    *iov;
+        size_t             iovcnt;
+        uct_completion_t   *comp;
+        unsigned           count;
+    };
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
+    static void purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
+
+        ++ctx->count;
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        EXPECT_EQ((ctx->comp != NULL),
+                  !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
+        EXPECT_EQ(ctx->operation, info->operation);
+
+        if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
+            EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+
+            EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+            EXPECT_EQ(ctx->rkey, info->rma.rkey);
+            EXPECT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+
+            for (size_t i = 0; i < ctx->iovcnt; ++i) {
+                const uct_iov_t &expected = ctx->iov[i];
+                const uct_iov_t &actual   = info->rma.payload.zcopy.iov[i];
+
+                EXPECT_EQ(expected.buffer, actual.buffer);
+                EXPECT_EQ(expected.length, actual.length);
+                EXPECT_EQ(expected.stride, actual.stride);
+                EXPECT_EQ(expected.count, actual.count);
+                EXPECT_EQ(uct_ib_memh_get_lkey(expected.memh),
+                          uct_ib_memh_get_lkey(actual.memh));
+            }
+        } else {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
+            EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA);
+
+            EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+            EXPECT_EQ(ctx->rkey, info->rma.rkey);
+            EXPECT_EQ(ctx->length, info->rma.payload.data.length);
+            EXPECT_EQ(0, memcmp(ctx->buffer, info->rma.payload.data.buffer,
+                                ctx->length));
+        }
+
+        if (ctx->comp != NULL) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(ctx->comp, info->comp);
+        }
+    }
+
+    ucs_status_t purge_stub(purge_ctx *ctx)
+    {
+        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+        __be32 rx_token      = htobe32(1);
+        uct_ep_outstanding_purge_params_t params = {
+            .field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                          UCT_EP_OUTSTANDING_FIELD_CB |
+                          UCT_EP_OUTSTANDING_FIELD_ARG,
+            .rx_token   = &rx_token,
+            .cb         = purge_cb,
+            .arg        = ctx
+        };
+
+        return uct_ep_outstanding_purge(&ep->super.super.super.super, &params);
+    }
+
+    void test_put(uct_ep_operation_t operation, size_t length,
+                  uct_completion_t *comp = NULL)
+    {
+        mapped_buffer sendbuf(length, 0x12345678ul, *m_e1);
+        mapped_buffer recvbuf(length, 0ul, *m_e2);
+        uct_iov_t iov[2];
+
+        iov[0] = {
+            .buffer = sendbuf.ptr(),
+            .length = length / 2,
+            .memh   = sendbuf.memh(),
+            .stride = 0,
+            .count  = 1
+        };
+        iov[1] = {
+            .buffer = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), length / 2),
+            .length = length - (length / 2),
+            .memh   = sendbuf.memh(),
+            .stride = 0,
+            .count  = 1
+        };
+
+        if (operation == UCT_EP_OP_PUT_SHORT) {
+            ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), sendbuf.ptr(), length,
+                                           recvbuf.addr(), recvbuf.rkey()));
+        } else if (operation == UCT_EP_OP_PUT_BCOPY) {
+            EXPECT_EQ(static_cast<ssize_t>(length),
+                      uct_ep_put_bcopy(m_e1->ep(0), mapped_buffer::pack,
+                                       &sendbuf, recvbuf.addr(),
+                                       recvbuf.rkey()));
+        } else {
+            ASSERT_EQ(UCS_INPROGRESS,
+                      uct_ep_put_zcopy(m_e1->ep(0), iov, 2, recvbuf.addr(),
+                                       recvbuf.rkey(), comp));
+        }
+
+        purge_ctx ctx = {operation,
+                         recvbuf.addr(),
+                         uct_ib_md_direct_rkey(recvbuf.rkey()),
+                         sendbuf.ptr(),
+                         length,
+                         iov,
+                         2,
+                         comp,
+                         0};
+
+        ucs_status_t status = purge_stub(&ctx);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            flush();
+
+            GTEST_SKIP() << "outstanding purge is not supported";
+        }
+        ASSERT_UCS_OK(status);
+
+        flush();
+
+        EXPECT_EQ(1, ctx.count);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_short,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_put(UCT_EP_OP_PUT_SHORT, 8);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    test_put(UCT_EP_OP_PUT_BCOPY, 8);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    uct_completion_t comp = {completion_cb, 1, UCS_OK};
+
+    test_put(UCT_EP_OP_PUT_ZCOPY, 8 * UCS_KBYTE, &comp);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
+
 #endif
