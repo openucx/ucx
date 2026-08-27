@@ -18,6 +18,7 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/hlist.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/sock.h>
 
 #include <endian.h>
@@ -154,20 +155,11 @@ typedef struct uct_ib_address {
 
 
 /**
- * PCI identifier of a device
- */
-typedef struct {
-    uint16_t                    vendor;
-    uint16_t                    device;
-} uct_ib_pci_id_t;
-
-
-/**
  * IB device specification.
  */
 typedef struct uct_ib_device_spec {
     const char                  *name;
-    uct_ib_pci_id_t             pci_id;
+    ucs_sys_pci_id_t            pci_id;
     unsigned                    flags;
     uint8_t                     priority;
 } uct_ib_device_spec_t;
@@ -227,7 +219,7 @@ typedef struct uct_ib_device {
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
-    uct_ib_pci_id_t             pci_id;          /* PCI identifiers */
+    ucs_sys_pci_id_t            pci_id;          /* PCI identifiers */
     ucs_sys_device_t            sys_dev;         /* System device id */
     double                      pci_bw;          /* Supported PCI bandwidth */
     unsigned                    flags;
