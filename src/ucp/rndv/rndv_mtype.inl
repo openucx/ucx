@@ -60,7 +60,7 @@ static UCS_F_ALWAYS_INLINE void ucp_proto_rndv_mtype_init_params_copy(
     mtype_init_params->super                = *init_params;
     mtype_init_params->select_param         = *init_params->select_param;
     mtype_init_params->select_param.sys_dev = frag_mem_info->sys_dev;
-    mtype_init_params->super.select_param  = &mtype_init_params->select_param;
+    mtype_init_params->super.select_param   = &mtype_init_params->select_param;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
