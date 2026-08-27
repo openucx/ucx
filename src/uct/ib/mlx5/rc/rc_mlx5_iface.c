@@ -548,6 +548,12 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ) {
+            status = uct_ib_md_check_cc_dma_bounce_supported(
+                    &md->super, "rc_mlx5 tag-matching DEVX");
+            if (status != UCS_OK) {
+                return status;
+            }
+
             status = uct_rc_mlx5_devx_init_rx_tm(iface, rc_config, 0,
                                                  UCT_RC_RNDV_HDR_LEN);
         } else {
