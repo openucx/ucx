@@ -37,14 +37,17 @@ typedef struct {
 
 typedef struct uct_rc_gdaki_iface {
     uct_rc_mlx5_iface_common_t super;
-    CUdevice                   cuda_dev;
     struct ibv_mr              *atomic_mr;
     uint64_t                   *atomic_buff;
-    CUcontext                  cuda_ctx;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
+    struct {
+        CUdevice  dev;
+        CUcontext ctx;
+        size_t    alloc_granularity;
+    } cuda;
 } uct_rc_gdaki_iface_t;
 
 
