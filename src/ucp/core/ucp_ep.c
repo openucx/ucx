@@ -1526,15 +1526,6 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
     ucp_ep_release_discard_arg(arg);
 }
 
-static void
-ucp_ep_discard_lanes_failover_failed(ucs_status_t status, void *user_data)
-{
-    ucp_ep_discard_lanes_arg_t *arg = user_data;
-
-    ucs_assert(status != UCS_OK);
-    arg->flags |= UCP_EP_DISCARD_LANES_FLAG_PURGE;
-}
-
 static ucs_status_t ucp_ep_failed_op(uct_ep_h ep)
 {
     return ucs_container_of(ep, ucp_ep_discard_lanes_arg_t, failed_ep)->status;
@@ -1617,7 +1608,6 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     if (failover_lanes_p != NULL) {
         status = ucp_ep_failover_add_lanes(ep, lanes, uct_eps,
                                            ucp_ep_discard_lanes_callback,
-                                           ucp_ep_discard_lanes_failover_failed,
                                            discard_arg, failover_lanes_p);
         if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
             ucs_debug("ep %p: failed to start failover for lanes 0x%lx: %s", ep,

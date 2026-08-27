@@ -46,8 +46,7 @@ typedef struct ucp_ep_failover_lane_ctx {
     uint8_t                          rx_token_length;
     unsigned                         flags;
     ucs_status_t                     status;
-    ucp_ep_failover_lane_done_cb_t   done_cb;
-    ucp_ep_failover_lane_failed_cb_t failed_cb;
+    ucp_send_nbx_callback_t          done_cb;
     void                             *done_arg;
     /* Temporary queue of extracted ops until they are posted as pending
      * requests; empty while replay is in flight (tracked by undelivered_count). */
@@ -327,11 +326,11 @@ static int ucp_ep_failover_lane_complete(ucp_ep_failover_ctx_t *ctx,
                                          ucp_lane_index_t lane_index,
                                          ucs_status_t status)
 {
-    ucp_ep_failover_lane_ctx_t *lane       = &ctx->lanes[lane_index];
-    ucp_ep_h ep                            = lane->ep;
-    ucp_worker_h worker                    = ep->worker;
-    ucp_ep_failover_lane_done_cb_t done_cb = lane->done_cb;
-    void *done_arg                         = lane->done_arg;
+    ucp_ep_failover_lane_ctx_t *lane = &ctx->lanes[lane_index];
+    ucp_ep_h ep                      = lane->ep;
+    ucp_worker_h worker              = ep->worker;
+    ucp_send_nbx_callback_t done_cb  = lane->done_cb;
+    void *done_arg                   = lane->done_arg;
     int failover_done;
 
     ucs_debug("ep %p: completed failover for lane %u status %s", ep, lane_index,
@@ -366,8 +365,7 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
     ucp_ep_failover_ctx_t *ctx = ep->ext->failover.ctx;
     ucp_worker_h worker        = ep->worker;
     ucp_ep_failover_lane_ctx_t *lane;
-    ucp_ep_failover_lane_done_cb_t done_cb;
-    ucp_ep_failover_lane_failed_cb_t failed_cb;
+    ucp_send_nbx_callback_t done_cb;
     ucp_rsc_index_t rsc_index;
     uct_ep_h uct_ep;
     void *done_arg;
@@ -380,9 +378,9 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
     uct_ep    = lane->uct_ep;
     rsc_index = lane->rsc_index;
     done_cb   = lane->done_cb;
-    failed_cb = lane->failed_cb;
     done_arg  = lane->done_arg;
 
+    ucs_assert(discard_status != UCS_OK);
     ucs_debug("ep %p: closing failover lane %u status %s", ep, lane_index,
               ucs_status_string(discard_status));
 
@@ -390,10 +388,6 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
     ucs_free(lane->rx_token);
     memset(lane, 0, sizeof(*lane));
     ctx->lane_map &= ~UCS_BIT(lane_index);
-
-    if (failed_cb != NULL) {
-        failed_cb(discard_status, done_arg);
-    }
 
     /* The lane owns in-flight WQEs whose completions are deferred, so it cannot
      * be discarded through a flush - the flush would never complete. Release
@@ -422,14 +416,15 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
 
 ucs_status_t
 ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
-                          uct_ep_h *uct_eps, ucp_ep_failover_lane_done_cb_t cb,
-                          ucp_ep_failover_lane_failed_cb_t failed_cb, void *arg,
-                          ucp_lane_map_t *failover_lanes_p)
+                          uct_ep_h *uct_eps, ucp_send_nbx_callback_t cb,
+                          void *arg, ucp_lane_map_t *failover_lanes_p)
 {
+    uct_ep_invalidate_params_t inv_params;
     ucp_ep_failover_ctx_t *ctx;
     ucp_ep_failover_lane_ctx_t *lane_ctx;
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
+    ucs_status_t inv_status;
 
     *failover_lanes_p = 0;
     ucs_assert(ep->ext != NULL);
@@ -462,44 +457,38 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
             return UCS_ERR_NO_MEMORY;
         }
 
-        ctx->status            = UCS_OK;
-        ctx->super_req->status = UCS_INPROGRESS;
-        ctx->super_req->flags  = 0;
+        ctx->status               = UCS_OK;
+        ctx->super_req->status    = UCS_INPROGRESS;
+        ctx->super_req->flags     = 0;
         ctx->super_req->user_data = ctx;
         ctx->super_req->send.ep   = ep;
         ucs_queue_head_init(&ctx->pending_queue);
-        ep->ext->failover.ctx = ctx;
+        ep->ext->failover.ctx     = ctx;
     }
 
     ctx->request_id = 0;
     ucs_for_each_bit(lane, lane_map) {
-        uct_ep = uct_eps[lane];
-        lane_ctx            = &ctx->lanes[lane];
-        lane_ctx->ctx       = ctx;
-        lane_ctx->ep        = ep;
-        lane_ctx->uct_ep    = uct_ep;
-        lane_ctx->lane      = lane;
-        lane_ctx->rsc_index = ucp_ep_get_rsc_index(ep, lane);
-        lane_ctx->status    = UCS_OK;
-        lane_ctx->done_cb   = cb;
-        lane_ctx->failed_cb = failed_cb;
-        lane_ctx->done_arg  = arg;
-        ucs_queue_head_init(&lane_ctx->replay_queue);
+        uct_ep                      = uct_eps[lane];
+        lane_ctx                    = &ctx->lanes[lane];
+        lane_ctx->ctx               = ctx;
+        lane_ctx->ep                = ep;
+        lane_ctx->uct_ep            = uct_ep;
+        lane_ctx->lane              = lane;
+        lane_ctx->rsc_index         = ucp_ep_get_rsc_index(ep, lane);
+        lane_ctx->status            = UCS_OK;
+        lane_ctx->done_cb           = cb;
+        lane_ctx->done_arg          = arg;
         lane_ctx->undelivered_count = 0;
+        ucs_queue_head_init(&lane_ctx->replay_queue);
 
         /* Own in-flight WQEs for extract; safe if the lane was already
          * invalidated without DEFER by the error-injection path. */
-        {
-            uct_ep_invalidate_params_t inv_params = {
-                .field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS,
-                .flags      = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS
-            };
-            ucs_status_t inv_status = uct_ep_invalidate(uct_ep, &inv_params);
-            if ((inv_status != UCS_OK) &&
-                (inv_status != UCS_ERR_UNSUPPORTED)) {
-                ucs_debug("ep %p: lane %u defer-completions invalidate: %s",
-                          ep, lane, ucs_status_string(inv_status));
-            }
+        inv_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+        inv_params.flags      = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
+        inv_status            = uct_ep_invalidate(uct_ep, &inv_params);
+        if ((inv_status != UCS_OK) && (inv_status != UCS_ERR_UNSUPPORTED)) {
+            ucs_debug("ep %p: lane %u defer-completions invalidate: %s", ep,
+                      lane, ucs_status_string(inv_status));
         }
 
         ucp_ep_refcount_add(ep, discard);
@@ -514,41 +503,6 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
               (uint64_t)*failover_lanes_p);
 
     return UCS_OK;
-}
-
-
-void ucp_ep_failover_cancel_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map)
-{
-    ucp_ep_failover_ctx_t *ctx;
-    ucp_ep_failover_lane_ctx_t *lane_ctx;
-    ucp_lane_index_t lane;
-
-    if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) {
-        return;
-    }
-
-    ctx           = ep->ext->failover.ctx;
-    ctx->request_id = 0;
-    ucs_debug("ep %p: canceling failover for lanes 0x%" PRIx64, ep,
-              (uint64_t)(lane_map & ctx->lane_map));
-    ucs_for_each_bit(lane, lane_map & ctx->lane_map) {
-        lane_ctx = &ctx->lanes[lane];
-        /* Completions are deferred on these endpoints, so they must be closed
-         * rather than handed back to a CANCEL flush discard path. */
-        ucp_ep_failover_replay_purge(lane_ctx, UCS_ERR_CANCELED);
-        ucs_free(lane_ctx->rx_token);
-        ucp_ep_failover_destroy_uct_ep(lane_ctx);
-        memset(lane_ctx, 0, sizeof(*lane_ctx));
-        ctx->lane_map &= ~UCS_BIT(lane);
-
-        ucp_worker_flush_ops_count_add(ep->worker, -1);
-        ucp_ep_refcount_remove(ep, discard);
-    }
-
-    if (ctx->lane_map == 0) {
-        ucp_ep_failover_pending_purge(ctx, UCS_ERR_CANCELED);
-        ucp_ep_failover_ctx_release(ep, ctx);
-    }
 }
 
 
@@ -585,16 +539,6 @@ void ucp_ep_failover_set_request_id(ucp_ep_h ep, uint64_t request_id)
     }
 
     ep->ext->failover.ctx->request_id = request_id;
-}
-
-
-uint64_t ucp_ep_failover_get_request_id(ucp_ep_h ep)
-{
-    if ((ep->ext == NULL) || (ep->ext->failover.ctx == NULL)) {
-        return 0;
-    }
-
-    return ep->ext->failover.ctx->request_id;
 }
 
 
@@ -1141,10 +1085,4 @@ static void ucp_ep_failover_schedule(ucp_ep_h ep)
     ep->ext->failover_progress_scheduled = 1;
     ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                               ucp_ep_failover_progress_cb, ep);
-}
-
-
-ucp_lane_map_t ucp_ep_failover_test_pending_rx_lane_map(ucp_ep_h ep)
-{
-    return ucp_ep_failover_pending_rx_lanes(ep);
 }
