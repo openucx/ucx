@@ -212,7 +212,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     size_t UCS_V_UNUSED max_count;
     uint8_t fence_flag;
     ucs_status_t status;
-    size_t total;
+    size_t UCS_V_UNUSED total;
     int fence;
 
     max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
