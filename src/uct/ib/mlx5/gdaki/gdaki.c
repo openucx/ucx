@@ -93,15 +93,13 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
 };
 
 
-ucs_status_t uct_rc_gdaki_alloc(size_t size, size_t align,
-                                size_t *granularity_p,
-                                uct_cuda_copy_alloc_handle_t *alloc_handle_p,
-                                void **buf_p)
+ucs_status_t
+uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
+                   uct_cuda_copy_alloc_handle_t *alloc_handle_p, void **buf_p)
 {
-    unsigned int flag = 1;
+    unsigned int flag  = 1;
     CUdevice cu_device;
     ucs_status_t status;
-    size_t granularity;
     uct_cuda_copy_alloc_handle_t alloc_handle;
     void *buf;
 
@@ -112,20 +110,19 @@ ucs_status_t uct_rc_gdaki_alloc(size_t size, size_t align,
 
     status = uct_cuda_mem_alloc(UCS_LOG_LEVEL_ERROR, UCS_MEMORY_TYPE_CUDA,
                                 UCS_TRY, cu_device, size + align - 1,
-                                &granularity, &alloc_handle);
+                                granularity_p, &alloc_handle);
     if (status != UCS_OK) {
         return status;
     }
 
     buf    = (void*)ucs_align_up_pow2_ptr(alloc_handle.ptr, align);
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-        cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                              (CUdeviceptr)buf));
+            cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                  (CUdeviceptr)buf));
     if (status != UCS_OK) {
         goto err;
     }
 
-    *granularity_p  = granularity;
     *alloc_handle_p = alloc_handle;
     *buf_p          = buf;
     return UCS_OK;
