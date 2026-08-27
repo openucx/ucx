@@ -15,7 +15,203 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
+#include <endian.h>
+#include <string.h>
 
+static uint64_t uct_rc_mlx5_atomic_value(const void *buffer, size_t value_size)
+{
+    uint64_t value64;
+    uint32_t value32;
+
+    if (value_size == sizeof(value32)) {
+        memcpy(&value32, buffer, sizeof(value32));
+        return ntohl(value32);
+    }
+
+    memcpy(&value64, buffer, sizeof(value64));
+    return be64toh(value64);
+}
+
+static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
+                                              uct_rc_iface_send_op_t *op)
+{
+    if ((op != NULL) && (op->user_comp != NULL)) {
+        info->field_mask |= UCT_EP_OP_INFO_FIELD_COMP;
+        info->comp        = op->user_comp;
+    }
+}
+
+static int uct_rc_mlx5_send_op_is_atomic_fetch(const uct_rc_iface_send_op_t *op)
+{
+    return (op->handler == uct_rc_mlx5_common_atomic32_le_handler) ||
+           (op->handler == uct_rc_mlx5_common_atomic64_le_handler) ||
+           (op->handler == uct_rc_ep_atomic_handler_32_be0) ||
+           (op->handler == uct_rc_ep_atomic_handler_32_be1) ||
+           (op->handler == uct_rc_ep_atomic_handler_64_be0) ||
+           (op->handler == uct_rc_ep_atomic_handler_64_be1);
+}
+
+static ucs_status_t
+uct_rc_mlx5_op_info_fill_atomic(uct_ep_op_info_t *info,
+                                const uct_ib_mlx5_txwq_t *txwq,
+                                uct_rc_iface_send_op_t *op,
+                                const struct mlx5_wqe_ctrl_seg *ctrl,
+                                size_t wqe_size)
+{
+    uint8_t atomic_data[4 * sizeof(uint64_t)] = {};
+    struct mlx5_wqe_raddr_seg raddr;
+    uint64_t mask, swap_add, swap_mask, compare, compare_mask;
+    size_t value_size, atomic_segs_size;
+    int fetch;
+    uint8_t opcode, opmod;
+
+    ucs_assert(op != NULL);
+
+    opcode       = uct_ib_mlx5_wqe_opcode(ctrl);
+    opmod        = ctrl->opmod_idx_opcode & UINT8_MAX;
+    compare      = 0;
+    swap_mask    = 0;
+    compare_mask = 0;
+
+    switch (opcode) {
+    case MLX5_OPCODE_ATOMIC_FA:
+    case MLX5_OPCODE_ATOMIC_CS:
+        value_size       = sizeof(uint64_t);
+        atomic_segs_size = sizeof(struct mlx5_wqe_atomic_seg);
+        break;
+    case MLX5_OPCODE_ATOMIC_MASKED_FA:
+    case MLX5_OPCODE_ATOMIC_MASKED_CS:
+        if (opmod == UCT_IB_MLX5_OPMOD_EXT_ATOMIC(2)) {
+            value_size = sizeof(uint32_t);
+        } else if (opmod == UCT_IB_MLX5_OPMOD_EXT_ATOMIC(3)) {
+            value_size = sizeof(uint64_t);
+        } else {
+            ucs_diag("unsupported atomic masked op %d", opmod);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        atomic_segs_size = (opcode == MLX5_OPCODE_ATOMIC_MASKED_FA) ?
+                                   (2 * value_size) :
+                                   (4 * value_size);
+        break;
+    default:
+        ucs_diag("unsupported atomic op %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ucs_assert(wqe_size >= (sizeof(*ctrl) + sizeof(raddr) + atomic_segs_size));
+
+    uct_ib_mlx5_txwq_copy_segs(txwq, ctrl + 1, &raddr, sizeof(raddr));
+    uct_ib_mlx5_txwq_copy_segs(
+            txwq,
+            uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                      (void*)(ctrl + 2)),
+            atomic_data, atomic_segs_size);
+
+    mask     = (value_size == sizeof(uint32_t)) ? UINT32_MAX : UINT64_MAX;
+    swap_add = uct_rc_mlx5_atomic_value(atomic_data, value_size);
+    switch (opcode) {
+    case MLX5_OPCODE_ATOMIC_FA:
+        info->atomic.op = UCT_ATOMIC_OP_ADD;
+        break;
+    case MLX5_OPCODE_ATOMIC_CS:
+        info->atomic.op = UCT_ATOMIC_OP_CSWAP;
+        compare         = uct_rc_mlx5_atomic_value(atomic_data + value_size,
+                                                   value_size);
+        break;
+    case MLX5_OPCODE_ATOMIC_MASKED_FA:
+        /* atomic: { add/swap_add, field_boundary/compare } */
+        compare = uct_rc_mlx5_atomic_value(atomic_data + value_size,
+                                           value_size);
+        if (compare == 0) {
+            info->atomic.op = UCT_ATOMIC_OP_ADD;
+        } else if (compare == mask) {
+            info->atomic.op = UCT_ATOMIC_OP_XOR;
+        } else {
+            ucs_diag("unsupported atomic masked fa op %d", compare);
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        compare = 0;
+        break;
+    case MLX5_OPCODE_ATOMIC_MASKED_CS:
+        /* atomic: { swap, compare, swap_mask, compare_mask } */
+        compare      = uct_rc_mlx5_atomic_value(atomic_data + value_size,
+                                                value_size);
+        swap_mask    = uct_rc_mlx5_atomic_value(atomic_data + (2 * value_size),
+                                                value_size);
+        compare_mask = uct_rc_mlx5_atomic_value(atomic_data + (3 * value_size),
+                                                value_size);
+        if ((compare_mask == mask) && (swap_mask == mask)) {
+            info->atomic.op = UCT_ATOMIC_OP_CSWAP;
+        } else if (swap_mask == mask) {
+            info->atomic.op = UCT_ATOMIC_OP_SWAP;
+        } else if (swap_mask == swap_add) {
+            info->atomic.op = UCT_ATOMIC_OP_OR;
+        } else if (swap_mask == ((~swap_add) & mask)) {
+            info->atomic.op = UCT_ATOMIC_OP_AND;
+        } else {
+            ucs_diag("unsupported atomic masked cs op %d, %d, %d, %d", swap_add,
+                     swap_mask, compare, compare_mask);
+            return UCS_ERR_UNSUPPORTED;
+        }
+        break;
+    default:
+        ucs_diag("unsupported atomic op %d", opcode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    fetch = uct_rc_mlx5_send_op_is_atomic_fetch(op);
+
+    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION |
+                       UCT_EP_OP_INFO_FIELD_ATOMIC;
+    info->operation  = fetch ? UCT_EP_OP_ATOMIC_FETCH : UCT_EP_OP_ATOMIC_POST;
+    info->atomic.field_mask  = UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+                               UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY |
+                               UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
+                               UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE |
+                               UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE;
+    info->atomic.remote_addr = be64toh(raddr.raddr);
+    info->atomic.rkey        = ((uct_rkey_t)UCT_IB_INVALID_MKEY << 32) |
+                               ntohl(raddr.rkey);
+    info->atomic.value       = swap_add;
+    info->atomic.size        = value_size;
+
+    if (info->atomic.op == UCT_ATOMIC_OP_CSWAP) {
+        info->atomic.field_mask |= UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE;
+        info->atomic.compare     = compare;
+    }
+
+    if (fetch) {
+        info->atomic.field_mask |= UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT;
+        info->atomic.result      = op->buffer;
+
+        uct_rc_mlx5_op_info_try_fill_comp(info, op);
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+                         uct_rc_iface_send_op_t *op,
+                         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+                         int *skip_p,
+                         uct_rc_mlx5_op_callback_data_t *callback_data)
+{
+    *skip_p = 0;
+
+    switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
+    case MLX5_OPCODE_ATOMIC_FA:
+    case MLX5_OPCODE_ATOMIC_CS:
+    case MLX5_OPCODE_ATOMIC_MASKED_FA:
+    case MLX5_OPCODE_ATOMIC_MASKED_CS:
+        return uct_rc_mlx5_op_info_fill_atomic(info, txwq, op, ctrl, wqe_size);
+    default:
+        ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
