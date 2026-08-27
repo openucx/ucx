@@ -15,7 +15,87 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
+#include <endian.h>
 
+void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
+                                       uct_rc_iface_send_op_t *op)
+{
+    if ((op != NULL) && (op->user_comp != NULL)) {
+        info->field_mask |= UCT_EP_OP_INFO_FIELD_COMP;
+        info->comp        = op->user_comp;
+    }
+}
+
+void uct_rc_mlx5_op_info_fill_rma_raddr(
+        uct_ep_op_info_t *info, const struct mlx5_wqe_raddr_seg *raddr)
+{
+    info->rma.remote_addr = be64toh(raddr->raddr);
+    info->rma.rkey        = ntohl(raddr->rkey);
+    info->rma.field_mask  = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                            UCT_EP_OP_INFO_RMA_FIELD_RKEY;
+    info->field_mask     |= UCT_EP_OP_INFO_FIELD_RMA;
+}
+
+static void uct_rc_mlx5_op_info_fill_zcopy_iov(
+        uct_rc_mlx5_op_callback_data_t *callback_data,
+        const uct_ib_mlx5_txwq_t *txwq, const void *first_dptr, size_t length,
+        size_t *iovcnt_p)
+{
+    const struct mlx5_wqe_data_seg *dptr;
+    uint32_t byte_count;
+    size_t iovcnt, i;
+
+    ucs_assert((length % sizeof(*dptr)) == 0);
+
+    iovcnt = length / sizeof(*dptr);
+    ucs_assert(iovcnt <= ucs_static_array_size(callback_data->iov));
+
+    dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                     (void*)first_dptr);
+    for (i = 0; i < iovcnt; ++i) {
+        byte_count = ntohl(dptr->byte_count);
+        ucs_assert(!(byte_count & MLX5_INLINE_SEG));
+
+        callback_data->memh[i].lkey  = ntohl(dptr->lkey);
+        callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;
+        callback_data->memh[i].flags = 0;
+        callback_data->iov[i].buffer = (void*)(uintptr_t)be64toh(dptr->addr);
+        callback_data->iov[i].length = byte_count;
+        callback_data->iov[i].memh   = &callback_data->memh[i];
+        callback_data->iov[i].stride = 0;
+        callback_data->iov[i].count  = 1;
+
+        dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                         (void*)(dptr + 1));
+    }
+
+    *iovcnt_p = iovcnt;
+}
+
+void uct_rc_mlx5_op_info_fill_rma_zcopy(
+        uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
+        size_t wqe_size, uct_ep_operation_t operation,
+        uct_rc_mlx5_op_callback_data_t *callback_data)
+{
+    size_t header_size, iovcnt;
+
+    header_size = sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(*raddr);
+    ucs_assert(wqe_size >= header_size);
+
+    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1,
+                                       wqe_size - header_size, &iovcnt);
+
+    info->rma.payload.zcopy.iov    = callback_data->iov;
+    info->rma.payload.zcopy.iovcnt = iovcnt;
+    info->rma.field_mask          |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
+
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
+    info->operation   = operation;
+}
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
