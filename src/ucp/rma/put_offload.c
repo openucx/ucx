@@ -78,7 +78,7 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_RMA,
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT

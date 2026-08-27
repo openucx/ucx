@@ -75,24 +75,53 @@ public:
 
     void mock_transport(const std::string &tl_name)
     {
-        uct_component_h component;
-
         /* Currently only one TL can be mocked */
         ucs_assert(nullptr == m_tl);
+
+        m_tl = find_transport(tl_name);
+        if (m_tl != nullptr) {
+            m_mock.setup(&m_tl->query_devices, query_devices_mock);
+            m_mock.setup(&m_tl->iface_open, iface_open_mock);
+            return;
+        }
+
+        FAIL() << "Transport " << tl_name << " not found";
+    }
+
+    static bool is_transport_registered(const std::string &tl_name)
+    {
+        uct_component_h *components;
+        unsigned UCS_V_UNUSED num_components;
+        ucs_status_t status;
+
+        /*
+         * Load/register UCT components and modules, but do not query their
+         * resources. Querying resources would call TL query_devices callbacks.
+         */
+        status = uct_query_components(&components, &num_components);
+        if (status != UCS_OK) {
+            UCS_TEST_ABORT("Failed to query UCT components: "
+                           << ucs_status_string(status));
+        }
+
+        uct_release_component_list(components);
+        return find_transport(tl_name) != nullptr;
+    }
+
+    static uct_tl_t *find_transport(const std::string &tl_name)
+    {
+        uct_component_h component;
 
         ucs_list_for_each(component, &uct_components_list, list) {
             uct_tl_t *tl;
             ucs_list_for_each(tl, &component->tl_list, list) {
                 if (tl_name == tl->name) {
-                    m_mock.setup(&tl->query_devices, query_devices_mock);
-                    m_mock.setup(&tl->iface_open, iface_open_mock);
-                    m_tl = tl;
-                    return;
+                    return tl;
                 }
             }
         }
 
-        FAIL() << "Transport " << tl_name << " not found";
+        return nullptr;
     }
 
     void mock_cuda_ipc_remote_pid(ucp_worker_h worker)
@@ -682,8 +711,7 @@ protected:
 
     ucp_worker_cfg_index_t
     send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                  unsigned rkey_cfg_index = 1)
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -717,12 +745,7 @@ protected:
             send_buf.pattern_check(1);
         }
 
-        auto actual_rkey_cfg_index = rkey->cfg_index;
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            EXPECT_EQ(actual_rkey_cfg_index, rkey_cfg_index);
-        }
-
-        return actual_rkey_cfg_index;
+        return rkey->cfg_index;
     }
 };
 
@@ -856,7 +879,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
 UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
 {
-    send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    auto rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE,
+                                        UCP_OP_ID_PUT);
 
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_PUT;
@@ -865,7 +889,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
     check_rkey_config(sender(), {
         {0,    2048, "short",     "rc_mlx5/mock_1:1"},
         {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
-    }, key, 0);
+    }, key, rkey_cfg_index);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
@@ -993,6 +1017,10 @@ public:
             iface_attr.latency.m         = 1e-9;
             iface_attr.cap.get.max_zcopy = 16384;
         };
+
+        if (is_transport_registered("rc_gda")) {
+            UCS_TEST_SKIP_R("rc_gda transport is registered");
+        }
 
         setup_numa_topology();
         add_mock_iface_on_sys_device("mock_0:1", m_remote_sys_dev,
@@ -1335,18 +1363,16 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "ZCOPY_THRESH=1")
 {
     test_cuda_rma(UCP_OP_ID_PUT, {
-        {0, 0,   "short",     "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
 }
 
-UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "ZCOPY_THRESH=1")
 {
     test_cuda_rma(UCP_OP_ID_GET, {
-        {0, 0,   "copy-out",  "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
 }
@@ -2390,8 +2416,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT, UCS_MEMORY_TYPE_HOST,
-                      rkey_cfg_index);
+        EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT),
+                  rkey_cfg_index);
     }, UCP_OP_ID_PUT);
 }
 
@@ -2399,8 +2425,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET, UCS_MEMORY_TYPE_HOST,
-                      rkey_cfg_index);
+        EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET),
+                  rkey_cfg_index);
     }, UCP_OP_ID_GET);
 }
 
