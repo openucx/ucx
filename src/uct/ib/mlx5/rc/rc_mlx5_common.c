@@ -15,8 +15,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
-#include <endian.h>
-#include <string.h>
 
 static void uct_rc_mlx5_get_dptr_buffer(uct_rc_iface_send_op_t *op,
                                         const struct mlx5_wqe_data_seg *dptr,
@@ -56,23 +54,23 @@ uct_rc_mlx5_op_info_fill_rma_raddr(uct_ep_op_info_t *info,
 {
     info->rma.remote_addr = be64toh(raddr->raddr);
     info->rma.rkey        = ntohl(raddr->rkey);
-    info->rma.field_mask  = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+    info->rma.field_mask |= UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
                             UCT_EP_OP_INFO_RMA_FIELD_RKEY;
     info->field_mask     |= UCT_EP_OP_INFO_FIELD_RMA;
 }
 
 static void uct_rc_mlx5_op_info_fill_zcopy_iov(
         uct_rc_mlx5_op_callback_data_t *callback_data,
-        const uct_ib_mlx5_txwq_t *txwq, const void *first_dptr, size_t length,
+        const uct_ib_mlx5_txwq_t *txwq, const void *first_dptr, size_t seg_size,
         size_t *iovcnt_p)
 {
     const struct mlx5_wqe_data_seg *dptr;
     uint32_t byte_count;
     size_t iovcnt, i;
 
-    ucs_assert((length % sizeof(*dptr)) == 0);
+    ucs_assert((seg_size % sizeof(*dptr)) == 0);
 
-    iovcnt = length / sizeof(*dptr);
+    iovcnt = seg_size / sizeof(*dptr);
     ucs_assert(iovcnt <= ucs_static_array_size(callback_data->iov));
 
     dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
@@ -150,19 +148,17 @@ uct_rc_mlx5_op_info_fill_put_bcopy(uct_ep_op_info_t *info,
 
 static void uct_rc_mlx5_op_info_fill_put_zcopy(
         uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
-        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_data_seg *dptr,
-        const struct mlx5_wqe_raddr_seg *raddr, size_t wqe_size,
-        uct_rc_mlx5_op_callback_data_t *callback_data)
+        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
+        size_t seg_size, uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    size_t header_size, iovcnt;
+    size_t iovcnt;
 
-    if (dptr == NULL) {
+    if (seg_size == 0) {
         goto out;
     }
 
-    header_size = sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(*raddr);
-    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, dptr,
-                                       wqe_size - header_size, &iovcnt);
+    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1, seg_size,
+                                       &iovcnt);
 
     info->rma.payload.zcopy.iov    = callback_data->iov;
     info->rma.payload.zcopy.iovcnt = iovcnt;
@@ -195,8 +191,8 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
                                                callback_data);
         } else {
             ucs_assert(op->handler == uct_rc_ep_send_op_completion_handler);
-            uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op, NULL, raddr,
-                                               wqe_size, callback_data);
+            uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op, raddr, 0,
+                                               callback_data);
         }
 
         return UCS_OK;
@@ -212,9 +208,9 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     }
 
     if ((op == NULL) || (op->handler == uct_rc_ep_send_op_completion_handler)) {
-        uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op,
-                                           (const struct mlx5_wqe_data_seg*)inl,
-                                           raddr, wqe_size, callback_data);
+        uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op, raddr,
+                                           wqe_size - header_size,
+                                           callback_data);
 
         return UCS_OK;
     }
@@ -240,8 +236,6 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          int *skip_p,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    *skip_p = 0;
-
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_RDMA_WRITE:
         return uct_rc_mlx5_op_info_fill_put(info, txwq, op, ctrl, wqe_size,
