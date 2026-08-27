@@ -387,23 +387,7 @@ public:
 
     virtual void init() override
     {
-        /* This test is for dynamic protocol selection available only in v2 */
-        if (!is_proto_enabled()) {
-            UCS_TEST_SKIP_R("Proto v2 is disabled");
-        }
-
-        /* Reset topo provider to force reload from config */
-        ucs_sys_topo_reset_provider();
-
-        /*
-         * By default TOPO_PRIO="sysfs,default"
-         * We keep only default config to always have the same topo distances
-         * when test is being executed on different machines.
-         */
-        modify_config("TOPO_PRIO", topo_prio());
-
-        ucp_test::init();
-        post_ucp_init();
+        init_ucp();
         connect();
     }
 
@@ -456,6 +440,27 @@ public:
     }
 
 protected:
+    void init_ucp()
+    {
+        /* This test is for dynamic protocol selection available only in v2 */
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("Proto v2 is disabled");
+        }
+
+        /* Reset topo provider to force reload from config */
+        ucs_sys_topo_reset_provider();
+
+        /*
+         * By default TOPO_PRIO="sysfs,default"
+         * We keep only default config to always have the same topo distances
+         * when test is being executed on different machines.
+         */
+        modify_config("TOPO_PRIO", topo_prio());
+
+        ucp_test::init();
+        post_ucp_init();
+    }
+
     virtual const char *topo_prio() const
     {
         return "default";
@@ -711,13 +716,16 @@ protected:
 
     ucp_worker_cfg_index_t
     send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                  ucp_ep_h ep = NULL)
     {
+        ep = (ep == NULL) ? sender().ep() : ep;
+
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
         auto memh        = mem_map(receiver(), recv_buf);
         auto rkey_packed = rkey_pack(receiver(), memh);
-        auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+        auto rkey        = rkey_unpack(ep, rkey_packed);
 
         mem_buffer send_buf(size, mem_type);
         send_buf.pattern_fill(2);
@@ -726,10 +734,10 @@ protected:
         req_param.op_attr_mask = 0;
         ucs_status_ptr_t sptr;
         if (op_id == UCP_OP_ID_PUT) {
-            sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
+            sptr = ucp_put_nbx(ep, send_buf.ptr(), size,
                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else if (op_id == UCP_OP_ID_GET) {
-            sptr = ucp_get_nbx(sender().ep(), send_buf.ptr(), size,
+            sptr = ucp_get_nbx(ep, send_buf.ptr(), size,
                                (uint64_t)recv_buf.ptr(), rkey, &req_param);
         } else {
             sptr = nullptr;
@@ -1200,6 +1208,103 @@ UCS_TEST_P(test_ucp_proto_mock_cma, am_send_1_lane)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_cma, mm_cma, "posix,cma")
+
+class test_ucp_proto_mock_aux_am : public test_ucp_proto_mock_cma {
+public:
+    virtual void init() override
+    {
+        modify_config("AM_AUX_TLS", "y");
+        modify_config("UNIFIED_MODE", "n");
+        add_mock_iface();
+        init_ucp();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_aux_am, rma_with_aux_am)
+{
+    ucp_context_h context = sender().worker()->context;
+    ucp_address_t *address;
+    size_t address_length;
+    ucp_ep_params_t ep_params;
+    ucp_ep_h ep;
+    ucs_status_t status;
+    ucp_ep_config_t *config;
+    const ucp_ep_config_key_t *key;
+    ucp_rsc_index_t rsc_index;
+    bool has_rma_lane = false;
+
+    ASSERT_UCS_OK(ucp_worker_get_address(receiver().worker(), &address,
+                                         &address_length));
+    ep_params             = get_ep_params();
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address     = address;
+    status = ucp_ep_create(sender().worker(), &ep_params, &ep);
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_UCS_OK(status);
+
+    config = ucp_worker_ep_config(sender().worker(), ep->cfg_index);
+    key    = &config->key;
+
+    ASSERT_NE(UCP_NULL_LANE, key->am_lane);
+    rsc_index = key->lanes[key->am_lane].rsc_index;
+    EXPECT_TRUE(context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX);
+    EXPECT_EQ("posix",
+              std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name));
+
+    for (ucp_lane_index_t lane = 0; lane < key->num_lanes; ++lane) {
+        if (!(key->lanes[lane].lane_types &
+              (UCS_BIT(UCP_LANE_TYPE_RMA) |
+               UCS_BIT(UCP_LANE_TYPE_RMA_BW)))) {
+            continue;
+        }
+
+        rsc_index = key->lanes[lane].rsc_index;
+        EXPECT_EQ("cma",
+                  std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name));
+        EXPECT_FALSE(context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX);
+        has_rma_lane = true;
+    }
+
+    EXPECT_TRUE(has_rma_lane);
+    EXPECT_NE(UCP_WORKER_CFG_INDEX_NULL,
+              send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT,
+                            UCS_MEMORY_TYPE_HOST, ep));
+    ASSERT_UCS_OK(request_wait(ep_close_nbx(ep, 0),
+                               {&sender(), &receiver()}));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_aux_am, cma_aux,
+                              "cma,posix:aux")
+
+class test_ucp_proto_mock_aux_am_prefer_primary : public test_ucp_proto_mock {
+public:
+    virtual void init() override
+    {
+        modify_config("AM_AUX_TLS", "y");
+        modify_config("UNIFIED_MODE", "n");
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_aux_am_prefer_primary, prefers_primary)
+{
+    ucp_context_h context = sender().worker()->context;
+    ucp_ep_config_t *config;
+    const ucp_ep_config_key_t *key;
+    ucp_rsc_index_t rsc_index;
+
+    config = ucp_worker_ep_config(sender().worker(), sender().ep()->cfg_index);
+    key    = &config->key;
+
+    ASSERT_NE(UCP_NULL_LANE, key->am_lane);
+    rsc_index = key->lanes[key->am_lane].rsc_index;
+    EXPECT_EQ("posix",
+              std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name));
+    EXPECT_FALSE(context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_aux_am_prefer_primary,
+                              posix_aux, "posix,sysv:aux")
 
 class test_ucp_proto_mock_tcp : public test_ucp_proto_mock {
 public:
