@@ -686,6 +686,7 @@ typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
+    uint32_t                    next_first_psn; /* First PSN of the next WQE */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
@@ -693,8 +694,11 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+    uint16_t                    ft_ci;      /* CI for last FT-completed WQE */
+    /* First BB index of the last HW-completed WQE.
+     * Updated under assert on the normal path; always on the FT path. */
+    uint16_t                    hw_ci;
 #if UCS_ENABLE_ASSERT
-    uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
@@ -995,6 +999,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         const void *in, size_t inlen,
                                         void *out, size_t outlen);
+
+ucs_status_t uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in,
+                                       size_t inlen, void *out, size_t outlen);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
