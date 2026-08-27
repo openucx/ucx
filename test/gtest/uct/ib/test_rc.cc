@@ -951,12 +951,11 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and send short put message to force
-     * pending queue dispatch. Can't send AM message for that, because it may
-     * trigger reordering assert due to disable/enable entity hack. */
+    /* Enable send capabilities of m_e2 and dispatch the pending queue.
+     * Can't send AM/PUT for that, because it is blocked while FC grant is
+     * queued. */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 0);
-    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
+    uct_rc_iface_arbiter_dispatch(rc_iface(m_e2));
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);
