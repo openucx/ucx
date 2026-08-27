@@ -49,7 +49,6 @@ typedef struct {
     ucp_proto_select_param_t select_param;
 } ucp_proto_rndv_mtype_init_params_t;
 
-
 static UCS_F_ALWAYS_INLINE void ucp_proto_rndv_mtype_init_params_copy(
         const ucp_proto_init_params_t *init_params,
         const ucp_memory_info_t *frag_mem_info,
