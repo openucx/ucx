@@ -715,8 +715,7 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 0;
     }
 
-    if (ucs_netlink_route_matches(ndev_index, sa_remote,
-                                  iface->config.roce_relaxed_route_check)) {
+    if (ucs_netlink_route_matches(ndev_index, sa_remote, 1)) {
         return 1;
     }
 
@@ -1747,9 +1746,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.flid_enabled       = config->flid_enabled;
     uct_ib_iface_set_path_mtu(self, config);
 
-    self->config.send_overhead            = config->send_overhead;
-    self->config.roce_relaxed_route_check =
-            !!(init_attr->flags & UCT_IB_RELAXED_ROUTE_CHECK);
+    self->config.send_overhead = config->send_overhead;
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");
