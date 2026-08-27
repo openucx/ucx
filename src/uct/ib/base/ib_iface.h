@@ -259,8 +259,8 @@ enum {
     /* Whether device and transport supports DDP */
     UCT_IB_DDP_SUPPORTED             = UCS_BIT(3),
 
-    /* Whether to accept a specific route through the current NIC even when
-     * another NIC has a more-specific route */
+    /* Accept any non-default route, or a default route if no better route
+     * exists */
     UCT_IB_RELAXED_ROUTE_CHECK       = UCS_BIT(4)
 };
 
@@ -375,7 +375,7 @@ struct uct_ib_iface {
         uint8_t                          qp_type;
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
-        uint8_t                          relaxed_route_check;
+        uint8_t                          roce_relaxed_route_check;
         enum ibv_mtu                     path_mtu;
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;

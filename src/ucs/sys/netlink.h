@@ -62,21 +62,6 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
                              int *netmask_len_p);
 
 /**
- * Check whether a route to a given destination address exists through a given
- * network interface. A specific route is accepted regardless of routes through
- * other interfaces. A default route is accepted only when no matching
- * non-default route exists through any interface.
- *
- * @param [in]  if_index         Network interface index.
- * @param [in]  sa_remote        Pointer to the destination address.
- *
- * @return 1 if such a route exists through this network interface, or 0
- *         otherwise.
- */
-int ucs_netlink_route_exists_with_default_fallback(
-        int if_index, const struct sockaddr *sa_remote);
-
-/**
  * Get the network interface index of a local route to a given destination
  * address.
  *
@@ -87,16 +72,20 @@ int ucs_netlink_route_exists_with_default_fallback(
 int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
 
 /**
- * Check if this network interface has the best route to the destination
- * address.
+ * Check whether a route to a given destination address through a network
+ * interface matches the requested policy.
  *
  * @param [in]  if_index         Network interface index.
  * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [in]  relaxed_check    If nonzero, accept any non-default route and
+ *                               accept a default route only if no better route
+ *                               exists through another interface. Otherwise,
+ *                               accept only a best route.
  *
- * @return 1 if this network interface has the best route to the destination
- *         address, or 0 otherwise.
+ * @return 1 if the route is accepted by the requested policy, or 0 otherwise.
  */
-int ucs_netlink_is_best_route(int if_index, const struct sockaddr *sa_remote);
+int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
+                              int relaxed_check);
 
 END_C_DECLS
 

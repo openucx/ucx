@@ -694,18 +694,6 @@ static void uct_ib_iface_log_subnet_info(const struct sockaddr *sa1,
     ucs_debug("%s", ucs_string_buffer_cstr(&info));
 }
 
-static int uct_ib_iface_roce_ndev_has_route(uct_ib_iface_t *iface,
-                                            unsigned ndev_index,
-                                            const struct sockaddr *sa_remote)
-{
-    if (iface->config.relaxed_route_check) {
-        return ucs_netlink_route_exists_with_default_fallback(ndev_index,
-                                                              sa_remote);
-    }
-
-    return ucs_netlink_is_best_route(ndev_index, sa_remote);
-}
-
 static int
 uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
                               struct sockaddr *sa_remote,
@@ -727,7 +715,8 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 0;
     }
 
-    if (uct_ib_iface_roce_ndev_has_route(iface, ndev_index, sa_remote)) {
+    if (ucs_netlink_route_matches(ndev_index, sa_remote,
+                                  iface->config.roce_relaxed_route_check)) {
         return 1;
     }
 
@@ -1758,8 +1747,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.flid_enabled       = config->flid_enabled;
     uct_ib_iface_set_path_mtu(self, config);
 
-    self->config.send_overhead = config->send_overhead;
-    self->config.relaxed_route_check =
+    self->config.send_overhead            = config->send_overhead;
+    self->config.roce_relaxed_route_check =
             !!(init_attr->flags & UCT_IB_RELAXED_ROUTE_CHECK);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {

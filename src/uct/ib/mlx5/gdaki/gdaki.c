@@ -1137,8 +1137,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     init_attr.qp_type       = IBV_QPT_RC;
     init_attr.dev_name      = ib_name;
     init_attr.max_rd_atomic = IBV_DEV_ATTR(&md->super.dev, max_qp_rd_atom);
-    /* A better route through a NIC associated with another GPU does not make
-     * this GPU-associated NIC unreachable */
     init_attr.flags        |= UCT_IB_RELAXED_ROUTE_CHECK;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
