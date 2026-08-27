@@ -107,7 +107,8 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
-    UCT_RC_IFACE_SEND_OP_STATUS     = UCS_BIT(11), /* status field is valid */
+    UCT_RC_IFACE_SEND_OP_FLAG_RETAIN = UCS_BIT(10), /* retain after handler */
+    UCT_RC_IFACE_SEND_OP_STATUS      = UCS_BIT(11), /* status is valid */
 #ifdef NVALGRIND
     UCT_RC_IFACE_SEND_OP_FLAG_IOV   = 0,
 #else

@@ -13,8 +13,8 @@
 #  include <infiniband/driver.h>
 #endif
 
-#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/ib_mlx5_ext.h>
+#include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -211,6 +211,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
+    uint32_t num_packets           = 0;
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
@@ -288,7 +289,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
-        total += lengths[i];
+        total       += lengths[i];
+        num_packets += uct_rc_mlx5_num_packets(iface, lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
@@ -299,6 +301,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+
+    uct_rc_mlx5_txwq_add_psn(txwq, num_packets);
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -668,6 +672,20 @@ ucs_status_t uct_rc_mlx5_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi);
 }
 
+ucs_status_t uct_rc_mlx5_base_ep_check(uct_ep_h tl_ep, unsigned flags,
+                                       uct_completion_t *comp)
+{
+    uct_rc_mlx5_base_ep_t *ep =
+            ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
+        return uct_rc_ep_check(tl_ep, flags, comp);
+    }
+
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags);
+    return UCS_ERR_CANCELED;
+}
+
 ucs_status_t
 uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
@@ -734,6 +752,10 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                                UCT_FLUSH_FLAG_REMOTE),
                     "flush flags CANCEL and REMOTE are mutually exclusive");
 
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+        return UCS_ERR_CANCELED;
+    }
+
     if (flags & UCT_FLUSH_FLAG_REMOTE) {
         UCT_RC_IFACE_CHECK_FLUSH_REMOTE(
                 uct_ib_md_is_flush_rkey_valid(ep->super.flush_rkey), ep,
@@ -774,13 +796,129 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                       &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
-                                            const uct_ep_invalidate_params_t *params)
+ucs_status_t
+uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
+                               const uct_ep_invalidate_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    unsigned flags;
+    ucs_status_t status;
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                       IBV_QPS_ERR);
+    status = uct_ep_invalidate_params_check(
+            tl_ep, params, UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS, &flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
+        if (ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS) {
+            ucs_error("ep %p: completions are already disabled", ep);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        /* Cover an unsignaled tail with a final CQE before moving the QP to
+         * error. */
+        if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
+            UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
+            uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
+                                         &ep->super.txqp, txwq,
+                                         MLX5_OPCODE_NOP, NULL, 0,
+                                         0, 0, 0,
+                                         0, 0,
+                                         0, 0,
+                                         0, INT_MAX);
+        }
+    }
+
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &txwq->super,
+                                         IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (flags & UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS) {
+        txwq->ft_ci = txwq->prev_sw_pi -
+                      (txwq->bb_max -
+                       uct_rc_txqp_available(&ep->super.txqp));
+        ep->flags  |= UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS;
+
+        ucs_debug("ep %p disable completions WQE range (%u, %u) "
+                  "next_first_psn %u",
+                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_first_psn);
+    }
+
+    return UCS_OK;
+}
+
+void uct_rc_mlx5_ep_destroy(uct_ep_h tl_ep)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep,
+                                               uct_rc_mlx5_base_ep_t);
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS) {
+        ep->flags |= UCT_RC_MLX5_EP_FLAG_DESTROY_PENDING;
+        return;
+    }
+
+    uct_rc_mlx5_ep_t_delete(tl_ep);
+}
+
+static ucs_status_t
+uct_rc_mlx5_ep_outstanding_purge_complete(uct_ep_h tl_ep, ucs_status_t status)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep,
+                                               uct_rc_mlx5_base_ep_t);
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DESTROY_PENDING) {
+        uct_rc_mlx5_ep_t_delete(tl_ep);
+    } else {
+        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
+    }
+
+    return status;
+}
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    uint16_t purge_ci;
+    ucs_status_t status;
+
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ep->flags & UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS) {
+        return UCS_ERR_BUSY;
+    }
+
+    /* Purge only after HW ownership reaches the saved SW tail. */
+    if (txwq->hw_ci != txwq->prev_sw_pi) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    purge_ci  = txwq->prev_sw_pi;
+    ep->flags |= UCT_RC_MLX5_EP_FLAG_PURGE_INPROGRESS;
+    status     = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+
+    if (status == UCS_OK) {
+        /* The recovery provider may advance ft_ci while classifying WQEs.
+         * Restore any remaining pre-callback range without releasing credits
+         * consumed by WQEs posted from a purge callback. */
+        uct_rc_txqp_available_add(txqp, purge_ci - txwq->ft_ci);
+        txwq->ft_ci = purge_ci;
+    }
+
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+    return uct_rc_mlx5_ep_outstanding_purge_complete(tl_ep, status);
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -1219,6 +1357,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     }
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
+    self->flags        = 0;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     uct_rc_mlx5_iface_common_prepost_recvs(iface);
     return UCS_OK;
@@ -1293,7 +1432,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     cleanup_ctx->reg   = self->super.tx.wq.reg;
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
-                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1,
+                                  self->super.flags &
+                                          UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS);
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
@@ -1305,8 +1446,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                                       &self->super.tx.wq.super, IBV_QPS_ERR);
 
     /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
-       overflow. These CQ credits will be released by error CQE handler. */
-    outstanding = self->super.tx.wq.bb_max - self->super.super.txqp.available;
+     * overflow. These CQ credits will be released by error CQE handler.
+     * TXQP credits may intentionally lag behind hardware progress after
+     * completions are disabled. Count outstanding BBs from the HW frontier. */
+    outstanding = self->super.tx.wq.prev_sw_pi - self->super.tx.wq.hw_ci;
     wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
                                                    outstanding);
     ucs_assert(outstanding >= wqe_count);

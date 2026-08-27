@@ -846,6 +846,12 @@ ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep,
                                        const uct_ep_invalidate_params_t *params)
 {
     uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    ucs_status_t status;
+
+    status = uct_ep_invalidate_params_check(tl_ep, params, 0, NULL);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ep->flags |= UCT_DC_MLX5_EP_FLAG_INVALIDATED;
@@ -1332,7 +1338,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 
     /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super.super, &dci->txqp,
-                                  UCS_ERR_CANCELED, dci->txwq.sw_pi, 1);
+                                  UCS_ERR_CANCELED, dci->txwq.sw_pi, 1, 0);
     ucs_assert(ucs_queue_is_empty(&dci->txqp.outstanding));
     uct_dc_mlx5_iface_dci(iface, self->dci)->ep = NULL;
 }
@@ -1774,7 +1780,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
 
     uct_dc_mlx5_update_tx_res(iface, dci_index, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, &dci->txqp, ep_status,
-                                  pi, 0);
+                                  pi, 0, 0);
 
     /* Invoke a user's error callback and release TX/FC resources before
      * releasing DCI, to have DCI for doing possible flush(CANCEL) */

@@ -752,7 +752,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
-                                  UCS_ERR_CANCELED, self->txcnt.pi, 1);
+                                  UCS_ERR_CANCELED, self->txcnt.pi, 1, 0);
     uct_ib_modify_qp(self->qp, IBV_QPS_ERR);
 
     /* We can release all CQ credits after ibv_qp_destroy(), since it would

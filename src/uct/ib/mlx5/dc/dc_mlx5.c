@@ -1246,7 +1246,7 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
         txqp = &fc_dci->txqp;
         uct_rc_txqp_purge_outstanding(&iface->super.super, txqp,
                                       /* complete with OK to avoid re-sending */
-                                      UCS_OK, fc_dci->txwq.sw_pi, 0);
+                                      UCS_OK, fc_dci->txwq.sw_pi, 0, 0);
     }
 
 out:

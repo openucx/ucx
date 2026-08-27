@@ -243,6 +243,10 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
             *dest = be64toh(*value); /* response in CQE as 64-bit value */ \
         } \
         \
+        if (ucs_unlikely(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_RETAIN)) { \
+            return; \
+        } \
+        \
         uct_invoke_completion(desc->super.user_comp, UCS_OK); \
         ucs_mpool_put(desc); \
     }

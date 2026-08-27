@@ -40,6 +40,15 @@ protected:
         return tx_token() + 1;
     }
 
+    ucs_status_t invalidate_ep_no_completions()
+    {
+        uct_ep_invalidate_params_t params = {};
+
+        params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+        params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+        return uct_ep_invalidate(m_e1->ep(0), &params);
+    }
+
     void save_plugins()
     {
         if (ucs_list_is_empty(&uct_ib_mlx5_ext_plugins)) {
@@ -115,6 +124,26 @@ protected:
     static void purge_cb(const uct_ep_op_info_t*, void *arg)
     {
         *static_cast<bool*>(arg) = true;
+    }
+
+    struct recursive_purge_context {
+        uct_ep_h                                ep;
+        const uct_ep_outstanding_purge_params_t *params;
+        ucs_status_t                            status;
+    };
+
+    static void purge_recursive_cb(const uct_ep_op_info_t*, void *arg)
+    {
+        recursive_purge_context *context =
+                static_cast<recursive_purge_context*>(arg);
+
+        context->status = uct_ep_outstanding_purge(context->ep,
+                                                   context->params);
+    }
+
+    static void purge_destroy_cb(const uct_ep_op_info_t*, void *arg)
+    {
+        static_cast<entity*>(arg)->destroy_ep(0);
     }
 
     static void
@@ -193,18 +222,19 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
     bool callback_invoked                    = false;
     uct_ep_outstanding_purge_params_t params = {};
 
-    {
-        scoped_log_handler wrap_err(wrap_errors_logger);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  uct_ep_outstanding_purge(m_e1->ep(0), &params));
-    }
-
     register_plugin("stub",
                     (uct_ib_mlx5_ext_iface_query_func_t)
                             ucs_empty_function_return_unsupported,
                     NULL, NULL);
     register_plugin("fail", NULL, NULL, purge_fail);
     register_plugin("token", iface_query, ep_query, purge);
+    ASSERT_UCS_OK(invalidate_ep_no_completions());
+
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  uct_ep_outstanding_purge(m_e1->ep(0), &params));
+    }
 
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                         UCT_EP_OUTSTANDING_FIELD_CB |
@@ -215,6 +245,47 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
 
     ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
     EXPECT_TRUE(callback_invoked);
+}
+
+UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge_recursive)
+{
+    uint64_t rx_token_value                  = rx_token();
+    recursive_purge_context context          = {};
+    uct_ep_outstanding_purge_params_t params = {};
+
+    register_plugin("token", iface_query, ep_query, purge);
+    ASSERT_UCS_OK(invalidate_ep_no_completions());
+
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                        UCT_EP_OUTSTANDING_FIELD_CB |
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.rx_token   = &rx_token_value;
+    params.cb         = purge_recursive_cb;
+    params.arg        = &context;
+    context.ep        = m_e1->ep(0);
+    context.params    = &params;
+
+    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
+    EXPECT_EQ(UCS_ERR_BUSY, context.status);
+}
+
+UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge_destroy)
+{
+    uint64_t rx_token_value                  = rx_token();
+    uct_ep_outstanding_purge_params_t params = {};
+
+    register_plugin("token", iface_query, ep_query, purge);
+    ASSERT_UCS_OK(invalidate_ep_no_completions());
+
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                        UCT_EP_OUTSTANDING_FIELD_CB |
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.rx_token   = &rx_token_value;
+    params.cb         = purge_destroy_cb;
+    params.arg        = m_e1;
+
+    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
+    EXPECT_EQ(NULL, m_e1->ep(0));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_ib_mlx5_ext_rc, rc_mlx5)

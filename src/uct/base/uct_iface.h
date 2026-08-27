@@ -1071,6 +1071,10 @@ void uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka, pid_t pid,
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 
+ucs_status_t uct_ep_invalidate_params_check(
+        uct_ep_h ep, const uct_ep_invalidate_params_t *params,
+        unsigned supported_flags, unsigned *flags_p);
+
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
 void uct_iface_vfs_set_dirty(uct_iface_h iface);

@@ -286,7 +286,12 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                                   ucs_status_t status, uint16_t sn, int warn);
+                                   ucs_status_t status, uint16_t sn, int warn,
+                                   int suppress_completion);
+
+void uct_rc_txqp_completion_no_completion(uct_rc_iface_t *iface,
+                                          uct_rc_txqp_t *txqp,
+                                          const void *resp, uint16_t sn);
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
@@ -452,6 +457,29 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_no_completion_cb(uct_completion_t *comp)
+{
+    (void)comp;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_invoke_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
+                                 int suppress_completion)
+{
+    uct_completion_t dummy_comp = {uct_rc_txqp_no_completion_cb, 1, UCS_OK};
+
+    /* Send handlers invoke user_comp synchronously. Let them perform their
+     * internal response processing and cleanup without completing the
+     * operation after completion ownership has moved to recovery. */
+    if (suppress_completion) {
+        /* cppcheck-suppress autoVariables */
+        op->user_comp = &dummy_comp;
+    }
+
+    op->handler(op, resp);
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
 {
     ucs_trace_poll("complete op %p sn %d handler %s", op, op->sn,
@@ -459,6 +487,7 @@ uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
     ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
     op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+
     op->handler(op, resp);
 }
 
@@ -470,12 +499,15 @@ uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
     ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
+        uct_rc_txqp_completion_op(op,
+                                  ucs_derived_of(op, uct_rc_iface_send_desc_t) +
+                                          1);
     }
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t sn)
+uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp,
+                                uint16_t sn)
 {
     uct_rc_iface_send_op_t *op;
 

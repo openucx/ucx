@@ -458,7 +458,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
     uint16_t outstanding;
     uint16_t wqe_count;
 
-    outstanding = self->super.tx.wq.bb_max - self->super.super.txqp.available;
+    outstanding = self->super.tx.wq.prev_sw_pi - self->super.tx.wq.hw_ci;
+    ucs_assert(outstanding ==
+               self->super.tx.wq.bb_max -
+                       uct_rc_txqp_available(&self->super.super.txqp));
     wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
                                                    outstanding);
     ucs_assert(outstanding >= wqe_count);
@@ -466,7 +469,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
     uct_ib_dereg_mr(self->dma_opaque.mr);
     ucs_free(self->dma_opaque.buf);
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
-                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+                                  UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1,
+                                  0);
     uct_rc_iface_remove_qp(&iface->super, self->super.tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(md, &self->super.tx.wq.super);
     uct_ib_mlx5_qp_mmio_cleanup(&self->super.tx.wq.super, self->super.tx.wq.reg);
@@ -729,6 +733,19 @@ uct_gga_mlx5_ep_is_connected(uct_ep_h tl_ep,
            uct_rc_mlx5_base_ep_is_connected(tl_ep, params);
 }
 
+static ucs_status_t uct_gga_mlx5_ep_invalidate(
+        uct_ep_h tl_ep, const uct_ep_invalidate_params_t *params)
+{
+    ucs_status_t status;
+
+    status = uct_ep_invalidate_params_check(tl_ep, params, 0, NULL);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_rc_mlx5_base_ep_invalidate(tl_ep, params);
+}
+
 static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
     .super = {
         .super = {
@@ -736,7 +753,7 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .iface_estimate_perf    = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function,
-            .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
+            .ep_invalidate          = uct_gga_mlx5_ep_invalidate,
             .ep_connect_to_ep_v2    = uct_gga_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_gga_mlx5_ep_is_connected,

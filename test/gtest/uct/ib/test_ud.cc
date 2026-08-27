@@ -948,6 +948,24 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 }
 #endif
 
+UCS_TEST_P(test_ud, invalidate_no_completions_unsupported)
+{
+    uct_ep_invalidate_params_t params = {};
+    uint32_t initial_flags;
+
+    connect();
+    initial_flags = ep(m_e1)->flags;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+
+    ASSERT_EQ(UCS_ERR_UNSUPPORTED, uct_ep_invalidate(m_e1->ep(0), &params));
+    EXPECT_EQ(initial_flags, ep(m_e1)->flags);
+
+    EXPECT_UCS_OK(tx(m_e1));
+    EXPECT_UCS_OK(ep_flush_b(m_e1));
+}
+
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
 #if UCT_UD_EP_DEBUG_HOOKS
@@ -1208,4 +1226,3 @@ UCS_TEST_P(test_ud_iface_attrs, iface_attrs)
 }
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)
-

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -14,6 +14,8 @@ extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
+
+#include <sched.h>
 #endif
 
 
@@ -143,6 +145,808 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
+
+#ifdef HAVE_MLX5_DV
+
+class test_rc_mlx5_invalidate : public test_rc {
+protected:
+    struct tracked_completion {
+        uct_completion_t uct;
+        unsigned         callback_count;
+    };
+
+    static void completion_cb(uct_completion_t *comp)
+    {
+        tracked_completion *tracked = ucs_container_of(comp,
+                                                       tracked_completion, uct);
+
+        ++tracked->callback_count;
+    }
+};
+
+UCS_TEST_P(test_rc_mlx5_invalidate, no_completions)
+{
+    uct_rc_mlx5_base_ep_t *ep =
+            reinterpret_cast<uct_rc_mlx5_base_ep_t*>(m_e1->ep(0));
+    uct_ep_invalidate_params_t params = {};
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    EXPECT_TRUE(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS);
+
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  uct_ep_invalidate(m_e1->ep(0), &params));
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_invalidate,
+                     destroy_preserves_completion_ownership,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const size_t length = 32;
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+
+    completion.uct.func  = completion_cb;
+    completion.uct.count = 1;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &completion.uct));
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+
+    m_e1->destroy_ep(0);
+
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+    uct_iface_progress_enable(m_e1->iface(), UCT_PROGRESS_SEND);
+}
+
+UCS_TEST_P(test_rc_mlx5_invalidate,
+           no_completions_unsupported_with_hw_tag_matching)
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep =
+            reinterpret_cast<uct_rc_mlx5_base_ep_t*>(m_e1->ep(0));
+    uct_ep_invalidate_params_t params = {};
+    uint8_t initial_tm_enabled        = iface->tm.enabled;
+    uint8_t initial_ep_flags          = ep->flags;
+    ucs_status_t status;
+
+    iface->tm.enabled = 1;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    status            = uct_ep_invalidate(m_e1->ep(0), &params);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+    EXPECT_EQ(initial_ep_flags, ep->flags);
+
+    iface->tm.enabled = initial_tm_enabled;
+    if (status != UCS_ERR_UNSUPPORTED) {
+        scoped_log_handler hide_warn(hide_warns_logger);
+        m_e1->destroy_ep(0);
+        return;
+    }
+
+    ASSERT_UCS_OK(send_am_message(m_e1));
+    flush();
+}
+
+UCS_TEST_P(test_rc_mlx5_invalidate, unknown_flags_is_atomic)
+{
+    uct_ep_invalidate_params_t params = {};
+    ucs_status_t status;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCS_BIT(31);
+
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        status = uct_ep_invalidate(m_e1->ep(0), &params);
+    }
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    if (status != UCS_ERR_INVALID_PARAM) {
+        scoped_log_handler hide_warn(hide_warns_logger);
+        m_e1->destroy_ep(0);
+        return;
+    }
+
+    ASSERT_UCS_OK(send_am_message(m_e1));
+    flush();
+}
+
+UCS_TEST_P(test_rc_mlx5_invalidate, null_params)
+{
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), NULL));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_invalidate, rc_mlx5)
+
+
+class test_rc_mlx5_late_cqe : public test_rc {
+public:
+    void init() override
+    {
+        modify_config("IB_TX_CQE_ZIP_ENABLE", "no");
+        modify_config("IB_TX_INLINE_RESP", "64");
+        test_rc::init();
+    }
+
+protected:
+    struct tracked_completion {
+        uct_completion_t uct;
+        unsigned         callback_count;
+    };
+
+    struct error_context {
+        uct_rc_mlx5_base_ep_t *ep;
+        tracked_completion    *completion;
+        uint16_t              observed_hw_ci;
+        int16_t               observed_available;
+        unsigned              observed_outstanding;
+        unsigned              observed_completion_count;
+        unsigned              callback_count;
+    };
+
+    class ep_cleanup_guard {
+    public:
+        ep_cleanup_guard(entity *test_entity) : m_entity(test_entity)
+        {
+        }
+
+        ~ep_cleanup_guard()
+        {
+            uct_rc_mlx5_iface_common_t *iface =
+                    reinterpret_cast<uct_rc_mlx5_iface_common_t*>(
+                            m_entity->iface());
+            uct_rc_mlx5_base_ep_t *ep =
+                    reinterpret_cast<uct_rc_mlx5_base_ep_t*>(m_entity->ep(0));
+            uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+            uct_rc_txqp_t *txqp      = &ep->super.txqp;
+
+            /* This fixture validates CQE processing, not EP retirement. */
+            if (!ucs_queue_is_empty(&txqp->outstanding)) {
+                uct_rc_txqp_purge_outstanding(&iface->super, txqp,
+                                              UCS_ERR_CANCELED, txwq->sw_pi, 0,
+                                              1);
+            }
+
+            uct_iface_progress_enable(m_entity->iface(), UCT_PROGRESS_SEND);
+            scoped_log_handler hide_warn(hide_warns_logger);
+            m_entity->destroy_ep(0);
+        }
+
+    private:
+        entity *m_entity;
+    };
+
+    static void completion_cb(uct_completion_t *comp)
+    {
+        tracked_completion *tracked = ucs_container_of(comp, tracked_completion,
+                                                       uct);
+
+        ++tracked->callback_count;
+    }
+
+    static struct mlx5_cqe64 make_error_cqe(uint32_t qpn, uint16_t pi)
+    {
+        uct_ib_mlx5_err_cqe_t err_cqe = {};
+        struct mlx5_cqe64 cqe;
+
+        UCS_STATIC_ASSERT(sizeof(cqe) == sizeof(err_cqe));
+
+        err_cqe.s_wqe_opcode_qpn = htonl((MLX5_OPCODE_RDMA_READ << 24) | qpn);
+        err_cqe.wqe_counter      = htons(pi);
+        err_cqe.syndrome         = MLX5_CQE_SYNDROME_WR_FLUSH_ERR;
+        err_cqe.op_own           = MLX5_CQE_REQ_ERR << 4;
+        memcpy(&cqe, &err_cqe, sizeof(cqe));
+        return cqe;
+    }
+
+    static ucs_status_t
+    observe_error_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        error_context *context = static_cast<error_context*>(arg);
+
+        EXPECT_EQ(&context->ep->super.super.super, ep);
+        EXPECT_EQ(UCS_ERR_CANCELED, status);
+        context->observed_hw_ci       = context->ep->tx.wq.hw_ci;
+        context->observed_available   = uct_rc_txqp_available(
+                &context->ep->super.txqp);
+        context->observed_outstanding = ucs_queue_length(
+                &context->ep->super.txqp.outstanding);
+        if (context->completion != NULL) {
+            context->observed_completion_count =
+                    context->completion->callback_count;
+        }
+
+        ++context->callback_count;
+        return UCS_OK;
+    }
+
+    static uint16_t logical_ci(uct_rc_mlx5_base_ep_t *ep)
+    {
+        uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+
+        return txwq->prev_sw_pi -
+               (txwq->bb_max - uct_rc_txqp_available(&ep->super.txqp));
+    }
+
+    static void check_retained_op(uct_rc_txqp_t *txqp,
+                                  uct_rc_iface_send_op_t *expected_op,
+                                  uct_completion_t *expected_comp)
+    {
+        uct_rc_iface_send_op_t *op;
+
+        ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+        op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
+                                           uct_rc_iface_send_op_t, queue);
+        EXPECT_EQ(expected_op, op);
+        EXPECT_EQ(expected_comp, op->user_comp);
+        EXPECT_FALSE(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_RETAIN);
+    }
+
+    static struct mlx5_cqe64 *get_cqe(uct_ib_mlx5_cq_t *cq, unsigned cqe_index)
+    {
+        return reinterpret_cast<struct mlx5_cqe64*>(
+                static_cast<char*>(cq->cq_buf) +
+                ((cqe_index & cq->cq_length_mask) << cq->cqe_size_log));
+    }
+
+    static int cqe_is_hw_owned(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe,
+                               unsigned cqe_index)
+    {
+        uint8_t sw_it_count = cqe_index >> cq->cq_length_log;
+
+        return (sw_it_count ^ cqe->op_own) & MLX5_CQE_OWNER_MASK;
+    }
+
+    static int cqe_is_error_or_zipped(uint8_t op_own)
+    {
+        const uint8_t mask = UCT_IB_MLX5_CQE_FORMAT_MASK |
+                             UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK;
+
+        return (op_own & mask) >= UCT_IB_MLX5_CQE_FORMAT_MASK;
+    }
+
+    static struct mlx5_cqe64 *
+    wait_for_cqe(uct_ib_mlx5_cq_t *cq, unsigned cqe_index)
+    {
+        struct mlx5_cqe64 *cqe = get_cqe(cq, cqe_index);
+        ucs_time_t deadline    = ucs::get_deadline(10.0);
+
+        while (cqe_is_hw_owned(cq, cqe, cqe_index) &&
+               (ucs_get_time() < deadline)) {
+            sched_yield();
+        }
+
+        return cqe;
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, success_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_TX];
+    mapped_buffer sendbuf(64, 0ul, *m_e1);
+    mapped_buffer recvbuf(64, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+    uct_rc_iface_send_op_t *send_op;
+    struct mlx5_cqe64 *cqe;
+    unsigned old_cq_ci;
+    uint16_t old_hw_ci, old_logical_ci, cqe_pi;
+    int16_t post_available;
+    signed post_cq_available;
+
+    flush();
+    memset(sendbuf.ptr(), 0xa5, sendbuf.length());
+    memset(recvbuf.ptr(), 0, recvbuf.length());
+
+    completion.uct.func   = completion_cb;
+    completion.uct.count  = 1;
+    completion.uct.status = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &completion.uct));
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    send_op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
+                                            uct_rc_iface_send_op_t, queue);
+
+    old_cq_ci = cq->cq_ci;
+    cqe       = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+
+    cqe_pi            = ntohs(cqe->wqe_counter);
+    old_hw_ci         = txwq->hw_ci;
+    old_logical_ci    = logical_ci(ep);
+    post_available    = txqp->available;
+    post_cq_available = iface->super.tx.cq_available;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_EQ(old_logical_ci, txwq->ft_ci);
+
+    EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
+    EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
+    EXPECT_EQ(cqe_pi, txwq->hw_ci);
+    EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(old_logical_ci, txwq->ft_ci);
+    EXPECT_EQ(post_available, txqp->available);
+    EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
+              iface->super.tx.cq_available);
+    EXPECT_EQ(txwq->prev_sw_pi, txwq->hw_ci);
+    EXPECT_LT(txqp->available, txwq->bb_max);
+    check_retained_op(txqp, send_op, &completion.uct);
+    uct_rc_txqp_purge_outstanding(&iface->super, txqp, UCS_ERR_CANCELED,
+                                  txwq->sw_pi, 0, 1);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+    EXPECT_EQ(0, memcmp(sendbuf.ptr(), recvbuf.ptr(), sendbuf.length()));
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, get_bcopy_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
+    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_TX];
+    const size_t length       = 32;
+    mapped_buffer localbuf(length, 0ul, *m_e1);
+    mapped_buffer remotebuf(length, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+    uct_rc_iface_send_op_t *send_op;
+    struct mlx5_cqe64 *cqe;
+    unsigned old_cq_ci;
+    uint16_t old_logical_ci, cqe_pi;
+    ssize_t initial_reads_available, initial_reads_completed;
+
+    if (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] < length) {
+        UCS_TEST_SKIP_R("TX inline response is unavailable");
+    }
+
+    flush();
+    memset(localbuf.ptr(), 0, length);
+    memset(remotebuf.ptr(), 0xa5, length);
+    completion.uct.func     = completion_cb;
+    completion.uct.count    = 1;
+    completion.uct.status   = UCS_OK;
+    initial_reads_available = iface->super.tx.reads_available;
+    initial_reads_completed = iface->super.tx.reads_completed;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    old_cq_ci = cq->cq_ci;
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                               localbuf.ptr(), length, remotebuf.addr(),
+                               remotebuf.rkey(), &completion.uct));
+    old_logical_ci = logical_ci(ep);
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    send_op = ucs_queue_head_elem_non_empty(&txqp->outstanding,
+                                            uct_rc_iface_send_op_t, queue);
+    ASSERT_LT(iface->super.tx.reads_available, initial_reads_available);
+
+    cqe = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+    ASSERT_TRUE(cqe->op_own &
+                (MLX5_INLINE_SCATTER_32 | MLX5_INLINE_SCATTER_64));
+    cqe_pi = ntohs(cqe->wqe_counter);
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_EQ(old_logical_ci, txwq->ft_ci);
+
+
+    EXPECT_GT(uct_iface_progress(m_e1->iface()), 0u);
+    EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
+    EXPECT_EQ(0, memcmp(localbuf.ptr(), remotebuf.ptr(), length));
+    check_retained_op(txqp, send_op, &completion.uct);
+    EXPECT_EQ(&uct_rc_ep_am_zcopy_handler, send_op->handler);
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+    EXPECT_EQ(initial_reads_available, iface->super.tx.reads_available);
+    EXPECT_EQ(initial_reads_completed, iface->super.tx.reads_completed);
+    EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(cqe_pi, txwq->hw_ci);
+    uct_rc_txqp_purge_outstanding(&iface->super, txqp, UCS_ERR_CANCELED,
+                                  txwq->sw_pi, 0, 1);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(initial_reads_available, iface->super.tx.reads_available);
+    EXPECT_EQ(initial_reads_completed, iface->super.tx.reads_completed);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe,
+                     error_cqe_cleanup_before_callback,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep    = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_base_iface_t *base_iface = &iface->super.super.super;
+    uct_ib_mlx5_txwq_t *txwq     = &ep->tx.wq;
+    uct_rc_txqp_t *txqp          = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq         = &iface->cq[UCT_IB_DIR_TX];
+    const size_t length          = 32;
+    mapped_buffer localbuf(length, 0ul, *m_e1);
+    mapped_buffer remotebuf(length, 0ul, *m_e2);
+    tracked_completion completion = {};
+    error_context context         = {};
+    struct mlx5_cqe64 error_cqe;
+    struct mlx5_cqe64 *cqe;
+    uct_error_handler_t saved_err_handler;
+    void *saved_err_handler_arg;
+    unsigned old_cq_ci;
+    uint16_t cqe_pi;
+    int16_t expected_available;
+
+    flush();
+    completion.uct.func   = completion_cb;
+    completion.uct.count  = 1;
+    completion.uct.status = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    old_cq_ci = cq->cq_ci;
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                               localbuf.ptr(), length, remotebuf.addr(),
+                               remotebuf.rkey(), &completion.uct));
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+
+    cqe = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+    cqe_pi = ntohs(cqe->wqe_counter);
+
+    saved_err_handler     = base_iface->err_handler;
+    saved_err_handler_arg = base_iface->err_handler_arg;
+    context.ep                  = ep;
+    context.completion          = &completion;
+    base_iface->err_handler     = observe_error_cb;
+    base_iface->err_handler_arg = &context;
+
+    error_cqe         = make_error_cqe(txwq->super.qp_num, cqe_pi);
+    error_cqe.op_own |= cqe->op_own & MLX5_CQE_OWNER_MASK;
+    memcpy(cqe, &error_cqe, sizeof(*cqe));
+    uct_ib_mlx5_check_completion_with_err(&iface->super.super, cq, cqe);
+
+    base_iface->err_handler     = saved_err_handler;
+    base_iface->err_handler_arg = saved_err_handler_arg;
+    expected_available          = txwq->bb_max -
+                                  (txwq->prev_sw_pi - cqe_pi);
+
+    EXPECT_EQ(1u, context.callback_count);
+    EXPECT_EQ(cqe_pi, context.observed_hw_ci);
+    EXPECT_EQ(0u, context.observed_outstanding);
+    EXPECT_EQ(expected_available, context.observed_available);
+    EXPECT_EQ(1u, context.observed_completion_count);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp->outstanding));
+    EXPECT_EQ(0, completion.uct.count);
+    EXPECT_EQ(UCS_ERR_CANCELED, completion.uct.status);
+    EXPECT_EQ(1u, completion.callback_count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, error_cqe_state_before_callback,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep    = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_base_iface_t *base_iface = &iface->super.super.super;
+    uct_ib_mlx5_txwq_t *txwq     = &ep->tx.wq;
+    uct_rc_txqp_t *txqp          = &ep->super.txqp;
+    uct_ib_mlx5_cq_t *cq         = &iface->cq[UCT_IB_DIR_TX];
+    const size_t length          = 32;
+    mapped_buffer localbuf(length, 0ul, *m_e1);
+    mapped_buffer remotebuf(length, 0ul, *m_e2);
+    tracked_completion completion     = {};
+    uct_ep_invalidate_params_t params = {};
+    error_context context             = {};
+    struct mlx5_cqe64 error_cqe;
+    struct mlx5_cqe64 *cqe;
+    uct_error_handler_t saved_err_handler;
+    void *saved_err_handler_arg;
+    unsigned old_cq_ci;
+    uint16_t old_hw_ci, old_logical_ci, cqe_pi;
+    int16_t post_available, observed_available;
+    signed post_cq_available, observed_cq_available;
+    ssize_t initial_reads_available;
+    ssize_t post_reads_available, post_reads_completed;
+    ssize_t observed_reads_available, observed_reads_completed;
+    uint8_t saved_ep_flags;
+    int16_t saved_fc_wnd;
+#ifdef ENABLE_STATS
+    uint64_t saved_fc_wnd_stat;
+#endif
+    bool outstanding_preserved;
+#if UCS_ENABLE_ASSERT
+    uint8_t saved_txwq_flags;
+#endif
+
+    flush();
+    completion.uct.func     = completion_cb;
+    completion.uct.count    = 1;
+    completion.uct.status   = UCS_OK;
+    initial_reads_available = iface->super.tx.reads_available;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    old_cq_ci = cq->cq_ci;
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                               localbuf.ptr(), length, remotebuf.addr(),
+                               remotebuf.rkey(), &completion.uct));
+    ASSERT_EQ(1ul, ucs_queue_length(&txqp->outstanding));
+    ASSERT_LT(iface->super.tx.reads_available, initial_reads_available);
+
+    cqe = wait_for_cqe(cq, old_cq_ci);
+    ASSERT_FALSE(cqe_is_hw_owned(cq, cqe, old_cq_ci));
+    ucs_memory_cpu_load_fence();
+    ASSERT_FALSE(cqe_is_error_or_zipped(cqe->op_own));
+
+    cqe_pi               = ntohs(cqe->wqe_counter);
+    old_hw_ci            = txwq->hw_ci;
+    old_logical_ci       = logical_ci(ep);
+    post_available       = txqp->available;
+    post_cq_available    = iface->super.tx.cq_available;
+    post_reads_available = iface->super.tx.reads_available;
+    post_reads_completed = iface->super.tx.reads_completed;
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    saved_err_handler     = base_iface->err_handler;
+    saved_err_handler_arg = base_iface->err_handler_arg;
+    saved_ep_flags        = ep->super.flags;
+    saved_fc_wnd          = ep->super.fc.fc_wnd;
+#ifdef ENABLE_STATS
+    saved_fc_wnd_stat = UCS_STATS_GET_COUNTER(ep->super.fc.stats,
+                                              UCT_RC_FC_STAT_FC_WND);
+#endif
+#if UCS_ENABLE_ASSERT
+    saved_txwq_flags = txwq->flags;
+#endif
+
+    context.ep                  = ep;
+    base_iface->err_handler     = observe_error_cb;
+    base_iface->err_handler_arg = &context;
+
+    error_cqe         = make_error_cqe(txwq->super.qp_num, cqe_pi);
+    error_cqe.op_own |= cqe->op_own & MLX5_CQE_OWNER_MASK;
+    memcpy(cqe, &error_cqe, sizeof(*cqe));
+    uct_ib_mlx5_check_completion_with_err(&iface->super.super, cq, cqe);
+
+    observed_cq_available    = iface->super.tx.cq_available;
+    observed_available       = txqp->available;
+    observed_reads_available = iface->super.tx.reads_available;
+    observed_reads_completed = iface->super.tx.reads_completed;
+    outstanding_preserved    = ucs_queue_length(&txqp->outstanding) == 1;
+
+    base_iface->err_handler     = saved_err_handler;
+    base_iface->err_handler_arg = saved_err_handler_arg;
+    ep->super.flags             = saved_ep_flags;
+    ep->super.fc.fc_wnd         = saved_fc_wnd;
+#ifdef ENABLE_STATS
+    UCS_STATS_SET_COUNTER(ep->super.fc.stats, UCT_RC_FC_STAT_FC_WND,
+                          saved_fc_wnd_stat);
+#endif
+#if UCS_ENABLE_ASSERT
+    txwq->flags = saved_txwq_flags;
+#endif
+
+    EXPECT_EQ(1u, context.callback_count);
+    EXPECT_EQ(cqe_pi, context.observed_hw_ci);
+    EXPECT_EQ(1u, context.observed_outstanding);
+    EXPECT_EQ(old_cq_ci + 1, cq->cq_ci);
+    EXPECT_EQ(cqe_pi, txwq->hw_ci);
+    EXPECT_EQ(old_logical_ci, logical_ci(ep));
+    EXPECT_EQ(old_logical_ci, txwq->ft_ci);
+    EXPECT_EQ(post_cq_available + (uint16_t)(cqe_pi - old_hw_ci),
+              observed_cq_available);
+    EXPECT_EQ(post_available, observed_available);
+    EXPECT_EQ(post_reads_available, observed_reads_available);
+    EXPECT_EQ(post_reads_completed, observed_reads_completed);
+    EXPECT_TRUE(outstanding_preserved);
+    EXPECT_EQ(1, completion.uct.count);
+    EXPECT_EQ(0u, completion.callback_count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, flush_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &ep->super.txqp;
+    mapped_buffer sendbuf(32, 0ul, *m_e1);
+    mapped_buffer recvbuf(32, 0ul, *m_e2);
+    tracked_completion operation_completion = {};
+    tracked_completion flush_completion     = {};
+    uct_ep_invalidate_params_t params        = {};
+
+    flush();
+    operation_completion.uct.func   = completion_cb;
+    operation_completion.uct.count  = 1;
+    operation_completion.uct.status = UCS_OK;
+    flush_completion.uct.func       = completion_cb;
+    flush_completion.uct.count      = 1;
+    flush_completion.uct.status     = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                               recvbuf.rkey(), &operation_completion.uct));
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+
+    const uint16_t sw_pi        = txwq->sw_pi;
+    const uint16_t prev_sw_pi   = txwq->prev_sw_pi;
+    const uint16_t sig_pi       = txwq->sig_pi;
+    const uint16_t unsignaled   = txqp->unsignaled;
+    const int16_t available     = txqp->available;
+    const signed cq_available   = iface->super.tx.cq_available;
+    const size_t outstanding    = ucs_queue_length(&txqp->outstanding);
+    const uint8_t mlx5_ep_flags = ep->flags;
+    const uint8_t rc_ep_flags   = ep->super.flags;
+
+    ASSERT_GT(outstanding, 0ul);
+    EXPECT_EQ(UCS_ERR_CANCELED,
+              uct_ep_flush(m_e1->ep(0), 0, &flush_completion.uct));
+    EXPECT_EQ(1, flush_completion.uct.count);
+    EXPECT_EQ(UCS_OK, flush_completion.uct.status);
+    EXPECT_EQ(0u, flush_completion.callback_count);
+    EXPECT_EQ(1, operation_completion.uct.count);
+    EXPECT_EQ(UCS_OK, operation_completion.uct.status);
+    EXPECT_EQ(0u, operation_completion.callback_count);
+    EXPECT_EQ(sw_pi, txwq->sw_pi);
+    EXPECT_EQ(prev_sw_pi, txwq->prev_sw_pi);
+    EXPECT_EQ(sig_pi, txwq->sig_pi);
+    EXPECT_EQ(unsignaled, txqp->unsignaled);
+    EXPECT_EQ(available, txqp->available);
+    EXPECT_EQ(cq_available, iface->super.tx.cq_available);
+    EXPECT_EQ(outstanding, ucs_queue_length(&txqp->outstanding));
+    EXPECT_EQ(mlx5_ep_flags, ep->flags);
+    EXPECT_EQ(rc_ep_flags, ep->super.flags);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_late_cqe, ep_check_after_no_completions,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    uct_rc_mlx5_iface_common_t *iface =
+            reinterpret_cast<uct_rc_mlx5_iface_common_t*>(m_e1->iface());
+    uct_rc_mlx5_base_ep_t *ep = reinterpret_cast<uct_rc_mlx5_base_ep_t*>(
+            m_e1->ep(0));
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &ep->super.txqp;
+    tracked_completion check_completion = {};
+    uct_ep_invalidate_params_t params    = {};
+
+    flush();
+    check_completion.uct.func   = completion_cb;
+    check_completion.uct.count  = 1;
+    check_completion.uct.status = UCS_OK;
+
+    uct_iface_progress_disable(m_e1->iface(), UCT_PROGRESS_SEND);
+    ep_cleanup_guard cleanup(m_e1);
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &params));
+    ASSERT_TRUE(ucs_arbiter_group_is_empty(&ep->super.arb_group));
+    ASSERT_FALSE(ucs_arbiter_group_is_scheduled(&ep->super.arb_group));
+
+    const signed saved_cq_available = iface->super.tx.cq_available;
+    iface->super.tx.cq_available    = 0;
+
+    const uint16_t sw_pi        = txwq->sw_pi;
+    const uint16_t prev_sw_pi   = txwq->prev_sw_pi;
+    const uint16_t sig_pi       = txwq->sig_pi;
+    const uint16_t unsignaled   = txqp->unsignaled;
+    const int16_t available     = txqp->available;
+    const size_t outstanding    = ucs_queue_length(&txqp->outstanding);
+    const uint8_t mlx5_ep_flags = ep->flags;
+    const uint8_t rc_ep_flags   = ep->super.flags;
+
+    EXPECT_EQ(UCS_ERR_CANCELED,
+              uct_ep_check(m_e1->ep(0), 0, &check_completion.uct));
+    EXPECT_EQ(1, check_completion.uct.count);
+    EXPECT_EQ(UCS_OK, check_completion.uct.status);
+    EXPECT_EQ(0u, check_completion.callback_count);
+    EXPECT_EQ(sw_pi, txwq->sw_pi);
+    EXPECT_EQ(prev_sw_pi, txwq->prev_sw_pi);
+    EXPECT_EQ(sig_pi, txwq->sig_pi);
+    EXPECT_EQ(unsignaled, txqp->unsignaled);
+    EXPECT_EQ(available, txqp->available);
+    EXPECT_EQ(0, iface->super.tx.cq_available);
+    EXPECT_EQ(outstanding, ucs_queue_length(&txqp->outstanding));
+    EXPECT_EQ(mlx5_ep_flags, ep->flags);
+    EXPECT_EQ(rc_ep_flags, ep->super.flags);
+    EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->super.arb_group));
+    EXPECT_FALSE(ucs_arbiter_group_is_scheduled(&ep->super.arb_group));
+
+    iface->super.tx.cq_available = saved_cq_available;
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_late_cqe, rc_mlx5)
+
+
+class test_gga_mlx5_invalidate : public test_rc {
+};
+
+UCS_TEST_P(test_gga_mlx5_invalidate, no_completions_unsupported)
+{
+    mapped_buffer sendbuf(64, 0ul, *m_e1);
+    mapped_buffer recvbuf(64, 0ul, *m_e2);
+    uct_ep_invalidate_params_t params = {};
+    uct_completion_t comp             = {};
+
+    params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+    params.flags      = UCT_EP_INVALIDATE_FLAG_NO_COMPLETIONS;
+
+    ASSERT_EQ(UCS_ERR_UNSUPPORTED, uct_ep_invalidate(m_e1->ep(0), &params));
+
+    comp.func  = [](uct_completion_t*) {};
+    comp.count = 1;
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(),
+                            m_e1->iface_attr().cap.put.max_iov);
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                             recvbuf.rkey(), &comp));
+    flush();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_gga_mlx5_invalidate, gga_mlx5)
+
+#endif
 
 
 class test_rc_max_wr : public test_rc {

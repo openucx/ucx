@@ -107,8 +107,9 @@ ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
 
 void test_uct_peer_failure::inject_error(unsigned idx)
 {
-    uct_ep_h ep         = m_sender->ep(idx);
-    ucs_status_t status = uct_ep_invalidate(ep, 0);
+    uct_ep_h ep                                  = m_sender->ep(idx);
+    uct_ep_invalidate_params_t invalidate_params = {};
+    ucs_status_t status = uct_ep_invalidate(ep, &invalidate_params);
 
     if (status == UCS_ERR_UNSUPPORTED) {
         kill_receiver(idx);
