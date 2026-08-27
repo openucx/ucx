@@ -450,14 +450,16 @@ enum ucp_context_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_attr_field {
-    UCP_WORKER_ATTR_FIELD_THREAD_MODE     = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_ATTR_FIELD_ADDRESS         = UCS_BIT(1), /**< UCP address */
-    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS   = UCS_BIT(2), /**< UCP address flags */
-    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER   = UCS_BIT(3), /**< Maximum header size
-                                                             used by UCP AM API */
-    UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
-    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
-                                                             info string */
+    UCP_WORKER_ATTR_FIELD_THREAD_MODE         = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_ATTR_FIELD_ADDRESS             = UCS_BIT(1), /**< UCP address */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS       = UCS_BIT(2), /**< UCP address flags */
+    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER       = UCS_BIT(3), /**< Maximum header size
+                                                                 used by UCP AM API */
+    UCP_WORKER_ATTR_FIELD_NAME                = UCS_BIT(4), /**< UCP worker name */
+    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING     = UCS_BIT(5), /**< Maximum size of
+                                                                 info string */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME = UCS_BIT(6)  /**< UCP address device
+                                                                 name */
 };
 
 
@@ -1409,6 +1411,25 @@ typedef struct ucp_worker_attr {
      * Maximum debug string size that can be filled with @ref ucp_request_query.
      */
     size_t                max_debug_string;
+
+    /**
+     * Name of the communication device whose resources should be included in
+     * the worker address. It must exactly match the full name reported in the
+     * "Device:" field by @c ucx_info @c -d for a resource enabled in the
+     * worker's context. The selector can name network, shared-memory,
+     * accelerator, or loopback devices.
+     *
+     * Setting @ref UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME without
+     * @ref UCP_WORKER_ATTR_FIELD_ADDRESS has no effect. If both fields are set
+     * in @ref field_mask, the resulting address is restricted to resources
+     * with this device name. If @ref UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is
+     * also set, its filters are applied in addition to this one. Consequently,
+     * combining @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY with a non-network
+     * device name will result in an error.
+     *
+     * @note This is an input attribute.
+     */
+    const char            *address_device_name;
 } ucp_worker_attr_t;
 
 

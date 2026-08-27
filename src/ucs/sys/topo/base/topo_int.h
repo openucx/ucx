@@ -29,6 +29,7 @@ typedef struct {
     char                    *name;
     unsigned                name_priority;
     ucs_numa_node_t         numa_node;
+    ucs_sys_pci_id_t        pci_id;
     uintptr_t               user_value;
     ucs_topo_device_class_t device_class;
 

@@ -46,6 +46,19 @@ BEGIN_C_DECLS
     (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
             (unsigned)(_bus_id)->function
 
+/* Special values for undefined PCI identifiers */
+#define UCS_SYS_PCI_ID_VALUE_UNDEFINED 0x0000
+#define UCS_SYS_PCI_ID_UNDEFINED \
+    (ucs_sys_pci_id_t) \
+    { \
+        .vendor = UCS_SYS_PCI_ID_VALUE_UNDEFINED, \
+        .device = UCS_SYS_PCI_ID_VALUE_UNDEFINED \
+    }
+
+/* String formatting for PCI identifiers */
+#define UCS_SYS_PCI_ID_FMT         "[%04x:%04x]"
+#define UCS_SYS_PCI_ID_ARG(_pci_id) ((_pci_id)->vendor), ((_pci_id)->device)
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -53,6 +66,15 @@ typedef struct ucs_sys_bus_id {
     uint8_t  slot;     /* range: 0 to 1f */
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
+
+
+/**
+ * PCI identifier of a system device.
+ */
+typedef struct ucs_sys_pci_id {
+    uint16_t vendor;
+    uint16_t device;
+} ucs_sys_pci_id_t;
 
 
 /* Packed bit representation of a PCI bus id */
@@ -227,6 +249,18 @@ ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
  */
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Compare two PCI identifiers.
+ *
+ * @param [in] pci_id1  First PCI identifier.
+ * @param [in] pci_id2  Second PCI identifier.
+ *
+ * @return Nonzero if the PCI identifiers are equal, zero otherwise.
+ */
+int ucs_topo_pci_id_equal(const ucs_sys_pci_id_t *pci_id1,
+                          const ucs_sys_pci_id_t *pci_id2);
 
 
 /**
@@ -434,6 +468,17 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev);
  * @return The number of NUMA node closest to given device.
  */
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
+
+
+/**
+ * Get the PCI identifier of a given system device.
+ *
+ * @param [in] sys_dev System device index.
+ *
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if the system device is
+ *         invalid or its PCI identifier is unavailable.
+ */
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev);
 
 
 /**

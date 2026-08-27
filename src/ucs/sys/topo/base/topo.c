@@ -236,6 +236,13 @@ void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
     provider->ops.get_memory_distance_for_cpuset(device, cpuset, distance);
 }
 
+int ucs_topo_pci_id_equal(const ucs_sys_pci_id_t *pci_id1,
+                          const ucs_sys_pci_id_t *pci_id2)
+{
+    return (pci_id1->vendor == pci_id2->vendor) &&
+           (pci_id1->device == pci_id2->device);
+}
+
 ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
@@ -313,16 +320,43 @@ out:
     return status;
 }
 
-static int
-ucs_topo_read_device_numa_node(const ucs_sys_bus_id_t *bus_id)
+static uint16_t
+ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
+                           const char *file_name)
 {
-    int numa_node = UCS_NUMA_NODE_UNDEFINED;
+    long value;
+    ucs_status_t status;
+
+    status = ucs_read_file_number(&value, 1, "%s/%s", sysfs_path, file_name);
+    if (status != UCS_OK) {
+        ucs_warn("failed to read PCI ID value from %s/%s: %s", sysfs_path,
+                 file_name, ucs_status_string(status));
+        return UCS_SYS_PCI_ID_VALUE_UNDEFINED;
+    }
+
+    if ((value < 0) || (value > UINT16_MAX)) {
+        ucs_warn("%s: value %ld in '%s/%s' is out of range", dev_name, value,
+                 sysfs_path, file_name);
+        return UCS_SYS_PCI_ID_VALUE_UNDEFINED;
+    }
+
+    return (uint16_t)value;
+}
+
+static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
+                                            const char *dev_name,
+                                            ucs_numa_node_t *numa_node_p,
+                                            ucs_sys_pci_id_t *pci_id_p)
+{
     char *path;
     ucs_status_t status;
 
+    *numa_node_p = UCS_NUMA_NODE_UNDEFINED;
+    *pci_id_p    = UCS_SYS_PCI_ID_UNDEFINED;
+
     status = ucs_string_alloc_path_buffer(&path, "sysfs_path");
     if (status != UCS_OK) {
-        goto out;
+        return;
     }
 
     status = ucs_topo_bus_id_to_sysfs_path(bus_id, path, PATH_MAX);
@@ -330,12 +364,16 @@ ucs_topo_read_device_numa_node(const ucs_sys_bus_id_t *bus_id)
         goto out_free_path;
     }
 
-    numa_node = ucs_numa_node_of_device(path);
+    *numa_node_p = ucs_numa_node_of_device(path);
+
+    pci_id_p->vendor = ucs_topo_read_pci_id_value(dev_name, path, "vendor");
+    pci_id_p->device = ucs_topo_read_pci_id_value(dev_name, path, "device");
+
+    ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
+              dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);
 
 out_free_path:
     ucs_free(path);
-out:
-    return numa_node;
 }
 
 static ucs_status_t
@@ -382,6 +420,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
 {
     ucs_topo_sys_device_info_t *device;
     ucs_topo_bus_value_key_t key;
+    ucs_sys_pci_id_t pci_id;
     ucs_numa_node_t numa_node;
     int kh_put_status;
     khiter_t hash_it;
@@ -414,7 +453,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
 
         ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
 
-        numa_node = ucs_topo_read_device_numa_node(bus_id);
+        ucs_topo_read_device_sysfs_info(bus_id, name, &numa_node, &pci_id);
 
         *sys_dev_p = ucs_topo_global_ctx.num_devices++;
         device     = &ucs_topo_global_ctx.devices[*sys_dev_p];
@@ -423,6 +462,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->name            = name;
         device->name_priority   = 0;
         device->numa_node       = numa_node;
+        device->pci_id          = pci_id;
         device->user_value      = user_value;
         device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
         device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
@@ -431,10 +471,14 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
-            ucs_debug("added sys_dev %d for bus id %s", *sys_dev_p, name);
+            ucs_debug(
+                    "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT,
+                    *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id));
         } else {
-            ucs_debug("added sys_dev %d for bus id %s with user value %"
-                      PRIuPTR, *sys_dev_p, name, user_value);
+            ucs_debug(
+                    "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT
+                    " with user value %" PRIuPTR,
+                    *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id), user_value);
         }
 
         kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) =
@@ -1102,6 +1146,25 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
+}
+
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev)
+{
+    ucs_sys_pci_id_t pci_id;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_SYS_PCI_ID_UNDEFINED;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        pci_id = ucs_topo_global_ctx.devices[sys_dev].pci_id;
+    } else {
+        pci_id = UCS_SYS_PCI_ID_UNDEFINED;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return pci_id;
 }
 
 ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
