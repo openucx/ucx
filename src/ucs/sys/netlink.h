@@ -80,12 +80,12 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
  * Check whether a route to a given destination address through a network
  * interface matches the requested policy.
  *
- * @param [in]  if_index         Network interface index.
- * @param [in]  sa_remote        Pointer to the destination address.
- * @param [in]  route_check      When set to UCS_NETLINK_ROUTE_CHECK_RELAXED,
- *                               accept any non-default route, or a default
- *                               route if nothing better exists. Otherwise,
- *                               accept only the best route.
+ * @param [in]  if_index     Network interface index.
+ * @param [in]  sa_remote    Pointer to the destination address.
+ * @param [in]  route_check  When set to UCS_NETLINK_ROUTE_CHECK_RELAXED,
+ *                           accept any non-default route, or a default
+ *                           route if nothing better exists. Otherwise,
+ *                           accept only the best route.
  *
  * @return 1 if the route is accepted by the requested policy, or 0 otherwise.
  */
