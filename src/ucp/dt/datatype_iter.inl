@@ -747,10 +747,10 @@ ucp_datatype_iter_seek(ucp_datatype_iter_t *dt_iter, size_t offset,
                 offset, dt_iter->length);
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         ucp_datatype_iter_iov_seek(dt_iter, offset);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
+        dt_iter->type.sgl.frag_offset = 0;
+        dt_iter->offset               = offset;
     } else {
-        if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
-            dt_iter->type.sgl.frag_offset = 0;
-        }
         dt_iter->offset = offset;
     }
 }
