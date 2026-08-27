@@ -77,7 +77,8 @@ typedef struct {
             void * const     *buffers;
             const size_t     *lengths;
             ucp_mem_h        *memhs;
-            size_t           frag_offset;
+            size_t           frag_offset; /* Offset in the current element */
+            /* length = element count, offset = current element index */
         } sgl;
     } type;
 } ucp_datatype_iter_t;
