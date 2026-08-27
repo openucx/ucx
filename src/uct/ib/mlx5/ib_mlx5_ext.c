@@ -29,54 +29,6 @@ static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
            (op == (const void*)ucs_empty_function_return_unsupported);
 }
 
-static ucs_status_t
-uct_ib_mlx5_ext_iface_query_check_param(uct_ib_mlx5_ext_iface_query_attr_t *attr)
-{
-    if (attr == NULL) {
-        ucs_error("ib mlx5 ext: iface query attribute is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) &&
-        (attr->tx_token == NULL)) {
-        ucs_error("ib mlx5 ext: tx token is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN) &&
-        (attr->rx_token == NULL)) {
-        ucs_error("ib mlx5 ext: rx token is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (!!(attr->field_mask &
-           UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN) !=
-        !!(attr->field_mask &
-           UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN)) {
-        ucs_error("ib mlx5 ext: tx token and rx token must be set together");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_ib_mlx5_ext_ep_query_check_param(uct_ib_mlx5_ext_ep_query_attr_t *attr)
-{
-    if (attr == NULL) {
-        ucs_error("ib mlx5 ext: ep query attribute is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) &&
-        (attr->tx_token == NULL)) {
-        ucs_error("ib mlx5 ext: tx token is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
 static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
 {
     uint64_t cap_flags = 0;
@@ -103,102 +55,17 @@ static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
     return cap_flags;
 }
 
-static uct_ib_mlx5_ext_plugin_t *
-uct_ib_mlx5_ext_find_plugin(uct_iface_h iface, uint64_t cap_flags)
-{
-    uct_ib_mlx5_ext_iface_query_attr_t attr;
-    uct_ib_mlx5_ext_plugin_t *plugin;
-    ucs_status_t status;
-
-    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
-        /* Each plugin must support iface query. */
-        ucs_assert(!(uct_ib_mlx5_ext_is_unsupported_op(
-                (const void*)plugin->ops.iface_query)));
-
-        attr.field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
-        status          = plugin->ops.iface_query(iface, &attr);
-        if (status != UCS_OK) {
-            continue;
-        }
-
-        if (!ucs_test_all_flags(attr.cap.flags, cap_flags)) {
-            continue;
-        }
-
-        return plugin;
-    }
-
-    ucs_error("ib mlx5 ext: no plugin found for cap flags: %" PRIu64,
-              cap_flags);
-    return NULL;
-}
-
 ucs_status_t
 uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
                             uct_ib_mlx5_ext_iface_query_attr_t *attr)
 {
-    const uint64_t token_mask =
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN_LEN |
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN_LEN |
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_TX_TOKEN |
-            UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_RX_TOKEN;
-    uct_ib_mlx5_ext_plugin_t *plugin;
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_ext_iface_query_check_param(attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (ucs_test_flags(attr->field_mask, token_mask)) {
-        plugin = uct_ib_mlx5_ext_find_plugin(iface,
-                                             UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-        if (plugin == NULL) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-
-        status = plugin->ops.iface_query(iface, attr);
-        if (status != UCS_OK) {
-            ucs_error("ib mlx5 ext: iface query failed: %s",
-                      ucs_status_string(status));
-            return status;
-        }
+    if (attr == NULL) {
+        ucs_error("ib mlx5 ext: iface query attribute is NULL");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     if (attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS) {
         attr->cap.flags = uct_ib_mlx5_ext_iface_query_cap_flags(iface);
-    }
-
-    return UCS_OK;
-}
-
-ucs_status_t
-uct_ib_mlx5_ext_ep_query(uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr)
-{
-    uct_ib_mlx5_ext_plugin_t *plugin;
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_ext_ep_query_check_param(attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (attr->field_mask & UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN) {
-        plugin = uct_ib_mlx5_ext_find_plugin(ep->iface,
-                                             UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-        if (plugin == NULL) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-
-        ucs_assert(!uct_ib_mlx5_ext_is_unsupported_op(
-                (const void*)plugin->ops.ep_query));
-
-        status = plugin->ops.ep_query(ep, attr);
-        if (status != UCS_OK) {
-            ucs_error("ib mlx5 ext: ep query failed: %s",
-                      ucs_status_string(status));
-            return status;
-        }
     }
 
     return UCS_OK;
@@ -344,15 +211,10 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     num_plugins = ucs_list_length(&uct_ib_mlx5_ext_plugins);
 
     ucs_debug("ib mlx5 ext: registered plugin name=%s iface_query=%s "
-              "ep_query=%s put_sgl_zcopy=%s outstanding_purge=%s "
-              "(total=%u)",
+              "put_sgl_zcopy=%s outstanding_purge=%s (total=%u)",
               plugin->ops.name,
               uct_ib_mlx5_ext_is_unsupported_op(
                       (const void*)plugin->ops.iface_query) ?
-                      "unsupported" :
-                      "supported",
-              uct_ib_mlx5_ext_is_unsupported_op(
-                      (const void*)plugin->ops.ep_query) ?
                       "unsupported" :
                       "supported",
               uct_ib_mlx5_ext_is_unsupported_op(
