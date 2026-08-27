@@ -25,6 +25,18 @@
                                    UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
+#define UCT_RC_MLX5_CHECK_SGL_ZCOPY(_count, _counts, _strides, _max_count, \
+                                    _name) \
+    UCT_CHECK_PARAM((_count) <= (_max_count), \
+                    "%s count(%zu) should be limited by %zu", (_name), \
+                    (size_t)(_count), (size_t)(_max_count)); \
+    /* TODO: add strided elements support */ \
+    if (ucs_unlikely(((_counts) != NULL) || ((_strides) != NULL))) { \
+        ucs_error("%s does not support strided elements", (_name)); \
+        return UCS_ERR_UNSUPPORTED; \
+    }
+
+
 enum {
     UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
 
