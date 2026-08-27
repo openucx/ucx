@@ -462,8 +462,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     next_iter->offset               = start_index;
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
-    if ((dt_iter->type.sgl.frag_offset != 0) ||
-        !ucp_proto_put_sgl_elem_fits(lengths[start_index], max_frag_length)) {
+    if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||
+                     !ucp_proto_put_sgl_elem_fits(lengths[start_index],
+                                                  max_frag_length))) {
         return ucp_proto_put_sgl_offload_send_frag(req, lpriv, max_frag_length,
                                                    next_iter);
     }
