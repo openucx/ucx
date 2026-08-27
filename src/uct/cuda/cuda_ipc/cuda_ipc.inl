@@ -46,7 +46,8 @@ uct_cuda_ipc_check_and_push_ctx(CUdeviceptr address, CUdevice *cuda_device_p,
     }
 
     if (cuda_ctx == NULL) {
-        status = uct_cuda_ctx_primary_retain(cuda_device, 0, &cuda_ctx);
+        status = uct_cuda_ctx_primary_retain(cuda_device, 0, &cuda_ctx,
+                                             UCS_LOG_LEVEL_ERROR);
         if (ucs_unlikely(status != UCS_OK)) {
            return status;
         }

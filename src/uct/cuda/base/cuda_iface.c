@@ -346,8 +346,8 @@ uct_cuda_base_ctx_rsc_check(const uct_cuda_ctx_rsc_t *ctx_rsc)
         return UCS_OK;
     }
 
-    status = uct_cuda_ctx_primary_retain(ctx_rsc->cuda_device, 0,
-                                         &primary_ctx);
+    status = uct_cuda_ctx_primary_retain(ctx_rsc->cuda_device, 0, &primary_ctx,
+                                         UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return status;
     }
@@ -444,7 +444,8 @@ uct_cuda_base_ctx_rsc_retain_primary_ctx(uct_cuda_ctx_rsc_t *ctx_rsc)
         return status;
     }
 
-    status = uct_cuda_ctx_primary_retain(cuda_device, 0, &primary_ctx);
+    status = uct_cuda_ctx_primary_retain(cuda_device, 0, &primary_ctx,
+                                         UCS_LOG_LEVEL_ERROR);
     if (status == UCS_ERR_NO_DEVICE) {
         return UCS_OK;
     } else if (status != UCS_OK) {
