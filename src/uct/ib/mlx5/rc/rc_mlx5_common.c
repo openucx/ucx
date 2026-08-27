@@ -17,21 +17,22 @@
 #include <ucs/profile/profile.h>
 #include <endian.h>
 
-void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
-                                       uct_rc_iface_send_op_t *op)
+static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
+                                              uct_rc_iface_send_op_t *op)
 {
     if ((op != NULL) && (op->user_comp != NULL)) {
-        info->field_mask |= UCT_EP_OP_INFO_FIELD_COMP;
         info->comp        = op->user_comp;
+        info->field_mask |= UCT_EP_OP_INFO_FIELD_COMP;
     }
 }
 
-void uct_rc_mlx5_op_info_fill_rma_raddr(
-        uct_ep_op_info_t *info, const struct mlx5_wqe_raddr_seg *raddr)
+static void
+uct_rc_mlx5_op_info_fill_rma_raddr(uct_ep_op_info_t *info,
+                                   const struct mlx5_wqe_raddr_seg *raddr)
 {
     info->rma.remote_addr = be64toh(raddr->raddr);
     info->rma.rkey        = ntohl(raddr->rkey);
-    info->rma.field_mask  = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+    info->rma.field_mask |= UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
                             UCT_EP_OP_INFO_RMA_FIELD_RKEY;
     info->field_mask     |= UCT_EP_OP_INFO_FIELD_RMA;
 }
@@ -72,34 +73,6 @@ static void uct_rc_mlx5_op_info_fill_zcopy_iov(
     *iovcnt_p = iovcnt;
 }
 
-void uct_rc_mlx5_op_info_fill_rma_zcopy(
-        uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
-        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
-        size_t wqe_size, uct_ep_operation_t operation,
-        uct_rc_mlx5_op_callback_data_t *callback_data)
-{
-    size_t header_size, iovcnt;
-
-    header_size = sizeof(struct mlx5_wqe_ctrl_seg) + sizeof(*raddr);
-    ucs_assert(wqe_size >= header_size);
-
-    if (wqe_size > header_size) {
-        uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1,
-                                           wqe_size - header_size, &iovcnt);
-
-        info->rma.payload.zcopy.iov    = callback_data->iov;
-        info->rma.payload.zcopy.iovcnt = iovcnt;
-        info->rma.field_mask          |=
-                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
-    }
-
-    uct_rc_mlx5_op_info_try_fill_comp(info, op);
-    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
-
-    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
-    info->operation   = operation;
-}
-
 static void
 uct_rc_mlx5_op_info_fill_get_bcopy(uct_ep_op_info_t *info,
                                    uct_rc_iface_send_op_t *op,
@@ -108,16 +81,42 @@ uct_rc_mlx5_op_info_fill_get_bcopy(uct_ep_op_info_t *info,
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
                                                     uct_rc_iface_send_desc_t);
 
-    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
-    uct_rc_mlx5_op_info_try_fill_comp(info, op);
-
-    info->field_mask                    |= UCT_EP_OP_INFO_FIELD_OPERATION;
-    info->operation                      = UCT_EP_OP_GET_BCOPY;
-    info->rma.field_mask                |=
-            UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK;
     info->rma.payload.unpack.unpack_cb   = desc->unpack_cb;
     info->rma.payload.unpack.arg         = op->unpack_arg;
     info->rma.payload.unpack.length      = op->length;
+    info->rma.field_mask |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK;
+
+    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
+
+    info->operation   = UCT_EP_OP_GET_BCOPY;
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
+}
+
+static void uct_rc_mlx5_op_info_fill_get_zcopy(
+        uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
+        size_t seg_size, uct_rc_mlx5_op_callback_data_t *callback_data)
+{
+    size_t iovcnt;
+
+    if (seg_size == 0) {
+        goto out;
+    }
+
+    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1, seg_size,
+                                       &iovcnt);
+
+    info->rma.payload.zcopy.iov    = callback_data->iov;
+    info->rma.payload.zcopy.iovcnt = iovcnt;
+    info->rma.field_mask          |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+out:
+    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
+
+    info->operation   = UCT_EP_OP_GET_ZCOPY;
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_get(
@@ -140,9 +139,10 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
 
     if ((op == NULL) ||
         (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
-        uct_rc_mlx5_op_info_fill_rma_zcopy(
-                info, txwq, op, raddr, wqe_size, UCT_EP_OP_GET_ZCOPY,
-                callback_data);
+        uct_rc_mlx5_op_info_fill_get_zcopy(info, txwq, op, raddr,
+                                           wqe_size - sizeof(*ctrl) -
+                                                   sizeof(*raddr),
+                                           callback_data);
         return UCS_OK;
     }
 
@@ -155,11 +155,8 @@ ucs_status_t
 uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          uct_rc_iface_send_op_t *op,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
-                         int *skip_p,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    *skip_p = 0;
-
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_RDMA_READ:
         return uct_rc_mlx5_op_info_fill_get(info, txwq, op, ctrl, wqe_size,
