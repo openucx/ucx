@@ -376,7 +376,7 @@ err:
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
-    struct ibv_ah      *ah;
+    uct_ib_ah_entry_t  *ah_entry;
     uct_ib_address_t   *ib_addr;
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
@@ -398,13 +398,14 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     }
 
     ah_attr.is_global = iface->config.force_global_addr;
-    status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
+    status = uct_ib_iface_ah_get(iface, &ah_attr, "compact AV check",
+                                 &ah_entry);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_ib_mlx5_get_av(ah, &mlx5_av);
-    uct_ib_iface_release_ah(iface, ah);
+    uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+    uct_ib_iface_ah_put(iface, ah_entry);
 
     /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
      * the device supports compact address vector. */

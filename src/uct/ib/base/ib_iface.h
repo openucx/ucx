@@ -508,11 +508,6 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 
 
-int uct_ib_iface_is_connected(uct_ib_iface_t *ib_iface,
-                              const uct_ib_address_t *ib_addr,
-                              unsigned path_index, struct ibv_ah *peer_ah);
-
-
 /**
  * Pack IB address.
  *
@@ -632,12 +627,16 @@ typedef struct uct_ib_recv_wr {
 int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
                                 uct_ib_recv_wr_t *wrs, unsigned n);
 
-ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
-                                    struct ibv_ah_attr *ah_attr,
-                                    const char *usage, struct ibv_ah **ah_p);
+/* Get a cached AH reference; release with uct_ib_iface_ah_put(). */
+ucs_status_t uct_ib_iface_ah_get(uct_ib_iface_t *iface,
+                                 struct ibv_ah_attr *ah_attr,
+                                 const char *usage,
+                                 uct_ib_ah_entry_t **entry_p);
 
-/* Counterpart of uct_ib_iface_create_ah(); destroys the AH if uncached */
-void uct_ib_iface_release_ah(uct_ib_iface_t *iface, struct ibv_ah *ah);
+void uct_ib_iface_ah_put(uct_ib_iface_t *iface, uct_ib_ah_entry_t *entry);
+
+/* Duplicate a reference already held by the caller. */
+void uct_ib_iface_ah_hold(uct_ib_iface_t *iface, uct_ib_ah_entry_t *entry);
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,

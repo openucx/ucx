@@ -25,6 +25,9 @@ int uct_srd_ep_is_connected(const uct_ep_h tl_ep,
                                                   params->device_addr;
     const uct_srd_iface_addr_t *if_addr = (const uct_srd_iface_addr_t*)
                                                   params->iface_addr;
+    struct ibv_ah_attr ah_attr;
+    enum ibv_mtu path_mtu;
+    ucs_status_t status;
 
     UCT_EP_IS_CONNECTED_CHECK_DEV_IFACE_ADDRS(params);
 
@@ -32,7 +35,17 @@ int uct_srd_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return uct_ib_iface_is_connected(ib_iface, ib_addr, ep->path_index, ep->ah);
+    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr,
+                                                 ep->path_index, &ah_attr,
+                                                 &path_mtu);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return (ah_attr.dlid == ep->dlid) &&
+           (ah_attr.is_global == ep->is_global) &&
+           (!ah_attr.is_global ||
+            !memcmp(&ah_attr.grh.dgid, &ep->dgid, sizeof(ah_attr.grh.dgid)));
 }
 
 static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
@@ -58,6 +71,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     self->psn        = UCT_SRD_INITIAL_PSN;
     self->flags      = 0;
     self->dest_qpn   = uct_ib_unpack_uint24(if_addr->qp_num);
+    self->ah_entry   = NULL;
 
     ucs_arbiter_group_init(&self->pending_group);
     ucs_list_head_init(&self->outstanding_list);
@@ -69,21 +83,27 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
         goto err_arb_cleanup;
     }
 
-    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
-                                            &ah_attr,
-                                            uct_ib_iface_md(&iface->super)->pd,
-                                            "SRD AH", &self->ah);
+    self->dlid      = ah_attr.dlid;
+    self->is_global = ah_attr.is_global;
+    if (ah_attr.is_global) {
+        self->dgid = ah_attr.grh.dgid;
+    }
+
+    status = uct_ib_iface_ah_get(&iface->super, &ah_attr, "SRD AH",
+                                 &self->ah_entry);
     if (status != UCS_OK) {
         goto err_arb_cleanup;
     }
 
     status = uct_srd_iface_add_ep(iface, self);
     if (status != UCS_OK) {
-        goto err_arb_cleanup;
+        goto err_release_ah;
     }
 
+    /* ctl_add() takes ownership of a reference; duplicate for the ep's own */
+    uct_ib_iface_ah_hold(&iface->super, self->ah_entry);
     status = uct_srd_iface_ctl_add(iface, UCT_SRD_CTL_ID_REQ, self->ep_uuid,
-                                   self->ah, self->dest_qpn);
+                                   self->ah_entry, self->dest_qpn);
     if (status != UCS_OK) {
         goto err_remove_ep;
     }
@@ -100,6 +120,10 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
 
 err_remove_ep:
     uct_srd_iface_remove_ep(iface, self);
+err_release_ah:
+    if (self->ah_entry != NULL) {
+        uct_ib_iface_ah_put(&iface->super, self->ah_entry);
+    }
 err_arb_cleanup:
     ucs_arbiter_group_cleanup(&self->pending_group);
     return status;
@@ -327,6 +351,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
     uct_srd_ep_send_op_purge(self);
     uct_srd_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_srd_iface_remove_ep(iface, self);
+    uct_ib_iface_ah_put(&iface->super, self->ah_entry);
     ucs_arbiter_group_cleanup(&self->pending_group);
 }
 
@@ -402,7 +427,8 @@ uct_srd_ep_post_send(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
 {
     uct_srd_send_op_t *send_op = (uct_srd_send_op_t*)wr->wr_id;
 
-    uct_srd_iface_post_send(iface, ep->ah, ep->dest_qpn, wr, send_flags);
+    uct_srd_iface_post_send(iface, ep->ah_entry->ah, ep->dest_qpn, wr,
+                            send_flags);
     ep->psn++;
     uct_srd_ep_posted(iface, ep, send_op);
     iface->tx.available--;
@@ -568,7 +594,8 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
         }; \
         __uct_ib_log_post_send_one(__FILE__, __LINE__, __func__, \
                                    &(_iface)->super, (_iface)->qp, &__wr, \
-                                   (_ep)->ah, (_ep)->dest_qpn, 2, NULL); \
+                                   (_ep)->ah_entry->ah, (_ep)->dest_qpn, 2, \
+                                   NULL); \
     }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -596,7 +623,7 @@ uct_srd_ep_post_rma(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_read,
     }
 
     ibv_wr_set_sge_list(qp_ex, num_sge, sge);
-    ibv_wr_set_ud_addr(qp_ex, ep->ah, ep->dest_qpn, UCT_IB_KEY);
+    ibv_wr_set_ud_addr(qp_ex, ep->ah_entry->ah, ep->dest_qpn, UCT_IB_KEY);
     if (ibv_wr_complete(qp_ex)) {
         ucs_fatal("ibv_wr_complete failed %m");
         return UCS_ERR_IO_ERROR;

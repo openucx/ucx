@@ -1095,7 +1095,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     uct_dc_fc_sender_data_t sender;
     uct_dc_mlx5_base_av_t av;
     struct mlx5_wqe_av mlx5_av;
-    struct ibv_ah *ah;
+    uct_ib_ah_entry_t *ah_entry;
     size_t av_size;
     ucs_status_t status;
 
@@ -1128,14 +1128,14 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                 ucs_unaligned_ptr(&fc_req->sender.payload.gid),
                 iface->super.super.super.gid_info.gid_index, 0, &ah_attr);
 
-        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "DC pure grant",
-                                        &ah);
+        status = uct_ib_iface_ah_get(ib_iface, &ah_attr, "DC pure grant",
+                                     &ah_entry);
         if (status != UCS_OK) {
             goto err_dci_put;
         }
 
-        uct_ib_mlx5_get_av(ah, &mlx5_av);
-        uct_ib_iface_release_ah(ib_iface, ah);
+        uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+        uct_ib_iface_ah_put(ib_iface, ah_entry);
     }
 
     /* lid in fc_req is in BE already  */

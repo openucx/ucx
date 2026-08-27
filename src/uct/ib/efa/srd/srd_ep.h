@@ -25,7 +25,10 @@ typedef struct uct_srd_ep {
     unsigned            flags;            /* Endpoint state tracking */
     uint64_t            ep_uuid;          /* Random EP identifier */
     uint32_t            dest_qpn;         /* Remote QP */
-    struct ibv_ah       *ah;              /* Remote peer */
+    uct_ib_ah_entry_t   *ah_entry;        /* AH cache reference */
+    uint16_t            dlid;             /* Peer identity, for is_connected() */
+    uint8_t             is_global;
+    union ibv_gid       dgid;             /* Valid only if is_global */
     uct_srd_psn_t       psn;              /* Next PSN to send */
     uint8_t             path_index;
     ucs_arbiter_group_t pending_group;    /* Queue of pending requests */

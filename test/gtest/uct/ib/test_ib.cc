@@ -306,6 +306,178 @@ UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_addr);
 
 
+class test_uct_ib_ah_cache : public test_uct_ib {
+public:
+    /* Single unconnected entity: some transports (e.g. ud_verbs, srd) keep
+     * a persistent AH ref on connected peers, which would skew the refcount
+     * baseline these tests rely on. */
+    void init() {
+        uct_test::init();
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+        check_skip_test();
+    }
+
+    uct_ib_iface_t *ib_iface() {
+        return ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    }
+
+    uct_ib_device_t *dev() {
+        return uct_ib_iface_device(ib_iface());
+    }
+
+    /* ah_attr for this iface's own device address */
+    ucs_status_t get_self_ah_attr(struct ibv_ah_attr *ah_attr) {
+        uct_ib_iface_t *iface = ib_iface();
+        std::vector<char> buf(uct_ib_iface_address_size(iface));
+        uct_ib_address_t *ib_addr = (uct_ib_address_t*)&buf[0];
+        enum ibv_mtu path_mtu;
+        ucs_status_t status;
+
+        status = uct_ib_iface_get_device_address(
+                &iface->super.super, (uct_device_addr_t*)ib_addr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        return uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, ah_attr,
+                                                    &path_mtu);
+    }
+};
+
+UCS_TEST_P(test_uct_ib_ah_cache, get_shares_entry_and_refcounts,
+           "IB_AH_CACHE_TTL=60m")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *e1, *e2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    /* refcount includes the cache's own reference, in addition to callers' */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e1));
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e2));
+    EXPECT_EQ(e1, e2);
+    EXPECT_EQ(3, e1->refcount);
+
+    uct_ib_iface_ah_put(ib_iface(), e1);
+    EXPECT_EQ(2, e2->refcount);
+    uct_ib_iface_ah_put(ib_iface(), e2);
+    EXPECT_EQ(1, e2->refcount); /* only the cache's own hold is left */
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, within_ttl_is_reused, "IB_AH_CACHE_TTL=60m")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+    struct ibv_ah *ah1, *ah2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    ah1 = entry->ah;
+    uct_ib_iface_ah_put(ib_iface(), entry); /* only the cache's own hold left */
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    ah2 = entry->ah;
+    EXPECT_EQ(ah1, ah2);
+    uct_ib_iface_ah_put(ib_iface(), entry);
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, past_ttl_is_requeried, "IB_AH_CACHE_TTL=1ms")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+    struct ibv_ah *ah1, *ah2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    ah1 = entry->ah;
+    uct_ib_iface_ah_put(ib_iface(), entry); /* only the cache's own hold left */
+
+    /* Force the entry's age past the TTL deterministically */
+    entry->creation_time = 0;
+
+    /* Stale + no external holder: evicted and destroyed immediately, a new
+     * AH is created and cached in its place. */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    ah2 = entry->ah;
+    EXPECT_NE(ah1, ah2);
+    uct_ib_iface_ah_put(ib_iface(), entry);
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, referenced_past_ttl_keeps_old_entry_valid,
+           "IB_AH_CACHE_TTL=1ms")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *held_entry, *entry;
+    struct ibv_ah *ah1;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    /* Keep a reference, so the entry is still held once it goes stale */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test",
+                                      &held_entry));
+    ah1 = held_entry->ah;
+
+    /* Force the entry's age past the TTL deterministically */
+    held_entry->creation_time = 0;
+
+    /* Stale + still referenced: the cache drops its own hold and forgets
+     * this entry (but doesn't destroy it), and hands out a fresh one. */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    EXPECT_NE(held_entry, entry);
+    EXPECT_NE(ah1, entry->ah);
+    EXPECT_EQ(1, held_entry->refcount); /* only our own hold is left */
+
+    /* The old entry's AH is still valid for as long as we hold it */
+    EXPECT_EQ(ah1, held_entry->ah);
+
+    uct_ib_iface_ah_put(ib_iface(), entry);
+    uct_ib_iface_ah_put(ib_iface(), held_entry); /* frees the orphaned entry */
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, ttl_zero_disables_cache, "IB_AH_CACHE_TTL=0")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *e1, *e2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e1));
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e2));
+
+    EXPECT_NE(e1, e2);
+    EXPECT_NE(e1->ah, e2->ah);
+    EXPECT_EQ(1, e1->refcount); /* private entry: no cache reference */
+    EXPECT_EQ(0u, kh_size(&dev()->ah_hash));
+
+    uct_ib_iface_ah_put(ib_iface(), e1);
+    uct_ib_iface_ah_put(ib_iface(), e2);
+    EXPECT_EQ(0u, kh_size(&dev()->ah_hash));
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, hold_adds_independent_reference,
+           "IB_AH_CACHE_TTL=60m")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    uct_ib_iface_ah_hold(ib_iface(), entry);
+    EXPECT_EQ(3, entry->refcount);
+
+    uct_ib_iface_ah_put(ib_iface(), entry);
+    EXPECT_EQ(2, entry->refcount);
+    uct_ib_iface_ah_put(ib_iface(), entry);
+    EXPECT_EQ(1, entry->refcount); /* only the cache's own hold is left */
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_ah_cache);
+
+
 test_uct_ib_with_specific_port::test_uct_ib_with_specific_port() {
     m_ibctx    = NULL;
     m_port     = 0;
@@ -1219,64 +1391,3 @@ UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, non_equal_mtu,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);
-
-
-/* Also creates connected entities for the relevant transports, exercising
- * their AH create/destroy path. */
-class test_uct_ib_ah_cache : public test_uct_ib {
-public:
-    uct_ib_iface_t *ib_iface()
-    {
-        return ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
-    }
-
-    /* AH pointing back at m_e1's own port, so a real AH gets created */
-    struct ibv_ah_attr self_ah_attr()
-    {
-        uct_ib_iface_t *iface = ib_iface();
-        uint16_t lid          = uct_ib_iface_port_attr(iface)->lid;
-        struct ibv_ah_attr ah_attr;
-
-        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid,
-                                               &iface->gid_info.gid,
-                                               iface->gid_info.gid_index, 0,
-                                               &ah_attr);
-        return ah_attr;
-    }
-
-    ucs_status_t create_ah(struct ibv_ah_attr *ah_attr, struct ibv_ah **ah_p)
-    {
-        return uct_ib_iface_create_ah(ib_iface(), ah_attr, "test", ah_p);
-    }
-
-    void release_ah(struct ibv_ah *ah)
-    {
-        uct_ib_iface_release_ah(ib_iface(), ah);
-    }
-};
-
-UCS_TEST_P(test_uct_ib_ah_cache, ttl_inf_reuses_ah)
-{
-    struct ibv_ah_attr ah_attr = self_ah_attr();
-    struct ibv_ah *ah1, *ah2;
-
-    ASSERT_UCS_OK(create_ah(&ah_attr, &ah1));
-    ASSERT_UCS_OK(create_ah(&ah_attr, &ah2));
-    EXPECT_EQ(ah1, ah2);
-    release_ah(ah1);
-    release_ah(ah2);
-}
-
-UCS_TEST_P(test_uct_ib_ah_cache, ttl_zero_disables_cache, "IB_AH_CACHE_TTL=0")
-{
-    struct ibv_ah_attr ah_attr = self_ah_attr();
-    struct ibv_ah *ah1, *ah2;
-
-    ASSERT_UCS_OK(create_ah(&ah_attr, &ah1));
-    ASSERT_UCS_OK(create_ah(&ah_attr, &ah2));
-    EXPECT_NE(ah1, ah2);
-    release_ah(ah1);
-    release_ah(ah2);
-}
-
-UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_ah_cache);

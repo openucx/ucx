@@ -135,8 +135,10 @@ ucs_status_t uct_srd_iface_add_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 
 void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep);
 
+/* Queue a control operation. Takes ownership of one AH reference. */
 ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface, uct_srd_ctl_id_t id,
-                                   uint64_t ep_uuid, struct ibv_ah *ah,
+                                   uint64_t ep_uuid,
+                                   uct_ib_ah_entry_t *ah_entry,
                                    uint32_t dest_qpn);
 
 void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface);
