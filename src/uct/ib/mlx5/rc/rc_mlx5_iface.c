@@ -207,10 +207,10 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    /* Remember the last truly completed WQE before advancing hw_ci to the
-     * failed in-flight WQE. If the error handler arms DEFER_COMPLETIONS,
-     * invalidate snapshots ft_ci from hw_ci; restore the pre-failure value so
-     * outstanding_purge still walks the failed WQE. */
+    /* Snapshot the last completed WQE before advancing hw_ci to the failed
+     * in-flight WQE. Arm DEFER before the error handler so nested progress
+     * cannot complete those WQEs; drop it again if the handler does not
+     * return UCS_INPROGRESS. */
     last_completed = ep->tx.wq.hw_ci;
     was_deferred   = ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
     uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, pi);
@@ -222,6 +222,12 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+    if (!was_deferred) {
+        ep->flags      |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+        ep->tx.wq.ft_ci = last_completed;
+        ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
+                  ep, ep->tx.wq.ft_ci, ep->tx.wq.sw_pi, ep->tx.wq.next_token);
+    }
 
     uct_rc_fc_restore_wnd(iface, &ep->super.fc);
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
@@ -231,15 +237,12 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
+    if (status != UCS_INPROGRESS) {
+        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+    }
+
 purge:
-    if (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS) {
-        if (!was_deferred) {
-            ep->tx.wq.ft_ci = last_completed;
-            ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
-                      ep, ep->tx.wq.ft_ci, ep->tx.wq.sw_pi,
-                      ep->tx.wq.next_token);
-        }
-    } else {
+    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
         uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     }

@@ -810,8 +810,8 @@ ucs_status_t uct_rc_mlx5_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     if ((flags & UCT_FLUSH_FLAG_CANCEL) &&
         (ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
-        /* The in-flight operations are owned by the caller which armed
-         * DEFER_COMPLETIONS and are not completed from the CQ, so this flush
+        /* The in-flight operations are owned by the error handler
+         * (UCS_INPROGRESS) and are not completed from the CQ, so this flush
          * could never be satisfied. Report the operations as canceled, since
          * that is what destroying the endpoint does to them. */
         ucs_debug("ep %p cancel flush while completions are deferred", ep);

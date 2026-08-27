@@ -87,29 +87,13 @@ protected:
         *static_cast<bool*>(arg) = true;
     }
 
-    static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
+    static ucs_status_t err_handler(void *arg, uct_ep_h, ucs_status_t)
     {
         auto *self = static_cast<test_uct_ib_mlx5_ext_rc*>(arg);
-        uct_ep_outstanding_purge_params_t purge_params = {};
-        uct_ep_invalidate_params_t invalidate_params   = {};
-        uint64_t rx_token_value                        = rx_token();
 
         ++self->m_err_handler_count;
-
-        invalidate_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
-        invalidate_params.flags = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
-        status                  = uct_ep_invalidate(ep, &invalidate_params);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
-                                  UCT_EP_OUTSTANDING_FIELD_CB |
-                                  UCT_EP_OUTSTANDING_FIELD_ARG;
-        purge_params.rx_token   = &rx_token_value;
-        purge_params.cb         = purge_cb;
-        purge_params.arg        = &self->m_purge_cb_invoked;
-        return uct_ep_outstanding_purge(ep, &purge_params);
+        /* Keep outstanding ops until uct_ep_outstanding_purge. */
+        return UCS_INPROGRESS;
     }
 
     static size_t am_pack_cb(void *dest, void*)
@@ -167,6 +151,8 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, ep_outstanding_purge)
 UCS_TEST_P(test_uct_ib_mlx5_ext_rc, err_handler_outstanding_purge)
 {
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+    uct_ep_outstanding_purge_params_t params = {};
+    uint64_t rx_token_value                  = rx_token();
 
     register_plugin("token", purge);
 
@@ -176,6 +162,15 @@ UCS_TEST_P(test_uct_ib_mlx5_ext_rc, err_handler_outstanding_purge)
     wait_for_value(&m_err_handler_count, 1, true);
 
     EXPECT_EQ(1, m_err_handler_count);
+    EXPECT_TRUE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
+
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                        UCT_EP_OUTSTANDING_FIELD_CB |
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.rx_token   = &rx_token_value;
+    params.cb         = purge_cb;
+    params.arg        = &m_purge_cb_invoked;
+    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
     EXPECT_TRUE(m_purge_cb_invoked);
     EXPECT_FALSE(ep->super.flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS);
 

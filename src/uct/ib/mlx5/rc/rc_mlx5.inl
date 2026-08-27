@@ -1967,10 +1967,11 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
                    ep, qp_num, hw_ci);
 
     if (ucs_unlikely(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
-        /* Failover owns the in-flight WQEs and completes them from
-         * uct_ep_outstanding_purge. Persist the completion boundary and consume
-         * the CQE so the CQ does not stall, but neither complete the operations
-         * nor release the resources they hold. */
+        /* Error handling is in progress (UCS_INPROGRESS): failover owns the
+         * in-flight WQEs and completes them from uct_ep_outstanding_purge.
+         * Persist the completion boundary and consume the CQE so the CQ does
+         * not stall, but neither complete the operations nor release the
+         * resources they hold. */
         uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, hw_ci);
         uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
         return 1;

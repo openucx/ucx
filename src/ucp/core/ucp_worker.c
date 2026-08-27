@@ -471,7 +471,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         ucs_debug("ep %p: ignoring duplicate error for failover lane %u "
                   "uct_ep %p",
                   ucp_ep, lane, uct_ep);
-        return UCS_OK;
+        return UCS_INPROGRESS;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
@@ -481,6 +481,11 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
+        if (ucp_ep_failover_is_uct_ep(ucp_ep, lane, uct_ep)) {
+            /* Failover owns outstanding ops until uct_ep_outstanding_purge. */
+            return UCS_INPROGRESS;
+        }
+
         return UCS_OK;
     }
 

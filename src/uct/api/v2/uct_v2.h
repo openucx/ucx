@@ -1387,9 +1387,11 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @brief Invalidate the endpoint.
  *
  * This routine invalidates the endpoint and moves it to the error state.
- * Incomplete operations are completed with error unless
- * @ref UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS transfers their ownership to
- * the caller.
+ * Incomplete operations are completed with error unless the error handler
+ * returns @ref UCS_INPROGRESS, which transfers outstanding-operation ownership
+ * to the caller until @ref uct_ep_outstanding_purge. @ref
+ * UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS is an equivalent explicit arm of
+ * that same ownership.
  *
  * @param [in]  ep         Endpoint to invalidate.
  * @param [in]  params     Operation parameters, see @ref
