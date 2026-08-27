@@ -1323,6 +1323,79 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 #ifdef HAVE_MLX5_DV
 
+class test_rc_mlx5_token_query : public test_rc {
+protected:
+    static constexpr uint32_t NUM_MESSAGES = 10;
+
+    static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
+    {
+        uint32_t *rx_count = static_cast<uint32_t*>(arg);
+
+        ++*rx_count;
+        return UCS_OK;
+    }
+
+    static void query_tx_token(uct_ep_h ep, uct_rc_mlx5_tx_token_t *tx_token)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
+    }
+
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_tx_token_t *tx_token,
+                               uct_rc_mlx5_rx_token_t *rx_token)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
+    }
+};
+
+constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    uct_rc_mlx5_tx_token_t tx_token = {};
+    uct_rc_mlx5_rx_token_t rx_token = {};
+    uint32_t rx_count               = 0;
+    uct_ib_mlx5_md_t *md            = uct_ib_mlx5_iface_md(
+            ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
+    uct_rc_mlx5_base_ep_t *e2_ep;
+    ucs_status_t status;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        UCS_TEST_SKIP_R("DEVX is not supported");
+    }
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
+                                           &rx_count, 0));
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(m_e1->ep(0), 0, i, NULL, 0),
+                                    status);
+        ASSERT_UCS_OK(status);
+    }
+
+    wait_for_value(&rx_count, NUM_MESSAGES, true);
+
+    query_tx_token(m_e1->ep(0), &tx_token);
+    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+
+    e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
+    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, be32toh(tx_token));
+    EXPECT_EQ(NUM_MESSAGES, be32toh(rx_token));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
+
 class test_rc_srq : public test_rc {
 public:
     test_rc_srq() : m_buf8b(NULL), m_buf8k(NULL)
