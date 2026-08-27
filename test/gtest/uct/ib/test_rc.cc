@@ -1477,17 +1477,45 @@ protected:
     ucs_status_t purge_stub(purge_ctx *ctx)
     {
         uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
-        __be32 rx_token      = htobe32(1);
-        uct_ep_outstanding_purge_params_t params = {
-            .field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
-                          UCT_EP_OUTSTANDING_FIELD_CB |
-                          UCT_EP_OUTSTANDING_FIELD_ARG,
-            .rx_token   = &rx_token,
-            .cb         = purge_cb,
-            .arg        = ctx
-        };
+        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
+        uint16_t ci              = 0;
+        uct_rc_mlx5_op_callback_data_t callback_data;
+        uct_ep_op_info_t info;
+        ucs_status_t status;
+        const struct mlx5_wqe_ctrl_seg *ctrl;
+        uct_rc_iface_send_op_t *op, *t_op;
+        size_t wqe_size;
+        int skip;
 
-        return uct_ep_outstanding_purge(&ep->super.super.super.super, &params);
+        while (ci != txwq->sw_pi) {
+            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+            op = NULL;
+
+            ucs_queue_for_each(t_op, &txqp->outstanding, queue) {
+                if (t_op->sn == ci) {
+                    op = t_op;
+                    break;
+                }
+            }
+
+            skip = 0;
+            memset(&info, 0, sizeof(info));
+
+            status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
+                                              &skip, &callback_data);
+
+            EXPECT_UCS_OK(status);
+            EXPECT_EQ(0, skip);
+
+            purge_cb(&info, ctx);
+
+            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        }
+
+        return UCS_OK;
     }
 
     void test_put(uct_ep_operation_t operation, size_t length,
@@ -1536,13 +1564,7 @@ protected:
                          comp,
                          0};
 
-        ucs_status_t status = purge_stub(&ctx);
-        if (status == UCS_ERR_UNSUPPORTED) {
-            flush();
-
-            GTEST_SKIP() << "outstanding purge is not supported";
-        }
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(purge_stub(&ctx));
 
         flush();
 
