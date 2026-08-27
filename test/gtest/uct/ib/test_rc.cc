@@ -1486,7 +1486,6 @@ protected:
         const struct mlx5_wqe_ctrl_seg *ctrl;
         uct_rc_iface_send_op_t *op, *t_op;
         size_t wqe_size;
-        int skip;
 
         while (ci != txwq->sw_pi) {
             ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
@@ -1501,14 +1500,12 @@ protected:
                 }
             }
 
-            skip = 0;
             memset(&info, 0, sizeof(info));
 
             status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
-                                              &skip, &callback_data);
+                                              &callback_data);
 
             EXPECT_UCS_OK(status);
-            EXPECT_EQ(0, skip);
 
             purge_cb(&info, ctx);
 
