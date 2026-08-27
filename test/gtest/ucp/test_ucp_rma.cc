@@ -318,6 +318,45 @@ UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
                    64 * UCS_KBYTE);
 }
 
+UCS_TEST_P(test_ucp_rma, put_nbx_nonblock_map_user_memh)
+{
+    constexpr size_t size = 512 * UCS_KBYTE;
+    mem_buffer sendbuf(size, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer rbuf(size, receiver(), UCP_MEM_MAP_NONBLOCK);
+    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+    ucp_mem_map_params_t mem_map_params = {0};
+    ucp_request_param_t param           = {0};
+    ucp_mem_h memh;
+    ucs_status_ptr_t request;
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    mem_map_params.address    = sendbuf.ptr();
+    mem_map_params.length     = sendbuf.size();
+    mem_map_params.flags      = UCP_MEM_MAP_NONBLOCK;
+    ASSERT_UCS_OK(ucp_mem_map(sender().ucph(), &mem_map_params, &memh));
+
+    ucs::handle<ucp_mem_h, ucp_context_h> send_memh(
+            memh,
+            [](ucp_mem_h memh, ucp_context_h context) {
+                static_cast<void>(ucp_mem_unmap(context, memh));
+            },
+            sender().ucph());
+
+    mem_buffer::pattern_fill(sendbuf.ptr(), size, ucs::rand());
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+    param.memh         = send_memh;
+    request            = ucp_put_nbx(sender().ep(), sendbuf.ptr(), size,
+                                     (uint64_t)rbuf.ptr(), rkey, &param);
+    ASSERT_UCS_OK(request_wait(request));
+    flush_worker(sender());
+
+    EXPECT_TRUE(mem_buffer::compare(sendbuf.ptr(), rbuf.ptr(), size,
+                                    UCS_MEMORY_TYPE_HOST));
+}
+
 UCS_TEST_P(test_ucp_rma, proto_disabled_unsupported, "PROTO_ENABLE=n")
 {
     constexpr size_t size = 8;
@@ -1003,6 +1042,8 @@ protected:
         std::vector<size_t>                  remote_lengths;
         std::vector<ucp_mem_h>               memhs;
         std::vector<ucp_rkey_h>              rkeys;
+        uint64_t                             null_local_arrays  = 0;
+        uint64_t                             null_remote_arrays = 0;
     };
 
     void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
@@ -1081,14 +1122,23 @@ protected:
         ctx.remote_lengths = ctx.lengths;
     }
 
+    template<typename T>
+    static const T *sgl_array(const std::vector<T> &array, uint64_t null_arrays,
+                              uint64_t field) {
+        return (null_arrays & field) ? nullptr : array.data();
+    }
+
     static ucp_dt_local_sgl_t
     make_local_sgl(sgl_ctx &ctx, uint64_t field_mask) {
         ucp_dt_local_sgl_t sgl = {};
         sgl.field_mask         = field_mask;
-        sgl.buffers            = ctx.buffers.data();
-        sgl.lengths            = ctx.lengths.data();
+        sgl.buffers            = sgl_array(ctx.buffers, ctx.null_local_arrays,
+                                           UCP_DT_LOCAL_SGL_FIELD_BUFFERS);
+        sgl.lengths            = sgl_array(ctx.lengths, ctx.null_local_arrays,
+                                           UCP_DT_LOCAL_SGL_FIELD_LENGTHS);
         if (field_mask & UCP_DT_LOCAL_SGL_FIELD_MEMHS) {
-            sgl.memhs = ctx.memhs.data();
+            sgl.memhs = sgl_array(ctx.memhs, ctx.null_local_arrays,
+                                  UCP_DT_LOCAL_SGL_FIELD_MEMHS);
         }
         return sgl;
     }
@@ -1097,9 +1147,14 @@ protected:
     make_remote_sgl(sgl_ctx &ctx, uint64_t field_mask) {
         ucp_dt_remote_sgl_t sgl = {};
         sgl.field_mask          = field_mask;
-        sgl.remote_addrs        = ctx.remote_addrs.data();
-        sgl.lengths             = ctx.remote_lengths.data();
-        sgl.rkeys               = ctx.rkeys.data();
+        sgl.remote_addrs        = sgl_array(
+                ctx.remote_addrs, ctx.null_remote_arrays,
+                UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS);
+        sgl.lengths             = sgl_array(ctx.remote_lengths,
+                                            ctx.null_remote_arrays,
+                                            UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
+        sgl.rkeys               = sgl_array(ctx.rkeys, ctx.null_remote_arrays,
+                                            UCP_DT_REMOTE_SGL_FIELD_RKEYS);
         return sgl;
     }
 
@@ -1539,6 +1594,54 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_mismatched_cfg,
     expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
                                      REMOTE_MASK_DEFAULT, 2);
     ctx.rkeys[1]->cfg_index = saved_cfg_index;
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_single_elem_rkey_null,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 1, 64);
+    ctx.rkeys[0] = NULL;
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_local_arrays,
+                     !ENABLE_PARAMS_CHECK) {
+    static const uint64_t fields[] = {UCP_DT_LOCAL_SGL_FIELD_BUFFERS,
+                                      UCP_DT_LOCAL_SGL_FIELD_LENGTHS,
+                                      UCP_DT_LOCAL_SGL_FIELD_MEMHS};
+    sgl_ctx ctx;
+
+    init_sgl_ctx(ctx, 2, 64);
+    for (uint64_t field : fields) {
+        ctx.null_local_arrays = field;
+        expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT | field,
+                                         REMOTE_MASK_DEFAULT, 2);
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_remote_arrays,
+                     !ENABLE_PARAMS_CHECK) {
+    static const uint64_t fields[] = {UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS,
+                                      UCP_DT_REMOTE_SGL_FIELD_LENGTHS,
+                                      UCP_DT_REMOTE_SGL_FIELD_RKEYS};
+    sgl_ctx ctx;
+
+    init_sgl_ctx(ctx, 2, 64);
+    for (uint64_t field : fields) {
+        ctx.null_remote_arrays = field;
+        expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                         REMOTE_MASK_DEFAULT, 2);
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_remote_lengths_mismatch,
+                     !ENABLE_PARAMS_CHECK) {
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 2, 64);
+    ctx.remote_lengths[1] = 32;
+    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
