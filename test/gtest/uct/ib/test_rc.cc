@@ -1403,8 +1403,7 @@ UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
 
 class test_rc_purge_outstanding : public test_rc {
 protected:
-    struct flush_purge_ctx {
-        unsigned         other_count;
+    struct purge_ctx {
         unsigned         flush_count;
         unsigned         flags;
         uct_completion_t *comp;
@@ -1416,65 +1415,94 @@ protected:
 
     static void purge_cb(const uct_ep_op_info_t *info, void *arg)
     {
-        flush_purge_ctx *ctx = static_cast<flush_purge_ctx*>(arg);
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
 
         EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
         if (info->operation != UCT_EP_OP_FLUSH) {
-            ++ctx->other_count;
             return;
         }
 
         ++ctx->flush_count;
+
         EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_FLUSH);
+
         EXPECT_EQ(UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS, info->flush.field_mask);
         EXPECT_EQ(ctx->flags, info->flush.flags);
         EXPECT_EQ((ctx->comp != NULL),
                   !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
-        if (ctx->comp != NULL) {
-            EXPECT_EQ(ctx->comp, info->comp);
-        }
+        EXPECT_EQ(ctx->comp, info->comp);
     }
 
-    ucs_status_t purge_stub(flush_purge_ctx *ctx)
+    ucs_status_t purge_stub(purge_ctx *ctx)
     {
-        __be32 rx_token = htobe32(1);
-        uct_ep_outstanding_purge_params_t params = {
-            .field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
-                          UCT_EP_OUTSTANDING_FIELD_CB |
-                          UCT_EP_OUTSTANDING_FIELD_ARG,
-            .rx_token   = &rx_token,
-            .cb         = purge_cb,
-            .arg        = ctx
-        };
+        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
+        uint16_t ci              = 0;
+        uct_rc_mlx5_op_callback_data_t callback_data;
+        uct_ep_op_info_t info;
+        ucs_status_t status;
+        const struct mlx5_wqe_ctrl_seg *ctrl;
+        uct_rc_iface_send_op_t *op, *t_op;
+        size_t wqe_size;
 
-        return uct_ep_outstanding_purge(m_e1->ep(0), &params);
+        while (ci != txwq->sw_pi) {
+            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+            op       = NULL;
+
+            ucs_queue_for_each(t_op, &txqp->outstanding, queue) {
+                if (t_op->sn == ci) {
+                    op = t_op;
+                    break;
+                }
+            }
+
+            if ((op == NULL) ||
+                ((op->handler != uct_rc_ep_flush_op_completion_handler) &&
+                 (op->handler != uct_rc_ep_flush_remote_handler))) {
+                goto next_wqe;
+            }
+
+            memset(&info, 0, sizeof(info));
+
+            status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
+                                              &callback_data);
+
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            purge_cb(&info, ctx);
+
+        next_wqe:
+            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        }
+
+        return UCS_OK;
     }
 };
 
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, flush,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    const char payload[]  = "flush";
     uct_completion_t comp = {completion_cb, 1, UCS_OK};
-    flush_purge_ctx ctx   = {0, 0, UCT_FLUSH_FLAG_LOCAL, &comp};
+    purge_ctx ctx         = {0, UCT_FLUSH_FLAG_LOCAL, &comp};
+    uint64_t data         = 1;
     ucs_status_t status;
 
-    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, payload,
-                                  sizeof(payload)));
-    ASSERT_EQ(UCS_INPROGRESS,
-              uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_LOCAL, &comp));
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, &data, sizeof(data)));
 
-    status = purge_stub(&ctx);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        flush();
-        GTEST_SKIP() << "outstanding purge is not supported";
-    }
-    ASSERT_UCS_OK(status);
+    status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_LOCAL, &comp);
+    ASSERT_EQ(UCS_INPROGRESS, status);
 
-    flush();
-    EXPECT_EQ(1u, ctx.other_count);
+    ASSERT_UCS_OK(purge_stub(&ctx));
+
     EXPECT_EQ(1u, ctx.flush_count);
     EXPECT_EQ(1, comp.count);
+
+    flush();
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, flush_remote,
@@ -1482,30 +1510,23 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, flush_remote,
 {
     mapped_buffer remote(sizeof(uint64_t), 0ul, *m_e2);
     uct_completion_t comp = {completion_cb, 1, UCS_OK};
-    flush_purge_ctx ctx   = {0, 0, UCT_FLUSH_FLAG_REMOTE, &comp};
-    uint64_t value        = 1;
+    purge_ctx ctx         = {0, UCT_FLUSH_FLAG_REMOTE, &comp};
+    uint64_t data         = 1;
     ucs_status_t status;
 
-    ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), &value, sizeof(value),
+    ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), &data, sizeof(data),
                                    remote.addr(), remote.rkey()));
     flush();
 
     status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_REMOTE, &comp);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        GTEST_SKIP() << "remote flush is not supported";
-    }
     ASSERT_EQ(UCS_INPROGRESS, status);
 
-    status = purge_stub(&ctx);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        flush();
-        GTEST_SKIP() << "outstanding purge is not supported";
-    }
-    ASSERT_UCS_OK(status);
+    ASSERT_UCS_OK(purge_stub(&ctx));
 
-    flush();
     EXPECT_EQ(1u, ctx.flush_count);
     EXPECT_EQ(1, comp.count);
+
+    flush();
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)

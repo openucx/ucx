@@ -15,8 +15,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
-#include <endian.h>
-#include <string.h>
 
 static int uct_rc_mlx5_op_info_is_flush(const uct_rc_iface_send_op_t *op)
 {
@@ -29,34 +27,31 @@ static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
                                               uct_rc_iface_send_op_t *op)
 {
     if ((op != NULL) && (op->user_comp != NULL)) {
-        info->field_mask |= UCT_EP_OP_INFO_FIELD_COMP;
         info->comp        = op->user_comp;
+        info->field_mask |= UCT_EP_OP_INFO_FIELD_COMP;
     }
 }
 
 static void uct_rc_mlx5_op_info_fill_flush(uct_ep_op_info_t *info,
                                            uct_rc_iface_send_op_t *op)
 {
-    info->field_mask       = UCT_EP_OP_INFO_FIELD_OPERATION |
-                             UCT_EP_OP_INFO_FIELD_FLUSH;
-    info->operation        = UCT_EP_OP_FLUSH;
-    info->flush.field_mask = UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS;
+    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+
     info->flush.flags      = (op->handler == uct_rc_ep_flush_remote_handler) ?
                                           UCT_FLUSH_FLAG_REMOTE :
                                           UCT_FLUSH_FLAG_LOCAL;
-
-    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+    info->flush.field_mask = UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS;
+    info->operation        = UCT_EP_OP_FLUSH;
+    info->field_mask      |= UCT_EP_OP_INFO_FIELD_OPERATION |
+                             UCT_EP_OP_INFO_FIELD_FLUSH;
 }
 
 ucs_status_t
 uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          uct_rc_iface_send_op_t *op,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
-                         int *skip_p,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    *skip_p = 0;
-
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_NOP:
     case MLX5_OPCODE_RDMA_READ:

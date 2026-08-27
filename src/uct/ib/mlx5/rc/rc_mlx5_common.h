@@ -246,12 +246,6 @@ typedef struct uct_rc_mlx5_mp_hash_key {
     uint32_t                      qp_num;
 } uct_rc_mlx5_mp_hash_key_t;
 
-#define UCT_RC_MLX5_RMA_MAX_IOV(_av_size) \
-    ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - \
-      ((_av_size) + sizeof(struct mlx5_wqe_raddr_seg) + \
-       sizeof(struct mlx5_wqe_ctrl_seg))) / \
-     sizeof(struct mlx5_wqe_data_seg))
-
 typedef struct {
     union {
         uint8_t data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
@@ -266,7 +260,6 @@ ucs_status_t
 uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          uct_rc_iface_send_op_t *op,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
-                         int *skip_p,
                          uct_rc_mlx5_op_callback_data_t *callback_data);
 
 
