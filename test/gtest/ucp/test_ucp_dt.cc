@@ -296,32 +296,36 @@ protected:
         m_ucph.reset();
     }
 
-    void init_sgl_iter(size_t count) {
+    void init_sgl_iter(size_t count,
+                       const std::vector<size_t> &lengths = {})
+    {
+        ASSERT_TRUE(lengths.empty() || (lengths.size() == count));
+
         m_buffers.resize(count);
         m_lengths.resize(count);
         m_remote_addrs.resize(count);
         m_rkeys.resize(count);
 
-        m_dummy_rkey            = {};
-        m_dummy_rkey.cfg_index  = 0;
+        m_dummy_rkey           = {};
+        m_dummy_rkey.cfg_index = 0;
 #if ENABLE_PARAMS_CHECK
-        m_dummy_rkey.ep         = nullptr;
+        m_dummy_rkey.ep        = nullptr;
 #endif
 
         for (size_t i = 0; i < count; i++) {
             m_buffers[i]      = &m_buffers[i];
-            m_lengths[i]      = (i + 1) * 64;
+            m_lengths[i]      = lengths.empty() ? (i + 1) * 64 : lengths[i];
             m_remote_addrs[i] = 0x1000 + i * 0x100;
             m_rkeys[i]        = &m_dummy_rkey;
         }
 
-        m_local = {};
+        m_local            = {};
         m_local.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
                              UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
         m_local.buffers    = m_buffers.data();
         m_local.lengths    = m_lengths.data();
 
-        m_remote = {};
+        m_remote              = {};
         m_remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
                                 UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS;
@@ -335,25 +339,117 @@ protected:
         param.datatype     = ucp_dt_make_sgl();
         param.remote       = &m_remote;
 
-        ucs_status_t status = ucp_datatype_iter_sgl_init(m_ucph.get(),
-                                                         &m_dt_iter, &m_local,
-                                                         &m_remote, count,
-                                                         &param);
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(ucp_datatype_iter_sgl_init(m_ucph.get(), &m_dt_iter,
+                                                 &m_local, &m_remote, count,
+                                                 &param));
+
+        m_next_iter   = {};
+        m_buffer      = NULL;
+        m_length      = 0;
+        m_remote_addr = 0;
+        m_elem_index  = 0;
+    }
+
+    size_t next_frags(size_t max_frag_count, size_t max_frag_length,
+                      void **buffers, size_t *lengths, uint64_t *remote_addrs,
+                      size_t *elem_indices)
+    {
+        m_next_iter = {};
+        return ucp_datatype_iter_next_sgl_frags(&m_dt_iter,
+                                                m_remote_addrs.data(),
+                                                max_frag_count,
+                                                max_frag_length, &m_next_iter,
+                                                buffers, lengths, remote_addrs,
+                                                elem_indices);
+    }
+
+    size_t next_frag(size_t max_frag_length)
+    {
+        return next_frags(1, max_frag_length, &m_buffer, &m_length,
+                          &m_remote_addr, &m_elem_index);
+    }
+
+    size_t next_batch(size_t max_frag_count, size_t max_frag_length)
+    {
+        m_desc_buffers.resize(max_frag_count);
+        m_desc_lengths.resize(max_frag_count);
+        m_desc_remote_addrs.resize(max_frag_count);
+        m_desc_elem_indices.resize(max_frag_count);
+
+        return next_frags(max_frag_count, max_frag_length,
+                          m_desc_buffers.data(), m_desc_lengths.data(),
+                          m_desc_remote_addrs.data(),
+                          m_desc_elem_indices.data());
+    }
+
+    void check_next_iter(size_t next_offset, size_t next_frag_offset)
+    {
+        EXPECT_EQ(next_offset, m_next_iter.offset);
+        EXPECT_EQ(next_frag_offset, m_next_iter.type.sgl.frag_offset);
+    }
+
+    void check_position(size_t offset, size_t frag_offset)
+    {
+        EXPECT_EQ(offset, m_dt_iter.offset);
+        EXPECT_EQ(frag_offset, m_dt_iter.type.sgl.frag_offset);
+    }
+
+    void start_partial_elem(size_t max_frag_length)
+    {
+        ASSERT_EQ(1u, next_frag(max_frag_length));
+        advance();
+        check_position(0, max_frag_length);
+    }
+
+    void check_frag(size_t elem_index, size_t frag_offset, size_t length,
+                    size_t next_offset, size_t next_frag_offset)
+    {
+        EXPECT_EQ(elem_index, m_elem_index);
+        EXPECT_EQ(length, m_length);
+        EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[elem_index], frag_offset),
+                  m_buffer);
+        EXPECT_EQ(m_remote_addrs[elem_index] + frag_offset, m_remote_addr);
+        check_next_iter(next_offset, next_frag_offset);
+    }
+
+    void check_desc(size_t desc_index, size_t elem_index, size_t frag_offset,
+                    size_t length)
+    {
+        EXPECT_EQ(elem_index, m_desc_elem_indices[desc_index]);
+        EXPECT_EQ(length, m_desc_lengths[desc_index]);
+        EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[elem_index], frag_offset),
+                  m_desc_buffers[desc_index]);
+        EXPECT_EQ(m_remote_addrs[elem_index] + frag_offset,
+                  m_desc_remote_addrs[desc_index]);
+    }
+
+    void advance()
+    {
+        ucp_datatype_iter_copy_position(&m_dt_iter, &m_next_iter,
+                                        UCS_BIT(UCP_DATATYPE_SGL));
     }
 
 private:
     ucs::handle<ucp_context_h> m_ucph;
-    std::vector<void*>         m_buffers;
-    std::vector<size_t>        m_lengths;
-    std::vector<uint64_t>      m_remote_addrs;
     std::vector<ucp_rkey_h>    m_rkeys;
     ucp_rkey_t                 m_dummy_rkey;
     ucp_dt_local_sgl_t         m_local;
     ucp_dt_remote_sgl_t        m_remote;
 
 protected:
+    std::vector<void*>         m_buffers;
+    std::vector<size_t>        m_lengths;
+    std::vector<uint64_t>      m_remote_addrs;
     ucp_datatype_iter_t        m_dt_iter;
+    ucp_datatype_iter_t        m_next_iter;
+    void                       *m_buffer;
+    size_t                     m_length;
+    uint64_t                   m_remote_addr;
+    size_t                     m_elem_index;
+    std::vector<void*>         m_desc_buffers;
+    std::vector<size_t>        m_desc_lengths;
+    std::vector<uint64_t>      m_desc_remote_addrs;
+    std::vector<size_t>        m_desc_elem_indices;
 };
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
@@ -364,14 +460,11 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
 
     size_t total_advanced = 0;
     while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
-        ucp_datatype_iter_t next_iter = {};
-        size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter,
-                                                     MAX_PER_STEP,
-                                                     &next_iter);
+        size_t advanced = next_batch(MAX_PER_STEP, SIZE_MAX);
         EXPECT_LE(advanced, MAX_PER_STEP);
         EXPECT_GT(advanced, 0u);
         total_advanced += advanced;
-        ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+        advance();
     }
 
     EXPECT_EQ(NUM_ELEMS, total_advanced);
@@ -383,11 +476,8 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_single_step) {
     for (size_t count : counts) {
         init_sgl_iter(count);
 
-        ucp_datatype_iter_t next_iter = {};
-        size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, count,
-                                                     &next_iter);
-        EXPECT_EQ(count, advanced);
-        ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+        EXPECT_EQ(count, next_batch(count, SIZE_MAX));
+        advance();
         EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
     }
 }
@@ -399,15 +489,191 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_one_by_one) {
 
     for (size_t i = 0; i < NUM_ELEMS; i++) {
         EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
-        ucp_datatype_iter_t next_iter = {};
-        size_t advanced = ucp_datatype_iter_next_sgl(&m_dt_iter, 1,
-                                                     &next_iter);
-        EXPECT_EQ(1u, advanced);
-        EXPECT_EQ(i + 1, next_iter.offset);
-        ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+        EXPECT_EQ(1u, next_frag(SIZE_MAX));
+        check_frag(i, 0, m_lengths[i], i + 1, 0);
+        advance();
+        check_position(i + 1, 0);
     }
 
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag) {
+    static constexpr size_t NUM_ELEMS = 5;
+    static constexpr size_t MAX_FRAG  = 64;
+    static constexpr size_t MAX_COUNT = 3;
+
+    init_sgl_iter(NUM_ELEMS);
+
+    std::vector<size_t> elem_progress(NUM_ELEMS);
+
+    while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
+        size_t desc_count = next_batch(MAX_COUNT, MAX_FRAG);
+
+        EXPECT_GT(desc_count, 0u);
+        EXPECT_LE(desc_count, MAX_COUNT);
+
+        for (size_t n = 0; n < desc_count; n++) {
+            size_t idx = m_desc_elem_indices[n];
+            ASSERT_LT(idx, NUM_ELEMS);
+
+            EXPECT_LE(m_desc_lengths[n], MAX_FRAG);
+            EXPECT_GT(m_desc_lengths[n], 0u);
+            check_desc(n, idx, elem_progress[idx], m_desc_lengths[n]);
+
+            elem_progress[idx] += m_desc_lengths[n];
+            EXPECT_LE(elem_progress[idx], m_lengths[idx]);
+        }
+
+        advance();
+    }
+
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    for (size_t i = 0; i < NUM_ELEMS; i++) {
+        EXPECT_EQ(m_lengths[i], elem_progress[i]);
+    }
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_offset) {
+    static constexpr size_t MAX_FRAG = 32;
+
+    init_sgl_iter(1, {96});
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(0, 0, MAX_FRAG, 0, MAX_FRAG);
+
+    advance();
+    check_position(0, MAX_FRAG);
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(0, MAX_FRAG, MAX_FRAG, 0, 2 * MAX_FRAG);
+
+    advance();
+    check_position(0, 2 * MAX_FRAG);
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(0, 2 * MAX_FRAG, MAX_FRAG, 1, 0);
+
+    advance();
+    check_position(1, 0);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_skip_zero_length) {
+    init_sgl_iter(3, {64, 0, 32});
+
+    EXPECT_EQ(1u, next_frag(SIZE_MAX));
+    check_frag(0, 0, 64, 1, 0);
+    advance();
+
+    EXPECT_EQ(1u, next_frag(SIZE_MAX));
+    check_frag(2, 0, 32, 3, 0);
+    advance();
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_zero_length) {
+    static constexpr size_t MAX_FRAG = 32;
+
+    init_sgl_iter(5, {0, 96, 0, 32, 0});
+
+    /* Leading zero-length element is skipped */
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(1, 0, MAX_FRAG, 1, MAX_FRAG);
+    advance();
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(1, MAX_FRAG, MAX_FRAG, 1, 2 * MAX_FRAG);
+    advance();
+
+    /* The last fragment leaves the iterator on the zero-length element */
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(1, 2 * MAX_FRAG, MAX_FRAG, 2, 0);
+    advance();
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    /* Zero-length element between fragmented and whole elements is skipped */
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(3, 0, MAX_FRAG, 4, 0);
+    advance();
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    /* Trailing zero-length element produces no descriptor */
+    EXPECT_EQ(0u, next_frag(MAX_FRAG));
+    check_next_iter(5, 0);
+    advance();
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_mixed_lengths) {
+    static constexpr size_t MAX_FRAG  = 32;
+    static constexpr size_t MAX_COUNT = 2;
+
+    init_sgl_iter(3, {16, 80, 16});
+
+    /* A whole element is batched with the first fragment of the next one */
+    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
+    check_desc(0, 0, 0, 16);
+    check_desc(1, 1, 0, MAX_FRAG);
+    check_next_iter(1, MAX_FRAG);
+    advance();
+
+    /* Two more fragments of the same element, the last one is the remainder */
+    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
+    check_desc(0, 1, MAX_FRAG, MAX_FRAG);
+    check_desc(1, 1, 2 * MAX_FRAG, 80 - (2 * MAX_FRAG));
+    check_next_iter(2, 0);
+    advance();
+
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_FRAG));
+    check_desc(0, 2, 0, 16);
+    check_next_iter(3, 0);
+    advance();
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
+    static constexpr size_t MAX_FRAG = 32;
+
+    init_sgl_iter(2, {96, 64});
+    start_partial_elem(MAX_FRAG);
+
+    ucp_datatype_iter_seek(&m_dt_iter, 1, UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, 0);
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(1, 0, MAX_FRAG, 1, MAX_FRAG);
+
+    ucp_datatype_iter_seek(&m_dt_iter, 2, UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(2, 0);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
+    static constexpr size_t MAX_FRAG = 32;
+
+    init_sgl_iter(2, {96, 64});
+    start_partial_elem(MAX_FRAG);
+
+    ucp_datatype_iter_rewind(&m_dt_iter, UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(0, 0);
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    std::vector<size_t> elem_progress(2);
+    while (!ucp_datatype_iter_is_end(&m_dt_iter)) {
+        ASSERT_EQ(1u, next_frag(MAX_FRAG));
+        ASSERT_LT(m_elem_index, m_buffers.size());
+        EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[m_elem_index],
+                                      elem_progress[m_elem_index]),
+                  m_buffer);
+        elem_progress[m_elem_index] += m_length;
+        advance();
+    }
+
+    EXPECT_EQ(96u, elem_progress[0]);
+    EXPECT_EQ(64u, elem_progress[1]);
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, init_zero_count) {

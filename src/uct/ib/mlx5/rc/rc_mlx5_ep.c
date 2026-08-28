@@ -14,7 +14,6 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -25,10 +24,42 @@
 #include "rc_mlx5.inl"
 
 
+static ucs_status_t
+uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
+{
+#if HAVE_DEVX
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
+    uct_rc_mlx5_tx_token_t *tx_token;
+    ucs_status_t status;
+    void *qpc;
+
+    if (ep_attr->tx_token == NULL) {
+        ucs_error("rc mlx5: tx token is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_ib_mlx5_devx_query_qp(&ep->tx.wq.super, in, sizeof(in), out,
+                                       sizeof(out));
+    if (status != UCS_OK) {
+        ucs_error("rc mlx5: ep %p failed to query tx token: %s", ep,
+                  ucs_status_string(status));
+        return status;
+    }
+
+    qpc       = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    tx_token  = ep_attr->tx_token;
+    *tx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, remote_qpn));
+
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
-    uct_ib_mlx5_ext_ep_query_attr_t attr = {};
-    ucs_status_t status;
+    uct_ib_mlx5_md_t *md;
 
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                                UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
@@ -36,13 +67,13 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     }
 
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
-        attr.field_mask |= UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN;
-        attr.tx_token    = ep_attr->tx_token;
-
-        status = uct_ib_mlx5_ext_ep_query(tl_ep, &attr);
-        if (status != UCS_OK) {
-            return status;
+        md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_ep->iface, uct_ib_iface_t));
+        if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+            return UCS_ERR_UNSUPPORTED;
         }
+
+        return uct_rc_mlx5_ep_query_tx_token(
+                ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t), ep_attr);
     }
 
     return UCS_OK;
@@ -212,6 +243,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
+    uint32_t num_packets           = 0;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
     size_t wqe_size, i;
@@ -288,7 +320,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
-        total += lengths[i];
+        total       += lengths[i];
+        num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
@@ -299,6 +332,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+    uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -877,6 +911,18 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
                           valid_length, buffer, max);
 }
 
+void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
+                                   enum ibv_mtu path_mtu)
+{
+    size_t mtu = uct_ib_mtu_value(path_mtu);
+
+    ucs_assert(mtu <= UINT16_MAX);
+    ucs_assert(ucs_is_pow2(mtu));
+
+    txwq->path_mtu_mask  = mtu - 1;
+    txwq->path_mtu_shift = ucs_ilog2(mtu);
+}
+
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
@@ -973,6 +1019,8 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     if (status != UCS_OK) {
         return status;
     }
+
+    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
 
     ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(
             rc_addr->atomic_mr_id);
