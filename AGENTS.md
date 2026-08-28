@@ -56,7 +56,7 @@ Other top-level areas:
 
 Follow these project docs instead of duplicating their contents:
 
-- `docs/CodeStyle.md` for C/C++ formatting and naming.
+- `docs/CodeStyle.md` for C/C++ formatting, naming, and comment style.
 - `docs/LoggingStyle.md` for log levels and message style.
 - `docs/OptimizationStyle.md` for performance-sensitive changes.
 - `REVIEW.md` for UCX pull-request review checks and comment style.
