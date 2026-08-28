@@ -818,22 +818,11 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
-    ucs_status_t status;
 
-    ucs_assert(ep->no_comp);
-
-    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
+    ucs_assert(ep->err_handler_inprogress);
 
     uct_rc_mlx5_ep_update_tx_qp_res(ep, ep->tx.wq.ft_ci);
 
-    if (status != UCS_OK) {
-        ucs_trace("ep %p purge outstanding range (%u, %u) status %s", ep,
-                  ep->tx.wq.ft_ci, ep->tx.wq.sw_pi, ucs_status_string(status));
-
-        return status;
-    }
-
-    ucs_debug("ep %p purge outstanding OK", ep);
     return UCS_OK;
 }
 
@@ -1248,7 +1237,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
-    self->no_comp = 0;
+    self->err_handler_inprogress = 0;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,

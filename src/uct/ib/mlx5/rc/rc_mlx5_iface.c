@@ -194,6 +194,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
+    int inprogress_supported;
+    uct_iface_attr_v2_t attr;
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -217,22 +219,32 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+
+    if (status == UCS_INPROGRESS) {
+        attr.field_mask      = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+        status               = uct_iface_query_v2(&iface->super.super.super, &attr);
+        inprogress_supported = ((status != UCS_OK) ||
+                                !(attr.cap.flags &
+                                  UCT_IFACE_FLAG_V2_ERR_HANDLER_INPROGRESS));
+    }
+
+    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super,
+                                               inprogress_supported, status,
                                                ep_status);
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
-    if (status == UCS_INPROGRESS) {
-        ep->no_comp     = 1;
-        ep->tx.wq.ft_ci = ep->tx.wq.prev_sw_pi -
-                          (ep->tx.wq.bb_max -
-                           uct_rc_txqp_available(&ep->super.txqp));
+    if ((status == UCS_INPROGRESS) && inprogress_supported) {
+        ep->err_handler_inprogress = 1;
+        ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
+                                     (ep->tx.wq.bb_max -
+                                      uct_rc_txqp_available(&ep->super.txqp));
         ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
                   ep->tx.wq.sw_pi);
     }
 
 out_update_tx_res:
-    if (!(ep->no_comp)) {
+    if (!(ep->err_handler_inprogress)) {
         uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
         uct_rc_mlx5_ep_update_tx_qp_res(ep, pi);
     }

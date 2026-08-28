@@ -216,7 +216,7 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     ep->flags |= UCT_SRD_EP_FLAG_ERR_HANDLER_INVOKED;
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super, ep_status);
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, 0, status,
                                                ep_status);
     UCT_IB_IFACE_VERBS_COMPLETION_LOG(log_lvl, "send", &iface->super, 0, wc);
 }

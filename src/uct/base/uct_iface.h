@@ -1043,12 +1043,12 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
 }
 
 
-static UCS_F_ALWAYS_INLINE
-ucs_log_level_t uct_base_iface_failure_log_level(uct_base_iface_t *iface,
-                                                 ucs_status_t err_handler_status,
-                                                 ucs_status_t status)
+static UCS_F_ALWAYS_INLINE ucs_log_level_t uct_base_iface_failure_log_level(
+        uct_base_iface_t *iface, int inprogress_supported,
+        ucs_status_t err_status, ucs_status_t status)
 {
-    if (UCS_STATUS_IS_ERR(err_handler_status)) {
+    if (!((err_status == UCS_OK) ||
+          ((err_status == UCS_INPROGRESS) && inprogress_supported))) {
         return UCS_LOG_LEVEL_FATAL;
     } else if ((status == UCS_ERR_ENDPOINT_TIMEOUT) ||
                (status == UCS_ERR_CONNECTION_RESET)) {

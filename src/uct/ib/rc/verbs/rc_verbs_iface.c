@@ -113,7 +113,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, 0, status,
                                                ep_status);
     status  = uct_ib_query_qp_peer_info(ep->qp, &ah_attr, &dest_qpn);
     if (status == UCS_OK) {
