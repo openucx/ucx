@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -1114,6 +1114,51 @@ protected:
     void copy_array_of_linked_lists(void *dst, void *src, int size);
     void cleanup_array_of_linked_lists(test_list_links_array_t *test_array);
 };
+
+UCS_TEST_F(test_array, carray_for_each_index) {
+    const int values[] = {3, 5, 7};
+    const int *elem;
+    size_t idx;
+
+    ucs_carray_for_each_index(elem, idx, values, 0) {
+        ADD_FAILURE() << "iterated over an empty array";
+    }
+    EXPECT_EQ(0, idx);
+
+    ucs_carray_for_each_index(elem, idx, values,
+                              ucs_static_array_size(values)) {
+        EXPECT_EQ(&values[idx], elem);
+        EXPECT_EQ(values[idx], *elem);
+    }
+    EXPECT_EQ(ucs_static_array_size(values), idx);
+}
+
+UCS_TEST_F(test_array, array_for_each_index) {
+    constexpr size_t NUM_ELEMENTS = 3;
+    test_1int_t test_array;
+    int *elem;
+    size_t idx;
+
+    ucs_array_init_dynamic(&test_array);
+
+    ucs_array_for_each_index(elem, idx, &test_array) {
+        ADD_FAILURE() << "iterated over an empty array";
+    }
+    EXPECT_EQ(0, idx);
+
+    for (idx = 0; idx < NUM_ELEMENTS; ++idx) {
+        *ucs_array_append(&test_array,
+                          FAIL()) = static_cast<int>(idx * idx + 1);
+    }
+
+    ucs_array_for_each_index(elem, idx, &test_array) {
+        EXPECT_EQ(&ucs_array_elem(&test_array, idx), elem);
+        EXPECT_EQ(idx * idx + 1, static_cast<size_t>(*elem));
+    }
+    EXPECT_EQ(NUM_ELEMENTS, idx);
+
+    ucs_array_cleanup_dynamic(&test_array);
+}
 
 /* generate a list of numbers in a certain size */
 void test_array::generate_linked_list(int size, simple_elem_t *head)
