@@ -142,7 +142,9 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     hsa_status_t hsa_status;
     int ret;
 
-    pthread_rwlock_wrlock(&cache->lock);
+    /* A per-cache lock would be needed only if the caller holds no lock or
+     * just a read lock on the global remote-cache lock, allowing concurrent
+     * access to this page table. */
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup,
                                   &cache->pgtable, key->address);
     if (ucs_likely(pgt_region != NULL)) {
@@ -154,7 +156,6 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                       key->length, UCS_PGT_REGION_ARG(&region->super));
 
             *mapped_addr = region->mapped_addr;
-            pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
         } else {
             ucs_trace("%s: rocm_ipc cache remove stale region:"
@@ -221,10 +222,8 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     ucs_trace("%s: rocm_ipc cache new region:"UCS_PGT_REGION_FMT" size:%lu",
               cache->name, UCS_PGT_REGION_ARG(&region->super), key->length);
 
-    pthread_rwlock_unlock(&cache->lock);
     return UCS_OK;
 err:
-    pthread_rwlock_unlock(&cache->lock);
     return status;
 }
 
@@ -233,7 +232,6 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
 {
     ucs_status_t status;
     uct_rocm_ipc_cache_t *cache_desc;
-    int ret;
 
     cache_desc = ucs_malloc(sizeof(uct_rocm_ipc_cache_t), "uct_rocm_ipc_cache_t");
     if (cache_desc == NULL) {
@@ -241,31 +239,24 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ret = pthread_rwlock_init(&cache_desc->lock, NULL);
-    if (ret) {
-        ucs_error("pthread_rwlock_init() failed: %m");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-
     status = ucs_pgtable_init(&cache_desc->pgtable,
                               uct_rocm_ipc_cache_pgt_dir_alloc,
                               uct_rocm_ipc_cache_pgt_dir_release);
     if (status != UCS_OK) {
-        goto err_destroy_rwlock;
+        goto err;
     }
 
     cache_desc->name = ucs_strdup(name, "rocm_ipc_cache_name");
     if (cache_desc->name == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_destroy_rwlock;
+        goto err_cleanup_pgtable;
     }
 
     *cache = cache_desc;
     return UCS_OK;
 
-err_destroy_rwlock:
-    pthread_rwlock_destroy(&cache_desc->lock);
+err_cleanup_pgtable:
+    ucs_pgtable_cleanup(&cache_desc->pgtable);
 err:
     ucs_free(cache_desc);
     return status;
@@ -333,7 +324,6 @@ void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache)
 {
     uct_rocm_ipc_cache_purge(cache);
     ucs_pgtable_cleanup(&cache->pgtable);
-    pthread_rwlock_destroy(&cache->lock);
     ucs_free(cache->name);
     ucs_free(cache);
 }

@@ -21,7 +21,6 @@ typedef struct uct_cuda_ipc_cache_region {
 } uct_rocm_ipc_cache_region_t;
 
 typedef struct uct_rocm_ipc_cache {
-    pthread_rwlock_t      lock;       /**< protests the page table */
     ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
     char                  *name;      /**< Name */
 } uct_rocm_ipc_cache_t;
