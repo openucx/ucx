@@ -122,11 +122,14 @@ uct_rc_gdaki_alloc(ucs_ternary_auto_value_t enable_fabric, size_t size,
     }
 
     buf    = (void*)ucs_align_up_pow2_ptr(alloc_handle.ptr, align);
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                  (CUdeviceptr)buf));
-    if (status != UCS_OK) {
-        goto err;
+
+    if (!alloc_handle.is_vmm) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                      (CUdeviceptr)buf));
+        if (status != UCS_OK) {
+            goto err;
+        }
     }
 
     *alloc_handle_p = alloc_handle;
