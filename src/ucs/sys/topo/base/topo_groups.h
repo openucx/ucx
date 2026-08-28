@@ -99,6 +99,14 @@ void ucs_topo_release_groups(ucs_topo_groups_t *groups);
 
 
 /**
+ * Initialize a topology group.
+ *
+ * @param [out] group  Group to initialize.
+ */
+void ucs_topo_init_group(ucs_topo_group_t *group);
+
+
+/**
  * Initialize topology groups.
  *
  * @param [in]  devices      Array of registered system devices.
