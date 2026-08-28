@@ -851,7 +851,8 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
     int defer_requested;
-    ucs_status_t status;
+    uint16_t last_completed;
+    ucs_status_t status, err_status;
 
     defer_requested = (params != NULL) &&
                       (params->field_mask &
@@ -870,6 +871,27 @@ uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         txwq->ft_ci      = txwq->hw_ci;
         ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
                   ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+    }
+
+    /* Flagless invalidate on a quiet QP produces no TX CQE, so handle_failure
+     * never runs. Deliver the error here; freeze iff the handler returns
+     * UCS_INPROGRESS. A later error CQE is then a duplicate. */
+    if ((status == UCS_OK) && !defer_requested &&
+        !(ep->super.super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED)) {
+        last_completed          = txwq->hw_ci;
+        ep->super.super.flags  |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+        ep->super.flags        |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+        txwq->ft_ci             = last_completed;
+        uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
+        ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
+                  ep, txwq->ft_ci, txwq->sw_pi, txwq->next_token);
+        uct_rc_fc_restore_wnd(&iface->super, &ep->super.super.fc);
+        err_status = uct_iface_handle_ep_err(
+                &iface->super.super.super.super,
+                &ep->super.super.super.super, UCS_ERR_CONNECTION_RESET);
+        if (err_status != UCS_INPROGRESS) {
+            ep->super.flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
+        }
     }
 
     if ((status != UCS_OK) && !defer_requested) {
