@@ -28,6 +28,7 @@ noinst_HEADERS = \
 	am/ucp_am.inl \
 	core/ucp_am.h \
 	core/ucp_context.h \
+	core/ucp_gpu_nic_assignment.h \
 	core/ucp_tl_info.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
@@ -110,6 +111,7 @@ libucp_la_SOURCES = \
 	am/eager_multi.c \
 	am/rndv.c \
 	core/ucp_context.c \
+	core/ucp_gpu_nic_assignment.c \
 	core/ucp_tl_info.c \
 	core/ucp_am.c \
 	core/ucp_ep.c \

@@ -1,0 +1,83 @@
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
+
+#ifndef UCP_GPU_NIC_ASSIGNMENT_H_
+#define UCP_GPU_NIC_ASSIGNMENT_H_
+
+#include <ucs/datastruct/array.h>
+#include <ucs/datastruct/static_bitmap.h>
+#include <ucs/sys/topo/base/topo_groups.h>
+
+#include <stdint.h>
+
+BEGIN_C_DECLS
+
+
+#define UCP_GPU_NIC_BITMAP_INDEX_INVALID UCS_SYS_DEVICE_ID_COUNT
+
+
+typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
+        ucp_gpu_nic_sys_dev_bitmap_t;
+
+
+UCS_ARRAY_DECLARE_TYPE(ucp_gpu_nic_sys_dev_bitmap_array_t, size_t,
+                       ucp_gpu_nic_sys_dev_bitmap_t);
+
+
+typedef struct {
+    ucp_gpu_nic_sys_dev_bitmap_array_t nic_sys_dev_bitmaps;
+    uint8_t bitmap_idx_by_gpu_sys_dev[UCS_SYS_DEVICE_ID_COUNT];
+} ucp_gpu_nic_assignment_t;
+
+
+typedef enum {
+    UCP_GPU_NIC_POLICY_FLIP,
+    UCP_GPU_NIC_POLICY_ALT,
+    UCP_GPU_NIC_POLICY_LAST
+} ucp_gpu_nic_policy_t;
+
+
+/**
+ * Build GPU-to-NIC assignments from topology groups.
+ *
+ * @param [in]  groups        Topology groups to build assignments from.
+ * @param [in]  policy        Assignment policy.
+ * @param [out] assignment_p  Completed assignment. Updated only on success.
+ *
+ * @return UCS_OK on success, or an error status if assignment construction
+ *         failed.
+ */
+ucs_status_t
+ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
+                             ucp_gpu_nic_policy_t policy,
+                             ucp_gpu_nic_assignment_t *assignment_p);
+
+
+/**
+ * Look up the NIC system-device bitmap assigned to a GPU system device.
+ *
+ * @param [in] assignment  GPU-to-NIC assignment.
+ * @param [in] gpu_sys_dev GPU system device to look up.
+ *
+ * @return Assigned NIC system-device bitmap, or NULL if @a gpu_sys_dev is
+ *         unknown or has no valid assignment.
+ */
+const ucp_gpu_nic_sys_dev_bitmap_t *
+ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
+                              ucs_sys_device_t gpu_sys_dev);
+
+
+/**
+ * Release an assignment returned by @ref ucp_gpu_nic_assignment_build.
+ *
+ * @param [in] assignment  Assignment to release.
+ */
+void ucp_gpu_nic_assignment_release(ucp_gpu_nic_assignment_t *assignment);
+
+
+END_C_DECLS
+
+#endif
