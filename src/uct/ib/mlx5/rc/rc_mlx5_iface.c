@@ -232,10 +232,11 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         ucs_assert(iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
 #endif
 
-        ep->err_handler_inprogress = 1;
+        /* Save last completed WQE. TX QP resources are reserved until purge. */
         ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
                                      (ep->tx.wq.bb_max -
                                       uct_rc_txqp_available(&ep->super.txqp));
+        ep->err_handler_inprogress = 1;
 
         ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
                   ep->tx.wq.sw_pi);
