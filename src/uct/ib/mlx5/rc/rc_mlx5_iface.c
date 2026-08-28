@@ -194,8 +194,10 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
-    int inprogress_supported;
-    uct_iface_attr_v2_t attr;
+#if UCS_ENABLE_ASSERT
+    uct_iface_attr_v2_t iface_attr;
+    ucs_status_t query_status;
+#endif
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -221,27 +223,32 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                       &ep->super.super.super, ep_status);
 
     if (status == UCS_INPROGRESS) {
-        attr.field_mask      = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-        status               = uct_iface_query_v2(&iface->super.super.super, &attr);
-        inprogress_supported = ((status != UCS_OK) ||
-                                !(attr.cap.flags &
-                                  UCT_IFACE_FLAG_V2_QUERY_TOKEN));
-    }
+#if UCS_ENABLE_ASSERT
+        iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
 
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super,
-                                               inprogress_supported, status,
-                                               ep_status);
+        query_status = uct_iface_query_v2(&iface->super.super.super,
+                                          &iface_attr);
+        ucs_assert(query_status == UCS_OK);
+        ucs_assert(iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
+#endif
 
-    uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
-
-    if ((status == UCS_INPROGRESS) && inprogress_supported) {
         ep->err_handler_inprogress = 1;
         ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
                                      (ep->tx.wq.bb_max -
                                       uct_rc_txqp_available(&ep->super.txqp));
+
         ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
                   ep->tx.wq.sw_pi);
+
+        log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, UCS_OK,
+                                                   ep_status);
+    } else {
+        log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                                   ep_status);
     }
+
+
+    uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 
 out_update_tx_res:
     if (!(ep->err_handler_inprogress)) {
@@ -1157,6 +1164,10 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
             if (status != UCS_OK) {
                 return status;
             }
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
         }
 
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {

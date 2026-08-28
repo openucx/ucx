@@ -1201,13 +1201,11 @@ enum uct_iface_attr_field {
         /* GET capabilities */
 #define UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY       UCS_BIT(1)  /**< Zero-copy SGL get */
         /* Interface capabilities */
-#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(2)  /**< Supports token query through
-                                                               @ref uct_iface_query_v2 and
-                                                               @ref uct_ep_query,
-                                                               outstanding purge through
-                                                               @ref uct_ep_outstanding_purge, and
-                                                               an error handler returning
-                                                               @ref UCS_INPROGRESS. */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(2)  /**< @ref uct_iface_query_v2
+                                                               and @ref uct_ep_query
+                                                               support token query, and
+                                                               @ref uct_ep_outstanding_purge
+                                                               is supported. */
 /**
  * @}
  */

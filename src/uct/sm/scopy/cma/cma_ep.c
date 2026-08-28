@@ -75,7 +75,7 @@ uct_cma_ep_tx_error(uct_cma_ep_t *ep, const char *cma_call_name,
 
     status  = uct_iface_handle_ep_err(&iface->super, &ep->super.super.super,
                                       UCS_ERR_CONNECTION_RESET);
-    log_lvl = uct_base_iface_failure_log_level(iface, 0, status,
+    log_lvl = uct_base_iface_failure_log_level(iface, status,
                                                UCS_ERR_CONNECTION_RESET);
 
     /* Dump IO vector */
