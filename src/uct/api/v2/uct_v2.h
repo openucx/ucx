@@ -1201,13 +1201,11 @@ enum uct_iface_attr_field {
         /* GET capabilities */
 #define UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY       UCS_BIT(1)  /**< Zero-copy SGL get */
         /* Interface capabilities */
-#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(2)  /**< Supports token query through
-                                                               @ref uct_iface_query_v2 and
-                                                               @ref uct_ep_query,
-                                                               outstanding purge through
-                                                               @ref uct_ep_outstanding_purge, and
-                                                               an error handler returning
-                                                               @ref UCS_INPROGRESS. */
+#define UCT_IFACE_FLAG_V2_QUERY_TOKEN         UCS_BIT(2)  /**< @ref uct_iface_query_v2
+                                                               and @ref uct_ep_query
+                                                               support token query, and
+                                                               @ref uct_ep_outstanding_purge
+                                                               is supported. */
 /**
  * @}
  */
@@ -1943,7 +1941,7 @@ typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. */
     uint64_t                            field_mask;
 
     /**
@@ -1966,6 +1964,8 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Purge outstanding (undelivered) operations from an endpoint.
  *
+ * This routine must be called only if the interface supports
+ * @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
  */
