@@ -216,6 +216,9 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_txwq_t *txwq,
                                          uct_ib_mlx5_qp_attr_t *attr);
 
+void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
+                                   enum ibv_mtu path_mtu);
+
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
