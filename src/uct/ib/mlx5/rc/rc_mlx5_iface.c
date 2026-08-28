@@ -1100,8 +1100,10 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
 
     rc_ep = uct_rc_iface_lookup_ep(iface, remote_qpn);
     if (rc_ep == NULL) {
-        ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
-        return UCS_ERR_INVALID_PARAM;
+        /* The QP may already have been extracted or destroyed by overlapping
+         * recovery; the caller skips this token. */
+        ucs_debug("rc mlx5: no ep for QPN %u", remote_qpn);
+        return UCS_ERR_NO_ELEM;
     }
 
     ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_base_ep_t);

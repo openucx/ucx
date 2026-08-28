@@ -419,10 +419,12 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
                           uct_ep_h *uct_eps, ucp_send_nbx_callback_t cb,
                           void *arg, ucp_lane_map_t *failover_lanes_p)
 {
+    uct_ep_invalidate_params_t inv_params;
     ucp_ep_failover_ctx_t *ctx;
     ucp_ep_failover_lane_ctx_t *lane_ctx;
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
+    ucs_status_t inv_status;
 
     *failover_lanes_p = 0;
     ucs_assert(ep->ext != NULL);
@@ -479,8 +481,17 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
         lane_ctx->undelivered_count = 0;
         ucs_queue_head_init(&lane_ctx->replay_queue);
 
-        /* Completions are stopped by the UCT error handler returning
-         * UCS_INPROGRESS; outstanding ops are purged after RX tokens. */
+        /* Local CQ failure already armed DEFER via UCS_INPROGRESS. Peer-
+         * triggered (asymmetric) failover has no CQ error yet, so arm it
+         * here. Invalidate is a no-op when DEFER is already set. */
+        inv_params.field_mask = UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS;
+        inv_params.flags      = UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS;
+        inv_status            = uct_ep_invalidate(uct_ep, &inv_params);
+        if ((inv_status != UCS_OK) && (inv_status != UCS_ERR_UNSUPPORTED)) {
+            ucs_debug("ep %p: lane %u defer-completions invalidate: %s", ep,
+                      lane, ucs_status_string(inv_status));
+        }
+
         ucp_ep_refcount_add(ep, discard);
         ucp_worker_flush_ops_count_add(ep->worker, +1);
 
