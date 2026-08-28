@@ -567,7 +567,7 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  *       endpoint.
  *
  * @note If the callback returns @ref UCS_INPROGRESS, user should purge
- *       outstanding operations with @ref uct_ep_outstanding_purge.
+ *       outstanding operations with @c uct_ep_outstanding_purge.
  *
  * @param [in]  arg      User argument to be passed to the callback.
  * @param [in]  ep       Endpoint which has failed. Upon return from the callback,
