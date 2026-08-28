@@ -829,8 +829,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     /* TODO: Implement purge and replace the external purge call. */
     status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
-    /* The purge function advances ft_ci as each WQE is processed. Reclaim TX
-     * resources up to ft_ci. */
+    /* TODO: Advance ft_ci as each WQE is processed to reclaim TX resources. */
     uct_rc_mlx5_ep_update_tx_qp_res(ep, ep->tx.wq.ft_ci);
 
     return status;
