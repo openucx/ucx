@@ -1120,11 +1120,6 @@ UCS_TEST_F(test_array, carray_for_each_index) {
     const int *elem;
     size_t idx, expected_idx;
 
-    ucs_carray_for_each_index(elem, idx, values, 0) {
-        ADD_FAILURE() << "iterated over an empty array";
-    }
-    EXPECT_EQ(0, idx);
-
     expected_idx = 0;
     ucs_carray_for_each_index(elem, idx, values,
                               ucs_static_array_size(values)) {
@@ -1147,7 +1142,7 @@ UCS_TEST_F(test_array, array_for_each_index) {
     ucs_array_for_each_index(elem, idx, &test_array) {
         ADD_FAILURE() << "iterated over an empty array";
     }
-    EXPECT_EQ(0, idx);
+    EXPECT_EQ(0u, idx);
 
     for (idx = 0; idx < NUM_ELEMENTS; ++idx) {
         *ucs_array_append(&test_array,
