@@ -693,11 +693,14 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
-    txwq->curr       = txwq->qstart;
-    txwq->sw_pi      = 0;
-    txwq->prev_sw_pi = UINT16_MAX;
-    txwq->ft_ci      = UINT16_MAX;
-    txwq->hw_ci      = UINT16_MAX;
+    txwq->curr           = txwq->qstart;
+    txwq->sw_pi          = 0;
+    txwq->prev_sw_pi     = UINT16_MAX;
+    txwq->next_wqe_psn   = 0;
+    txwq->hw_ci          = UINT16_MAX;
+    txwq->ft_ci          = UINT16_MAX;
+    txwq->path_mtu_mask  = 0;
+    txwq->path_mtu_shift = 0;
 #if UCS_ENABLE_ASSERT
     txwq->flags      = 0;
 #endif
@@ -713,6 +716,16 @@ void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq)
     uct_ib_mlx5_set_ctrl_qpn_ds(uct_ib_mlx5_txwq_get_wqe(txwq, 0xffff), 0, 1);
 }
 
+static void
+uct_ib_mlx5_txwq_vfs_show_next_wqe_psn(void *obj, ucs_string_buffer_t *strb,
+                                       void *arg_ptr, uint64_t arg_u64)
+{
+    uct_ib_mlx5_txwq_t *txwq = arg_ptr;
+
+    ucs_string_buffer_appendf(
+            strb, "%u\n", uct_ib_mlx5_txwq_get_next_wqe_psn(txwq));
+}
+
 void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
 {
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
@@ -722,6 +735,9 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "sw_pi");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
                             &txwq->prev_sw_pi, UCS_VFS_TYPE_U16, "prev_sw_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj,
+                            uct_ib_mlx5_txwq_vfs_show_next_wqe_psn, txwq, 0,
+                            "next_wqe_psn");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qstart,
                             UCS_VFS_TYPE_POINTER, "qstart");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qend,
