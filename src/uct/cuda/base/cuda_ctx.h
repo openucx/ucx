@@ -16,7 +16,6 @@
  * @param [in]  cuda_device Device for which primary context is requested.
  * @param [in]  force       Retain the primary context regardless of its state.
  * @param [out] cuda_ctx_p  Returned context handle of the retained context.
- * @param [in]  log_level   Log level for CUDA driver API failures.
  *
  * @return UCS_OK if the method completes successfully. UCS_ERR_NO_DEVICE if the
  *         primary device context is inactive on the given CUDA device and
@@ -24,8 +23,7 @@
  *         methods called inside failed with an error.
  */
 ucs_status_t uct_cuda_ctx_primary_retain(CUdevice cuda_device, int force,
-                                         CUcontext *cuda_ctx_p,
-                                         ucs_log_level_t log_level);
+                                         CUcontext *cuda_ctx_p);
 
 
 /**

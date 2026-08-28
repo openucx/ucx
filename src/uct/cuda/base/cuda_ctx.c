@@ -12,8 +12,7 @@
 
 
 ucs_status_t uct_cuda_ctx_primary_retain(CUdevice cuda_device, int force,
-                                         CUcontext *cuda_ctx_p,
-                                         ucs_log_level_t log_level)
+                                         CUcontext *cuda_ctx_p)
 {
     unsigned int flags;
     int active;
@@ -21,9 +20,8 @@ ucs_status_t uct_cuda_ctx_primary_retain(CUdevice cuda_device, int force,
     CUcontext cuda_ctx;
 
     if (!force) {
-        status = UCT_CUDADRV_FUNC(
-                    cuDevicePrimaryCtxGetState(cuda_device, &flags, &active),
-                    log_level);
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                    cuDevicePrimaryCtxGetState(cuda_device, &flags, &active));
         if (status != UCS_OK) {
             return status;
         }
@@ -35,8 +33,8 @@ ucs_status_t uct_cuda_ctx_primary_retain(CUdevice cuda_device, int force,
         }
     }
 
-    status = UCT_CUDADRV_FUNC(cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device),
-                              log_level);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuDevicePrimaryCtxRetain(&cuda_ctx, cuda_device));
     if (status != UCS_OK) {
         return status;
     }
@@ -82,7 +80,7 @@ ucs_status_t uct_cuda_ctx_primary_push(CUdevice cuda_device, int retain_inactive
     CUcontext primary_ctx;
 
     status = uct_cuda_ctx_primary_retain(cuda_device, retain_inactive,
-                                         &primary_ctx, log_level);
+                                         &primary_ctx);
     if (status != UCS_OK) {
         return status;
     }
