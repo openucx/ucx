@@ -1964,11 +1964,12 @@ typedef struct {
  * @ingroup UCT_RESOURCE
  * @brief Purge outstanding (undelivered) operations from an endpoint.
  *
- * This routine should be called only after the error handler for @a ep returns
- * @ref UCS_INPROGRESS. It can be used only if the interface supports
- * @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ *
+ * @note This routine should be called only after the error handler for @a ep
+ *       returns @ref UCS_INPROGRESS. It can be used only if the interface
+ *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,

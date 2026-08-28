@@ -563,7 +563,11 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  * @brief Callback to process peer failure.
  *
  * @note User should purge a pending queue and do not post any TX operations
- * and cancel all possible outstanding operations prior closing a UCT endpoint.
+ *       and cancel all possible outstanding operations prior closing a UCT
+ *       endpoint.
+ *
+ * @note If the callback returns @ref UCS_INPROGRESS, user should purge
+ *       outstanding operations with @ref uct_ep_outstanding_purge.
  *
  * @param [in]  arg      User argument to be passed to the callback.
  * @param [in]  ep       Endpoint which has failed. Upon return from the callback,
@@ -573,11 +577,7 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  * @param [in]  status   Status indicating error.
  *
  * @return @ref UCS_OK         - The error was handled successfully.
- *         @ref UCS_INPROGRESS - The error handling is in progress. The user
- *                               may return this only if the interface supports
- *                               @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
- *                               The transport does not purge outstanding
- *                               operations.
+ *         @ref UCS_INPROGRESS - The error handling is in progress.
  *         Otherwise           - The error was not handled and is returned back
  *                               to the transport.
  */
