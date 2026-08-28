@@ -693,13 +693,13 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
-    txwq->curr           = txwq->qstart;
-    txwq->sw_pi          = 0;
-    txwq->prev_sw_pi     = UINT16_MAX;
-    txwq->ft_ci          = UINT16_MAX;
-    txwq->hw_ci          = UINT16_MAX;
+    txwq->curr       = txwq->qstart;
+    txwq->sw_pi      = 0;
+    txwq->prev_sw_pi = UINT16_MAX;
+    txwq->ft_ci      = UINT16_MAX;
+    txwq->hw_ci      = UINT16_MAX;
 #if UCS_ENABLE_ASSERT
-    txwq->flags          = 0;
+    txwq->flags      = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
 }
