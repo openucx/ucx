@@ -1118,18 +1118,21 @@ protected:
 UCS_TEST_F(test_array, carray_for_each_index) {
     const int values[] = {3, 5, 7};
     const int *elem;
-    size_t idx;
+    size_t idx, expected_idx;
 
     ucs_carray_for_each_index(elem, idx, values, 0) {
         ADD_FAILURE() << "iterated over an empty array";
     }
     EXPECT_EQ(0, idx);
 
+    expected_idx = 0;
     ucs_carray_for_each_index(elem, idx, values,
                               ucs_static_array_size(values)) {
         EXPECT_EQ(&values[idx], elem);
         EXPECT_EQ(values[idx], *elem);
+        EXPECT_EQ(expected_idx++, idx);
     }
+    EXPECT_EQ(expected_idx, idx);
     EXPECT_EQ(ucs_static_array_size(values), idx);
 }
 
@@ -1137,7 +1140,7 @@ UCS_TEST_F(test_array, array_for_each_index) {
     constexpr size_t NUM_ELEMENTS = 3;
     test_1int_t test_array;
     int *elem;
-    size_t idx;
+    size_t idx, expected_idx;
 
     ucs_array_init_dynamic(&test_array);
 
@@ -1150,12 +1153,16 @@ UCS_TEST_F(test_array, array_for_each_index) {
         *ucs_array_append(&test_array,
                           FAIL()) = static_cast<int>(idx * idx + 1);
     }
+    EXPECT_EQ(NUM_ELEMENTS, ucs_array_length(&test_array));
 
+    expected_idx = 0;
     ucs_array_for_each_index(elem, idx, &test_array) {
         EXPECT_EQ(&ucs_array_elem(&test_array, idx), elem);
         EXPECT_EQ(idx * idx + 1, static_cast<size_t>(*elem));
+        EXPECT_EQ(expected_idx++, idx);
     }
-    EXPECT_EQ(NUM_ELEMENTS, idx);
+    EXPECT_EQ(expected_idx, idx);
+    EXPECT_EQ(ucs_array_length(&test_array), idx);
 
     ucs_array_cleanup_dynamic(&test_array);
 }
