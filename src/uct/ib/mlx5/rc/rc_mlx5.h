@@ -55,6 +55,9 @@ typedef struct uct_rc_mlx5_base_ep {
     bool                     no_comp;
 } uct_rc_mlx5_base_ep_t;
 
+typedef __be32 uct_rc_mlx5_tx_token_t;
+typedef __be32 uct_rc_mlx5_rx_token_t;
+
 
 /**
  * Generic RC remote endpoint with HW TM support
