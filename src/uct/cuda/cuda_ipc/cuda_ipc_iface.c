@@ -164,9 +164,16 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                      sizeof(pid_t));
     ipc_addr       = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
                                                        iface_addr_len);
+    /* CUDA IPC is not useful between endpoints in one process which use the
+     * same GPU. UCP supplies the system device identities; preserve
+     * reachability for UCT callers which do not provide them. */
     if (same_uuid &&
-        uct_cuda_ipc_is_rkey_local(ipc_addr.pid, ipc_addr.pid_ns)) {
-        uct_iface_fill_info_str_buf(params, "same process");
+        uct_cuda_ipc_is_rkey_local(ipc_addr.pid, ipc_addr.pid_ns) &&
+        (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_LOCAL_SYS_DEV) &&
+        (params->field_mask & UCT_IFACE_IS_REACHABLE_FIELD_REMOTE_SYS_DEV) &&
+        (params->local_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (params->local_sys_dev == params->remote_sys_dev)) {
+        uct_iface_fill_info_str_buf(params, "same process and same GPU");
         return 0;
     }
 

@@ -1502,11 +1502,15 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
         .field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
                               UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
                               UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
-                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH,
+                              UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH |
+                              UCT_IFACE_IS_REACHABLE_FIELD_LOCAL_SYS_DEV |
+                              UCT_IFACE_IS_REACHABLE_FIELD_REMOTE_SYS_DEV,
         .device_addr        = ae->dev_addr,
         .iface_addr         = ae->iface_addr,
         .device_addr_length = ae->dev_addr_len,
-        .iface_addr_length  = ae->iface_addr_len
+        .iface_addr_length  = ae->iface_addr_len,
+        .local_sys_dev      = context->tl_rscs[rsc_index].tl_rsc.sys_device,
+        .remote_sys_dev     = ae->sys_dev
     };
 
     if (info_str != NULL) {

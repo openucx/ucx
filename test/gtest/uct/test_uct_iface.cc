@@ -59,8 +59,19 @@ void test_uct_iface::test_is_reachable()
 
     bool is_reachable = uct_iface_is_reachable_v2(iface, &params);
     if (has_cuda_ipc()) {
-        EXPECT_FALSE(is_reachable);
-        EXPECT_EQ(std::string("same process"), std::string(info_str));
+        /* GPU identity is not supplied by this direct UCT caller. */
+        EXPECT_TRUE(is_reachable);
+
+        params.field_mask |= UCT_IFACE_IS_REACHABLE_FIELD_LOCAL_SYS_DEV |
+                             UCT_IFACE_IS_REACHABLE_FIELD_REMOTE_SYS_DEV;
+        params.local_sys_dev  = 0;
+        params.remote_sys_dev = 0;
+        EXPECT_FALSE(uct_iface_is_reachable_v2(iface, &params));
+        EXPECT_EQ(std::string("same process and same GPU"),
+                  std::string(info_str));
+
+        params.remote_sys_dev = 1;
+        EXPECT_TRUE(uct_iface_is_reachable_v2(iface, &params));
     } else {
         EXPECT_TRUE(is_reachable);
     }

@@ -292,7 +292,9 @@ typedef enum {
     UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3), /**< info_string_length field */
     UCT_IFACE_IS_REACHABLE_FIELD_SCOPE              = UCS_BIT(4), /**< scope field */
     UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(5), /**< device_addr_length field */
-    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6)  /**< iface_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH  = UCS_BIT(6), /**< iface_addr_length field */
+    UCT_IFACE_IS_REACHABLE_FIELD_LOCAL_SYS_DEV      = UCS_BIT(7), /**< local_sys_dev field */
+    UCT_IFACE_IS_REACHABLE_FIELD_REMOTE_SYS_DEV     = UCS_BIT(8)  /**< remote_sys_dev field */
 } uct_iface_is_reachable_field_mask_t;
 
 
@@ -662,6 +664,12 @@ typedef struct uct_iface_is_reachable_params {
      * default minimum length according to the address buffer contents.
      */
     size_t                        iface_addr_length;
+
+    /** Local system device id. */
+    ucs_sys_device_t              local_sys_dev;
+
+    /** Remote system device id. */
+    ucs_sys_device_t              remote_sys_dev;
 } uct_iface_is_reachable_params_t;
 
 
