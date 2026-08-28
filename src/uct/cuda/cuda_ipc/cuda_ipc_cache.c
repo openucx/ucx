@@ -966,7 +966,7 @@ UCS_STATIC_CLEANUP {
      * shutdown. If the driver is already deinitialized, the memory handles
      * cannot be closed, and there is no need to do it, because the driver
      * releases all the mappings anyway. */
-    close_handles = cuDeviceGetCount(&num_devices) != CUDA_ERROR_DEINITIALIZED;
+    close_handles = (cuDeviceGetCount(&num_devices) != CUDA_ERROR_DEINITIALIZED);
 
     kh_foreach_value(&uct_cuda_ipc_remote_cache.hash, rem_cache, {
         uct_cuda_ipc_destroy_cache(rem_cache, close_handles);
