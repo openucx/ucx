@@ -297,7 +297,7 @@ static int ucp_wireup_ep_supports_tokens(ucp_ep_h ep)
 static ucs_status_t
 ucp_wireup_pack_token_payload(ucp_ep_h ep, ucp_lane_map_t requested_lane_map,
                               ucp_lane_map_t provided_lane_map,
-                              uint64_t request_id, void **payload_p,
+                              uint32_t request_id, void **payload_p,
                               size_t *payload_length_p)
 {
     void *address         = *payload_p;
@@ -338,7 +338,7 @@ ucp_wireup_msg_send_full(ucp_ep_h ep, uint8_t type,
                          const ucp_tl_bitmap_t *tl_bitmap,
                          const ucp_lane_index_t *lanes2remote,
                          ucp_lane_map_t requested_lane_map,
-                         ucp_lane_map_t provided_lane_map, uint64_t request_id)
+                         ucp_lane_map_t provided_lane_map, uint32_t request_id)
 {
     ucp_request_t *req;
     ucs_status_t status;
@@ -1088,7 +1088,7 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map,
-                                    uint64_t request_id)
+                                    uint32_t request_id)
 {
     ucp_tl_bitmap_t tl_bitmap;
     ucs_status_t status;
@@ -1097,7 +1097,7 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
     ucp_wireup_augment_aux_tls(ep, provided_lane_map, &tl_bitmap);
 
     ucs_debug("ep %p: send %s requested=0x%" PRIx64 " provided=0x%" PRIx64
-              " request_id=0x%" PRIx64,
+              " request_id=0x%" PRIx32,
               ep, ucp_wireup_msg_str(msg_type), (uint64_t)requested_lane_map,
               (uint64_t)provided_lane_map, request_id);
 
@@ -1145,7 +1145,7 @@ ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
 static UCS_F_NOINLINE void
 ucp_wireup_process_lanes_addr_request(
         ucp_worker_h worker, ucp_ep_h ep, const ucp_wireup_msg_t *msg,
-        const ucp_wireup_msg_lanes_info_t *lanes_info, uint64_t request_id,
+        const ucp_wireup_msg_lanes_info_t *lanes_info, uint32_t request_id,
         const ucp_unpacked_address_t *remote_address)
 {
     ucp_lane_map_t peer_unaware, to_rebuild, peer_provided;
@@ -1196,7 +1196,7 @@ ucp_wireup_process_lanes_addr_request(
 static UCS_F_NOINLINE void
 ucp_wireup_process_lanes_addr_reply(
         ucp_worker_h worker, ucp_ep_h ep, const ucp_wireup_msg_t *msg,
-        const ucp_wireup_msg_lanes_info_t *lanes_info, uint64_t request_id,
+        const ucp_wireup_msg_lanes_info_t *lanes_info, uint32_t request_id,
         const ucp_unpacked_address_t *remote_address)
 {
     ucp_lane_map_t rebuilt;
@@ -1241,7 +1241,7 @@ static ucs_status_t
 ucp_wireup_parse_lanes_addr(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
                             size_t length,
                             const ucp_wireup_msg_lanes_info_t **lanes_info_p,
-                            uint64_t *request_id_p, const void **address_p)
+                            uint32_t *request_id_p, const void **address_p)
 {
     const ucp_wireup_msg_tokens_info_t *tokens_info;
     const ucp_wireup_msg_lanes_info_t *lanes_info;
@@ -1311,8 +1311,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     ucp_worker_h worker   = arg;
     ucp_wireup_msg_t *msg = data;
     ucp_ep_h ep           = NULL;
-    uint64_t request_id   = 0;
-    const ucp_wireup_msg_lanes_info_t *lanes_info;
+    uint32_t request_id   = 0;
+    const ucp_wireup_msg_lanes_info_t *lanes_info = NULL;
     const void *address_ptr;
     ucp_unpacked_address_t remote_address;
     ucs_status_t status;
@@ -1368,13 +1368,15 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) {
+        ucs_assert(lanes_info != NULL);
         ucp_wireup_process_lanes_addr_request(worker, ep, msg, lanes_info,
                                               request_id, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
+        ucs_assert(lanes_info != NULL);
         ucp_wireup_process_lanes_addr_reply(worker, ep, msg, lanes_info,
                                             request_id, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_ACK) {
-        ucs_debug("ep %p: LANES_ADDR_ACK request_id=0x%" PRIx64, ep,
+        ucs_debug("ep %p: LANES_ADDR_ACK request_id=0x%" PRIx32, ep,
                   request_id);
     } else {
         ucs_bug("invalid wireup message");

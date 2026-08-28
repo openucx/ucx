@@ -182,7 +182,7 @@ typedef struct ucp_wireup_msg_tokens_info_t {
     /* Exchange generation, echoed by the peer in its answers, to be matched
      * against the tokens once they are carried. Starts from 1, so that 0 tells
      * the receiver the message came without a trailer at all. */
-    uint64_t request_id;
+    uint32_t request_id;
     /* uint8_t tx_lengths[popcount(provided_lane_map)] followed by the TX
      * tokens, then uint8_t rx_lengths[popcount(requested_lane_map)] followed by
      * the RX tokens, then the packed addresses. A zero length means the
@@ -300,7 +300,7 @@ unsigned ucp_wireup_eps_progress(void *arg);
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
                                     ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map,
-                                    uint64_t request_id);
+                                    uint32_t request_id);
 
 
 /* Size of one token section (gtest feeds it crafted buffers). */

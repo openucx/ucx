@@ -517,7 +517,7 @@ typedef struct ucp_ep_recovery_arg {
      * and echoed by the peer in its answers. Only carried on the wire for now,
      * the follow-up patch matches it against the tokens of an answer to tell
      * apart the round they belong to */
-    uint64_t                request_id;
+    uint32_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
