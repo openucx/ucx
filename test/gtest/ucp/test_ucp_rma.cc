@@ -1304,7 +1304,6 @@ protected:
         }
 
         ucp_request_release(sptr);
-
         flush_ep(sender());
         verify_sgl_buffers();
     }
