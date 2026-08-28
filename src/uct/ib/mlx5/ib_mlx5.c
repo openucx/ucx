@@ -702,7 +702,7 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->path_mtu_mask  = 0;
     txwq->path_mtu_shift = 0;
 #if UCS_ENABLE_ASSERT
-    txwq->flags      = 0;
+    txwq->flags          = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
 }
