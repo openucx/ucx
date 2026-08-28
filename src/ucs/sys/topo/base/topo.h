@@ -18,8 +18,9 @@
 BEGIN_C_DECLS
 
 
-/* Upper limit on system device id */
-#define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
+/* Maximal valid system device id and number of valid ids */
+#define UCS_SYS_DEVICE_ID_MAX   (UINT8_MAX - 1)
+#define UCS_SYS_DEVICE_ID_COUNT (UCS_SYS_DEVICE_ID_MAX + 1)
 
 /* Indicate that the ucs_sys_device_t for the device has no real bus_id
  * e.g. virtual devices like CMA/knem */

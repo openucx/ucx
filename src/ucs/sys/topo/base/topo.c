@@ -26,7 +26,6 @@
 #include <inttypes.h>
 
 
-#define UCS_TOPO_MAX_SYS_DEVICES     256
 #define UCS_TOPO_SYSFS_PCI_PREFIX    "/sys/bus/pci/devices/"
 #define UCS_TOPO_SYSFS_DEVICES_ROOT  "/sys/devices"
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
@@ -71,7 +70,7 @@ KHASH_INIT(bus_to_sys_dev, ucs_topo_bus_value_key_t, ucs_sys_device_t, 1,
 typedef struct ucs_topo_global_ctx {
     ucs_spinlock_t             lock;
     khash_t(bus_to_sys_dev)    bus_to_sys_dev_hash;
-    ucs_topo_sys_device_info_t devices[UCS_TOPO_MAX_SYS_DEVICES];
+    ucs_topo_sys_device_info_t devices[UCS_SYS_DEVICE_ID_COUNT];
     unsigned                   num_devices;
 } ucs_topo_global_ctx_t;
 
@@ -440,7 +439,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
-                          UCS_TOPO_MAX_SYS_DEVICES);
+                          UCS_SYS_DEVICE_ID_COUNT);
 
         name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
         if (name == NULL) {

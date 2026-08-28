@@ -136,7 +136,7 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
 
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev1);
     ASSERT_UCS_OK(status);
-    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
+    EXPECT_LE(dev1, UCS_SYS_DEVICE_ID_MAX);
     status = ucs_topo_sys_device_set_name(dev1, "test_bus_id_1", 10);
     ASSERT_UCS_OK(status);
 
@@ -153,7 +153,7 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev2);
     ASSERT_UCS_OK(status);
     EXPECT_EQ((unsigned)dev1 + 1, dev2);
-    EXPECT_LT(dev2, UCS_SYS_DEVICE_ID_MAX);
+    EXPECT_LE(dev2, UCS_SYS_DEVICE_ID_MAX);
     status = ucs_topo_sys_device_set_name(dev2, "test_bus_id_2", 10);
     ASSERT_UCS_OK(status);
 
@@ -274,7 +274,7 @@ UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
                                                            user_value1, &dev1);
     ASSERT_UCS_OK(status);
-    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
+    EXPECT_LE(dev1, UCS_SYS_DEVICE_ID_MAX);
 
     status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
                                                            user_value1,

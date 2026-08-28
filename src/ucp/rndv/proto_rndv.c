@@ -24,8 +24,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
-    ucp_rsc_index_t mem_sys_dev              = params->super.reg_mem_info.sys_dev;
-    ucp_rsc_index_t ep_sys_dev;
+    ucs_sys_device_t mem_sys_dev             = params->super.reg_mem_info.sys_dev;
+    ucs_sys_device_t ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
