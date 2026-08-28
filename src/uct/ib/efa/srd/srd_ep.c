@@ -69,7 +69,6 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
         goto err_arb_cleanup;
     }
 
-    /* always cached: SRD needs a stable ah pointer for is_connected() */
     status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
                                             &ah_attr,
                                             uct_ib_iface_md(&iface->super)->pd,

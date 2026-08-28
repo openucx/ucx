@@ -387,6 +387,7 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
                         struct ibv_pd *pd, const char *usage,
                         struct ibv_ah **ah_p);
 
+/* Bypasses ah_cache_ttl; cache-owned, caller must not destroy the AH */
 ucs_status_t
 uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,

@@ -802,7 +802,6 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         goto out;
     }
 
-    /* always cached: matches uct_srd_ep_t's ah for is_connected() */
     status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
                                             &ah_attr,
                                             uct_ib_iface_md(&iface->super)->pd,

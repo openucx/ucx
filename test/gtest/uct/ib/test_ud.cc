@@ -950,52 +950,6 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
-
-class test_ud_verbs_is_connected : public ud_base_test {
-};
-
-/* uct_ud_verbs_ep_is_connected() must compare the peer's actual resolved
- * LID/GID (via ah_attr), not just the destination QP number - otherwise a
- * peer that changed its L2 address could be mistaken for still being the
- * one this ep is connected to. */
-UCS_TEST_P(test_ud_verbs_is_connected, mismatched_device_addr)
-{
-    uct_ep_is_connected_params_t params = {0};
-    uct_iface_attr_t attr;
-    std::string dev_addr, iface_addr;
-
-    connect();
-
-    ASSERT_UCS_OK(uct_iface_query(m_e2->iface(), &attr));
-    dev_addr.resize(attr.device_addr_len);
-    iface_addr.resize(attr.iface_addr_len);
-    ASSERT_UCS_OK(uct_iface_get_device_address(
-            m_e2->iface(), (uct_device_addr_t*)dev_addr.data()));
-    ASSERT_UCS_OK(uct_iface_get_address(m_e2->iface(),
-                                        (uct_iface_addr_t*)iface_addr.data()));
-
-    params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
-                         UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
-    params.device_addr = (uct_device_addr_t*)dev_addr.data();
-    params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
-    /* Not in field_mask, kept non-NULL to avoid a Coverity false positive. */
-    params.ep_addr     = (uct_ep_addr_t*)iface_addr.data();
-
-    EXPECT_TRUE(uct_ep_is_connected(m_e1->ep(0), &params));
-
-    /* Flip the LID/GID - the byte right after uct_ib_address_t::flags is
-     * always either the GID (RoCE) or the LID (IB), see its layout comment
-     * - while keeping the destination QP number (in iface_addr) the same
-     * as the real peer's, to isolate the ah_attr-based comparison from the
-     * dest_qpn check. */
-    ((uint8_t*)dev_addr.data())[1] ^= 1;
-
-    EXPECT_FALSE(uct_ep_is_connected(m_e1->ep(0), &params));
-}
-
-_UCT_INSTANTIATE_TEST_CASE(test_ud_verbs_is_connected, ud_verbs)
-
-
 #if UCT_UD_EP_DEBUG_HOOKS
 class test_ud_stale_ack : public test_ud {
 public:

@@ -15,18 +15,14 @@
 
 
 typedef struct {
-    uint32_t      dest_qpn;
-    uint16_t      dlid;
-    uint8_t       is_global;
-    union ibv_gid dgid; /* Valid only if is_global. Used for connection
-                         * matching and is_connected() */
+    uint32_t                          dest_qpn;
+    struct ibv_ah                     *ah;
 } uct_ud_verbs_ep_peer_address_t;
 
 
 typedef struct {
     uct_ud_ep_t                       super;
     uct_ud_verbs_ep_peer_address_t    peer_address;
-    struct ibv_ah                     *ah;
 } uct_ud_verbs_ep_t;
 
 
