@@ -60,23 +60,21 @@ UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 }
 
-static void uct_ud_verbs_ep_destroy_ah(uct_ud_verbs_ep_t *ep)
+static void uct_ud_verbs_ep_release_ah(uct_ud_verbs_ep_t *ep)
 {
     uct_ib_iface_t *iface;
 
-    if (ep->ah == NULL) {
-        return;
+    if (ep->ah != NULL) {
+        iface = ucs_derived_of(ep->super.super.super.iface, uct_ib_iface_t);
+        uct_ib_iface_release_ah(iface, ep->ah);
+        ep->ah = NULL;
     }
-
-    iface = ucs_derived_of(ep->super.super.super.iface, uct_ib_iface_t);
-    uct_ib_iface_release_ah(iface, ep->ah);
-    ep->ah = NULL;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
 {
     ucs_trace_func("");
-    uct_ud_verbs_ep_destroy_ah(self);
+    uct_ud_verbs_ep_release_ah(self);
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_ep_t, uct_ud_ep_t);
@@ -653,7 +651,7 @@ uct_ud_verbs_ep_resolve_peer_address(uct_ud_ep_t *ud_ep,
     }
 
     /* Release any AH from a previous resolve (e.g. on reconnect) first */
-    uct_ud_verbs_ep_destroy_ah(ep);
+    uct_ud_verbs_ep_release_ah(ep);
 
     return uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
                                   &ep->ah);
