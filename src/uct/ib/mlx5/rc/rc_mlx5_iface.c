@@ -225,7 +225,7 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         status               = uct_iface_query_v2(&iface->super.super.super, &attr);
         inprogress_supported = ((status != UCS_OK) ||
                                 !(attr.cap.flags &
-                                  UCT_IFACE_FLAG_V2_ERR_HANDLER_INPROGRESS));
+                                  UCT_IFACE_FLAG_V2_QUERY_TOKEN));
     }
 
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super,
