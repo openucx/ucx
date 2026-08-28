@@ -19,11 +19,11 @@
 
 
 ## Comments
-  * Usually one line; more only for a non-obvious, complex point, or Doxygen
-    doc for public headers or non-trivial functions.
-  * Document 'Why' not 'What'; no PR/issue references, no dev-process
+  * Usually one line; use more only for a non-obvious or complex point, or
+    per the `## Doxygen` section below.
+  * Document `why` not `what`; no PR/issue references, no dev-process
     narration.
-  * Document once, in the most relevant area; do not duplicate elsewhere.
+  * Document once, in the most relevant area.
   * Explain locking, ownership, tradeoffs, or step-by-step processing when
     non-obvious.
 
