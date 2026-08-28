@@ -206,7 +206,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"AH_CACHE_TTL", "inf",
      "Address handle (AH) cache: 0 disables it, inf keeps it enabled. No\n"
-     "other values are allowed.",
+     "other values are allowed. SRD transport always uses the cache.",
      ucs_offsetof(uct_ib_md_config_t, ah_cache_ttl),
      UCS_CONFIG_TYPE_TIME_UNITS},
 

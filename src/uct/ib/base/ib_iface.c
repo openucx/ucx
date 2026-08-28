@@ -1026,7 +1026,6 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
 
-    /* ah_cache_ttl=0 (UCX_IB_AH_CACHE_TTL) bypasses the cache */
     if (dev->ah_cache_ttl == 0) {
         return uct_ib_device_create_ah(dev, ah_attr, uct_ib_iface_md(iface)->pd,
                                        usage, ah_p);
