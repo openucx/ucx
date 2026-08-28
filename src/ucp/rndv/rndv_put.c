@@ -644,10 +644,12 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 
     ucp_proto_rndv_mtype_init_params_copy(init_params, &frag_mem_info,
                                           &mtype_init_params);
-    ucp_proto_rndv_put_common_probe(
-            &mtype_init_params.super, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
-            frag_size, UCT_EP_OP_GET_ZCOPY, flags, mdesc_md_map, comp_cb, 1,
-            UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, &frag_mem_info);
+    ucp_proto_rndv_put_common_probe(&mtype_init_params.super,
+                                    UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
+                                    frag_size, UCT_EP_OP_GET_ZCOPY, flags,
+                                    mdesc_md_map, comp_cb, 1,
+                                    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
+                                    &frag_mem_info);
 }
 
 static void
