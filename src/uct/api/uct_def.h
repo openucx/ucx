@@ -575,7 +575,7 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  * @return @ref UCS_OK         - The error was handled successfully.
  *         @ref UCS_INPROGRESS - The error handling is in progress. The user
  *                               may return this only if the interface supports
- *                               @ref UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ *                               @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  *                               The transport does not purge outstanding
  *                               operations.
  *         Otherwise           - The error was not handled and is returned back
