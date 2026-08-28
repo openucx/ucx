@@ -43,11 +43,6 @@ enum {
     UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1)
 };
 
-enum {
-    /* Do not purge outstanding WQE on error. */
-    UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS = UCS_BIT(0)
-};
-
 
 /**
  * RC base remote endpoint
@@ -57,7 +52,7 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
-    uint8_t                  flags;
+    bool                     no_comp;
 } uct_rc_mlx5_base_ep_t;
 
 

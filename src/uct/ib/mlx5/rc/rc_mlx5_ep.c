@@ -789,7 +789,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
     ucs_status_t status;
 
-    ucs_assert(ep->flags & UCT_RC_MLX5_EP_FLAG_NO_COMPLETIONS);
+    ucs_assert(ep->no_comp);
 
     status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
 
@@ -1217,7 +1217,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
-    self->flags = 0;
+    self->no_comp = 0;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,
