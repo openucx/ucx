@@ -907,9 +907,6 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
 
 uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl);
 
-void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
-                                void *dst, size_t length);
-
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding);

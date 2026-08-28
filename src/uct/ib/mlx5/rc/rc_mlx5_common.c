@@ -60,6 +60,8 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
 
             return UCS_OK;
         }
+
+        /* fall through */
     default:
         ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
         return UCS_ERR_UNSUPPORTED;
