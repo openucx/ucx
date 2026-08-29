@@ -802,7 +802,10 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         goto out;
     }
 
-    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
+    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
+                                            &ah_attr,
+                                            uct_ib_iface_md(&iface->super)->pd,
+                                            "SRD AH", &ah);
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u failed to create ah"
                   "status=%s",
