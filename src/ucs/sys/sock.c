@@ -465,7 +465,8 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
                                     int reuse_addr, int *listen_fd)
 {
     ucs_socket_options_t server_params = {
-        .reuse_addr = reuse_addr
+        .reuse_addr  = reuse_addr,
+        .bind_device = NULL
     };
 
     return ucs_socket_server_init_v2(saddr, socklen, backlog,
@@ -501,6 +502,15 @@ ucs_socket_server_init_v2(const struct sockaddr *saddr, socklen_t socklen,
     if (socket_params->reuse_addr) {
         status = ucs_socket_setopt(fd, SOL_SOCKET, SO_REUSEADDR,
                                    &so_reuse_optval, sizeof(so_reuse_optval));
+        if (status != UCS_OK) {
+            goto err_close_socket;
+        }
+    }
+
+    if (socket_params->bind_device != NULL) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_BINDTODEVICE,
+                                   socket_params->bind_device,
+                                   strlen(socket_params->bind_device) + 1);
         if (status != UCS_OK) {
             goto err_close_socket;
         }

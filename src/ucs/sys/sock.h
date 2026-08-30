@@ -45,6 +45,12 @@ typedef struct {
      * released by another socket yet.
      */
     int         reuse_addr;
+
+    /**
+     * Name of the network interface to bind the socket
+     * to, or NULL if the socket should not be bound to a device.
+     */
+    const char *bind_device;
 } ucs_socket_options_t;
 
 /**
