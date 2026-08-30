@@ -49,16 +49,16 @@ typedef struct {
     ucp_proto_select_param_t select_param;
 } ucp_proto_rndv_mtype_init_params_t;
 
-static UCS_F_ALWAYS_INLINE void ucp_proto_rndv_mtype_init_params_copy(
+static UCS_F_ALWAYS_INLINE void ucp_proto_rndv_mtype_init_params_prepare(
         const ucp_proto_init_params_t *init_params,
         const ucp_memory_info_t *frag_mem_info,
         ucp_proto_rndv_mtype_init_params_t *mtype_init_params)
 {
     /* Use the staging buffer device for local lane modeling without changing
      * the protocol selection lookup key. */
-    mtype_init_params->super                = *init_params;
     mtype_init_params->select_param         = *init_params->select_param;
     mtype_init_params->select_param.sys_dev = frag_mem_info->sys_dev;
+    mtype_init_params->super                = *init_params;
     mtype_init_params->super.select_param   = &mtype_init_params->select_param;
 }
 
