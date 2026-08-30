@@ -64,6 +64,8 @@
 #define UCT_IB_MLX5_CQ_SET_CI            0
 #define UCT_IB_MLX5_CQ_ARM_DB            1
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE     30
+#define UCT_IB_MLX5_PSN_BITS             24
+#define UCT_IB_MLX5_PSN_MASK             UCS_MASK(UCT_IB_MLX5_PSN_BITS)
 #define UCT_IB_MLX5_ATOMIC_MODE_COMP     1
 #define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
@@ -709,7 +711,7 @@ typedef struct uct_ib_mlx5_txwq {
 static UCS_F_ALWAYS_INLINE uint32_t
 uct_ib_mlx5_txwq_get_next_wqe_psn(const uct_ib_mlx5_txwq_t *txwq)
 {
-    return txwq->next_wqe_psn & UCS_MASK(24);
+    return txwq->next_wqe_psn & UCT_IB_MLX5_PSN_MASK;
 }
 
 
@@ -916,6 +918,14 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 
 /* Get pointer to a WQE by producer index */
 void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
+
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl);
+
+uint16_t uct_ib_mlx5_txwq_next_ci(uint16_t ci, size_t wqe_size);
+
+ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
+                                             uint32_t receiver_next_psn,
+                                             uint32_t num_packets);
 
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,

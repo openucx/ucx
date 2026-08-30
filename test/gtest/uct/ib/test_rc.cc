@@ -243,6 +243,19 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
     flush();
 }
 
+UCS_TEST_P(test_rc_mlx5_psn, delivery_status)
+{
+    EXPECT_EQ(UCS_INPROGRESS, uct_ib_mlx5_psn_delivery_status(10, 10, 1));
+    EXPECT_EQ(UCS_OK, uct_ib_mlx5_psn_delivery_status(10, 11, 1));
+    EXPECT_EQ(UCS_INPROGRESS,
+              uct_ib_mlx5_psn_delivery_status(10, 11, 2));
+    EXPECT_EQ(UCS_OK,
+              uct_ib_mlx5_psn_delivery_status(UCT_IB_MLX5_PSN_MASK, 0, 1));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_ib_mlx5_psn_delivery_status(
+                      0, UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1), 1));
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_psn, rc_mlx5)
 #endif
 
@@ -1497,6 +1510,98 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
+
+class test_rc_mlx5_outstanding_purge : public test_rc {
+public:
+    void init() override
+    {
+        uct_test::init();
+
+        m_e1 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e1);
+
+        check_skip_test();
+
+        m_e2 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e2);
+        connect();
+    }
+
+protected:
+    struct operation {
+        uint8_t              am_id;
+        uint64_t             header;
+        std::vector<uint8_t> payload;
+    };
+
+    static ucs_status_t err_handler(void*, uct_ep_h, ucs_status_t)
+    {
+        return UCS_OK;
+    }
+
+    static void purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        test_rc_mlx5_outstanding_purge *self =
+                static_cast<test_rc_mlx5_outstanding_purge*>(arg);
+        operation op;
+        const uint8_t *payload =
+                static_cast<const uint8_t*>(info->am.payload.data.buffer);
+
+        EXPECT_EQ(UCT_EP_OP_AM_SHORT, info->operation);
+        op.am_id  = info->am.am_id;
+        op.header = info->am.header.value;
+        op.payload.assign(payload,
+                          payload + info->am.payload.data.length);
+        self->m_operations.push_back(op);
+    }
+
+    std::vector<operation> m_operations;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_outstanding_purge, am_short,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    static const uint8_t  am_id = 3;
+    static const uint64_t header = 0x0123456789abcdefull;
+    const std::vector<uint8_t> delivered_payload = {0};
+    const std::vector<uint8_t> short_payload = {1, 2, 3, 4};
+    uct_rc_mlx5_base_ep_t *ep =
+            ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(
+            ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
+    uct_ep_outstanding_purge_params_t purge_params = {};
+    uct_ep_invalidate_params_t invalidate_params    = {};
+    uct_rc_mlx5_rx_token_t rx_token;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        UCS_TEST_SKIP_R("DEVX is not supported");
+    }
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), am_id, header,
+                                  delivered_payload.data(),
+                                  delivered_payload.size()));
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), am_id, header,
+                                  short_payload.data(), short_payload.size()));
+
+    rx_token = htobe32((uct_ib_mlx5_txwq_get_next_wqe_psn(&ep->tx.wq) - 1) &
+                       UCT_IB_MLX5_PSN_MASK);
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &invalidate_params));
+
+    purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                              UCT_EP_OUTSTANDING_FIELD_CB |
+                              UCT_EP_OUTSTANDING_FIELD_ARG;
+    purge_params.rx_token = &rx_token;
+    purge_params.cb       = purge_cb;
+    purge_params.arg      = this;
+    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &purge_params));
+
+    ASSERT_EQ(1, m_operations.size());
+    EXPECT_EQ(am_id, m_operations[0].am_id);
+    EXPECT_EQ(header, m_operations[0].header);
+    EXPECT_EQ(short_payload, m_operations[0].payload);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_outstanding_purge, rc_mlx5)
 
 class test_rc_srq : public test_rc {
 public:
