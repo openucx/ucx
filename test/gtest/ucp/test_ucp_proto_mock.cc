@@ -1394,10 +1394,15 @@ protected:
     {
         static constexpr size_t msg_size = UCS_KBYTE;
         uint8_t remote                   = 0;
+        ucp_worker_h worker              = sender().worker();
+
+        if (worker->mem_type_ep[UCS_MEMORY_TYPE_CUDA_MANAGED] == NULL) {
+            UCS_TEST_SKIP_R("CUDA managed memory type endpoint is unavailable");
+        }
+
         auto memh           = mem_map(receiver(), &remote, sizeof(remote));
         auto rkey_packed    = rkey_pack(receiver(), memh);
         auto rkey           = rkey_unpack(sender().ep(), rkey_packed);
-        ucp_worker_h worker = sender().worker();
         ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
         ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
                                                          rkey->cfg_index);
