@@ -400,6 +400,84 @@ public:
     }
 
 protected:
+    void dump_am_rndv_selection(const ucp_proto_select_elem_t *select_elem)
+    {
+        const ucp_proto_threshold_elem_t *thresh = select_elem->thresholds;
+        size_t min_msg_length                     = 0;
+
+        for (;;) {
+            const ucp_proto_config_t *proto_config = &thresh->proto_config;
+
+            UCS_TEST_MESSAGE << "PR11685_DIAG outer range=["
+                             << min_msg_length << ","
+                             << thresh->max_msg_length << "] proto="
+                             << proto_config->proto->name << " sys_dev="
+                             << static_cast<unsigned>(
+                                        proto_config->select_param.sys_dev)
+                             << " mem_type="
+                             << static_cast<unsigned>(
+                                        proto_config->select_param.mem_type)
+                             << " op_id_flags="
+                             << static_cast<unsigned>(
+                                        proto_config->select_param.op_id_flags);
+
+            if (std::strcmp(proto_config->proto->name, "am/rndv") == 0) {
+                const ucp_proto_rndv_ctrl_priv_t *rpriv =
+                        static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                                proto_config->priv);
+                const ucp_proto_config_t *remote_proto_config =
+                        &rpriv->remote_proto_config;
+                const ucp_proto_select_param_t *remote_select_param =
+                        &remote_proto_config->select_param;
+
+                UCS_TEST_MESSAGE << "PR11685_DIAG remote outer_range=["
+                                 << min_msg_length << ","
+                                 << thresh->max_msg_length << "] sys_dev="
+                                 << static_cast<unsigned>(
+                                            remote_select_param->sys_dev)
+                                 << " mem_type="
+                                 << static_cast<unsigned>(
+                                            remote_select_param->mem_type)
+                                 << " mem_flags="
+                                 << static_cast<unsigned>(
+                                            remote_select_param->op.mem_flags)
+                                 << " op_id_flags="
+                                 << static_cast<unsigned>(
+                                            remote_select_param->op_id_flags)
+                                 << " rkey_cfg_index="
+                                 << remote_proto_config->rkey_cfg_index;
+
+                if (remote_proto_config->rkey_cfg_index !=
+                    UCP_WORKER_CFG_INDEX_NULL) {
+                    const ucp_rkey_config_key_t *rkey_key =
+                            &ucs_array_elem(
+                                     &worker()->rkey_config,
+                                     remote_proto_config->rkey_cfg_index).key;
+
+                    UCS_TEST_MESSAGE << "PR11685_DIAG rkey outer_range=["
+                                     << min_msg_length << ","
+                                     << thresh->max_msg_length << "] sys_dev="
+                                     << static_cast<unsigned>(rkey_key->sys_dev)
+                                     << " mem_type="
+                                     << static_cast<unsigned>(
+                                                rkey_key->mem_type)
+                                     << " flags="
+                                     << static_cast<unsigned>(rkey_key->flags)
+                                     << " md_map=" << rkey_key->md_map
+                                     << " unreachable_md_map="
+                                     << rkey_key->unreachable_md_map;
+                }
+            }
+
+            if (thresh->max_msg_length == SIZE_MAX) {
+                break;
+            }
+
+            min_msg_length = thresh->max_msg_length + 1;
+            ++thresh;
+        }
+    }
+
     const ucp_proto_config_t *select_am_rndv_remote_proto_config(
             uint8_t op_flags)
     {
@@ -427,6 +505,8 @@ protected:
         if (select_elem == nullptr) {
             return nullptr;
         }
+
+        dump_am_rndv_selection(select_elem);
 
         thresh = ucp_proto_thresholds_search_slow(select_elem->thresholds,
                                                   UCS_MBYTE);
@@ -778,7 +858,8 @@ UCS_TEST_P(test_ucp_proto_am_rndv,
 UCS_TEST_P(test_ucp_proto_am_rndv,
            am_explicit_scheme_disables_force_provenance,
            "RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE=y",
-           "RNDV_SCHEME=get_zcopy")
+           "RNDV_SCHEME=get_zcopy",
+           "PROTO_INFO=y")
 {
     require_cuda_rndv_support();
 
