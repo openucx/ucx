@@ -88,21 +88,6 @@ protected:
         return false;
     }
 
-    bool has_tl(const char *tl_name)
-    {
-        ucp_context_h context = this->context();
-        ucp_rsc_index_t rsc_index;
-
-        for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-            if (!std::strcmp(context->tl_rscs[rsc_index].tl_rsc.tl_name,
-                             tl_name)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     void require_cuda_memory()
     {
         if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
@@ -823,7 +808,7 @@ UCS_TEST_P(test_ucp_proto, memtype_copy_disable_keeps_staging_ep,
            "MEMTYPE_COPY_ENABLE=n")
 {
     require_cuda_memory();
-    if (!has_tl("cuda_copy")) {
+    if (!has_resource(sender(), "cuda_copy")) {
         UCS_TEST_SKIP_R("cuda_copy transport is not available");
     }
 
