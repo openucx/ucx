@@ -937,8 +937,8 @@ protected:
 
     ucs::mock         m_progress_mock;
     bool              m_is_peer_closed{false};
-    bool m_fail_target_proto{true};
-    bool m_target_proto_seen{false};
+    bool              m_fail_target_proto{true};
+    bool              m_target_proto_seen{false};
     std::string       m_proto_name{};
     /* Protocol stage during which data transfer happens */
     uint8_t           m_proto_xfer_stage{};
