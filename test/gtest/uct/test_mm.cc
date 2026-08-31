@@ -418,17 +418,19 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_dispatch_completes,
     ctx.done     = 0;
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &ctx.req, 0));
 
-    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(10.0);
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(DEFAULT_TIMEOUT_SEC);
     while (!ctx.done && (ucs_get_time() < deadline)) {
         progress();
     }
     EXPECT_TRUE(ctx.done);
     EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
 
-    if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
-        unsigned purged = 0;
-        uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
-    }
+    /* Unconditional, not just a fallback: if the deadline above was hit,
+     * ctx.req is still enqueued on the arbiter and points into this stack
+     * frame, so it must be purged here while ctx is still alive. */
+    unsigned purged = 0;
+    uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
 }
 
 UCT_INSTANTIATE_MM_TEST_CASE(test_uct_mm)
