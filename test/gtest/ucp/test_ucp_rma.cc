@@ -1428,6 +1428,14 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
     }
 }
 
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_fragmented_elements,
+                     RUNNING_ON_VALGRIND) {
+    cleanup();
+    modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
+    test_ucp_rma::init();
+    test_put_sgl({255, 256, 257, 1024, 64});
+}
+
 UCS_TEST_P(test_ucp_rma_sgl, put_force_imm_cmpl) {
     static constexpr size_t NUM_ELEMS = 4;
 
