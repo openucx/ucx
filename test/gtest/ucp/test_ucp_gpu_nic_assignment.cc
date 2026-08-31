@@ -143,11 +143,35 @@ protected:
         m_assignment_initialized = true;
     }
 
+    void check_gpu_device_aliases(const topology_shape_t &config)
+    {
+        for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
+            size_t gpu_device_idx = 0;
+            const ucp_gpu_nic_sys_dev_bitmap_t *expected_bitmap =
+                    ucp_gpu_nic_assignment_lookup(&m_assignment,
+                                                  gpu_sys_dev(config, gpu_idx,
+                                                              gpu_device_idx));
+            ASSERT_NE(nullptr, expected_bitmap);
+
+            for (gpu_device_idx = 1; gpu_device_idx < config.num_gpu_devices;
+                 ++gpu_device_idx) {
+                const ucp_gpu_nic_sys_dev_bitmap_t *actual_bitmap =
+                        ucp_gpu_nic_assignment_lookup(
+                                &m_assignment,
+                                gpu_sys_dev(config, gpu_idx, gpu_device_idx));
+                ASSERT_NE(nullptr, actual_bitmap);
+                EXPECT_EQ(expected_bitmap, actual_bitmap);
+            }
+        }
+    }
+
     void check_nic_owners(const topology_shape_t &config,
                           const std::vector<size_t> &expected_owners)
     {
+        /* Expected number of assigned NIC ports per physical GPU. */
         std::vector<size_t> expected_port_counts(config.num_gpus(), 0);
 
+        /* Verify that each NIC has exactly one expected physical GPU owner. */
         for (size_t nic_idx = 0; nic_idx < config.num_nics(); ++nic_idx) {
             const size_t expected_owner = expected_owners[nic_idx];
             size_t actual_owner         = config.num_gpus();
@@ -160,29 +184,34 @@ protected:
                                                       gpu_sys_dev(config,
                                                                   gpu_idx, 0));
                 ASSERT_NE(nullptr, nic_sys_dev_bitmap);
-                const bool owns_nic = UCS_STATIC_BITMAP_GET(
+
+                size_t port_idx     = 0;
+                const bool gpu_owns_nic = UCS_STATIC_BITMAP_GET(
                         *nic_sys_dev_bitmap,
-                        nic_port_sys_dev(config, nic_idx, 0));
+                        nic_port_sys_dev(config, nic_idx, port_idx));
 
-                if (owns_nic) {
-                    EXPECT_EQ(config.num_gpus(), actual_owner);
-                    actual_owner = gpu_idx;
-                }
-
-                EXPECT_EQ(gpu_idx == expected_owner, owns_nic);
-                for (size_t port_idx = 1; port_idx < config.num_nic_ports;
+                /* All ports of a NIC must have the same owner. */
+                for (port_idx = 1; port_idx < config.num_nic_ports;
                      ++port_idx) {
-                    EXPECT_EQ(owns_nic,
+                    EXPECT_EQ(gpu_owns_nic,
                               UCS_STATIC_BITMAP_GET(
                                       *nic_sys_dev_bitmap,
                                       nic_port_sys_dev(config, nic_idx,
                                                        port_idx)));
                 }
+
+                if (gpu_owns_nic) {
+                    EXPECT_EQ(config.num_gpus(), actual_owner);
+                    actual_owner = gpu_idx;
+                }
+
+                EXPECT_EQ(gpu_idx == expected_owner, gpu_owns_nic);
             }
 
             EXPECT_EQ(expected_owner, actual_owner);
         }
 
+        /* Verify each GPU has the expected number of assigned ports. */
         for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
             const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap =
                     ucp_gpu_nic_assignment_lookup(&m_assignment,
@@ -220,6 +249,7 @@ protected:
 
         build_groups(config);
         build_assignment(policy);
+        check_gpu_device_aliases(config);
         check_nic_owners(config, expected_owners);
     }
 
@@ -236,9 +266,11 @@ protected:
         config.num_nics_per_group = 4;
 
         /* Each GPU may appear as two devices if MPS MLOPart is enabled. */
-        for (size_t num_gpu_devices = 1; num_gpu_devices <= 2; ++num_gpu_devices) {
+        for (size_t num_gpu_devices = 1; num_gpu_devices <= 2;
+             ++num_gpu_devices) {
             /* Each NIC may appear as two ports if dual-port mode is enabled. */
-            for (size_t num_nic_ports = 1; num_nic_ports <= 2; ++num_nic_ports) {
+            for (size_t num_nic_ports = 1; num_nic_ports <= 2;
+                 ++num_nic_ports) {
                 config.num_gpu_devices = num_gpu_devices;
                 config.num_nic_ports   = num_nic_ports;
                 check_assignment(config, policy, expected_owners);
