@@ -1040,7 +1040,7 @@ set_gtest_make_test_flags() {
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
 
-	GTEST_EXTRA_ARGS=""
+	GTEST_EXTRA_ARGS="-s 11689"
 	if [ "$TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
 	then
 		# Check performance with 10 retries and 2 seconds interval
