@@ -9,10 +9,12 @@
 * @openucx/ucx-maintainers
 
 # ROCm
-/config/m4/rocm.m4    @edgargabriel @mshanthagit @openucx/ucx-maintainers
-/src/ucm/rocm/        @edgargabriel @mshanthagit @openucx/ucx-maintainers
-/src/uct/rocm/        @edgargabriel @mshanthagit @openucx/ucx-maintainers
-/src/tools/perf/rocm/ @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/config/m4/rocm.m4            @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/src/ucm/rocm/                @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/src/uct/rocm/                @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/src/tools/perf/rocm/         @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/test/gtest/ucm/rocm_hooks.cc @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/test/gtest/uct/rocm/         @edgargabriel @mshanthagit @openucx/ucx-maintainers
 
 # Level Zero (ZE)
 /config/m4/ze.m4            @yafshar @j-xiong @openucx/ucx-maintainers
