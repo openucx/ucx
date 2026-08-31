@@ -285,12 +285,12 @@ private:
     bool m_assignment_initialized;
 };
 
-UCS_TEST_F(test_ucp_gpu_nic, vera_flip) {
+UCS_TEST_F(test_ucp_gpu_nic, vera_rubin_flip) {
     check_vera_rubin_assignment(UCP_GPU_NIC_POLICY_FLIP,
                                 {0, 1, 1, 0, 2, 3, 3, 2});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, vera_alt) {
+UCS_TEST_F(test_ucp_gpu_nic, vera_rubin_alt) {
     check_vera_rubin_assignment(UCP_GPU_NIC_POLICY_ALT,
                                 {0, 1, 0, 1, 2, 3, 2, 3});
 }
