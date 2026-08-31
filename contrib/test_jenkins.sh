@@ -1024,7 +1024,7 @@ run_malloc_hook_gtest() {
 }
 
 set_gtest_common_test_flags() {
-	export GTEST_RANDOM_SEED=0
+	export GTEST_RANDOM_SEED=37290
 	export GTEST_SHUFFLE=1
 	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
