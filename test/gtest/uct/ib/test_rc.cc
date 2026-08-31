@@ -1692,47 +1692,29 @@ protected:
 
     void test_get(uct_ep_operation_t operation, size_t length)
     {
-        mapped_buffer localbuf(length, 0ul, *m_e1);
-        mapped_buffer remotebuf(length, 0x12345678ul, *m_e2);
+        mapped_buffer sendbuf(length, 0ul, *m_e1);
+        mapped_buffer recvbuf(length, 0ul, *m_e2);
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), length,
+                                sendbuf.memh(), 1);
         uct_completion_t comp = {completion_cb, 1, UCS_OK};
-        uct_iov_t iov[2];
-
-        iov[0] = {
-            .buffer = localbuf.ptr(),
-            .length = length / 2,
-            .memh   = localbuf.memh(),
-            .stride = 0,
-            .count  = 1
-        };
-        iov[1] = {
-            .buffer = UCS_PTR_BYTE_OFFSET(localbuf.ptr(), length / 2),
-            .length = length - (length / 2),
-            .memh   = localbuf.memh(),
-            .stride = 0,
-            .count  = 1
-        };
 
         if (operation == UCT_EP_OP_GET_BCOPY) {
             ASSERT_EQ(UCS_INPROGRESS,
-                      uct_ep_get_bcopy(m_e1->ep(0), unpack_cb, localbuf.ptr(),
-                                       length, remotebuf.addr(),
-                                       remotebuf.rkey(), &comp));
+                      uct_ep_get_bcopy(m_e1->ep(0), unpack_cb, sendbuf.ptr(),
+                                       length, recvbuf.addr(), recvbuf.rkey(),
+                                       &comp));
         } else {
             ASSERT_EQ(UCS_INPROGRESS,
-                      uct_ep_get_zcopy(m_e1->ep(0), iov, 2, remotebuf.addr(),
-                                       remotebuf.rkey(), &comp));
+                      uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                                       recvbuf.rkey(), &comp));
         }
 
-        purge_ctx ctx = {operation,
-                         remotebuf.addr(),
-                         uct_ib_md_direct_rkey(remotebuf.rkey()),
-                         unpack_cb,
-                         localbuf.ptr(),
-                         length,
-                         iov,
-                         2,
-                         &comp,
-                         0};
+        purge_ctx ctx = {
+            operation, recvbuf.addr(), uct_ib_md_direct_rkey(recvbuf.rkey()),
+            unpack_cb, sendbuf.ptr(),  length,
+            iov,       iovcnt,         &comp,
+            0
+        };
 
         ASSERT_UCS_OK(purge_stub(&ctx));
         flush();
@@ -1744,13 +1726,16 @@ protected:
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_bcopy,
                      !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
 {
-    test_get(UCT_EP_OP_GET_BCOPY, 8);
+    test_get(UCT_EP_OP_GET_BCOPY,
+             ucs_min(8ul, m_e1->iface_attr().cap.get.max_bcopy));
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_zcopy,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
 {
-    test_get(UCT_EP_OP_GET_ZCOPY, 8 * UCS_KBYTE);
+    test_get(UCT_EP_OP_GET_ZCOPY,
+             ucs_min(ucs_max(64ul, m_e1->iface_attr().cap.get.min_zcopy),
+                     m_e1->iface_attr().cap.get.max_zcopy));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
