@@ -19,6 +19,7 @@
 #include <ucs/datastruct/hlist.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/sock.h>
+#include <ucs/time/time.h>
 
 #include <endian.h>
 #include <linux/ip.h>
@@ -249,6 +250,7 @@ typedef struct uct_ib_device {
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
+    ucs_time_t                  ah_cache_ttl; /* 0 or inf */
     /* Async event subscribers */
     ucs_spinlock_t              async_event_lock;
     khash_t(uct_ib_async_event) async_events_hash;
@@ -387,6 +389,13 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
+/* Creates an AH outside the device cache; caller must destroy it */
+ucs_status_t
+uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                        struct ibv_pd *pd, const char *usage,
+                        struct ibv_ah **ah_p);
+
+/* Bypasses ah_cache_ttl; cache-owned, caller must not destroy the AH */
 ucs_status_t
 uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
