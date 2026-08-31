@@ -41,7 +41,7 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
     (void)num_devices;
     (void)groups_type;
 
-    /* TODO: Implement VR groups initialization */
+    /* TODO: Implement groups initialization */
 
     groups_p->type = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
     ucs_array_init_dynamic(&groups_p->groups);
