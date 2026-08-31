@@ -1533,6 +1533,136 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
 
+class test_rc_purge_outstanding : public test_rc {
+protected:
+    struct am_zcopy_state {
+        uint8_t          am_id;
+        const void       *header;
+        size_t           header_length;
+        const uct_iov_t  *iov;
+        size_t           iovcnt;
+        uct_completion_t *comp;
+        unsigned         count;
+    };
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
+    ucs_status_t purge_stub(am_zcopy_state *state)
+    {
+        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
+        uint16_t ci              = 0;
+        uct_rc_mlx5_op_callback_data_t callback_data;
+        uct_ep_op_info_t info;
+        const struct mlx5_wqe_ctrl_seg *ctrl;
+        uct_rc_iface_send_op_t *op, *t_op;
+        size_t wqe_size;
+        ucs_status_t status;
+
+        while (ci != txwq->sw_pi) {
+            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+            op       = NULL;
+
+            ucs_queue_for_each(t_op, &txqp->outstanding, queue) {
+                if (t_op->sn == ci) {
+                    op = t_op;
+                    break;
+                }
+            }
+
+            memset(&info, 0, sizeof(info));
+            status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
+                                              &callback_data);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            am_zcopy_cb(&info, state);
+            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        }
+
+        return UCS_OK;
+    }
+
+    static void am_zcopy_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        am_zcopy_state *state = static_cast<am_zcopy_state*>(arg);
+
+        ++state->count;
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        EXPECT_EQ(UCT_EP_OP_AM_ZCOPY, info->operation);
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
+
+        EXPECT_TRUE(info->am.field_mask & UCT_EP_OP_INFO_AM_FIELD_AM_ID);
+        EXPECT_EQ(state->am_id, info->am.am_id);
+
+        EXPECT_TRUE(info->am.field_mask & UCT_EP_OP_INFO_AM_FIELD_FLAGS);
+        EXPECT_EQ(0u, info->am.flags);
+
+        EXPECT_TRUE(info->am.field_mask & UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY);
+        ASSERT_EQ(state->header_length, info->am.header.zcopy.length);
+        EXPECT_EQ(0, memcmp(state->header, info->am.header.zcopy.buffer,
+                            state->header_length));
+
+        EXPECT_TRUE(info->am.field_mask &
+                    UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY);
+        ASSERT_EQ(state->iovcnt, info->am.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < state->iovcnt; ++i) {
+            EXPECT_EQ(state->iov[i].buffer,
+                      info->am.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(uct_iov_get_length(&state->iov[i]),
+                      uct_iov_get_length(&info->am.payload.zcopy.iov[i]));
+            EXPECT_EQ(uct_ib_memh_get_lkey(state->iov[i].memh),
+                      uct_ib_memh_get_lkey(info->am.payload.zcopy.iov[i].memh));
+        }
+
+        if (state->comp != NULL) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(state->comp, info->comp);
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        }
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    static const uint8_t am_id = 0;
+    uint64_t header            = 0x1234567890abcdef;
+    uct_completion_t comp      = {completion_cb, 1, UCS_OK};
+    const auto &cap            = m_e1->iface_attr().cap.am;
+
+    ASSERT_GT(cap.max_zcopy, sizeof(header));
+    size_t payload_size = ucs_min(384ul, cap.max_zcopy - sizeof(header));
+    ASSERT_GE(payload_size, cap.max_iov);
+
+    mapped_buffer sendbuf(payload_size, *m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), cap.max_iov);
+
+    am_zcopy_state state = {am_id, (void*)&header, sizeof(header),
+                            iov,   iovcnt,         &comp,
+                            0};
+
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_am_zcopy(m_e1->ep(0), am_id, (void*)&header,
+                              sizeof(header), iov, iovcnt, 0, &comp));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
+
 class test_rc_srq : public test_rc {
 public:
     test_rc_srq() : m_buf8b(NULL), m_buf8k(NULL)
