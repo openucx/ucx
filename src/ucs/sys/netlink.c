@@ -34,6 +34,7 @@ typedef struct {
 
 typedef struct {
     struct sockaddr_storage dest;
+    uint32_t                table_id;
     uint8_t                 subnet_prefix_len;
     uint8_t                 route_type;
 } ucs_netlink_route_entry_t;
@@ -175,7 +176,8 @@ out:
 
 static ucs_status_t
 ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr, size_t rtm_dst_len)
+                           const void **dst_in_addr, uint32_t *table_id_p,
+                           size_t rtm_dst_len)
 {
     *if_index_p  = -1;
     *dst_in_addr = NULL;
@@ -185,6 +187,8 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
             *if_index_p = *((const int *)RTA_DATA(rta));
         } else if (rta->rta_type == RTA_DST) {
             *dst_in_addr = RTA_DATA(rta);
+        } else if (rta->rta_type == RTA_TABLE) {
+            *table_id_p = *((const uint32_t *)RTA_DATA(rta));
         }
     }
 
@@ -202,6 +206,7 @@ static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
     const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    uint32_t table_id = rt_msg->rtm_table;
     const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
     ucs_netlink_rt_rules_t *iface_rules;
@@ -210,7 +215,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     int khret;
 
     if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr,
+                                   &iface_index, &dst_in_addr, &table_id,
                                    rt_msg->rtm_dst_len) != UCS_OK) {
         return UCS_INPROGRESS;
     }
@@ -245,6 +250,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 
     new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
     new_rule->route_type        = rt_msg->rtm_type;
+    new_rule->table_id          = table_id;
 
     return UCS_INPROGRESS;
 }
