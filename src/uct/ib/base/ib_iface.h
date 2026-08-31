@@ -630,6 +630,9 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     const char *usage, struct ibv_ah **ah_p);
 
+/* Counterpart of uct_ib_iface_create_ah(); destroys the AH if uncached */
+void uct_ib_iface_release_ah(uct_ib_iface_t *iface, struct ibv_ah *ah);
+
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
                                             uint8_t gid_index,

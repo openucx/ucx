@@ -1135,6 +1135,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
         }
 
         uct_ib_mlx5_get_av(ah, &mlx5_av);
+        uct_ib_iface_release_ah(ib_iface, ah);
     }
 
     /* lid in fc_req is in BE already  */
