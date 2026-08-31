@@ -840,15 +840,12 @@ protected:
         ucs::mock mock;
 
         if (proto->name == self->m_proto_name) {
-            self->m_target_proto_seen = true;
-            if (self->m_fail_target_proto) {
-                if (self->m_replace_ops) {
-                    mock_rndv_ops(req->send.ep, mock);
-                }
+            if (self->m_replace_ops) {
+                mock_rndv_ops(req->send.ep, mock);
+            }
 
-                if (stage == self->m_proto_xfer_stage) {
-                    self->close_peer();
-                }
+            if (stage == self->m_proto_xfer_stage) {
+                self->close_peer();
             }
         }
 
@@ -907,20 +904,6 @@ protected:
         setup_progress_mock(sender().worker(), m_progress_mock);
         setup_progress_mock(receiver().worker(), m_progress_mock);
 
-        if (mode == rndv_mode::put_ppln) {
-            /* The capability check in init() does not include staging-device
-             * reachability. Verify that this topology actually selected the
-             * protocol whose abort handling is under test. */
-            m_fail_target_proto = false;
-            m_target_proto_seen = false;
-            smoke_test(true);
-            if (!m_target_proto_seen) {
-                m_progress_mock.cleanup();
-                UCS_TEST_SKIP_R("rndv/put/mtype was not selected");
-            }
-        }
-
-        m_fail_target_proto = true;
         {
             scoped_log_handler err_wrapper(wrap_errors_logger);
             scoped_log_handler warn_wrapper(wrap_warns_logger);
@@ -937,8 +920,6 @@ protected:
 
     ucs::mock         m_progress_mock;
     bool              m_is_peer_closed{false};
-    bool              m_fail_target_proto{true};
-    bool              m_target_proto_seen{false};
     std::string       m_proto_name{};
     /* Protocol stage during which data transfer happens */
     uint8_t           m_proto_xfer_stage{};
