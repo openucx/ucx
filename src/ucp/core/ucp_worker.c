@@ -2246,7 +2246,7 @@ out:
 
 static void
 ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
-                                ucp_rkey_config_key_t *key)
+                                const ucp_rkey_config_key_t *key)
 {
     ucs_string_buffer_appendf(
             log_strb,
@@ -2291,7 +2291,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         }
 
         ucs_string_buffer_appendf(&log_strb, "rkey key new: ");
-        ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        ucp_worker_dump_rkey_config_key(&log_strb, key);
 
         ucs_debug("%s", ucs_string_buffer_cstr(&log_strb));
         ucs_string_buffer_cleanup(&log_strb);
