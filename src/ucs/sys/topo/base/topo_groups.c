@@ -43,7 +43,7 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
 
     /* TODO: Implement groups initialization */
 
-    groups_p->type = UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+    groups_p->type = groups_type;
     ucs_array_init_dynamic(&groups_p->groups);
 
     ucs_debug("initialized topo groups of type %s with %zu groups",
