@@ -1513,24 +1513,10 @@ protected:
     void test_put(uct_ep_operation_t operation, size_t length,
                   uct_completion_t *comp = NULL)
     {
-        mapped_buffer sendbuf(length, 0x12345678ul, *m_e1);
+        mapped_buffer sendbuf(length, 0ul, *m_e1);
         mapped_buffer recvbuf(length, 0ul, *m_e2);
-        uct_iov_t iov[2];
-
-        iov[0] = {
-            .buffer = sendbuf.ptr(),
-            .length = length / 2,
-            .memh   = sendbuf.memh(),
-            .stride = 0,
-            .count  = 1
-        };
-        iov[1] = {
-            .buffer = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), length / 2),
-            .length = length - (length / 2),
-            .memh   = sendbuf.memh(),
-            .stride = 0,
-            .count  = 1
-        };
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), length,
+                                sendbuf.memh(), 1);
 
         if (operation == UCT_EP_OP_PUT_SHORT) {
             ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), sendbuf.ptr(), length,
@@ -1542,7 +1528,7 @@ protected:
                                        recvbuf.rkey()));
         } else {
             ASSERT_EQ(UCS_INPROGRESS,
-                      uct_ep_put_zcopy(m_e1->ep(0), iov, 2, recvbuf.addr(),
+                      uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
                                        recvbuf.rkey(), comp));
         }
 
@@ -1552,7 +1538,7 @@ protected:
                          sendbuf.ptr(),
                          length,
                          iov,
-                         2,
+                         iovcnt,
                          comp,
                          0};
 
@@ -1581,7 +1567,7 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
 {
     uct_completion_t comp = {completion_cb, 1, UCS_OK};
 
-    test_put(UCT_EP_OP_PUT_ZCOPY, 8 * UCS_KBYTE, &comp);
+    test_put(UCT_EP_OP_PUT_ZCOPY, 64, &comp);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
