@@ -39,6 +39,7 @@
 typedef struct {
     const void *mapped_addr;
     CUdevice   cu_dev;
+    int        cache_enabled;
 } uct_cuda_ipc_rkey_handle_t;
 
 typedef struct {
@@ -493,7 +494,7 @@ static ucs_status_t
 uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 uct_cuda_ipc_unpacked_rkey_t *rkey,
                                 uct_cuda_ipc_rkey_handle_t *rkey_handle,
-                                CUdevice cu_dev)
+                                CUdevice cu_dev, int bound_lifetime)
 {
     ucs_status_t status;
     void *d_mapped;
@@ -515,8 +516,8 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
      * stream sequentialization */
     rkey->stream_id = cache->dev_num;
     accessible      = &cache->accessible[cu_dev];
-    if (ucs_unlikely(*accessible == UCS_TRY)) { /* unchecked, add to cache */
-
+    if (ucs_unlikely(*accessible == UCS_TRY) || /* unchecked, add to cache */
+        (bound_lifetime && (*accessible == UCS_YES))) {
         /* Check if peer is reachable by trying to open memory handle. This is
          * necessary when the device is not visible through CUDA_VISIBLE_DEVICES
          * and checking peer accessibility through CUDA driver API is not
@@ -539,8 +540,12 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
             rkey_handle->mapped_addr = d_mapped;
         }
 
-        *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
-                      ? UCS_YES : UCS_NO;
+        if (*accessible == UCS_TRY) {
+            *accessible = ((status == UCS_OK) ||
+                           (status == UCS_ERR_ALREADY_EXISTS)) ?
+                                  UCS_YES :
+                                  UCS_NO;
+        }
     }
 
     status = (*accessible == UCS_YES) ? UCS_OK : UCS_ERR_UNREACHABLE;
@@ -548,6 +553,13 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
 err:
     pthread_mutex_unlock(&component->lock);
     return status;
+}
+
+static int
+uct_cuda_ipc_rkey_unpack_bound_lifetime(const uct_rkey_unpack_params_t *params)
+{
+    return !!(UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, flags, FLAGS, 0) &
+              UCT_RKEY_UNPACK_FLAG_BOUND_LIFETIME);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
@@ -562,6 +574,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     uct_cuda_ipc_unpacked_rkey_t *unpacked;
     uct_cuda_ipc_rkey_handle_t *rkey_handle;
     ucs_sys_device_t sys_dev;
+    int bound_lifetime;
     CUdevice cuda_device;
     CUdevice avail_cuda_device;
     ucs_status_t status;
@@ -569,6 +582,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
                               SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    bound_lifetime = uct_cuda_ipc_rkey_unpack_bound_lifetime(params);
 
     unpacked = ucs_malloc(sizeof(*unpacked), "uct_cuda_ipc_unpacked_rkey_t");
     if (NULL == unpacked) {
@@ -605,13 +620,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     /* Check if peer is accessible, and if that check required mapping a memory
      * handle, save it in the rkey handle */
     status = uct_cuda_ipc_is_peer_accessible(com, unpacked, rkey_handle,
-                                             avail_cuda_device);
+                                             avail_cuda_device, bound_lifetime);
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
     if (status != UCS_OK) {
         goto err_free_rkey_handle;
     }
+
+    rkey_handle->cache_enabled =
+            bound_lifetime ? 0 : uct_cuda_ipc_component.enable_remote_cache;
 
     *handle_p = rkey_handle;
     *rkey_p   = (uintptr_t) unpacked;
@@ -644,7 +662,7 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
 
     uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
                                  rkey_handle->mapped_addr, rkey_handle->cu_dev,
-                                 uct_cuda_ipc_component.enable_remote_cache);
+                                 rkey_handle->cache_enabled);
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,

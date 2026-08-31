@@ -765,8 +765,24 @@ typedef struct uct_rkey_compare_params {
  * @brief Rkey unpack parameters field mask.
  */
 typedef enum {
-    UCT_RKEY_UNPACK_FIELD_SYS_DEVICE = UCS_BIT(0)  /**< sys_device field */
+    UCT_RKEY_UNPACK_FIELD_SYS_DEVICE = UCS_BIT(0), /**< sys_device field */
+    UCT_RKEY_UNPACK_FIELD_FLAGS      = UCS_BIT(1)
 } uct_rkey_unpack_field_mask_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Rkey unpack flags.
+ */
+typedef enum {
+    /**
+     * Indicate that resources required for accessing the unpacked remote key
+     * are created at unpack time, and their lifetime is bound to the remote
+     * key: they must be released once the key is released (see
+     * @ref uct_rkey_release).
+     */
+    UCT_RKEY_UNPACK_FLAG_BOUND_LIFETIME = UCS_BIT(0)
+} uct_rkey_unpack_flags_t;
 
 
 /**
@@ -786,6 +802,11 @@ typedef struct uct_rkey_unpack_params {
      * (default behavior).
      */
     ucs_sys_device_t     sys_device;
+
+    /**
+     * Flags to unpack rkey with, using bits from @ref uct_rkey_unpack_flags_t.
+     */
+    uint64_t             flags;
 } uct_rkey_unpack_params_t;
 
 
