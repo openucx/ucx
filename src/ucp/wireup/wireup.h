@@ -54,8 +54,16 @@ enum {
     UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
     UCP_WIREUP_MSG_LANES_ADDR_REPLY,
     UCP_WIREUP_MSG_LANES_ADDR_ACK,
+
     UCP_WIREUP_MSG_LAST
 };
+
+
+/*
+ * Minimal peer release version which understands the token trailer of the
+ * LANES_ADDR messages. Older peers get the messages without any token.
+ */
+#define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
 /**
@@ -153,20 +161,35 @@ typedef struct ucp_wireup_msg {
 
 
 typedef struct ucp_wireup_msg_lanes_info_t {
-    /* Lanes whose RX tokens are carried here: the lanes of the message being
-     * answered whose TX tokens arrived. Empty in a REQUEST. A zero RX length
-     * means the sender could not derive a token, so the lane must fall back. */
+    /* Lanes the sender asked about. Empty in a REQUEST, which answers nothing.
+     * When the token trailer is present, these are also the RX-token lanes. */
     ucp_lane_map_t         requested_lane_map;
-    /* Lanes whose addresses are carried here */
+    /* Lanes whose addresses are carried here. When the token trailer is
+     * present, these are also the TX-token lanes. */
     ucp_lane_map_t         provided_lane_map;
-    /* Lanes whose TX tokens are carried here. These are the lanes awaiting a
-     * token exchange, which is not the same set as the lanes being rebuilt. */
-    ucp_lane_map_t         tx_token_map;
-    uint64_t               request_id;         /* recovery generation id */
-    /* uint8_t tx_token_lengths[popcount(tx_token_map)] + tx tokens[], then
-     * uint8_t rx_token_lengths[popcount(requested_lane_map)] + rx tokens[],
-     * then the packed addresses up to the end of the message follow */
+    /* @ref ucp_wireup_msg_tokens_info_t (only towards peers of release version
+     * UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION and above), then packed addresses
+     * follow */
 } UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
+
+
+/*
+ * Token trailer of a LANES_ADDR message. Both peers decide whether it is part
+ * of the message by the release version of the remote peer, kept in
+ * ucp_ep_config_key_t::dst_version, so no flag is needed on the wire.
+ */
+typedef struct ucp_wireup_msg_tokens_info_t {
+    /* Exchange generation, echoed by the peer in its answers and matched
+     * against ADDR RX tokens in ucp_ep_failover_apply_rx_tokens(). Starts
+     * from 1, so that 0 tells the receiver the message came without a
+     * trailer at all. */
+    uint32_t request_id;
+    /* uint8_t tx_lengths[popcount(provided_lane_map)] followed by the TX
+     * tokens, then uint8_t rx_lengths[popcount(requested_lane_map)] followed by
+     * the RX tokens, then the packed addresses. A zero length means the
+     * respective lane carries no token. */
+} UCS_S_PACKED ucp_wireup_msg_tokens_info_t;
+
 
 typedef struct {
     double          score;
@@ -178,9 +201,11 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
-/* ADDR_REQ/REP/ACK carry TX/RX tokens (replaces QUERY_LANE_STATE/LANE_STATE). */
-#define UCP_WIREUP_ADDR_TOKEN_MIN_VERSION 23
-#define UCP_WIREUP_LANE_STATE_MIN_VERSION UCP_WIREUP_ADDR_TOKEN_MIN_VERSION
+/* ADDR token trailers and failover extract share this dst_version gate. */
+#define UCP_WIREUP_ADDR_TOKEN_MIN_VERSION \
+        UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION
+#define UCP_WIREUP_LANE_STATE_MIN_VERSION \
+        UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION
 
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
@@ -209,11 +234,14 @@ const char* ucp_wireup_msg_str(uint8_t msg_type);
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
-ucs_status_t ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
-                                    const ucp_tl_bitmap_t *tl_bitmap,
-                                    const ucp_lane_index_t *lanes2remote,
-                                    ucp_wireup_msg_t *msg_hdr, void **payload_p,
-                                    size_t *payload_length_p);
+ucs_status_t
+ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
+                       const ucp_tl_bitmap_t *tl_bitmap,
+                       const ucp_lane_index_t *lanes2remote,
+                       ucp_lane_map_t requested_lane_map,
+                       ucp_lane_map_t provided_lane_map,
+                       ucp_wireup_msg_t *msg_hdr, void **address_p,
+                       size_t *address_length_p);
 
 int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
@@ -272,18 +300,25 @@ unsigned ucp_wireup_eps_progress(void *arg);
 
 
 /**
- * Send a LANES_ADDR_REQUEST/REPLY/ACK over the AM lane. Addresses are sent for
- * @a provided_lane_map and TX tokens for @a tx_token_map. RX tokens are derived
- * from @a peer_tx_lengths / @a peer_tx_tokens, the TX section of the message
- * being answered, which covers @a peer_tx_map (all empty in a REQUEST).
+ * Send a LANES_ADDR_REQUEST/REPLY/ACK wireup message over the AM lane, packing
+ * addresses for the lanes in @a provided_lane_map. @a request_id identifies the
+ * exchange, and is echoed by the peer in its answer. TX tokens are collected
+ * for @a provided_lane_map. RX tokens are derived from @a peer_tx_lengths /
+ * @a peer_tx_tokens, the TX section of the message being answered (NULL in a
+ * REQUEST).
  */
 void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
+                                    ucp_lane_map_t requested_lane_map,
                                     ucp_lane_map_t provided_lane_map,
-                                    ucp_lane_map_t tx_token_map,
-                                    ucp_lane_map_t peer_tx_map,
-                                    uint64_t request_id,
+                                    uint32_t request_id,
                                     const uint8_t *peer_tx_lengths,
                                     const void *peer_tx_tokens);
+
+
+/* Size of one token section (gtest feeds it crafted buffers). */
+ucs_status_t
+ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
+                              size_t avail, size_t *consumed_p);
 
 
 /**
