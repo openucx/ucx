@@ -101,12 +101,11 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
 ucs_status_t
 uct_rc_gdaki_alloc(ucs_ternary_auto_value_t enable_fabric, size_t size,
                    size_t align, size_t *granularity_p,
-                   uct_cuda_copy_alloc_handle_t *alloc_handle_p, void **buf_p)
+                   uct_cuda_copy_alloc_handle_t *alloc_handle, void **buf_p)
 {
     unsigned int flag = 1;
     CUdevice cu_device;
     ucs_status_t status;
-    uct_cuda_copy_alloc_handle_t alloc_handle;
     void *buf;
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cu_device));
@@ -116,14 +115,14 @@ uct_rc_gdaki_alloc(ucs_ternary_auto_value_t enable_fabric, size_t size,
 
     status = uct_cuda_mem_alloc(UCS_LOG_LEVEL_ERROR, UCS_MEMORY_TYPE_CUDA,
                                 enable_fabric, cu_device, size + align - 1,
-                                granularity_p, &alloc_handle);
+                                granularity_p, alloc_handle);
     if (status != UCS_OK) {
         return status;
     }
 
-    buf    = (void*)ucs_align_up_pow2_ptr(alloc_handle.ptr, align);
+    buf = (void*)ucs_align_up_pow2_ptr(alloc_handle->ptr, align);
 
-    if (!alloc_handle.is_vmm) {
+    if (!alloc_handle->is_vmm) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
                                       (CUdeviceptr)buf));
@@ -132,8 +131,7 @@ uct_rc_gdaki_alloc(ucs_ternary_auto_value_t enable_fabric, size_t size,
         }
     }
 
-    *alloc_handle_p = alloc_handle;
-    *buf_p          = buf;
+    *buf_p = buf;
     return UCS_OK;
 
 err:
@@ -416,7 +414,7 @@ uct_rc_gdaki_init_umem(uct_rc_gdaki_iface_t *iface, uint64_t pgsz_bitmap,
     return UCS_OK;
 
 err_umem:
-    uct_cuda_mem_free(mem->gpu_raw);
+    uct_cuda_mem_free(&mem->gpu_raw);
     mem->gpu_mem = NULL;
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
@@ -586,7 +584,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
 err_umem:
     mlx5dv_devx_umem_dereg(hdr->umem);
-    uct_cuda_mem_free(hdr->gpu_raw);
+    uct_cuda_mem_free(&hdr->gpu_raw);
 err_free_hdr:
     ucs_free(hdr);
     return status;
@@ -606,7 +604,7 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
                                         mp_chunk->num_elems,
                                         iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(hdr->umem);
-    uct_cuda_mem_free(hdr->gpu_raw);
+    uct_cuda_mem_free(&hdr->gpu_raw);
     ucs_free(hdr);
 }
 
@@ -735,7 +733,7 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
 
 err_umem:
     mlx5dv_devx_umem_dereg(ep->mem.umem);
-    uct_cuda_mem_free(ep->mem.gpu_raw);
+    uct_cuda_mem_free(&ep->mem.gpu_raw);
 err_block:
     ucs_free(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
@@ -752,7 +750,7 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
     uct_rc_gdaki_chunk_channels_destroy(iface, NULL, ep->channel_block, 1, 1,
                                         iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(ep->mem.umem);
-    uct_cuda_mem_free(ep->mem.gpu_raw);
+    uct_cuda_mem_free(&ep->mem.gpu_raw);
     ucs_free(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }

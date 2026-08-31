@@ -505,7 +505,7 @@ static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
     uct_cuda_copy_alloc_handle_t *alloc_handle = (uct_cuda_copy_alloc_handle_t*)
             memh;
 
-    uct_cuda_mem_free(*alloc_handle);
+    uct_cuda_mem_free(alloc_handle);
     ucs_free(alloc_handle);
     return UCS_OK;
 }
@@ -1119,7 +1119,7 @@ ucs_status_t
 uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
                    ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
                    size_t length, size_t *granularity_p,
-                   uct_cuda_copy_alloc_handle_t *alloc_handle_p)
+                   uct_cuda_copy_alloc_handle_t *alloc_handle)
 {
     CUdeviceptr ptr;
     ucs_status_t status;
@@ -1151,7 +1151,7 @@ uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
                                                         log_level;
         status = uct_cuda_copy_mem_alloc_fabric(log_level_fabric, cu_device,
                                                 length, granularity_p,
-                                                alloc_handle_p);
+                                                alloc_handle);
         if ((status == UCS_OK) || (enable_fabric == UCS_YES)) {
             return status;
         }
@@ -1163,18 +1163,18 @@ uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
     }
 
 set_non_vmm:
-    alloc_handle_p->ptr    = ptr;
-    alloc_handle_p->length = length;
-    alloc_handle_p->is_vmm = 0;
+    alloc_handle->ptr    = ptr;
+    alloc_handle->length = length;
+    alloc_handle->is_vmm = 0;
 
     return UCS_OK;
 }
 
-void uct_cuda_mem_free(uct_cuda_copy_alloc_handle_t alloc_handle)
+void uct_cuda_mem_free(uct_cuda_copy_alloc_handle_t *alloc_handle)
 {
-    if (alloc_handle.is_vmm) {
-        (void)uct_cuda_copy_mem_release_fabric(&alloc_handle);
+    if (alloc_handle->is_vmm) {
+        (void)uct_cuda_copy_mem_release_fabric(alloc_handle);
     } else {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(alloc_handle.ptr));
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(alloc_handle->ptr));
     }
 }
