@@ -32,7 +32,8 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
      * topology is always aware of all GPUs. */
     status = uct_cuda_enum_gpus(NULL, NULL);
     if (status != UCS_OK) {
-        ucs_diag("failed to enumerate all gpus: %s", ucs_status_string(status));
+        ucs_error("failed to enumerate GPUs: %s", ucs_status_string(status));
+        return status;
     }
 
     status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
@@ -44,11 +45,13 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
         status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_device, i),
                                   UCS_LOG_LEVEL_DIAG);
         if (status != UCS_OK) {
-            continue;
+            return status;
         }
 
         status = uct_cuda_get_sys_dev(cuda_device, &sys_dev);
         if (status != UCS_OK) {
+            ucs_error("failed to get system device for GPU%d: %s", cuda_device,
+                      ucs_status_string(status));
             return status;
         }
 
