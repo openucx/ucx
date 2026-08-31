@@ -33,10 +33,13 @@ static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
 
 ucs_status_t
 ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
-                            unsigned num_devices, ucs_topo_groups_t *groups_p)
+                            unsigned num_devices,
+                            ucs_topo_groups_type_t groups_type,
+                            ucs_topo_groups_t *groups_p)
 {
     (void)devices;
     (void)num_devices;
+    (void)groups_type;
 
     /* TODO: Implement VR groups initialization */
 

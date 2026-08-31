@@ -111,6 +111,7 @@ void ucs_topo_init_group(ucs_topo_group_t *group);
  *
  * @param [in]  devices      Array of registered system devices.
  * @param [in]  num_devices  Number of elements in @a devices.
+ * @param [in]  groups_type  Type of topology groups to build.
  * @param [out] groups_p     Initialized topology groups.
  *
  * @return UCS_OK on success, or an error status if topology group
@@ -118,7 +119,9 @@ void ucs_topo_init_group(ucs_topo_group_t *group);
  */
 ucs_status_t
 ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
-                            unsigned num_devices, ucs_topo_groups_t *groups_p);
+                            unsigned num_devices,
+                            ucs_topo_groups_type_t groups_type,
+                            ucs_topo_groups_t *groups_p);
 
 END_C_DECLS
 
