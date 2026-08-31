@@ -102,7 +102,7 @@ void ucs_topo_init_group(ucs_topo_group_t *group);
 
 
 /**
- * Initialize topology groups.
+ * Build system topology groups (internal function).
  *
  * @param [in]  devices      Array of registered system devices.
  * @param [in]  num_devices  Number of elements in @a devices.
