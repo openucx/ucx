@@ -1426,20 +1426,20 @@ protected:
         ++ctx->count;
 
         EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-        EXPECT_EQ((ctx->comp != NULL),
-                  !!(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP));
         EXPECT_EQ(ctx->operation, info->operation);
 
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
+
+        EXPECT_TRUE(info->rma.field_mask &
+                    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+
+        EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
+        EXPECT_EQ(ctx->rkey, info->rma.rkey);
+
         if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
-            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
-            EXPECT_TRUE(info->rma.field_mask &
-                        UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
-            EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
             EXPECT_TRUE(info->rma.field_mask &
                         UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
-
-            EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
-            EXPECT_EQ(ctx->rkey, info->rma.rkey);
             EXPECT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
 
             for (size_t i = 0; i < ctx->iovcnt; ++i) {
@@ -1454,15 +1454,8 @@ protected:
                           uct_ib_memh_get_lkey(actual.memh));
             }
         } else {
-            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
-            EXPECT_TRUE(info->rma.field_mask &
-                        UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
-            EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
             EXPECT_TRUE(info->rma.field_mask &
                         UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA);
-
-            EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
-            EXPECT_EQ(ctx->rkey, info->rma.rkey);
             EXPECT_EQ(ctx->length, info->rma.payload.data.length);
             EXPECT_EQ(0, memcmp(ctx->buffer, info->rma.payload.data.buffer,
                                 ctx->length));
@@ -1471,6 +1464,8 @@ protected:
         if (ctx->comp != NULL) {
             EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
             EXPECT_EQ(ctx->comp, info->comp);
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
         }
     }
 
