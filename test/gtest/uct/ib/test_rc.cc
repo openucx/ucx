@@ -1576,4 +1576,183 @@ UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
 
+class test_rc_purge_outstanding : public test_rc {
+protected:
+    struct purge_ctx {
+        uct_ep_operation_t    operation;
+        uint64_t              remote_addr;
+        uct_rkey_t            rkey;
+        uct_unpack_callback_t unpack_cb;
+        void                  *unpack_arg;
+        size_t                length;
+        const uct_iov_t       *iov;
+        size_t                iovcnt;
+        uct_completion_t      *comp;
+        unsigned              count;
+    };
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
+    static void unpack_cb(void *arg, const void *data, size_t length)
+    {
+        memcpy(arg, data, length);
+    }
+
+    static void purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
+
+        ++ctx->count;
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        EXPECT_EQ(ctx->operation, info->operation);
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
+
+        EXPECT_TRUE(info->rma.field_mask &
+                    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+
+        EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
+        EXPECT_EQ(ctx->rkey, info->rma.rkey);
+
+        if (ctx->operation == UCT_EP_OP_GET_BCOPY) {
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
+            EXPECT_EQ(ctx->unpack_cb, info->rma.payload.unpack.unpack_cb);
+            EXPECT_EQ(ctx->unpack_arg, info->rma.payload.unpack.arg);
+            EXPECT_EQ(ctx->length, info->rma.payload.unpack.length);
+        } else {
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+            EXPECT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+
+            for (size_t i = 0; i < ctx->iovcnt; ++i) {
+                const uct_iov_t &expected = ctx->iov[i];
+                const uct_iov_t &actual   = info->rma.payload.zcopy.iov[i];
+
+                EXPECT_EQ(expected.buffer, actual.buffer);
+                EXPECT_EQ(expected.length, actual.length);
+                EXPECT_EQ(expected.stride, actual.stride);
+                EXPECT_EQ(expected.count, actual.count);
+                EXPECT_EQ(uct_ib_memh_get_lkey(expected.memh),
+                          uct_ib_memh_get_lkey(actual.memh));
+            }
+        }
+
+        if (ctx->comp != NULL) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(ctx->comp, info->comp);
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        }
+    }
+
+    ucs_status_t purge_stub(purge_ctx *ctx)
+    {
+        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
+        uint16_t ci              = 0;
+        uct_rc_mlx5_op_callback_data_t callback_data;
+        uct_ep_op_info_t info;
+        ucs_status_t status;
+        const struct mlx5_wqe_ctrl_seg *ctrl;
+        uct_rc_iface_send_op_t *op, *t_op;
+        size_t wqe_size;
+
+        while (ci != txwq->sw_pi) {
+            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+            op       = NULL;
+
+            ucs_queue_for_each(t_op, &txqp->outstanding, queue) {
+                if (t_op->sn == ci) {
+                    op = t_op;
+                    break;
+                }
+            }
+
+            memset(&info, 0, sizeof(info));
+            status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
+                                              &callback_data);
+
+            EXPECT_UCS_OK(status);
+
+            purge_cb(&info, ctx);
+
+            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        }
+
+        return UCS_OK;
+    }
+
+    void test_get(uct_ep_operation_t operation, size_t length)
+    {
+        mapped_buffer localbuf(length, 0ul, *m_e1);
+        mapped_buffer remotebuf(length, 0x12345678ul, *m_e2);
+        uct_completion_t comp = {completion_cb, 1, UCS_OK};
+        uct_iov_t iov[2];
+
+        iov[0] = {
+            .buffer = localbuf.ptr(),
+            .length = length / 2,
+            .memh   = localbuf.memh(),
+            .stride = 0,
+            .count  = 1
+        };
+        iov[1] = {
+            .buffer = UCS_PTR_BYTE_OFFSET(localbuf.ptr(), length / 2),
+            .length = length - (length / 2),
+            .memh   = localbuf.memh(),
+            .stride = 0,
+            .count  = 1
+        };
+
+        if (operation == UCT_EP_OP_GET_BCOPY) {
+            ASSERT_EQ(UCS_INPROGRESS,
+                      uct_ep_get_bcopy(m_e1->ep(0), unpack_cb, localbuf.ptr(),
+                                       length, remotebuf.addr(),
+                                       remotebuf.rkey(), &comp));
+        } else {
+            ASSERT_EQ(UCS_INPROGRESS,
+                      uct_ep_get_zcopy(m_e1->ep(0), iov, 2, remotebuf.addr(),
+                                       remotebuf.rkey(), &comp));
+        }
+
+        purge_ctx ctx = {operation,
+                         remotebuf.addr(),
+                         uct_ib_md_direct_rkey(remotebuf.rkey()),
+                         unpack_cb,
+                         localbuf.ptr(),
+                         length,
+                         iov,
+                         2,
+                         &comp,
+                         0};
+
+        ASSERT_UCS_OK(purge_stub(&ctx));
+        flush();
+
+        EXPECT_EQ(1, ctx.count);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    test_get(UCT_EP_OP_GET_BCOPY, 8);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    test_get(UCT_EP_OP_GET_ZCOPY, 8 * UCS_KBYTE);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
+
 #endif
