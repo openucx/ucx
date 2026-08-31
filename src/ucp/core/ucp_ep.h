@@ -517,6 +517,11 @@ typedef struct ucp_ep_recovery_arg {
 } ucp_ep_recovery_arg_t;
 
 
+enum ucp_ep_ext_flags {
+    UCP_EP_EXT_FLAG_RKEY_BOUND_LIFETIME = UCS_BIT(0)
+};
+
+
 /**
  * Endpoint extension
  */
@@ -581,6 +586,9 @@ typedef struct ucp_ep_ext {
      * Map of system devices that require a flush operation
      */
     ucp_sys_dev_map_t             flush_sys_dev_map;
+
+    /* Flags from ucp_ep_ext_flags */
+    uint8_t flags;
 } ucp_ep_ext_t;
 
 
