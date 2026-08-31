@@ -14,7 +14,6 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -816,23 +815,6 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 
     return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
                                        IBV_QPS_ERR);
-}
-
-ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
-        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
-{
-    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_mlx5_base_ep_t);
-    ucs_status_t status;
-
-    ucs_assert(ep->err_handler_inprogress);
-
-    /* TODO: Implement purge and replace the external purge call. */
-    status = uct_ib_mlx5_ext_ep_outstanding_purge(tl_ep, params);
-
-    /* TODO: Advance ft_ci as each WQE is processed to reclaim TX resources. */
-    uct_rc_mlx5_ep_update_tx_qp_res(ep, ep->tx.wq.ft_ci);
-
-    return status;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
