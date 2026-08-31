@@ -1365,8 +1365,12 @@ public:
         add_mock_iface("mock_1:1", iface_attr_func);
         test_ucp_proto_mock::init();
 
-        s_user_sys_dev = add_mock_sys_dev(0, "mock_user");
-        s_frag_sys_dev = add_mock_sys_dev(1, "mock_frag");
+        s_user_sys_dev = get_mock_sys_dev_by_name("mock_0:1");
+        s_frag_sys_dev = get_mock_sys_dev_by_name("mock_1:1");
+        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
+                s_user_sys_dev, UCS_TOPO_DEVICE_CLASS_ACC));
+        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
+                s_frag_sys_dev, UCS_TOPO_DEVICE_CLASS_ACC));
 
         set_frag_sys_dev(sender());
         set_frag_sys_dev(receiver());
@@ -1374,6 +1378,8 @@ public:
 
     virtual void cleanup() override
     {
+        test_ucp_proto_mock::cleanup();
+
         if (s_user_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
             EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
                     s_user_sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN));
@@ -1385,7 +1391,6 @@ public:
 
         s_frag_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         s_user_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        test_ucp_proto_mock::cleanup();
     }
 
 protected:
@@ -1445,23 +1450,6 @@ protected:
     }
 
 private:
-    static ucs_sys_device_t add_mock_sys_dev(uint8_t function, const char *name)
-    {
-        const ucs_sys_bus_id_t bus_id = {
-            .domain   = 0xfffe,
-            .bus      = 0xfe,
-            .slot     = 0x1f,
-            .function = function,
-        };
-        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
-        EXPECT_UCS_OK(ucs_topo_sys_device_set_name(sys_dev, name, 10));
-        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(sys_dev,
-                                                    UCS_TOPO_DEVICE_CLASS_ACC));
-        return sys_dev;
-    }
-
     static void set_frag_sys_dev(entity &e)
     {
         ucp_memory_info_t mem_info;
