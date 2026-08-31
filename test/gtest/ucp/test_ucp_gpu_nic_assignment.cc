@@ -185,17 +185,17 @@ protected:
                                                                   gpu_idx, 0));
                 ASSERT_NE(nullptr, nic_sys_dev_bitmap);
 
-                size_t port_idx     = 0;
-                const bool gpu_owns_nic = UCS_STATIC_BITMAP_GET(
-                        *nic_sys_dev_bitmap,
+                size_t port_idx         = 0;
+                const bool gpu_owns_nic = ucp_gpu_nic_bitmap_test(
+                        nic_sys_dev_bitmap,
                         nic_port_sys_dev(config, nic_idx, port_idx));
 
                 /* All ports of a NIC must have the same owner. */
                 for (port_idx = 1; port_idx < config.num_nic_ports;
                      ++port_idx) {
                     EXPECT_EQ(gpu_owns_nic,
-                              UCS_STATIC_BITMAP_GET(
-                                      *nic_sys_dev_bitmap,
+                              ucp_gpu_nic_bitmap_test(
+                                      nic_sys_dev_bitmap,
                                       nic_port_sys_dev(config, nic_idx,
                                                        port_idx)));
                 }

@@ -202,8 +202,22 @@ ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
         return NULL;
     }
 
+    ucs_assert(nic_sys_dev_bitmap_idx <
+               ucs_array_length(&assignment->nic_sys_dev_bitmaps));
     return &ucs_array_elem(&assignment->nic_sys_dev_bitmaps,
                            nic_sys_dev_bitmap_idx);
+}
+
+int ucp_gpu_nic_bitmap_test(const ucp_gpu_nic_sys_dev_bitmap_t *bitmap,
+                            ucs_sys_device_t net_sys_dev)
+{
+    ucs_assert(bitmap != NULL);
+
+    if (net_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return 0;
+    }
+
+    return UCS_STATIC_BITMAP_GET(*bitmap, net_sys_dev);
 }
 
 void ucp_gpu_nic_assignment_release(ucp_gpu_nic_assignment_t *assignment)

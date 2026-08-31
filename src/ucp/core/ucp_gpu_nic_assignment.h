@@ -71,6 +71,19 @@ ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
 
 
 /**
+ * Test whether a network system device is present in a GPU assignment bitmap.
+ *
+ * @param [in] bitmap       Valid GPU-to-NIC assignment bitmap.
+ * @param [in] net_sys_dev  Network system device to test.
+ *
+ * @return Nonzero if @a net_sys_dev is present in @a bitmap, or zero if the
+ *         system device is unknown or the bit is not set.
+ */
+int ucp_gpu_nic_bitmap_test(const ucp_gpu_nic_sys_dev_bitmap_t *bitmap,
+                            ucs_sys_device_t net_sys_dev);
+
+
+/**
  * Release an assignment returned by @ref ucp_gpu_nic_assignment_build.
  *
  * @param [in] assignment  Assignment to release.
