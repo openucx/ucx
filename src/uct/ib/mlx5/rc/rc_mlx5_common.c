@@ -124,7 +124,7 @@ out:
     info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
 }
 
-static void
+static ucs_status_t
 uct_rc_mlx5_op_info_fill_put_bcopy(uct_ep_op_info_t *info,
                                    uct_rc_iface_send_op_t *op,
                                    const struct mlx5_wqe_data_seg *dptr,
@@ -135,6 +135,9 @@ uct_rc_mlx5_op_info_fill_put_bcopy(uct_ep_op_info_t *info,
     int is_dm;
 
     uct_rc_mlx5_get_dptr_buffer(op, dptr, &buffer, &length, &is_dm);
+    if (is_dm) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     info->rma.payload.data.buffer = buffer;
     info->rma.payload.data.length = length;
@@ -142,8 +145,10 @@ uct_rc_mlx5_op_info_fill_put_bcopy(uct_ep_op_info_t *info,
 
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
 
-    info->operation   = is_dm ? UCT_EP_OP_PUT_SHORT : UCT_EP_OP_PUT_BCOPY;
+    info->operation   = UCT_EP_OP_PUT_BCOPY;
     info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
+
+    return UCS_OK;
 }
 
 static void uct_rc_mlx5_op_info_fill_put_zcopy(
@@ -216,11 +221,8 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     }
 
     if ((void*)op->handler == (void*)ucs_mpool_put) {
-        uct_rc_mlx5_op_info_fill_put_bcopy(info, op,
-                                           (const struct mlx5_wqe_data_seg*)inl,
-                                           raddr);
-
-        return UCS_OK;
+        return uct_rc_mlx5_op_info_fill_put_bcopy(
+                info, op, (const struct mlx5_wqe_data_seg*)inl, raddr);
     }
 
     ucs_diag("unsupported put op %p handler %s", op,
