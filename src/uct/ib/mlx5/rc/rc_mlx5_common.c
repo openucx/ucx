@@ -15,19 +15,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
-#include <string.h>
-
-static void uct_rc_mlx5_txwq_copy(const uct_ib_mlx5_txwq_t *txwq,
-                                  const void *src, void *dst, size_t length)
-{
-    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
-
-    memcpy(dst, src, copy_len);
-    if (copy_len < length) {
-        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
-               length - copy_len);
-    }
-}
 
 static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
                                               uct_rc_iface_send_op_t *op)
@@ -79,6 +66,9 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am_zcopy(
     size_t dptrs_size, iovcnt;
     size_t inline_length, inline_seg_size;
 
+    info->operation  = UCT_EP_OP_AM_ZCOPY;
+    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION;
+
     inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
     ucs_assert(inline_length >= sizeof(uct_rc_mlx5_hdr_t));
 
@@ -86,7 +76,8 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am_zcopy(
                                         UCT_IB_MLX5_WQE_SEG_SIZE);
     ucs_assert(wqe_size >= (sizeof(*ctrl) + inline_seg_size));
 
-    uct_rc_mlx5_txwq_copy(txwq, inl + 1, callback_data->data, inline_length);
+    uct_ib_mlx5_txwq_copy_segs(txwq, inl + 1, callback_data->data,
+                               inline_length);
     rch = (const uct_rc_mlx5_hdr_t*)callback_data->data;
 
     dptr       = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
@@ -109,9 +100,6 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am_zcopy(
     info->field_mask             |= UCT_EP_OP_INFO_FIELD_AM;
 
     uct_rc_mlx5_op_info_try_fill_comp(info, op);
-
-    info->operation  = UCT_EP_OP_AM_ZCOPY;
-    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION;
 
     return UCS_OK;
 }
@@ -141,7 +129,7 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    uint8_t opcode = ctrl->opmod_idx_opcode >> 24;
+    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
 
     switch (opcode) {
     case MLX5_OPCODE_SEND:

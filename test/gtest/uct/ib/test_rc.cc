@@ -1636,25 +1636,26 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, am_zcopy,
                      !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
 {
     static const uint8_t am_id = 0;
-    uint64_t header            = 0x1234567890abcdef;
     uct_completion_t comp      = {completion_cb, 1, UCS_OK};
     const auto &cap            = m_e1->iface_attr().cap.am;
+    uint64_t header            = 0x1234567890abcdef;
 
     ASSERT_GT(cap.max_zcopy, sizeof(header));
-    size_t payload_size = ucs_min(384ul, cap.max_zcopy - sizeof(header));
+
+    size_t payload_size = ucs_min(256ul, cap.max_zcopy - sizeof(header));
     ASSERT_GE(payload_size, cap.max_iov);
 
     mapped_buffer sendbuf(payload_size, *m_e1);
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                             sendbuf.memh(), cap.max_iov);
 
-    am_zcopy_state state = {am_id, (void*)&header, sizeof(header),
-                            iov,   iovcnt,         &comp,
-                            0};
-
     ASSERT_EQ(UCS_INPROGRESS,
               uct_ep_am_zcopy(m_e1->ep(0), am_id, (void*)&header,
                               sizeof(header), iov, iovcnt, 0, &comp));
+
+    am_zcopy_state state = {am_id, (void*)&header, sizeof(header),
+                            iov,   iovcnt,         &comp,
+                            0};
     ASSERT_UCS_OK(purge_stub(&state));
 
     flush();
