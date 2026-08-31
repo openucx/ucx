@@ -571,6 +571,12 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
+/**
+ * @return Nonzero if a multiplane interface reports XDR-equivalent bandwidth.
+ */
+int uct_ib_iface_is_multiplane_xdr_bw(uct_ib_iface_t *iface);
+
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
