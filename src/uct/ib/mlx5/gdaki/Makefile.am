@@ -10,7 +10,8 @@ libuct_ib_mlx5_gda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS) \
                                  $(CUDA_CPPFLAGS)
 libuct_ib_mlx5_gda_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS) $(CUDA_CFLAGS)
 libuct_ib_mlx5_gda_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(CUDA_LDFLAGS) \
-                                 -version-info $(SOVERSION)
+                                 -version-info $(SOVERSION) \
+                                 $(UCX_LT_RELEASE)
 libuct_ib_mlx5_gda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                                  $(top_builddir)/src/uct/libuct.la \
                                  $(top_builddir)/src/uct/ib/libuct_ib.la \
@@ -25,6 +26,10 @@ libuct_ib_mlx5_gda_la_SOURCES = \
 nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gdaki.cuh \
 	gdaki_dev.h \
+	common.cuh \
+	d2p.cuh \
+	d2p.h \
+	d2p_proto.h \
 	gpunetio/common/doca_gpunetio_verbs_def.h \
 	gpunetio/common/doca_gpunetio_verbs_dev.h \
 	gpunetio/device/doca_gpunetio_dev_verbs_common.cuh \

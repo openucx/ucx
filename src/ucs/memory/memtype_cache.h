@@ -46,6 +46,14 @@ struct ucs_memtype_cache {
 
 
 void ucs_memtype_cache_global_init(void);
+
+
+/**
+ * Create the global memory type cache and install its event handlers.
+ */
+void ucs_memtype_cache_global_create(void);
+
+
 void ucs_memtype_cache_cleanup(void);
 
 
