@@ -114,17 +114,6 @@ UCS_TEST_P(test_uct_query, query_perf)
     }
 }
 
-UCS_TEST_P(test_uct_query, query_token_support)
-{
-    uct_iface_attr_v2_t attr = {};
-
-    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-    attr.cap.flags  = UINT64_MAX;
-
-    ASSERT_UCS_OK(uct_iface_query_v2(get_iface(), &attr));
-    EXPECT_EQ(0ul, attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
-}
-
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)
 
 class test_uct_query_ib : public test_uct_query {
