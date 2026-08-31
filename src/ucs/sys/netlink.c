@@ -258,7 +258,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 static int
 ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
                                           ucs_netlink_rt_rules_t *iface_rules,
-                                          uint8_t route_type)
+                                          uint8_t route_type, uint32_t table_id)
 {
     int found_netmask_len = -1;
     ucs_netlink_route_entry_t *curr_entry;
@@ -266,6 +266,11 @@ ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
     ucs_array_for_each(curr_entry, iface_rules) {
         if ((route_type != RTN_UNSPEC) &&
             (curr_entry->route_type != route_type)) {
+            continue;
+        }
+
+        if ((table_id != RT_TABLE_UNSPEC) &&
+            (curr_entry->table_id != table_id)) {
             continue;
         }
 
@@ -282,10 +287,11 @@ ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
 
 static int
 ucs_netlink_lookup_in_iface_rules(const struct sockaddr *sa_remote,
-                                  ucs_netlink_rt_rules_t *iface_rules)
+                                  ucs_netlink_rt_rules_t *iface_rules,
+                                  uint32_t table_id)
 {
     return ucs_netlink_lookup_in_iface_rules_by_type(sa_remote, iface_rules,
-                                                     RTN_UNSPEC);
+                                                     RTN_UNSPEC, table_id);
 }
 
 static void ucs_netlink_init_routing_table_cache(void)
@@ -322,7 +328,8 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules       = &kh_val(&ucs_netlink_routing_table_cache, iter);
     info->netmask_len = ucs_netlink_lookup_in_iface_rules(info->sa_remote,
-                                                          iface_rules);
+                                                          iface_rules,
+                                                          RT_TABLE_UNSPEC);
 }
 
 static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
@@ -331,8 +338,8 @@ static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
     ucs_netlink_rt_rules_t iface_rules;
 
     kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
-        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
-                                                                 &iface_rules);
+        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(
+                sa_remote, &iface_rules, RT_TABLE_UNSPEC);
         if (curr_netmask_len > max_netmask_len) {
             max_netmask_len = curr_netmask_len;
         }
@@ -370,7 +377,7 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
 
     kh_foreach(&ucs_netlink_routing_table_cache, if_index, iface_rules, {
         int curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
-                sa_remote, &iface_rules, RTN_LOCAL);
+                sa_remote, &iface_rules, RTN_LOCAL, RT_TABLE_UNSPEC);
         if (curr_netmask_len > best_netmask_len) {
             best_netmask_len = curr_netmask_len;
             best_if_index    = if_index;
