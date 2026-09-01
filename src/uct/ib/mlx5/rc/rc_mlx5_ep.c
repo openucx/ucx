@@ -905,6 +905,27 @@ static ucs_status_t uct_rc_mlx5_fill_am_short_op_info(
     return UCS_ERR_UNSUPPORTED;
 }
 
+static ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
+                                                    uint32_t receiver_next_psn,
+                                                    uint32_t num_packets)
+{
+    const uint32_t psn_half = UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1);
+    uint32_t diff;
+
+    ucs_assert(num_packets > 0);
+
+    diff = (receiver_next_psn - first_psn) & UCT_IB_MLX5_PSN_MASK;
+    if (diff == psn_half) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((diff > 0) && (diff < psn_half) && (diff >= num_packets)) {
+        return UCS_OK;
+    }
+
+    return UCS_INPROGRESS;
+}
+
 static uint32_t uct_rc_mlx5_ep_am_short_num_packets(
         uct_ib_mlx5_txwq_t *txwq, uint16_t start_ci, uint16_t end_ci)
 {

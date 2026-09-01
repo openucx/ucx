@@ -923,10 +923,6 @@ size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl);
 
 uint16_t uct_ib_mlx5_txwq_next_ci(uint16_t ci, size_t wqe_size);
 
-ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
-                                             uint32_t receiver_next_psn,
-                                             uint32_t num_packets);
-
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding);

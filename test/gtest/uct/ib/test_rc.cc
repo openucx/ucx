@@ -243,19 +243,6 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
     flush();
 }
 
-UCS_TEST_P(test_rc_mlx5_psn, delivery_status)
-{
-    EXPECT_EQ(UCS_INPROGRESS, uct_ib_mlx5_psn_delivery_status(10, 10, 1));
-    EXPECT_EQ(UCS_OK, uct_ib_mlx5_psn_delivery_status(10, 11, 1));
-    EXPECT_EQ(UCS_INPROGRESS,
-              uct_ib_mlx5_psn_delivery_status(10, 11, 2));
-    EXPECT_EQ(UCS_OK,
-              uct_ib_mlx5_psn_delivery_status(UCT_IB_MLX5_PSN_MASK, 0, 1));
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-              uct_ib_mlx5_psn_delivery_status(
-                      0, UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1), 1));
-}
-
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_psn, rc_mlx5)
 #endif
 

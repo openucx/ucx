@@ -873,27 +873,6 @@ uint16_t uct_ib_mlx5_txwq_next_ci(uint16_t ci, size_t wqe_size)
     return ci + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
 }
 
-ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
-                                             uint32_t receiver_next_psn,
-                                             uint32_t num_packets)
-{
-    const uint32_t psn_half = UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1);
-    uint32_t diff;
-
-    ucs_assert(num_packets > 0);
-
-    diff = (receiver_next_psn - first_psn) & UCT_IB_MLX5_PSN_MASK;
-    if (diff == psn_half) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((diff > 0) && (diff < psn_half) && (diff >= num_packets)) {
-        return UCS_OK;
-    }
-
-    return UCS_INPROGRESS;
-}
-
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {
