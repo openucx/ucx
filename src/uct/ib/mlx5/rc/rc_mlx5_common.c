@@ -95,7 +95,7 @@ uct_rc_mlx5_op_info_fill_atomic(uct_ep_op_info_t *info,
                                    (4 * value_size);
         break;
     default:
-        ucs_diag("unsupported atomic op %d", opcode);
+        ucs_fatal("unsupported atomic op %d", opcode);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -151,13 +151,13 @@ uct_rc_mlx5_op_info_fill_atomic(uct_ep_op_info_t *info,
         } else if (swap_mask == ((~swap_add) & mask)) {
             info->atomic.op = UCT_ATOMIC_OP_AND;
         } else {
-            ucs_diag("unsupported atomic masked cs op %d, %d, %d, %d", swap_add,
-                     swap_mask, compare, compare_mask);
+            ucs_fatal("unsupported atomic masked cs op %d, %d, %d, %d",
+                      swap_add, swap_mask, compare, compare_mask);
             return UCS_ERR_UNSUPPORTED;
         }
         break;
     default:
-        ucs_diag("unsupported atomic op %d", opcode);
+        ucs_fatal("unsupported atomic op %d", opcode);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -208,7 +208,7 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
     case MLX5_OPCODE_ATOMIC_MASKED_CS:
         return uct_rc_mlx5_op_info_fill_atomic(info, txwq, op, ctrl, wqe_size);
     default:
-        ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        ucs_fatal("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
         return UCS_ERR_UNSUPPORTED;
     }
 }
