@@ -582,7 +582,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, invalid_get_size,
     EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
 }
 
-// Check that gets resource counter is not affected/changed when the get
+// Check that gets resource num_completed is not affected/changed when the get
 // function fails due to lack of some other resources.
 UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
@@ -1577,6 +1577,22 @@ UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
 
 class test_rc_purge_outstanding : public test_rc {
+public:
+    void init() override
+    {
+        uct_test::init();
+
+        m_e1 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e1);
+
+        check_skip_test();
+
+        m_e2 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e2);
+
+        connect();
+    }
+
 protected:
     enum {
         NUM_MESSAGES = 2000
@@ -1585,13 +1601,31 @@ protected:
     struct purge_ctx {
         uct_ep_h         ep;
         uct_completion_t comp;
+        unsigned         num_replayed;
     };
+
+    bool check_caps_v2(uint64_t required_flags)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+        EXPECT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+
+        return ucs_test_all_flags(attr.cap.flags, required_flags);
+    }
+
+    static ucs_status_t err_handler(void *arg, uct_ep_h, ucs_status_t)
+    {
+        test_rc_purge_outstanding *self =
+                static_cast<test_rc_purge_outstanding*>(arg);
+
+        ++self->m_err_count;
+        return UCS_INPROGRESS;
+    }
 
     static void purge_cb(const uct_ep_op_info_t *info, void *arg)
     {
         purge_ctx *ctx = static_cast<purge_ctx*>(arg);
-
-        ++ctx->comp.count;
 
         ASSERT_EQ(UCT_EP_OP_PUT_ZCOPY, info->operation);
         ASSERT_EQ(UCS_INPROGRESS,
@@ -1599,78 +1633,90 @@ protected:
                                    info->rma.payload.zcopy.iovcnt,
                                    info->rma.remote_addr, info->rma.rkey,
                                    &ctx->comp));
+
+        ++ctx->num_replayed;
     }
 
-    ucs_status_t purge_stub(purge_ctx *ctx)
+    static void query_tx_token(uct_ep_h ep, uct_rc_mlx5_tx_token_t *tx_token)
     {
-        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
-        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
-        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
-        uint16_t ci              = txwq->prev_sw_pi -
-                                   (txwq->bb_max - uct_rc_txqp_available(txqp));
-        uint16_t end_ci          = txwq->sw_pi;
-        uct_rc_mlx5_op_callback_data_t callback_data;
-        uct_ep_op_info_t info;
-        ucs_status_t status;
-        const struct mlx5_wqe_ctrl_seg *ctrl;
-        size_t wqe_size;
+        uct_ep_attr_t attr = {};
 
-        ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
-                uct_ib_mlx5_txwq_get_wqe(txwq, ci));
-        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-        ci      += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
-
-        while (ci != end_ci) {
-            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
-                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
-            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-
-            status = uct_rc_mlx5_op_info_fill(&info, txwq, NULL, ctrl, wqe_size,
-                                              &callback_data);
-
-            EXPECT_UCS_OK(status);
-
-            purge_cb(&info, ctx);
-
-            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
-        }
-
-        return UCS_OK;
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
     }
 
-    void test_put_zcopy()
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_tx_token_t *tx_token,
+                               uct_rc_mlx5_rx_token_t *rx_token)
     {
-        static const size_t length = 64;
-        mapped_buffer sendbuf(length, 0ul, *m_e1);
-        mapped_buffer recvbuf(length, 0ul, *m_e2);
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), length,
-                                sendbuf.memh(), 1);
-        ucs_status_t status;
+        uct_iface_attr_v2_t attr = {};
 
-        m_e1->connect(1, *m_e2, 1);
-
-        purge_ctx ctx = {m_e1->ep(1), {NULL, NUM_MESSAGES + 1, UCS_OK}};
-
-        for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
-            UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_zcopy(m_e1->ep(0), iov,
-                                                         iovcnt, recvbuf.addr(),
-                                                         recvbuf.rkey(),
-                                                         &ctx.comp),
-                                        status);
-        }
-
-        ASSERT_UCS_OK(purge_stub(&ctx));
-
-        flush();
-
-        EXPECT_EQ(1, ctx.comp.count);
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
     }
+
+    unsigned m_err_count = 0;
 };
 
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
 {
-    test_put_zcopy();
+    if (!check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+        UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
+    }
+
+    static const size_t length = 64;
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    uct_ep_outstanding_purge_params_t params = {};
+    uct_rc_mlx5_tx_token_t tx_token          = {};
+    uct_rc_mlx5_rx_token_t rx_token          = {};
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), length, sendbuf.memh(),
+                            1);
+    uct_ep_invalidate_params_t invalidate_params = {};
+    ucs_status_t status;
+
+    m_e1->connect(1, *m_e2, 1);
+
+    purge_ctx ctx = {m_e1->ep(1), {NULL, NUM_MESSAGES + 1, UCS_OK}, 0};
+
+    for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt,
+                                                     recvbuf.addr(),
+                                                     recvbuf.rkey(), &ctx.comp),
+                                    status);
+        ASSERT_EQ(UCS_INPROGRESS, status);
+    }
+
+    ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &invalidate_params));
+
+    wait_for_flag(&m_err_count);
+    EXPECT_EQ(1u, m_err_count);
+
+    uct_rc_mlx5_ep_t *failed_ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+    unsigned num_posted = static_cast<uint16_t>(failed_ep->super.tx.wq.ft_ci +
+                                                1);
+
+    query_tx_token(m_e1->ep(0), &tx_token);
+    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                        UCT_EP_OUTSTANDING_FIELD_CB |
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.rx_token   = &rx_token;
+    params.cb         = purge_cb;
+    params.arg        = &ctx;
+    ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
+
+    flush();
+
+    EXPECT_GT(ctx.num_replayed, 0);
+    EXPECT_EQ(NUM_MESSAGES, num_posted + ctx.num_replayed);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
