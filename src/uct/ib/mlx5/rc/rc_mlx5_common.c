@@ -15,8 +15,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
-#include <endian.h>
-#include <string.h>
 
 static uint64_t uct_rc_mlx5_atomic_value(const void *buffer, size_t value_size)
 {
@@ -86,7 +84,7 @@ uct_rc_mlx5_op_info_fill_atomic(uct_ep_op_info_t *info,
         } else if (opmod == UCT_IB_MLX5_OPMOD_EXT_ATOMIC(3)) {
             value_size = sizeof(uint64_t);
         } else {
-            ucs_diag("unsupported atomic masked op %d", opmod);
+            ucs_fatal("unsupported atomic masked op %d", opmod);
             return UCS_ERR_IO_ERROR;
         }
 
@@ -128,7 +126,7 @@ uct_rc_mlx5_op_info_fill_atomic(uct_ep_op_info_t *info,
         } else if (compare == mask) {
             info->atomic.op = UCT_ATOMIC_OP_XOR;
         } else {
-            ucs_diag("unsupported atomic masked fa op %d", compare);
+            ucs_fatal("unsupported atomic masked fa %" PRIu64, compare);
             return UCS_ERR_UNSUPPORTED;
         }
 
@@ -151,7 +149,8 @@ uct_rc_mlx5_op_info_fill_atomic(uct_ep_op_info_t *info,
         } else if (swap_mask == ((~swap_add) & mask)) {
             info->atomic.op = UCT_ATOMIC_OP_AND;
         } else {
-            ucs_fatal("unsupported atomic masked cs op %d, %d, %d, %d",
+            ucs_fatal("unsupported atomic masked cs %" PRIu64 ", %" PRIu64 ", "
+                      "%" PRIu64 ", %" PRIu64,
                       swap_add, swap_mask, compare, compare_mask);
             return UCS_ERR_UNSUPPORTED;
         }
