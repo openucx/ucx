@@ -59,6 +59,9 @@ static void
 ucs_topo_groups_sys_dev_sort(ucs_topo_groups_sys_dev_array_t *sys_devs,
                              const ucs_topo_sys_device_info_t *devices)
 {
+    ucs_assert(sys_devs != NULL);
+    ucs_assert(devices != NULL);
+
     if (ucs_array_is_empty(sys_devs)) {
         return;
     }
@@ -97,6 +100,9 @@ ucs_topo_groups_gpu_aliases_filter(ucs_topo_groups_sys_dev_array_t *gpus,
     ucs_bus_id_bit_rep_t bus_id1, bus_id2;
     ucs_sys_device_t sys_dev1, sys_dev2;
     size_t i;
+
+    ucs_assert(gpus != NULL);
+    ucs_assert(devices != NULL);
 
     if (ucs_array_length(gpus) < 2) {
         return;
@@ -192,6 +198,9 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
     ucs_sys_device_t *sys_dev;
     ucs_status_t status;
 
+    ucs_assert(devices != NULL);
+    ucs_assert(nics != NULL);
+
     ucs_log_indent(1);
 
     ucs_array_for_each(sys_dev, nics) {
@@ -248,6 +257,10 @@ ucs_topo_groups_devices_collect(const ucs_topo_sys_device_info_t *devices,
     ucs_topo_groups_sys_dev_array_t *target_array;
     unsigned i;
 
+    ucs_assert(devices != NULL);
+    ucs_assert(acc_devices != NULL);
+    ucs_assert(net_devices != NULL);
+
     for (i = 0; i < num_devices; ++i) {
         if (devices[i].device_class == UCS_TOPO_DEVICE_CLASS_ACC) {
             target_array = acc_devices;
@@ -288,6 +301,10 @@ ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
     const ucs_sys_device_t *sys_dev;
     ucs_topo_gpu_t *gpu;
 
+    ucs_assert(devices != NULL);
+    ucs_assert(acc_devices != NULL);
+    ucs_assert(gpus != NULL);
+
     ucs_array_for_each(sys_dev, acc_devices) {
         dev_bus_id = &devices[*sys_dev].bus_id;
 
@@ -321,6 +338,10 @@ ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
     const ucs_sys_bus_id_t *dev_bus_id;
     const ucs_sys_device_t *sys_dev;
     ucs_topo_nic_t *nic;
+
+    ucs_assert(devices != NULL);
+    ucs_assert(net_devices != NULL);
+    ucs_assert(nics != NULL);
 
     ucs_array_for_each(sys_dev, net_devices) {
         dev_bus_id = &devices[*sys_dev].bus_id;
@@ -369,6 +390,9 @@ ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
     ucs_topo_groups_sys_dev_array_t net_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
     ucs_topo_group_t inventory;
     ucs_status_t status;
+
+    ucs_assert(devices != NULL);
+    ucs_assert(inventory_p != NULL);
 
     ucs_topo_init_group(&inventory);
 

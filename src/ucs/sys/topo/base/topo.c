@@ -1388,6 +1388,7 @@ ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
 
 void ucs_topo_release_group(ucs_topo_group_t *group)
 {
+    ucs_assert(group != NULL);
     ucs_array_cleanup_dynamic(&group->nics);
     ucs_array_cleanup_dynamic(&group->gpus);
 }
@@ -1395,6 +1396,8 @@ void ucs_topo_release_group(ucs_topo_group_t *group)
 void ucs_topo_release_groups(ucs_topo_groups_t *groups)
 {
     size_t i;
+
+    ucs_assert(groups != NULL);
 
     for (i = 0; i < ucs_array_length(&groups->groups); ++i) {
         ucs_topo_release_group(&ucs_array_elem(&groups->groups, i));
