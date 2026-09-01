@@ -80,9 +80,9 @@ uct_rc_mlx5_op_info_fill_get_bcopy(uct_ep_op_info_t *info,
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
                                                     uct_rc_iface_send_desc_t);
 
-    info->rma.payload.unpack.unpack_cb   = desc->unpack_cb;
-    info->rma.payload.unpack.arg         = op->unpack_arg;
-    info->rma.payload.unpack.length      = op->length;
+    info->rma.payload.unpack.unpack_cb = desc->unpack_cb;
+    info->rma.payload.unpack.arg       = op->unpack_arg;
+    info->rma.payload.unpack.length    = op->length;
     info->rma.field_mask |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK;
 
     uct_rc_mlx5_op_info_try_fill_comp(info, op);
