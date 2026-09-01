@@ -461,6 +461,19 @@ uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
     return (message_length + txwq->path_mtu_mask) >> txwq->path_mtu_shift;
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_rc_mlx5_txwq_first_outstanding_ci(const uct_ib_mlx5_txwq_t *txwq,
+                                      const uct_rc_txqp_t *txqp)
+{
+    uint16_t last_completed_ci = txwq->prev_sw_pi -
+                                 (txwq->bb_max - txqp->available);
+    const struct mlx5_wqe_ctrl_seg *ctrl;
+
+    ctrl = uct_ib_mlx5_txwq_get_wqe(txwq, last_completed_ci);
+    return uct_ib_mlx5_txwq_next_ci(last_completed_ci,
+                                    uct_ib_mlx5_wqe_size(ctrl));
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_add_psn(uct_ib_mlx5_txwq_t *txwq, int qp_type,
                          uint32_t num_packets)
