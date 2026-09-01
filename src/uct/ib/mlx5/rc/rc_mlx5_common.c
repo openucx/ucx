@@ -116,6 +116,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am_send(
     inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                     (void*)(ctrl + 1));
     if (!(inl->byte_count & htonl(MLX5_INLINE_SEG))) {
+        ucs_fatal("unsupported send op with inline data");
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -136,7 +137,7 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
         return uct_rc_mlx5_op_info_fill_am_send(info, txwq, op, ctrl, wqe_size,
                                                 callback_data);
     default:
-        ucs_diag("unsupported op %d", opcode);
+        ucs_fatal("unsupported op %d", opcode);
         return UCS_ERR_UNSUPPORTED;
     }
 }
