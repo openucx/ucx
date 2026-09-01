@@ -146,8 +146,8 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
         return UCS_OK;
     }
 
-    ucs_diag("unsupported get op %p handler %s", op,
-             ucs_debug_get_symbol_name((void*)op->handler));
+    ucs_fatal("unsupported get op %p handler %s", op,
+              ucs_debug_get_symbol_name((void*)op->handler));
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -162,7 +162,7 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
         return uct_rc_mlx5_op_info_fill_get(info, txwq, op, ctrl, wqe_size,
                                             callback_data);
     default:
-        ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        ucs_fatal("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
         return UCS_ERR_UNSUPPORTED;
     }
 }
