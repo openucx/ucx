@@ -1444,7 +1444,7 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
 
-    ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
+    ucs_debug("activate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     if (ep_config->ep_count++ == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
@@ -1464,7 +1464,7 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
     }
 
     ep_config = ucp_worker_ep_config(worker, cfg_index);
-    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
+    ucs_debug("deactivate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
                 cfg_index);
@@ -1481,7 +1481,7 @@ ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t old_cfg_index,
                                        ucp_worker_cfg_index_t new_cfg_index)
 {
-    ucs_trace("worker %p: reactivating interfaces deactivate cfg_index %u "
+    ucs_debug("worker %p: reactivating interfaces deactivate cfg_index %u "
               "activate cfg_index %u", worker, old_cfg_index, new_cfg_index);
 
     if (old_cfg_index == new_cfg_index) {

@@ -399,12 +399,18 @@ int ucp_worker_iface_get_event_fd(const ucp_worker_iface_t *wiface)
     return wiface->event_fd;
 }
 
-static UCS_F_ALWAYS_INLINE
-void ucp_worker_iface_event_fd_ctl(ucp_worker_iface_t *wiface,
-                                   ucp_worker_event_fd_op_t op)
+static void ucp_worker_iface_event_fd_ctl(ucp_worker_iface_t *wiface,
+                                          ucp_worker_event_fd_op_t op)
 {
+    static const char *const op_str[] = {
+        [UCP_WORKER_EPFD_OP_ADD] = "add",
+        [UCP_WORKER_EPFD_OP_DEL] = "delete",
+    };
     ucs_status_t status;
 
+    ucs_debug("worker %p: %s fd %d epfd %d on " UCP_WIFACE_FMT, wiface->worker,
+              op_str[op], ucp_worker_iface_get_event_fd(wiface),
+              wiface->worker->event_fd, UCP_WIFACE_ARG(wiface));
     status = ucp_worker_wakeup_ctl_fd(wiface->worker, op,
                                       ucp_worker_iface_get_event_fd(wiface));
     ucs_assert_always(status == UCS_OK);
@@ -575,13 +581,44 @@ out:
     return status;
 }
 
-void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
+static void ucp_worker_iface_activate_arm_mark_busy(ucp_worker_iface_t *wiface)
+{
+    if (wiface->flags & UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY) {
+        return;
+    }
+
+    wiface->flags |= UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY;
+    ++wiface->worker->arm_block_count;
+    ucs_debug("worker %p: marked " UCP_WIFACE_FMT
+              " as busy, arm block count %d",
+              wiface->worker, UCP_WIFACE_ARG(wiface),
+              wiface->worker->arm_block_count);
+}
+
+void ucp_worker_iface_activate_arm_unmark_busy(ucp_worker_iface_t *wiface)
+{
+    if (!(wiface->flags & UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY)) {
+        return;
+    }
+
+    wiface->flags &= ~UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY;
+    ucs_assert(wiface->worker->arm_block_count > 0);
+    --wiface->worker->arm_block_count;
+    ucs_debug("worker %p: marked " UCP_WIFACE_FMT
+              " as not-busy, arm block count %d",
+              wiface->worker, UCP_WIFACE_ARG(wiface),
+              wiface->worker->arm_block_count);
+}
+
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags,
+                               const char *reason)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("activate " UCP_WIFACE_FMT " a_count=%u a_ifaces=%u",
-              UCP_WIFACE_ARG(wiface), wiface->activate_count,
-              worker->num_active_ifaces);
+    ucs_debug("worker %p: activate " UCP_WIFACE_FMT
+              " %s a_count=%u a_ifaces=%u uct_flags=0x%x",
+              worker, UCP_WIFACE_ARG(wiface), reason, wiface->activate_count,
+              worker->num_active_ifaces, uct_flags);
 
     if (wiface->activate_count++ > 0) {
         return; /* was already activated */
@@ -592,6 +629,8 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 
     /* Set default active message handlers */
     ucp_worker_set_am_handlers(wiface, 0);
+
+    ucp_worker_iface_activate_arm_unmark_busy(wiface);
 
     if (ucp_worker_iface_has_event_notify(wiface)) {
         if (ucp_worker_iface_use_event_fd(wiface)) {
@@ -639,7 +678,7 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
     *progress_count = uct_iface_progress(wiface->iface);
     if (prev_recv_count != wiface->proxy_recv_count) {
         /* Received relevant active messages, activate the interface */
-        ucp_worker_iface_activate(wiface, 0);
+        ucp_worker_iface_activate(wiface, 0, "active message");
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
@@ -651,7 +690,9 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         status = uct_iface_event_arm(wiface->iface,
                                      UCT_EVENT_RECV | UCT_EVENT_SEND_COMP);
         if (status == UCS_OK) {
-            ucs_trace("armed iface %p", wiface->iface);
+            ucs_trace("check_events: armed " UCP_WIFACE_FMT,
+                      UCP_WIFACE_ARG(wiface));
+            ucp_worker_iface_activate_arm_unmark_busy(wiface);
 
             if (ucp_worker_iface_use_event_fd(wiface)) {
                 /* re-enable events, which were disabled by
@@ -666,10 +707,14 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
 
             return UCS_OK;
         } else if (status != UCS_ERR_BUSY) {
-            ucs_fatal("failed to arm iface %p: %s", wiface->iface,
-                      ucs_status_string(status));
+            ucs_fatal("check_events: failed to arm " UCP_WIFACE_FMT ": %s",
+                      UCP_WIFACE_ARG(wiface), ucs_status_string(status));
         } else {
-            ucs_trace("arm iface %p returned BUSY", wiface->iface);
+            ucs_debug("check_events: arm " UCP_WIFACE_FMT " returned BUSY",
+                      UCP_WIFACE_ARG(wiface));
+            /* Prevent ucp_worker_arm() from returning OK until the interface is
+               either activated or armed, so we will not block-wait forever. */
+            ucp_worker_iface_activate_arm_mark_busy(wiface);
             return UCS_ERR_BUSY;
         }
     } else {
@@ -733,7 +778,7 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
 {
     ucp_worker_h worker = wiface->worker;
 
-    ucs_trace("deactivate " UCP_WIFACE_FMT " force=%d a_count=%u a_ifaces=%u",
+    ucs_debug("deactivate " UCP_WIFACE_FMT " force=%d a_count=%u a_ifaces=%u",
               UCP_WIFACE_ARG(wiface), force, wiface->activate_count,
               worker->num_active_ifaces);
 
@@ -775,7 +820,7 @@ void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface)
     /* This function may be called from progress thread (such as when processing
      * wireup messages), so ask UCT to be thread-safe.
      */
-    ucp_worker_iface_activate(wiface, UCT_PROGRESS_THREAD_SAFE);
+    ucp_worker_iface_activate(wiface, UCT_PROGRESS_THREAD_SAFE, "progress ep");
 
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
@@ -895,7 +940,7 @@ ucp_worker_iface_async_fd_event(int fd, ucs_event_set_types_t events, void *arg)
     ucs_status_t status;
 
     ucs_assertv(fd == event_fd, "fd=%d vs wiface::event_fd=%d", fd, event_fd);
-    ucs_trace_func("fd=%d iface=%p", event_fd, wiface->iface);
+    ucs_trace_func(UCP_WIFACE_FMT " fd=%d", UCP_WIFACE_ARG(wiface), event_fd);
 
     status = ucs_async_modify_handler(event_fd, 0);
     if (status != UCS_OK) {
@@ -1597,7 +1642,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                UCP_WIREUP_UCT_EVENT_CAP_FLAGS)) {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {
-            ucp_worker_iface_activate(wiface, 0);
+            ucp_worker_iface_activate(wiface, 0, "event handler");
         }
     }
 
@@ -2620,6 +2665,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->flush_ops_count      = 0;
     worker->fence_seq            = 0;
     worker->inprogress           = 0;
+    worker->arm_block_count      = 0;
     worker->num_active_ifaces    = 0;
     worker->num_ifaces           = 0;
     worker->am_message_id        = ucs_generate_uuid(0);
@@ -3296,6 +3342,12 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
                                     return UCS_ERR_INVALID_PARAM);
 
+    if (worker->arm_block_count > 0) {
+        ucs_debug("worker %p: arm block count %d - returning busy", worker,
+                  worker->arm_block_count);
+        return UCS_ERR_BUSY;
+    }
+
     /* Read from event pipe. If some events are found, return BUSY, otherwise -
      * continue to arm the transport interfaces.
      */
@@ -3331,8 +3383,8 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
         ucs_assert(wiface->activate_count > 0);
         status = uct_iface_event_arm(wiface->iface, worker->uct_events);
-        ucs_trace_data("arm iface %p returned %s", wiface->iface,
-                       ucs_status_string(status));
+        ucs_trace_data("arm " UCP_WIFACE_FMT " returned %s",
+                       UCP_WIFACE_ARG(wiface), ucs_status_string(status));
         if (status != UCS_OK) {
             break;
         }
@@ -3398,7 +3450,9 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
      * because of using the same descriptor in multiple threads.
      */
     for (;;) {
+        ucs_trace_data("worker %p: poll waiting on %ld fds", worker, nfds);
         ret = poll(pfd, nfds, -1);
+        ucs_trace_data("worker %p: poll returned %d", worker, ret);
         if (ret >= 0) {
             ucs_assertv(ret == 1, "ret=%d", ret);
             status = UCS_OK;
