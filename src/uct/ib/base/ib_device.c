@@ -696,6 +696,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
+    dev->ah_cache_ttl = UCS_TIME_INFINITY;
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
@@ -1420,7 +1421,7 @@ const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
     return ibv_wc_status_str(wc_status);
 }
 
-static ucs_status_t
+ucs_status_t
 uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
                         struct ibv_pd *pd, const char *usage,
                         struct ibv_ah **ah_p)

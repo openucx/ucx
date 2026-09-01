@@ -144,6 +144,108 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
+#ifdef HAVE_MLX5_DV
+class test_rc_mlx5_psn : public test_rc {
+public:
+    void init() override
+    {
+        uct_test::init();
+
+        modify_config("IB_PATH_MTU", "4096");
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+
+        check_skip_test();
+
+        modify_config("IB_PATH_MTU", "512");
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+
+        connect();
+    }
+
+protected:
+    uct_ib_mlx5_txwq_t *txwq()
+    {
+        return &ucs_derived_of(m_e1->ep(0),
+                               uct_rc_mlx5_ep_t)->super.tx.wq;
+    }
+};
+
+UCS_TEST_P(test_rc_mlx5_psn, path_mtu_from_rc_qp)
+{
+    uct_ib_iface_t *local_iface =
+            ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    uct_ib_iface_t *peer_iface =
+            ucs_derived_of(m_e2->iface(), uct_ib_iface_t);
+
+    EXPECT_EQ(IBV_MTU_4096, local_iface->config.path_mtu);
+    EXPECT_EQ(IBV_MTU_512, peer_iface->config.path_mtu);
+    EXPECT_EQ(511, txwq()->path_mtu_mask);
+    EXPECT_EQ(9, txwq()->path_mtu_shift);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    static const size_t length = 513;
+    uct_ib_mlx5_txwq_t *wq    = txwq();
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    uct_iov_t zero_iov = {};
+    uct_completion_t comp;
+    ucs_status_t status;
+
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(1, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = 1;
+    comp.status = UCS_OK;
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), 1);
+    status = uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                              recvbuf.rkey(), &comp);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+
+    /* The RC QP uses the peer's 512-byte path MTU, so 513 bytes use 2 PSNs. */
+    EXPECT_EQ(3, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    if (status == UCS_INPROGRESS) {
+        wait_for_value(&comp.count, 0, true);
+    }
+
+    zero_iov.buffer = sendbuf.ptr();
+    zero_iov.length = 0;
+    zero_iov.memh   = sendbuf.memh();
+    zero_iov.stride = 0;
+    zero_iov.count  = 1;
+    comp.count      = 1;
+    comp.status     = UCS_OK;
+
+    status = uct_ep_put_zcopy(m_e1->ep(0), &zero_iov, 1, recvbuf.addr(),
+                              recvbuf.rkey(), &comp);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    EXPECT_EQ(4, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    if (status == UCS_INPROGRESS) {
+        wait_for_value(&comp.count, 0, true);
+    }
+
+    wq->next_wqe_psn = UCS_MASK(24);
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_BIT(24), wq->next_wqe_psn);
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    flush();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_psn, rc_mlx5)
+#endif
+
 
 class test_rc_max_wr : public test_rc {
 protected:

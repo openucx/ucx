@@ -20,6 +20,7 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/sock.h>
+#include <ucs/time/time.h>
 
 #include <endian.h>
 #include <linux/ip.h>
@@ -91,17 +92,19 @@ typedef enum uct_ib_roce_version {
 
 
 enum {
-    UCT_IB_DEVICE_FLAG_MLX4_PRM = UCS_BIT(1),   /* Device supports mlx4 PRM */
-    UCT_IB_DEVICE_FLAG_MLX5_PRM = UCS_BIT(2),   /* Device supports mlx5 PRM */
-    UCT_IB_DEVICE_FLAG_MELLANOX = UCS_BIT(3),   /* Mellanox device */
-    UCT_IB_DEVICE_FLAG_SRQ      = UCS_BIT(4),   /* Supports SRQ */
-    UCT_IB_DEVICE_FLAG_LINK_IB  = UCS_BIT(5),   /* Require only IB */
-    UCT_IB_DEVICE_FLAG_DC_V1    = UCS_BIT(6),   /* Device supports DC ver 1 */
-    UCT_IB_DEVICE_FLAG_DC_V2    = UCS_BIT(7),   /* Device supports DC ver 2 */
-    UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
-    UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
-                                  UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
-    UCT_IB_DEVICE_FAILED        = UCS_BIT(9)    /* Got fatal error */
+    UCT_IB_DEVICE_FLAG_MLX4_PRM   = UCS_BIT(1), /* Device supports mlx4 PRM */
+    UCT_IB_DEVICE_FLAG_MLX5_PRM   = UCS_BIT(2), /* Device supports mlx5 PRM */
+    UCT_IB_DEVICE_FLAG_MELLANOX   = UCS_BIT(3), /* Mellanox device */
+    UCT_IB_DEVICE_FLAG_SRQ        = UCS_BIT(4), /* Supports SRQ */
+    UCT_IB_DEVICE_FLAG_LINK_IB    = UCS_BIT(5), /* Require only IB */
+    UCT_IB_DEVICE_FLAG_DC_V1      = UCS_BIT(6), /* Device supports DC ver 1 */
+    UCT_IB_DEVICE_FLAG_DC_V2      = UCS_BIT(7), /* Device supports DC ver 2 */
+    UCT_IB_DEVICE_FLAG_AV         = UCS_BIT(8), /* Device supports compact AV */
+    /* Device supports DC */
+    UCT_IB_DEVICE_FLAG_DC         = UCT_IB_DEVICE_FLAG_DC_V1 |
+                                    UCT_IB_DEVICE_FLAG_DC_V2,
+    UCT_IB_DEVICE_FAILED          = UCS_BIT(9), /* Got fatal error */
+    UCT_IB_DEVICE_FLAG_MULTIPLANE = UCS_BIT(10) /* Supports multiplane */
 };
 
 
@@ -241,6 +244,7 @@ typedef struct uct_ib_device {
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
+    ucs_time_t                  ah_cache_ttl; /* 0 or inf */
     /* Async event subscribers */
     ucs_spinlock_t              async_event_lock;
     khash_t(uct_ib_async_event) async_events_hash;
@@ -379,6 +383,13 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
+/* Creates an AH outside the device cache; caller must destroy it */
+ucs_status_t
+uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                        struct ibv_pd *pd, const char *usage,
+                        struct ibv_ah **ah_p);
+
+/* Bypasses ah_cache_ttl; cache-owned, caller must not destroy the AH */
 ucs_status_t
 uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
