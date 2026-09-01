@@ -669,7 +669,7 @@ run_device_perftest_at() {
 }
 
 #
-# Build UCX at a specific commit into a separate prefix ($base_inst), used to
+# Build UCX at a specific commit into a given install prefix, used to
 # produce the "before" binaries for perf regression compare. Built in devel
 # mode to match the head leg's devel build (line ~1335); --enable-gtest is
 # omitted on purpose - it adds the gtest suite but does not change the
@@ -677,8 +677,8 @@ run_device_perftest_at() {
 #
 build_ucx_at_commit() {
 	local sha=$1
+	local inst=$2
 	local base_src="${WORKSPACE}/base-src"
-	base_inst="${WORKSPACE}/install-base"
 
 	(cd "${WORKSPACE}" && git worktree add -f --detach "${base_src}" "${sha}") \
 		|| return 1
@@ -686,7 +686,7 @@ build_ucx_at_commit() {
 	local rc=0
 	(
 		WORKSPACE="${base_src}"
-		ucx_inst="${base_inst}"
+		ucx_inst="${inst}"
 		prepare
 		build devel --without-valgrind
 	) || rc=1
@@ -735,9 +735,10 @@ run_ucx_perftest_cuda_device() {
 	fi
 
 	local base_sha
+	local base_inst="${WORKSPACE}/install-base"
 	base_sha=$(cd "${WORKSPACE}" && git rev-parse HEAD^1)
 	echo "==== Building base ${base_sha} for device perftest comparison ===="
-	if ! build_ucx_at_commit "${base_sha}"
+	if ! build_ucx_at_commit "${base_sha}" "${base_inst}"
 	then
 		echo "==== Base build failed; running device perftest without comparison ===="
 		run_device_perftest_at "${ucx_inst}"
