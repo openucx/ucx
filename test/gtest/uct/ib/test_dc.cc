@@ -172,6 +172,26 @@ int test_dc::n_warnings         = 0;
 int test_dc::m_purge_count      = 0;
 uint32_t test_dc::m_am_rx_count = 0;
 
+UCS_TEST_P(test_dc, fence_am_short_consumed, "RC_FENCE=weak")
+{
+    uct_dc_mlx5_iface_t *iface = dc_iface(m_e1);
+    uct_dc_mlx5_ep_t *ep;
+    uct_dc_dci_t *dci;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    ep = dc_ep(m_e1, 0);
+    ASSERT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
+    dci = uct_dc_mlx5_iface_dci(iface, ep->dci);
+
+    ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
+    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, dci->txwq.fi.fence_beat);
+}
+
 UCS_TEST_P(test_dc, dcs_single) {
     ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
@@ -632,6 +652,14 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
 }
 
 UCS_TEST_P(test_dc_flow_control, pending_grant)
+{
+    test_pending_grant(5);
+}
+
+/* Same as pending_grant, but with the AH cache disabled, to exercise
+ * uct_dc_mlx5_ep_fc_pure_grant_send()'s uncached AH create/release. */
+UCS_TEST_P(test_dc_flow_control, pending_grant_ah_cache_ttl_zero,
+           "IB_AH_CACHE_TTL=0")
 {
     test_pending_grant(5);
 }

@@ -295,13 +295,12 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     /* For Coverity */
     ucs_assert(remote != NULL);
 
-    dt_iter->dt_class              = UCP_DATATYPE_SGL;
-    dt_iter->length                = count;
-    dt_iter->offset                = 0;
-    dt_iter->type.sgl.buffers      = local->buffers;
-    dt_iter->type.sgl.lengths      = local->lengths;
-    dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
-    dt_iter->type.sgl.rkeys        = remote->rkeys;
+    dt_iter->dt_class             = UCP_DATATYPE_SGL;
+    dt_iter->length               = count;
+    dt_iter->offset               = 0;
+    dt_iter->type.sgl.buffers     = local->buffers;
+    dt_iter->type.sgl.lengths     = local->lengths;
+    dt_iter->type.sgl.frag_offset = 0;
 
     if (ucs_unlikely(count == 0)) {
         dt_iter->type.sgl.memhs = NULL;
@@ -332,7 +331,13 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
         }
     }
 
-    if (ENABLE_PARAMS_CHECK && (count > 1)) {
+    if (ENABLE_PARAMS_CHECK && (count > 0)) {
+        status = ucp_dt_sgl_check_matching_lengths(local->lengths,
+                                                   remote->lengths, count);
+        if (status != UCS_OK) {
+            return status;
+        }
+
         status = ucp_dt_sgl_check_same_rkey_config(remote->rkeys, count);
         if (status != UCS_OK) {
             return status;
@@ -384,17 +389,13 @@ void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
     size_t count = dt_iter->length;
     size_t i;
 
-    ucs_assert(dt_iter->type.sgl.memhs != NULL);
+    ucs_assert(ucp_datatype_iter_sgl_owns_memhs(dt_iter));
     for (i = 0; i < count; ++i) {
         ucp_datatype_iter_mem_dereg_single(&dt_iter->type.sgl.memhs[i]);
     }
-}
 
-static UCS_F_ALWAYS_INLINE int
-ucp_datatype_iter_sgl_owns_memhs(const ucp_datatype_iter_t *dt_iter)
-{
-    return (dt_iter->type.sgl.memhs != NULL) &&
-           !ucp_memh_is_user_memh(dt_iter->type.sgl.memhs[0]);
+    ucs_free(dt_iter->type.sgl.memhs);
+    dt_iter->type.sgl.memhs = NULL;
 }
 
 void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
@@ -407,13 +408,17 @@ void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
 
     if (dereg) {
         ucp_datatype_iter_sgl_mem_dereg(dt_iter);
-    } else if (UCS_ENABLE_ASSERT) {
+        return;
+    }
+
+    if (UCS_ENABLE_ASSERT) {
         for (i = 0; i < dt_iter->length; ++i) {
             ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.sgl.memhs[i]);
         }
     }
 
     ucs_free(dt_iter->type.sgl.memhs);
+    dt_iter->type.sgl.memhs = NULL;
 }
 
 void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -22,6 +22,7 @@
 #define UCT_RC_QP_TABLE_SIZE        UCS_BIT(UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_MAX_RETRY_COUNT   7
+#define UCT_RC_TX_CQ_RESERVED       2
 
 #define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _header_t, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
@@ -141,6 +142,12 @@ typedef struct uct_rc_pending_req {
 } uct_rc_pending_req_t;
 
 
+typedef struct {
+    uct_pending_req_priv_arb_t arb;
+    uct_completion_t           *comp;
+} uct_rc_pending_req_priv_t;
+
+
 /**
  * RC fence type.
  */
@@ -218,7 +225,8 @@ typedef void (*uct_rc_iface_qp_cleanup_func_t)(
         uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx);
 
 
-typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
+typedef ucs_status_t (*uct_rc_iface_ep_post_check_func_t)(
+        uct_ep_h tl_ep, uct_completion_t *comp);
 
 
 typedef void (*uct_rc_iface_ep_vfs_populate_func_t)(uct_rc_ep_t *rc_ep);
@@ -480,6 +488,12 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
     return iface->tx.cq_available > 0;
 }
 
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_iface_tx_cq_capacity(unsigned tx_cq_len)
+{
+    return tx_cq_len - UCT_RC_TX_CQ_RESERVED;
+}
+
 /**
  * Release RDMA_READ credits back to RC iface.
  * RDMA_READ credits are freed in completion callbacks, but not released to
@@ -584,7 +598,7 @@ uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
 
     ucs_assert(tl_iface->ops.iface_fence == uct_rc_iface_fence);
 
-    if (!md->relaxed_order) {
+    if (!uct_ib_md_is_relaxed_order(md)) {
         return UCS_OK;
     }
 
@@ -641,6 +655,11 @@ uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
 #endif
 }
 
+static UCS_F_ALWAYS_INLINE uct_rc_pending_req_priv_t*
+uct_rc_pending_req_priv(uct_pending_req_t *req)
+{
+    return (uct_rc_pending_req_priv_t*)&req->priv;
+}
 
 /**
  * Helper function to set ECE to qp.

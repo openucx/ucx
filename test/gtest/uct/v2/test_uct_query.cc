@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <common/test.h>
 #include <gtest/uct/uct_p2p_test.h>
 
@@ -31,6 +35,7 @@ public:
     void init() override;
     ucs_status_t iface_estimate_perf(uct_perf_attr_t *perf_attr) const;
     const uct_iface_attr &get_iface_attr() const;
+    uct_iface_h get_iface() const;
     static uct_perf_attr_t init_perf_attr();
 
 private:
@@ -52,6 +57,11 @@ test_uct_query::iface_estimate_perf(uct_perf_attr_t *perf_attr) const
 const uct_iface_attr &test_uct_query::get_iface_attr() const
 {
     return m_e->iface_attr();
+}
+
+uct_iface_h test_uct_query::get_iface() const
+{
+    return m_e->iface();
 }
 
 uct_perf_attr_t test_uct_query::init_perf_attr()

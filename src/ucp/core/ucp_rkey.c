@@ -662,7 +662,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 {
     ucp_memory_info_t mem_info;
     ucs_status_t status;
-    ucs_sys_dev_distance_t sys_dev_distances[UCS_SYS_DEVICE_ID_MAX] = {};
+    ucs_sys_dev_distance_t sys_dev_distances[UCS_SYS_DEVICE_ID_COUNT] = {};
     ucs_sys_dev_distance_t *sys_distance;
     ucs_sys_device_t ep_sys_dev;
 
@@ -713,8 +713,11 @@ ucp_memh_pack_internal(ucp_mem_h memh, const ucp_memh_pack_params_t *params,
 
     ucs_trace("packing %smemh %p for buffer %p md_map 0x%" PRIx64
               " export_md_map 0x%" PRIx64,
-              (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " : "", memh,
-              ucp_memh_address(memh), memh->md_map, context->export_md_map);
+              (flags & UCP_MEMH_PACK_FLAG_EXPORT) ? "exported " :
+              ucp_memh_is_zero_length(memh)       ? "zero_length " :
+                                                    "",
+              memh, ucp_memh_address(memh), memh->md_map,
+              (context != NULL) ? context->export_md_map : 0);
 
     if (ucp_memh_is_zero_length(memh)) {
         /* Dummy memh, return dummy key */
@@ -807,7 +810,7 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
 {
     const void *p                 = buffer;
     ucp_sys_dev_map_t sys_dev_map = 0;
-    ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_MAX];
+    ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_COUNT];
     ucs_sys_device_t sys_dev;
     ucp_lane_index_t lane;
     char buf[128];

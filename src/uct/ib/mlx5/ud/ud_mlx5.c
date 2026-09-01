@@ -320,9 +320,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     /* set iov to dptr */
     if (iovcnt > 0) {
         wqe_size  = ucs_align_up_pow2(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
-        wqe_size += uct_ib_mlx5_set_data_seg_iov(&iface->tx.wq,
-                                                 UCS_PTR_BYTE_OFFSET(ctrl, wqe_size),
-                                                 iov, iovcnt);
+        wqe_size += uct_ib_mlx5_set_data_seg_iov(
+                &iface->tx.wq, UCS_PTR_BYTE_OFFSET(ctrl, wqe_size), iov,
+                iovcnt, NULL);
     }
 
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, neth,
@@ -864,7 +864,8 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_connect_to_ep_v2    = uct_ud_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
             .ep_is_connected        = uct_ud_mlx5_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ud_mlx5_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,

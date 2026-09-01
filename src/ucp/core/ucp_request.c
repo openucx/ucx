@@ -44,12 +44,17 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RECV_TAG)]              = "rcv_tag",
     [ucs_ilog2(UCP_REQUEST_FLAG_RKEY_INUSE)]            = "rk_use",
     [ucs_ilog2(UCP_REQUEST_FLAG_USER_HEADER_COPIED)]    = "hdr_copy",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)]    = "rndv_rcv_int",
 
 #if UCS_ENABLE_ASSERT
     [ucs_ilog2(UCP_REQUEST_FLAG_STREAM_RECV)]           = "strm_rcv",
     [ucs_ilog2(UCP_REQUEST_DEBUG_FLAG_EXTERNAL)]        = "extrn",
     [ucs_ilog2(UCP_REQUEST_FLAG_SUPER_VALID)]           = "spr_vld",
 #endif
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL)]    = "rndv_snd_int",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_GET_REQ)]          = "rndv_get_req",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_FLUSH)]            = "rndv_flush",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_START_FLUSH)]      = "rndv_start_flush",
 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
@@ -59,7 +64,8 @@ static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
     } else if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         return req->send.mem_type;
     } else if (req->flags &
-               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
+               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG |
+                UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)) {
         return req->recv.dt_iter.mem_info.type;
     } else {
         return UCS_MEMORY_TYPE_UNKNOWN;

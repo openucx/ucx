@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -11,6 +11,7 @@
 
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
@@ -733,6 +734,57 @@ uct_rc_mlx5_iface_subscribe_cqs(uct_rc_mlx5_iface_common_t *iface)
     return status;
 }
 
+static int
+uct_rc_mlx5_iface_need_strong_order(uct_rc_mlx5_iface_common_t *iface)
+{
+    return (iface->config.dp_ordering_devx > UCT_IB_MLX5_DP_ORDERING_IBTA) ||
+           iface->config.ddp_enabled_dv;
+}
+
+static ucs_status_t
+uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
+                                   uct_rc_iface_common_config_t *rc_config,
+                                   uct_ib_mlx5_md_t *md,
+                                   uct_ib_device_t *dev)
+{
+    int strong_order = uct_rc_mlx5_iface_need_strong_order(iface);
+    int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
+
+    iface->config.put_fence_flag =
+            strong_order ? UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER : 0;
+
+    switch (rc_config->fence_mode) {
+    case UCT_RC_FENCE_MODE_WEAK:
+        break;
+    case UCT_RC_FENCE_MODE_AUTO:
+        if (strong_order || pci_atomics ||
+            uct_ib_md_is_relaxed_order(&md->super)) {
+            break;
+        }
+
+        /* Fall through */
+    case UCT_RC_FENCE_MODE_NONE:
+        iface->config.atomic_fence_flag = 0;
+        iface->super.config.fence_mode  = UCT_RC_FENCE_MODE_NONE;
+        return UCS_OK;
+    default:
+        ucs_error("incorrect fence value: %d", iface->super.config.fence_mode);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (strong_order) {
+        iface->config.atomic_fence_flag =
+                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+    } else if (pci_atomics) {
+        iface->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+    } else {
+        iface->config.atomic_fence_flag = 0;
+    }
+
+    iface->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -815,24 +867,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
 
-    if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
-        ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
-         (uct_ib_device_has_pci_atomics(dev) || md->super.relaxed_order))) {
-        if (uct_ib_device_has_pci_atomics(dev)) {
-            self->config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
-        } else {
-            self->config.atomic_fence_flag = 0;
-        }
-        self->super.config.fence_mode      = UCT_RC_FENCE_MODE_WEAK;
-    } else if ((rc_config->fence_mode == UCT_RC_FENCE_MODE_NONE) ||
-               ((rc_config->fence_mode == UCT_RC_FENCE_MODE_AUTO) &&
-                !uct_ib_device_has_pci_atomics(dev))) {
-        self->config.atomic_fence_flag     = 0;
-        self->super.config.fence_mode      = UCT_RC_FENCE_MODE_NONE;
-    } else {
-        ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
-        status = UCS_ERR_INVALID_PARAM;
-        goto cleanup_tm;
+    status = uct_rc_mlx5_iface_init_fence_flags(self, rc_config, md, dev);
+    if (status != UCS_OK) {
+        goto cleanup_dm;
     }
 
     /* By default set to something that is always in cache */
@@ -974,18 +1011,196 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_mlx5_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
+static ucs_status_t
+uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                             const size_t *lengths, uct_mem_h const *memhs,
+                             const uint64_t *remote_addrs,
+                             uct_rkey_t const *rkeys, const size_t *counts,
+                             const size_t *strides, size_t count,
+                             uct_completion_t *comp)
+{
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
+                                              remote_addrs, rkeys, counts,
+                                              strides, count, comp);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        status = uct_rc_mlx5_base_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
+                                                   remote_addrs, rkeys, counts,
+                                                   strides, count, comp);
+    }
+
+    return status;
+}
+
+static void uct_rc_mlx5_iface_fill_ext_query_attr(
+        uct_iface_attr_v2_t *iface_attr,
+        uct_ib_mlx5_ext_iface_query_attr_t *ext_attr)
+{
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        ext_attr->field_mask |= UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
+    }
+}
+
+static ucs_status_t
+uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
+                                 uct_iface_attr_v2_t *iface_attr)
+{
+#if HAVE_DEVX
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
+    const uct_rc_mlx5_tx_token_t *tx_token;
+    uct_rc_mlx5_rx_token_t *rx_token;
+    uct_rc_iface_t *iface;
+    uct_rc_mlx5_base_ep_t *ep;
+    uct_rc_ep_t *rc_ep;
+    ucs_status_t status;
+    uint32_t remote_qpn;
+    void *qpc;
+
+    /* suppress coverity false-positive */
+    ucs_assert((iface_attr->tx_token != NULL) &&
+               (iface_attr->rx_token != NULL));
+
+    if (!(iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN)) {
+        ucs_error("rc mlx5: tx token is required to query rx token");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    tx_token   = iface_attr->tx_token;
+    iface      = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    remote_qpn = be32toh(*tx_token);
+    if (remote_qpn >= UCS_BIT(UCT_IB_QPN_ORDER)) {
+        ucs_error("rc mlx5: remote QPN %u is out of range", remote_qpn);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    rc_ep = uct_rc_iface_lookup_ep(iface, remote_qpn);
+    if (rc_ep == NULL) {
+        ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_base_ep_t);
+    status = uct_ib_mlx5_devx_query_qp(&ep->tx.wq.super, in, sizeof(in), out,
+                                       sizeof(out));
+    if (status != UCS_OK) {
+        ucs_error("rc mlx5: iface %p failed to query rx token: %s", tl_iface,
+                  ucs_status_string(status));
+        return status;
+    }
+
+    qpc       = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    rx_token  = iface_attr->rx_token;
+    *rx_token = htobe32(UCT_IB_MLX5DV_GET(qpc, qpc, next_rcv_psn));
+
+    return UCS_OK;
+#else
+    return UCS_ERR_UNSUPPORTED;
+#endif
+}
+
+static ucs_status_t
+uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
+                           uct_iface_attr_v2_t *iface_attr)
+{
+    uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {0};
+    uct_rc_mlx5_iface_common_t *mlx5_iface;
+    uct_ib_mlx5_md_t *md;
+    size_t max_sgl;
+    ucs_status_t status;
+
+    uct_iface_query_v2_init(tl_iface, iface_attr);
+
+    if (ucs_test_flags(iface_attr->field_mask,
+                       UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                               UCT_IFACE_ATTR_FIELD_RX_TOKEN) &&
+        !ucs_test_all_flags(iface_attr->field_mask,
+                            UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                    UCT_IFACE_ATTR_FIELD_RX_TOKEN)) {
+        ucs_error("rc mlx5: tx and rx token fields must be set together");
+
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
+            status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
+            iface_attr->tx_token_length = sizeof(uct_rc_mlx5_tx_token_t);
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
+            iface_attr->rx_token_length = sizeof(uct_rc_mlx5_rx_token_t);
+        }
+    } else {
+        if (ucs_test_flags(iface_attr->field_mask,
+                           UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                   UCT_IFACE_ATTR_FIELD_RX_TOKEN |
+                                   UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
+                                   UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+    }
+
+    if (iface_attr->field_mask &
+        (UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+         UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT)) {
+        mlx5_iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+        max_sgl    = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
+        if (max_sgl == 0) {
+            max_sgl = uct_rc_mlx5_base_put_sgl_zcopy_max_count(mlx5_iface);
+        }
+
+        if ((iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) &&
+            (max_sgl > 0)) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+        }
+
+        if (iface_attr->field_mask &
+            UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
+            iface_attr->max_put_sgl_zcopy_count = max_sgl;
+        }
+    }
+
+    uct_rc_mlx5_iface_fill_ext_query_attr(iface_attr, &ext_attr);
+
+    if (ext_attr.field_mask == 0) {
+        return UCS_OK;
+    }
+
+    status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+        iface_attr->cap.flags |= ext_attr.cap.flags;
+    }
+
+    return UCS_OK;
+}
+
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_query_v2         = uct_iface_base_query_v2,
+            .iface_query_v2         = uct_rc_mlx5_iface_query_v2,
             .iface_estimate_perf    = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh      = uct_rc_iface_vfs_refresh,
-            .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_query               = uct_rc_mlx5_base_ep_query,
             .ep_invalidate          = uct_rc_mlx5_base_ep_invalidate,
             .ep_connect_to_ep_v2    = uct_rc_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_rc_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
+            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
