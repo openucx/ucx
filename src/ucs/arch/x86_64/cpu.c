@@ -625,8 +625,10 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 {
     if (user_val != UCS_MEMUNITS_AUTO) {
+#if ENABLE_BUILTIN_MEMCPY
         /* Let the NT dispatcher select the copy implementation. */
         ucs_global_opts.arch.builtin_memcpy_max = 0;
+#endif
         return user_val;
     }
 
