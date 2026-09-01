@@ -295,15 +295,14 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     /* For Coverity */
     ucs_assert(remote != NULL);
 
-    dt_iter->dt_class              = UCP_DATATYPE_SGL;
-    dt_iter->length                = length;
-    dt_iter->offset                = 0;
-    dt_iter->type.sgl.buffers      = local->buffers;
-    dt_iter->type.sgl.lengths      = local->lengths;
-    dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
-    dt_iter->type.sgl.rkeys        = remote->rkeys;
-    dt_iter->type.sgl.elem_count   = count;
-    dt_iter->type.sgl.elem_index   = 0;
+    dt_iter->dt_class             = UCP_DATATYPE_SGL;
+    dt_iter->length               = length;
+    dt_iter->offset               = 0;
+    dt_iter->type.sgl.buffers     = local->buffers;
+    dt_iter->type.sgl.lengths     = local->lengths;
+    dt_iter->type.sgl.elem_count  = count;
+    dt_iter->type.sgl.elem_index  = 0;
+    dt_iter->type.sgl.frag_offset = 0;
 
     if (ucs_unlikely(count == 0)) {
         dt_iter->type.sgl.memhs = NULL;
@@ -533,8 +532,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
 
             cur = ucp_memory_info_from_memh(sgl_memh);
             if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref,
-                                       dt_iter->type.sgl.elem_count) !=
-                UCS_OK) {
+                                       dt_iter->type.sgl.elem_count) != UCS_OK) {
                 return 0;
             }
         }

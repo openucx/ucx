@@ -77,10 +77,9 @@ typedef struct {
             void * const     *buffers;
             const size_t     *lengths;
             ucp_mem_h        *memhs;
-            const uint64_t   *remote_addrs;
-            ucp_rkey_h const *rkeys;
-            size_t           elem_count;
-            size_t           elem_index;
+            size_t           elem_count;  /* Number of SGL elements */
+            size_t           elem_index;  /* Current SGL element */
+            size_t           frag_offset; /* Offset in the current element */
         } sgl;
     } type;
 } ucp_datatype_iter_t;

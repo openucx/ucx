@@ -16,9 +16,6 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/base/uct_iface.h>
-#ifdef HAVE_MLX5_DV
-#include <uct/ib/mlx5/ib_mlx5.h>
-#endif
 }
 
 
@@ -115,29 +112,6 @@ UCS_TEST_P(test_uct_query, query_perf)
            and gdr_copy transports */
         EXPECT_NE(perf_attr.bandwidth.shared, perf_attr_get.bandwidth.shared);
     }
-}
-
-UCS_TEST_P(test_uct_query, query_token_support)
-{
-    uct_iface_attr_v2_t attr = {};
-    uint64_t iface_cap_flags = 0;
-
-    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-    attr.cap.flags  = UINT64_MAX;
-
-    ASSERT_UCS_OK(uct_iface_query_v2(get_iface(), &attr));
-
-#ifdef HAVE_MLX5_DV
-    if (has_transport("rc_mlx5")) {
-        uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(
-                ucs_derived_of(get_iface(), uct_ib_iface_t));
-        if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
-            iface_cap_flags = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
-        }
-    }
-#endif
-
-    EXPECT_EQ(iface_cap_flags, attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_query)

@@ -194,6 +194,10 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
+#if UCS_ENABLE_ASSERT
+    uct_iface_attr_v2_t iface_attr;
+    ucs_status_t query_status;
+#endif
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -203,15 +207,13 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        goto out;
+        goto out_update_tx_res;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
@@ -219,10 +221,42 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
-                                               ep_status);
+
+    if (status == UCS_INPROGRESS) {
+#if UCS_ENABLE_ASSERT
+        iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+
+        query_status = uct_iface_query_v2(&iface->super.super.super,
+                                          &iface_attr);
+        ucs_assert(query_status == UCS_OK);
+        ucs_assert(iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
+#endif
+
+        /* Save last completed WQE. TX QP resources are reserved until purge. */
+        ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
+                                     (ep->tx.wq.bb_max -
+                                      uct_rc_txqp_available(&ep->super.txqp));
+        ep->err_handler_inprogress = 1;
+
+        ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
+                  ep->tx.wq.sw_pi);
+
+        log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, UCS_OK,
+                                                   ep_status);
+    } else {
+        log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                                   ep_status);
+    }
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
+
+out_update_tx_res:
+    if (!(ep->err_handler_inprogress)) {
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+        uct_rc_mlx5_ep_update_tx_qp_res(ep, pi);
+    }
+
+    uct_rc_mlx5_iface_update_tx_cq_res(iface, ep, pi);
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
@@ -1130,10 +1164,6 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
             if (status != UCS_OK) {
                 return status;
             }
-        }
-
-        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
         }
 
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {

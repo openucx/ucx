@@ -2516,6 +2516,9 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
     if (status == UCS_OK) {
         cap_2 = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, cap_2_out, capability);
         uct_ib_mlx5_devx_check_mkey_by_name(md, cap_2, dev);
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap_2, multiplane)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_MULTIPLANE;
+        }
     } else {
         cap_2 = NULL;
     }

@@ -26,6 +26,11 @@ them.
 - Keep changes scoped to the requested behavior; use `REVIEW.md` for PR split
   expectations.
 - Prefer existing local patterns before adding new abstractions.
+- Before adding or repeating initialization or reset logic, trace existing
+  call sites and state writes through the owning lifecycle; require a distinct
+  state transition for every added initialization.
+- Do not add a parameter whose sole purpose is to decide whether a function
+  performs its core operation; make that decision in the caller.
 - Do not duplicate rules across `AGENTS.md` files, skills, and `REVIEW.md`;
   link to the source of truth instead.
 - Do not duplicate code or similar implementation patterns; use helper

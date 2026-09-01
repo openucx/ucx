@@ -72,7 +72,7 @@ ucp_proto_reconfig_report_no_rma_emulation_no_proto(ucp_request_t *req,
               ucs_memory_type_names[local_mem_type],
               (op_id == UCP_OP_ID_PUT) ? "to" : "from",
               ucs_memory_type_names[remote_mem_type],
-              req->send.state.dt_iter.length);
+              req->send.length);
     return 1;
 }
 

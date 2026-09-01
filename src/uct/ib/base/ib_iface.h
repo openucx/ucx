@@ -571,6 +571,12 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface,
                                 uct_iface_attr_t *iface_attr);
 
 
+/**
+ * @return Nonzero if a multiplane interface reports XDR-equivalent bandwidth.
+ */
+int uct_ib_iface_is_multiplane_xdr_bw(uct_ib_iface_t *iface);
+
+
 ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
@@ -629,6 +635,9 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     const char *usage, struct ibv_ah **ah_p);
+
+/* Counterpart of uct_ib_iface_create_ah(); destroys the AH if uncached */
+void uct_ib_iface_release_ah(uct_ib_iface_t *iface, struct ibv_ah *ah);
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,

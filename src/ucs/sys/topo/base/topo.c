@@ -8,18 +8,22 @@
 #  include "config.h"
 #endif
 
+#include "topo_int.h"
+#include "topo_groups.h"
+
+#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
-#include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
-
+#include <ucs/datastruct/array.h>
 #include <ucs/config/global_opts.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+
 #include <inttypes.h>
 
 
@@ -40,40 +44,6 @@ typedef struct ucs_sys_topo_provider {
 
     ucs_list_link_t    list;
 } ucs_sys_topo_provider_t;
-
-/* Possible role of a current device wrt its sibling */
-typedef enum {
-    /* No sibling capability */
-    UCS_TOPO_SIBLING_ROLE_NONE,
-
-    /* Memory device, a sibling device could access its memory */
-    UCS_TOPO_SIBLING_ROLE_MEM,
-
-    /* Device that could access memory from its sibling */
-    UCS_TOPO_SIBLING_ROLE_DEV
-} ucs_topo_sibling_role_t;
-
-typedef struct {
-    ucs_sys_bus_id_t        bus_id;
-    char                    *name;
-    unsigned                name_priority;
-    ucs_numa_node_t         numa_node;
-    ucs_sys_pci_id_t        pci_id;
-    uintptr_t               user_value;
-    ucs_topo_device_class_t device_class;
-
-    /* Cached rank of the device's BDF within its class, or
-     * UCS_SYS_DEVICE_ORDINAL_INVALID if not yet computed. 
-     * Invalidated when any device's class changes. */
-    unsigned                class_ordinal;
-
-    /* Secondary device for the current device */
-    ucs_sys_device_t        sys_dev_aux;
-
-    ucs_topo_sibling_role_t sibling_role; /* Role of the current device */
-    /* MEM role: matched DEV. DEV role: one representative matched MEM. */
-    ucs_sys_device_t        sibling_sys_dev;
-} ucs_topo_sys_device_info_t;
 
 typedef struct {
     ucs_bus_id_bit_rep_t    bus_id_bit_rep;
@@ -1394,6 +1364,44 @@ static void ucs_topo_release_devices()
         device = &ucs_topo_global_ctx.devices[ucs_topo_global_ctx.num_devices];
         ucs_free(device->name);
     }
+}
+
+static ucs_topo_groups_type_t ucs_topo_groups_type_detect()
+{
+    return (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_VERA) ?
+                   UCS_TOPO_GROUPS_TYPE_VERA_RUBIN :
+                   UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+}
+
+ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
+{
+    ucs_status_t status;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
+                                         ucs_topo_global_ctx.num_devices,
+                                         ucs_topo_groups_type_detect(),
+                                         groups_p);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return status;
+}
+
+static void ucs_topo_release_group(ucs_topo_group_t *group)
+{
+    ucs_array_cleanup_dynamic(&group->nics);
+    ucs_array_cleanup_dynamic(&group->gpus);
+}
+
+void ucs_topo_release_groups(ucs_topo_groups_t *groups)
+{
+    size_t i;
+
+    for (i = 0; i < ucs_array_length(&groups->groups); ++i) {
+        ucs_topo_release_group(&ucs_array_elem(&groups->groups, i));
+    }
+
+    ucs_array_cleanup_dynamic(&groups->groups);
 }
 
 ucs_global_state_t *ucs_topo_extract_state(void)

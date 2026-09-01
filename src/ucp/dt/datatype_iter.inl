@@ -141,8 +141,6 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                        int is_pack, ucp_datatype_iter_t *dt_iter,
                        uint8_t *sg_count, const ucp_request_param_t *param)
 {
-    const ucp_dt_local_sgl_t *local_sgl;
-    const ucp_dt_remote_sgl_t *remote_sgl;
     size_t length;
 
     dt_iter->dt_class = ucp_datatype_class(datatype);
@@ -158,12 +156,13 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
         return ucp_datatype_iov_iter_init(context, buffer, count, length,
                                           dt_iter, param);
     } else if (dt_iter->dt_class == UCP_DATATYPE_SGL) {
-        local_sgl  = (const ucp_dt_local_sgl_t*)buffer;
-        remote_sgl = (const ucp_dt_remote_sgl_t*)param->remote;
-        *sg_count  = 0;
-        length     = ucp_dt_sgl_length(local_sgl->lengths, count);
-        return ucp_datatype_iter_sgl_init(context, dt_iter, local_sgl,
-                                          remote_sgl, count, length, param);
+        *sg_count = 0;
+        length    = ucp_dt_sgl_length(
+                ((const ucp_dt_local_sgl_t*)buffer)->lengths, count);
+        return ucp_datatype_iter_sgl_init(context, dt_iter,
+                                          (const ucp_dt_local_sgl_t*)buffer,
+                                          (const ucp_dt_remote_sgl_t*)param->remote,
+                                          count, length, param);
     } else if (!ENABLE_PARAMS_CHECK ||
                (dt_iter->dt_class == UCP_DATATYPE_GENERIC)) {
         *sg_count = 0;
@@ -379,6 +378,28 @@ ucp_datatype_iter_iov_check(const ucp_datatype_iter_t *dt_iter)
                 (dt_iter->type.iov.iov_index < dt_iter->type.iov.iov_count),
                 "index=%zu count=%zu", dt_iter->type.iov.iov_index,
                 dt_iter->type.iov.iov_count);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_sgl_check(const ucp_datatype_iter_t *dt_iter)
+{
+    size_t UCS_V_UNUSED elem_length;
+
+    ucs_assertv(dt_iter->offset <= dt_iter->length,
+                "offset=%zu length=%zu", dt_iter->offset, dt_iter->length);
+    ucs_assertv(dt_iter->type.sgl.elem_index <= dt_iter->type.sgl.elem_count,
+                "elem_index=%zu elem_count=%zu",
+                dt_iter->type.sgl.elem_index,
+                dt_iter->type.sgl.elem_count);
+    if (dt_iter->type.sgl.elem_index < dt_iter->type.sgl.elem_count) {
+        elem_length = dt_iter->type.sgl.lengths[dt_iter->type.sgl.elem_index];
+        ucs_assertv((elem_length > 0) ?
+                    (dt_iter->type.sgl.frag_offset < elem_length) :
+                    (dt_iter->type.sgl.frag_offset == 0),
+                    "elem_index=%zu frag_offset=%zu elem_length=%zu",
+                    dt_iter->type.sgl.elem_index,
+                    dt_iter->type.sgl.frag_offset, elem_length);
+    }
 }
 
 /*
@@ -623,33 +644,73 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_datatype_iter_next_sgl(const ucp_datatype_iter_t *dt_iter,
-                           size_t max_elem_count,
-                           ucp_datatype_iter_t *next_iter)
+ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
+                                 const uint64_t *remote_addrs,
+                                 size_t max_frag_count,
+                                 size_t max_frag_length,
+                                 ucp_datatype_iter_t *next_iter,
+                                 void **out_buffers, size_t *out_lengths,
+                                 uint64_t *out_remote_addrs,
+                                 size_t *out_elem_indices)
 {
-    size_t elem_index, elem_count;
+    size_t elem_index   = dt_iter->type.sgl.elem_index;
+    size_t frag_offset  = dt_iter->type.sgl.frag_offset;
+    size_t desc_count   = 0;
+    size_t total_length = 0;
+    size_t elem_length, frag_length;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
-    elem_index = dt_iter->type.sgl.elem_index;
-    ucs_assert(elem_index <= dt_iter->type.sgl.elem_count);
-    elem_count = ucs_min(max_elem_count,
-                         dt_iter->type.sgl.elem_count - elem_index);
+    ucs_assert(max_frag_count >= 1);
+    ucs_assert(max_frag_length > 0);
+    ucp_datatype_iter_sgl_check(dt_iter);
 
-    next_iter->offset = dt_iter->offset +
-                        ucp_dt_sgl_length(dt_iter->type.sgl.lengths +
-                                          elem_index, elem_count);
-    next_iter->type.sgl.elem_index = elem_index + elem_count;
+    while ((desc_count < max_frag_count) &&
+           (elem_index < dt_iter->type.sgl.elem_count)) {
+        elem_length = dt_iter->type.sgl.lengths[elem_index];
+        if (elem_length > 0) {
+            ucs_assert(elem_length > frag_offset);
+            frag_length = ucs_min(elem_length - frag_offset, max_frag_length);
+
+            out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
+                    dt_iter->type.sgl.buffers[elem_index], frag_offset);
+            out_lengths[desc_count]      = frag_length;
+            out_remote_addrs[desc_count] = remote_addrs[elem_index] +
+                                           frag_offset;
+            out_elem_indices[desc_count] = elem_index;
+            ++desc_count;
+
+            frag_offset  += frag_length;
+            total_length += frag_length;
+            if (frag_offset < elem_length) {
+                continue;
+            }
+        }
+
+        ++elem_index;
+        frag_offset = 0;
+    }
+
+    ucs_assertv((elem_index == dt_iter->type.sgl.elem_count) || (desc_count > 0),
+                "dt_iter=%p offset=%zu length=%zu elem_index=%zu "
+                "elem_count=%zu frag_offset=%zu desc_count=%zu",
+                dt_iter, dt_iter->offset, dt_iter->length, elem_index,
+                dt_iter->type.sgl.elem_count,
+                dt_iter->type.sgl.frag_offset, desc_count);
+
+    next_iter->offset               = dt_iter->offset + total_length;
+    next_iter->type.sgl.elem_index  = elem_index;
+    next_iter->type.sgl.frag_offset = frag_offset;
     ucs_assert(next_iter->offset <= dt_iter->length);
 
-    return elem_count;
+    return desc_count;
 }
 
 /*
  * Copy iterator position only.
  * 'src_dt_iter' must be initialized from the same datatype object as 'dt_iter',
  * or returned as 'next_iter' from @ref ucp_datatype_iter_next_pack
- * @ref ucp_datatype_iter_next_unpack or @ref ucp_datatype_iter_next_iov that
- * were used on 'dt_iter'.
+ * @ref ucp_datatype_iter_next_unpack, @ref ucp_datatype_iter_next_iov or
+ * @ref ucp_datatype_iter_next_sgl_frags that were used on 'dt_iter'.
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
@@ -660,9 +721,9 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = src_dt_iter->type.iov.iov_index;
         dt_iter->type.iov.iov_offset = src_dt_iter->type.iov.iov_offset;
-    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
-                                          dt_mask)) {
-        dt_iter->type.sgl.elem_index = src_dt_iter->type.sgl.elem_index;
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
+        dt_iter->type.sgl.elem_index  = src_dt_iter->type.sgl.elem_index;
+        dt_iter->type.sgl.frag_offset = src_dt_iter->type.sgl.frag_offset;
     }
 }
 
@@ -675,6 +736,7 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
     ucs_assertv(dt_iter->offset <= dt_iter->length,
                 "dt_iter=%p dt_iter->offset=%zu dt_iter->length=%zu", dt_iter,
                 dt_iter->offset, dt_iter->length);
+
     return dt_iter->offset == dt_iter->length;
 }
 
@@ -685,10 +747,32 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = 0;
         dt_iter->type.iov.iov_offset = 0;
-    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL,
-                                          dt_mask)) {
-        dt_iter->type.sgl.elem_index = 0;
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
+        dt_iter->type.sgl.elem_index  = 0;
+        dt_iter->type.sgl.frag_offset = 0;
     }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_sgl_seek(ucp_datatype_iter_t *dt_iter, size_t offset)
+{
+    size_t elem_index  = 0;
+    size_t elem_offset = offset;
+    size_t elem_length;
+
+    while (elem_index < dt_iter->type.sgl.elem_count) {
+        elem_length = dt_iter->type.sgl.lengths[elem_index];
+        if (elem_offset < elem_length) {
+            break;
+        }
+
+        elem_offset -= elem_length;
+        ++elem_index;
+    }
+
+    dt_iter->offset               = offset;
+    dt_iter->type.sgl.elem_index  = elem_index;
+    dt_iter->type.sgl.frag_offset = elem_offset;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -700,6 +784,8 @@ ucp_datatype_iter_seek(ucp_datatype_iter_t *dt_iter, size_t offset,
                 offset, dt_iter->length);
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         ucp_datatype_iter_iov_seek(dt_iter, offset);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_SGL, dt_mask)) {
+        ucp_datatype_iter_sgl_seek(dt_iter, offset);
     } else {
         dt_iter->offset = offset;
     }
