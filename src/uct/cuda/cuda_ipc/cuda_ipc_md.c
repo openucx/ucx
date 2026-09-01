@@ -401,7 +401,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 legacy_path:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
     status              = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr));
+            cuIpcGetMemHandle(&key->ph.handle.legacy, key->d_bptr));
     if (status != UCS_OK) {
         goto out_pop_ctx;
     }
