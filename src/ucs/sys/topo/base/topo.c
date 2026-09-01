@@ -11,6 +11,7 @@
 #include "topo_int.h"
 #include "topo_groups.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -1364,6 +1365,13 @@ static void ucs_topo_release_devices()
     }
 }
 
+static ucs_topo_groups_type_t ucs_topo_groups_type_detect()
+{
+    return (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_VERA) ?
+                   UCS_TOPO_GROUPS_TYPE_VERA_RUBIN :
+                   UCS_TOPO_GROUPS_TYPE_UNKNOWN;
+}
+
 ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
@@ -1371,6 +1379,7 @@ ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
+                                         ucs_topo_groups_type_detect(),
                                          groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 

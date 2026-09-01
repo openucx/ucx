@@ -509,10 +509,13 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
 static UCS_F_ALWAYS_INLINE
 size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
                                     struct mlx5_wqe_data_seg *dptr,
-                                    const uct_iov_t *iov, size_t iovcnt)
+                                    const uct_iov_t *iov, size_t iovcnt,
+                                    size_t *iov_length_p)
 {
-    size_t wqe_size = 0;
+    size_t iov_length = 0;
+    size_t wqe_size   = 0;
     size_t iov_it;
+    size_t length;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
         if (!iov[iov_it].length) { /* Skip zero length WQE*/
@@ -522,11 +525,16 @@ size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 
         /* place data into the buffer */
         dptr = uct_ib_mlx5_txwq_wrap_any(txwq, dptr);
-        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer,
-                                 uct_iov_get_length(iov + iov_it),
+        length = uct_iov_get_length(iov + iov_it);
+        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer, length,
                                  uct_ib_memh_get_lkey(iov[iov_it].memh));
-        wqe_size += sizeof(*dptr);
+        iov_length += length;
+        wqe_size   += sizeof(*dptr);
         ++dptr;
+    }
+
+    if (iov_length_p != NULL) {
+        *iov_length_p = iov_length;
     }
 
     return wqe_size;

@@ -193,10 +193,10 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
 {
-    ucp_worker_h worker     = ep->worker;
-    size_t contig_length    = 0;
-    ucp_datatype_t datatype = ucp_dt_make_contig(1);
-    const ucp_dt_remote_sgl_t *remote;
+    ucp_worker_h worker               = ep->worker;
+    size_t contig_length              = 0;
+    ucp_datatype_t datatype           = ucp_dt_make_contig(1);
+    const ucp_dt_remote_sgl_t *remote = NULL;
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
@@ -241,6 +241,10 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                                 goto out_unlock;});
     req->send.rma.rkey        = rkey;
     req->send.rma.remote_addr = remote_addr;
+    if (remote != NULL) {
+        req->send.rma.sgl.remote_addrs = remote->remote_addrs;
+        req->send.rma.sgl.rkeys        = remote->rkeys;
+    }
 
     ret = ucp_proto_request_send_op_rma(
             ep, rkey, req, ucp_ep_rma_get_fence_flag(ep), UCP_OP_ID_PUT,

@@ -656,6 +656,14 @@ UCS_TEST_P(test_dc_flow_control, pending_grant)
     test_pending_grant(5);
 }
 
+/* Same as pending_grant, but with the AH cache disabled, to exercise
+ * uct_dc_mlx5_ep_fc_pure_grant_send()'s uncached AH create/release. */
+UCS_TEST_P(test_dc_flow_control, pending_grant_ah_cache_ttl_zero,
+           "IB_AH_CACHE_TTL=0")
+{
+    test_pending_grant(5);
+}
+
 UCS_TEST_P(test_dc_flow_control, fc_disabled_flush)
 {
     test_flush_fc_disabled();

@@ -243,6 +243,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
+    uint32_t num_packets           = 0;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
     size_t wqe_size, i;
@@ -319,7 +320,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
-        total += lengths[i];
+        total       += lengths[i];
+        num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
@@ -330,6 +332,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
 
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+    uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
                               uct_rc_ep_send_op_completion_handler, comp, sn,
@@ -908,6 +911,18 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
                           valid_length, buffer, max);
 }
 
+void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
+                                   enum ibv_mtu path_mtu)
+{
+    size_t mtu = uct_ib_mtu_value(path_mtu);
+
+    ucs_assert(mtu <= UINT16_MAX);
+    ucs_assert(ucs_is_pow2(mtu));
+
+    txwq->path_mtu_mask  = mtu - 1;
+    txwq->path_mtu_shift = ucs_ilog2(mtu);
+}
+
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
@@ -1004,6 +1019,8 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     if (status != UCS_OK) {
         return status;
     }
+
+    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
 
     ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(
             rc_addr->atomic_mr_id);

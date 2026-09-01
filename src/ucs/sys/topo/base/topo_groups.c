@@ -12,7 +12,6 @@
 #include "topo_int.h"
 
 #include <ucs/algorithm/qsort_r.h>
-#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/array.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -447,22 +446,20 @@ static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
 
 ucs_status_t
 ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
-                            unsigned num_devices, ucs_topo_groups_t *groups_p)
+                            unsigned num_devices,
+                            ucs_topo_groups_type_t groups_type,
+                            ucs_topo_groups_t *groups_p)
 {
-    ucs_cpu_model_t cpu_model = ucs_arch_get_cpu_model();
-    ucs_topo_groups_type_t groups_type;
     ucs_topo_group_t inventory;
     ucs_topo_groups_t groups;
     ucs_status_t status;
 
     ucs_topo_init_groups(&groups);
 
-    if (cpu_model != UCS_CPU_MODEL_NVIDIA_VERA) {
+    if (groups_type != UCS_TOPO_GROUPS_TYPE_VERA_RUBIN) {
         /* Currently only Vera Rubin is supported. */
         goto out;
     }
-
-    groups_type = UCS_TOPO_GROUPS_TYPE_VERA_RUBIN;
 
     status = ucs_topo_groups_inventory_build(devices, num_devices, groups_type,
                                              &inventory);
