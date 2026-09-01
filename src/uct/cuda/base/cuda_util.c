@@ -206,12 +206,12 @@ static ucs_status_t
 uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
                            unsigned num_visible_gpus)
 {
-    ucs_status_t status = UCS_OK;
     unsigned nvml_dev_count, i;
-    nvmlDevice_t nvml_dev;
-    nvmlPciInfo_t nvml_pci;
-    ucs_sys_bus_id_t bus_id;
     ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
+    nvmlPciInfo_t nvml_pci;
+    nvmlDevice_t nvml_dev;
+    ucs_status_t status;
 
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
     if (status != UCS_OK) {
