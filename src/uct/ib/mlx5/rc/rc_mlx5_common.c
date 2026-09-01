@@ -136,6 +136,7 @@ uct_rc_mlx5_op_info_fill_put_bcopy(uct_ep_op_info_t *info,
 
     uct_rc_mlx5_get_dptr_buffer(op, dptr, &buffer, &length, &is_dm);
     if (is_dm) {
+        ucs_fatal("unsupported put bcopy op with direct memory");
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -225,8 +226,8 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
                 info, op, (const struct mlx5_wqe_data_seg*)inl, raddr);
     }
 
-    ucs_diag("unsupported put op %p handler %s", op,
-             ucs_debug_get_symbol_name((void*)op->handler));
+    ucs_fatal("unsupported put op %p handler %s", op,
+              ucs_debug_get_symbol_name((void*)op->handler));
 
     return UCS_ERR_UNSUPPORTED;
 }
@@ -242,7 +243,7 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
         return uct_rc_mlx5_op_info_fill_put(info, txwq, op, ctrl, wqe_size,
                                             callback_data);
     default:
-        ucs_diag("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        ucs_fatal("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
         return UCS_ERR_UNSUPPORTED;
     }
 }
