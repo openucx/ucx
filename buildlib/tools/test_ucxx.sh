@@ -64,7 +64,7 @@ grep -q 'command -v nvidia-smi' ci/test_common.sh \
 # build is the only provider) and verify the lib the loader sees is the PR's.
 for f in ci/test_cpp.sh ci/test_python.sh; do
   grep -q "ucx-pr" "$f" \
-    || sed -i 's#^conda activate test$#conda activate test\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\ncmp -s "$CONDA_PREFIX/lib/libucs.so.0" /tmp/ucx-pr/lib/libucs.so.0 || { echo "ERROR: UCX-PR overlay verification failed" >\&2; exit 1; }\necho "UCX-PR overlaid into test env"#' "$f"
+    || sed -i 's#^conda activate test$#conda activate test\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\nfor l in /tmp/ucx-pr/lib/libucs.so.*; do cmp -s "$CONDA_PREFIX/lib/$(basename "$l")" "$l" || { echo "ERROR: UCX-PR overlay verification failed" >\&2; exit 1; }; done\necho "UCX-PR overlaid into test env"#' "$f"
   grep -q "ucx-pr" "$f" \
     || { echo "ERROR: UCX-PR overlay patch did not apply to $f" >&2; exit 1; }
 done
