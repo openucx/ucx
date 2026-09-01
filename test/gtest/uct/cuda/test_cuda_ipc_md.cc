@@ -406,7 +406,7 @@ protected:
     virtual void cleanup() {
         if (m_cache != NULL) {
             drain_cache();
-            uct_cuda_ipc_destroy_cache(m_cache);
+            uct_cuda_ipc_destroy_cache(m_cache, 1);
         }
         uct_cuda_ipc_cache_set_global_limits(ULONG_MAX, SIZE_MAX);
         ucs::test::cleanup();
