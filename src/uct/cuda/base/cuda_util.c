@@ -47,44 +47,57 @@ ucs_status_t uct_cuda_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     return UCS_OK;
 }
 
-ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
-                                             ucs_sys_device_t *sys_dev_p,
-                                             ucs_sys_bus_id_t *bus_id_p)
+static ucs_status_t
+uct_cuda_init_bus_id(CUdevice cuda_device, ucs_sys_bus_id_t *bus_id)
 {
-    ucs_sys_device_t sys_dev;
-    ucs_sys_bus_id_t bus_id;
-    int attrib;
     ucs_status_t status;
+    int attrib;
 
     /* PCI domain id */
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID,
                                  cuda_device));
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
-    bus_id.domain = (uint16_t)attrib;
+    bus_id->domain = (uint16_t)attrib;
 
     /* PCI bus id */
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
                                  cuda_device));
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
-    bus_id.bus = (uint8_t)attrib;
+    bus_id->bus = (uint8_t)attrib;
 
     /* PCI slot id */
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
                                  cuda_device));
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
-    bus_id.slot = (uint8_t)attrib;
+    bus_id->slot = (uint8_t)attrib;
 
     /* Function - always 0 */
-    bus_id.function = 0;
+    bus_id->function = 0;
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
+                                             ucs_sys_device_t *sys_dev_p,
+                                             ucs_sys_bus_id_t *bus_id_p)
+{
+    ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
+    ucs_status_t status;
+
+    status = uct_cuda_init_bus_id(cuda_device, &bus_id);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     status = ucs_topo_find_device_by_bus_id_and_user_value(
             &bus_id, (uintptr_t)cuda_device, &sys_dev);
