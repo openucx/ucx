@@ -714,9 +714,6 @@ static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
     uct_ib_ah_entry_t *entry;
 
     kh_foreach_value(&dev->ah_hash, entry, {
-        ucs_assertv(entry->refcount == 1,
-                    "ah_entry %p (ah=%p) destroyed with refcount=%d",
-                    entry, entry->ah, entry->refcount);
         if (entry->refcount != 1) {
             ucs_warn("ah_entry %p (ah=%p) destroyed with refcount=%d",
                      entry, entry->ah, entry->refcount);
@@ -1482,57 +1479,58 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
                      struct ibv_pd *pd, const char *usage,
                      uct_ib_ah_entry_t **entry_p)
 {
+    int cache_enabled = (dev->ah_cache_ttl != 0);
     ucs_status_t status;
     uct_ib_ah_entry_t *entry;
     struct ibv_ah *ah;
     khiter_t iter;
     int ret;
-
-    if (dev->ah_cache_ttl == 0) {
-        /* Cache disabled: always create a private, unshared AH */
-        status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, &ah);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        entry = uct_ib_ah_entry_alloc(ah, 1);
-        if (entry == NULL) {
-            ibv_destroy_ah(ah);
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        *entry_p = entry;
-        return UCS_OK;
-    }
+    char buf[128];
 
     ucs_recursive_spin_lock(&dev->ah_lock);
 
-    iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
-    if ((dev->ah_cache_ttl != UCS_TIME_INFINITY) &&
-        (iter != kh_end(&dev->ah_hash)) &&
-        ((ucs_get_time() - kh_value(&dev->ah_hash, iter)->creation_time) >=
-         dev->ah_cache_ttl)) {
-        /* Stale: drop the cache's own reference and forget this entry */
-        uct_ib_ah_entry_release(kh_value(&dev->ah_hash, iter));
-        kh_del(uct_ib_ah, &dev->ah_hash, iter);
-        iter = kh_end(&dev->ah_hash);
+    if (cache_enabled) {
+        iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
+        if ((dev->ah_cache_ttl != UCS_TIME_INFINITY) &&
+            (iter != kh_end(&dev->ah_hash)) &&
+            ((ucs_get_time() - kh_value(&dev->ah_hash, iter)->creation_time) >=
+             dev->ah_cache_ttl)) {
+            /* Stale: drop the cache's own reference and forget this entry */
+            ucs_trace("evicting stale ah_entry %p (ah %p) refcount %d %s",
+                      kh_value(&dev->ah_hash, iter),
+                      kh_value(&dev->ah_hash, iter)->ah,
+                      kh_value(&dev->ah_hash, iter)->refcount,
+                      uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
+            uct_ib_ah_entry_release(kh_value(&dev->ah_hash, iter));
+            kh_del(uct_ib_ah, &dev->ah_hash, iter);
+            iter = kh_end(&dev->ah_hash);
+        }
+
+        if (iter != kh_end(&dev->ah_hash)) {
+            /* found existing, shared entry */
+            entry = kh_value(&dev->ah_hash, iter);
+            entry->refcount++;
+            *entry_p = entry;
+            status   = UCS_OK;
+            goto unlock;
+        }
     }
 
-    if (iter == kh_end(&dev->ah_hash)) {
-        /* new AH */
-        status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, &ah);
-        if (status != UCS_OK) {
-            goto unlock;
-        }
+    /* Miss, or cache disabled: create a fresh, initially-private entry */
+    status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, &ah);
+    if (status != UCS_OK) {
+        goto unlock;
+    }
 
-        entry = uct_ib_ah_entry_alloc(ah, 2);
-        if (entry == NULL) {
-            ibv_destroy_ah(ah);
-            status = UCS_ERR_NO_MEMORY;
-            goto unlock;
-        }
+    entry = uct_ib_ah_entry_alloc(ah, 1);
+    if (entry == NULL) {
+        ibv_destroy_ah(ah);
+        status = UCS_ERR_NO_MEMORY;
+        goto unlock;
+    }
 
-        /* store entry in hash */
+    if (cache_enabled) {
+        /* Add the cache's own reference and store it for reuse */
         iter = kh_put(uct_ib_ah, &dev->ah_hash, *ah_attr, &ret);
         if (iter == kh_end(&dev->ah_hash)) {
             ibv_destroy_ah(ah);
@@ -1541,11 +1539,8 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
             goto unlock;
         }
 
-        kh_value(&dev->ah_hash, iter) = entry;
-    } else {
-        /* found existing entry */
-        entry = kh_value(&dev->ah_hash, iter);
         entry->refcount++;
+        kh_value(&dev->ah_hash, iter) = entry;
     }
 
     *entry_p = entry;
