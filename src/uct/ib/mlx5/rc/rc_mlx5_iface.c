@@ -1132,10 +1132,6 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
             }
         }
 
-        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
-        }
-
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) {
             iface_attr->tx_token_length = sizeof(uct_rc_mlx5_tx_token_t);
         }
