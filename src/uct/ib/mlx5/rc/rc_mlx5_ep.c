@@ -25,15 +25,11 @@
 
 
 typedef struct {
-    union {
-        /* Copied inline payload of AM short and PUT short operations */
-        uint8_t data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
-        /* Reconstructed IOV of PUT zcopy operations */
-        struct {
-            uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-            uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-        } zcopy;
-    };
+    /* Copied inline payload of AM and PUT operations */
+    uint8_t      data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
+    /* Reconstructed IOV of zcopy operations */
+    uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
+    uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
 } uct_rc_mlx5_op_callback_data_t;
 
 static ucs_status_t
@@ -857,7 +853,7 @@ static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
     return op->handler == (uct_rc_send_handler_t)ucs_mpool_put;
 }
 
-static int uct_rc_mlx5_send_op_is_put_zcopy(const uct_rc_iface_send_op_t *op)
+static int uct_rc_mlx5_send_op_is_zcopy(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == uct_rc_ep_send_op_completion_handler;
 }
@@ -925,25 +921,6 @@ uct_rc_mlx5_op_info_fill_am_short(const uct_ib_mlx5_txwq_t *txwq,
     info->am.payload.data.buffer = am + 1;
     info->am.payload.data.length = inline_length - sizeof(*am);
     return UCS_OK;
-}
-
-static ucs_status_t uct_rc_mlx5_op_info_fill_am(
-        const uct_ib_mlx5_txwq_t *txwq,
-        const struct mlx5_wqe_ctrl_seg *ctrl, void *callback_data,
-        uct_ep_op_info_t *info)
-{
-    const struct mlx5_wqe_inl_data_seg *inl;
-    size_t inline_length;
-
-    ucs_assert(uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_SEND);
-
-    if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) ==
-        UCS_OK) {
-        return uct_rc_mlx5_op_info_fill_am_short(
-                txwq, inl, inline_length, callback_data, info);
-    }
-
-    return UCS_ERR_UNSUPPORTED;
 }
 
 static void uct_rc_mlx5_get_dptr_buffer(const struct mlx5_wqe_data_seg *dptr,
@@ -1033,25 +1010,109 @@ static void uct_rc_mlx5_op_callback_data_fill_iov(
     uint32_t byte_count;
     size_t i;
 
-    ucs_assert(num_dseg <= ucs_static_array_size(callback_data->zcopy.iov));
+    ucs_assert(num_dseg <= ucs_static_array_size(callback_data->iov));
 
     for (i = 0; i < num_dseg; ++i) {
         byte_count = ntohl(dptr->byte_count);
         ucs_assertv_always(!(byte_count & MLX5_INLINE_SEG),
-                           "inline segment in put zcopy WQE");
+                           "inline segment in zcopy WQE");
 
-        callback_data->zcopy.memh[i].lkey  = ntohl(dptr->lkey);
-        callback_data->zcopy.memh[i].rkey  = UCT_IB_INVALID_MKEY;
-        callback_data->zcopy.memh[i].flags = 0;
-        callback_data->zcopy.iov[i].buffer = (void*)(uintptr_t)be64toh(
-                dptr->addr);
-        callback_data->zcopy.iov[i].length = byte_count;
-        callback_data->zcopy.iov[i].memh   = &callback_data->zcopy.memh[i];
-        callback_data->zcopy.iov[i].stride = 0;
-        callback_data->zcopy.iov[i].count  = 1;
+        callback_data->memh[i].lkey  = ntohl(dptr->lkey);
+        callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;
+        callback_data->memh[i].flags = 0;
+        callback_data->iov[i].buffer = (void*)(uintptr_t)be64toh(dptr->addr);
+        callback_data->iov[i].length = byte_count;
+        callback_data->iov[i].memh   = &callback_data->memh[i];
+        callback_data->iov[i].stride = 0;
+        callback_data->iov[i].count  = 1;
 
         dptr = uct_ib_mlx5_txwq_wrap_any_const(txwq, dptr + 1);
     }
+}
+
+static void uct_rc_mlx5_op_info_fill_am_zcopy(
+        const uct_ib_mlx5_txwq_t *txwq, uct_rc_iface_send_op_t *op,
+        const struct mlx5_wqe_inl_data_seg *inl, size_t inline_length,
+        const struct mlx5_wqe_data_seg *dptr, size_t num_dseg,
+        uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
+{
+    const uct_rc_mlx5_hdr_t *rch;
+
+    ucs_assert(inline_length >= sizeof(*rch));
+    ucs_assert(inline_length <= sizeof(callback_data->data));
+
+    uct_ib_mlx5_txwq_copy_segs(txwq, callback_data->data, inl + 1,
+                               inline_length);
+    rch = (const uct_rc_mlx5_hdr_t*)callback_data->data;
+
+#if IBV_HW_TM
+    if (rch->tmh_opcode != IBV_TMH_NO_TAG) {
+        ucs_fatal("unsupported tag matching send");
+    }
+#endif
+
+    info->field_mask             = UCT_EP_OP_INFO_FIELD_OPERATION |
+                                   UCT_EP_OP_INFO_FIELD_AM;
+    info->operation              = UCT_EP_OP_AM_ZCOPY;
+    info->am.field_mask          = UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                                   UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                                   UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+                                   UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY;
+    info->am.am_id               = rch->rc_hdr.am_id & ~UCT_RC_EP_FC_MASK;
+    info->am.flags               = 0;
+    info->am.header.zcopy.buffer = rch + 1;
+    info->am.header.zcopy.length = inline_length - sizeof(*rch);
+
+    uct_rc_mlx5_op_callback_data_fill_iov(txwq, dptr, num_dseg,
+                                           callback_data);
+    info->am.payload.zcopy.iov    = callback_data->iov;
+    info->am.payload.zcopy.iovcnt = num_dseg;
+    uct_rc_mlx5_op_info_fill_user_comp(op, info);
+}
+
+static ucs_status_t uct_rc_mlx5_op_info_fill_am(
+        uct_rc_mlx5_base_ep_t *ep, const uct_ib_mlx5_txwq_t *txwq, uint16_t pi,
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+        uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
+{
+    const struct mlx5_wqe_inl_data_seg *inl;
+    const struct mlx5_wqe_data_seg *dptr;
+    uct_rc_iface_send_op_t *op;
+    size_t inline_length, inline_seg_size, num_dseg;
+
+    ucs_assert(uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_SEND);
+
+    if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) !=
+        UCS_OK) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    inline_seg_size = ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                        UCT_IB_MLX5_WQE_SEG_SIZE);
+    ucs_assert(wqe_size >= (sizeof(*ctrl) + inline_seg_size));
+
+    op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+    if ((op == NULL) &&
+        (wqe_size == (sizeof(*ctrl) + inline_seg_size))) {
+        return uct_rc_mlx5_op_info_fill_am_short(
+                txwq, inl, inline_length, callback_data->data, info);
+    }
+
+    if ((op == NULL) || uct_rc_mlx5_send_op_is_zcopy(op)) {
+        ucs_assert(((wqe_size - sizeof(*ctrl) - inline_seg_size) %
+                    sizeof(*dptr)) == 0);
+        dptr = uct_ib_mlx5_txwq_wrap_any_const(
+                txwq, UCS_PTR_BYTE_OFFSET(inl, inline_seg_size));
+        num_dseg = (wqe_size - sizeof(*ctrl) - inline_seg_size) / sizeof(*dptr);
+        uct_rc_mlx5_op_info_fill_am_zcopy(txwq, op, inl, inline_length, dptr,
+                                          num_dseg, callback_data, info);
+        return UCS_OK;
+    }
+
+    ucs_fatal("rc mlx5: unexpected am wqe send op %p sn %d handler %s "
+        "wqe_size %zu",
+        op, op->sn, ucs_debug_get_symbol_name((void*)op->handler),
+        wqe_size);
 }
 
 static void uct_rc_mlx5_op_info_fill_put_zcopy(
@@ -1068,8 +1129,7 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
     uct_rc_mlx5_op_info_fill_rma_raddr(raddr, info);
 
     uct_rc_mlx5_op_callback_data_fill_iov(txwq, dptr, num_dseg, callback_data);
-    uct_rc_mlx5_op_info_fill_rma_zcopy_iov(callback_data->zcopy.iov, num_dseg,
-                                           info);
+    uct_rc_mlx5_op_info_fill_rma_zcopy_iov(callback_data->iov, num_dseg, info);
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_put(
@@ -1106,7 +1166,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         return UCS_OK;
     }
 
-    if ((op == NULL) || uct_rc_mlx5_send_op_is_put_zcopy(op)) {
+    if ((op == NULL) || uct_rc_mlx5_send_op_is_zcopy(op)) {
         ucs_assert(((wqe_size - header_size) % sizeof(*dptr)) == 0);
         num_dseg = (wqe_size - header_size) / sizeof(*dptr);
         uct_rc_mlx5_op_info_fill_put_zcopy(txwq, op, raddr, dptr, num_dseg,
@@ -1133,8 +1193,8 @@ uct_rc_mlx5_op_info_fill(uct_rc_mlx5_base_ep_t *ep,
     case MLX5_OPCODE_NOP:
         return UCS_ERR_NO_ELEM;
     case MLX5_OPCODE_SEND:
-        return uct_rc_mlx5_op_info_fill_am(txwq, ctrl, callback_data->data,
-                                           info);
+        return uct_rc_mlx5_op_info_fill_am(ep, txwq, pi, ctrl, wqe_size,
+                                           callback_data, info);
     case MLX5_OPCODE_RDMA_WRITE:
         return uct_rc_mlx5_op_info_fill_put(ep, txwq, pi, ctrl, wqe_size,
                                             callback_data, info);
@@ -1297,11 +1357,11 @@ static void
 uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_send_op_t *op)
 {
     ucs_assert(uct_rc_mlx5_send_op_is_put_bcopy(op) ||
-               uct_rc_mlx5_send_op_is_put_zcopy(op) ||
+               uct_rc_mlx5_send_op_is_zcopy(op) ||
                uct_rc_mlx5_send_op_is_flush(op));
     op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
-    if (uct_rc_mlx5_send_op_is_put_zcopy(op)) {
+    if (uct_rc_mlx5_send_op_is_zcopy(op)) {
         uct_rc_iface_put_send_op(op);
     } else {
         ucs_mpool_put(op);
@@ -1318,14 +1378,14 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_mlx5_base_ep_t *ep,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, pi)) {
         ucs_assertv_always(uct_rc_mlx5_send_op_is_flush(op) ||
                                    uct_rc_mlx5_send_op_is_put_bcopy(op) ||
-                                   uct_rc_mlx5_send_op_is_put_zcopy(op),
+                                   uct_rc_mlx5_send_op_is_zcopy(op),
                            "ep %p qp 0x%x unexpected send op sn %u handler %s",
                            ep, ep->tx.wq.super.qp_num, op->sn,
                            ucs_debug_get_symbol_name(op->handler));
         if (uct_rc_mlx5_send_op_is_flush(op)) {
             uct_invoke_completion(op->user_comp, status);
         } else if ((status == UCS_OK) && (op->user_comp != NULL) &&
-                   (uct_rc_mlx5_send_op_is_put_zcopy(op))) {
+                   uct_rc_mlx5_send_op_is_zcopy(op)) {
             uct_invoke_completion(op->user_comp, UCS_OK);
         }
         uct_rc_mlx5_ep_outstanding_release_send_op(op);

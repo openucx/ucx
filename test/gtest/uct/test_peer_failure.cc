@@ -349,10 +349,12 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_purge_outstanding : public uct_test {
 public:
-    static const uint64_t SEND_SEED       = 0xa1a1a1a1a1a1a1a1ul;
-    static const uint64_t RECV_SEED       = 0xb2b2b2b2b2b2b2b2ul;
-    static const uint8_t AM_SHORT_ID      = 3;
-    static const uint64_t AM_SHORT_HEADER = 0x0123456789abcdefull;
+    static const uint64_t SEND_SEED         = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED         = 0xb2b2b2b2b2b2b2b2ul;
+    static const uint8_t AM_SHORT_ID        = 3;
+    static const uint64_t AM_SHORT_HEADER   = 0x0123456789abcdefull;
+    static const uint8_t AM_ZCOPY_ID        = 1;
+    static const uint64_t AM_ZCOPY_HDR_SEED = 0xc3c3c3c3c3c3c3c3ul;
 
     void init() override
     {
@@ -390,6 +392,8 @@ protected:
         uct_rkey_t                 rkey;
         const void                 *send_buf;
         size_t                     send_len;
+        const void                 *am_header;
+        size_t                     am_header_length;
         const uct_iov_t            *iov;
         size_t                     iovcnt;
     };
@@ -465,6 +469,9 @@ protected:
         case UCT_EP_OP_AM_SHORT:
             validate_am_short(info, ctx);
             return;
+        case UCT_EP_OP_AM_ZCOPY:
+            validate_am_zcopy(info, ctx);
+            return;
         case UCT_EP_OP_PUT_SHORT:
         case UCT_EP_OP_PUT_BCOPY:
         case UCT_EP_OP_PUT_ZCOPY:
@@ -493,6 +500,36 @@ protected:
         ASSERT_NE(nullptr, info->am.payload.data.buffer);
         mem_buffer::pattern_check(info->am.payload.data.buffer,
                                   info->am.payload.data.length, SEND_SEED);
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_am_zcopy(const uct_ep_op_info_t *info,
+                                  purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_AM |
+                                         UCT_EP_OP_INFO_FIELD_COMP;
+        const uint64_t expected_am_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID | UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->am.field_mask, expected_am_fields));
+        EXPECT_EQ(AM_ZCOPY_ID, info->am.am_id);
+        EXPECT_EQ(0u, info->am.flags);
+        EXPECT_EQ(&ctx->comp, info->comp);
+        uct_invoke_completion(info->comp, UCS_OK);
+
+        ASSERT_EQ(ctx->am_header_length, info->am.header.zcopy.length);
+        EXPECT_EQ(0, memcmp(ctx->am_header, info->am.header.zcopy.buffer,
+                            ctx->am_header_length));
+        ASSERT_EQ(ctx->iovcnt, info->am.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer, info->am.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length, info->am.payload.zcopy.iov[i].length);
+        }
+
         ++ctx->num_ops_purged;
     }
 
@@ -759,6 +796,38 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
     };
 
     test_purge_outstanding(put_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.am.max_iov, 2);
+    const size_t hdr_size        = ucs_min((size_t)64, attr.cap.am.max_hdr);
+    const size_t size            = ucs_min((size_t)4096, attr.cap.am.max_zcopy);
+    std::vector<uint8_t> header(hdr_size);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+
+    mem_buffer::pattern_fill(header.data(), header.size(), AM_ZCOPY_HDR_SEED);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_AM_ZCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.am_header        = header.data();
+    ctx.am_header_length = header.size();
+    ctx.iov              = iov;
+    ctx.iovcnt           = iovcnt;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_ZCOPY_ID,
+                                           am_handler, NULL, 0));
+
+    send_func_t am_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_am_zcopy(ep, AM_ZCOPY_ID, ctx.am_header,
+                               ctx.am_header_length, iov, iovcnt, 0, comp);
+    };
+
+    test_purge_outstanding(am_zcopy, ctx);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
