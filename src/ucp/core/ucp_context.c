@@ -425,6 +425,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_context_config_t, unified_mode), UCS_CONFIG_TYPE_BOOL},
 
+  {"AM_AUX_TLS", "n",
+   "Allow transports marked auxiliary by UCX_TLS or its aliases to be used\n"
+   "as a fallback for the active-message lane.",
+   ucs_offsetof(ucp_context_config_t, allow_am_aux_tl), UCS_CONFIG_TYPE_BOOL},
+
   {"CM_USE_ALL_DEVICES", "y",
    "When creating client/server endpoints, use all available devices.\n"
    "If disabled, use only the one device on which the connection\n"
@@ -778,7 +783,9 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc",    { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
-  { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
+  { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy",
+                UCP_TL_AUX(UCP_RSC_CONFIG_ALL), NULL } },
+  { "cuda_ipc", { "cuda_ipc", UCP_TL_AUX(UCP_RSC_CONFIG_ALL), NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { "gaudi", { "gaudi_gdr", NULL } },
@@ -1157,7 +1164,11 @@ static int ucp_tls_alias_is_present(ucp_tl_alias_t *alias, const char *tl_name,
     uint64_t dummy_mask     = 0;
 
     return ucp_tls_array_is_present(alias->tls, tl_alias_count, tl_name,
-                                    str_suffix, &dummy_mask);
+                                    str_suffix, &dummy_mask) ||
+           ((str_suffix != NULL) &&
+            ucp_tls_array_is_present(alias->tls, tl_alias_count,
+                                     UCP_RSC_CONFIG_ALL,
+                                     str_suffix, &dummy_mask));
 }
 
 static uint8_t
@@ -1751,21 +1762,27 @@ static ucs_status_t ucp_check_resources(ucp_context_h context,
     char info_str[128];
     ucp_rsc_index_t tl_id;
     ucp_tl_resource_desc_t *resource;
-    unsigned num_usable_tls;
+    unsigned num_usable_tls, num_primary_tls;
 
-    /* Error check: Make sure there is at least one transport that is not
-     * auxiliary */
-    num_usable_tls = 0;
+    /* Error check: Make sure there is at least one usable transport and one
+     * primary transport. */
+    num_usable_tls  = 0;
+    num_primary_tls = 0;
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         ucs_assert(context->tl_rscs != NULL);
         resource = &context->tl_rscs[tl_id];
+        if (!(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
+            ++num_primary_tls;
+        }
+
         if ((resource->tl_rsc.dev_type != UCT_DEVICE_TYPE_ACC) &&
-            !(resource->flags & UCP_TL_RSC_FLAG_AUX)) {
-            num_usable_tls++;
+            (!(resource->flags & UCP_TL_RSC_FLAG_AUX) ||
+             config->ctx.allow_am_aux_tl)) {
+            ++num_usable_tls;
         }
     }
 
-    if (num_usable_tls == 0) {
+    if ((num_usable_tls == 0) || (num_primary_tls == 0)) {
         ucp_resource_config_str(config, info_str, sizeof(info_str));
         ucs_error("no usable transports/devices (asked %s)", info_str);
         return UCS_ERR_NO_DEVICE;

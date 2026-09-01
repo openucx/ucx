@@ -62,6 +62,31 @@ UCS_TEST_P(test_ucp_context, minimal_field_mask) {
     }
 }
 
+UCS_TEST_P(test_ucp_context, rejects_aux_only_tls)
+{
+    ucs::handle<ucp_config_t*> config;
+    ucp_context_h context = NULL;
+    ucp_params_t params    = {};
+    ucs_status_t status;
+
+    UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                           ucp_config_read, NULL, NULL);
+    ASSERT_EQ(UCS_OK, ucp_config_modify(config, "TLS", "self:aux"));
+    ASSERT_EQ(UCS_OK, ucp_config_modify(config, "AM_AUX_TLS", "y"));
+
+    params.field_mask = UCP_PARAM_FIELD_FEATURES;
+    params.features   = UCP_FEATURE_AM;
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+        status = ucp_init(&params, config, &context);
+    }
+
+    if (status == UCS_OK) {
+        ucp_cleanup(context);
+    }
+    EXPECT_EQ(UCS_ERR_NO_DEVICE, status);
+}
+
 UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
 {
     modify_config("MAX_HCA_PER_GPU", "2");
@@ -88,6 +113,141 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, srd, "srd")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ud_mlx5, "ud_mlx5")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, ugni, "ugni")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_aliases, shm, "shm")
+
+class test_ucp_cuda_ipc_alias : public test_ucp_context {
+public:
+    virtual void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        modify_config("AM_AUX_TLS", "y");
+        test_ucp_context::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_cuda_ipc_alias, resources)
+{
+    entity *e            = create_entity();
+    ucp_context_h context = e->ucph();
+    bool has_cuda_ipc     = false;
+    bool has_cuda_copy    = false;
+    bool detects_cuda     = false;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
+
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        const ucp_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index];
+
+        if (!strcmp(resource->tl_rsc.tl_name, "cuda_ipc")) {
+            EXPECT_FALSE(resource->flags & UCP_TL_RSC_FLAG_AUX);
+            has_cuda_ipc = true;
+        } else {
+            EXPECT_TRUE(resource->flags & UCP_TL_RSC_FLAG_AUX);
+            has_cuda_copy |= !strcmp(resource->tl_rsc.tl_name, "cuda_copy");
+        }
+    }
+
+    for (md_index = 0; md_index < context->num_mem_type_detect_mds;
+         ++md_index) {
+        if (context->tl_mds[context->mem_type_detect_mds[md_index]].attr.
+                    detect_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA)) {
+            detects_cuda = true;
+            break;
+        }
+    }
+
+    EXPECT_TRUE(has_cuda_ipc);
+    EXPECT_TRUE(has_cuda_copy);
+    EXPECT_TRUE(detects_cuda);
+}
+
+UCS_TEST_P(test_ucp_cuda_ipc_alias, disables_only_cuda_ipc)
+{
+    modify_config("TLS", "^cuda_ipc");
+
+    entity *e             = create_entity();
+    ucp_context_h context = e->ucph();
+    bool has_cuda_ipc     = false;
+    bool has_cuda_copy    = false;
+    ucp_rsc_index_t rsc_index;
+
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        const ucp_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index];
+
+        if (!strcmp(resource->tl_rsc.tl_name, "cuda_ipc")) {
+            has_cuda_ipc = true;
+        } else if (!strcmp(resource->tl_rsc.tl_name, "cuda_copy")) {
+            EXPECT_FALSE(resource->flags & UCP_TL_RSC_FLAG_AUX);
+            has_cuda_copy = true;
+        }
+    }
+
+    EXPECT_FALSE(has_cuda_ipc);
+    EXPECT_TRUE(has_cuda_copy);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda_ipc_alias, cuda_ipc, "cuda_ipc")
+
+class test_ucp_cuda_alias : public test_ucp_cuda_ipc_alias {
+protected:
+    static bool is_cuda_transport(const char *tl_name)
+    {
+        return !strcmp(tl_name, "cuda_copy") ||
+               !strcmp(tl_name, "cuda_ipc") ||
+               !strcmp(tl_name, "gdr_copy");
+    }
+};
+
+UCS_TEST_P(test_ucp_cuda_alias, resources)
+{
+    entity *e             = create_entity();
+    ucp_context_h context = e->ucph();
+    bool has_cuda_copy    = false;
+    bool has_cuda_ipc     = false;
+    bool has_aux          = false;
+    ucp_rsc_index_t rsc_index;
+
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        const ucp_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index];
+
+        if (is_cuda_transport(resource->tl_rsc.tl_name)) {
+            EXPECT_FALSE(resource->flags & UCP_TL_RSC_FLAG_AUX);
+            has_cuda_copy |= !strcmp(resource->tl_rsc.tl_name, "cuda_copy");
+            has_cuda_ipc  |= !strcmp(resource->tl_rsc.tl_name, "cuda_ipc");
+        } else {
+            EXPECT_TRUE(resource->flags & UCP_TL_RSC_FLAG_AUX);
+            has_aux = true;
+        }
+    }
+
+    EXPECT_TRUE(has_cuda_copy);
+    EXPECT_TRUE(has_cuda_ipc);
+    EXPECT_TRUE(has_aux);
+}
+
+UCS_TEST_P(test_ucp_cuda_alias, disables_only_cuda_tls)
+{
+    modify_config("TLS", "^cuda");
+
+    entity *e             = create_entity();
+    ucp_context_h context = e->ucph();
+    bool has_non_cuda     = false;
+    ucp_rsc_index_t rsc_index;
+
+    for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+        const ucp_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index];
+
+        EXPECT_FALSE(is_cuda_transport(resource->tl_rsc.tl_name));
+        EXPECT_FALSE(resource->flags & UCP_TL_RSC_FLAG_AUX);
+        has_non_cuda = true;
+    }
+
+    EXPECT_TRUE(has_non_cuda);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda_alias, cuda, "cuda")
 
 
 class test_ucp_version : public test_ucp_context {

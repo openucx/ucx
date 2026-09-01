@@ -1039,10 +1039,16 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
     for (rsc_index = 0; rsc_index < ctx->num_tls; ++rsc_index) {
         if_iter = worker->ifaces[rsc_index];
 
-        /* Need to check resources which belong to the same device only */
+        /* Need to check resources which belong to the same device only. When
+         * auxiliary transports can provide the AM lane, also preserve the
+         * resource group. */
         if ((ctx->tl_rscs[rsc_index].dev_index != ctx->tl_rscs[wiface->rsc_index].dev_index) ||
             (if_iter->flags & UCP_WORKER_IFACE_FLAG_UNUSED) ||
-            (rsc_index == wiface->rsc_index)) {
+            (rsc_index == wiface->rsc_index) ||
+            (ctx->config.ext.allow_am_aux_tl &&
+             ((ctx->tl_rscs[rsc_index].flags ^
+               ctx->tl_rscs[wiface->rsc_index].flags) &
+              UCP_TL_RSC_FLAG_AUX))) {
             continue;
         }
 
