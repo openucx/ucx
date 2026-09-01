@@ -1394,7 +1394,7 @@ public:
     }
 
 protected:
-    void check_mtype_uses_frag_sys_dev(ucp_operation_id_t op_id,
+    void check_mtype_keeps_user_sys_dev(ucp_operation_id_t op_id,
                                        const char *proto_name)
     {
         static constexpr size_t msg_size = UCS_KBYTE;
@@ -1442,9 +1442,20 @@ protected:
         threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
                                                      msg_size);
         ASSERT_STREQ(proto_name, threshold->proto_config.proto->name);
+        EXPECT_EQ(s_user_sys_dev,
+                  threshold->proto_config.select_param.sys_dev);
+        if (op_id == UCP_OP_ID_RNDV_RECV) {
+            const auto *rpriv =
+                    static_cast<const ucp_proto_rndv_bulk_priv_t*>(
+                            threshold->proto_config.priv);
+            EXPECT_EQ(s_frag_sys_dev, rpriv->frag_sys_dev);
+        }
+
         ucp_proto_config_query(worker, &threshold->proto_config, msg_size,
                                &attr);
-        EXPECT_STREQ((frag_ordinal % 2) ? "rc_mlx5/mock_1:1" :
+        /* Keep the user device as the equal-lane spreading key. The fragment
+         * device is modeled separately through reg_mem_info. */
+        EXPECT_STREQ((user_ordinal % 2) ? "rc_mlx5/mock_1:1" :
                                           "rc_mlx5/mock_0:1",
                      attr.config);
     }
@@ -1470,18 +1481,18 @@ ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_frag_sys_dev =
 ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_user_sys_dev =
         UCS_SYS_DEVICE_ID_UNKNOWN;
 
-UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_uses_frag_sys_dev,
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_keeps_user_sys_dev,
            "RNDV_SCHEME=get_ppln", "RNDV_THRESH=1", "RNDV_FRAG_MEM_TYPES=host",
            "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
-    check_mtype_uses_frag_sys_dev(UCP_OP_ID_RNDV_RECV, "rndv/get/mtype");
+    check_mtype_keeps_user_sys_dev(UCP_OP_ID_RNDV_RECV, "rndv/get/mtype");
 }
 
-UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_uses_frag_sys_dev,
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_keeps_user_sys_dev,
            "RNDV_SCHEME=put_ppln", "RNDV_THRESH=1", "RNDV_FRAG_MEM_TYPES=host",
            "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
-    check_mtype_uses_frag_sys_dev(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
+    check_mtype_keeps_user_sys_dev(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_mtype_sys_dev, rcx_gpu,
