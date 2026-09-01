@@ -88,7 +88,7 @@ int main(int argc, char **argv)
     CUDA_CHECK(cuDevicePrimaryCtxRetain(&cu_ctx, cu_dev));
     CUDA_CHECK(cuCtxSetCurrent(cu_ctx));
 
-    ucp = create_ucp();
+    ucp = create_ucp(UCP_EP_PARAMS_FLAGS_RKEY_BOUND_LIFETIME);
 
     if (rank == 0) {
         exit_status = rank0(ucp.context);

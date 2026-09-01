@@ -77,7 +77,7 @@ static void *recv_worker_address(int sender_rank)
     return worker_address;
 }
 
-static ucp_ep_h create_ucp_ep(ucp_worker_h worker)
+static ucp_ep_h create_ucp_ep(ucp_worker_h worker, unsigned ep_flags)
 {
     int rank;
     void *worker_address;
@@ -93,8 +93,10 @@ static ucp_ep_h create_ucp_ep(ucp_worker_h worker)
         send_worker_address(0, worker);
     }
 
-    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
+                           UCP_EP_PARAM_FIELD_FLAGS;
     ep_params.address    = (ucp_address_t*)worker_address;
+    ep_params.flags      = ep_flags;
 
     UCX_CHECK(ucp_ep_create(worker, &ep_params, &ep));
     free(worker_address);
@@ -124,12 +126,12 @@ create_ucp_mem(void *buffer, size_t size, ucp_context_h context)
     return mem;
 }
 
-ucp_t create_ucp()
+ucp_t create_ucp(unsigned ep_flags)
 {
     ucp_t ucp;
     ucp.context = create_ucp_context();
     ucp.worker  = create_ucp_worker(ucp.context);
-    ucp.ep      = create_ucp_ep(ucp.worker);
+    ucp.ep      = create_ucp_ep(ucp.worker, ep_flags);
     return ucp;
 }
 
