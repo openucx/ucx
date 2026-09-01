@@ -727,12 +727,11 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             }
         }
 
-        /* The two devices must also have internal reachability. This is only
-         * meaningful when select_param->sys_dev is what actually gets
-         * registered on this lane. Otherwise, reachability is checked by the
-         * lane filter against the buffer that is actually registered. */
-        if (!(flags & UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG) ||
-            (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
+        /* Check internal reachability only when the selected buffer is
+         * registered on this lane. For non-zcopy protocols, either no buffer
+         * is registered or the lane filter checks the buffer described by
+         * reg_mem_info. */
+        if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
             lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
             if (!ucs_topo_is_reachable(lane_sys_dev,
                                        select_param->sys_dev)) {
