@@ -17,6 +17,7 @@
 #include <ucp/proto/proto_failover.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/ptr_arith.h>
 
