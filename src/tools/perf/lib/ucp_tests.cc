@@ -41,6 +41,8 @@ public:
         m_am_rx_buffer(NULL),
         m_am_rx_length(0ul)
     {
+        unsigned am_flags = UCP_AM_FLAG_WHOLE_MSG;
+
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
         memset(&m_send_get_info_params, 0, sizeof(m_send_get_info_params));
@@ -48,7 +50,11 @@ public:
 
         ucs_assert_always(m_max_outstanding > 0);
 
-        set_am_handler(AM_ID, am_data_handler, this, UCP_AM_FLAG_WHOLE_MSG);
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_AM_RECV_COPY) {
+            am_flags |= UCP_AM_FLAG_PERSISTENT_DATA;
+        }
+
+        set_am_handler(AM_ID, am_data_handler, this, am_flags);
         set_am_handler(UCP_PERF_DAEMON_AM_ID_SEND_CMPL,
                        am_daemon_send_ack_handler, this, UCP_AM_FLAG_WHOLE_MSG);
         set_am_handler(UCP_PERF_DAEMON_AM_ID_RECV_CMPL,
@@ -273,10 +279,11 @@ public:
         return ucs_likely(status == UCS_OK) ? length : status;
     }
 
-    ucs_status_t am_rndv_recv(void *data, size_t length,
-                              const ucp_am_recv_param_t *rx_params)
+    ucs_status_t am_recv(void *data, size_t length,
+                         const ucp_am_recv_param_t *rx_params)
     {
-        ucs_assert(!(rx_params->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA));
+        ucs_assert(rx_params->recv_attr & (UCP_AM_RECV_ATTR_FLAG_DATA |
+                                           UCP_AM_RECV_ATTR_FLAG_RNDV));
         ucs_assertv(length == m_am_rx_length,
                     "length=%zu expected=%zu index=%u", length, m_am_rx_length,
                     rte_call(&m_perf, group_index));
@@ -325,15 +332,9 @@ public:
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)arg;
 
-        if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
-            return test->am_rndv_recv(data, length, param);
-        }
-
-        if (test->m_perf.params.flags & UCX_PERF_TEST_FLAG_AM_RECV_COPY) {
-            ucs_assertv(length == test->m_am_rx_length,
-                        "wrong buffer length %ld != %ld",
-                        length, test->m_am_rx_length);
-            memcpy(test->m_am_rx_buffer, data, length);
+        if ((param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) ||
+            (test->m_perf.params.flags & UCX_PERF_TEST_FLAG_AM_RECV_COPY)) {
+            return test->am_recv(data, length, param);
         }
 
         test->recv_completed();

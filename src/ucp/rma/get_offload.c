@@ -51,7 +51,8 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
                                           send.state.uct_comp);
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
                               UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_request_complete_send(req, req->send.state.uct_comp.status);
+    ucp_proto_request_restart_or_complete(req, req->send.state.uct_comp.status,
+                                          NULL);
 }
 
 static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self)
@@ -105,7 +106,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
@@ -135,6 +137,10 @@ static void ucp_proto_get_offload_reset(ucp_request_t *req)
 static ucs_status_t ucp_proto_get_offload_bcopy_reset(ucp_request_t *req)
 {
     ucp_proto_get_offload_reset(req);
+    /* GET is idempotent, so a restarted request replays from the beginning
+     * instead of resuming from an offset which counts posted rather than
+     * completed fragments */
+    ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
     return ucp_proto_request_bcopy_reset(req);
 }
 
