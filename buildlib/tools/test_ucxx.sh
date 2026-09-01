@@ -60,11 +60,12 @@ grep -q 'command -v nvidia-smi' ci/test_common.sh \
   || { echo "ERROR: nvidia-smi patch did not apply to ci/test_common.sh" >&2; exit 1; }
 
 # Conda tests load the PR-built UCX: right after env activation, copy its
-# libraries and tools into the env (the env carries no ucx package - the PR
-# build is the only provider) and verify the lib the loader sees is the PR's.
+# libraries and tools into the env. The PR build is the only provider of UCX
+# there, so assert no released ucx package slipped back into the env - that is
+# the one way another libucs could shadow the overlay.
 for f in ci/test_cpp.sh ci/test_python.sh; do
   grep -q "ucx-pr" "$f" \
-    || sed -i 's#^conda activate test$#conda activate test\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\nfor l in /tmp/ucx-pr/lib/libucs.so.*; do cmp -s "$CONDA_PREFIX/lib/$(basename "$l")" "$l" || { echo "ERROR: UCX-PR overlay verification failed" >\&2; exit 1; }; done\necho "UCX-PR overlaid into test env"#' "$f"
+    || sed -i 's#^conda activate test$#conda activate test\ncp -a /tmp/ucx-pr/lib/. "$CONDA_PREFIX/lib/"\ncp -a /tmp/ucx-pr/bin/. "$CONDA_PREFIX/bin/"\nif conda list | grep -qE "^ucx +[0-9]"; then echo "ERROR: released ucx package present in test env - it would shadow the PR UCX" >\&2; exit 1; fi\necho "UCX-PR overlaid into test env"#' "$f"
   grep -q "ucx-pr" "$f" \
     || { echo "ERROR: UCX-PR overlay patch did not apply to $f" >&2; exit 1; }
 done
