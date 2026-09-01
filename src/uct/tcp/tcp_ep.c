@@ -632,6 +632,7 @@ static ucs_status_t uct_tcp_ep_bind_src_iface(uct_tcp_ep_t *ep)
     struct sockaddr_storage bind_addr = iface->config.ifaddr;
     struct sockaddr* bind_sockaddr    = (struct sockaddr*)&bind_addr;
     char bind_addr_str[UCS_SOCKADDR_STRING_LEN];
+    char vrf_master_name[IFNAMSIZ];
     ucs_log_level_t log_level;
     int suppress_error;
     size_t bind_addr_len;
@@ -644,7 +645,24 @@ static ucs_status_t uct_tcp_ep_bind_src_iface(uct_tcp_ep_t *ep)
 
     suppress_error = (iface->config.ep_bind_src_addr != UCS_YES);
     log_level      = suppress_error ? UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
-    status         = uct_tcp_iface_check_rp_filter(iface, log_level);
+    if (iface->vrf_info.master_if_index > 0) {
+        if (if_indextoname(iface->vrf_info.master_if_index,
+                           vrf_master_name) == NULL) {
+            ucs_log(log_level, "if_indextoname(%u) failed: %m",
+                    iface->vrf_info.master_if_index);
+            status = UCS_ERR_IO_ERROR;
+        } else {
+            status = ucs_socket_setopt(ep->fd, SOL_SOCKET, SO_BINDTODEVICE,
+                                       vrf_master_name,
+                                       strlen(vrf_master_name) + 1);
+        }
+
+        if (!suppress_error && (status != UCS_OK)) {
+            return status;
+        }
+    }
+
+    status = uct_tcp_iface_check_rp_filter(iface, log_level);
     if (!suppress_error && (status != UCS_OK)) {
         return status;
     }
