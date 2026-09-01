@@ -399,31 +399,6 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Field mask of @ref uct_ep_invalidate_params_t.
- */
-typedef enum {
-    /** Endpoint invalidation flags */
-    UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS = UCS_BIT(0)
-} uct_ep_invalidate_param_field_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Flags used by @ref uct_ep_invalidate.
- */
-typedef enum {
-    /**
-     * Defer completion of outstanding operations to the caller. The normal
-     * endpoint error path will not complete these operations; the caller must
-     * purge them with @ref uct_ep_outstanding_purge. A successful purge returns
-     * ownership of subsequent operations to UCT.
-     */
-    UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
-} uct_ep_invalidate_flags_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief Endpoint attributes, capabilities and limitations.
  */
 struct uct_ep_attr {
@@ -761,21 +736,13 @@ typedef struct uct_ep_connect_to_ep_params {
  * @ingroup UCT_RESOURCE
  * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
  */
-typedef struct {
+ typedef struct {
     /**
-     * Mask of valid fields in this structure, using bits from
-     * @ref uct_ep_invalidate_param_field_t. Fields not specified in this mask
-     * will be ignored. Provides ABI compatibility with respect to adding new
-     * fields.
+     * Mask of valid fields in this structure. Must currently be equal to zero.
+     * Fields not specified in this mask will be ignored. Provides ABI
+     * compatibility with respect to adding new fields.
      */
     uint64_t                      field_mask;
-
-    /**
-     * Invalidation flags, see @ref uct_ep_invalidate_flags_t. This field is
-     * valid only when @ref UCT_EP_INVALIDATE_PARAM_FIELD_FLAGS is set in
-     * @ref field_mask.
-     */
-    unsigned                      flags;
 } uct_ep_invalidate_params_t;
 
 
@@ -1387,11 +1354,8 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @brief Invalidate the endpoint.
  *
  * This routine invalidates the endpoint and moves it to the error state.
- * Incomplete operations are completed with error unless the error handler
- * returns @ref UCS_INPROGRESS, which transfers outstanding-operation ownership
- * to the caller until @ref uct_ep_outstanding_purge. @ref
- * UCT_EP_INVALIDATE_FLAG_DEFER_COMPLETIONS is an equivalent explicit arm of
- * that same ownership.
+ * All the incomplete and subsequent operations on the endpoint will be
+ * completed with error.
  *
  * @param [in]  ep         Endpoint to invalidate.
  * @param [in]  params     Operation parameters, see @ref
@@ -1977,7 +1941,7 @@ typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required for token-based purging. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. */
     uint64_t                            field_mask;
 
     /**
@@ -2002,22 +1966,14 @@ typedef struct {
  *
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ *
+ * @note This routine should be called only after the error handler for @a ep
+ *       returns @ref UCS_INPROGRESS. It can be used only if the interface
+ *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,
                          const uct_ep_outstanding_purge_params_t *params);
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Enable outstanding extraction on endpoint failure.
- *
- * This function must be called before posting operations that may need replay.
- * After it succeeds, a transport error preserves the outstanding send queue
- * until the caller finishes @ref uct_ep_outstanding_purge. After a successful
- * extract, the endpoint can be destroyed immediately.
- */
-ucs_status_t uct_ep_failover_enable(uct_ep_h ep);
 
 
 END_C_DECLS
