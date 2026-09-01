@@ -61,7 +61,7 @@ ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
             cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID,
                                  cuda_device));
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
     bus_id.domain = (uint16_t)attrib;
 
@@ -70,7 +70,7 @@ ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
             cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
                                  cuda_device));
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
     bus_id.bus = (uint8_t)attrib;
 
@@ -79,7 +79,7 @@ ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
             cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
                                  cuda_device));
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
     bus_id.slot = (uint8_t)attrib;
 
@@ -89,31 +89,44 @@ ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
     status = ucs_topo_find_device_by_bus_id_and_user_value(
             &bus_id, (uintptr_t)cuda_device, &sys_dev);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     status = ucs_topo_sys_device_enable_aux_path(sys_dev);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
-    *sys_dev_p = sys_dev;
+    if (sys_dev_p != NULL) {
+        *sys_dev_p = sys_dev;
+    }
+
     if (bus_id_p != NULL) {
         *bus_id_p = bus_id;
     }
 
     return UCS_OK;
+
+err:
+    return status;
 }
 
-ucs_status_t
-uct_cuda_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p)
+ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device)
 {
-    return uct_cuda_get_sys_dev_and_bus_id(cuda_device, sys_dev_p, NULL);
+    ucs_sys_device_t sys_dev;
+    ucs_status_t status;
+
+    status = uct_cuda_get_sys_dev_and_bus_id(cuda_device, &sys_dev, NULL);
+    if (status != UCS_OK) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    return sys_dev;
 }
 
 CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev)
@@ -128,15 +141,17 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev)
     return (CUdevice)user_value;
 }
 
-static int uct_cuda_bus_id_is_visible(const ucs_sys_bus_id_t *visible_bus_ids,
-                                      unsigned num_visible_gpus,
-                                      const ucs_sys_bus_id_t *bus_id)
+static int
+uct_cuda_gpu_bus_id_is_visible(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
+                               unsigned num_visible_gpus,
+                               const ucs_sys_bus_id_t *bus_id)
 {
     ucs_bus_id_bit_rep_t bus_id_key = ucs_topo_get_bus_id_bit_repr(bus_id);
     unsigned i;
 
     for (i = 0; i < num_visible_gpus; ++i) {
-        if (bus_id_key == ucs_topo_get_bus_id_bit_repr(&visible_bus_ids[i])) {
+        if (bus_id_key ==
+            ucs_topo_get_bus_id_bit_repr(&visible_gpu_bus_ids[i])) {
             return 1;
         }
     }
@@ -144,52 +159,52 @@ static int uct_cuda_bus_id_is_visible(const ucs_sys_bus_id_t *visible_bus_ids,
     return 0;
 }
 
-static ucs_status_t uct_cuda_init_devices_cu(ucs_sys_bus_id_t *visible_bus_ids,
-                                             int *num_visible_gpus_p)
+static unsigned uct_cuda_init_devices_cu(ucs_sys_bus_id_t *visible_gpu_bus_ids)
 {
     const unsigned sys_device_priority = 10;
+    unsigned num_visible_gpus          = 0;
     ucs_sys_device_t sys_dev;
-    int num_visible_gpus, i;
     char device_name[10];
     ucs_status_t status;
     CUdevice cuda_dev;
+    int i, num_devices;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_visible_gpus));
+    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_devices),
+                              UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
-        goto out;
+        return 0;
     }
 
-    ucs_assert_always(num_visible_gpus <= UCT_CUDA_MAX_DEVICES);
+    ucs_assert_always(num_devices <= UCT_CUDA_MAX_DEVICES);
 
-    for (i = 0; i < num_visible_gpus; ++i) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_dev, i));
+    for (i = 0; i < num_devices; ++i) {
+        status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_dev, i),
+                                  UCS_LOG_LEVEL_DIAG);
         if (status != UCS_OK) {
-            goto out;
+            continue;
         }
 
-        status = uct_cuda_get_sys_dev_and_bus_id(cuda_dev, &sys_dev,
-                                                 &visible_bus_ids[i]);
+        status = uct_cuda_get_sys_dev_and_bus_id(
+                cuda_dev, &sys_dev, &visible_gpu_bus_ids[num_visible_gpus]);
         if (status != UCS_OK) {
-            goto out;
+            ucs_diag("failed to initialize cuda device %d: %s", cuda_dev,
+                     ucs_status_string(status));
+            continue;
         }
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d", cuda_dev);
         status = ucs_topo_sys_device_set_name(sys_dev, device_name,
                                               sys_device_priority);
-        if (status != UCS_OK) {
-            goto out;
-        }
+        ucs_assert_always(status == UCS_OK);
+        ++num_visible_gpus;
     }
 
-    *num_visible_gpus_p = num_visible_gpus;
-
-out:
-    return status;
+    return num_visible_gpus;
 }
 
 static ucs_status_t
-uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_bus_ids,
-                           int num_visible_gpus)
+uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
+                           unsigned num_visible_gpus)
 {
     ucs_status_t status = UCS_OK;
     unsigned nvml_dev_count, i;
@@ -200,7 +215,7 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_bus_ids,
 
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
     if (status != UCS_OK) {
-        ucs_warn("nvml unavailable: using cuda-only gpu enumeration");
+        ucs_diag("nvml unavailable: using cuda-only gpu enumeration");
         return UCS_OK;
     }
 
@@ -224,8 +239,8 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_bus_ids,
         bus_id.slot     = nvml_pci.device;
         bus_id.function = 0;
 
-        if (uct_cuda_bus_id_is_visible(visible_bus_ids, num_visible_gpus,
-                                       &bus_id)) {
+        if (uct_cuda_gpu_bus_id_is_visible(visible_gpu_bus_ids,
+                                           num_visible_gpus, &bus_id)) {
             continue;
         }
 
@@ -239,47 +254,33 @@ out:
     return status;
 }
 
-static ucs_status_t uct_cuda_init_devices_internal(int *num_visible_gpus_p)
+static unsigned uct_cuda_init_devices_internal(void)
 {
-    ucs_sys_bus_id_t visible_bus_ids[UCT_CUDA_MAX_DEVICES];
-    int num_visible_gpus;
+    ucs_sys_bus_id_t visible_gpu_bus_ids[UCT_CUDA_MAX_DEVICES];
+    unsigned num_visible_gpus;
     ucs_status_t status;
 
     /* Init visible devices first using the CUDA driver */
-    status = uct_cuda_init_devices_cu(visible_bus_ids, &num_visible_gpus);
-    if (status != UCS_OK) {
-        ucs_error("failed to initialize CUDA devices: %s",
-                  ucs_status_string(status));
-        goto out;
-    }
+    num_visible_gpus = uct_cuda_init_devices_cu(visible_gpu_bus_ids);
 
     /* Init the remaining non-visible devices using NVML */
-    status = uct_cuda_init_devices_nvml(visible_bus_ids, num_visible_gpus);
+    status = uct_cuda_init_devices_nvml(visible_gpu_bus_ids, num_visible_gpus);
     if (status != UCS_OK) {
-        ucs_error("failed to initialize NVML devices: %s",
-                  ucs_status_string(status));
-        goto out;
+        ucs_diag("failed to initialize nvml devices: %s",
+                 ucs_status_string(status));
     }
 
-    *num_visible_gpus_p = num_visible_gpus;
-
-out:
-    return status;
+    return num_visible_gpus;
 }
 
-ucs_status_t uct_cuda_init_devices(int *num_visible_gpus_p)
+unsigned uct_cuda_init_devices(void)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
-    static int num_visible_gpus;
-    static ucs_status_t status;
+    static unsigned num_visible_gpus;
 
     UCS_INIT_ONCE(&init_once) {
-        status = uct_cuda_init_devices_internal(&num_visible_gpus);
+        num_visible_gpus = uct_cuda_init_devices_internal();
     }
 
-    if (status == UCS_OK) {
-        *num_visible_gpus_p = num_visible_gpus;
-    }
-
-    return status;
+    return num_visible_gpus;
 }

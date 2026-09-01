@@ -68,12 +68,11 @@ ucs_status_t uct_cuda_get_sys_dev_and_bus_id(CUdevice cuda_device,
  * Get the system device from the CUDA device.
  *
  * @param [in]  cuda_device CUDA device.
- * @param [out] sys_dev_p   System device corresponding to the CUDA device.
  *
- * @return UCS_OK on success, or an error code otherwise.
+ * @return System device corresponding to the CUDA device, or
+ *         UCS_SYS_DEVICE_ID_UNKNOWN on error.
  */
-ucs_status_t
-uct_cuda_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
+ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device);
 
 
 /**
@@ -107,10 +106,8 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
  * physical GPUs hidden by CUDA_VISIBLE_DEVICES. Initialization is performed
  * once and its result is cached.
  *
- * @param [out] num_visible_gpus_p Number of CUDA-visible devices.
- *
- * @return UCS_OK on success, or an error code otherwise.
+ * @return Number of CUDA-visible devices.
  */
-ucs_status_t uct_cuda_init_devices(int *num_visible_gpus_p);
+unsigned uct_cuda_init_devices(void);
 
 #endif

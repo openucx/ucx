@@ -18,13 +18,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,
                                  unsigned *num_resources_p)
 {
-    ucs_status_t status;
-    int num_visible_gpus;
-
-    status = uct_cuda_init_devices(&num_visible_gpus);
-    if (status != UCS_OK) {
-        return status;
-    }
+    unsigned num_visible_gpus = uct_cuda_init_devices();
 
     if (num_visible_gpus == 0) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);

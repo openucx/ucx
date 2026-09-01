@@ -722,10 +722,11 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                    cuda_device;
             }
 
-            mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-            if (pref_loc != CU_DEVICE_CPU) {
-                status = uct_cuda_get_sys_dev(pref_loc, &mem_info->sys_dev);
-                if (status != UCS_OK) {
+            if (pref_loc == CU_DEVICE_CPU) {
+                mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            } else {
+                mem_info->sys_dev = uct_cuda_get_sys_dev(pref_loc);
+                if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
                     ucs_diag("cu_device %d (for address %p...%p) unrecognized",
                              pref_loc, address,
                              UCS_PTR_BYTE_OFFSET(address, length));
@@ -754,9 +755,9 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
         goto out_default_range;
     }
 
-    status = uct_cuda_get_sys_dev(cuda_device, &mem_info->sys_dev);
-    if (status != UCS_OK) {
-        return status;
+    mem_info->sys_dev = uct_cuda_get_sys_dev(cuda_device);
+    if (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_ERR_NO_DEVICE;
     }
 
     uct_cuda_copy_md_sync_memops_get_address_range(md, (CUdeviceptr)address,
