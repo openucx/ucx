@@ -142,7 +142,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
     size_t gpu_idx;
 
     ucs_assert(groups != NULL);
-    ucs_assertv((policy >= 0) && (policy < UCP_GPU_NIC_POLICY_LAST),
+    ucs_assertv(policy < UCP_GPU_NIC_POLICY_LAST,
                 "invalid gpu-nic assignment policy %d", policy);
 
     ucp_gpu_nic_assignment_init(&assignment);
