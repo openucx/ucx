@@ -1576,4 +1576,103 @@ UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
 
+class test_rc_purge_outstanding : public test_rc {
+protected:
+    enum {
+        NUM_MESSAGES = 2000
+    };
+
+    struct purge_ctx {
+        uct_ep_h         ep;
+        uct_completion_t comp;
+    };
+
+    static void purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
+
+        ++ctx->comp.count;
+
+        ASSERT_EQ(UCT_EP_OP_PUT_ZCOPY, info->operation);
+        ASSERT_EQ(UCS_INPROGRESS,
+                  uct_ep_put_zcopy(ctx->ep, info->rma.payload.zcopy.iov,
+                                   info->rma.payload.zcopy.iovcnt,
+                                   info->rma.remote_addr, info->rma.rkey,
+                                   &ctx->comp));
+    }
+
+    ucs_status_t purge_stub(purge_ctx *ctx)
+    {
+        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
+        uint16_t ci              = txwq->prev_sw_pi -
+                                   (txwq->bb_max - uct_rc_txqp_available(txqp));
+        uint16_t end_ci          = txwq->sw_pi;
+        uct_rc_mlx5_op_callback_data_t callback_data;
+        uct_ep_op_info_t info;
+        ucs_status_t status;
+        const struct mlx5_wqe_ctrl_seg *ctrl;
+        size_t wqe_size;
+
+        ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+        ci      += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+
+        while (ci != end_ci) {
+            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+
+            status = uct_rc_mlx5_op_info_fill(&info, txwq, NULL, ctrl, wqe_size,
+                                              &callback_data);
+
+            EXPECT_UCS_OK(status);
+
+            purge_cb(&info, ctx);
+
+            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        }
+
+        return UCS_OK;
+    }
+
+    void test_put_zcopy()
+    {
+        static const size_t length = 64;
+        mapped_buffer sendbuf(length, 0ul, *m_e1);
+        mapped_buffer recvbuf(length, 0ul, *m_e2);
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), length,
+                                sendbuf.memh(), 1);
+        ucs_status_t status;
+
+        m_e1->connect(1, *m_e2, 1);
+
+        purge_ctx ctx = {m_e1->ep(1), {NULL, NUM_MESSAGES + 1, UCS_OK}};
+
+        for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+            UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_zcopy(m_e1->ep(0), iov,
+                                                         iovcnt, recvbuf.addr(),
+                                                         recvbuf.rkey(),
+                                                         &ctx.comp),
+                                        status);
+        }
+
+        ASSERT_UCS_OK(purge_stub(&ctx));
+
+        flush();
+
+        EXPECT_EQ(1, ctx.comp.count);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    test_put_zcopy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
+
 #endif
