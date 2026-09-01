@@ -15,7 +15,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
-#include <endian.h>
 
 static void uct_rc_mlx5_op_info_try_fill_comp(uct_ep_op_info_t *info,
                                               uct_rc_iface_send_op_t *op)

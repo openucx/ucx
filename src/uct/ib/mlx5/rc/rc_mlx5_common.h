@@ -248,7 +248,6 @@ typedef struct uct_rc_mlx5_mp_hash_key {
 
 typedef struct {
     union {
-        uint8_t data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
         struct {
             uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
             uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
