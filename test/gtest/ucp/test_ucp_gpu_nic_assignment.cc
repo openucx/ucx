@@ -258,7 +258,7 @@ protected:
     {
         topology_shape_t config;
 
-        /* Vera-Rubin topology is built of groups, each with 2 GPUs and 4 NICs 
+        /* Vera-Rubin topology is built of groups, each with 2 GPUs and 4 NICs
          * that are equally distant from each other. */
         config.type               = UCS_TOPO_GROUPS_TYPE_VERA_RUBIN;
         config.num_groups         = 2;
