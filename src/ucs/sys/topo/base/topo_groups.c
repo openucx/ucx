@@ -66,6 +66,8 @@ ucs_topo_groups_sys_dev_sort(ucs_topo_groups_sys_dev_array_t *sys_devs,
         return;
     }
 
+    ucs_assert(ucs_array_begin(sys_devs) != NULL);
+
     ucs_qsort_r(ucs_array_begin(sys_devs), ucs_array_length(sys_devs),
                 sizeof(*ucs_array_begin(sys_devs)), ucs_topo_groups_sys_dev_cmp,
                 (void*)devices);
@@ -201,6 +203,12 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
     ucs_assert(devices != NULL);
     ucs_assert(nics != NULL);
 
+    if (ucs_array_is_empty(nics)) {
+        return;
+    }
+
+    ucs_assert(ucs_array_begin(nics) != NULL);
+
     ucs_log_indent(1);
 
     ucs_array_for_each(sys_dev, nics) {
@@ -305,6 +313,12 @@ ucs_topo_groups_gpus_build(const ucs_topo_sys_device_info_t *devices,
     ucs_assert(acc_devices != NULL);
     ucs_assert(gpus != NULL);
 
+    if (ucs_array_is_empty(acc_devices)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(ucs_array_begin(acc_devices) != NULL);
+
     ucs_array_for_each(sys_dev, acc_devices) {
         dev_bus_id = &devices[*sys_dev].bus_id;
 
@@ -342,6 +356,12 @@ ucs_topo_groups_nics_build(const ucs_topo_sys_device_info_t *devices,
     ucs_assert(devices != NULL);
     ucs_assert(net_devices != NULL);
     ucs_assert(nics != NULL);
+
+    if (ucs_array_is_empty(net_devices)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(ucs_array_begin(net_devices) != NULL);
 
     ucs_array_for_each(sys_dev, net_devices) {
         dev_bus_id = &devices[*sys_dev].bus_id;
