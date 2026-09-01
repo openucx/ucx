@@ -17,7 +17,6 @@
 #include <ucp/proto/proto_failover.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/api/v2/uct_v2.h>
-#include <uct/base/uct_iface.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/ptr_arith.h>
 
@@ -110,7 +109,6 @@ ucs_status_t ucp_ep_failover_enable_lanes(ucp_ep_h ep)
     ucp_wireup_ep_t *wireup_ep;
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
-    ucs_status_t status;
 
     if ((ep->ext == NULL) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
@@ -137,20 +135,13 @@ ucs_status_t ucp_ep_failover_enable_lanes(ucp_ep_h ep)
             continue;
         }
 
-        status = uct_ep_failover_enable(uct_ep);
-        if (status != UCS_OK) {
-            ucs_debug("ep %p: failed to enable lane %u uct_ep %p for "
-                      "failover: %s",
-                      ep, lane, uct_ep, ucs_status_string(status));
-            return status;
-        }
-
-        ucs_debug("ep %p: enabled lane %u uct_ep %p for failover extraction",
-                  ep, lane, uct_ep);
+        ucs_debug("ep %p: lane %u uct_ep %p supports failover tokens", ep,
+                  lane, uct_ep);
     }
 
     return UCS_OK;
 }
+
 
 static void ucp_ep_failover_replay_purge(ucp_ep_failover_lane_ctx_t *lane,
                                          ucs_status_t status)

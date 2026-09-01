@@ -79,14 +79,6 @@ enum {
                                           UCT_RC_EP_FLAG_FC_GRANT)
 };
 
-enum {
-    /* Failover enabled on this endpoint */
-    UCT_RC_EP_FAILOVER_FLAG_ENABLED = UCS_BIT(0),
-
-    /* Defer outstanding purge until extract completes */
-    UCT_RC_EP_FAILOVER_FLAG_ARMED   = UCS_BIT(1)
-};
-
 /*
  * FC protocol header mask
  */
@@ -241,7 +233,6 @@ struct uct_rc_ep {
     uint16_t            cq_reserve;
     uint8_t             path_index;
     uint8_t             flags;
-    uint8_t             failover_flags;
 };
 
 

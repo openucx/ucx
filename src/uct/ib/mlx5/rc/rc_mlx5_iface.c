@@ -194,8 +194,6 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
-    uint16_t last_completed;
-    int was_deferred;
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -205,47 +203,26 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    /* Snapshot the last completed WQE before advancing hw_ci to the failed
-     * in-flight WQE. Arm DEFER before the error handler so nested progress
-     * cannot complete those WQEs; drop it again if the handler does not
-     * return UCS_INPROGRESS. */
-    last_completed = ep->tx.wq.hw_ci;
-    was_deferred   = ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
-    uct_ib_mlx5_txwq_update_bb(&ep->tx.wq, pi);
+    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
-    if ((ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) ||
-        (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        goto purge;
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+        goto out;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-    if (!was_deferred) {
-        ep->flags      |= UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
-        ep->tx.wq.ft_ci = last_completed;
-        ucs_debug("ep %p defer completions WQE range (%u, %u) next token %u",
-                  ep, ep->tx.wq.ft_ci, ep->tx.wq.sw_pi, ep->tx.wq.next_token);
-    }
-
     uct_rc_fc_restore_wnd(iface, &ep->super.fc);
+
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
-
-    if (status != UCS_INPROGRESS) {
-        ep->flags &= ~UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS;
-    }
-
-purge:
-    if (!(ep->flags & UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS)) {
-        uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
-        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
-    }
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
@@ -1100,10 +1077,8 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
 
     rc_ep = uct_rc_iface_lookup_ep(iface, remote_qpn);
     if (rc_ep == NULL) {
-        /* The QP may already have been extracted or destroyed by overlapping
-         * recovery; the caller skips this token. */
-        ucs_debug("rc mlx5: no ep for QPN %u", remote_qpn);
-        return UCS_ERR_NO_ELEM;
+        ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_base_ep_t);
@@ -1225,8 +1200,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge,
-            .ep_failover_enable     = uct_rc_mlx5_ep_failover_enable
+            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

@@ -44,12 +44,6 @@ enum {
 };
 
 
-enum {
-    /* Error handler returned UCS_INPROGRESS: caller owns outstanding ops. */
-    UCT_RC_MLX5_EP_FLAG_DEFER_COMPLETIONS = UCS_BIT(0)
-};
-
-
 /**
  * RC base remote endpoint
  */
@@ -58,7 +52,6 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
-    uint8_t flags;
 } uct_rc_mlx5_base_ep_t;
 
 typedef __be32 uct_rc_mlx5_tx_token_t;
@@ -215,9 +208,6 @@ ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params);
 
-ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
-        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params);
-
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req);
 
@@ -273,12 +263,6 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
-
-void uct_rc_mlx5_ep_update_tx_res(uct_ep_h tl_ep);
-
-ucs_status_t uct_rc_mlx5_ep_failover_enable(uct_ep_h ep);
-
-void uct_rc_mlx5_ep_failover_arm(uct_ep_h ep);
 
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 
