@@ -13,6 +13,7 @@
 class test_ucp_gpu_nic : public ucs::test {
 public:
     test_ucp_gpu_nic() :
+        m_groups(), m_assignment(),
         m_groups_initialized(false), m_assignment_initialized(false)
     {
     }
