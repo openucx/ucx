@@ -9,8 +9,12 @@
 # Requires: ucx_dir, UCX_PR_PREFIX exported by the caller; cwd = UCXX_DIR for
 # use_pr_ucx.
 
-# Runs inside the toolchain env created by build_ucx_pr_conda (invoked there by
-# name through conda run). Idempotent - the container, and thus /tmp, is shared
+# This file's own path, so build_ucx_pr_conda can re-source it in the toolchain
+# shell instead of relying on an exported function surviving conda run.
+ucxx_ucx_pr_sh=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
+
+# Runs inside the toolchain env created by build_ucx_pr_conda, which sources
+# this file to get it. Idempotent - the container, and thus /tmp, is shared
 # by all steps of a job.
 build_ucx_pr() {
   [ -x "$UCX_PR_PREFIX/bin/ucx_info" ] && return 0
@@ -26,7 +30,6 @@ build_ucx_pr() {
    && make -j"$(nproc)" install) > /tmp/ucx-pr-build.log 2>&1 \
     || { tail -50 /tmp/ucx-pr-build.log >&2; echo "ERROR: UCX (PR) build failed" >&2; return 1; }
 }
-export -f build_ucx_pr
 
 # The conda image has no system toolchain; build the PR's UCX with a
 # conda-forge one. Everything version-sensitive is pinned, because the env is
@@ -44,7 +47,7 @@ build_ucx_pr_conda() {
     "cuda-version=${RAPIDS_CUDA_VERSION%.*}" \
     > /tmp/ucx-toolchain.log 2>&1 \
     || { tail -30 /tmp/ucx-toolchain.log >&2; echo "ERROR: toolchain env create failed" >&2; return 1; }
-  conda run -n ucx-build bash -ec build_ucx_pr \
+  conda run -n ucx-build bash -ec "source '$ucxx_ucx_pr_sh'; build_ucx_pr" \
     || { echo "ERROR: UCX (PR) build failed in toolchain env" >&2; return 1; }
 }
 

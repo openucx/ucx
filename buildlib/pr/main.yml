@@ -7,7 +7,9 @@ variables:
   DOCKER_OPT_ZE_GPU: ""
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
   # Persistent pip cache for the UCXX jobs (the wheel test env alone downloads
-  # ~2 GB of cuda/rapids wheels). Nodes without the dir degrade gracefully.
+  # ~2 GB of cuda/rapids wheels). Docker creates the host dir if it is missing,
+  # so on a node that was never prepared pip finds it unwritable and disables
+  # caching by itself - slower, never fatal.
   UCXX_PIP_CACHE_VOL: -v /scrap/pip-cache:/pip-cache
 
 resources:
