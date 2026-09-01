@@ -1242,6 +1242,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
+    self->err_handler_inprogress = 0;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,
