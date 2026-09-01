@@ -187,9 +187,9 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
                            ucs_topo_groups_sys_dev_array_t *nics)
 {
     char fw_ver[UCS_TOPO_GROUPS_FW_VER_MAX];
-    ucs_topo_sys_device_info_t *device;
+    ucs_topo_sys_device_info_t const *device;
+    ucs_sys_pci_id_t const *pci_id;
     ucs_sys_device_t *sys_dev;
-    ucs_sys_pci_id_t *pci_id;
     ucs_status_t status;
 
     ucs_log_indent(1);
@@ -205,7 +205,7 @@ ucs_topo_groups_cx9_filter(const ucs_topo_sys_device_info_t *devices,
 
         ucs_log_indent(1);
 
-        if (pci_id->vendor == UCS_SYS_PCI_ID_VENDOR_MELLANOX) {
+        if (pci_id->vendor == UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID) {
             if (pci_id->device == UCS_TOPO_GROUPS_CX9_DEVICE_ID) {
                 ucs_trace("cx9 device found (device id)");
                 continue;
