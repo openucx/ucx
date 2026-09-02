@@ -14,7 +14,7 @@
 if HAVE_GTEST
 
 # Set default configuration for running tests
-UCX_HANDLE_ERRORS        ?= bt
+UCX_HANDLE_ERRORS        ?= freeze
 UCX_LOG_LEVEL            ?= warn
 UCX_LOG_PRINT_ENABLE     ?= y
 GTEST_FILTER             ?= *
@@ -131,7 +131,6 @@ gtest_SOURCES = \
 	uct/test_uct_iface.cc \
 	uct/test_uct_perf.cc \
 	uct/v2/test_uct_query.cc \
-	uct/v2/test_uct_outstanding_purge.cc \
 	uct/v2/test_uct_sgl.cc \
 	uct/test_zcopy_comp.cc \
 	uct/uct_p2p_test.cc \

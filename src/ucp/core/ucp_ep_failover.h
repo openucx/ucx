@@ -29,9 +29,6 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
                           uct_ep_h *uct_eps, ucp_send_nbx_callback_t cb,
                           void *arg, ucp_lane_map_t *failover_lanes_p);
 
-/** Enable failover extraction on eligible lanes before posting operations. */
-ucs_status_t ucp_ep_failover_enable_lanes(ucp_ep_h ep);
-
 /** Lanes armed for failover that still need RX tokens. */
 ucp_lane_map_t ucp_ep_failover_pending_rx_lanes(ucp_ep_h ep);
 
