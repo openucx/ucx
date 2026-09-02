@@ -769,21 +769,17 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #ifdef __AVX__
 #include "cpu_nt_avx2.inl"
 
-/* This is an adaptation of the memcpy code from https://github.com/amd/aocl-libmem
- * TODO: Provide an option to copy from backwards, in this way
- * application can choose the cache hotness of the final buffer
- */
 void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
                                 ucs_arch_memcpy_hint_t hint, size_t total_len)
 {
     const size_t min_nt_buffer_transfer_size = 3072;
-    size_t tail_bytes;
 
     if (ucs_likely(len < min_nt_buffer_transfer_size)) {
         memcpy(dst, src, len);
         return;
     }
 
+    /* force nontemporal stores for large transfers */
     if (ucs_unlikely(total_len > ucs_global_opts.arch.nt_dest_threshold)) {
         hint = UCS_ARCH_MEMCPY_NT_DEST;
     }
@@ -791,18 +787,9 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
     if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
         ucs_x86_nt_dst_buffer_transfer(dst, src, len);
         return;
-    } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
-        tail_bytes = ucs_x86_nt_src_buffer_transfer(dst, src, len);
-    } else {
-        memcpy(dst, src, len);
-        tail_bytes = 0;
     }
 
-    dst = UCS_PTR_BYTE_OFFSET(dst, len - tail_bytes);
-    src = UCS_PTR_BYTE_OFFSET(src, len - tail_bytes);
-    len = tail_bytes;
-
-    ucs_x86_copy_bytes_le_128(dst, src, len);
+    ucs_x86_nt_src_buffer_transfer(dst, src, len);
 }
 #endif
 
