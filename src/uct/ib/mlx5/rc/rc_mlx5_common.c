@@ -107,18 +107,6 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
 
     raddr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                       (void*)(ctrl + 1));
-    if (wqe_size == header_size) {
-        if ((op == NULL) &&
-            (op->handler == uct_rc_ep_send_op_completion_handler)) {
-            uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op, raddr, 0,
-                                               callback_data);
-
-            return UCS_OK;
-        }
-
-        ucs_fatal("unsupported put op %p handler %s", op,
-                  ucs_debug_get_symbol_name((void*)op->handler));
-    }
 
     if ((op == NULL) || (op->handler == uct_rc_ep_send_op_completion_handler)) {
         uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op, raddr,
@@ -138,14 +126,16 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
+    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+
     memset(info, 0, sizeof(*info));
 
-    switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
+    switch (opcode) {
     case MLX5_OPCODE_RDMA_WRITE:
         return uct_rc_mlx5_op_info_fill_put(info, txwq, op, ctrl, wqe_size,
                                             callback_data);
     default:
-        ucs_fatal("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        ucs_fatal("unsupported op %d", opcode);
     }
 }
 
