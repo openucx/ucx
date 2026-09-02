@@ -4,8 +4,13 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_vmm_mem_buffer.h"
 
+#include <cuda_runtime.h>
 #include <thread>
 #include <vector>
 
@@ -732,6 +737,49 @@ UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
 
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
     EXPECT_GE(mem_attr.alloc_length, buffer.size());
+}
+
+UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+    ASSERT_EQ(cudaSuccess, cudaSetDevice(0));
+
+    auto check_domain = [this](unsigned char domain_id,
+                               ucs_sys_device_t &sys_dev) {
+        cuda_vmm_mem_buffer buffer;
+        CUresult ret = buffer.alloc(64, 0,
+                                    CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN,
+                                    1, domain_id);
+        if (ret != CUDA_SUCCESS) {
+            return false;
+        }
+
+        uct_md_mem_attr_t mem_attr;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+
+        ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                       &mem_attr));
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+        sys_dev = mem_attr.sys_dev;
+        return true;
+    };
+
+    ucs_sys_device_t sys_dev0, sys_dev1;
+    if (!check_domain(0, sys_dev0)) {
+        UCS_TEST_SKIP_R("failed to allocate locality-domain 0 VMM memory");
+    }
+
+    if (!check_domain(1, sys_dev1)) {
+        ADD_FAILURE() << "locality domain 1 allocation failed even though "
+                         "domain 0 succeeded";
+        return;
+    }
+
+    EXPECT_EQ(sys_dev0, sys_dev1);
+#else
+    UCS_TEST_SKIP_R("built without locality-domain support");
+#endif
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);
