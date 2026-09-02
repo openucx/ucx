@@ -1359,9 +1359,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 #if UCS_ENABLE_ASSERT
     sw_ci = self->super.err_handler_inprogress ? self->super.tx.wq.ft_ci :
                                                  self->super.tx.wq.hw_ci;
-    ucs_assertv((self->super.tx.wq.bb_max -
-                 uct_rc_txqp_available(&self->super.super.txqp)) ==
-                        (self->super.tx.wq.prev_sw_pi - sw_ci),
+    ucs_assertv((uint16_t)(self->super.tx.wq.prev_sw_pi - sw_ci) ==
+                        (self->super.tx.wq.bb_max -
+                         uct_rc_txqp_available(&self->super.super.txqp)),
                 "ep=%p sw_ci=%u ft_ci=%u hw_ci=%u available=%d", self, sw_ci,
                 self->super.tx.wq.ft_ci, self->super.tx.wq.hw_ci,
                 uct_rc_txqp_available(&self->super.super.txqp));
