@@ -789,6 +789,27 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
         return;
     }
 
+    /*
+     * NT_SOURCE (copy-out) path, taken for the UCS_ARCH_MEMCPY_NT_SOURCE
+     * hint. We do not non-temporally prefetch the source: an NT prefetch on
+     * a source line still in the Modified state can trigger a write-back, so
+     * a copy-out would generate writes for both the source (evicted) and the
+     * destination and double the receiver's memory-write pressure.  The
+     * UCS_ARCH_MEMCPY_NT_SOURCE hint is therefore serviced as a plain
+     * cache-respecting copy-out with a vectorized implementation and,
+     * when built-in memcpy is enabled, an ERMS implementation:
+     *
+     *   - rep movsb (ERMS), selected when len exceeds builtin_memcpy_min.
+     *   - an optimized vectorized copy routine (fallback when ERMS is
+     *     disabled for this size).
+     */
+#if ENABLE_BUILTIN_MEMCPY
+    if (len > ucs_global_opts.arch.builtin_memcpy_min) {
+        ucs_x86_memcpy_erms(dst, src, len);
+        return;
+    }
+#endif
+
     ucs_x86_nt_src_buffer_transfer(dst, src, len);
 }
 #endif
