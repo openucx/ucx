@@ -870,7 +870,6 @@ uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
        completed */
     pi    = txwq->prev_sw_pi - outstanding;
     count = -1;
-    ucs_assert(pi == txwq->hw_ci);
     do {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
         wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
