@@ -837,10 +837,10 @@ uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
 }
 
 static ucs_status_t
-uct_rc_mlx5_fill_am_short_info(const uct_ib_mlx5_txwq_t *txwq,
-                               const struct mlx5_wqe_inl_data_seg *inl,
-                               size_t wqe_size, uct_ep_op_info_t *info,
-                               int *skip_p, void *callback_data)
+uct_rc_mlx5_op_info_fill_am_short(const uct_ib_mlx5_txwq_t *txwq,
+                                  const struct mlx5_wqe_inl_data_seg *inl,
+                                  size_t wqe_size, void *callback_data,
+                                  int *skip_p, uct_ep_op_info_t *info)
 {
     size_t inline_length   = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
     size_t inline_wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
@@ -879,10 +879,10 @@ uct_rc_mlx5_fill_am_short_info(const uct_ib_mlx5_txwq_t *txwq,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rc_mlx5_fill_am_short_op_info(
+static ucs_status_t uct_rc_mlx5_op_info_fill_am(
         const uct_ib_mlx5_txwq_t *txwq,
-        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size, int *skip_p,
-        uct_ep_op_info_t *info, void *callback_data)
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+        void *callback_data, int *skip_p, uct_ep_op_info_t *info)
 {
     const struct mlx5_wqe_inl_data_seg *inl;
 
@@ -898,8 +898,8 @@ static ucs_status_t uct_rc_mlx5_fill_am_short_op_info(
     inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                     (void*)(ctrl + 1));
     if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
-        return uct_rc_mlx5_fill_am_short_info(txwq, inl, wqe_size, info,
-                                              skip_p, callback_data);
+        return uct_rc_mlx5_op_info_fill_am_short(
+                txwq, inl, wqe_size, callback_data, skip_p, info);
     }
 
     return UCS_ERR_UNSUPPORTED;
@@ -986,10 +986,8 @@ static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
-    uct_rc_mlx5_base_ep_t *ep = ucs_derived_of(tl_ep,
-                                               uct_rc_mlx5_base_ep_t);
-    uct_ib_mlx5_txwq_t *txwq  = &ep->tx.wq;
-    uct_rc_txqp_t *txqp       = &ep->super.txqp;
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
     const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uint8_t callback_data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
@@ -1011,17 +1009,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     callback_arg = (params->field_mask & UCT_EP_OUTSTANDING_FIELD_ARG) ?
                    params->arg : NULL;
 
-    end_ci = txwq->sw_pi;
-    if (ep->err_handler_inprogress) {
-        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
-        start_ci = uct_ib_mlx5_txwq_next_ci(txwq->ft_ci,
-                                            uct_ib_mlx5_wqe_size(ctrl));
-    } else {
-        start_ci = uct_rc_mlx5_txwq_first_outstanding_ci(txwq, txqp);
-    }
+    ucs_assert(ep->err_handler_inprogress);
+
+    end_ci   = txwq->sw_pi;
+    ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
+    start_ci = uct_ib_mlx5_txwq_next_ci(txwq->ft_ci,
+                                        uct_ib_mlx5_wqe_size(ctrl));
 
     if (start_ci == end_ci) {
-        return UCS_OK;
+        goto out_purge;
     }
 
     total_packets = uct_rc_mlx5_ep_am_short_num_packets(txwq, start_ci,
@@ -1051,21 +1047,24 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         ucs_assert(delivery_status != UCS_ERR_INVALID_PARAM);
         first_psn = (first_psn + 1) & UCT_IB_MLX5_PSN_MASK;
 
-        skip = 1;
         if (delivery_status != UCS_OK) {
-            status = uct_rc_mlx5_fill_am_short_op_info(
-                    txwq, ctrl, wqe_size, &skip, &info, callback_data);
+            status = uct_rc_mlx5_op_info_fill_am(
+                    txwq, ctrl, wqe_size, callback_data, &skip, &info);
             if (status != UCS_OK) {
                 ucs_fatal("rc mlx5: failed to parse outstanding WQE at ci %u",
                           ci);
             }
-        }
 
-        if ((delivery_status != UCS_OK) && !skip) {
-            params->cb(&info, callback_arg);
+            if (!skip) {
+                params->cb(&info, callback_arg);
+            }
         }
     }
 
+out_purge:
+    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
+                                  UCS_ERR_CANCELED, txwq->prev_sw_pi, 0);
+    uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     return UCS_OK;
 }
 

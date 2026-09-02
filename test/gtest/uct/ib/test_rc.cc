@@ -1523,7 +1523,7 @@ protected:
 
     static ucs_status_t err_handler(void*, uct_ep_h, ucs_status_t)
     {
-        return UCS_OK;
+        return UCS_INPROGRESS;
     }
 
     static void purge_cb(const uct_ep_op_info_t *info, void *arg)
@@ -1558,21 +1558,29 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_outstanding_purge, am_short,
             ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
     uct_ep_outstanding_purge_params_t purge_params = {};
     uct_ep_invalidate_params_t invalidate_params    = {};
+    uct_completion_t flush_comp;
     uct_rc_mlx5_rx_token_t rx_token;
 
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
         UCS_TEST_SKIP_R("DEVX is not supported");
     }
 
+    flush_comp.func   = [](uct_completion_t*) {};
+    flush_comp.count  = 1;
+    flush_comp.status = UCS_OK;
+
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), am_id, header,
                                   delivered_payload.data(),
                                   delivered_payload.size()));
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), am_id, header,
                                   short_payload.data(), short_payload.size()));
+    EXPECT_EQ(UCS_INPROGRESS,
+              uct_ep_flush(m_e1->ep(0), 0, &flush_comp));
 
     rx_token = htobe32((uct_ib_mlx5_txwq_get_next_wqe_psn(&ep->tx.wq) - 1) &
                        UCT_IB_MLX5_PSN_MASK);
     ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &invalidate_params));
+    wait_for_flag(&ep->err_handler_inprogress);
 
     purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                               UCT_EP_OUTSTANDING_FIELD_CB |
@@ -1586,6 +1594,9 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_outstanding_purge, am_short,
     EXPECT_EQ(am_id, m_operations[0].am_id);
     EXPECT_EQ(header, m_operations[0].header);
     EXPECT_EQ(short_payload, m_operations[0].payload);
+    EXPECT_EQ(0, flush_comp.count);
+    EXPECT_EQ(UCS_ERR_CANCELED, flush_comp.status);
+    EXPECT_EQ(ep->tx.wq.bb_max, uct_rc_txqp_available(&ep->super.txqp));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_outstanding_purge, rc_mlx5)
