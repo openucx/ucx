@@ -1453,19 +1453,18 @@ ucp_wireup_process_lanes_addr_request(
 
     /* Dual-REQ: lower ep_id is the initiator. Ignore REQ from a higher-id
      * peer while we are waiting for a reply to our own REQ. */
-    if ((ep->ext != NULL) && (ep->ext->recovery_arg != NULL) &&
-        (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_WAIT_REPLY) &&
-        (ucp_ep_local_id(ep) < msg->src_ep_id)) {
-        ucs_debug("ep %p: ignore LANES_ADDR_REQ from higher ep id 0x%" PRIx64
-                  " while we are initiator",
-                  ep, msg->src_ep_id);
-        return;
-    }
+    if ((ep->ext->recovery_arg != NULL) &&
+        (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_WAIT_REPLY)) {
+        if (ucp_ep_local_id(ep) < msg->src_ep_id) {
+            ucs_debug("ep %p: ignore LANES_ADDR_REQ from higher ep id 0x%" PRIx64
+                      " while we are initiator",
+                      ep, msg->src_ep_id);
+            return;
+        }
 
-    if ((ep->ext != NULL) && (ep->ext->recovery_arg != NULL) &&
-        (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_WAIT_REPLY) &&
-        (ucp_ep_local_id(ep) > msg->src_ep_id)) {
-        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        if (ucp_ep_local_id(ep) > msg->src_ep_id) {
+            ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        }
     }
 
     /* Asymmetric failure: lanes the peer declared broken but we don't yet
