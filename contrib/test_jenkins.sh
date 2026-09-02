@@ -701,6 +701,17 @@ run_ucx_perftest() {
 			echo "==== cuda-async memory is not supported, skipping ===="
 		fi
 
+		# cuda-localized is always registered (it fails with a clear error at
+		# init time on unsupported build/driver combinations instead of not
+		# being registered), so it must always be listed here. No functional
+		# run: the locality-domain hardware/driver this allocator targets is
+		# not available in CI.
+		if ! $ucx_perftest -h 2>&1 | grep -q "cuda-localized"
+		then
+			echo "==== cuda-localized allocator missing from ucx_perftest -h ===="
+			exit 1
+		fi
+
 		for memtype_cache in y n
 		do
 			for gdr in $gdr_options
