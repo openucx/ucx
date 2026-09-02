@@ -540,9 +540,7 @@ void test_ucp_peer_failure_inval::test_invalidate_rma_bw_lane(
     }
 
     if (force_invalidate_rma) {
-        if (!(config->key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF)) {
-            EXPECT_FALSE(has_no_invalidate_rma);
-        }
+        ASSERT_FALSE(has_no_invalidate_rma);
     } else {
         ASSERT_TRUE(!has_transport("tcp") || has_no_invalidate_rma);
         ASSERT_TRUE(!has_transport("rc_x") || has_invalidate_rma);
