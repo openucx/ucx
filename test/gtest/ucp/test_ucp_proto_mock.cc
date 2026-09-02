@@ -1379,9 +1379,8 @@ public:
 
         test_ucp_proto_mock_cuda_ipc::init();
 
-        m_ep_config       = ucp_worker_ep_config(sender().worker(),
-                                                 ep_config_index(sender()));
-        m_ep_config_flags = m_ep_config->key.flags;
+        m_ep_config             = ucp_ep_config(sender().ep());
+        m_ep_config_flags       = m_ep_config->key.flags;
         m_ep_config->key.flags &= ~(UCP_EP_CONFIG_KEY_FLAG_SELF |
                                     UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE);
 
@@ -1426,9 +1425,10 @@ protected:
                 continue;
             }
 
-            if (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
+            auto& rsc = context->tl_rscs[rsc_index];
+            if (std::string(rsc.tl_rsc.tl_name) ==
                 "cuda_ipc") {
-                return context->tl_rscs[rsc_index].md_index;
+                return rsc.md_index;
             }
         }
 

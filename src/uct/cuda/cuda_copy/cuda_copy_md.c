@@ -940,7 +940,7 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
     uint8_t mem_flags = 0;
 
     if (uct_cuda_copy_md_is_registrable(md, mem_info, is_async_managed,
-                                         is_host_located, dmabuf)) {
+                                        is_host_located, dmabuf)) {
         mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
     }
 
