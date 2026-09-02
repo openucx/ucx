@@ -31,7 +31,7 @@ UCS_TEST_F(test_ucp_wireup_err_mode, init_flags_self)
 {
     EXPECT_EQ(UCP_EP_INIT_ERR_MODE_PEER_FAILURE,
               ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_PEER, 0));
-    EXPECT_EQ(0,
+    EXPECT_EQ(0u,
               ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_PEER, 1));
     EXPECT_EQ(UCP_EP_INIT_ERR_MODE_FAILOVER_MASK,
               ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_FAILOVER, 0));
