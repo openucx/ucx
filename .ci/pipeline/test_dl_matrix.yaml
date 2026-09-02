@@ -28,8 +28,8 @@ env:
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
-  NWORKERS: "1"
-  WORKER: "0"
+  # Must match the number of values in the `shard` matrix axis below.
+  NWORKERS: "4"
   SLURM_NODES: 1
   # The account is bound to the partition by the cluster's cli_filter; the two
   # move together. gb200nvl72_ci carries 99 nodes against gb300nvl72_ci's 36,
@@ -64,11 +64,15 @@ runs_on_dockers:
     }
 
 matrix:
+  # One cell per gtest shard, each taking its own node. The axis is named
+  # `shard` rather than `worker` so it cannot collide case-insensitively with
+  # the NWORKERS env var when Jenkins folds both into hudson.EnvVars.
   axes:
     arch:
       - aarch64
+    shard: [0, 1, 2, 3]
 
-taskName: '${arch}/${name}'
+taskName: '${arch}/${name}/w${shard}'
 
 steps:
   - name: Allocate
@@ -84,8 +88,8 @@ steps:
       nodes: "${SLURM_NODES}"
       jobTimeout: "${SLURM_JOB_TIMEOUT}"
       immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
-      jobName: "ucx-ci-dl-${BUILD_NUMBER}"
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      jobName: "ucx-ci-dl-${BUILD_NUMBER}-w${shard}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}_w${shard}.txt"
       credentialsId: "${SSH_CREDENTIALS_ID}"
       extraArgs: ["--account=${SLURM_ACCOUNT}"]
 
@@ -97,7 +101,7 @@ steps:
     module: slurmCI
     run: run
     args:
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}_w${shard}.txt"
       # Workaround: dlcluster's UCX_NET_DEVICES preset breaks UCX loopback.
       # memlock unlimited is required for UCX.
       testScript: "unset UCX_NET_DEVICES && ulimit -l unlimited && git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1} && ./contrib/test_jenkins.sh"
@@ -105,16 +109,16 @@ steps:
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SSH_CREDENTIALS_ID}"
-      containerName: "ucx-ci-dl-${BUILD_NUMBER}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w${shard}"
       slurmEnv: [
         "RUN_TESTS=${RUN_TESTS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}",
         "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
-        "EXECUTOR_NUMBER=${WORKER}",
+        "EXECUTOR_NUMBER=${shard}",
         "nworkers=${NWORKERS}",
-        "worker=${WORKER}"
+        "worker=${shard}"
       ]
 
 pipeline_stop:
