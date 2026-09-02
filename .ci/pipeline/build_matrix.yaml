@@ -37,6 +37,8 @@ runs_on_dockers:
   - { name: "tencentos44-mofed26.04", url: "harbor.mellanox.com/hpcx/x86_64/tencentos4.4/builder:mofed-26.04-0.7.6.0", arch: x86_64 }
   - { name: "ubuntu2004-rocm5.4", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2004:rocm_5_4_0", arch: x86_64 }
   - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64 }
+  - { name: "ubuntu2404-rocm7.14", url: "rocm/dev-ubuntu-24.04:7.14.0-full", arch: x86_64 }
+  - { name: "ubuntu2604-rocm10.0", url: "rocm/dev-ubuntu-26.04:10.0.0-full", arch: x86_64 }
   # aarch64
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0", arch: aarch64 }
   - { name: "ubuntu2604-mofed26.04", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu26.04/builder:mofed-26.04-0.7.6.0", arch: aarch64 }

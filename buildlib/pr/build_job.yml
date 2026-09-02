@@ -87,6 +87,12 @@ jobs:
           ubuntu2204_rocm:
             CONTAINER: ubuntu2204_rocm_6_0_0
             build_mode: short
+          ubuntu2404_rocm:
+            CONTAINER: ubuntu2404_rocm_7_14_0
+            build_mode: short
+          ubuntu2604_rocm:
+            CONTAINER: ubuntu2604_rocm_10_0_0
+            build_mode: short
           kylin10sp3:
             CONTAINER: kylin10sp3
             build_mode: short
