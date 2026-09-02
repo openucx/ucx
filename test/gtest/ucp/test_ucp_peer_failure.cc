@@ -866,7 +866,6 @@ protected:
         auto stage   = req->send.proto_stage;
         auto *proto  = req->send.proto_config->proto;
         auto *worker = req->send.ep->worker;
-        ucs_status_t status;
         ucs::mock mock;
 
         if (proto->name == self->m_proto_name) {
@@ -880,8 +879,8 @@ protected:
         }
 
         /* Call original proto progress */
-        status = self->m_progress_mock.orig_func(&proto->progress[stage],
-                                                 uct_req);
+        const ucs_status_t status = self->m_progress_mock.orig_func(
+                                            &proto->progress[stage], uct_req);
 
         if (self->m_abort_fc_pending &&
             (worker == self->receiver().worker()) &&
@@ -1022,7 +1021,6 @@ protected:
     void rndv_fc_pending_abort_test()
     {
         ucp_ep_config_t *sender_config = ucp_ep_config(sender().ep());
-        std::vector<ucp_mem_desc_t *> held_mdescs;
         std::pair<ucs_status_t, ucs_status_t> result;
 
         if (sender_config->key.rma_bw_lanes[0] == UCP_NULL_LANE) {
@@ -1033,7 +1031,8 @@ protected:
 
         /* Complete one transfer so the CUDA fragment mpool is created. */
         smoke_test(true);
-        held_mdescs = hold_cuda_fragments(receiver().worker());
+        std::vector<ucp_mem_desc_t *> held_mdescs = hold_cuda_fragments(
+                                                          receiver().worker());
         ASSERT_FALSE(held_mdescs.empty());
 
         m_abort_fc_pending = true;

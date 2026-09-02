@@ -1058,27 +1058,26 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_allocation_failure,
            "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
            "RNDV_FRAG_WORKER_MAX_MEM=16K")
 {
+    ucp_worker_h worker = sender().worker();
     ucp_worker_mpool_key_t key;
     ucp_mem_desc_t *mdesc1;
     ucp_mem_desc_t *mdesc2;
     ucp_mem_desc_t *mdesc3;
-    ucp_worker_h worker = sender().worker();
     ucs_mpool_ops_t fail_ops;
     const ucs_mpool_ops_t *orig_ops;
-    ucs_mpool_t *mpool;
     ucs_status_t status;
-    khiter_t khiter;
 
     ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
                                      UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
     ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
                                      UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
 
-    key.mem_type = UCS_MEMORY_TYPE_HOST;
-    key.sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
-    khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash, key);
+    key.mem_type          = UCS_MEMORY_TYPE_HOST;
+    key.sys_dev           = UCS_SYS_DEVICE_ID_UNKNOWN;
+    const khiter_t khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash,
+                                   key);
     ASSERT_NE(kh_end(&worker->mpool_hash), khiter);
-    mpool = &kh_val(&worker->mpool_hash, khiter);
+    ucs_mpool_t *mpool = &kh_val(&worker->mpool_hash, khiter);
 
     /* The first chunk is exhausted, but the pool still has quota. Make the
      * next chunk allocation fail and verify it is not reported as quota
