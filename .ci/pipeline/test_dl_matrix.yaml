@@ -1,7 +1,7 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
-# UCX DL Cluster (GB300/aarch64) test matrix.
+# UCX DL Cluster (GB200/aarch64) test matrix.
 ---
 job: ucx-test-dl-gpu
 
@@ -31,10 +31,13 @@ env:
   NWORKERS: "1"
   WORKER: "0"
   SLURM_NODES: 1
-  SLURM_PARTITION: gb300nvl72_ci
+  # The account is bound to the partition by the cluster's cli_filter; the two
+  # move together. gb200nvl72_ci carries 99 nodes against gb300nvl72_ci's 36,
+  # and allocation is plain FIFO by queue age with no per-account priority.
+  SLURM_PARTITION: gb200nvl72_ci
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
-  SLURM_ACCOUNT: blackwell-ci
+  SLURM_ACCOUNT: oberon-gb-ci
   SLURM_JOB_TIMEOUT: '02:45:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
