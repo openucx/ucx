@@ -10,6 +10,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
@@ -74,24 +75,53 @@ public:
 
     void mock_transport(const std::string &tl_name)
     {
-        uct_component_h component;
-
         /* Currently only one TL can be mocked */
         ucs_assert(nullptr == m_tl);
+
+        m_tl = find_transport(tl_name);
+        if (m_tl != nullptr) {
+            m_mock.setup(&m_tl->query_devices, query_devices_mock);
+            m_mock.setup(&m_tl->iface_open, iface_open_mock);
+            return;
+        }
+
+        FAIL() << "Transport " << tl_name << " not found";
+    }
+
+    static bool is_transport_registered(const std::string &tl_name)
+    {
+        uct_component_h *components;
+        unsigned UCS_V_UNUSED num_components;
+        ucs_status_t status;
+
+        /*
+         * Load/register UCT components and modules, but do not query their
+         * resources. Querying resources would call TL query_devices callbacks.
+         */
+        status = uct_query_components(&components, &num_components);
+        if (status != UCS_OK) {
+            UCS_TEST_ABORT("Failed to query UCT components: "
+                           << ucs_status_string(status));
+        }
+
+        uct_release_component_list(components);
+        return find_transport(tl_name) != nullptr;
+    }
+
+    static uct_tl_t *find_transport(const std::string &tl_name)
+    {
+        uct_component_h component;
 
         ucs_list_for_each(component, &uct_components_list, list) {
             uct_tl_t *tl;
             ucs_list_for_each(tl, &component->tl_list, list) {
                 if (tl_name == tl->name) {
-                    m_mock.setup(&tl->query_devices, query_devices_mock);
-                    m_mock.setup(&tl->iface_open, iface_open_mock);
-                    m_tl = tl;
-                    return;
+                    return tl;
                 }
             }
         }
 
-        FAIL() << "Transport " << tl_name << " not found";
+        return nullptr;
     }
 
     void mock_cuda_ipc_remote_pid(ucp_worker_h worker)
@@ -681,8 +711,7 @@ protected:
 
     ucp_worker_cfg_index_t
     send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                  unsigned rkey_cfg_index = 1)
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -716,12 +745,7 @@ protected:
             send_buf.pattern_check(1);
         }
 
-        auto actual_rkey_cfg_index = rkey->cfg_index;
-        if (mem_type == UCS_MEMORY_TYPE_HOST) {
-            EXPECT_EQ(actual_rkey_cfg_index, rkey_cfg_index);
-        }
-
-        return actual_rkey_cfg_index;
+        return rkey->cfg_index;
     }
 };
 
@@ -855,7 +879,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
 UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
 {
-    send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    auto rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE,
+                                        UCP_OP_ID_PUT);
 
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_PUT;
@@ -864,7 +889,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
     check_rkey_config(sender(), {
         {0,    2048, "short",     "rc_mlx5/mock_1:1"},
         {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
-    }, key, 0);
+    }, key, rkey_cfg_index);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
@@ -992,6 +1017,10 @@ public:
             iface_attr.latency.m         = 1e-9;
             iface_attr.cap.get.max_zcopy = 16384;
         };
+
+        if (is_transport_registered("rc_gda")) {
+            UCS_TEST_SKIP_R("rc_gda transport is registered");
+        }
 
         setup_numa_topology();
         add_mock_iface_on_sys_device("mock_0:1", m_remote_sys_dev,
@@ -1334,18 +1363,16 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "IB_NUM_PATHS?=1")
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "ZCOPY_THRESH=1")
 {
     test_cuda_rma(UCP_OP_ID_PUT, {
-        {0, 0,   "short",     "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
 }
 
-UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "IB_NUM_PATHS?=1")
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "ZCOPY_THRESH=1")
 {
     test_cuda_rma(UCP_OP_ID_GET, {
-        {0, 0,   "copy-out",  "rc_mlx5/mock"},
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
 }
@@ -1460,6 +1487,40 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_2,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_tag, rcx, "rc_x")
 
+class test_ucp_proto_mock_rcx_twins_rndv_min :
+    public test_ucp_proto_mock_rcx_twins_tag {
+public:
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.get.min_zcopy = 65;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_func);
+        add_mock_iface("mock_1:1", iface_attr_func);
+        add_mock_iface("mock_2:1", iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_twins_rndv_min,
+           rndv_respects_lane_min_length,
+           "IB_NUM_PATHS?=1", "RNDV_THRESH=1", "RNDV_SCHEME=get_zcopy",
+           "MAX_RNDV_LANES=2")
+{
+    check_config(
+            {{0, 129, "eager short", "rc_mlx5/mock_0:1"},
+             {130, INF, "rendezvous zero-copy read from remote",
+              "50% on rc_mlx5/mock_0:1 and 50% on rc_mlx5/mock_1:1"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_rndv_min, rcx,
+                              "rc_x")
+
 class test_ucp_proto_mock_rcx_twins_put : public test_ucp_proto_mock_rcx_twins {
 protected:
     void check_config(const proto_select_data_vec_t &data_vec);
@@ -1497,6 +1558,88 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_put, use_single_net_device_rank_2,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_put, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_same_bdf_put : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_same_bdf_put() :
+        m_low_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_high_user_value_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 500e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        setup_same_bdf_topology();
+        add_mock_iface_on_sys_device("mock_0:1", m_high_user_value_sys_dev,
+                                     iface_attr_func);
+        add_mock_iface_on_sys_device("mock_1:1", m_low_user_value_sys_dev,
+                                     iface_attr_func);
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    void check_config(const proto_select_data_vec_t &data_vec)
+    {
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = UCP_OP_ID_PUT;
+        key.param.op_attr          = 0;
+
+        check_rkey_config(sender(), data_vec, key, 0);
+    }
+
+private:
+    void setup_same_bdf_topology()
+    {
+        ucs_sys_bus_id_t bus_id;
+
+        bus_id.domain   = 0xfffd;
+        bus_id.bus      = 0xfd;
+        bus_id.slot     = 0x1f;
+        bus_id.function = 0;
+
+        /* Do not extract/restore topology here: UCP init still probes real
+         * transports, and clearing global topology can break hardware caches. */
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &bus_id, 2, &m_high_user_value_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
+                m_high_user_value_sys_dev, "mock_high_user_value", 10));
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &bus_id, 1, &m_low_user_value_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(
+                m_low_user_value_sys_dev, "mock_low_user_value", 10));
+    }
+
+    ucs_sys_device_t m_low_user_value_sys_dev;
+    ucs_sys_device_t m_high_user_value_sys_dev;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
+           single_net_device_orders_same_bdf_by_user_value_0,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=0")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_1:1/path0"}});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_same_bdf_put,
+           single_net_device_orders_same_bdf_by_user_value_1,
+           "IB_NUM_PATHS?=2", "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=1")
+{
+    check_config({{0, 2048, "short", "rc_mlx5/mock_0:1/path0"},
+                  {2049, INF, "zero-copy", "rc_mlx5/mock_0:1/path0"}});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_same_bdf_put, rcx,
+                              "rc_x")
 
 class test_ucp_proto_mock_rcx_twins_get : public test_ucp_proto_mock_rcx_twins {
 protected:
@@ -1578,12 +1721,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_twins_get_inline_0, rcx,
  * lane-index insertion order (mock_1:1 first) differ from the
  * deterministic bus-id sorted order [mock_0:1, mock_1:1, mock_2:1].
  *
- * Installs a "proto_mock" topology provider that gives any sys_dev 
- * pair a 100ns latency penalty unless their indices differ by 1, and 
- * forces the local memory onto mock_1:1's sys_dev. 
- * Because the three mock devices get consecutive sys_devs, mock_0:1 and 
- * mock_2:1 are adjacent to the buffer while mock_1:1 (the buffer's own device) 
- * is "far".
+ * Installs a "proto_mock" topology provider that gives any known sys_dev
+ * pair a 100ns latency penalty unless it is one of the explicit adjacent
+ * pairs with mock_1:1. This makes mock_0:1 and mock_2:1 adjacent to the
+ * buffer while mock_1:1 (the buffer's own device) is "far".
  *
  * Each test asserts two ranges in the proto cache:
  *   - 0..64 (get/bcopy "copy-out"): reg_mem_info unknown, so all NICs
@@ -1624,6 +1765,10 @@ public:
         add_mock_iface("mock_2:1", iface_attr_slow); /* bus 2 */
         test_ucp_proto_mock::init();
 
+        s_low_adjacent_sys_dev  = get_mock_sys_dev_by_name("mock_0:1");
+        s_local_sys_dev         = get_mock_sys_dev_by_name("mock_1:1");
+        s_high_adjacent_sys_dev = get_mock_sys_dev_by_name("mock_2:1");
+
         const ucs_sys_topo_ops_t topo_ops = {
             .get_distance                   = get_distance,
             .get_memory_distance            = get_memory_distance,
@@ -1635,6 +1780,9 @@ public:
     virtual void cleanup() override
     {
         ucs_sys_topo_provider_pop();
+        s_low_adjacent_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
+        s_local_sys_dev         = UCS_SYS_DEVICE_ID_UNKNOWN;
+        s_high_adjacent_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         test_ucp_proto_mock::cleanup();
     }
 
@@ -1672,6 +1820,22 @@ protected:
                           key, rkey->cfg_index);
     }
 
+    static int is_adjacent_to_local(ucs_sys_device_t device1,
+                                    ucs_sys_device_t device2)
+    {
+        if (device1 == s_local_sys_dev) {
+            return (device2 == s_low_adjacent_sys_dev) ||
+                   (device2 == s_high_adjacent_sys_dev);
+        }
+
+        if (device2 == s_local_sys_dev) {
+            return (device1 == s_low_adjacent_sys_dev) ||
+                   (device1 == s_high_adjacent_sys_dev);
+        }
+
+        return 0;
+    }
+
     static ucs_status_t get_distance(ucs_sys_device_t device1,
                                      ucs_sys_device_t device2,
                                      ucs_sys_dev_distance_t *distance)
@@ -1679,7 +1843,7 @@ protected:
         *distance = ucs_topo_default_distance;
         if ((device1 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
             (device2 != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-            (sys_dev_delta(device1, device2) != 1)) {
+            !is_adjacent_to_local(device1, device2)) {
             distance->latency = 100e-9;
         }
         return UCS_OK;
@@ -1699,12 +1863,20 @@ protected:
     }
 
 private:
-    static unsigned
-    sys_dev_delta(ucs_sys_device_t device1, ucs_sys_device_t device2)
-    {
-        return (device1 > device2) ? (device1 - device2) : (device2 - device1);
-    }
+    static ucs_sys_device_t s_low_adjacent_sys_dev;
+    static ucs_sys_device_t s_local_sys_dev;
+    static ucs_sys_device_t s_high_adjacent_sys_dev;
 };
+
+ucs_sys_device_t
+test_ucp_proto_mock_rcx_trio_local_distance_get::s_low_adjacent_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
+ucs_sys_device_t
+test_ucp_proto_mock_rcx_trio_local_distance_get::s_local_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
+ucs_sys_device_t
+test_ucp_proto_mock_rcx_trio_local_distance_get::s_high_adjacent_sys_dev =
+        UCS_SYS_DEVICE_ID_UNKNOWN;
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
            single_net_dev_local_id_0_picks_lowest_adjacent_sys_dev,
@@ -1735,6 +1907,233 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_trio_local_distance_get,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_trio_local_distance_get,
                               rcx, "rc_x")
+
+class test_ucp_proto_mock_scoped_acc_devices {
+protected:
+    ~test_ucp_proto_mock_scoped_acc_devices()
+    {
+        for (auto sys_dev : m_gpus) {
+            if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+                ucs_assert_always(
+                        ucs_topo_sys_device_set_class(
+                                sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN) ==
+                        UCS_OK);
+            }
+        }
+    }
+
+protected:
+    ucs_sys_device_t m_gpus[3] = {
+        UCS_SYS_DEVICE_ID_UNKNOWN,
+        UCS_SYS_DEVICE_ID_UNKNOWN,
+        UCS_SYS_DEVICE_ID_UNKNOWN,
+    };
+};
+
+class test_ucp_proto_mock_rcx_single_net_dev :
+    protected test_ucp_proto_mock_scoped_acc_devices,
+    public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_single_net_dev()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short  = 208;
+            iface_attr.cap.put.max_short = 2048;
+            iface_attr.bandwidth.shared  = 28e9;
+            iface_attr.latency.c         = 600e-9;
+            iface_attr.latency.m         = 1e-9;
+        };
+
+        add_mock_iface("mock_0:1", iface_attr_func);
+        add_mock_iface("mock_1:1", iface_attr_func);
+        add_mock_iface("mock_2:1", iface_attr_func);
+
+        /* Register out of BDF order to verify that the ordinal, rather than
+         * topology insertion order, drives protocol selection. */
+        m_gpus[2] = register_mock_gpu(0x03);
+        m_gpus[0] = register_mock_gpu(0x01);
+        m_gpus[1] = register_mock_gpu(0x02);
+
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    static void
+    add_node_local_id_variant(std::vector<ucp_test_variant> &variants,
+                              size_t node_local_id)
+    {
+        ucp_params_t params = {};
+        params.field_mask   = UCP_PARAM_FIELD_FEATURES |
+                              UCP_PARAM_FIELD_NODE_LOCAL_ID;
+        params.features = UCP_FEATURE_TAG | UCP_FEATURE_AM | UCP_FEATURE_RMA;
+        params.node_local_id = node_local_id;
+        add_variant(variants, params);
+    }
+
+    static const char *expected_device_name(unsigned selection_id)
+    {
+        static const char *names[] = {"mock_0:1", "mock_1:1", "mock_2:1"};
+        return names[selection_id % 3];
+    }
+
+    static unsigned gpu_ordinal(ucs_sys_device_t gpu_sys_dev)
+    {
+        const unsigned ordinal = ucs_topo_sys_device_get_bdf_class_ordinal(
+                gpu_sys_dev);
+        EXPECT_NE(UCS_SYS_DEVICE_ORDINAL_INVALID, ordinal);
+        return ordinal;
+    }
+
+    ucp_proto_query_attr_t select_am_rndv_data_attr(ucs_sys_device_t sys_dev)
+    {
+        const size_t msg_length     = UCS_MBYTE;
+        ucp_ep_config_t *ep_config  = ucp_worker_ep_config(sender().worker(),
+                                                           ep_config_index(
+                                                                  sender()));
+        ucp_memory_info_t mem_info  = {
+            .type    = UCS_MEMORY_TYPE_HOST,
+            .sys_dev = sys_dev,
+            .flags   = UCS_MEM_FLAG_REGISTRABLE
+        };
+        ucp_proto_query_attr_t attr = {};
+        ucp_proto_select_param_t select_param;
+        const ucp_proto_threshold_elem_t *threshold;
+        const ucp_proto_rndv_ctrl_priv_t *rpriv;
+
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_AM_SEND, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        threshold = ucp_proto_select_lookup(sender().worker(),
+                                            &ep_config->proto_select,
+                                            ep_config_index(sender()),
+                                            UCP_WORKER_CFG_INDEX_NULL,
+                                            &select_param, msg_length);
+        if (threshold == nullptr) {
+            ADD_FAILURE() << "protocol selection failed";
+            return attr;
+        }
+
+        if (strcmp(threshold->proto_config.proto->name, "am/rndv") != 0) {
+            ADD_FAILURE() << "expected am/rndv protocol, got "
+                          << threshold->proto_config.proto->name;
+            return attr;
+        }
+
+        rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                threshold->proto_config.priv);
+        ucp_proto_config_query(sender().worker(), &rpriv->remote_proto_config,
+                               msg_length, &attr);
+        return attr;
+    }
+
+    void expect_selected_device(ucs_sys_device_t sys_dev, unsigned selection_id)
+    {
+        const ucp_proto_query_attr_t attr = select_am_rndv_data_attr(sys_dev);
+        ucp_context_h context             = sender().worker()->context;
+        ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                          ep_config_index(
+                                                                  sender()));
+        const ucs_sys_device_t expected_sys_dev = get_mock_sys_dev_by_name(
+                expected_device_name(selection_id));
+        ucp_lane_index_t lane;
+        ucp_rsc_index_t rsc_index;
+
+        EXPECT_GT(ucs_popcount(attr.lane_map), 1);
+        ucs_for_each_bit(lane, attr.lane_map) {
+            rsc_index = ep_config->key.lanes[lane].rsc_index;
+            ASSERT_NE(UCP_NULL_RESOURCE, rsc_index);
+            EXPECT_EQ(expected_sys_dev,
+                      context->tl_rscs[rsc_index].tl_rsc.sys_device);
+        }
+    }
+
+    ucs_sys_device_t gpu_with_auto_selection_not(unsigned selection_id)
+    {
+        for (auto sys_dev : m_gpus) {
+            if ((gpu_ordinal(sys_dev) % 3) != selection_id) {
+                return sys_dev;
+            }
+        }
+
+        ADD_FAILURE() << "all automatic selections matched " << selection_id;
+        return m_gpus[0];
+    }
+
+private:
+    static ucs_sys_device_t register_mock_gpu(uint8_t slot)
+    {
+        const ucs_sys_bus_id_t bus_id = {
+            .domain   = 0xfffc,
+            .bus      = 0xfc,
+            .slot     = slot,
+            .function = 0,
+        };
+        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(sys_dev,
+                                                    UCS_TOPO_DEVICE_CLASS_ACC));
+        return sys_dev;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_single_net_dev,
+           auto_selects_and_caches_each_device, "SINGLE_NET_DEVICE=y",
+           "NODE_LOCAL_ID=auto", "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=3")
+{
+    const unsigned first_ordinal = gpu_ordinal(m_gpus[0]);
+
+    EXPECT_EQ(UCS_ULUNITS_AUTO,
+              sender().worker()->context->config.node_local_id);
+    for (unsigned i = 0; i < 3; ++i) {
+        EXPECT_EQ(first_ordinal + i, gpu_ordinal(m_gpus[i]));
+        expect_selected_device(m_gpus[i], gpu_ordinal(m_gpus[i]));
+    }
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_single_net_dev, auto_host_falls_back_to_zero,
+           "SINGLE_NET_DEVICE=y", "NODE_LOCAL_ID=auto", "IB_NUM_PATHS?=2",
+           "MAX_RNDV_LANES=3")
+{
+    EXPECT_EQ(UCS_ULUNITS_AUTO,
+              sender().worker()->context->config.node_local_id);
+    expect_selected_device(UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_single_net_dev, rcx,
+                              "rc_x")
+
+class test_ucp_proto_mock_rcx_single_net_dev_api :
+    public test_ucp_proto_mock_rcx_single_net_dev {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_node_local_id_variant(variants, 1);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_single_net_dev_api,
+           api_id_overrides_auto_ordinal, "SINGLE_NET_DEVICE=y",
+           "NODE_LOCAL_ID=auto", "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=3")
+{
+    EXPECT_EQ(1ul, sender().worker()->context->config.node_local_id);
+    expect_selected_device(gpu_with_auto_selection_not(1), 1);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_single_net_dev_api,
+           numeric_config_overrides_api_id, "SINGLE_NET_DEVICE=y",
+           "NODE_LOCAL_ID=2", "IB_NUM_PATHS?=2", "MAX_RNDV_LANES=3")
+{
+    EXPECT_EQ(2ul, sender().worker()->context->config.node_local_id);
+    expect_selected_device(gpu_with_auto_selection_not(2), 2);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_single_net_dev_api, rcx,
+                              "rc_x")
 
 class test_ucp_proto_mock_am_tiebreak : public test_ucp_proto_mock {
 public:
@@ -1818,9 +2217,9 @@ public:
 };
 
 UCS_TEST_P(test_ucp_proto_mock_am_tiebreak_within_window,
-           bandwidth_within_window, "IB_NUM_PATHS?=1")
+           latency_beats_bandwidth, "IB_NUM_PATHS?=1")
 {
-    check_config("rc_mlx5/mock_1:1");
+    check_config("rc_mlx5/mock_0:1");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_am_tiebreak_within_window,
@@ -1904,7 +2303,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_keepalive_tiebreak, rcx,
                               "rc_x")
 
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
 
 class test_ucp_proto_mock_rcx_speed_change : public test_ucp_proto_mock {
 public:
@@ -1943,7 +2342,7 @@ public:
     {
         m_port_speed[iface_name] = port_speed;
 
-        ib_event(IBV_EVENT_PORT_SPEED_CHANGE, 1);
+        ib_event(IBV_EVENT_DEVICE_SPEED_CHANGE, 0);
         while (progress());
     }
 
@@ -1952,17 +2351,17 @@ public:
     {
         // One EP & rkey config created during connection establishment
         ucp_worker_h worker = sender().worker();
-        EXPECT_EQ(worker->rkey_config_count, 1);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 1);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         // New rkey config created during first operation
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 2);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 2);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         // Existing rkey config is used during second operation
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 2);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 2);
         EXPECT_EQ(worker->ep_config.length, 1);
 
         ucp_proto_select_key_t key = any_key();
@@ -1976,14 +2375,14 @@ public:
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
         set_port_speed("mock_0:1", 14e9);
         send(2);
-        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         // Slightly change port_speed, so that quantized value remains the same
         // This shouldn't affect EP or rkey config
         set_port_speed("mock_0:1", 14.5e9);
         send(2);
-        EXPECT_EQ(worker->rkey_config_count, 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         check_rkey_config(sender(), {
@@ -1994,7 +2393,7 @@ public:
         // new EP & rkey configs are created
         set_port_speed("mock_1:1", 14e9);
         send(3);
-        EXPECT_EQ(worker->rkey_config_count, 4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 3);
 
         check_rkey_config(sender(), {
@@ -2005,7 +2404,7 @@ public:
         set_port_speed("mock_0:1", 28e9);
         set_port_speed("mock_1:1", 24e9);
         send(1);
-        EXPECT_EQ(worker->rkey_config_count, 4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 
@@ -2017,8 +2416,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT, UCS_MEMORY_TYPE_HOST,
-                      rkey_cfg_index);
+        EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT),
+                  rkey_cfg_index);
     }, UCP_OP_ID_PUT);
 }
 
@@ -2026,11 +2425,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
            "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
 {
     test_port_speed([this](unsigned rkey_cfg_index) {
-        send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET, UCS_MEMORY_TYPE_HOST,
-                      rkey_cfg_index);
+        EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET),
+                  rkey_cfg_index);
     }, UCP_OP_ID_GET);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rcx, "rc_x")
 
-#endif // HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#endif // HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE

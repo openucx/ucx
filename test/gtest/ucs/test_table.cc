@@ -64,7 +64,7 @@ protected:
 UCS_TEST_F(test_table, empty_table) {
     table_t table(2);
     EXPECT_EQ("+--+--+\n"
-              "+--+--+\n",
+              "+--+--+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -78,7 +78,7 @@ UCS_TEST_F(test_table, single_cell) {
 
     EXPECT_EQ("+-----+\n"
               "| abc |\n"
-              "+-----+\n",
+              "+-----+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -91,7 +91,7 @@ UCS_TEST_F(test_table, single_cell_empty) {
 
     EXPECT_EQ("+--+\n"
               "|  |\n"
-              "+--+\n",
+              "+--+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -120,7 +120,7 @@ UCS_TEST_F(test_table, wide_columns) {
     EXPECT_EQ("+--------------------+------------------+-------------------+\n"
               "| short              | even longer cell | wide third column |\n"
               "| a much wider value |        x         |                 y |\n"
-              "+--------------------+------------------+-------------------+\n",
+              "+--------------------+------------------+-------------------+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -158,7 +158,7 @@ UCS_TEST_F(test_table, separator) {
               "+---+---+\n"
               "+---+---+\n"
               "|   | d |\n"
-              "+---+---+\n",
+              "+---+---+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -177,7 +177,7 @@ UCS_TEST_F(test_table, trailing_separator_avoids_bottom_frame) {
 
     EXPECT_EQ("+---+--+\n"
               "| x |  |\n"
-              "+---+--+\n",
+              "+---+--+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -218,7 +218,7 @@ UCS_TEST_F(test_table, col_span) {
               "| col_span = 3       |    1 |\n"
               "|   left_2    |   right_2   |\n"
               "| abcd | efgh | ijkl | mnop |\n"
-              "+------+------+------+------+\n",
+              "+------+------+------+------+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -240,7 +240,7 @@ UCS_TEST_F(test_table, col_span_sets_width) {
     EXPECT_EQ("+----+--------------------+\n"
               "| this header is too wide |\n"
               "| ab |                 cd |\n"
-              "+----+--------------------+\n",
+              "+----+--------------------+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -264,7 +264,7 @@ UCS_TEST_F(test_table, cell_fmt) {
     EXPECT_EQ("+--------------+-----+\n"
               "|  42 lo..hi   | k=7 |\n"
               "| 3.1415926536 |   x |\n"
-              "+--------------+-----+\n",
+              "+--------------+-----+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -289,7 +289,7 @@ UCS_TEST_F(test_table, row_prefix) {
               "# | a |\n"
               "# +---+\n"
               "# | b |\n"
-              "# +---+\n",
+              "# +---+",
               table.render());
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }
@@ -313,7 +313,7 @@ UCS_TEST_F(test_table, equal_widths) {
 
     EXPECT_EQ("+--------+--------+--------+\n"
               "| a      | longer | xy     |\n"
-              "+--------+--------+--------+\n",
+              "+--------+--------+--------+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -340,7 +340,7 @@ UCS_TEST_F(test_table, equal_widths_with_col_span) {
     EXPECT_EQ("+--------------------+--------------------+\n"
               "| this header is too wide                 |\n"
               "| ab                 | cd                 |\n"
-              "+--------------------+--------------------+\n",
+              "+--------------------+--------------------+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -359,7 +359,7 @@ UCS_TEST_F(test_table, render_twice) {
 
     EXPECT_EQ("+---+---+\n"
               "| a | b |\n"
-              "+---+---+\n",
+              "+---+---+",
               table.render());
 
     row = table.add_row();
@@ -371,7 +371,7 @@ UCS_TEST_F(test_table, render_twice) {
     EXPECT_EQ("+-------------+-------------+\n"
               "| a           | b           |\n"
               "| aaaaaaaaaaa | bbbbbbbbbbb |\n"
-              "+-------------+-------------+\n",
+              "+-------------+-------------+",
               table.render());
 
     EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
@@ -430,4 +430,61 @@ UCS_TEST_F(test_table, cell_fmt_newline_2) {
     ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT,
                                "a%sb", "\n");
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_table_get_status(table.get()));
+}
+
+UCS_TEST_F(test_table, separator_merged_1_of_2) {
+    table_t table(2);
+
+    auto row = table.add_row();
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "xx");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "yy");
+
+    /* Carry the leftmost column over the separator. */
+    ucs_table_add_separator_with_merged_cols(table.get(), 1);
+
+    row = table.add_row();
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "zz");
+
+    EXPECT_EQ("+----+----+\n"
+              "| xx | yy |\n"
+              "|    +----+\n"
+              "|    | zz |\n"
+              "+----+----+",
+              table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
+}
+
+UCS_TEST_F(test_table, separator_merged_2_of_3) {
+    table_t table(3);
+
+    auto row = table.add_row();
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "aa");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "bb");
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "cc");
+
+    /* Carry the two leftmost columns over the separator. */
+    ucs_table_add_separator_with_merged_cols(table.get(), 2);
+
+    row = table.add_row();
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_empty(table.get(), row, 1);
+    ucs_table_row_add_cell_fmt(table.get(), row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
+                               "dd");
+
+    EXPECT_EQ("+----+----+----+\n"
+              "| aa | bb | cc |\n"
+              "|    |    +----+\n"
+              "|    |    | dd |\n"
+              "+----+----+----+",
+              table.render());
+
+    EXPECT_EQ(UCS_OK, ucs_table_get_status(table.get()));
 }

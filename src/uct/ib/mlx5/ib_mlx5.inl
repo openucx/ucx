@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (c) Google, LLC, 2024. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -191,9 +191,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq, int poll_flags,
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 {
-#if UCS_ENABLE_ASSERT
     wq->hw_ci = hw_ci;
-#endif
     return wq->bb_max - (wq->prev_sw_pi - hw_ci);
 }
 
@@ -509,10 +507,13 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
 static UCS_F_ALWAYS_INLINE
 size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
                                     struct mlx5_wqe_data_seg *dptr,
-                                    const uct_iov_t *iov, size_t iovcnt)
+                                    const uct_iov_t *iov, size_t iovcnt,
+                                    size_t *iov_length_p)
 {
-    size_t wqe_size = 0;
+    size_t iov_length = 0;
+    size_t wqe_size   = 0;
     size_t iov_it;
+    size_t length;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
         if (!iov[iov_it].length) { /* Skip zero length WQE*/
@@ -522,11 +523,16 @@ size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 
         /* place data into the buffer */
         dptr = uct_ib_mlx5_txwq_wrap_any(txwq, dptr);
-        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer,
-                                 uct_iov_get_length(iov + iov_it),
+        length = uct_iov_get_length(iov + iov_it);
+        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer, length,
                                  uct_ib_memh_get_lkey(iov[iov_it].memh));
-        wqe_size += sizeof(*dptr);
+        iov_length += length;
+        wqe_size   += sizeof(*dptr);
         ++dptr;
+    }
+
+    if (iov_length_p != NULL) {
+        *iov_length_p = iov_length;
     }
 
     return wqe_size;
@@ -573,24 +579,21 @@ void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
     return src;
 }
 
-static UCS_F_ALWAYS_INLINE uint16_t
-uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
-                      unsigned wqe_size, int hw_ci_updated)
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_txwq_ring_doorbell(uct_ib_mlx5_txwq_t *wq,
+                               struct mlx5_wqe_ctrl_seg *ctrl,
+                               uint16_t dbrec_pi, uint16_t num_bb)
 {
-    uint16_t sw_pi, num_bb, res_count;
     void *src, *dst;
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
-    sw_pi   = wq->sw_pi;
-
-    uct_ib_mlx5_txwq_validate(wq, num_bb, hw_ci_updated);
+    ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
 
     /* TODO Put memory store fence here too, to prevent WC being flushed after DBrec */
     ucs_memory_cpu_store_fence();
 
     /* Write doorbell record */
-    *wq->dbrec = htonl(sw_pi += num_bb);
+    *wq->dbrec = htonl(dbrec_pi);
 
     /* Make sure that doorbell record is written before ringing the doorbell */
     ucs_memory_bus_store_fence();
@@ -599,8 +602,6 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     dst = wq->reg->addr.ptr;
     src = ctrl;
 
-    ucs_assert(wqe_size <= UCT_IB_MLX5_BF_REG_SIZE);
-    ucs_assert(num_bb <= UCT_IB_MLX5_MAX_BB);
     if (ucs_likely(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_BF_POST)) {
         src = uct_ib_mlx5_bf_copy(dst, src, num_bb, wq);
         ucs_memory_bus_cacheline_wc_flush();
@@ -628,6 +629,27 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     /* We don't want the compiler to reorder instructions and hurt latency */
     ucs_compiler_fence();
 
+    /* Flip BF register */
+    wq->reg->addr.uint ^= UCT_IB_MLX5_BF_REG_SIZE;
+
+    return src;
+}
+
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
+                      unsigned wqe_size, int hw_ci_updated)
+{
+    uint16_t sw_pi, num_bb, res_count;
+    void *src;
+
+    num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+    sw_pi   = wq->sw_pi;
+
+    uct_ib_mlx5_txwq_validate(wq, num_bb, hw_ci_updated);
+
+    sw_pi += num_bb;
+    src    = uct_ib_mlx5_txwq_ring_doorbell(wq, ctrl, sw_pi, num_bb);
+
     /*
      * Advance queue pointer.
      * We return the number of BBs the *previous* WQE has consumed, since CQEs
@@ -641,8 +663,6 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
     ucs_assert(wq->prev_sw_pi == wq->sw_pi);
     wq->sw_pi       = sw_pi;
 
-    /* Flip BF register */
-    wq->reg->addr.uint ^= UCT_IB_MLX5_BF_REG_SIZE;
     return res_count;
 }
 

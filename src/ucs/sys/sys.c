@@ -529,8 +529,17 @@ ucs_status_t ucs_read_file_number(long *value, int silent,
     }
 
     n = strtol(buffer, &tail, 0);
-    if ((*tail != '\0') && !isspace(*tail)) {
-        /* parse error */
+    if (tail == buffer) {
+        /* No digits were parsed */
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    while (isspace((unsigned char)*tail)) {
+        ++tail;
+    }
+
+    if (*tail != '\0') {
+        /* Unexpected non-whitespace characters follow the number */
         return UCS_ERR_INVALID_PARAM;
     }
 

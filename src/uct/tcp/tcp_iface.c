@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -266,8 +266,13 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!ucs_netlink_is_best_route(ndev_index,
-                                   (const struct sockaddr*)&remote_addr)) {
+    /* TODO: Check using relaxed route (might need bind to device socket
+     * option). We currently assume here that with or without src address bind,
+     * kernel is going to anyway use the best route. So we make UCX refuse other
+     * interfaces. */
+    if (!ucs_netlink_route_matches(ndev_index,
+                                   (const struct sockaddr*)&remote_addr,
+                                   UCS_NETLINK_ROUTE_CHECK_BEST)) {
         uct_iface_fill_info_str_buf(
                     params, "no route to %s",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
@@ -687,7 +692,8 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_connect_to_ep_v2    = uct_tcp_ep_connect_to_ep_v2,
     .iface_is_reachable_v2  = uct_tcp_iface_is_reachable_v2,
     .ep_is_connected        = uct_tcp_ep_is_connected,
-    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+    .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+    .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -1044,6 +1050,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                                   path_buffer);
         sys_dev    = ucs_topo_get_sysfs_dev((*entry)->d_name, sysfs_path,
                                             sys_device_priority);
+        if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_NET);
+        }
 
         ucs_snprintf_zero(devices[num_devices].name,
                           sizeof(devices[num_devices].name), "%s",

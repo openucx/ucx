@@ -236,6 +236,8 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
         .ep_is_connected       = uct_srd_ep_is_connected,
         .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)
+            ucs_empty_function_return_unsupported,
+        .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)
             ucs_empty_function_return_unsupported
     },
     .create_cq      = uct_ib_verbs_create_cq,
@@ -800,7 +802,10 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         goto out;
     }
 
-    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
+    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
+                                            &ah_attr,
+                                            uct_ib_iface_md(&iface->super)->pd,
+                                            "SRD AH", &ah);
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u failed to create ah"
                   "status=%s",

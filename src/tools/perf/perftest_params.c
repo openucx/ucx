@@ -8,8 +8,10 @@
 #  include "config.h"
 #endif
 
+#include "api/libperf.h"
 #include "perftest.h"
 
+#include <ucs/memory/memory_type.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
@@ -22,13 +24,16 @@ const struct option TEST_PARAMS_ARGS_LONG[] =
     {0, 0, 0, 0}
 };
 
-static void print_memory_type_usage(void)
+static void print_memory_allocator_usage(void)
 {
-    ucs_memory_type_t it;
+    const ucx_perf_allocator_t *allocator;
+    unsigned i;
 
-    ucs_memory_type_for_each(it) {
-        printf("                        %s - %s\n", ucs_memory_type_names[it],
-               ucs_memory_type_descs[it]);
+    for (i = 0; i < ucx_perf_num_allocators; ++i) {
+        allocator = ucx_perf_allocators[i];
+        printf("                        %s - %s\n",
+               allocator->name,
+               ucs_memory_type_descs[allocator->resolve_mem_type(allocator)]);
     }
 }
 
@@ -88,9 +93,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
     printf("                    compact form example: \"-s 1024:16 expands to [1024, ..., 1024] with 16 elements\n");
-    printf("     -m <send mem type>[,<recv mem type>]\n");
-    printf("                    memory type of message for sender and receiver (host)\n");
-    print_memory_type_usage();
+    printf("     -m <send memory>[,<recv memory>]\n");
+    printf("                    memory allocator for sender and receiver "
+           "(host)\n");
+    print_memory_allocator_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
                                 ctx->params.super.warmup_iter);
@@ -165,7 +171,10 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -I             create context with wakeup feature enabled\n");
-    printf("     -e             create endpoints with error handling support\n");
+    printf("     -e [<mode>]    create endpoints with error handling mode (peer):\n");
+    printf("                        none     - no error handling\n");
+    printf("                        peer     - peer failure error handling\n");
+    printf("                        failover - lane failover error handling\n");
     printf("     -E <mode>      wait mode for tests\n");
     printf("                        poll       : repeatedly call worker_progress\n");
     printf("                        sleep      : go to sleep after posting requests\n");
@@ -173,6 +182,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.ucp.am_hdr_size);
     printf("     -y             do additional memcopy to the user memory in active message receive handler\n");
     printf("     -z             pass pre-registered memory handle\n");
+    printf("     -V             validate data correctness for pingpong tests\n");
     printf("     -g <IP>[:<port>], --daemon-local <IP>[:<port>]\n");
     printf("                    IP address and port of the local daemon to offload UCP operations to\n");
     printf("                    Port is optional, by default daemon port is (%d)\n",
@@ -235,6 +245,33 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
     return UCS_ERR_INVALID_PARAM;
 }
 
+static ucs_status_t parse_perf_mem_allocator(const char *opt_arg,
+                                             ucs_memory_type_t *mem_type,
+                                             char *alloc_name)
+{
+    const ucx_perf_allocator_t *allocator;
+
+    if (opt_arg == NULL) {
+        ucs_error("memory allocator string is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (strlen(opt_arg) >= UCX_PERF_ALLOC_NAME_MAX) {
+        ucs_error("memory allocator name is too long: \"%s\"", opt_arg);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    allocator = ucx_perf_allocator_by_name(opt_arg);
+    if (allocator != NULL) {
+        *mem_type = allocator->resolve_mem_type(allocator);
+        ucs_strncpy_safe(alloc_name, opt_arg, UCX_PERF_ALLOC_NAME_MAX);
+        return UCS_OK;
+    }
+
+    ucs_error("unsupported memory allocator: \"%s\"", opt_arg);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t
 parse_accel_device(char *opt_arg, ucx_perf_accel_dev_t *dev)
 {
@@ -273,13 +310,15 @@ parse_accel_device(char *opt_arg, ucx_perf_accel_dev_t *dev)
 
 static ucs_status_t parse_mem_type_params(const char *opt_arg,
                                           ucs_memory_type_t *send_mem_type,
-                                          ucs_memory_type_t *recv_mem_type)
+                                          ucs_memory_type_t *recv_mem_type,
+                                          char *send_alloc_name,
+                                          char *recv_alloc_name)
 {
-    const char *delim   = ",";
-    char *token         = strtok((char*)opt_arg, delim);
+    const char *delim = ",";
+    char *token       = strtok((char*)opt_arg, delim);
     ucs_status_t status;
 
-    status = parse_mem_type(token, send_mem_type);
+    status = parse_perf_mem_allocator(token, send_mem_type, send_alloc_name);
     if (status != UCS_OK) {
         return status;
     }
@@ -287,9 +326,11 @@ static ucs_status_t parse_mem_type_params(const char *opt_arg,
     token = strtok(NULL, delim);
     if (NULL == token) {
         *recv_mem_type = *send_mem_type;
+        ucs_strncpy_safe(recv_alloc_name, send_alloc_name,
+                         UCX_PERF_ALLOC_NAME_MAX);
         return UCS_OK;
     } else {
-        return parse_mem_type(token, recv_mem_type);
+        return parse_perf_mem_allocator(token, recv_mem_type, recv_alloc_name);
     }
 }
 
@@ -473,6 +514,32 @@ static ucs_status_t parse_device_level(const char *opt_arg,
 
     ucs_error("Invalid option argument for device level: %s", opt_arg);
     return UCS_ERR_INVALID_PARAM;
+}
+
+static ucs_status_t
+parse_ucp_err_handling_params(perftest_params_t *params, const char *opt_arg)
+{
+    if (opt_arg == NULL) {
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_PEER;
+        return UCS_OK;
+    }
+
+    if (!strcmp(opt_arg, "peer")) {
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_PEER;
+    } else if (!strcmp(opt_arg, "failover")) {
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_FAILOVER;
+    } else if (!strcmp(opt_arg, "none")) {
+        params->super.flags &= ~UCX_PERF_TEST_FLAG_ERR_HANDLING;
+        params->super.ucp.err_mode = UCP_ERR_HANDLING_MODE_NONE;
+    } else {
+        ucs_error("Invalid option argument for -e: %s", opt_arg);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
@@ -701,8 +768,7 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         params->super.flags |= UCX_PERF_TEST_FLAG_WAKEUP;
         return UCS_OK;
     case 'e':
-        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
-        return UCS_OK;
+        return parse_ucp_err_handling_params(params, opt_arg);
     case 'M':
         if (!strcmp(opt_arg, "single")) {
             params->super.thread_mode = UCS_THREAD_MODE_SINGLE;
@@ -753,7 +819,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         }
     case 'm':
         return parse_mem_type_params(opt_arg, &params->super.send_mem_type,
-                                     &params->super.recv_mem_type);
+                                     &params->super.recv_mem_type,
+                                     params->super.send_mem_alloc_name,
+                                     params->super.recv_mem_alloc_name);
     case 'a':
         return parse_accel_device_params(opt_arg, &params->super.send_device,
                                          &params->super.recv_device);
@@ -770,6 +838,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         return UCS_OK;
     case 'z':
         params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;
+        return UCS_OK;
+    case 'V':
+        params->super.flags |= UCX_PERF_TEST_FLAG_VALIDATE;
         return UCS_OK;
     default:
        return UCS_ERR_INVALID_PARAM;
@@ -819,11 +890,39 @@ ucs_status_t clone_params(perftest_params_t *dest,
     return UCS_OK;
 }
 
-ucs_status_t check_params(const perftest_params_t *params)
+ucs_status_t check_validation_params(ucx_perf_params_t *params)
+{
+    if (!(params->flags & UCX_PERF_TEST_FLAG_VALIDATE)) {
+        return UCS_OK;
+    }
+
+    if (params->api == UCX_PERF_API_UCT) {
+        ucs_error("validation mode is not compatible with UCT tests");
+        return UCS_ERR_INVALID_PARAM;
+    }
+   
+    if (params->test_type != UCX_PERF_TEST_TYPE_PINGPONG) {
+        ucs_error("validation mode requires using a PingPong test");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->command == UCX_PERF_CMD_AM) {
+        params->flags |= UCX_PERF_TEST_FLAG_AM_RECV_COPY;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t check_params(perftest_params_t *params)
 {
     ucs_status_t status;
 
     status = check_daemon_params(&params->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = check_validation_params(&params->super);
     if (status != UCS_OK) {
         return status;
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,6 +11,7 @@
 #include <cuda.h>
 #include <common/cuda.h>
 #include <memory>
+#include <vector>
 
 class test_cuda_ipc_rma : public uct_test {
 protected:
@@ -190,8 +191,11 @@ UCS_TEST_P(test_cuda_ipc_rma, get_mem_elem_pack)
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
     uct_device_mem_elem_t mem_elem_host;
+    void *release_handle;
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &mem_elem_host));
+                                       recvbuf.rkey(), &mem_elem_host,
+                                       &release_handle));
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 UCS_TEST_P(test_cuda_ipc_rma, get_device_ep)
@@ -222,8 +226,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
 
     uct_device_mem_elem_t src_elem_host;
+    void *release_handle;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &src_elem_host));
+                                       recvbuf.rkey(), &src_elem_host,
+                                       &release_handle));
 
 
     uct_device_mem_elem_t *src_elem;
@@ -248,6 +254,7 @@ UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
     recvbuf.pattern_check(SEED1);
     cuMemFree((CUdeviceptr)src_elem);
     cuMemFree((CUdeviceptr)mem_elem);
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
@@ -272,9 +279,10 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
 
     uct_device_mem_elem_t mem_elem_host;
+    void *release_handle;
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
-                                       &mem_elem_host));
+                                       &mem_elem_host, &release_handle));
     ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &mem_elem_host,
                                          mem_elem_size));
 
@@ -286,6 +294,227 @@ UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
                                   UCS_MEMORY_TYPE_CUDA),
               1);
     cuMemFree((CUdeviceptr)mem_elem);
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_rma_device, cuda_ipc)
+
+class test_cuda_ipc_sgl : public test_cuda_ipc_rma {
+protected:
+    struct sgl_arrays {
+        std::vector<std::unique_ptr<mapped_buffer>> sendbufs;
+        std::vector<std::unique_ptr<mapped_buffer>> recvbufs;
+        std::vector<void*> buffers;
+        std::vector<size_t> lengths;
+        std::vector<uct_mem_h> memhs;
+        std::vector<uint64_t> remote_addrs;
+        std::vector<uct_rkey_t> rkeys;
+    };
+
+    struct sgl_completion {
+        uct_completion_t uct;
+        unsigned         done;
+    };
+
+    enum sgl_op_t {
+        SGL_OP_PUT,
+        SGL_OP_GET
+    };
+
+    bool is_sgl_supported(sgl_op_t op) {
+        uct_iface_attr_v2_t attr = {};
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                          UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+                          UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+
+        if (uct_iface_query_v2(m_sender->iface(), &attr) != UCS_OK) {
+            return false;
+        }
+
+        if (op == SGL_OP_PUT) {
+            return (attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) &&
+                   (attr.max_put_sgl_zcopy_count > 0);
+        }
+
+        return (attr.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY) &&
+               (attr.max_get_sgl_zcopy_count > 0);
+    }
+
+    void init_sgl(sgl_arrays &sgl, const std::vector<size_t> &sizes,
+                  sgl_op_t op = SGL_OP_PUT) {
+        size_t count = sizes.size();
+
+        sgl.buffers.resize(count);
+        sgl.lengths = sizes;
+        sgl.memhs.resize(count);
+        sgl.remote_addrs.resize(count);
+        sgl.rkeys.resize(count);
+
+        for (size_t i = 0; i < count; ++i) {
+            uint64_t local_seed  = (op == SGL_OP_PUT) ? (SEED1 + i) : SEED2;
+            uint64_t remote_seed = (op == SGL_OP_PUT) ? SEED2 : (SEED1 + i);
+
+            sgl.sendbufs.emplace_back(new mapped_buffer(sizes[i], local_seed,
+                                                        *m_sender, 0,
+                                                        UCS_MEMORY_TYPE_CUDA));
+            sgl.recvbufs.emplace_back(new mapped_buffer(sizes[i], remote_seed,
+                                                        *m_receiver, 0,
+                                                        UCS_MEMORY_TYPE_CUDA));
+            sgl.buffers[i]      = sgl.sendbufs[i]->ptr();
+            sgl.memhs[i]        = sgl.sendbufs[i]->memh();
+            sgl.remote_addrs[i] = (uint64_t)sgl.recvbufs[i]->ptr();
+            sgl.rkeys[i]        = sgl.recvbufs[i]->rkey();
+        }
+    }
+
+    ucs_status_t sgl_op(sgl_op_t op, const sgl_arrays &sgl,
+                        uct_completion_t *comp = NULL) {
+        if (op == SGL_OP_PUT) {
+            return uct_ep_put_sgl_zcopy(m_sender->ep(0), sgl.buffers.data(),
+                                        sgl.lengths.data(), sgl.memhs.data(),
+                                        sgl.remote_addrs.data(),
+                                        sgl.rkeys.data(), NULL, NULL,
+                                        sgl.lengths.size(), comp);
+        }
+
+        return uct_ep_get_sgl_zcopy(m_sender->ep(0), sgl.buffers.data(),
+                                    sgl.lengths.data(), sgl.memhs.data(),
+                                    sgl.remote_addrs.data(), sgl.rkeys.data(),
+                                    NULL, NULL, sgl.lengths.size(), comp);
+    }
+
+    void check_sgl(sgl_op_t op, const sgl_arrays &sgl) {
+        for (size_t i = 0; i < sgl.recvbufs.size(); ++i) {
+            if (op == SGL_OP_PUT) {
+                sgl.recvbufs[i]->pattern_check(SEED1 + i);
+            } else {
+                sgl.sendbufs[i]->pattern_check(SEED1 + i);
+            }
+        }
+    }
+
+    void test_sgl_various_counts(sgl_op_t op) {
+        static constexpr size_t length = 2 * UCS_KBYTE;
+        static const size_t counts[]   = {1, 2, 4, 10, 1024};
+
+        for (size_t count : counts) {
+            sgl_arrays sgl;
+            init_sgl(sgl, std::vector<size_t>(count, length), op);
+            ASSERT_UCS_OK_OR_INPROGRESS(sgl_op(op, sgl));
+            m_sender->flush();
+            check_sgl(op, sgl);
+
+            if (HasFailure()) {
+                break;
+            }
+        }
+    }
+
+    void test_sgl_various_lengths(sgl_op_t op) {
+        sgl_arrays sgl;
+        init_sgl(sgl, {64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 16 * UCS_KBYTE}, op);
+        ASSERT_UCS_OK_OR_INPROGRESS(sgl_op(op, sgl));
+        m_sender->flush();
+        check_sgl(op, sgl);
+    }
+
+    void test_sgl_with_callback(sgl_op_t op) {
+        sgl_arrays sgl;
+        init_sgl(sgl, std::vector<size_t>(10, UCS_KBYTE), op);
+
+        sgl_completion comp = {};
+        comp.uct.func       = completion_cb;
+        comp.uct.count      = 1;
+        comp.uct.status     = UCS_OK;
+
+        ucs_status_t status = sgl_op(op, sgl, &comp.uct);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+
+        if (status == UCS_INPROGRESS) {
+            wait_for_flag(&comp.done);
+            EXPECT_EQ(1u, comp.done);
+            EXPECT_UCS_OK(comp.uct.status);
+        }
+
+        m_sender->flush();
+        check_sgl(op, sgl);
+    }
+
+    static void completion_cb(uct_completion_t *self) {
+        ucs_container_of(self, sgl_completion, uct)->done = 1;
+    }
+};
+
+UCS_TEST_P(test_cuda_ipc_sgl, iface_caps_v2)
+{
+    uct_iface_attr_v2_t attr = {};
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+                      UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+
+    ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &attr));
+
+    bool put_flag_set  = attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+    bool put_count_set = attr.max_put_sgl_zcopy_count > 0;
+    EXPECT_EQ(put_flag_set, put_count_set);
+
+    bool get_flag_set  = attr.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY;
+    bool get_count_set = attr.max_get_sgl_zcopy_count > 0;
+    EXPECT_EQ(get_flag_set, get_count_set);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, put_various_counts)
+{
+    if (!is_sgl_supported(SGL_OP_PUT)) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
+    test_sgl_various_counts(SGL_OP_PUT);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, put_various_lengths)
+{
+    if (!is_sgl_supported(SGL_OP_PUT)) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
+    test_sgl_various_lengths(SGL_OP_PUT);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, put_with_callback)
+{
+    if (!is_sgl_supported(SGL_OP_PUT)) {
+        UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+    }
+
+    test_sgl_with_callback(SGL_OP_PUT);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, get_various_counts)
+{
+    if (!is_sgl_supported(SGL_OP_GET)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    test_sgl_various_counts(SGL_OP_GET);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, get_various_lengths)
+{
+    if (!is_sgl_supported(SGL_OP_GET)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    test_sgl_various_lengths(SGL_OP_GET);
+}
+
+UCS_TEST_P(test_cuda_ipc_sgl, get_with_callback)
+{
+    if (!is_sgl_supported(SGL_OP_GET)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    test_sgl_with_callback(SGL_OP_GET);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_sgl, cuda_ipc)
