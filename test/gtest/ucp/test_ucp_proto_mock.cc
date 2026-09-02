@@ -1351,6 +1351,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
 class test_ucp_proto_mock_mtype_sys_dev : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_mtype_sys_dev() :
+        m_topo_state(nullptr),
         m_user_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
         m_transfer_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
         m_sibling_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
@@ -1367,6 +1368,9 @@ public:
             iface_attr.latency.m        = 1e-9;
         };
 
+        m_topo_state = ucs_topo_extract_state();
+        ASSERT_NE(nullptr, m_topo_state);
+
         add_mock_iface_on_real_device("mock", iface_attr_func);
         test_ucp_proto_mock::init();
     }
@@ -1378,17 +1382,13 @@ public:
 
     virtual void cleanup() override
     {
-        /* Leave no synthetic device in the DEV role. In particular, CUDA
-         * discovery in a later test must not scan these aliases. */
-        if (m_transfer_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            EXPECT_UCS_OK(
-                    ucs_topo_sys_device_enable_aux_path(m_transfer_sys_dev));
-        }
-        if (m_sibling_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            EXPECT_UCS_OK(
-                    ucs_topo_sys_device_enable_aux_path(m_sibling_sys_dev));
-        }
         test_ucp_proto_mock::cleanup();
+        if (m_topo_state != nullptr) {
+            ucs_topo_restore_state(m_topo_state);
+            m_topo_state = nullptr;
+            ucs_sys_topo_reset_provider();
+        }
+
         m_user_sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
         m_transfer_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         m_sibling_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -1536,9 +1536,10 @@ private:
         ASSERT_FALSE(ucs_topo_is_reachable(m_transfer_sys_dev, m_user_sys_dev));
     }
 
-    ucs_sys_device_t m_user_sys_dev;
-    ucs_sys_device_t m_transfer_sys_dev;
-    ucs_sys_device_t m_sibling_sys_dev;
+    ucs_global_state_t *m_topo_state;
+    ucs_sys_device_t    m_user_sys_dev;
+    ucs_sys_device_t    m_transfer_sys_dev;
+    ucs_sys_device_t    m_sibling_sys_dev;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_host_frag_non_sibling,
