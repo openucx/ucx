@@ -1705,8 +1705,6 @@ protected:
                 }
             }
 
-            memset(&info, 0, sizeof(info));
-
             status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
                                               &callback_data);
 

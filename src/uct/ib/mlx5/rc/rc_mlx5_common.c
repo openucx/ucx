@@ -60,11 +60,9 @@ uct_rc_mlx5_op_info_fill_rma_raddr(uct_ep_op_info_t *info,
 }
 
 static void uct_rc_mlx5_op_info_fill_put_data(uct_ep_op_info_t *info,
-                                              size_t inline_length,
-                                              void *buffer)
+                                              size_t length, void *buffer)
 {
-    size_t inline_length;
-    info->rma.payload.data.length = inline_length;
+    info->rma.payload.data.length = length;
     info->rma.payload.data.buffer = buffer;
     info->rma.field_mask         |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA;
 }
@@ -157,9 +155,7 @@ uct_rc_mlx5_op_info_fill_put_bcopy(uct_ep_op_info_t *info,
         ucs_fatal("unsupported put bcopy op with direct memory");
     }
 
-    info->rma.payload.data.buffer = buffer;
-    info->rma.payload.data.length = length;
-    info->rma.field_mask         |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA;
+    uct_rc_mlx5_op_info_fill_put_data(info, length, buffer);
 
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
 
@@ -179,8 +175,8 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
                                        seg_size);
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
 
-    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
     info->operation   = UCT_EP_OP_PUT_ZCOPY;
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_put(
@@ -241,12 +237,16 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
+    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+
+    memset(info, 0, sizeof(*info));
+
+    switch (opcode) {
     case MLX5_OPCODE_RDMA_WRITE:
         return uct_rc_mlx5_op_info_fill_put(info, txwq, op, ctrl, wqe_size,
                                             callback_data);
     default:
-        ucs_fatal("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
+        ucs_fatal("unsupported op %d", opcode);
     }
 }
 
