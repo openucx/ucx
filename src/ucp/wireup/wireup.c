@@ -1220,11 +1220,13 @@ ucp_wireup_process_lanes_addr_reply(
     /* ucp_ep_recovery_progress owns FAILED-bit clearing and the retry
      * cadence; do not clear or re-send inline here. */
 
-    if (request_id == 0) {
+    if (!ucp_wireup_ep_supports_tokens(ep)) {
         /* The ACK exists only to carry tokens, and a peer which does not add
          * the trailer would not know the message type either */
         return;
     }
+
+    ucs_assert(request_id != 0);
 
     /* Close the exchange, so that the peer knows the reply arrived. The ACK
      * answers the lanes the reply provided, so its token trailer belongs to

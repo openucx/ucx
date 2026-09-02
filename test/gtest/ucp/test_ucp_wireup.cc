@@ -2500,6 +2500,14 @@ UCS_TEST_F(test_ucp_wireup_token_section, skip) {
     ASSERT_UCS_OK(ucp_wireup_skip_token_section(0, &section[0], section.size(),
                                                 &consumed));
     EXPECT_EQ(0ul, consumed);
+
+    /* Empty tokens: one zero length per lane, which is what the wire carries
+     * until tokens are exchanged */
+    section = make_section({0, 0, 0});
+    section.push_back(0xff);
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed));
+    EXPECT_EQ(3ul, consumed);
 }
 
 UCS_TEST_F(test_ucp_wireup_token_section, skip_truncated) {
