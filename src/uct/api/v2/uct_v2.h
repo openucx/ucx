@@ -1941,7 +1941,7 @@ typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. */
     uint64_t                            field_mask;
 
     /**
@@ -1966,6 +1966,10 @@ typedef struct {
  *
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ *
+ * @note This routine should be called only after the error handler for @a ep
+ *       returns @ref UCS_INPROGRESS. It can be used only if the interface
+ *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,
