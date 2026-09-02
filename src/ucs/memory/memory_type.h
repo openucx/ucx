@@ -52,7 +52,7 @@ typedef enum ucs_memory_type {
 
 
 typedef enum ucs_mem_flags {
-    UCS_MEM_FLAG_REGISTRABLE = UCS_BIT(0), /**< Memory is registrable by MDs */
+    UCS_MEM_FLAG_REGISTRABLE             = UCS_BIT(0), /**< Memory is registrable by MDs */
 
     /**
      * Memory can be copied by a memory-type transport on a peer which resides
