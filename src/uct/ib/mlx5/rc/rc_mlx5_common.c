@@ -108,7 +108,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     raddr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                       (void*)(ctrl + 1));
     if (wqe_size == header_size) {
-        if ((op != NULL) &&
+        if ((op == NULL) &&
             (op->handler == uct_rc_ep_send_op_completion_handler)) {
             uct_rc_mlx5_op_info_fill_put_zcopy(info, txwq, op, raddr, 0,
                                                callback_data);

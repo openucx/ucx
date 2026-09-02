@@ -1602,7 +1602,7 @@ protected:
         test_rc_purge_outstanding *self;
         uct_ep_h                  ep;
         uct_completion_t          comp;
-        unsigned                  num_replayed;
+        uint32_t                  num_replayed;
     };
 
     bool check_caps_v2(uint64_t required_flags)
@@ -1737,7 +1737,7 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
     params.arg        = &ctx;
     ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
 
-    EXPECT_GT(ctx.num_replayed, 0);
+    EXPECT_GT(ctx.num_replayed, 0u);
 
     flush();
 
