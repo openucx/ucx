@@ -782,26 +782,16 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
     }
 
     if (ucs_unlikely(total_len > ucs_global_opts.arch.nt_dest_threshold)) {
-        if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
-            /*
-             * If the lines prefetched with 'NTA' are in 'MODIFIED' state
-             * evicting them will result in a memory write, along
-             * with the already committed streaming stores to destination
-             * buffer, it can make this path more bandwidth intensive.
-             */
-            tail_bytes = ucs_x86_nt_all_buffer_transfer(dst, src, len);
-        } else {
-            tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, total_len);
-        }
+        hint = UCS_ARCH_MEMCPY_NT_DEST;
+    }
+
+    if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
+        tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, total_len);
+    } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
+        tail_bytes = ucs_x86_nt_src_buffer_transfer(dst, src, len);
     } else {
-        if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
-            tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, total_len);
-        } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
-            tail_bytes = ucs_x86_nt_src_buffer_transfer(dst, src, len);
-        } else {
-            memcpy(dst, src, len);
-            tail_bytes = 0;
-        }
+        memcpy(dst, src, len);
+        tail_bytes = 0;
     }
 
     dst = UCS_PTR_BYTE_OFFSET(dst, len - tail_bytes);
