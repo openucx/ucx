@@ -625,6 +625,10 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 {
     if (user_val != UCS_MEMUNITS_AUTO) {
+#if ENABLE_BUILTIN_MEMCPY
+        /* Let the NT dispatcher select the copy implementation. */
+        ucs_global_opts.arch.builtin_memcpy_max = 0;
+#endif
         return user_val;
     }
 
@@ -802,6 +806,12 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
      *   - rep movsb (ERMS), selected when len exceeds builtin_memcpy_min.
      *   - an optimized vectorized copy routine (fallback when ERMS is
      *     disabled for this size).
+     *
+     * ERMS is gated in two places. The outer size window in
+     * ucs_memcpy_relaxed() may return before this function is reached.
+     * Setting NT_BUFFER_TRANSFER_MIN explicitly closes that window during
+     * initialization. The inner gate here then selects rep movsb; otherwise
+     * the vectorized routine runs.
      */
 #if ENABLE_BUILTIN_MEMCPY
     if (len > ucs_global_opts.arch.builtin_memcpy_min) {
