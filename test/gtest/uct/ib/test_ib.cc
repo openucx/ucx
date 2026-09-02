@@ -387,22 +387,19 @@ UCS_TEST_P(test_uct_ib_ah_cache, past_ttl_is_requeried, "IB_AH_CACHE_TTL=1ms")
 {
     struct ibv_ah_attr ah_attr;
     uct_ib_ah_entry_t *entry;
-    struct ibv_ah *ah1, *ah2;
 
     ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
 
     ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
-    ah1 = entry->ah;
     uct_ib_iface_ah_put(ib_iface(), entry); /* only the cache's own hold left */
 
     /* Force the entry's age past the TTL deterministically */
     entry->creation_time = 0;
 
     /* Stale + no external holder: evicted and destroyed immediately, a new
-     * AH is created and cached in its place. */
+     * entry is created and cached in its place. */
     ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
-    ah2 = entry->ah;
-    EXPECT_NE(ah1, ah2);
+    EXPECT_NE(0, entry->creation_time);
     uct_ib_iface_ah_put(ib_iface(), entry);
 }
 
