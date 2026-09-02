@@ -6,14 +6,20 @@
 
 #include "ucp_test.h"
 
+#include <dirent.h>
+
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
 #include <uct/base/uct_iface.h>
+#if HAVE_CUDA
+#include <uct/cuda/base/cuda_util.h>
+#endif
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/rndv/proto_rndv.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -557,11 +563,13 @@ protected:
         return true;
     }
 
-    void
-    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    void send_recv_am(size_t size,
+                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                      ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN)
     {
         /* Prepare receiver data handler */
         mem_buffer recv_buf(size, mem_type);
+        set_buffer_sys_dev(recv_buf, sys_dev);
         struct ctx_t {
             mem_buffer                     *buf;
             bool                            received;
@@ -611,6 +619,7 @@ protected:
 
         /* Send data */
         mem_buffer buf(size, mem_type);
+        set_buffer_sys_dev(buf, sys_dev);
         ucp_request_param_t param = {};
         auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
                                     buf.size(), &param);
@@ -620,6 +629,17 @@ protected:
         EXPECT_EQ(UCS_OK, request_wait(sptr));
         wait_for_flag(&ctx.received);
         EXPECT_TRUE(ctx.received);
+    }
+
+    static void
+    set_buffer_sys_dev(const mem_buffer &buffer, ucs_sys_device_t sys_dev)
+    {
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            return;
+        }
+
+        ucs_memtype_cache_update(buffer.ptr(), buffer.size(), buffer.mem_type(),
+                                 sys_dev, UCS_MEM_FLAG_REGISTRABLE);
     }
 
     void send_recv_am_range(size_t msg_start, size_t msg_end, size_t msg_step,
@@ -1347,13 +1367,16 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
 
 class test_ucp_proto_mock_mtype_sys_dev : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_mtype_sys_dev()
+    test_ucp_proto_mock_mtype_sys_dev() :
+        m_user_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_transfer_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
     {
         mock_transport("rc_mlx5");
     }
 
     virtual void init() override
     {
+        setup_fake_sibling_topology();
         auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
             iface_attr.cap.am.max_short = 2000;
             iface_attr.bandwidth.shared = 28e9;
@@ -1361,41 +1384,26 @@ public:
             iface_attr.latency.m        = 1e-9;
         };
 
-        add_mock_iface("mock_0:1", iface_attr_func);
-        add_mock_iface("mock_1:1", iface_attr_func);
+        add_mock_iface_on_sys_device("mock", m_transfer_sys_dev,
+                                     iface_attr_func);
         test_ucp_proto_mock::init();
-
-        s_user_sys_dev = get_mock_sys_dev_by_name("mock_0:1");
-        s_frag_sys_dev = get_mock_sys_dev_by_name("mock_1:1");
-        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
-                s_user_sys_dev, UCS_TOPO_DEVICE_CLASS_ACC));
-        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
-                s_frag_sys_dev, UCS_TOPO_DEVICE_CLASS_ACC));
-
-        set_frag_sys_dev(sender());
-        set_frag_sys_dev(receiver());
     }
 
     virtual void cleanup() override
     {
         test_ucp_proto_mock::cleanup();
-
-        if (s_user_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        if (m_user_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
             EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
-                    s_user_sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN));
-        }
-        if (s_frag_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-            EXPECT_UCS_OK(ucs_topo_sys_device_set_class(
-                    s_frag_sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN));
+                    m_user_sys_dev, UCS_TOPO_DEVICE_CLASS_UNKNOWN));
         }
 
-        s_frag_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        s_user_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        m_user_sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
+        m_transfer_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
 protected:
-    void check_mtype_keeps_user_sys_dev(ucp_operation_id_t op_id,
-                                       const char *proto_name)
+    void
+    check_mtype_uses_host_frag(ucp_operation_id_t op_id, const char *proto_name)
     {
         static constexpr size_t msg_size = UCS_KBYTE;
         uint8_t remote                   = 0;
@@ -1416,19 +1424,11 @@ protected:
         const ucp_proto_select_elem_t *select_elem;
         const ucp_proto_threshold_elem_t *threshold;
         ucp_proto_query_attr_t attr;
-        unsigned user_ordinal, frag_ordinal;
 
-        ASSERT_NE(s_user_sys_dev, s_frag_sys_dev);
-        user_ordinal = ucs_topo_sys_device_get_bdf_class_ordinal(
-                s_user_sys_dev);
-        frag_ordinal = ucs_topo_sys_device_get_bdf_class_ordinal(
-                s_frag_sys_dev);
-        ASSERT_NE(UCS_SYS_DEVICE_ORDINAL_INVALID, user_ordinal);
-        ASSERT_NE(UCS_SYS_DEVICE_ORDINAL_INVALID, frag_ordinal);
-        ASSERT_NE(user_ordinal % 2, frag_ordinal % 2);
+        ASSERT_FALSE(ucs_topo_is_reachable(m_transfer_sys_dev, m_user_sys_dev));
 
         mem_info.type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
-        mem_info.sys_dev = s_user_sys_dev;
+        mem_info.sys_dev = m_user_sys_dev;
         mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
         ucp_proto_select_param_init(&select_param, op_id, 0, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
@@ -1442,57 +1442,125 @@ protected:
         threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
                                                      msg_size);
         ASSERT_STREQ(proto_name, threshold->proto_config.proto->name);
-        EXPECT_EQ(s_user_sys_dev,
-                  threshold->proto_config.select_param.sys_dev);
+        EXPECT_EQ(m_user_sys_dev, threshold->proto_config.select_param.sys_dev);
         if (op_id == UCP_OP_ID_RNDV_RECV) {
             const auto *rpriv =
                     static_cast<const ucp_proto_rndv_bulk_priv_t*>(
                             threshold->proto_config.priv);
-            EXPECT_EQ(s_frag_sys_dev, rpriv->frag_sys_dev);
+            EXPECT_EQ(UCS_MEMORY_TYPE_HOST, rpriv->frag_mem_type);
+            EXPECT_TRUE(ucs_topo_is_reachable(m_transfer_sys_dev,
+                                              rpriv->frag_sys_dev));
         }
 
         ucp_proto_config_query(worker, &threshold->proto_config, msg_size,
                                &attr);
-        /* Keep the user device as the equal-lane spreading key. The fragment
-         * device is modeled separately through reg_mem_info. */
-        EXPECT_STREQ((user_ordinal % 2) ? "rc_mlx5/mock_1:1" :
-                                          "rc_mlx5/mock_0:1",
-                     attr.config);
+        EXPECT_STREQ("rc_mlx5/mock", attr.config);
+
+        send_recv_am(64 * UCS_KBYTE, UCS_MEMORY_TYPE_CUDA_MANAGED,
+                     m_user_sys_dev);
     }
 
 private:
-    static void set_frag_sys_dev(entity &e)
+    void setup_fake_sibling_topology()
     {
-        ucp_memory_info_t mem_info;
-        ucp_md_index_t md_index;
+        static constexpr uintptr_t fake_sibling_value = 0x11685001;
+        static constexpr uintptr_t fake_dma_value     = 0x11685002;
+        static constexpr uintptr_t fake_user_value    = 0;
+        ucs_sys_device_t cuda_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        ucs_sys_device_t dma_sys_dev, pci_sys_dev, sibling_sys_dev;
+        ucs_sys_bus_id_t cuda_bus_id, pci_bus_id, transfer_bus_id;
+        struct dirent *entry;
+        DIR *dir;
 
-        ASSERT_UCS_OK(ucp_mm_get_alloc_md_index(e.ucph(), UCS_MEMORY_TYPE_HOST,
-                                                UCS_SYS_DEVICE_ID_UNKNOWN,
-                                                &md_index, &mem_info));
-        e.ucph()->alloc_md[UCS_MEMORY_TYPE_HOST].sys_dev = s_frag_sys_dev;
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            UCS_TEST_SKIP_R("CUDA managed memory is unavailable");
+        }
+
+#if HAVE_CUDA
+        mem_buffer::set_device_context();
+        cuda_sys_dev = uct_cuda_get_sys_dev(0);
+#else
+        UCS_TEST_SKIP_R("CUDA support is unavailable");
+#endif
+        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, cuda_sys_dev);
+        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(cuda_sys_dev, &cuda_bus_id));
+
+        pci_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        dir         = opendir("/sys/bus/pci/devices");
+        ASSERT_NE(nullptr, dir);
+        while ((entry = readdir(dir)) != nullptr) {
+            if (ucs_topo_find_device_by_bdf_name(entry->d_name, &pci_sys_dev) ==
+                UCS_OK) {
+                ASSERT_UCS_OK(
+                        ucs_topo_get_device_bus_id(pci_sys_dev, &pci_bus_id));
+                if (ucs_topo_get_bus_id_bit_repr(&pci_bus_id) !=
+                    ucs_topo_get_bus_id_bit_repr(&cuda_bus_id)) {
+                    break;
+                }
+                pci_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            }
+        }
+        closedir(dir);
+        if (pci_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            UCS_TEST_SKIP_R("no PCI device for fake sibling topology");
+        }
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &pci_bus_id, fake_sibling_value, &sibling_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &pci_bus_id, fake_dma_value, &dma_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &pci_bus_id, fake_user_value, &m_user_sys_dev));
+
+        transfer_bus_id.domain   = 0xffff;
+        transfer_bus_id.bus      = 0xff;
+        transfer_bus_id.slot     = 0xfe;
+        transfer_bus_id.function = 0;
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&transfer_bus_id,
+                                                     &m_transfer_sys_dev));
+
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(sibling_sys_dev,
+                                                   "fake_sibling_nic", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(dma_sys_dev,
+                                                   "fake_sibling_dma", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(m_user_sys_dev,
+                                                   "fake_user_acc", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(m_transfer_sys_dev,
+                                                   "fake_transfer_nic", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_class(m_user_sys_dev,
+                                                    UCS_TOPO_DEVICE_CLASS_ACC));
+
+        /* The fake user accelerator is paired with sibling_sys_dev. The mock
+         * transfer NIC is deliberately a different auxiliary-path device, so
+         * it cannot access the accelerator directly but can access a host
+         * staging fragment. Register the fake device last so it replaces any
+         * earlier match on the same real PCI bridge. */
+        ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(m_user_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(sibling_sys_dev,
+                                                          dma_sys_dev));
+        ASSERT_TRUE(ucs_topo_is_sibling(sibling_sys_dev, m_user_sys_dev));
+
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(m_transfer_sys_dev,
+                                                          m_transfer_sys_dev));
+        ASSERT_FALSE(ucs_topo_is_reachable(m_transfer_sys_dev, m_user_sys_dev));
     }
 
-    static ucs_sys_device_t s_frag_sys_dev;
-    static ucs_sys_device_t s_user_sys_dev;
+    ucs_sys_device_t m_user_sys_dev;
+    ucs_sys_device_t m_transfer_sys_dev;
 };
 
-ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_frag_sys_dev =
-        UCS_SYS_DEVICE_ID_UNKNOWN;
-ucs_sys_device_t test_ucp_proto_mock_mtype_sys_dev::s_user_sys_dev =
-        UCS_SYS_DEVICE_ID_UNKNOWN;
-
-UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_keeps_user_sys_dev,
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_host_frag_non_sibling,
            "RNDV_SCHEME=get_ppln", "RNDV_THRESH=1", "RNDV_FRAG_MEM_TYPES=host",
            "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
-    check_mtype_keeps_user_sys_dev(UCP_OP_ID_RNDV_RECV, "rndv/get/mtype");
+    check_mtype_uses_host_frag(UCP_OP_ID_RNDV_RECV, "rndv/get/mtype");
 }
 
-UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_keeps_user_sys_dev,
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_host_frag_non_sibling,
            "RNDV_SCHEME=put_ppln", "RNDV_THRESH=1", "RNDV_FRAG_MEM_TYPES=host",
            "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
-    check_mtype_keeps_user_sys_dev(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
+    check_mtype_uses_host_frag(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_mtype_sys_dev, rcx_gpu,
