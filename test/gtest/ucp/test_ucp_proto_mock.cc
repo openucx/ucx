@@ -340,9 +340,9 @@ private:
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
     std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
     std::map<std::string, ucs_sys_device_t>             m_sys_devices;
-    std::map<std::string, bool> m_use_real_sys_device;
+    std::map<std::string, bool>                         m_use_real_sys_device;
     std::map<std::string, ucs_sys_device_t>             m_sys_devs_by_name;
-    std::vector<ucs_sys_device_t> m_real_sys_devices;
+    std::vector<ucs_sys_device_t>                       m_real_sys_devices;
     std::string                                         m_real_dev_name;
     uct_md_h                                            m_real_md;
 };
