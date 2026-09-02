@@ -890,10 +890,10 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am(
     *skip_p = 0;
     ucs_assert(uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_SEND);
 
-    if ((wqe_size < (sizeof(*ctrl) + sizeof(*inl))) ||
-        (wqe_size > UCT_IB_MLX5_MAX_SEND_WQE_SIZE)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
+    ucs_assertv_always(
+            (wqe_size >= (sizeof(*ctrl) + sizeof(*inl))) &&
+            (wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE),
+            "wqe_size=%zu", wqe_size);
 
     inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                     (void*)(ctrl + 1));
@@ -919,11 +919,11 @@ static ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t first_psn,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((diff > 0) && (diff < psn_half) && (diff >= num_packets)) {
-        return UCS_OK;
+    if ((diff == 0) || (diff > psn_half) || (diff < num_packets)) {
+        return UCS_INPROGRESS;
     }
 
-    return UCS_INPROGRESS;
+    return UCS_OK;
 }
 
 static uint32_t uct_rc_mlx5_ep_am_short_num_packets(
@@ -968,11 +968,12 @@ static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) ||
-        (params->rx_token == NULL)) {
-        ucs_error("rc mlx5: rx token is not set or is NULL");
+    if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN)) {
+        ucs_error("rc mlx5: rx token is not set");
         return UCS_ERR_INVALID_PARAM;
     }
+
+    ucs_assert(params->rx_token != NULL);
 
     if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_CB) ||
         (params->cb == NULL)) {

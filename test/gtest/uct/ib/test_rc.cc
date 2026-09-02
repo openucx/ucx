@@ -1556,8 +1556,9 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_outstanding_purge, am_short,
             ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
     uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(
             ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
+    uct_iface_attr_v2_t iface_attr                 = {};
     uct_ep_outstanding_purge_params_t purge_params = {};
-    uct_ep_invalidate_params_t invalidate_params    = {};
+    uct_ep_invalidate_params_t invalidate_params   = {};
     uct_completion_t flush_comp;
     uct_rc_mlx5_rx_token_t rx_token;
 
@@ -1565,22 +1566,32 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_outstanding_purge, am_short,
         UCS_TEST_SKIP_R("DEVX is not supported");
     }
 
+    iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &iface_attr));
+    if (!(iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+        UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
+    }
+
     flush_comp.func   = [](uct_completion_t*) {};
     flush_comp.count  = 1;
     flush_comp.status = UCS_OK;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), am_id,
+                                           am_dummy_handler, NULL, 0));
 
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), am_id, header,
                                   delivered_payload.data(),
                                   delivered_payload.size()));
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), am_id, header,
                                   short_payload.data(), short_payload.size()));
-    EXPECT_EQ(UCS_INPROGRESS,
-              uct_ep_flush(m_e1->ep(0), 0, &flush_comp));
 
     rx_token = htobe32((uct_ib_mlx5_txwq_get_next_wqe_psn(&ep->tx.wq) - 1) &
                        UCT_IB_MLX5_PSN_MASK);
     ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &invalidate_params));
+    EXPECT_EQ(UCS_INPROGRESS,
+              uct_ep_flush(m_e1->ep(0), 0, &flush_comp));
     wait_for_flag(&ep->err_handler_inprogress);
+    ASSERT_TRUE(ep->err_handler_inprogress);
 
     purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                               UCT_EP_OUTSTANDING_FIELD_CB |
