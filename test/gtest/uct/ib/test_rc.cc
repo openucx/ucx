@@ -582,7 +582,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, invalid_get_size,
     EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
 }
 
-// Check that gets resource num_completed is not affected/changed when the get
+// Check that gets resource counter is not affected/changed when the get
 // function fails due to lack of some other resources.
 UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |

@@ -37,13 +37,20 @@ uct_rc_mlx5_op_info_fill_rma_raddr(uct_ep_op_info_t *info,
 }
 
 static void uct_rc_mlx5_op_info_fill_zcopy_iov(
-        uct_rc_mlx5_op_callback_data_t *callback_data,
-        const uct_ib_mlx5_txwq_t *txwq, const void *first_dptr, size_t seg_size,
-        size_t *iovcnt_p)
+        uct_ep_op_info_t *info, uct_rc_mlx5_op_callback_data_t *callback_data,
+        const uct_ib_mlx5_txwq_t *txwq, const void *first_dptr, size_t seg_size)
 {
     const struct mlx5_wqe_data_seg *dptr;
     uint32_t byte_count;
     size_t iovcnt, i;
+
+    if (seg_size == 0) {
+        info->rma.payload.zcopy.iov    = NULL;
+        info->rma.payload.zcopy.iovcnt = 0;
+        info->rma.field_mask |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+        return;
+    }
 
     ucs_assert((seg_size % sizeof(*dptr)) == 0);
 
@@ -69,7 +76,9 @@ static void uct_rc_mlx5_op_info_fill_zcopy_iov(
                                          (void*)(dptr + 1));
     }
 
-    *iovcnt_p = iovcnt;
+    info->rma.payload.zcopy.iov    = callback_data->iov;
+    info->rma.payload.zcopy.iovcnt = iovcnt;
+    info->rma.field_mask          |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
 }
 
 static void uct_rc_mlx5_op_info_fill_put_zcopy(
@@ -77,25 +86,13 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
         uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
         size_t seg_size, uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    size_t iovcnt;
-
-    if (seg_size == 0) {
-        goto out;
-    }
-
-    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1, seg_size,
-                                       &iovcnt);
-
-    info->rma.payload.zcopy.iov    = callback_data->iov;
-    info->rma.payload.zcopy.iovcnt = iovcnt;
-    info->rma.field_mask          |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
-
-out:
     uct_rc_mlx5_op_info_try_fill_user_comp(info, op);
+    uct_rc_mlx5_op_info_fill_zcopy_iov(info, callback_data, txwq, raddr + 1,
+                                       seg_size);
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
 
-    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
     info->operation   = UCT_EP_OP_PUT_ZCOPY;
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_put(
