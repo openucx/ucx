@@ -1748,7 +1748,7 @@ protected:
                          sendbuf.ptr(),
                          length,
                          iov,
-                         iovcnt,
+                         (length == 0) ? 0 : iovcnt,
                          comp,
                          0};
 
@@ -1766,6 +1766,12 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_short,
     test_put(UCT_EP_OP_PUT_SHORT, 8);
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_short_zero,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_put(UCT_EP_OP_PUT_SHORT, 0);
+}
+
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_bcopy,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
 {
@@ -1778,6 +1784,12 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
     uct_completion_t comp = {completion_cb, 1, UCS_OK};
 
     test_put(UCT_EP_OP_PUT_ZCOPY, 64, &comp);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy_zero,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    test_put(UCT_EP_OP_PUT_ZCOPY, 0);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
