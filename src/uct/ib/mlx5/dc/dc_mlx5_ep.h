@@ -874,6 +874,15 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     }
 
 
+#define UCT_DC_MLX5_CHECK_FENCE_RET(_iface, _ep, _ret) \
+    if (ucs_unlikely((_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH)) { \
+        ucs_status_t _status = uct_dc_mlx5_ep_check_fence(_iface, _ep); \
+        if (ucs_unlikely(_status != UCS_OK)) { \
+            return _ret; \
+        } \
+    }
+
+
 #define UCT_DC_CHECK_RES_PTR(_iface, _ep) \
     { \
         { \
@@ -884,12 +893,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         } \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
-        if (ucs_unlikely((_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH)) { \
-            ucs_status_t _status = uct_dc_mlx5_ep_check_fence(_iface, _ep); \
-            if (_status != UCS_OK) { \
-                return UCS_STATUS_PTR(_status); \
-            } \
-        } \
+        UCT_DC_MLX5_CHECK_FENCE_RET(_iface, _ep, UCS_STATUS_PTR(_status)) \
     }
 
 
@@ -904,12 +908,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_ERR_NO_RESOURCE) \
-        if (ucs_unlikely((_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH)) { \
-            ucs_status_t _status = uct_dc_mlx5_ep_check_fence(_iface, _ep); \
-            if (_status != UCS_OK) { \
-                return _status; \
-            } \
-        } \
+        UCT_DC_MLX5_CHECK_FENCE_RET(_iface, _ep, _status) \
     }
 
 

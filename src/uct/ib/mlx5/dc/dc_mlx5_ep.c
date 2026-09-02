@@ -792,22 +792,17 @@ static void uct_dc_mlx5_ep_detach_fence_flush(uct_dc_mlx5_ep_t *ep)
             uct_dc_mlx5_ep_fence_state(ep);
     uct_rc_iface_send_op_t *op = fence_state->fence_op;
 
-    ucs_assertv(op != NULL, "fence flush operation for endpoint %p was not found",
-                ep);
-    if (op == NULL) {
-        return;
-    }
+    ucs_assertv_always(op != NULL,
+                       "fence flush operation for endpoint %p was not found",
+                       ep);
 
-    ucs_assertv((op->handler == uct_dc_mlx5_ep_fence_flush_handler) &&
-                (op->ep == (uct_ep_h)ep),
-                "unexpected fence flush operation %p for endpoint %p", op, ep);
-    if ((op->handler != uct_dc_mlx5_ep_fence_flush_handler) ||
-        (op->ep != (uct_ep_h)ep)) {
-        return;
-    }
+    ucs_assertv_always(
+            (op->handler == uct_dc_mlx5_ep_fence_flush_handler) &&
+            (op->ep == (uct_ep_h)ep),
+            "unexpected fence flush operation %p for endpoint %p", op, ep);
 
     op->ep                 = NULL;
-    fence_state->fence_op = NULL;
+    fence_state->fence_op  = NULL;
     ep->flags             &= ~UCT_DC_MLX5_EP_FLAG_FENCE_PENDING;
 }
 
