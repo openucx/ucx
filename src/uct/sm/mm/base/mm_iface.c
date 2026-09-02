@@ -747,6 +747,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                     ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
     size_t alignment, align_offset, payload_offset;
+    uct_md_attr_t md_attr;
     ucs_status_t status;
     unsigned i;
 
@@ -806,6 +807,17 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                       UCT_IFACE_PARAM_FIELD_RX_HEADROOM) ?
                                      params->rx_headroom : 0;
     self->release_desc.cb          = uct_mm_iface_release_desc;
+
+    status = uct_md_query(self->super.super.md, &md_attr);
+    if (status != UCS_OK) {
+        goto err;
+    }
+    if (!(md_attr.cap.flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG))) {
+        ucs_debug("md %s cannot allocate or register memory, not opening mm "
+                  "iface", self->super.super.md->component->name);
+        status = UCS_ERR_NO_DEVICE;
+        goto err;
+    }
 
     /* Allocate the receive FIFO */
     status = uct_iface_mem_alloc(&self->super.super.super,
