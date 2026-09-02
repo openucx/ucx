@@ -1310,10 +1310,10 @@ ucp_wireup_parse_lanes_addr(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                            size_t length, unsigned flags)
 {
-    ucp_worker_h worker   = arg;
-    ucp_wireup_msg_t *msg = data;
-    ucp_ep_h ep           = NULL;
-    uint32_t request_id   = 0;
+    ucp_worker_h worker                           = arg;
+    ucp_wireup_msg_t *msg                         = data;
+    ucp_ep_h ep                                   = NULL;
+    uint32_t request_id                           = 0;
     const ucp_wireup_msg_lanes_info_t *lanes_info = NULL;
     const void *address_ptr;
     ucp_unpacked_address_t remote_address;
