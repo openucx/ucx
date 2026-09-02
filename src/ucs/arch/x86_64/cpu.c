@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 
@@ -775,10 +776,12 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
                                 ucs_arch_memcpy_hint_t hint, size_t total_len)
 {
+    const size_t min_nt_buffer_transfer_size = 3072;
     size_t tail_bytes;
 
-    if (ucs_likely(len <= 128)) {
-        goto copy_bytes_le_128;
+    if (ucs_likely(len < min_nt_buffer_transfer_size)) {
+        memcpy(dst, src, len);
+        return;
     }
 
     if (ucs_unlikely(total_len > ucs_global_opts.arch.nt_dest_threshold)) {
@@ -786,7 +789,8 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
     }
 
     if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
-        tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, total_len);
+        ucs_x86_nt_dst_buffer_transfer(dst, src, len);
+        return;
     } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
         tail_bytes = ucs_x86_nt_src_buffer_transfer(dst, src, len);
     } else {
@@ -798,7 +802,6 @@ void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
     src = UCS_PTR_BYTE_OFFSET(src, len - tail_bytes);
     len = tail_bytes;
 
-copy_bytes_le_128:
     ucs_x86_copy_bytes_le_128(dst, src, len);
 }
 #endif
