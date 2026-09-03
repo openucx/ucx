@@ -275,6 +275,7 @@ static ucs_status_t
 ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
@@ -283,7 +284,6 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
         return status;
     }
 
-    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
             UCP_DT_MASK_CONTIG_IOV,
@@ -517,6 +517,7 @@ static ucs_status_t
 ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
@@ -525,7 +526,6 @@ ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
         return status;
     }
 
-    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
             UCS_BIT(UCP_DATATYPE_SGL),
@@ -614,6 +614,7 @@ static ucs_status_t
 ucp_proto_put_sgl_offload_sw_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
@@ -622,7 +623,6 @@ ucp_proto_put_sgl_offload_sw_progress(uct_pending_req_t *self)
         return status;
     }
 
-    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
             UCS_BIT(UCP_DATATYPE_SGL),

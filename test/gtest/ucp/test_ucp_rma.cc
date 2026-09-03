@@ -14,7 +14,151 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
+#include <uct/base/uct_iface.h>
 }
+
+
+namespace {
+
+struct test_ucp_ep_based_fence_flush_call {
+    uct_ep_h ep;
+    unsigned flags;
+    uct_completion_t *comp;
+};
+
+struct test_ucp_ep_based_fence_iface_restore {
+    uct_iface_h iface;
+    uct_ep_flush_func_t flush_func;
+};
+
+static std::vector<test_ucp_ep_based_fence_flush_call>
+        test_ucp_ep_based_fence_flush_calls;
+
+static ucs_status_t
+test_ucp_ep_based_fence_flush_inprogress(uct_ep_h ep, unsigned flags,
+                                         uct_completion_t *comp)
+{
+    if (comp == NULL) {
+        ADD_FAILURE() << "asynchronous flush requires a completion";
+        return UCS_OK;
+    }
+
+    test_ucp_ep_based_fence_flush_calls.push_back({ep, flags, comp});
+    return UCS_INPROGRESS;
+}
+
+class test_ucp_ep_based_fence_flush_guard {
+public:
+    test_ucp_ep_based_fence_flush_guard(
+            ucp_ep_h ep,
+            const std::vector<test_ucp_ep_based_fence_iface_restore> &restore)
+        : m_ep(ep), m_restore(restore), m_callbacks_patched(false)
+    {
+        test_ucp_ep_based_fence_flush_calls.clear();
+    }
+
+    ~test_ucp_ep_based_fence_flush_guard()
+    {
+        cleanup();
+    }
+
+    void patch_callbacks()
+    {
+        for (const auto &saved : m_restore) {
+            saved.iface->ops.ep_flush =
+                    test_ucp_ep_based_fence_flush_inprogress;
+        }
+
+        m_callbacks_patched = true;
+    }
+
+    void restore_callbacks()
+    {
+        if (!m_callbacks_patched) {
+            return;
+        }
+
+        for (const auto &saved : m_restore) {
+            saved.iface->ops.ep_flush = saved.flush_func;
+        }
+
+        m_callbacks_patched = false;
+    }
+
+    void invoke_completion(size_t index)
+    {
+        uct_completion_t *comp;
+
+        restore_callbacks();
+        if (index >= test_ucp_ep_based_fence_flush_calls.size()) {
+            ADD_FAILURE() << "missing captured flush completion " << index;
+            return;
+        }
+
+        if (m_ep->ext->fence_inflight_req == NULL) {
+            ADD_FAILURE() << "cannot invoke a completion after the fence "
+                             "request was released";
+            return;
+        }
+
+        comp = test_ucp_ep_based_fence_flush_calls[index].comp;
+        if (comp == NULL) {
+            ADD_FAILURE() << "captured flush completion is NULL";
+            return;
+        }
+
+        uct_invoke_completion(comp, UCS_OK);
+    }
+
+private:
+    void cleanup()
+    {
+        ucp_request_t *inflight_req;
+        uct_completion_t *comp;
+        int completion_count;
+
+        restore_callbacks();
+        inflight_req = m_ep->ext->fence_inflight_req;
+        if (inflight_req != NULL) {
+            completion_count = inflight_req->send.state.uct_comp.count;
+            if (completion_count <= 0) {
+                ADD_FAILURE() << "in-flight fence has a non-positive "
+                                 "completion count";
+            }
+
+            for (int index = 0; index < completion_count; ++index) {
+                inflight_req = m_ep->ext->fence_inflight_req;
+                if (inflight_req == NULL) {
+                    break;
+                }
+
+                comp = &inflight_req->send.state.uct_comp;
+                if (comp->count <= 0) {
+                    ADD_FAILURE() << "in-flight fence has a non-positive "
+                                     "completion count";
+                    break;
+                }
+
+                if (m_ep->ext->fence_inflight_req != inflight_req) {
+                    break;
+                }
+
+                uct_invoke_completion(comp, UCS_OK);
+            }
+        }
+
+        EXPECT_TRUE(m_ep->ext->fence_inflight_req == NULL)
+                << "scoped flush cleanup left a fence in flight";
+
+        test_ucp_ep_based_fence_flush_calls.clear();
+    }
+
+    ucp_ep_h m_ep;
+    const std::vector<test_ucp_ep_based_fence_iface_restore> &m_restore;
+    bool m_callbacks_patched;
+};
+
+} // namespace
 
 
 class test_ucp_rma : public test_ucp_memheap {
@@ -996,6 +1140,113 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_get) {
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
     test_ep_based_fence_common(
         OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, strong_fence_async_multi_lane_lifetime)
+{
+    std::vector<test_ucp_ep_based_fence_iface_restore> iface_restore;
+    std::vector<uct_ep_h> selected_eps;
+    ucp_ep_h ep = sender().ep();
+    ucp_lane_map_t remaining_lanes;
+    ucp_lane_map_t selected_lanes = 0;
+    uint64_t fence_seq_before;
+    uint64_t target_fence_seq;
+#if UCS_ENABLE_ASSERT
+    unsigned flush_refcount;
+#endif
+    ucs_status_t status;
+
+    flush_workers();
+    ASSERT_TRUE(ep->ext->fence_inflight_req == NULL);
+
+    remaining_lanes = ucp_ep_get_live_lanes(ep);
+    while ((remaining_lanes != 0) && (iface_restore.size() < 2)) {
+        ucp_lane_index_t lane = ucs_ffs64(remaining_lanes);
+        uct_ep_h uct_ep       = ucp_ep_get_lane(ep, lane);
+        bool duplicate_iface  = false;
+
+        remaining_lanes &= ~UCS_BIT(lane);
+        if ((uct_ep == NULL) || (uct_ep->iface == NULL)) {
+            continue;
+        }
+
+        for (const auto &saved : iface_restore) {
+            if (saved.iface == uct_ep->iface) {
+                duplicate_iface = true;
+                break;
+            }
+        }
+
+        if (duplicate_iface) {
+            continue;
+        }
+
+        iface_restore.push_back({uct_ep->iface, uct_ep->iface->ops.ep_flush});
+        selected_eps.push_back(uct_ep);
+        selected_lanes |= UCS_BIT(lane);
+    }
+
+    if (iface_restore.size() < 2) {
+        UCS_TEST_SKIP_R("requires two live lanes on distinct interfaces");
+    }
+
+    fence_seq_before           = ep_fence_seq();
+    target_fence_seq           = fence_seq_before + 1;
+#if UCS_ENABLE_ASSERT
+    flush_refcount             = ep->refcounts.flush;
+#endif
+    ep->ext->unflushed_lanes   = selected_lanes;
+    ep->ext->fence_lanes_dirty = 0;
+
+    test_ucp_ep_based_fence_flush_guard flush_guard(ep, iface_restore);
+
+    flush_guard.patch_callbacks();
+    status = ucp_ep_fence_strong_nb(ep, target_fence_seq);
+    flush_guard.restore_callbacks();
+
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(2u, test_ucp_ep_based_fence_flush_calls.size());
+    ASSERT_TRUE(ep->ext->fence_inflight_req != NULL);
+#if UCS_ENABLE_ASSERT
+    EXPECT_EQ(flush_refcount + 1, ep->refcounts.flush);
+#endif
+    EXPECT_EQ(fence_seq_before, ep_fence_seq());
+    EXPECT_EQ(selected_lanes, ep->ext->unflushed_lanes);
+
+    ucp_request_t *inflight_req = ep->ext->fence_inflight_req;
+    unsigned seen_eps           = 0;
+
+    ASSERT_EQ(2, inflight_req->send.state.uct_comp.count);
+    for (const auto &call : test_ucp_ep_based_fence_flush_calls) {
+        ASSERT_TRUE(call.comp != NULL);
+        ASSERT_EQ(&inflight_req->send.state.uct_comp, call.comp);
+        EXPECT_EQ(UCT_FLUSH_FLAG_REMOTE, call.flags);
+        if (call.ep == selected_eps[0]) {
+            seen_eps |= UCS_BIT(0);
+        } else if (call.ep == selected_eps[1]) {
+            seen_eps |= UCS_BIT(1);
+        } else {
+            ADD_FAILURE() << "flush called on an unselected lane";
+        }
+    }
+    EXPECT_EQ(UCS_MASK(2), seen_eps);
+
+    flush_guard.invoke_completion(0);
+    EXPECT_EQ(inflight_req, ep->ext->fence_inflight_req);
+#if UCS_ENABLE_ASSERT
+    EXPECT_EQ(flush_refcount + 1, ep->refcounts.flush);
+#endif
+    EXPECT_EQ(fence_seq_before, ep_fence_seq());
+    EXPECT_EQ(selected_lanes, ep->ext->unflushed_lanes);
+
+    flush_guard.invoke_completion(1);
+    EXPECT_TRUE(ep->ext->fence_inflight_req == NULL);
+#if UCS_ENABLE_ASSERT
+    EXPECT_EQ(flush_refcount, ep->refcounts.flush);
+#endif
+    EXPECT_EQ(target_fence_seq, ep_fence_seq());
+    EXPECT_EQ(0, ep->ext->unflushed_lanes);
+    EXPECT_EQ(UCS_OK, ep->ext->fence_status);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")

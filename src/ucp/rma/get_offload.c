@@ -183,6 +183,7 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
@@ -191,7 +192,6 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
         return status;
     }
 
-    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_WRITE,
             UCP_DT_MASK_CONTIG_IOV,
