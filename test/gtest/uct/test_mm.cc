@@ -433,4 +433,33 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_dispatch_completes,
     uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
 }
 
+static ucs_status_t mm_test_pending_no_res_cb(uct_pending_req_t *self)
+{
+    return UCS_ERR_NO_RESOURCE;
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_add_consistency,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    uct_pending_req_t preq, extra;
+    unsigned purged = 0;
+
+    mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
+
+    preq.func = mm_test_pending_no_res_cb;
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &preq, 0));
+
+    /* free the remote FIFO, then dispatch once so the cached tail is refreshed
+     * while the request stays queued and keeps the group scheduled */
+    while (m_e2->progress()) {
+    }
+    m_e1->progress();
+
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_flush(m_e1->ep(0), 0, NULL));
+
+    extra.func = mm_test_pending_cb;
+    EXPECT_NE(UCS_ERR_BUSY, uct_ep_pending_add(m_e1->ep(0), &extra, 0));
+
+    uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
+}
+
 UCT_INSTANTIATE_MM_TEST_CASE(test_uct_mm)
