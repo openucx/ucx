@@ -185,6 +185,8 @@ protected:
         static_cast<void>(ucp_proto_select_lookup_slow(
                 worker(), proto_select, 1, ep_cfg_index, rkey_cfg_index,
                 &select_param));
+        proto_select = &ucs_array_elem(&worker()->rkey_config,
+                                       rkey_cfg_index).proto_select;
 
         frag_key.param             = select_param;
         frag_key.param.op_id_flags = UCP_OP_ID_RNDV_RECV |

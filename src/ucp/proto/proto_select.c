@@ -193,6 +193,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
                                 ucp_proto_select_init_protocols_t *proto_init)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
+    ucp_rkey_config_key_t rkey_config_key;
     ucp_proto_init_params_t init_params;
 
     ucs_assert(ep_cfg_index != UCP_WORKER_CFG_INDEX_NULL);
@@ -208,14 +209,15 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         init_params.rkey_config_key = NULL;
     } else {
-        init_params.rkey_config_key =
-                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
+        /* Copy the key: probes may add rkey configs and reallocate the array */
+        rkey_config_key             = ucs_array_elem(&worker->rkey_config,
+                                                     rkey_cfg_index).key;
+        init_params.rkey_config_key = &rkey_config_key;
 
         /* rkey configuration must be for the same ep */
-        ucs_assertv_always(
-                init_params.rkey_config_key->ep_cfg_index == ep_cfg_index,
-                "rkey->ep_cfg_index=%d ep_cfg_index=%d",
-                init_params.rkey_config_key->ep_cfg_index, ep_cfg_index);
+        ucs_assertv_always(rkey_config_key.ep_cfg_index == ep_cfg_index,
+                           "rkey->ep_cfg_index=%d ep_cfg_index=%d",
+                           rkey_config_key.ep_cfg_index, ep_cfg_index);
     }
 
     ucs_array_init_dynamic(&proto_init->protocols);
@@ -564,6 +566,16 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
         return NULL;
     }
 
+    /* Protocol initialization can add endpoint or remote key configurations,
+     * which reallocates the worker configuration arrays and invalidates
+     * 'proto_select'. Resolve it again from the configuration indexes.
+     */
+    if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        proto_select = ucp_ep_config_proto_select(worker, ep_cfg_index);
+    } else {
+        proto_select = ucp_rkey_config_proto_select(worker, rkey_cfg_index);
+    }
+
     /* Add to hash after initializing the temp element, since calling
      * ucp_proto_select_elem_init() can recursively modify the hash. For
      * example, RNDV_RECV may probe RTR, which models its peer side by
@@ -768,6 +780,13 @@ void ucp_proto_select_short_init(ucp_worker_h worker,
             goto out_disable;
         }
 
+        /* lookup may add a configuration and reallocate the array */
+        if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+            proto_select = ucp_ep_config_proto_select(worker, ep_cfg_index);
+        } else {
+            proto_select = ucp_rkey_config_proto_select(worker, rkey_cfg_index);
+        }
+
         ucs_assert(thresh->proto_config.proto != NULL);
         if (!ucs_test_all_flags(thresh->proto_config.proto->flags,
                                 proto_flags)) {
@@ -864,22 +883,21 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-        return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
-    } else {
-        rkey_config_key =
-                ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
-
-        rkey_config_key.ep_cfg_index = ep_cfg_index;
-        status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
-                                            new_rkey_cfg_index);
-        if (status != UCS_OK) {
-            ucs_error("failed to switch to new rkey");
-            return NULL;
-        }
-
-        return &ucs_array_elem(&worker->rkey_config, *new_rkey_cfg_index)
-                        .proto_select;
+        return ucp_ep_config_proto_select(worker, ep_cfg_index);
     }
+
+    rkey_config_key =
+            ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
+
+    rkey_config_key.ep_cfg_index = ep_cfg_index;
+    status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
+                                        new_rkey_cfg_index);
+    if (status != UCS_OK) {
+        ucs_error("failed to switch to new rkey");
+        return NULL;
+    }
+
+    return ucp_rkey_config_proto_select(worker, *new_rkey_cfg_index);
 }
 
 void ucp_proto_config_query(ucp_worker_h worker,
