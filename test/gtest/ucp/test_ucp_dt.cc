@@ -452,7 +452,7 @@ protected:
     std::vector<size_t>        m_desc_elem_indices;
 };
 
-UCS_TEST_F(test_ucp_dt_sgl, mem_reg_user_memh_missing_md) {
+UCS_TEST_F(test_ucp_dt_sgl, mem_reg_provided_memh_missing_md) {
     static constexpr size_t NUM_ELEMS = 2;
     static constexpr size_t LENGTH    = UCS_KBYTE;
     static constexpr unsigned FLAGS   = UCT_MD_MEM_ACCESS_RMA;
@@ -462,6 +462,7 @@ UCS_TEST_F(test_ucp_dt_sgl, mem_reg_user_memh_missing_md) {
         UCS_TEST_SKIP_R("need at least 2 cacheable memory domains");
     }
 
+    /* Restricting md_map requires ucp_memh_get(), so these aren't user memhs */
     ucp_md_index_t md_index = ucs_ffs64(cache_md_map);
     ucp_md_map_t reg_md_map = cache_md_map & ~UCS_BIT(md_index);
     std::vector<std::vector<uint8_t>> data(NUM_ELEMS,
