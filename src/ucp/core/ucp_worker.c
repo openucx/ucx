@@ -1657,6 +1657,7 @@ err:
 
 void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 {
+    ucp_worker_iface_activate_arm_unmark_busy(wiface);
     uct_worker_progress_unregister_safe(wiface->worker->uct,
                                         &wiface->check_events_id);
     ucp_worker_iface_disarm(wiface);
