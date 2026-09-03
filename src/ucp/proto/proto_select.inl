@@ -108,6 +108,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
             }
         }
 
+        /* FIXME proto_select could get invalidated by adding rkey config */
         proto_select->cache.key   = key.u64;
         proto_select->cache.value = select_elem;
     }

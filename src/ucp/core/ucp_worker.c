@@ -595,7 +595,8 @@ static void ucp_worker_iface_activate_arm_mark_busy(ucp_worker_iface_t *wiface)
               wiface->worker->arm_block_count);
 }
 
-void ucp_worker_iface_activate_arm_unmark_busy(ucp_worker_iface_t *wiface)
+static void
+ucp_worker_iface_activate_arm_unmark_busy(ucp_worker_iface_t *wiface)
 {
     if (!(wiface->flags & UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY)) {
         return;

@@ -1232,6 +1232,10 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
             ucs_assertv_always(pending_added, "ep=%p req=%p am_lane=%d", ucp_ep,
                                req, am_lane);
         } else {
+            /* This path should not be reachable from async thread, because only
+             * wireup protocol can trigger an async thread callback, and in this
+             * case there would be a wireup ep on am_lane.
+             */
             ucp_trace_req(req, "replay proto %s",
                           req->send.proto_config->proto->name);
             ucp_proto_request_restart(req);
