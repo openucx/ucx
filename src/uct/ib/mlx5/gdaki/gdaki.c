@@ -60,7 +60,6 @@ typedef struct {
     uct_rc_gdaki_ep_alloc_mode_t      ep_alloc_mode;
     unsigned                          num_channels;
     unsigned                          num_eps;
-    ucs_ternary_auto_value_t          cuda_enable_fabric;
 } uct_rc_gdaki_iface_config_t;
 
 ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
@@ -90,17 +89,12 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      "more are needed.",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, num_eps), UCS_CONFIG_TYPE_UINT},
 
-    {"CUDA_ENABLE_FABRIC", "no", "Enable CUDA fabric memory allocation",
-     ucs_offsetof(uct_rc_gdaki_iface_config_t, cuda_enable_fabric),
-     UCS_CONFIG_TYPE_TERNARY},
-
     {NULL}
 };
 
 
 ucs_status_t
-uct_rc_gdaki_alloc(ucs_ternary_auto_value_t enable_fabric, size_t size,
-                   size_t align, size_t *granularity_p,
+uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
                    uct_cuda_copy_alloc_handle_t *alloc_handle, void **buf_p)
 {
     unsigned int flag = 1;
@@ -114,7 +108,7 @@ uct_rc_gdaki_alloc(ucs_ternary_auto_value_t enable_fabric, size_t size,
     }
 
     status = uct_cuda_mem_alloc(UCS_LOG_LEVEL_ERROR, UCS_MEMORY_TYPE_CUDA,
-                                enable_fabric, cu_device, size + align - 1,
+                                UCS_TRY, cu_device, size + align - 1,
                                 granularity_p, alloc_handle);
     if (status != UCS_OK) {
         return status;
@@ -392,8 +386,7 @@ uct_rc_gdaki_init_umem(uct_rc_gdaki_iface_t *iface, uint64_t pgsz_bitmap,
         return status;
     }
 
-    status = uct_rc_gdaki_alloc(iface->cuda.enable_fabric, mem_size,
-                                ucs_get_page_size(),
+    status = uct_rc_gdaki_alloc(mem_size, ucs_get_page_size(),
                                 &iface->cuda.alloc_granularity, &mem->gpu_raw,
                                 &mem->gpu_mem);
     if (status != UCS_OK) {
@@ -1235,7 +1228,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     self->cuda.dev               = cuda_dev;
     self->cuda.ctx               = NULL;
     self->cuda.alloc_granularity = SIZE_MAX;
-    self->cuda.enable_fabric     = config->cuda_enable_fabric;
 
     return UCS_OK;
 

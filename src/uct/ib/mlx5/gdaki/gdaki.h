@@ -46,7 +46,6 @@ typedef struct uct_rc_gdaki_iface {
     struct {
         CUdevice                 dev;
         CUcontext                ctx;
-        ucs_ternary_auto_value_t enable_fabric;
         size_t                   alloc_granularity;
     } cuda;
 } uct_rc_gdaki_iface_t;
