@@ -240,12 +240,9 @@ unsigned ucp_ep_init_flags(const ucp_worker_h worker,
  * @brief Convert error handling mode to endpoint initialization flags.
  *
  * @param [in] err_mode Error handling mode.
- * @param [in] is_self  Whether the endpoint connects to the same worker.
- *
  * @return Endpoint initialization flags.
  */
-unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode,
-                                    int is_self);
+unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode);
 
 
 int ucp_wireup_connect_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
