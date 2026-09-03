@@ -13,10 +13,10 @@
 void ucp_ep_failover_cleanup(ucp_ep_h ep);
 
 /**
- * Whether this UCT ep's iface can keep outstanding ops for token-based
- * failover (@c UCT_IFACE_FLAG_V2_QUERY_TOKEN and a valid TX token length).
+ * Non-zero while token failover owns UCT endpoints
+ * (@c ucp_ep_recovery_arg_t::failover.lane_map).
  */
-int ucp_ep_failover_is_token_supported(uct_ep_h uct_ep);
+int ucp_ep_failover_in_progress(ucp_ep_h ep);
 
 /**
  * Take ownership of every UCT ep in @a lane_map for token-based failover.

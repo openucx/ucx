@@ -864,7 +864,7 @@ protected:
             }
 
             for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.count != 0) {
+                if (arg->recovery.probe[lane].comp.count != 0) {
                     return true;
                 }
             }
@@ -926,7 +926,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
 
         if (arg != NULL) {
             for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.func != NULL) {
+                if (arg->recovery.probe[lane].comp.func != NULL) {
                     probe_armed = true;
                     break;
                 }

@@ -20,7 +20,7 @@
 static unsigned ucp_ep_failover_progress_cb(void *arg);
 
 
-int ucp_ep_failover_is_token_supported(uct_ep_h uct_ep)
+static int ucp_ep_failover_is_token_supported(uct_ep_h uct_ep)
 {
     uct_iface_attr_v2_t attr;
     ucs_status_t status;
@@ -38,6 +38,15 @@ int ucp_ep_failover_is_token_supported(uct_ep_h uct_ep)
 
     return (attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) &&
            (attr.tx_token_length > 0) && (attr.tx_token_length <= UINT8_MAX);
+}
+
+int ucp_ep_failover_in_progress(ucp_ep_h ep)
+{
+    const ucp_ep_recovery_arg_t *rec;
+
+    ucs_assert(ep->ext != NULL);
+    rec = ep->ext->recovery_arg;
+    return (rec != NULL) && (rec->failover.lane_map != 0);
 }
 
 static void ucp_ep_failover_lane_close(ucp_ep_h ep,
