@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_COMMON_H
 
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
@@ -247,12 +248,7 @@ typedef struct uct_rc_mlx5_mp_hash_key {
 } uct_rc_mlx5_mp_hash_key_t;
 
 typedef struct {
-    union {
-        struct {
-            uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-            uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-        };
-    };
+    uint8_t data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
 } uct_rc_mlx5_op_callback_data_t;
 
 ucs_status_t

@@ -1612,22 +1612,78 @@ UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
 
 class test_rc_purge_outstanding : public test_rc {
+public:
+    void init() override
+    {
+        uct_test::init();
+
+        m_e1 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e1);
+
+        check_skip_test();
+
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+
+        test_rc::connect();
+
+        /* Endpoint used for replaying purged operations */
+        m_e1->connect(1, *m_e2, 1);
+    }
+
 protected:
-    struct purge_ctx {
-        uct_ep_operation_t    operation;
-        uint64_t              remote_addr;
-        uct_rkey_t            rkey;
-        uct_unpack_callback_t unpack_cb;
-        void                  *unpack_arg;
-        size_t                length;
-        const uct_iov_t       *iov;
-        size_t                iovcnt;
-        uct_completion_t      *comp;
-        unsigned              count;
+    enum {
+        NUM_MESSAGES = 2000
     };
 
-    static void completion_cb(uct_completion_t*)
+    struct purge_ctx {
+        test_rc_purge_outstanding *self;
+        uct_ep_h                  ep;
+        unsigned                  num_replayed;
+    };
+
+    bool check_caps_v2(uint64_t required_flags)
     {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+        return (uct_iface_query_v2(m_e1->iface(), &attr) == UCS_OK) &&
+               ucs_test_all_flags(attr.cap.flags, required_flags);
+    }
+
+    static ucs_status_t err_handler(void *arg, uct_ep_h, ucs_status_t)
+    {
+        ++static_cast<test_rc_purge_outstanding*>(arg)->m_err_count;
+        return UCS_OK;
+    }
+
+    static void query_tx_token(uct_ep_h ep, uct_rc_mlx5_tx_token_t *tx_token)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
+    }
+
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_tx_token_t *tx_token,
+                               uct_rc_mlx5_rx_token_t *rx_token)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
+    }
+
+    void ensure_undelivered(const uct_rc_mlx5_rx_token_t &rx_token) const
+    {
+        if (be32toh(rx_token) >= NUM_MESSAGES) {
+            UCS_TEST_SKIP_R("all messages were delivered before invalidate");
+        }
     }
 
     static void unpack_cb(void *arg, const void *data, size_t length)
@@ -1635,142 +1691,89 @@ protected:
         memcpy(arg, data, length);
     }
 
+    void replay_get(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        ucs_status_t status;
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        ASSERT_EQ(UCT_EP_OP_GET_BCOPY, info->operation);
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
+        ASSERT_TRUE(info->rma.field_mask &
+                    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
+        ASSERT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
+        ASSERT_TRUE(info->rma.field_mask &
+                    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
+
+        UCT_TEST_CALL_AND_TRY_AGAIN(
+                uct_ep_get_bcopy(ctx->ep, info->rma.payload.unpack.unpack_cb,
+                                 info->rma.payload.unpack.arg,
+                                 info->rma.payload.unpack.length,
+                                 info->rma.remote_addr, info->rma.rkey, NULL),
+                status);
+        ASSERT_EQ(UCS_INPROGRESS, status);
+
+        ++ctx->num_replayed;
+    }
+
     static void purge_cb(const uct_ep_op_info_t *info, void *arg)
     {
         purge_ctx *ctx = static_cast<purge_ctx*>(arg);
 
-        ++ctx->count;
-
-        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-        EXPECT_EQ(ctx->operation, info->operation);
-
-        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
-
-        EXPECT_TRUE(info->rma.field_mask &
-                    UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
-        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
-
-        EXPECT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
-        EXPECT_EQ(ctx->rkey, info->rma.rkey);
-
-        if (ctx->operation == UCT_EP_OP_GET_BCOPY) {
-            EXPECT_TRUE(info->rma.field_mask &
-                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
-            EXPECT_EQ(ctx->unpack_cb, info->rma.payload.unpack.unpack_cb);
-            EXPECT_EQ(ctx->unpack_arg, info->rma.payload.unpack.arg);
-            EXPECT_EQ(ctx->length, info->rma.payload.unpack.length);
-        } else {
-            EXPECT_TRUE(info->rma.field_mask &
-                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
-            EXPECT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
-
-            for (size_t i = 0; i < ctx->iovcnt; ++i) {
-                const uct_iov_t &expected = ctx->iov[i];
-                const uct_iov_t &actual   = info->rma.payload.zcopy.iov[i];
-
-                EXPECT_EQ(expected.buffer, actual.buffer);
-                EXPECT_EQ(expected.length, actual.length);
-                EXPECT_EQ(expected.stride, actual.stride);
-                EXPECT_EQ(expected.count, actual.count);
-                EXPECT_EQ(uct_ib_memh_get_lkey(expected.memh),
-                          uct_ib_memh_get_lkey(actual.memh));
-            }
-        }
-
-        if (ctx->comp != NULL) {
-            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
-            EXPECT_EQ(ctx->comp, info->comp);
-        } else {
-            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
-        }
+        ctx->self->replay_get(info, ctx);
     }
 
-    ucs_status_t purge_stub(purge_ctx *ctx)
+    void test_get_bcopy(size_t length)
     {
-        uct_rc_mlx5_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
-        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
-        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
-        uint16_t ci              = 0;
-        uct_rc_mlx5_op_callback_data_t callback_data;
-        uct_ep_op_info_t info;
+        static const uint64_t remote_seed = 0x1;
+        mapped_buffer localbuf(length, ~remote_seed, *m_e1);
+        mapped_buffer remotebuf(length, remote_seed, *m_e2);
+        uct_ep_outstanding_purge_params_t params = {};
+        uct_rc_mlx5_tx_token_t tx_token          = {};
+        uct_rc_mlx5_rx_token_t rx_token          = {};
+        purge_ctx ctx                            = {this, m_e1->ep(1), 0};
         ucs_status_t status;
-        const struct mlx5_wqe_ctrl_seg *ctrl;
-        uct_rc_iface_send_op_t *op, *t_op;
-        size_t wqe_size;
 
-        while (ci != txwq->sw_pi) {
-            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
-                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
-            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-            op       = NULL;
-
-            ucs_queue_for_each(t_op, &txqp->outstanding, queue) {
-                if (t_op->sn == ci) {
-                    op = t_op;
-                    break;
-                }
-            }
-
-            memset(&info, 0, sizeof(info));
-            status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
-                                              &callback_data);
-
-            EXPECT_UCS_OK(status);
-
-            purge_cb(&info, ctx);
-
-            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+            UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_get_bcopy(m_e1->ep(0), unpack_cb,
+                                                         localbuf.ptr(), length,
+                                                         remotebuf.addr(),
+                                                         remotebuf.rkey(),
+                                                         NULL),
+                                        status);
+            ASSERT_EQ(UCS_INPROGRESS, status);
         }
 
-        return UCS_OK;
-    }
+        /* Freeze the endpoint, so no more operations are delivered */
+        ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), NULL));
 
-    void test_get(uct_ep_operation_t operation, size_t length)
-    {
-        mapped_buffer sendbuf(length, 0ul, *m_e1);
-        mapped_buffer recvbuf(length, 0ul, *m_e2);
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), length,
-                                sendbuf.memh(), 1);
-        uct_completion_t comp = {completion_cb, 1, UCS_OK};
+        query_tx_token(m_e1->ep(0), &tx_token);
+        query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+        ensure_undelivered(rx_token);
 
-        if (operation == UCT_EP_OP_GET_BCOPY) {
-            ASSERT_EQ(UCS_INPROGRESS,
-                      uct_ep_get_bcopy(m_e1->ep(0), unpack_cb, sendbuf.ptr(),
-                                       length, recvbuf.addr(), recvbuf.rkey(),
-                                       &comp));
-        } else {
-            ASSERT_EQ(UCS_INPROGRESS,
-                      uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
-                                       recvbuf.rkey(), &comp));
-        }
+        params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                            UCT_EP_OUTSTANDING_FIELD_CB |
+                            UCT_EP_OUTSTANDING_FIELD_ARG;
+        params.rx_token   = &rx_token;
+        params.cb         = purge_cb;
+        params.arg        = &ctx;
+        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &params));
 
-        purge_ctx ctx = {
-            operation, recvbuf.addr(), uct_ib_md_direct_rkey(recvbuf.rkey()),
-            unpack_cb, sendbuf.ptr(),  length,
-            iov,       iovcnt,         &comp,
-            0
-        };
+        EXPECT_GT(ctx.num_replayed, 0u);
 
-        ASSERT_UCS_OK(purge_stub(&ctx));
         flush();
 
-        EXPECT_EQ(1, ctx.count);
+        EXPECT_EQ(1, m_err_count);
+        localbuf.pattern_check(remote_seed);
     }
+
+    unsigned m_err_count = 0;
 };
 
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_bcopy,
-                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY) ||
+                             !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN))
 {
-    test_get(UCT_EP_OP_GET_BCOPY,
-             ucs_min(8ul, m_e1->iface_attr().cap.get.max_bcopy));
-}
-
-UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_zcopy,
-                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
-{
-    test_get(UCT_EP_OP_GET_ZCOPY,
-             ucs_min(ucs_max(64ul, m_e1->iface_attr().cap.get.min_zcopy),
-                     m_e1->iface_attr().cap.get.max_zcopy));
+    test_get_bcopy(ucs_min(64ul, m_e1->iface_attr().cap.get.max_bcopy));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
