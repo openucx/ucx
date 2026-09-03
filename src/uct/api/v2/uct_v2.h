@@ -1918,10 +1918,7 @@ typedef struct uct_ep_op_info {
  * @brief Callback invoked for each undelivered outstanding operation.
  *
  * @param [in] op_info  Descriptor of the undelivered operation. The descriptor
- *                      is valid only for the duration of the callback. The user
- *                      must copy it, and any callback-lifetime data it
- *                      references, if they are needed after the callback
- *                      returns.
+ *                      is valid only for the duration of the callback.
  * @param [in] arg      User-defined argument.
  */
 typedef void (*uct_ep_outstanding_purge_callback_t)(
