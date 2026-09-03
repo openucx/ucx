@@ -1691,26 +1691,46 @@ protected:
         memcpy(arg, data, length);
     }
 
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
     void replay_get(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
+        uct_completion_t *comp;
         ucs_status_t status;
 
         ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-        ASSERT_EQ(UCT_EP_OP_GET_BCOPY, info->operation);
         ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_RMA);
         ASSERT_TRUE(info->rma.field_mask &
                     UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR);
         ASSERT_TRUE(info->rma.field_mask & UCT_EP_OP_INFO_RMA_FIELD_RKEY);
-        ASSERT_TRUE(info->rma.field_mask &
-                    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
 
-        UCT_TEST_CALL_AND_TRY_AGAIN(
-                uct_ep_get_bcopy(ctx->ep, info->rma.payload.unpack.unpack_cb,
-                                 info->rma.payload.unpack.arg,
-                                 info->rma.payload.unpack.length,
-                                 info->rma.remote_addr, info->rma.rkey, NULL),
-                status);
-        ASSERT_EQ(UCS_INPROGRESS, status);
+        comp = (info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) ? info->comp :
+                                                                NULL;
+
+        if (info->operation == UCT_EP_OP_GET_BCOPY) {
+            ASSERT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
+            UCT_TEST_CALL_AND_TRY_AGAIN(
+                    uct_ep_get_bcopy(ctx->ep,
+                                     info->rma.payload.unpack.unpack_cb,
+                                     info->rma.payload.unpack.arg,
+                                     info->rma.payload.unpack.length,
+                                     info->rma.remote_addr, info->rma.rkey,
+                                     comp),
+                    status);
+        } else {
+            ASSERT_EQ(UCT_EP_OP_GET_ZCOPY, info->operation);
+            ASSERT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+            UCT_TEST_CALL_AND_TRY_AGAIN(
+                    uct_ep_get_zcopy(ctx->ep, info->rma.payload.zcopy.iov,
+                                     info->rma.payload.zcopy.iovcnt,
+                                     info->rma.remote_addr, info->rma.rkey,
+                                     comp),
+                    status);
+        }
 
         ++ctx->num_replayed;
     }
@@ -1722,29 +1742,55 @@ protected:
         ctx->self->replay_get(info, ctx);
     }
 
-    void test_get_bcopy(size_t length)
+    void post_get(uct_ep_operation_t operation, const mapped_buffer &localbuf,
+                  const mapped_buffer &remotebuf, const uct_iov_t *iov,
+                  size_t iovcnt, uct_completion_t *comp)
     {
-        static const uint64_t remote_seed = 0x1;
-        mapped_buffer localbuf(length, ~remote_seed, *m_e1);
+        ucs_status_t status;
+
+        if (operation == UCT_EP_OP_GET_BCOPY) {
+            UCT_TEST_CALL_AND_TRY_AGAIN(
+                    uct_ep_get_bcopy(m_e1->ep(0), unpack_cb, localbuf.ptr(),
+                                     localbuf.length(), remotebuf.addr(),
+                                     remotebuf.rkey(), comp),
+                    status);
+        } else {
+            UCT_TEST_CALL_AND_TRY_AGAIN(
+                    uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, remotebuf.addr(),
+                                     remotebuf.rkey(), comp),
+                    status);
+        }
+
+        ASSERT_EQ(UCS_INPROGRESS, status);
+    }
+
+    void test_get(uct_ep_operation_t operation, size_t length)
+    {
+        if (!check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+            UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
+        }
+
+        static const uint64_t local_seed  = 0x1111111111111111lu;
+        static const uint64_t remote_seed = 0x2222222222222222lu;
+        mapped_buffer localbuf(length, local_seed, *m_e1);
         mapped_buffer remotebuf(length, remote_seed, *m_e2);
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, localbuf.ptr(), length,
+                                localbuf.memh(), 1);
+        uct_completion_t comp = {completion_cb, NUM_MESSAGES, UCS_OK};
         uct_ep_outstanding_purge_params_t params = {};
         uct_rc_mlx5_tx_token_t tx_token          = {};
         uct_rc_mlx5_rx_token_t rx_token          = {};
         purge_ctx ctx                            = {this, m_e1->ep(1), 0};
-        ucs_status_t status;
 
         for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
-            UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_get_bcopy(m_e1->ep(0), unpack_cb,
-                                                         localbuf.ptr(), length,
-                                                         remotebuf.addr(),
-                                                         remotebuf.rkey(),
-                                                         NULL),
-                                        status);
-            ASSERT_EQ(UCS_INPROGRESS, status);
+            post_get(operation, localbuf, remotebuf, iov, iovcnt, &comp);
         }
 
         /* Freeze the endpoint, so no more operations are delivered */
         ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), NULL));
+
+        wait_for_flag(&m_err_count);
+        EXPECT_EQ(1u, m_err_count);
 
         query_tx_token(m_e1->ep(0), &tx_token);
         query_rx_token(m_e2->iface(), &tx_token, &rx_token);
@@ -1762,7 +1808,7 @@ protected:
 
         flush();
 
-        EXPECT_EQ(1, m_err_count);
+        EXPECT_EQ(0, comp.count);
         localbuf.pattern_check(remote_seed);
     }
 
@@ -1770,10 +1816,18 @@ protected:
 };
 
 UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_bcopy,
-                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY) ||
-                             !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN))
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
 {
-    test_get_bcopy(ucs_min(64ul, m_e1->iface_attr().cap.get.max_bcopy));
+    test_get(UCT_EP_OP_GET_BCOPY,
+             ucs_min(64ul, m_e1->iface_attr().cap.get.max_bcopy));
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    test_get(UCT_EP_OP_GET_ZCOPY,
+             ucs_min(ucs_max(64ul, m_e1->iface_attr().cap.get.min_zcopy),
+                     m_e1->iface_attr().cap.get.max_zcopy));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)

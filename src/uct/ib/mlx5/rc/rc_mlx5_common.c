@@ -38,6 +38,42 @@ uct_rc_mlx5_op_info_fill_rma_raddr(uct_ep_op_info_t *info,
     info->field_mask     |= UCT_EP_OP_INFO_FIELD_RMA;
 }
 
+static void uct_rc_mlx5_op_info_fill_zcopy_iov(
+        uct_rc_mlx5_op_callback_data_t *callback_data,
+        const uct_ib_mlx5_txwq_t *txwq, const void *first_dptr, size_t length,
+        size_t *iovcnt_p)
+{
+    const struct mlx5_wqe_data_seg *dptr;
+    uint32_t byte_count;
+    size_t iovcnt, i;
+
+    ucs_assert((length % sizeof(*dptr)) == 0);
+
+    iovcnt = length / sizeof(*dptr);
+    ucs_assert(iovcnt <= ucs_static_array_size(callback_data->iov));
+
+    dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                     (void*)first_dptr);
+    for (i = 0; i < iovcnt; ++i) {
+        byte_count = ntohl(dptr->byte_count);
+        ucs_assert(!(byte_count & MLX5_INLINE_SEG));
+
+        callback_data->memh[i].lkey  = ntohl(dptr->lkey);
+        callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;
+        callback_data->memh[i].flags = 0;
+        callback_data->iov[i].buffer = (void*)(uintptr_t)be64toh(dptr->addr);
+        callback_data->iov[i].length = byte_count;
+        callback_data->iov[i].memh   = &callback_data->memh[i];
+        callback_data->iov[i].stride = 0;
+        callback_data->iov[i].count  = 1;
+
+        dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                         (void*)(dptr + 1));
+    }
+
+    *iovcnt_p = iovcnt;
+}
+
 static void
 uct_rc_mlx5_op_info_fill_get_bcopy(uct_ep_op_info_t *info,
                                    uct_rc_iface_send_op_t *op,
@@ -55,6 +91,32 @@ uct_rc_mlx5_op_info_fill_get_bcopy(uct_ep_op_info_t *info,
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
 
     info->operation   = UCT_EP_OP_GET_BCOPY;
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
+}
+
+static void uct_rc_mlx5_op_info_fill_get_zcopy(
+        uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
+        size_t seg_size, uct_rc_mlx5_op_callback_data_t *callback_data)
+{
+    size_t iovcnt;
+
+    if (seg_size == 0) {
+        goto out;
+    }
+
+    uct_rc_mlx5_op_info_fill_zcopy_iov(callback_data, txwq, raddr + 1, seg_size,
+                                       &iovcnt);
+
+    info->rma.payload.zcopy.iov    = callback_data->iov;
+    info->rma.payload.zcopy.iovcnt = iovcnt;
+    info->rma.field_mask          |= UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+out:
+    uct_rc_mlx5_op_info_try_fill_comp(info, op);
+    uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
+
+    info->operation   = UCT_EP_OP_GET_ZCOPY;
     info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION;
 }
 
@@ -76,9 +138,17 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
         return UCS_OK;
     }
 
-    ucs_fatal("unsupported get op %p handler %s", (void*)op,
-              (op != NULL) ? ucs_debug_get_symbol_name((void*)op->handler) :
-                             "none");
+    if ((op == NULL) ||
+        (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
+        uct_rc_mlx5_op_info_fill_get_zcopy(info, txwq, op, raddr,
+                                           wqe_size - sizeof(*ctrl) -
+                                                   sizeof(*raddr),
+                                           callback_data);
+        return UCS_OK;
+    }
+
+    ucs_fatal("unsupported get op %p handler %s", op,
+              ucs_debug_get_symbol_name((void*)op->handler));
 }
 
 ucs_status_t
