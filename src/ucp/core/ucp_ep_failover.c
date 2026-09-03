@@ -40,20 +40,20 @@ static int ucp_ep_failover_is_token_supported(uct_ep_h uct_ep)
            (attr.tx_token_length > 0) && (attr.tx_token_length <= UINT8_MAX);
 }
 
-int ucp_ep_failover_in_progress(ucp_ep_h ep)
+int ucp_ep_failover_in_progress(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     const ucp_ep_recovery_arg_t *rec;
 
     ucs_assert(ep->ext != NULL);
-    rec = ep->ext->recovery_arg;
-    return (rec != NULL) && (rec->failover.lane_map != 0);
+    rec = ucp_ep_get_recovery_arg(ep);
+    return (rec != NULL) && (rec->failover.lane_map & UCS_BIT(lane));
 }
 
 static void ucp_ep_failover_lane_close(ucp_ep_h ep,
                                        ucp_lane_index_t lane_index,
                                        ucs_status_t discard_status)
 {
-    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_ep_recovery_arg_t *arg = ucp_ep_get_recovery_arg(ep);
     ucp_worker_h worker        = ep->worker;
     ucp_ep_failover_lane_t *lane;
     ucp_send_nbx_callback_t done_cb;
@@ -108,13 +108,12 @@ static unsigned ucp_ep_failover_progress_cb(void *arg)
     ucp_ep_recovery_arg_t *rec;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    rec = ep->ext->recovery_arg;
+    rec = ucp_ep_get_recovery_arg(ep);
     if ((rec != NULL) && (rec->failover.lane_map != 0)) {
         ucp_ep_failover_abort(ep, rec->failover.status);
         if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
             ucp_ep_recovery_arm(ep);
         }
-
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -135,9 +134,10 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
 
     ucs_assert(ep->ext != NULL);
     ucs_assert(ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER));
+    ucs_assert(!ucp_ep_has_cm_lane(ep));
     ucs_assert(lane_map != 0);
 
-    rec = ep->ext->recovery_arg;
+    rec = ucp_ep_get_recovery_arg(ep);
     ucs_for_each_bit(lane, lane_map) {
         uct_ep = uct_eps[lane];
         if ((ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) ||
@@ -189,9 +189,11 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
 
 void ucp_ep_failover_cleanup(ucp_ep_h ep)
 {
+    const ucp_ep_recovery_arg_t *rec;
+
     ucs_assert(ep->ext != NULL);
-    ucs_assert((ep->ext->recovery_arg == NULL) ||
-               (ep->ext->recovery_arg->failover.lane_map == 0));
+    rec = ucp_ep_get_recovery_arg(ep);
+    ucs_assert((rec == NULL) || (rec->failover.lane_map == 0));
 
     ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
                                  ucp_ep_failover_progress_remove_filter, ep);
@@ -206,7 +208,7 @@ void ucp_ep_failover_abort(ucp_ep_h ep, ucs_status_t status)
     ucs_assert(status != UCS_OK);
     ucs_assert(ep->ext != NULL);
 
-    rec = ep->ext->recovery_arg;
+    rec = ucp_ep_get_recovery_arg(ep);
     if ((rec == NULL) || (rec->failover.lane_map == 0)) {
         return;
     }
@@ -229,16 +231,14 @@ void ucp_ep_failover_schedule_abort(ucp_ep_h ep, ucs_status_t status)
     ucs_assert(status != UCS_OK);
     ucs_assert(ep->ext != NULL);
 
-    rec = ep->ext->recovery_arg;
+    rec = ucp_ep_get_recovery_arg(ep);
     ucs_assert(rec != NULL);
     ucs_assert(rec->failover.lane_map != 0);
 
-    if (rec->failover.status != UCS_OK) {
-        rec->failover.status = status;
-        return;
+    if (rec->failover.status == UCS_OK) {
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_failover_progress_cb, ep);
     }
 
     rec->failover.status = status;
-    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
-                              ucp_ep_failover_progress_cb, ep);
 }

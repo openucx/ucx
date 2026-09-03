@@ -476,7 +476,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
         /* Token failover owns the UCT ep: UCT must not complete outstanding
          * ops. */
-        return ucp_ep_failover_in_progress(ucp_ep) ? UCS_INPROGRESS :
+        return ucp_ep_failover_in_progress(ucp_ep, lane) ? UCS_INPROGRESS :
                UCS_OK;
     }
 

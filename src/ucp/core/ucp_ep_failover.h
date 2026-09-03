@@ -13,10 +13,10 @@
 void ucp_ep_failover_cleanup(ucp_ep_h ep);
 
 /**
- * Non-zero while token failover owns UCT endpoints
+ * Non-zero while token failover owns the UCT endpoint of @a lane
  * (@c ucp_ep_recovery_arg_t::failover.lane_map).
  */
-int ucp_ep_failover_in_progress(ucp_ep_h ep);
+int ucp_ep_failover_in_progress(ucp_ep_h ep, ucp_lane_index_t lane);
 
 /**
  * Take ownership of every UCT ep in @a lane_map for token-based failover.
