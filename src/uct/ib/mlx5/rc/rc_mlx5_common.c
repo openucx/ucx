@@ -29,8 +29,10 @@ static void
 uct_rc_mlx5_op_info_fill_rma_raddr(uct_ep_op_info_t *info,
                                    const struct mlx5_wqe_raddr_seg *raddr)
 {
+    uct_ib_md_pack_rkey(ntohl(raddr->rkey), UCT_IB_INVALID_MKEY,
+                        &info->rma.rkey);
+
     info->rma.remote_addr = be64toh(raddr->raddr);
-    info->rma.rkey        = ntohl(raddr->rkey);
     info->rma.field_mask |= UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
                             UCT_EP_OP_INFO_RMA_FIELD_RKEY;
     info->field_mask     |= UCT_EP_OP_INFO_FIELD_RMA;
@@ -61,7 +63,8 @@ static void uct_rc_mlx5_op_info_fill_zcopy_iov(
                                      (void*)first_dptr);
     for (i = 0; i < iovcnt; ++i) {
         byte_count = ntohl(dptr->byte_count);
-        ucs_assert(!(byte_count & MLX5_INLINE_SEG));
+        ucs_assertv_always(!(byte_count & MLX5_INLINE_SEG),
+                           "put_short is not supported yet");
 
         callback_data->memh[i].lkey  = ntohl(dptr->lkey);
         callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;

@@ -1693,11 +1693,13 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
         UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
     }
 
-    const size_t length = ucs_min(ucs_max(8 * UCS_KBYTE,
-                                          m_e1->iface_attr().cap.put.min_zcopy),
-                                  m_e1->iface_attr().cap.put.max_zcopy);
-    mapped_buffer sendbuf(length, 0ul, *m_e1);
-    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    const size_t length      = ucs_min(ucs_max(8 * UCS_KBYTE,
+                                               m_e1->iface_attr().cap.put.min_zcopy),
+                                       m_e1->iface_attr().cap.put.max_zcopy);
+    const uint64_t send_seed = 0x1111111111111111lu;
+    const uint64_t recv_seed = 0x2222222222222222lu;
+    mapped_buffer sendbuf(length, send_seed, *m_e1);
+    mapped_buffer recvbuf(length, recv_seed, *m_e2);
     uct_ep_invalidate_params_t invalidate_params = {};
     uct_ep_outstanding_purge_params_t params     = {};
     uct_rc_mlx5_tx_token_t tx_token              = {};
@@ -1742,6 +1744,7 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
     flush();
 
     EXPECT_EQ(0, ctx.comp.count);
+    recvbuf.pattern_check(send_seed);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
