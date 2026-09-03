@@ -266,8 +266,13 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!ucs_netlink_is_best_route(ndev_index,
-                                   (const struct sockaddr*)&remote_addr)) {
+    /* TODO: Check using relaxed route (might need bind to device socket
+     * option). We currently assume here that with or without src address bind,
+     * kernel is going to anyway use the best route. So we make UCX refuse other
+     * interfaces. */
+    if (!ucs_netlink_route_matches(ndev_index,
+                                   (const struct sockaddr*)&remote_addr,
+                                   UCS_NETLINK_ROUTE_CHECK_BEST)) {
         uct_iface_fill_info_str_buf(
                     params, "no route to %s",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
