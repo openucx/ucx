@@ -97,7 +97,7 @@ jobs:
               JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
         displayName: Publish-Maven
         # rc tags carry the final maven version - skip to keep it for GA
-        condition: and(in(variables['Build.Reason'], 'IndividualCI', 'PullRequest'), not(contains(variables['Build.SourceBranch'], '-rc')))
+        condition: and(eq(variables['Build.Reason'], 'IndividualCI'), not(contains(variables['Build.SourceBranch'], '-rc')))
         env:
           GPG_PASSPHRASE: $(GPG_PASSPHRASE)
           SONATYPE_PASSWORD: $(SONATYPE_PASSWORD)
