@@ -248,7 +248,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     struct mlx5_wqe_data_seg *dptr;
     size_t wqe_size, i;
     uint8_t fm_ce_se, fence_flag;
-    uint16_t sn, pi, res_count;
+    uint16_t pi, res_count;
     uint64_t addr;
     uct_rkey_t rkey;
     void *curr;
@@ -278,17 +278,15 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     UCT_RC_CHECK_CQE_VALUE_RET(&iface->super, &ep->super,
                                UCS_ERR_NO_RESOURCE, count - 1);
 
-    UCT_RC_CHECK_NUM_RDMA_READ_RET(&iface->super, UCS_ERR_NO_RESOURCE);
     UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
                                 UCS_ERR_NO_RESOURCE, count - 1);
 
     wqe_size = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*dptr);
-    sn       = txwq->sw_pi;
+    pi       = txwq->sw_pi;
 
     ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
     ucs_assert(ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB) == 1);
 
-    pi   = sn;
     curr = txwq->curr;
 
     fence      = uct_rc_ep_fm(&iface->super, &txwq->fi, 1);
@@ -335,8 +333,9 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
-                              uct_rc_ep_send_op_completion_handler, comp, sn,
-                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL, 0, total);
+                              uct_rc_ep_send_op_completion_handler, comp,
+                              txwq->sig_pi, UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
+                              NULL, 0, total);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total);
     uct_rc_ep_enable_flush_remote(&ep->super);
