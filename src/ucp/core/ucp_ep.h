@@ -169,6 +169,7 @@ enum {
                                                            transports for AM lane */
     UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11), /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_FAILOVER */
+    UCP_EP_INIT_RECOVERY               = UCS_BIT(12),
 
     /**
      * For consistency with @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER
@@ -492,10 +493,27 @@ typedef struct {
 } ucp_ep_flush_state_t;
 
 
+typedef struct ucp_ep_recovery_probe {
+    uct_completion_t  comp;
+    ucp_ep_h          ep;
+    ucp_lane_index_t  lane;
+} ucp_ep_recovery_probe_t;
+
+
+enum {
+    UCP_EP_RECOVERY_STATE_IDLE,
+    UCP_EP_RECOVERY_STATE_WAIT_REPLY,
+    UCP_EP_RECOVERY_STATE_PROBING,
+    UCP_EP_RECOVERY_STATE_PROBE_OK
+};
+
+
 /* Per-EP recovery retry state. */
 typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
-    unsigned    retries_left;
+    unsigned                retries_left;
+    uint8_t                 state;
+    ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
 
@@ -598,6 +616,8 @@ typedef struct ucp_ep {
         /* How many UCT EP discarding operations are in-progress scheduled for
          * the EP */
         unsigned                      discard;
+        /* How many recovery aux probes are in-progress on the EP */
+        unsigned                      probe;
     } refcounts;
 #endif
 
@@ -1003,6 +1023,12 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Notify recovery progress that a lanes-address reply was received.
+ */
+void ucp_ep_recovery_on_reply_received(ucp_ep_h ep);
 
 
 /**

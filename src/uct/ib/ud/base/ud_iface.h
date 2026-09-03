@@ -13,6 +13,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/sglib_wrapper.h>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/sglib.h>
 #include <ucs/datastruct/list.h>
@@ -158,6 +159,8 @@ KHASH_IMPL(uct_ud_iface_gid, union ibv_gid, char, 0,
 
 KHASH_MAP_INIT_INT(uct_ud_iface_ctl_desc_hash, uct_ud_ctl_desc_t*);
 
+UCS_ARRAY_DECLARE_TYPE(uct_ud_ep_gen_array_t, unsigned, uint8_t);
+
 struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;
@@ -203,6 +206,7 @@ struct uct_ud_iface {
     ucs_conn_match_ctx_t  conn_match_ctx;
 
     ucs_ptr_array_t       eps;
+    uct_ud_ep_gen_array_t ep_gen; /* generation of each index in eps */
     struct {
         ucs_time_t                tick;
         int                       timer_id;
@@ -255,7 +259,7 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
 
-void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
+ucs_status_t uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 

@@ -12,6 +12,7 @@
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
+#include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
 #endif
 
@@ -118,7 +119,132 @@ UCS_TEST_P(test_rc, flush_fc, "FLUSH_MODE?=fc") {
     } while (status != UCS_OK);
 }
 
+UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
+{
+    uct_ib_fence_info_t *fence_info;
+
+    if (GetParam()->tl_name == "rc_verbs") {
+        fence_info = &ucs_derived_of(m_e1->ep(0), uct_rc_verbs_ep_t)->fi;
+    } else {
+#ifdef HAVE_MLX5_DV
+        fence_info =
+                &ucs_derived_of(m_e1->ep(0),
+                                uct_rc_mlx5_ep_t)->super.tx.wq.fi;
+#else
+        UCS_TEST_ABORT("rc_mlx5 transport requires mlx5 DV support");
+#endif
+    }
+
+    ASSERT_UCS_OK(uct_ep_fence(m_e1->ep(0), 0));
+    EXPECT_NE(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
+}
+
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
+
+#ifdef HAVE_MLX5_DV
+class test_rc_mlx5_psn : public test_rc {
+public:
+    void init() override
+    {
+        uct_test::init();
+
+        modify_config("IB_PATH_MTU", "4096");
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+
+        check_skip_test();
+
+        modify_config("IB_PATH_MTU", "512");
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+
+        connect();
+    }
+
+protected:
+    uct_ib_mlx5_txwq_t *txwq()
+    {
+        return &ucs_derived_of(m_e1->ep(0),
+                               uct_rc_mlx5_ep_t)->super.tx.wq;
+    }
+};
+
+UCS_TEST_P(test_rc_mlx5_psn, path_mtu_from_rc_qp)
+{
+    uct_ib_iface_t *local_iface =
+            ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    uct_ib_iface_t *peer_iface =
+            ucs_derived_of(m_e2->iface(), uct_ib_iface_t);
+
+    EXPECT_EQ(IBV_MTU_4096, local_iface->config.path_mtu);
+    EXPECT_EQ(IBV_MTU_512, peer_iface->config.path_mtu);
+    EXPECT_EQ(511, txwq()->path_mtu_mask);
+    EXPECT_EQ(9, txwq()->path_mtu_shift);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_psn, next_wqe_psn,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    static const size_t length = 513;
+    uct_ib_mlx5_txwq_t *wq    = txwq();
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    uct_iov_t zero_iov = {};
+    uct_completion_t comp;
+    ucs_status_t status;
+
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(1, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = 1;
+    comp.status = UCS_OK;
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), 1);
+    status = uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                              recvbuf.rkey(), &comp);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+
+    /* The RC QP uses the peer's 512-byte path MTU, so 513 bytes use 2 PSNs. */
+    EXPECT_EQ(3, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    if (status == UCS_INPROGRESS) {
+        wait_for_value(&comp.count, 0, true);
+    }
+
+    zero_iov.buffer = sendbuf.ptr();
+    zero_iov.length = 0;
+    zero_iov.memh   = sendbuf.memh();
+    zero_iov.stride = 0;
+    zero_iov.count  = 1;
+    comp.count      = 1;
+    comp.status     = UCS_OK;
+
+    status = uct_ep_put_zcopy(m_e1->ep(0), &zero_iov, 1, recvbuf.addr(),
+                              recvbuf.rkey(), &comp);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    EXPECT_EQ(4, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    if (status == UCS_INPROGRESS) {
+        wait_for_value(&comp.count, 0, true);
+    }
+
+    wq->next_wqe_psn = UCS_MASK(24);
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+    EXPECT_EQ(UCS_BIT(24), wq->next_wqe_psn);
+    EXPECT_EQ(0, uct_ib_mlx5_txwq_get_next_wqe_psn(wq));
+
+    flush();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_psn, rc_mlx5)
+#endif
 
 
 class test_rc_max_wr : public test_rc {
@@ -1057,13 +1183,15 @@ protected:
         uint8_t saved_dp_ordering = md->dp_ordering_cap_devx.rc;
         uint8_t saved_pci_fadd    = dev->pci_fadd_arg_sizes;
         uint8_t saved_pci_cswap   = dev->pci_cswap_arg_sizes;
-        int saved_relaxed_order   = md->super.relaxed_order;
+        uint64_t saved_relaxed_order_mem_types =
+                md->super.relaxed_order_mem_types;
         uct_iface_h tl_iface      = NULL;
         ucs_status_t status;
 
         m_iface.reset();
         md->dp_ordering_cap_devx.rc = dp_ordering;
-        md->super.relaxed_order     = relaxed_order;
+        md->super.relaxed_order_mem_types =
+                relaxed_order ? UCS_BIT(UCS_MEMORY_TYPE_HOST) : 0;
         dev->pci_fadd_arg_sizes     = pci_atomics ? sizeof(uint64_t) : 0;
         dev->pci_cswap_arg_sizes    = pci_atomics ? sizeof(uint64_t) : 0;
 
@@ -1073,7 +1201,8 @@ protected:
 
         dev->pci_cswap_arg_sizes    = saved_pci_cswap;
         dev->pci_fadd_arg_sizes     = saved_pci_fadd;
-        md->super.relaxed_order     = saved_relaxed_order;
+        md->super.relaxed_order_mem_types =
+                saved_relaxed_order_mem_types;
         md->dp_ordering_cap_devx.rc = saved_dp_ordering;
 
         if (status == UCS_OK) {
@@ -1295,6 +1424,79 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 
 #ifdef HAVE_MLX5_DV
+
+class test_rc_mlx5_token_query : public test_rc {
+protected:
+    static constexpr uint32_t NUM_MESSAGES = 10;
+
+    static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
+    {
+        uint32_t *rx_count = static_cast<uint32_t*>(arg);
+
+        ++*rx_count;
+        return UCS_OK;
+    }
+
+    static void query_tx_token(uct_ep_h ep, uct_rc_mlx5_tx_token_t *tx_token)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
+    }
+
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_tx_token_t *tx_token,
+                               uct_rc_mlx5_rx_token_t *rx_token)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
+    }
+};
+
+constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    uct_rc_mlx5_tx_token_t tx_token = {};
+    uct_rc_mlx5_rx_token_t rx_token = {};
+    uint32_t rx_count               = 0;
+    uct_ib_mlx5_md_t *md            = uct_ib_mlx5_iface_md(
+            ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
+    uct_rc_mlx5_base_ep_t *e2_ep;
+    ucs_status_t status;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        UCS_TEST_SKIP_R("DEVX is not supported");
+    }
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
+                                           &rx_count, 0));
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short(m_e1->ep(0), 0, i, NULL, 0),
+                                    status);
+        ASSERT_UCS_OK(status);
+    }
+
+    wait_for_value(&rx_count, NUM_MESSAGES, true);
+
+    query_tx_token(m_e1->ep(0), &tx_token);
+    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+
+    e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
+    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, be32toh(tx_token));
+    EXPECT_EQ(NUM_MESSAGES, be32toh(rx_token));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
 
 class test_rc_srq : public test_rc {
 public:

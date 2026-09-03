@@ -385,10 +385,24 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
    ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE", "n",
+   "Prefer the copy-to-attached host-staged path for intra-node\n"
+   "CUDA-to-CUDA tag rendezvous only when RNDV_SCHEME is auto\n"
+   "and the pipeline is enabled and available. AM rdnv and RMA rdnv\n"
+   "are not forced. This parameter is a temporary workaround\n"
+   "and may be removed in future releases.\n"
+   "Other rendezvous protocols remain as fallback.",
+   ucs_offsetof(ucp_context_config_t, rndv_shm_cuda_staging_force),
+   UCS_CONFIG_TYPE_BOOL},
+
   {"RNDV_PIPELINE_ERROR_HANDLING", "n",
    "Allow using error handling protocol in the rendezvous pipeline protocol\n"
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RMA_PPLN_ENABLE", "n",
+   "Force-enable the RMA rendezvous put/get protocols.",
+   ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -605,7 +619,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
 
-  {"SINGLE_NET_DEVICE", "n", "Use only one network device for all protocols.",
+  {"SINGLE_NET_DEVICE", "n",
+   "Restrict each protocol's lanes to one network device.\n"
+   "The device is picked among the closest eligible network devices using \n"
+   "the NODE_LOCAL_ID hint.",
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
 
@@ -618,9 +635,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"NODE_LOCAL_ID", "auto",
-   "An optimization hint for the local identificator on a single node. Does \n"
-   "not affect semantics, only transport selection criteria and the \n"
-   "resulting performance.",
+   "An optimization hint for the local identifier on a single node.\n"
+   " 'auto' : derive the id from the requesting device's ordinal among the\n"
+   "          devices of its class (e.g. the local GPU index). Devices with no\n"
+   "          such ordinal (e.g. host memory) fall back to 0.\n"
+   " <N>    : use the given id for all selections, overrides the value passed \n"
+   "          through ucp_params_t.node_local_id\n",
    ucs_offsetof(ucp_context_config_t, node_local_id), UCS_CONFIG_TYPE_ULUNITS},
 
   {"PRINT_TRANSPORT_TABLES", "auto",
@@ -2343,7 +2363,8 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                                                         ESTIMATED_NUM_PPN, 1);
 
     context->config.node_local_id = UCP_PARAM_FIELD_VALUE(params, node_local_id,
-                                                          NODE_LOCAL_ID, 0);
+                                                          NODE_LOCAL_ID,
+                                                          UCS_ULUNITS_AUTO);
 
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {
@@ -2458,7 +2479,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         /* node_local_id was set via the env variable. Override current value */
         context->config.node_local_id = context->config.ext.node_local_id;
     }
-    ucs_debug("node local id is %lu", context->config.node_local_id);
+
+    if (context->config.node_local_id == UCS_ULUNITS_AUTO) {
+        ucs_debug("node local id is auto");
+    } else {
+        ucs_debug("node local id is %lu", context->config.node_local_id);
+    }
 
     if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
@@ -2691,7 +2717,7 @@ static void ucp_context_create_vfs(ucp_context_h context)
 static void
 ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
 {
-    UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    UCS_STRING_BUFFER_ONSTACK(strb, 512);
     unsigned major_version, minor_version, release_number;
     ucs_log_level_t log_level;
     Dl_info dl_info;
@@ -2714,13 +2740,20 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     }
 
     if (ucs_log_is_enabled(log_level)) {
+        ucs_string_buffer_appendf(&strb, " (");
+
         ret = dladdr(ucp_init_version, &dl_info);
         if (ret != 0) {
-            ucs_string_buffer_appendf(&strb, " (loaded from %s)",
+            ucs_string_buffer_appendf(&strb, "loaded from %s, ",
                                       dl_info.dli_fname);
         }
+
+        ucs_string_buffer_appendf(&strb, "git branch %s, revision %s)",
+                                  UCT_SCM_BRANCH, UCT_SCM_VERSION);
         ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
     }
+
+    ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,

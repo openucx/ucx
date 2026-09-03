@@ -23,7 +23,6 @@
 #include <inttypes.h>
 
 
-#define UCS_TOPO_MAX_SYS_DEVICES     256
 #define UCS_TOPO_SYSFS_PCI_PREFIX    "/sys/bus/pci/devices/"
 #define UCS_TOPO_SYSFS_DEVICES_ROOT  "/sys/devices"
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
@@ -59,6 +58,7 @@ typedef struct {
     char                    *name;
     unsigned                name_priority;
     ucs_numa_node_t         numa_node;
+    ucs_sys_pci_id_t        pci_id;
     uintptr_t               user_value;
     ucs_topo_device_class_t device_class;
 
@@ -101,7 +101,7 @@ KHASH_INIT(bus_to_sys_dev, ucs_topo_bus_value_key_t, ucs_sys_device_t, 1,
 typedef struct ucs_topo_global_ctx {
     ucs_spinlock_t             lock;
     khash_t(bus_to_sys_dev)    bus_to_sys_dev_hash;
-    ucs_topo_sys_device_info_t devices[UCS_TOPO_MAX_SYS_DEVICES];
+    ucs_topo_sys_device_info_t devices[UCS_SYS_DEVICE_ID_COUNT];
     unsigned                   num_devices;
 } ucs_topo_global_ctx_t;
 
@@ -266,6 +266,13 @@ void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
     provider->ops.get_memory_distance_for_cpuset(device, cpuset, distance);
 }
 
+int ucs_topo_pci_id_equal(const ucs_sys_pci_id_t *pci_id1,
+                          const ucs_sys_pci_id_t *pci_id2)
+{
+    return (pci_id1->vendor == pci_id2->vendor) &&
+           (pci_id1->device == pci_id2->device);
+}
+
 ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
@@ -344,16 +351,43 @@ out:
     return status;
 }
 
-static int
-ucs_topo_read_device_numa_node(const ucs_sys_bus_id_t *bus_id)
+static uint16_t
+ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
+                           const char *file_name)
 {
-    int numa_node = UCS_NUMA_NODE_UNDEFINED;
+    long value;
+    ucs_status_t status;
+
+    status = ucs_read_file_number(&value, 1, "%s/%s", sysfs_path, file_name);
+    if (status != UCS_OK) {
+        ucs_warn("failed to read PCI ID value from %s/%s: %s", sysfs_path,
+                 file_name, ucs_status_string(status));
+        return UCS_SYS_PCI_ID_VALUE_UNDEFINED;
+    }
+
+    if ((value < 0) || (value > UINT16_MAX)) {
+        ucs_warn("%s: value %ld in '%s/%s' is out of range", dev_name, value,
+                 sysfs_path, file_name);
+        return UCS_SYS_PCI_ID_VALUE_UNDEFINED;
+    }
+
+    return (uint16_t)value;
+}
+
+static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
+                                            const char *dev_name,
+                                            ucs_numa_node_t *numa_node_p,
+                                            ucs_sys_pci_id_t *pci_id_p)
+{
     char *path;
     ucs_status_t status;
 
+    *numa_node_p = UCS_NUMA_NODE_UNDEFINED;
+    *pci_id_p    = UCS_SYS_PCI_ID_UNDEFINED;
+
     status = ucs_string_alloc_path_buffer(&path, "sysfs_path");
     if (status != UCS_OK) {
-        goto out;
+        return;
     }
 
     status = ucs_topo_bus_id_to_sysfs_path(bus_id, path, PATH_MAX);
@@ -361,12 +395,16 @@ ucs_topo_read_device_numa_node(const ucs_sys_bus_id_t *bus_id)
         goto out_free_path;
     }
 
-    numa_node = ucs_numa_node_of_device(path);
+    *numa_node_p = ucs_numa_node_of_device(path);
+
+    pci_id_p->vendor = ucs_topo_read_pci_id_value(dev_name, path, "vendor");
+    pci_id_p->device = ucs_topo_read_pci_id_value(dev_name, path, "device");
+
+    ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
+              dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);
 
 out_free_path:
     ucs_free(path);
-out:
-    return numa_node;
 }
 
 static ucs_status_t
@@ -413,6 +451,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
 {
     ucs_topo_sys_device_info_t *device;
     ucs_topo_bus_value_key_t key;
+    ucs_sys_pci_id_t pci_id;
     ucs_numa_node_t numa_node;
     int kh_put_status;
     khiter_t hash_it;
@@ -432,7 +471,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
-                          UCS_TOPO_MAX_SYS_DEVICES);
+                          UCS_SYS_DEVICE_ID_COUNT);
 
         name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
         if (name == NULL) {
@@ -445,7 +484,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
 
         ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
 
-        numa_node = ucs_topo_read_device_numa_node(bus_id);
+        ucs_topo_read_device_sysfs_info(bus_id, name, &numa_node, &pci_id);
 
         *sys_dev_p = ucs_topo_global_ctx.num_devices++;
         device     = &ucs_topo_global_ctx.devices[*sys_dev_p];
@@ -454,6 +493,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->name            = name;
         device->name_priority   = 0;
         device->numa_node       = numa_node;
+        device->pci_id          = pci_id;
         device->user_value      = user_value;
         device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
         device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
@@ -462,10 +502,14 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
-            ucs_debug("added sys_dev %d for bus id %s", *sys_dev_p, name);
+            ucs_debug(
+                    "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT,
+                    *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id));
         } else {
-            ucs_debug("added sys_dev %d for bus id %s with user value %"
-                      PRIuPTR, *sys_dev_p, name, user_value);
+            ucs_debug(
+                    "added sys_dev %d for bus id %s pci id " UCS_SYS_PCI_ID_FMT
+                    " with user value %" PRIuPTR,
+                    *sys_dev_p, name, UCS_SYS_PCI_ID_ARG(&pci_id), user_value);
         }
 
         kh_val(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) =
@@ -1053,7 +1097,7 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
     ucs_topo_device_class_t device_class;
     ucs_bus_id_bit_rep_t ref_key, key;
-    unsigned ordinal, d;
+    unsigned ordinal, d, prev_d;
 
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         return UCS_SYS_DEVICE_ORDINAL_INVALID;
@@ -1078,10 +1122,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
         goto out_unlock;
     }
 
-    /* The ordinal is the rank of the device's bus id (BDF) among all devices
-     * of the same class. Counting devices with a smaller BDF is equivalent to
-     * sorting the class by BDF and taking the index, and yields a stable,
-     * name-independent ordering. */
+    /* The ordinal is the rank of the device's bus id (BDF) among all unique
+     * BDFs of the same class. */
     ref_key = ucs_topo_get_bus_id_bit_repr(
             &ucs_topo_global_ctx.devices[sys_dev].bus_id);
     ordinal = 0;
@@ -1092,7 +1134,21 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 
         key = ucs_topo_get_bus_id_bit_repr(
                 &ucs_topo_global_ctx.devices[d].bus_id);
-        if (key < ref_key) {
+        if (key >= ref_key) {
+            continue;
+        }
+
+        /* Count only the first same-class record for this BDF. */
+        for (prev_d = 0; prev_d < d; ++prev_d) {
+            if ((ucs_topo_global_ctx.devices[prev_d].device_class ==
+                 device_class) &&
+                (ucs_topo_get_bus_id_bit_repr(
+                         &ucs_topo_global_ctx.devices[prev_d].bus_id) == key)) {
+                break;
+            }
+        }
+
+        if (prev_d == d) {
             ++ordinal;
         }
     }
@@ -1121,6 +1177,25 @@ ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return numa_node;
+}
+
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev)
+{
+    ucs_sys_pci_id_t pci_id;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return UCS_SYS_PCI_ID_UNDEFINED;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        pci_id = ucs_topo_global_ctx.devices[sys_dev].pci_id;
+    } else {
+        pci_id = UCS_SYS_PCI_ID_UNDEFINED;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return pci_id;
 }
 
 ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,

@@ -298,50 +298,106 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     return UCS_OK;
 }
 
-int uct_rocm_base_is_dmabuf_supported()
+FILE* uct_rocm_base_load_kernel_config_file()
 {
-    int dmabuf_supported = 0;
-
-#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-    const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
-    const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
-    int found_opt1           = 0;
-    int found_opt2           = 0;
-    FILE *fp;
-    struct utsname utsname;
+    const char *fmts[] = {
+        "/boot/config-%s",
+        "/usr/src/linux-%s/.config",
+        "/usr/lib/modules/%s/config",
+        "/usr/lib/kernel/config-%s",
+        "/usr/src/linux-headers-%s/.config",
+        "/lib/modules/%s/build/.config",
+        "/usr/lib/ostree-boot/config-%s"
+    };
+    FILE* fp = NULL;
     char kernel_conf_file[128];
-    char buf[256];
-
+    struct utsname utsname;
+    
     if (uname(&utsname) == -1) {
         ucs_trace("could not get kernel name");
-        goto out;
+        return NULL;
     }
 
-    ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file),
-                      "/boot/config-%s", utsname.release);
-    fp = fopen(kernel_conf_file, "r");
-    if (fp == NULL) {
-        ucs_trace("could not open kernel conf file %s error: %m",
-                  kernel_conf_file);
-        goto out;
+    for (size_t i = 0; i < sizeof(fmts) / sizeof(fmts[0]); ++i) {
+        const char *path = fmts[i];
+        ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file), path, utsname.release);
+        fp = fopen(kernel_conf_file, "r");
+        if (fp != NULL) {
+            ucs_trace("reading kernel config from %s", kernel_conf_file);
+            return fp;
+        }
+        ucs_trace("could not open kernel conf file %s error: %m", kernel_conf_file);
     }
+    return fp;
+}
+
+int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[], const char kernel_opt2[])
+{
+    int dmabuf_supported = 0;
+    int found_opt1           = 0;
+    int found_opt2           = 0;
+    char buf[256];
 
     while (fgets(buf, sizeof(buf), fp) != NULL) {
-        if (strstr(buf, kernel_opt1) != NULL) {
+        if (!found_opt1 && (strstr(buf, kernel_opt1) != NULL)) {
             found_opt1 = 1;
         }
-        if (strstr(buf, kernel_opt2) != NULL) {
+        if (!found_opt2 && (strstr(buf, kernel_opt2) != NULL)) {
             found_opt2 = 1;
         }
         if (found_opt1 && found_opt2) {
             dmabuf_supported = 1;
-            break;
         }
     }
-    fclose(fp);
-#endif
-out:
     return dmabuf_supported;
+}
+
+int uct_rocm_base_kernel_config_supports_dmabuf()
+{
+    int dmabuf_supported = 0;
+    FILE* fp = NULL;
+    const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
+    const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
+
+    fp = uct_rocm_base_load_kernel_config_file();
+    if (fp == NULL) {
+        ucs_trace("no kernel conf file found");
+        return 0;
+    }
+    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_opt1, kernel_opt2);
+    fclose(fp);
+    return dmabuf_supported;
+} 
+
+int uct_rocm_base_kernel_symbols_supports_dmabuf()
+{
+    int dmabuf_supported = 0;
+    FILE* fp = NULL;
+    const char kernel_sym1[] = "dma_buf_move_notify";
+    const char kernel_sym2[] = "pci_p2pdma";
+
+    fp = fopen("/proc/kallsyms", "r");
+    if (fp == NULL) {
+        ucs_trace("no /proc/kallsyms file found");
+        return dmabuf_supported;
+    }
+    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_sym1, kernel_sym2);
+    fclose(fp);
+    return dmabuf_supported;
+}
+
+int uct_rocm_base_is_dmabuf_supported()
+{
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF    
+    if (uct_rocm_base_kernel_config_supports_dmabuf()) {
+        return 1;
+    }
+
+    ucs_trace("no kernel conf file found or no support for dmabuf found, trying /proc/kallsyms fallback");
+    return uct_rocm_base_kernel_symbols_supports_dmabuf();
+#else
+    return 0;
+#endif
 }
 
 static void uct_rocm_base_dmabuf_export(const void *addr, const size_t length,

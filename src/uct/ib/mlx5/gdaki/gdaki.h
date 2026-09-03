@@ -54,4 +54,9 @@ typedef struct uct_rc_gdaki_ep {
     uct_rc_gdaki_channel_block_t     *channel_block;
 } uct_rc_gdaki_ep_t;
 
+ucs_status_t
+uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
+                               uct_tl_device_resource_t **tl_devices_p,
+                               unsigned *num_tl_devices_p);
+
 #endif /* UCT_GDAKI_H */

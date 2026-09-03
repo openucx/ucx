@@ -23,7 +23,6 @@ typedef struct {
     unsigned                max_poll;            /* query attempts w.o success */
     unsigned                max_streams;         /* # concurrent streams for || progress*/
     unsigned                max_cuda_ipc_events; /* max mpool entries */
-    int                     enable_cache;        /* enable/disable ipc handle cache */
     ucs_on_off_auto_value_t enable_get_zcopy;    /* enable get_zcopy except for specific platforms */
     double                  bandwidth;           /* estimated bandwidth */
     double                  latency;             /* estimated latency */
@@ -43,12 +42,11 @@ typedef struct {
 } uct_cuda_ipc_iface_config_t;
 
 
-#if CUDA_VERSION >= 13000
 typedef struct {
     pid_t        pid;
     ucs_sys_ns_t pid_ns;
     uintptr_t    d_bptr;
-    void         *mapped_addr;
+    const void   *mapped_addr;
 } uct_cuda_ipc_sgl_entry_t;
 
 
@@ -74,20 +72,17 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
 
     ucs_free(mapping);
 }
-#endif
 
 
 typedef struct {
     uct_cuda_event_desc_t super;
-    void                  *mapped_addr;
+    const void            *mapped_addr;
     uct_cuda_ipc_ep_t     *ep;
     uintptr_t             d_bptr;
     pid_t                 pid;
     ucs_sys_ns_t          pid_ns;
     CUdevice              cuda_device;
-#if CUDA_VERSION >= 13000
     uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
-#endif
 } uct_cuda_ipc_event_desc_t;
 
 

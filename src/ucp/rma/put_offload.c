@@ -78,7 +78,7 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
-        .super.exclude_map   = 0,
+        .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_RMA,
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
@@ -377,7 +377,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t start_index           = dt_iter->offset;
-    size_t max_sgl_count         = lpriv->max_put_sgl_zcopy_count;
+    size_t max_sgl_count         = lpriv->max_sgl_zcopy_count;
     size_t elem_count            = ucp_datatype_iter_next_sgl(dt_iter,
                                                               max_sgl_count,
                                                               next_iter);

@@ -302,6 +302,8 @@ static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
     static uct_cuda_cuCtxSetFlags_t cuda_cuCtxSetFlags_func =
         (uct_cuda_cuCtxSetFlags_t)ucs_empty_function;
     CUdriverProcAddressQueryResult sym_status;
+    ucs_status_t status;
+    unsigned ctx_flags;
     CUresult cu_err;
 
     if (cuda_cuCtxSetFlags_func ==
@@ -316,6 +318,17 @@ static ucs_status_t uct_cuda_copy_set_ctx_sync_memops(int log_level)
     }
 
     if (cuda_cuCtxSetFlags_func != NULL) {
+        /* CU_CTX_SYNC_MEMOPS is sticky and context-wide, but cuCtxSetFlags()
+         * takes the context write-lock, which deadlocks a progress thread
+         * against an application thread inside cudaLaunchKernel(). This is the
+         * hazard described at the uct_cuda_copy_md_open() call site, which only
+         * covers the context that is current at MD open. Read the flag first
+         * and take the write-lock only when it still has to be set. */
+        status = UCT_CUDADRV_FUNC(cuCtxGetFlags(&ctx_flags), log_level);
+        if ((status == UCS_OK) && (ctx_flags & CU_CTX_SYNC_MEMOPS)) {
+            return UCS_OK;
+        }
+
         /* Synchronize future DMA operations for all memory types */
         UCT_CUDADRV_FUNC(cuda_cuCtxSetFlags_func(CU_CTX_SYNC_MEMOPS),
                          log_level);
@@ -637,6 +650,12 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
         }
     } else {
         ucs_assert(md->config.alloc_whole_reg == UCS_CONFIG_ON);
+    }
+
+    /* For multi-handle VMM, the physical allocation may be smaller than the
+     * mapped virtual range; preserve the caller's requested extent. */
+    if (is_vmm && (alloc_length < length)) {
+        goto out_ctx_pop;
     }
 
     mem_info->base_address = (void*)base_address;
@@ -1052,6 +1071,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function,
     .detect_memory_type = uct_cuda_copy_md_detect_memory_type
 };
 
