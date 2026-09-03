@@ -11,6 +11,7 @@ extern "C" {
 #include <ucp/rma/rma.h>
 }
 
+#include <cstring>
 
 class test_ucp_fence_lane_state : public ucs::test {
 };
@@ -104,6 +105,49 @@ UCS_TEST_F(test_ucp_fence_lane_state, live_unstarted_lane)
     EXPECT_TRUE(ucp_ep_flush_has_unstarted_lanes(
             UCS_BIT(0) | UCS_BIT(2),
             UCS_BIT(0) | UCS_BIT(1)));
+}
+
+UCS_TEST_F(test_ucp_fence_lane_state, cmpl_header_rejects_truncated)
+{
+    const uint64_t expected_ep_id = UINT64_C(0x1122334455667788);
+    const uint8_t expected_flags  = UINT8_C(0xa5);
+    const uint8_t cmpl_hdr[7]     = {};
+    uint64_t ep_id                = expected_ep_id;
+    uint8_t flags                 = expected_flags;
+
+    EXPECT_FALSE(ucp_rma_cmpl_hdr_unpack(cmpl_hdr, sizeof(cmpl_hdr), &ep_id,
+                                         &flags));
+    EXPECT_EQ(expected_ep_id, ep_id);
+    EXPECT_EQ(expected_flags, flags);
+}
+
+UCS_TEST_F(test_ucp_fence_lane_state, cmpl_header_decodes_legacy)
+{
+    const uint64_t expected_ep_id = UINT64_C(0x1122334455667788);
+    const uint64_t cmpl_hdr       = expected_ep_id;
+    uint64_t ep_id;
+    uint8_t flags;
+
+    ASSERT_TRUE(ucp_rma_cmpl_hdr_unpack(&cmpl_hdr, sizeof(cmpl_hdr), &ep_id,
+                                        &flags));
+    EXPECT_EQ(expected_ep_id, ep_id);
+    EXPECT_EQ(0, flags);
+}
+
+UCS_TEST_F(test_ucp_fence_lane_state, cmpl_header_decodes_current)
+{
+    const uint64_t expected_ep_id = UINT64_C(0x1122334455667788);
+    uint8_t cmpl_hdr[9]           = {};
+    uint64_t ep_id;
+    uint8_t flags;
+
+    std::memcpy(cmpl_hdr, &expected_ep_id, sizeof(expected_ep_id));
+    cmpl_hdr[8] = UCP_CMPL_FLAG_RMA_RNDV;
+
+    ASSERT_TRUE(ucp_rma_cmpl_hdr_unpack(cmpl_hdr, sizeof(cmpl_hdr), &ep_id,
+                                        &flags));
+    EXPECT_EQ(expected_ep_id, ep_id);
+    EXPECT_EQ(UCP_CMPL_FLAG_RMA_RNDV, flags);
 }
 
 static ucp_ep_h test_fence_flush_mutation_ep;

@@ -150,6 +150,22 @@ typedef struct {
 } UCS_S_PACKED ucp_cmpl_hdr_t;
 
 
+static UCS_F_ALWAYS_INLINE int
+ucp_rma_cmpl_hdr_unpack(const void *data, size_t length, uint64_t *ep_id_p,
+                        uint8_t *flags_p)
+{
+    const ucp_cmpl_hdr_t *hdr = (const ucp_cmpl_hdr_t*)data;
+
+    if (length < sizeof(hdr->ep_id)) {
+        return 0;
+    }
+
+    *ep_id_p = hdr->ep_id;
+    *flags_p = (length >= sizeof(*hdr)) ? hdr->flags : 0;
+    return 1;
+}
+
+
 typedef struct {
     uint64_t                  address;
     uint64_t                  length;

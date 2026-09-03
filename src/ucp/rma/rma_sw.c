@@ -91,16 +91,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    ucp_cmpl_hdr_t *putackh = data;
-    ucp_worker_h worker     = arg;
+    ucp_worker_h worker = arg;
+    uint64_t ep_id;
+    uint8_t flags;
     ucp_ep_h ep;
+
+    if (!ucp_rma_cmpl_hdr_unpack(data, length, &ep_id, &flags)) {
+        return UCS_OK;
+    }
 
     /* allow getting closed EP to be used for handling a completion to enable flush
      * on a peer
      */
-    UCP_WORKER_GET_EP_BY_ID(&ep, worker, putackh->ep_id, return UCS_OK,
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, ep_id, return UCS_OK,
                             "SW RMA completion");
-    if (putackh->flags & UCP_CMPL_FLAG_RMA_RNDV) {
+    if (flags & UCP_CMPL_FLAG_RMA_RNDV) {
         ucp_ep_rma_rndv_remote_request_completed(ep);
     } else {
         ucp_ep_rma_remote_request_completed(ep);
@@ -224,9 +229,10 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
 {
     const ucp_get_req_hdr_t *geth;
     const ucp_rma_rep_hdr_t *reph;
-    const ucp_cmpl_hdr_t *cmplh;
     const ucp_put_hdr_t *puth;
     size_t header_len;
+    uint64_t ep_id;
+    uint8_t flags;
     char *p;
 
     switch (id) {
@@ -250,9 +256,12 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
         header_len = sizeof(*reph);
         break;
     case UCP_AM_ID_CMPL:
-        cmplh = data;
+        if (!ucp_rma_cmpl_hdr_unpack(data, length, &ep_id, &flags)) {
+            return;
+        }
+
         snprintf(buffer, max, "CMPL [ep_id 0x%"PRIx64" flags 0x%x]",
-                 cmplh->ep_id, cmplh->flags);
+                 ep_id, flags);
         return;
     default:
         return;

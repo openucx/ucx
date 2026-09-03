@@ -23,7 +23,6 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
 #define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
 #define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
@@ -43,11 +42,18 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
         return 0;
     }
 
+    /* Completion accounting has no per-operation identity, so partial failover
+     * cannot distinguish surviving live-lane operations from discarded ones. */
+    if (!ucp_proto_rma_rndv_is_err_mode_supported(
+                init_params->ep_config_key->err_mode)) {
+        return 0;
+    }
+
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (init_params->ep_config_key->dst_version <
-         UCP_PROTO_RMA_RNDV_MIN_DST_VERSION) ||
+        !ucp_proto_rma_rndv_is_peer_supported(
+                init_params->ep_config_key->dst_version) ||
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }

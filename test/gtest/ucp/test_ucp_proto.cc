@@ -19,6 +19,7 @@ extern "C" {
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_perf.h>
 #include <ucp/proto/proto_init.h>
+#include <ucp/rma/rma_rndv.h>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
@@ -696,6 +697,23 @@ UCS_TEST_P(test_ucp_proto, rndv_rts_opcode_maps_to_tag_rndv_op_flags)
               ucp_proto_rndv_rts_tag_op_flags(UCP_RNDV_RTS_TAG_OK));
     EXPECT_EQ(0, ucp_proto_rndv_rts_tag_op_flags(UCP_RNDV_RTS_AM));
     EXPECT_EQ(0, ucp_proto_rndv_rts_tag_op_flags(UCP_RNDV_RTS_RMA));
+}
+
+UCS_TEST_P(test_ucp_proto, rma_rndv_peer_version)
+{
+    EXPECT_LE(UCP_PROTO_RMA_RNDV_MIN_DST_VERSION, UCP_API_MINOR);
+    EXPECT_FALSE(ucp_proto_rma_rndv_is_peer_supported(
+            UCP_PROTO_RMA_RNDV_MIN_DST_VERSION - 1));
+    EXPECT_TRUE(ucp_proto_rma_rndv_is_peer_supported(
+            UCP_PROTO_RMA_RNDV_MIN_DST_VERSION));
+    EXPECT_TRUE(ucp_proto_rma_rndv_is_peer_supported(
+            UCP_PROTO_RMA_RNDV_MIN_DST_VERSION + 1));
+    EXPECT_TRUE(ucp_proto_rma_rndv_is_err_mode_supported(
+            UCP_ERR_HANDLING_MODE_NONE));
+    EXPECT_TRUE(ucp_proto_rma_rndv_is_err_mode_supported(
+            UCP_ERR_HANDLING_MODE_PEER));
+    EXPECT_FALSE(ucp_proto_rma_rndv_is_err_mode_supported(
+            UCP_ERR_HANDLING_MODE_FAILOVER));
 }
 
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
