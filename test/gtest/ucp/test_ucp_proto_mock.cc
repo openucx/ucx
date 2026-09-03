@@ -1368,11 +1368,20 @@ public:
             iface_attr.latency.m        = 1e-9;
         };
 
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            UCS_TEST_SKIP_R("CUDA managed memory is unavailable");
+        }
+
         m_topo_state = ucs_topo_extract_state();
         ASSERT_NE(nullptr, m_topo_state);
 
-        add_mock_iface_on_real_device("mock", iface_attr_func);
-        test_ucp_proto_mock::init();
+        try {
+            add_mock_iface_on_real_device("mock", iface_attr_func);
+            test_ucp_proto_mock::init();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
     }
 
     virtual void post_ucp_init() override
@@ -1462,10 +1471,6 @@ private:
         ucs_sys_device_t dma_sys_dev, transfer_sys_dev;
         ucs_sys_bus_id_t cuda_bus_id, transfer_bus_id;
         ucp_memory_info_t cuda_mem_info;
-
-        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA_MANAGED)) {
-            UCS_TEST_SKIP_R("CUDA managed memory is unavailable");
-        }
 
         /* CUDA managed memory is host-preferred on some systems and therefore
          * has no device identity. Use a real CUDA allocation to discover the
