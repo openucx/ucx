@@ -1,6 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -186,7 +186,15 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
 }
 
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
+    /* Exercise the vectorized NT_SOURCE path */
+    ucs_global_opts.arch.builtin_memcpy_min = UCS_MEMUNITS_INF;
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+
+#if ENABLE_BUILTIN_MEMCPY
+    /* Exercise the ERMS NT_SOURCE path */
+    ucs_global_opts.arch.builtin_memcpy_min = 0;
+    nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+#endif
 }
 
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_dst) {
