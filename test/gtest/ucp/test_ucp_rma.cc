@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucp/proto/proto_multi.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -1294,19 +1295,6 @@ protected:
                      expect_immediate_completion);
     }
 
-    std::vector<ucp_lane_index_t> rma_bw_lanes() {
-        const ucp_ep_config_key_t *key = &ucp_ep_config(sender().ep())->key;
-        std::vector<ucp_lane_index_t> lanes;
-
-        for (ucp_lane_index_t i = 0; (i < UCP_MAX_LANES) &&
-                                     (key->rma_bw_lanes[i] != UCP_NULL_LANE);
-             ++i) {
-            lanes.push_back(key->rma_bw_lanes[i]);
-        }
-
-        return lanes;
-    }
-
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
             UCP_DT_LOCAL_SGL_FIELD_BUFFERS | UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
 
@@ -1430,10 +1418,6 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
 UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
     static constexpr size_t NUM_ELEMS = 16;
 
-    if (rma_bw_lanes().size() < 2) {
-        UCS_TEST_SKIP_R("less than 2 rma lanes");
-    }
-
     /* Complete the wireup, so that the operation below is posted rather than
        added to a pending queue */
     test_put_sgl(1, UCS_KBYTE);
@@ -1450,10 +1434,13 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
                                             UCP_RKEY_INVALID, &param);
     ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
-    /* All the elements fit into a single post, so more than one outstanding
-       post means they were split between the lanes */
+    /* All the elements fit into a single post, so at least one outstanding post
+       per lane of the selected protocol means they were split between them */
     const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-    EXPECT_GT(req->send.state.uct_comp.count, 1);
+    const ucp_proto_multi_priv_t *mpriv =
+            static_cast<const ucp_proto_multi_priv_t*>(
+                    req->send.proto_config->priv);
+    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
 
     request_wait(sptr);
 }
