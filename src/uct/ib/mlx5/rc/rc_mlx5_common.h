@@ -719,12 +719,14 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic);
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic,
+        const uct_ep_connect_to_ep_params_t *params);
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
         uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_qp_t *qp,
         uint32_t dest_qp_num, struct ibv_ah_attr *ah_attr,
-        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic)
+        enum ibv_mtu path_mtu, uint8_t path_index, unsigned max_rd_atomic,
+        const uct_ep_connect_to_ep_params_t *params)
 {
     return UCS_ERR_UNSUPPORTED;
 }
