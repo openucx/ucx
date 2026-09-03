@@ -208,11 +208,9 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                            uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_rc_iface_send_op_t *op;
     size_t length;
     ucs_status_t status;
     uint8_t fm_ce_se;
-    uint16_t sn;
 
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(0),
                        "uct_rc_mlx5_ep_put_zcopy");
@@ -223,24 +221,11 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset, &fm_ce_se);
 
-    sn     = ep->tx.wq.sw_pi;
     status = uct_rc_mlx5_base_ep_zcopy_post(
             ep, MLX5_OPCODE_RDMA_WRITE, iov, iovcnt, 0ul, 0, NULL, 0,
             remote_addr, rkey, 0ul, 0, 0, NULL,
             fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
             uct_rc_ep_send_op_completion_handler, 0, comp);
-    if ((length == 0) && (comp == NULL)) {
-        /*
-         * A zero-length PUT_ZCOPY has the same header-only WQE as PUT_SHORT.
-         * Keep a send op so outstanding-purge can recover the API operation.
-         */
-        op            = uct_rc_iface_get_send_op(&iface->super);
-        op->handler   = uct_rc_ep_send_op_completion_handler;
-        op->user_comp = NULL;
-        op->flags    |= UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY;
-        op->length    = 0;
-        uct_rc_txqp_add_send_op_sn(&ep->super.txqp, op, sn);
-    }
 
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY, length);
     uct_rc_ep_enable_flush_remote(&ep->super);
