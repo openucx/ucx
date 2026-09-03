@@ -234,7 +234,6 @@ static void ucp_ep_deallocate(ucp_ep_h ep)
 static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 {
     ucp_ep_h ep;
-    ucp_lane_index_t lane;
     ucs_status_t status;
 
     ep = ucs_strided_alloc_get(&worker->ep_alloc, "ucp_ep");
@@ -290,9 +289,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
-    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
-        ucp_ep_set_lane(ep, lane, NULL);
-    }
+    memset(ep->uct_eps, 0, sizeof(ep->uct_eps));
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_ADDRESS_NAME_MAX, "%s",
                       peer_name);
@@ -611,8 +608,6 @@ void ucp_ep_fence_pending_purge(ucp_ep_h ep, ucs_status_t status)
 {
     ucp_ep_ext_t *ep_ext = ep->ext;
     ucp_request_t *req;
-
-    ep_ext->fence_pending_scheduled = 0;
 
     ucs_queue_for_each_extract(req, &ep_ext->fence_pending_q,
                               send.fenced_req.fence_pending_elem, 1) {
@@ -4950,7 +4945,13 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
                             0;
 
     for (lane = old_num_lanes; lane < new_num_lanes; ++lane) {
-        ucp_ep_set_lane(ep, lane, NULL);
+        /* New storage is not initialized yet, so bypass lane change
+         * tracking. */
+        if (lane < UCP_MAX_FAST_PATH_LANES) {
+            ep->uct_eps[lane] = NULL;
+        } else {
+            ep_ext->uct_eps[lane - UCP_MAX_FAST_PATH_LANES] = NULL;
+        }
     }
 
     return UCS_OK;

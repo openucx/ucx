@@ -44,10 +44,20 @@ ucp_ep_get_lane(ucp_ep_h ep, ucp_lane_index_t lane_index)
 static UCS_F_ALWAYS_INLINE void ucp_ep_set_lane(ucp_ep_h ep, size_t lane_index,
                                                 uct_ep_h uct_ep)
 {
+    uct_ep_h old_uct_ep;
+
     ucs_assert(lane_index != UCP_NULL_LANE);
 
+    old_uct_ep = ucp_ep_get_lane(ep, lane_index);
+    if (old_uct_ep == uct_ep) {
+        return;
+    }
+
     ++ep->ext->lane_generation;
-    ep->ext->fence_lanes_dirty = 1;
+    if ((old_uct_ep != NULL) &&
+        (ep->ext->unflushed_lanes & UCS_BIT(lane_index))) {
+        ep->ext->fence_lanes_dirty = 1;
+    }
 
     if (lane_index < UCP_MAX_FAST_PATH_LANES) {
         ep->uct_eps[lane_index] = uct_ep;

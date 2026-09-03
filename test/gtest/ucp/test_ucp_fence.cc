@@ -109,12 +109,19 @@ UCS_TEST_F(test_ucp_fence_lane_state, live_unstarted_lane)
 static ucp_ep_h test_fence_flush_mutation_ep;
 static int test_fence_saw_clean_before_mutation;
 
+static int test_fence_count_oneshot(const ucs_callbackq_elem_t *, void *arg)
+{
+    ++*static_cast<unsigned*>(arg);
+    return 0;
+}
+
 static ucs_status_t
 test_fence_flush_mutate_and_fail(uct_ep_h uct_ep, unsigned,
                                  uct_completion_t *)
 {
     test_fence_saw_clean_before_mutation =
             !test_fence_flush_mutation_ep->ext->fence_lanes_dirty;
+    ucp_ep_set_lane(test_fence_flush_mutation_ep, 0, NULL);
     ucp_ep_set_lane(test_fence_flush_mutation_ep, 0, uct_ep);
     return UCS_ERR_IO_ERROR;
 }
@@ -328,19 +335,31 @@ UCS_TEST_P(test_ucp_fence32, lane_topology_dirty_lifecycle)
     lane_generation            = ep->ext->lane_generation;
     lane                       = ucp_ep_get_lane(ep, 0);
 
-    /* Replacing a lane at the same index must still invalidate fence
-     * tracking. */
+    /* Assigning the existing lane is not a topology change. */
     ucp_ep_set_lane(ep, 0, lane);
+    EXPECT_EQ(lane_generation, ep->ext->lane_generation);
+    EXPECT_FALSE(ep->ext->fence_lanes_dirty);
+
+    ucp_ep_set_lane(ep, 0, NULL);
     EXPECT_EQ(lane_generation + 1, ep->ext->lane_generation);
+    EXPECT_TRUE(ep->ext->fence_lanes_dirty);
+
+    ucp_ep_set_lane(ep, 0, lane);
+    EXPECT_EQ(lane_generation + 2, ep->ext->lane_generation);
     EXPECT_TRUE(ep->ext->fence_lanes_dirty);
 
     EXPECT_UCS_OK(ucp_ep_fence_strong(ep));
     EXPECT_EQ(0, ep->ext->unflushed_lanes);
     EXPECT_FALSE(ep->ext->fence_lanes_dirty);
 
+    ucp_ep_set_lane(ep, 0, NULL);
+    EXPECT_EQ(lane_generation + 3, ep->ext->lane_generation);
+    EXPECT_FALSE(ep->ext->fence_lanes_dirty);
+
     ep->ext->unflushed_lanes = UCS_BIT(0);
     ucp_ep_set_lane(ep, 0, lane);
-    EXPECT_TRUE(ep->ext->fence_lanes_dirty);
+    EXPECT_EQ(lane_generation + 4, ep->ext->lane_generation);
+    EXPECT_FALSE(ep->ext->fence_lanes_dirty);
 
     iface                                = lane->iface;
     flush_func                           = iface->ops.ep_flush;
@@ -363,6 +382,69 @@ UCS_TEST_P(test_ucp_fence32, lane_topology_dirty_lifecycle)
 
     disconnect(sender());
     disconnect(receiver());
+}
+
+UCS_TEST_P(test_ucp_fence32, recycled_ep_lane_storage_initialization)
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_ep_h ep;
+    ucp_ep_h recycled_ep;
+    ucp_lane_index_t lane;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ASSERT_UCS_OK(ucp_ep_create_base(worker,
+                                     UCP_EP_INIT_FLAG_INTERNAL, "lane-init",
+                                     "lane-init", &ep));
+
+    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
+        ep->uct_eps[lane] = reinterpret_cast<uct_ep_h>(
+                static_cast<uintptr_t>(lane + 1));
+    }
+
+    ucp_ep_delete(ep);
+
+    ASSERT_UCS_OK(ucp_ep_create_base(worker,
+                                     UCP_EP_INIT_FLAG_INTERNAL, "lane-recycle",
+                                     "lane-recycle", &recycled_ep));
+
+    EXPECT_EQ(ep, recycled_ep);
+    EXPECT_EQ(0, recycled_ep->ext->lane_generation);
+    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
+        EXPECT_EQ(NULL, recycled_ep->uct_eps[lane]);
+    }
+
+    ucp_ep_delete(recycled_ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+UCS_TEST_P(test_ucp_fence32, slow_lane_storage_initialization)
+{
+    const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 2;
+    ucp_worker_h worker       = sender().worker();
+    ucp_ep_h ep;
+    ucp_lane_index_t lane;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ASSERT_UCS_OK(ucp_ep_create_base(worker,
+                                     UCP_EP_INIT_FLAG_INTERNAL, "lane-init",
+                                     "lane-init", &ep));
+    ASSERT_UCS_OK(ucp_ep_realloc_lanes(ep, num_lanes));
+
+    for (lane = UCP_MAX_FAST_PATH_LANES; lane < num_lanes; ++lane) {
+        ep->ext->uct_eps[lane - UCP_MAX_FAST_PATH_LANES] =
+                reinterpret_cast<uct_ep_h>(static_cast<uintptr_t>(lane + 1));
+    }
+
+    ep->ext->lane_generation = 0;
+    ASSERT_UCS_OK(ucp_ep_realloc_lanes(ep, num_lanes));
+
+    EXPECT_EQ(0, ep->ext->lane_generation);
+    for (lane = 0; lane < num_lanes; ++lane) {
+        EXPECT_EQ(NULL, ucp_ep_get_lane(ep, lane));
+    }
+
+    ucp_ep_delete(ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 UCS_TEST_P(test_ucp_fence32, fresh_defer_without_uct_lane)
@@ -397,6 +479,77 @@ UCS_TEST_P(test_ucp_fence32, fresh_defer_without_uct_lane)
     if (UCS_PTR_IS_PTR(flush_req)) {
         EXPECT_UCS_OK(request_wait(flush_req, {&sender()}));
     }
+
+    disconnect(sender());
+    disconnect(receiver());
+}
+
+UCS_TEST_P(test_ucp_fence32, pending_purge_readd_preserves_oneshot)
+{
+    if (!is_self()) {
+        UCS_TEST_SKIP_R("Synthetic fence-queue test uses stack requests");
+    }
+
+    ucp_request_t purged_req  = {};
+    ucp_request_t readded_req = {};
+    unsigned num_oneshots;
+    ucp_ep_h ep;
+
+    sender().connect(&receiver(), get_ep_params());
+    ep = sender().ep();
+
+    purged_req.id                         = UCS_PTR_MAP_KEY_INVALID;
+    purged_req.send.ep                    = ep;
+    purged_req.send.fenced_req.fence_seq  = ep->ext->fence_seq;
+    purged_req.send.uct.func              = defer_once;
+    purged_req.flags                      = UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    readded_req.id                        = UCS_PTR_MAP_KEY_INVALID;
+    readded_req.send.ep                   = ep;
+    readded_req.send.fenced_req.fence_seq = ep->ext->fence_seq;
+    readded_req.send.uct.func             = defer_once;
+    readded_req.send.state.completed_size = 1;
+    readded_req.flags                     = UCP_REQUEST_FLAG_FENCE_BLOCKED;
+
+    ucp_ep_fence_pending_add(ep, &purged_req.send.uct);
+    ASSERT_TRUE(ep->ext->fence_pending_scheduled);
+
+    num_oneshots = 0;
+    ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                 test_fence_count_oneshot, &num_oneshots);
+    ASSERT_EQ(1u, num_oneshots);
+
+    ucp_ep_fence_pending_purge(ep, UCS_ERR_IO_ERROR);
+
+    EXPECT_TRUE(ucs_queue_is_empty(&ep->ext->fence_pending_q));
+    EXPECT_TRUE(ep->ext->fence_pending_scheduled);
+    EXPECT_FALSE(purged_req.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+    EXPECT_TRUE(purged_req.flags & UCP_REQUEST_FLAG_COMPLETED);
+    EXPECT_EQ(UCS_ERR_IO_ERROR, purged_req.status);
+
+    num_oneshots = 0;
+    ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                 test_fence_count_oneshot, &num_oneshots);
+    EXPECT_EQ(1u, num_oneshots);
+
+    ucp_ep_fence_pending_add(ep, &readded_req.send.uct);
+
+    EXPECT_FALSE(ucs_queue_is_empty(&ep->ext->fence_pending_q));
+    EXPECT_TRUE(ep->ext->fence_pending_scheduled);
+    num_oneshots = 0;
+    ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                 test_fence_count_oneshot, &num_oneshots);
+    EXPECT_EQ(1u, num_oneshots);
+
+    progress({&sender()});
+
+    EXPECT_TRUE(ucs_queue_is_empty(&ep->ext->fence_pending_q));
+    EXPECT_FALSE(ep->ext->fence_pending_scheduled);
+    EXPECT_FALSE(readded_req.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+    EXPECT_EQ(2u, readded_req.send.state.completed_size);
+    num_oneshots = 0;
+    ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                 test_fence_count_oneshot, &num_oneshots);
+    EXPECT_EQ(0u, num_oneshots);
 
     disconnect(sender());
     disconnect(receiver());

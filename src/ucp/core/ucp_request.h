@@ -29,7 +29,16 @@
 #define ucp_trace_req(_sreq, _message, ...) \
     ucs_trace_req("req %p: " _message, (_sreq), ## __VA_ARGS__)
 
-#define UCP_STATUS_FENCE_DEFER ((ucs_status_t)(UCS_ERR_LAST - 2))
+#define UCP_STATUS_FENCE_DEFER ((ucs_status_t)(UCS_ERR_LAST + 1))
+#ifdef __cplusplus
+static_assert((UCP_STATUS_FENCE_DEFER < UCS_OK) &&
+              (UCP_STATUS_FENCE_DEFER >= UCS_ERR_LAST),
+              "fence defer status must be an error pointer");
+#else
+_Static_assert((UCP_STATUS_FENCE_DEFER < UCS_OK) &&
+               (UCP_STATUS_FENCE_DEFER >= UCS_ERR_LAST),
+               "fence defer status must be an error pointer");
+#endif
 
 
 /**
