@@ -1294,6 +1294,19 @@ protected:
                      expect_immediate_completion);
     }
 
+    std::vector<ucp_lane_index_t> rma_bw_lanes() {
+        const ucp_ep_config_key_t *key = &ucp_ep_config(sender().ep())->key;
+        std::vector<ucp_lane_index_t> lanes;
+
+        for (ucp_lane_index_t i = 0; (i < UCP_MAX_LANES) &&
+                                     (key->rma_bw_lanes[i] != UCP_NULL_LANE);
+             ++i) {
+            lanes.push_back(key->rma_bw_lanes[i]);
+        }
+
+        return lanes;
+    }
+
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
             UCP_DT_LOCAL_SGL_FIELD_BUFFERS | UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
 
@@ -1412,6 +1425,37 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_memhs) {
 
 UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
     test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
+    static constexpr size_t NUM_ELEMS = 16;
+
+    if (rma_bw_lanes().size() < 2) {
+        UCS_TEST_SKIP_R("less than 2 rma lanes");
+    }
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_put_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 64 * UCS_KBYTE);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
+    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
+                                            UCP_REMOTE_ADDR_INVALID,
+                                            UCP_RKEY_INVALID, &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* All the elements fit into a single post, so more than one outstanding
+       post means they were split between the lanes */
+    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+    EXPECT_GT(req->send.state.uct_comp.count, 1);
+
+    request_wait(sptr);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
