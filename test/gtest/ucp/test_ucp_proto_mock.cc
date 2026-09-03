@@ -14,7 +14,6 @@ extern "C" {
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/rndv/proto_rndv.h>
-#include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -610,13 +609,11 @@ protected:
         return true;
     }
 
-    void send_recv_am(size_t size,
-                      ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
-                      ucs_sys_device_t sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN)
+    void
+    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
         /* Prepare receiver data handler */
         mem_buffer recv_buf(size, mem_type);
-        set_buffer_sys_dev(recv_buf, sys_dev);
         struct ctx_t {
             mem_buffer                     *buf;
             bool                            received;
@@ -666,7 +663,6 @@ protected:
 
         /* Send data */
         mem_buffer buf(size, mem_type);
-        set_buffer_sys_dev(buf, sys_dev);
         ucp_request_param_t param = {};
         auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
                                     buf.size(), &param);
@@ -676,17 +672,6 @@ protected:
         EXPECT_EQ(UCS_OK, request_wait(sptr));
         wait_for_flag(&ctx.received);
         EXPECT_TRUE(ctx.received);
-    }
-
-    static void
-    set_buffer_sys_dev(const mem_buffer &buffer, ucs_sys_device_t sys_dev)
-    {
-        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-            return;
-        }
-
-        ucs_memtype_cache_update(buffer.ptr(), buffer.size(), buffer.mem_type(),
-                                 sys_dev, UCS_MEM_FLAG_REGISTRABLE);
     }
 
     void send_recv_am_range(size_t msg_start, size_t msg_end, size_t msg_step,
@@ -1351,9 +1336,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
 class test_ucp_proto_mock_mtype_sys_dev : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_mtype_sys_dev() :
-        m_topo_state(nullptr),
         m_user_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
         m_transfer_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_topo_state(nullptr),
         m_sibling_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
     {
         mock_transport("rc_mlx5");
@@ -1457,9 +1442,10 @@ protected:
         ucp_proto_config_query(worker, &threshold->proto_config, msg_size,
                                &attr);
         EXPECT_STREQ("rc_mlx5/mock", attr.config);
-
-        send_recv_am(64 * UCS_KBYTE, UCS_MEMORY_TYPE_CUDA_MANAGED);
     }
+
+    ucs_sys_device_t m_user_sys_dev;
+    ucs_sys_device_t m_transfer_sys_dev;
 
 private:
     void setup_fake_sibling_topology()
@@ -1542,8 +1528,6 @@ private:
     }
 
     ucs_global_state_t *m_topo_state;
-    ucs_sys_device_t    m_user_sys_dev;
-    ucs_sys_device_t    m_transfer_sys_dev;
     ucs_sys_device_t    m_sibling_sys_dev;
 };
 
@@ -1559,6 +1543,69 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_host_frag_non_sibling,
            "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
 {
     check_mtype_uses_host_frag(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
+}
+
+/* A wire-packed rkey sys_dev belongs to the peer's topology namespace. Model
+ * a numeric collision with our unreachable fake GPU alias and verify that the
+ * nested remote selection does not reuse it as a local device. */
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
+           put_zcopy_remote_sys_dev_namespace, "RNDV_SCHEME=put_zcopy",
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+{
+    static constexpr size_t select_size = UCS_MBYTE;
+    uint8_t remote                      = 0;
+    ucp_worker_h worker                 = sender().worker();
+
+    auto memh        = mem_map(receiver(), &remote, sizeof(remote));
+    auto rkey_packed = rkey_pack(receiver(), memh);
+    auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+    ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
+    const ucp_rkey_config_t *base_rkey_config =
+            &ucs_array_elem(&worker->rkey_config, rkey->cfg_index);
+    const ucp_ep_config_t *ep_config      = ucp_worker_ep_config(worker,
+                                                                 ep_cfg_index);
+    ucp_rkey_config_key_t rkey_config_key = base_rkey_config->key;
+    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_memory_info_t mem_info;
+    ucp_proto_select_param_t select_param;
+    const ucp_proto_select_elem_t *select_elem;
+    const ucp_proto_threshold_elem_t *threshold;
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
+
+    ASSERT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, rkey_config_key.sys_dev);
+    memcpy(lanes_distance, base_rkey_config->lanes_distance,
+           ep_config->key.num_lanes * sizeof(lanes_distance[0]));
+
+    rkey_config_key.sys_dev = m_user_sys_dev;
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                             lanes_distance, &rkey_cfg_index));
+
+    mem_info.type    = UCS_MEMORY_TYPE_HOST;
+    mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
+                                                     rkey_cfg_index);
+    select_elem                    = ucp_proto_select_lookup_slow(worker,
+                                                                  &rkey_config->proto_select, 1,
+                                                                  ep_cfg_index, rkey_cfg_index,
+                                                                  &select_param);
+    ASSERT_NE(nullptr, select_elem);
+
+    threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                 select_size);
+    ASSERT_STREQ("rndv/rtr", threshold->proto_config.proto->name);
+    rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+            threshold->proto_config.priv);
+
+    EXPECT_EQ(m_user_sys_dev, rkey_config->key.sys_dev);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+              rpriv->remote_proto_config.select_param.sys_dev);
+    EXPECT_STREQ("rndv/put/zcopy", rpriv->remote_proto_config.proto->name);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_mtype_sys_dev, rcx_gpu,
