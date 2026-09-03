@@ -1327,7 +1327,7 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
     struct ibv_mr *mr;
 
     mr = ibv_reg_dmabuf_mr(md->pd, 0, ucs_get_page_size(), 0, bad_fd,
-                           UCT_IB_MEM_ACCESS_FLAGS);
+                           md->dev.mr_access_flags);
     if (mr != NULL) {
         ibv_dereg_mr(mr);
         /* dmabuf is supported */
