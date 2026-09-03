@@ -279,9 +279,6 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
     }
 
     if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
-        /* The peer is gone, so stop matching the endpoint by new connections
-         * already now, it is destroyed only after the linger timeout */
-        uct_ud_iface_cep_remove_ep(iface, ep);
         uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
         uct_ep_destroy(&ep->super.super);
         goto out;
@@ -329,6 +326,11 @@ static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
+
+    if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+        /* The peer is gone, stop matching the endpoint by new connections */
+        uct_ud_iface_cep_remove_ep(iface, ep);
+    }
 
     ucs_callbackq_add_oneshot(&iface->super.super.worker->super.progress_q, ep,
                               uct_ud_ep_deferred_timeout_handler, ep);
