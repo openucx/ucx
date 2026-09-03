@@ -40,16 +40,6 @@ int ucp_ep_failover_is_token_supported(uct_ep_h uct_ep)
            (attr.tx_token_length > 0) && (attr.tx_token_length <= UINT8_MAX);
 }
 
-static int ucp_ep_failover_lane_token_supported(ucp_ep_h ep, uct_ep_h uct_ep,
-                                                ucp_lane_index_t lane)
-{
-    if (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) {
-        return 0;
-    }
-
-    return ucp_ep_failover_is_token_supported(uct_ep);
-}
-
 static void ucp_ep_failover_lane_close(ucp_ep_h ep,
                                        ucp_lane_index_t lane_index,
                                        ucs_status_t discard_status)
@@ -62,9 +52,9 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
     uct_ep_h uct_ep;
     void *done_arg;
 
-    if ((arg == NULL) || !(arg->failover.lane_map & UCS_BIT(lane_index))) {
-        return;
-    }
+    ucs_assert(arg != NULL);
+    ucs_assert(arg->failover.lane_map & UCS_BIT(lane_index));
+    ucs_assert(discard_status != UCS_OK);
 
     lane      = &arg->failover.lanes[lane_index];
     uct_ep    = lane->uct_ep;
@@ -72,7 +62,6 @@ static void ucp_ep_failover_lane_close(ucp_ep_h ep,
     done_cb   = lane->done_cb;
     done_arg  = lane->done_arg;
 
-    ucs_assert(discard_status != UCS_OK);
     ucs_assert(uct_ep != NULL);
     ucs_debug("ep %p: closing failover lane %u status %s", ep, lane_index,
               ucs_status_string(discard_status));
@@ -116,6 +105,7 @@ static unsigned ucp_ep_failover_progress_cb(void *arg)
         if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
             ucp_ep_recovery_arm(ep);
         }
+
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -125,7 +115,7 @@ static unsigned ucp_ep_failover_progress_cb(void *arg)
 ucs_status_t
 ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
                           uct_ep_h *uct_eps, ucp_send_nbx_callback_t cb,
-                          void *arg, ucp_lane_map_t *failover_lanes_p)
+                          void *arg)
 {
     uct_ep_invalidate_params_t inv_params = {0};
     ucp_ep_recovery_arg_t *rec;
@@ -134,7 +124,6 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
     uct_ep_h uct_ep;
     ucs_status_t inv_status;
 
-    *failover_lanes_p = 0;
     ucs_assert(ep->ext != NULL);
     ucs_assert(ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER));
     ucs_assert(lane_map != 0);
@@ -142,10 +131,13 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
     rec = ep->ext->recovery_arg;
     ucs_for_each_bit(lane, lane_map) {
         uct_ep = uct_eps[lane];
-        if (!ucp_ep_failover_lane_token_supported(ep, uct_ep, lane) ||
-            ((rec != NULL) && (rec->failover.lane_map & UCS_BIT(lane)))) {
+        if ((ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) ||
+            !ucp_ep_failover_is_token_supported(uct_ep)) {
             return UCS_ERR_UNSUPPORTED;
         }
+
+        ucs_assert((rec == NULL) ||
+                   !(rec->failover.lane_map & UCS_BIT(lane)));
     }
 
     if (rec == NULL) {
@@ -170,12 +162,9 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
 
         ucs_trace("ep %p: lane %u failover armed", ep, lane);
         rec->failover.lane_map |= UCS_BIT(lane);
-        *failover_lanes_p      |= UCS_BIT(lane);
 
-        /* Take ownership of the UCT ep so the error handler returns
-         * UCS_INPROGRESS. Invalidate so an unaware peer also gets an
-         * error CQE. Already-ERR QPs may fail modify_qp; that is not
-         * fatal. */
+        /* Invalidate so an unaware peer also gets an error CQE.
+         * Already-ERR QPs may fail modify_qp; that is not fatal. */
         inv_status = uct_ep_invalidate(uct_ep, &inv_params);
         if ((inv_status != UCS_OK) && (inv_status != UCS_ERR_UNSUPPORTED)) {
             ucs_debug("ep %p: lane %u invalidate: %s", ep, lane,
@@ -184,36 +173,19 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
     }
 
     ucs_debug("ep %p: started failover for lanes 0x%" PRIx64, ep,
-              (uint64_t)*failover_lanes_p);
+              (uint64_t)lane_map);
 
     return UCS_OK;
 }
 
 void ucp_ep_failover_cleanup(ucp_ep_h ep)
 {
-    ucp_ep_recovery_arg_t *rec;
-    ucp_ep_failover_lane_t *lane_ctx;
-    ucp_lane_index_t lane;
-
     ucs_assert(ep->ext != NULL);
+    ucs_assert((ep->ext->recovery_arg == NULL) ||
+               (ep->ext->recovery_arg->failover.lane_map == 0));
 
     ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
                                  ucp_ep_failover_progress_remove_filter, ep);
-
-    rec = ep->ext->recovery_arg;
-    if (rec == NULL) {
-        return;
-    }
-
-    ucs_for_each_bit(lane, rec->failover.lane_map) {
-        lane_ctx = &rec->failover.lanes[lane];
-        ucp_ep_unprogress_uct_ep(ep, lane_ctx->uct_ep, lane_ctx->rsc_index);
-        uct_ep_destroy(lane_ctx->uct_ep);
-        ucp_worker_flush_ops_count_add(ep->worker, -1);
-    }
-
-    rec->failover.lane_map = 0;
-    rec->failover.status   = UCS_OK;
 }
 
 void ucp_ep_failover_abort(ucp_ep_h ep, ucs_status_t status)

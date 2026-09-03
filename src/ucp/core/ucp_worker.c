@@ -474,7 +474,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
-        /* Token iface: UCT must not complete; UCP will outstanding_purge. */
+        /* Token iface: UCT must not complete outstanding ops. */
         return ucp_ep_failover_is_token_supported(uct_ep) ?
                UCS_INPROGRESS : UCS_OK;
     }

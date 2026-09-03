@@ -224,7 +224,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 
 static void ucp_ep_deallocate(ucp_ep_h ep)
 {
-    ucp_ep_failover_cleanup(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep->ext->uct_eps);
     ucs_free(ep->ext);
@@ -1545,7 +1544,6 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                       UCT_FLUSH_FLAG_CANCEL :
                                       UCT_FLUSH_FLAG_LOCAL;
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
-    ucp_lane_map_t discard_lanes    = lanes;
     ucp_ep_discard_lanes_arg_t *discard_arg;
     ucs_status_t status;
     ucp_lane_index_t lane;
@@ -1590,40 +1588,38 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     ucp_ep_extract_failed_lanes(ep, lanes, &discard_arg->failed_ep, uct_eps);
 
     if (failover_lanes_p != NULL) {
-        status = ucp_ep_failover_add_lanes(ep, lanes, uct_eps,
-                                           ucp_ep_discard_lanes_callback,
-                                           discard_arg, failover_lanes_p);
-        if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+        *failover_lanes_p = 0;
+        status            = ucp_ep_failover_add_lanes(
+                ep, lanes, uct_eps, ucp_ep_discard_lanes_callback,
+                discard_arg);
+        if (status == UCS_OK) {
+            /* Keep discard refs until abort or extract/replay. */
+            *failover_lanes_p             = lanes;
+            discard_arg->discard_counter += ucs_popcount(lanes);
+        } else if (status != UCS_ERR_UNSUPPORTED) {
             ucs_debug("ep %p: failed to start failover for lanes 0x%lx: %s", ep,
                       lanes, ucs_status_string(status));
         }
-
-        ucs_assert((*failover_lanes_p == 0) || (*failover_lanes_p == lanes));
-
-        if (*failover_lanes_p != 0) {
-            /* Keep discard refs until abort (this PR) or extract/replay. */
-            discard_arg->discard_counter += ucs_popcount(*failover_lanes_p);
-            discard_lanes                ^= *failover_lanes_p;
-            ucp_ep_failover_schedule_abort(ep, discard_status);
-        }
     }
 
-    ucs_for_each_bit(lane, discard_lanes) {
-        uct_ep = uct_eps[lane];
-        if (uct_ep == NULL) {
-            continue;
-        }
+    if ((failover_lanes_p == NULL) || (*failover_lanes_p == 0)) {
+        ucs_for_each_bit(lane, lanes) {
+            uct_ep = uct_eps[lane];
+            if (uct_ep == NULL) {
+                continue;
+            }
 
-        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
-        status = ucp_worker_discard_uct_ep(ep, uct_ep,
-                                           ucp_ep_get_rsc_index(ep, lane),
-                                           ep_flush_flags,
-                                           ucp_ep_err_pending_purge,
-                                           UCS_STATUS_PTR(discard_status),
-                                           ucp_ep_discard_lanes_callback,
-                                           discard_arg);
-        if (status == UCS_INPROGRESS) {
-            ++discard_arg->discard_counter;
+            ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
+            status = ucp_worker_discard_uct_ep(ep, uct_ep,
+                                               ucp_ep_get_rsc_index(ep, lane),
+                                               ep_flush_flags,
+                                               ucp_ep_err_pending_purge,
+                                               UCS_STATUS_PTR(discard_status),
+                                               ucp_ep_discard_lanes_callback,
+                                               discard_arg);
+            if (status == UCS_INPROGRESS) {
+                ++discard_arg->discard_counter;
+            }
         }
     }
 
@@ -2567,6 +2563,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          &failover_lanes);
     if (failover_lanes != 0) {
         /* Token failover owns the UCT eps; arm ADDR recovery after abort. */
+        ucp_ep_failover_schedule_abort(ucp_ep, discard_status);
         return UCS_OK;
     }
 
