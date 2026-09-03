@@ -1369,7 +1369,7 @@ static void ucs_topo_release_devices()
 static ucs_topo_groups_type_t ucs_topo_groups_type_detect()
 {
     return (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_VERA) ?
-                   UCS_TOPO_GROUPS_TYPE_VERA_RUBIN :
+                   UCS_TOPO_GROUPS_TYPE_CLIQUE :
                    UCS_TOPO_GROUPS_TYPE_UNKNOWN;
 }
 

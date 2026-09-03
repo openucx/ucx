@@ -22,7 +22,7 @@ BEGIN_C_DECLS
  */
 typedef enum {
     UCS_TOPO_GROUPS_TYPE_UNKNOWN,
-    UCS_TOPO_GROUPS_TYPE_VERA_RUBIN
+    UCS_TOPO_GROUPS_TYPE_CLIQUE
 } ucs_topo_groups_type_t;
 
 

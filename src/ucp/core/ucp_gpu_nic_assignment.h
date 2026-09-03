@@ -7,10 +7,10 @@
 #ifndef UCP_GPU_NIC_ASSIGNMENT_H_
 #define UCP_GPU_NIC_ASSIGNMENT_H_
 
-#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/sys/topo/base/topo_groups.h>
 
+#include <stddef.h>
 #include <stdint.h>
 
 BEGIN_C_DECLS
@@ -23,21 +23,28 @@ typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
         ucp_gpu_nic_sys_dev_bitmap_t;
 
 
-UCS_ARRAY_DECLARE_TYPE(ucp_gpu_nic_sys_dev_bitmap_array_t, size_t,
-                       ucp_gpu_nic_sys_dev_bitmap_t);
-
-
 typedef struct {
-    ucp_gpu_nic_sys_dev_bitmap_array_t nic_sys_dev_bitmaps;
+    ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmaps;
+    size_t                       num_bitmaps;
     uint8_t bitmap_idx_by_gpu_sys_dev[UCS_SYS_DEVICE_ID_COUNT];
 } ucp_gpu_nic_assignment_t;
 
 
 typedef enum {
-    UCP_GPU_NIC_POLICY_FLIP,
-    UCP_GPU_NIC_POLICY_ALT,
-    UCP_GPU_NIC_POLICY_LAST
-} ucp_gpu_nic_policy_t;
+    /**
+     * Assign each run of NICs forward and then backward across the GPUs:
+     * 0, 1, ..., N-1, N-1, ..., 1, 0.
+     */
+    UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
+
+    /**
+     * Assign NICs to GPUs repeatedly in ascending order:
+     * 0, 1, ..., N-1, 0, 1, ...
+     */
+    UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
+
+    UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST
+} ucp_gpu_nic_assignment_policy_t;
 
 
 /**
@@ -52,7 +59,7 @@ typedef enum {
  */
 ucs_status_t
 ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
-                             ucp_gpu_nic_policy_t policy,
+                             ucp_gpu_nic_assignment_policy_t policy,
                              ucp_gpu_nic_assignment_t *assignment_p);
 
 
@@ -62,8 +69,9 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
  * @param [in] assignment  GPU-to-NIC assignment.
  * @param [in] gpu_sys_dev GPU system device to look up.
  *
- * @return Assigned NIC system-device bitmap, or NULL if @a gpu_sys_dev is
- *         unknown or has no valid assignment.
+ * @return Assigned NIC system-device bitmap. The bitmap is empty if the GPU
+ *         has no assigned NICs. Returns NULL if @a gpu_sys_dev is unknown or
+ *         is not represented in the assignment.
  */
 const ucp_gpu_nic_sys_dev_bitmap_t *
 ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
