@@ -284,17 +284,21 @@ static ucs_status_t mm_md_query_no_memh(uct_md_h md, uct_md_attr_v2_t *attr)
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, iface_mem_alloc_no_memh,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    ucs::mock m;
+                     !check_md_caps(UCT_MD_FLAG_ALLOC)) {
     uct_md_h md = m_e1->md();
     uct_allocated_memory_t mem;
     ucs_status_t status;
 
-    mm_md_query_mock = &m;
-    m.setup(&md->ops->query, mm_md_query_no_memh);
+    {
+        /* clear the mock pointer only after the mock restores md->ops->query */
+        ucs::mock m;
 
-    status = uct_iface_mem_alloc(m_e1->iface(), 8192, UCT_MD_MEM_ACCESS_ALL,
-                                 "test", &mem);
+        mm_md_query_mock = &m;
+        m.setup(&md->ops->query, mm_md_query_no_memh);
+
+        status = uct_iface_mem_alloc(m_e1->iface(), 8192,
+                                     UCT_MD_MEM_ACCESS_ALL, "test", &mem);
+    }
     mm_md_query_mock = NULL;
 
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
