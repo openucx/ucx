@@ -594,32 +594,23 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
               ucp_proto_id_field(params->super.super.proto_id, name));
 }
 
-static void ucp_proto_multi_adjust_path_bandwidth(
+static void ucp_proto_multi_adjust_path_perf(
         const ucp_proto_multi_init_params_t *params,
         const ucp_proto_lane_selection_t *selection,
         ucp_proto_common_tl_perf_t *lanes_perf)
 {
+    double scale = (double)params->max_lanes / selection->num_lanes;
     ucp_proto_common_tl_perf_t *lane_perf;
-    ucp_rsc_index_t dev_index;
     ucp_lane_index_t lane;
-    double path_ratio, total_ratio;
 
+    /* Extra device paths distribute whole requests without increasing the
+     * configured lane count, so keep its performance estimate. */
     ucs_for_each_bit(lane, selection->lane_map) {
         lane_perf = &lanes_perf[lane];
-        if (lane_perf->num_paths == 1) {
-            continue;
-        }
-
-        dev_index = ucp_proto_common_get_dev_index(&params->super.super, lane);
-        path_ratio = ucs_min(lane_perf->path_ratio, 1.0);
-        total_ratio = path_ratio +
-                      ((selection->dev_count[dev_index] - 1) *
-                       (1.0 - path_ratio) /
-                       (lane_perf->num_paths - 1));
-
-        /* Share the device bandwidth between its selected paths. */
-        lane_perf->bandwidth *= ucs_min(total_ratio, 1.0) /
-                                selection->dev_count[dev_index];
+        lane_perf->bandwidth          *= scale;
+        lane_perf->send_pre_overhead  *= scale;
+        lane_perf->send_post_overhead *= scale;
+        lane_perf->recv_overhead      *= scale;
     }
 }
 
@@ -935,7 +926,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     lane_per_request = params->use_device_num_paths &&
                        (selection.num_lanes > params->max_lanes);
     if (lane_per_request) {
-        ucp_proto_multi_adjust_path_bandwidth(params, &selection, lanes_perf);
+        ucp_proto_multi_adjust_path_perf(params, &selection, lanes_perf);
     }
 
     ucp_proto_multi_aggregate_perf(params, &selection, lanes_perf, &perf,

@@ -234,7 +234,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"MAX_RNDV_RAILS", "auto",
-   "Maximal number of devices on which a rendezvous operation may be executed in parallel",
+   "Maximal number of devices on which a rendezvous operation may be executed in parallel.\n"
+   "An 'auto' value uses the default of 2 and lets multi-send GET operations use\n"
+   "the number of paths recommended by the transport.",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes_config),
    UCS_CONFIG_TYPE_ULUNITS},
 
@@ -243,7 +245,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"MAX_RMA_RAILS", "auto",
-   "Maximal number of devices on which a RMA operation may be executed in parallel",
+   "Maximal number of devices on which a RMA operation may be executed in parallel.\n"
+   "An 'auto' value uses the default of 1 and lets multi-send GET operations use\n"
+   "the number of paths recommended by the transport.",
    ucs_offsetof(ucp_context_config_t, max_rma_lanes_config),
    UCS_CONFIG_TYPE_ULUNITS},
 

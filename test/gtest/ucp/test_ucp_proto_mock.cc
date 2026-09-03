@@ -713,7 +713,8 @@ protected:
 
     ucp_worker_cfg_index_t
     send_recv_rma(size_t size, ucp_operation_id_t op_id,
-                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                  uint64_t op_attr_mask = 0)
     {
         mem_buffer recv_buf(size, mem_type);
         recv_buf.pattern_fill(1);
@@ -725,7 +726,7 @@ protected:
         send_buf.pattern_fill(2);
 
         ucp_request_param_t req_param;
-        req_param.op_attr_mask = 0;
+        req_param.op_attr_mask = op_attr_mask;
         ucs_status_ptr_t sptr;
         if (op_id == UCP_OP_ID_PUT) {
             sptr = ucp_put_nbx(sender().ep(), send_buf.ptr(), size,
@@ -892,10 +893,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_auto_num_paths,
     check_ep_config(sender(), {
         {1,       477,    "rendezvous fragmented copy-in copy-out",
          "rc_mlx5/mock_1:1/path0"},
-        {478,     2459,   "rendezvous zero-copy", "rc_mlx5/mock_1:1/path0"},
-        {2460,    46800,  "rendezvous zero-copy fenced write to remote",
-         "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
-        {46801,   INF,    "rendezvous zero-copy read from remote",
+        {478,     1174,   "rendezvous zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {1175,    INF,    "rendezvous zero-copy read from remote",
          "24% on rc_mlx5/mock_1:1/path0, 27% on rc_mlx5/mock_0:1/path0, "
          "27% on rc_mlx5/mock_0:1/path1 and 22% on "
          "rc_mlx5/mock_1:1/path1"},
@@ -915,6 +914,26 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
     check_rkey_config(sender(), {
         {0,    2048, "short",     "rc_mlx5/mock_1:1"},
         {2049, INF,  "zero-copy", "47% on rc_mlx5/mock_1:1 and 53% on rc_mlx5/mock_0:1"},
+    }, key, rkey_cfg_index);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rma_get_auto_num_paths,
+           "IB_NUM_PATHS?=4", "ZCOPY_THRESH=0")
+{
+    auto rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET,
+                                        UCS_MEMORY_TYPE_HOST,
+                                        UCP_OP_ATTR_FLAG_MULTI_SEND);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_GET;
+    key.param.op_attr          = ucp_proto_select_op_attr_pack(
+            UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
+
+    check_rkey_config(sender(), {
+        {0,  64,  "copy-out",  "rc_mlx5/mock_0:1/path0"},
+        {65, INF, "zero-copy",
+         "rc_mlx5/mock_0:1 25% on path0, 25% on path1, 25% on path2 and "
+         "25% on path3"},
     }, key, rkey_cfg_index);
 }
 
