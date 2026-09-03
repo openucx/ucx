@@ -40,6 +40,13 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
                                       const ucp_rma_rndv_rts_hdr_t *rts,
                                       size_t length);
 
+void ucp_rma_rndv_req_claim(ucp_request_t *req);
+void ucp_rma_rndv_req_release(ucp_request_t *req, ucp_ep_h ep);
+void ucp_rma_rndv_req_transfer(ucp_request_t *req, ucp_request_t *next_req);
+void ucp_rma_rndv_req_send_start(ucp_request_t *req, ucp_ep_h ep);
+void ucp_rma_rndv_req_send_cancel(ucp_request_t *req, ucp_ep_h ep);
+void ucp_rma_rndv_remote_request_completed(ucp_ep_h ep);
+
 ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req);
 
 void ucp_rma_rndv_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,

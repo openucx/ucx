@@ -12,6 +12,7 @@
 
 #include "rma.h"
 #include "rma.inl"
+#include "rma_rndv.h"
 
 #include <ucs/profile/profile.h>
 #include <ucp/core/ucp_request.inl>
@@ -106,7 +107,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flag
     UCP_WORKER_GET_EP_BY_ID(&ep, worker, ep_id, return UCS_OK,
                             "SW RMA completion");
     if (flags & UCP_CMPL_FLAG_RMA_RNDV) {
-        ucp_ep_rma_rndv_remote_request_completed(ep);
+        ucp_rma_rndv_remote_request_completed(ep);
     } else {
         ucp_ep_rma_remote_request_completed(ep);
     }

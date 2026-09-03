@@ -102,20 +102,6 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_h ep)
     }
 }
 
-static inline void ucp_ep_rma_rndv_remote_request_sent(ucp_ep_h ep)
-{
-    ++ucp_ep_flush_state(ep)->rma_rndv_ops;
-    ucp_ep_rma_remote_request_sent(ep);
-}
-
-static inline void ucp_ep_rma_rndv_remote_request_completed(ucp_ep_h ep)
-{
-    ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
-
-    ucs_assert(flush_state->rma_rndv_ops > 0);
-    --flush_state->rma_rndv_ops;
-    ucp_ep_rma_remote_request_completed(ep);
-}
 
 static UCS_F_ALWAYS_INLINE uint32_t ucp_ep_rma_rndv_ops(ucp_ep_h ep)
 {

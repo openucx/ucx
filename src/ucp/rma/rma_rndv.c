@@ -28,6 +28,73 @@
 #define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
 
 
+static void ucp_rma_rndv_visibility_complete(ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
+
+    ucs_assert(flush_state->rma_rndv_ops > 0);
+    --flush_state->rma_rndv_ops;
+}
+
+void ucp_rma_rndv_req_claim(ucp_request_t *req)
+{
+    if (req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED) {
+        return;
+    }
+
+    ++ucp_ep_flush_state(req->send.ep)->rma_rndv_ops;
+    req->flags |= UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+}
+
+void ucp_rma_rndv_req_release(ucp_request_t *req, ucp_ep_h ep)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED)) {
+        return;
+    }
+
+    req->flags &= ~UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+    ucp_rma_rndv_visibility_complete(ep);
+}
+
+void ucp_rma_rndv_req_transfer(ucp_request_t *req, ucp_request_t *next_req)
+{
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED);
+    req->flags &= ~UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+
+    if (next_req != NULL) {
+        ucs_assert(!(next_req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED));
+        next_req->flags |= UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+    }
+}
+
+static void ucp_rma_rndv_req_reclaim(ucp_request_t *req)
+{
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED));
+    req->flags |= UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+}
+
+void ucp_rma_rndv_req_send_start(ucp_request_t *req, ucp_ep_h ep)
+{
+    ucp_rma_rndv_req_transfer(req, NULL);
+    ucp_ep_rma_remote_request_sent(ep);
+}
+
+void ucp_rma_rndv_req_send_cancel(ucp_request_t *req, ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
+
+    ucs_assert(flush_state->send_sn != flush_state->cmpl_sn);
+    --flush_state->send_sn;
+    ucp_rma_rndv_req_reclaim(req);
+}
+
+void ucp_rma_rndv_remote_request_completed(ucp_ep_h ep)
+{
+    ucp_rma_rndv_visibility_complete(ep);
+    ucp_ep_rma_remote_request_completed(ep);
+}
+
+
 static int
 ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
                                ucp_operation_id_t op_id)
@@ -114,6 +181,19 @@ static ucs_status_t ucp_proto_put_rndv_init(ucp_request_t *req)
     req->send.lane = rpriv->lane;
     return ucp_proto_rndv_rts_request_init(req);
 }
+static void
+ucp_proto_put_rndv_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_rma_rndv_req_release(req, req->send.ep);
+    ucp_proto_rndv_rts_abort(req, status);
+}
+
+static ucs_status_t ucp_proto_put_rndv_reset(ucp_request_t *req)
+{
+    ucp_rma_rndv_req_release(req, req->send.ep);
+    return ucp_proto_rndv_rts_reset(req);
+}
+
 
 static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
 {
@@ -137,6 +217,15 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
         return status;
     }
 
+    /* ucp_ep_resolve_remote_id() may only start wireup. Retry through the
+     * wireup pending queue until the endpoint leaves the match context and its
+     * flush-state union becomes valid. */
+    if (ucs_unlikely(req->send.ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_rma_rndv_req_claim(req);
+
     ep           = req->send.ep;
     max_rts_size = sizeof(ucp_rma_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
@@ -144,18 +233,19 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
      * flush, and they may complete in any order. */
     req->flags |= UCP_REQUEST_FLAG_RNDV_FLUSH;
     ucp_worker_flush_ops_count_add(ep->worker, +2);
+    ucp_rma_rndv_req_send_start(req, ep);
     status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTS,
                                             rpriv->lane,
                                             ucp_proto_put_rndv_rts_pack, req,
                                             max_rts_size, 0);
     if (status != UCS_OK) {
+        ucp_rma_rndv_req_send_cancel(req, ep);
         if (status == UCS_ERR_NO_RESOURCE) {
             req->send.lane = rpriv->lane;
         }
         goto err_flush_count;
     }
 
-    ucp_ep_rma_rndv_remote_request_sent(ep);
     return UCS_OK;
 
 err_flush_count:
@@ -395,6 +485,7 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
 static void
 ucp_proto_get_rndv_abort(ucp_request_t *req, ucs_status_t status)
 {
+    ucp_rma_rndv_req_release(req, req->send.ep);
     if (req->id != UCS_PTR_MAP_KEY_INVALID) {
         ucp_send_request_id_release(req);
     }
@@ -409,6 +500,7 @@ ucp_proto_get_rndv_abort(ucp_request_t *req, ucs_status_t status)
 
 static ucs_status_t ucp_proto_get_rndv_reset(ucp_request_t *req)
 {
+    ucp_rma_rndv_req_release(req, req->send.ep);
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         if (req->id != UCS_PTR_MAP_KEY_INVALID) {
             ucp_send_request_id_release(req);
@@ -444,6 +536,7 @@ ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
          * Claim before issuing it, since SELF can complete inline. */
         recv_req->flags &= ~UCP_REQUEST_FLAG_RNDV_START_FLUSH;
         ucp_worker_flush_ops_count_add(ep->worker, +1);
+        ucp_rma_rndv_req_send_start(recv_req, ep);
         return recv_req;
     }
 
@@ -453,14 +546,10 @@ ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
 void ucp_rma_rndv_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
                               ucs_status_t status)
 {
-    if (recv_req != NULL) {
-        if (!UCS_STATUS_IS_ERR(status)) {
-            /* recv_req may complete inline, so only touch ep on success. */
-            ucp_ep_rma_rndv_remote_request_sent(ep);
-        } else {
-            ucp_worker_flush_ops_count_add(ep->worker, -1);
-            recv_req->flags |= UCP_REQUEST_FLAG_RNDV_START_FLUSH;
-        }
+    if ((recv_req != NULL) && UCS_STATUS_IS_ERR(status)) {
+        ucp_worker_flush_ops_count_add(ep->worker, -1);
+        ucp_rma_rndv_req_send_cancel(recv_req, ep);
+        recv_req->flags |= UCP_REQUEST_FLAG_RNDV_START_FLUSH;
     }
 }
 
@@ -471,10 +560,12 @@ static void ucp_rma_rndv_get_recv_complete(ucp_request_t *recv_req)
     int start_flush;
 
     start_flush = recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH;
-    ucp_request_complete_send(get_req, recv_req->status);
-    if (!start_flush) {
-        ucp_ep_rma_rndv_remote_request_completed(ep);
+    if (start_flush) {
+        ucp_rma_rndv_req_release(recv_req, ep);
+    } else {
+        ucp_rma_rndv_remote_request_completed(ep);
     }
+    ucp_request_complete_send(get_req, recv_req->status);
     ucp_request_put(recv_req);
 }
 
@@ -515,6 +606,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     recv_req->recv.rndv.complete_cb = ucp_rma_rndv_get_recv_complete;
     recv_req->status                = UCS_OK;
     ucp_request_set_super(recv_req, get_req);
+    ucp_rma_rndv_req_transfer(get_req, recv_req);
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move, &recv_req->recv.dt_iter,
                           &get_req->send.state.dt_iter, length, &sg_count);
@@ -562,6 +654,14 @@ static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
         ucp_proto_request_abort(get_req, status);
         return UCS_OK;
     }
+
+    /* Do not access the flush-state union while wireup still owns it as the
+     * endpoint match context. */
+    if (ucs_unlikely(get_req->send.ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_rma_rndv_req_claim(get_req);
 
     status = ucp_proto_get_rndv_init(get_req, &rndv_req);
     if (status != UCS_OK) {
@@ -645,8 +745,8 @@ ucp_proto_t ucp_put_rndv_proto = {
     .probe    = ucp_proto_put_rndv_probe,
     .query    = ucp_proto_rma_rndv_query,
     .progress = {ucp_proto_put_rndv_progress},
-    .abort    = ucp_proto_rndv_rts_abort,
-    .reset    = ucp_proto_rndv_rts_reset
+    .abort    = ucp_proto_put_rndv_abort,
+    .reset    = ucp_proto_put_rndv_reset
 };
 
 ucp_proto_t ucp_get_rndv_proto = {
