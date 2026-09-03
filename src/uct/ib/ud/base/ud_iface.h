@@ -33,7 +33,7 @@ BEGIN_C_DECLS
 #define UCT_UD_MIN_TIMER_TIMER_BACKOFF 1.0
 
 
-/* Must be less then peer_timeout to avoid false positive errors taking into
+/* Must be less than peer_timeout to avoid false positive errors taking into
  * account timer resolution and not too small to avoid performance degradation
  */
 #define UCT_UD_SLOW_TIMER_MAX_TICK(_iface)  ((_iface)->config.peer_timeout / 3)
