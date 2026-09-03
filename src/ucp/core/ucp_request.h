@@ -244,6 +244,11 @@ struct ucp_request {
                 struct {
                     uint64_t   remote_addr; /* Remote address */
                     ucp_rkey_h rkey; /* Remote memory key */
+
+                    struct {
+                        const uint64_t   *remote_addrs;
+                        ucp_rkey_h const *rkeys;
+                    } sgl;
                 } rma;
 
                 struct {
