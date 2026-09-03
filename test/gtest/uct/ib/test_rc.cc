@@ -1554,17 +1554,11 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_outstanding_purge, am_short,
     const std::vector<uint8_t> short_payload = {1, 2, 3, 4};
     uct_rc_mlx5_base_ep_t *ep =
             ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
-    uct_ib_mlx5_md_t *md = uct_ib_mlx5_iface_md(
-            ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
     uct_iface_attr_v2_t iface_attr                 = {};
     uct_ep_outstanding_purge_params_t purge_params = {};
     uct_ep_invalidate_params_t invalidate_params   = {};
     uct_completion_t flush_comp;
     uct_rc_mlx5_rx_token_t rx_token;
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        UCS_TEST_SKIP_R("DEVX is not supported");
-    }
 
     iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
     ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &iface_attr));
