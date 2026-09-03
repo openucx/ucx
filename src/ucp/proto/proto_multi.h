@@ -104,6 +104,8 @@ typedef struct {
     size_t                      max_frag_sum; /* 'max_frag' sum of all lanes */
     ucp_lane_map_t              lane_map;     /* Map of used lanes */
     ucp_lane_index_t            num_lanes;    /* Number of lanes to use */
+    uint8_t                     lane_per_request; /* Keep each request on one
+                                                    lane */
     size_t                      align_thresh; /* Cached value of threshold for
                                                  enabling data split alignment */
     ucp_proto_multi_lane_priv_t lanes[UCP_MAX_LANES]; /* Array of lanes */
@@ -118,6 +120,9 @@ typedef struct {
 
     /* Maximal number of lanes to select */
     ucp_lane_index_t               max_lanes;
+
+    /* Select additional paths recommended by the transport */
+    int                            use_device_num_paths;
 
     /* Minimal chunk size. It defines the minimal size of the fragment to split into
      * several parts. The goal is to not split below this limit */

@@ -569,6 +569,8 @@ typedef struct ucp_ep_ext {
                                                       unflushed operations */
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
+    uint64_t                      next_multi_send_lane; /* Next lane for a
+                                                          multi-send request */
 
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint

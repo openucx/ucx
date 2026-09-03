@@ -41,6 +41,15 @@ ucp_proto_multi_request_init(ucp_request_t *req)
     ucp_proto_multi_set_send_lane(req);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_multi_request_init_lane(ucp_request_t *req,
+                                  const ucp_proto_multi_priv_t *mpriv)
+{
+    req->send.multi_lane_idx =
+            req->send.ep->ext->next_multi_send_lane++ % mpriv->num_lanes;
+    ucp_proto_multi_set_send_lane(req);
+}
+
 static UCS_F_ALWAYS_INLINE uint32_t
 ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
 {

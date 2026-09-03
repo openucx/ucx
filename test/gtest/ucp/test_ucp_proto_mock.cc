@@ -587,7 +587,8 @@ protected:
     }
 
     void
-    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
+    send_recv_am(size_t size, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST,
+                 uint64_t op_attr_mask = 0)
     {
         /* Prepare receiver data handler */
         mem_buffer recv_buf(size, mem_type);
@@ -641,6 +642,7 @@ protected:
         /* Send data */
         mem_buffer buf(size, mem_type);
         ucp_request_param_t param = {};
+        param.op_attr_mask        = op_attr_mask;
         auto sptr = ucp_am_send_nbx(sender().ep(), AM_ID, NULL, 0ul, buf.ptr(),
                                     buf.size(), &param);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
@@ -873,6 +875,30 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
         {283700,  INF,    "rendezvous zero-copy fenced write to remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
+    }, key);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_auto_num_paths,
+           "IB_NUM_PATHS?=4", "RNDV_THRESH=0")
+{
+    send_recv_am(UCS_KBYTE, UCS_MEMORY_TYPE_HOST,
+                 UCP_OP_ATTR_FLAG_MULTI_SEND);
+
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = ucp_proto_select_op_attr_pack(
+            UCP_OP_ATTR_FLAG_MULTI_SEND, UCP_PROTO_SELECT_OP_ATTR_MASK);
+
+    check_ep_config(sender(), {
+        {1,       477,    "rendezvous fragmented copy-in copy-out",
+         "rc_mlx5/mock_1:1/path0"},
+        {478,     2459,   "rendezvous zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {2460,    46800,  "rendezvous zero-copy fenced write to remote",
+         "47% on rc_mlx5/mock_1:1/path0 and 53% on rc_mlx5/mock_0:1/path0"},
+        {46801,   INF,    "rendezvous zero-copy read from remote",
+         "24% on rc_mlx5/mock_1:1/path0, 27% on rc_mlx5/mock_0:1/path0, "
+         "27% on rc_mlx5/mock_0:1/path1 and 22% on "
+         "rc_mlx5/mock_1:1/path1"},
     }, key);
 }
 
