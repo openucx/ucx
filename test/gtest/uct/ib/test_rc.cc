@@ -9,6 +9,8 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
+#include <functional>
+
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
@@ -1547,15 +1549,23 @@ public:
         m_e2 = uct_test::create_entity(0, err_handler);
         m_entities.push_back(m_e2);
         connect();
+        m_e1->connect(1, *m_e2, 1);
     }
 
 protected:
+    enum {
+        NUM_MESSAGES = 2000
+    };
+
     struct purge_ctx {
         test_rc_purge_outstanding *self;
         uct_ep_h                  ep;
         uct_completion_t          comp;
         uint32_t                  num_replayed;
     };
+
+    using send_func_t =
+            std::function<ucs_status_t(uct_ep_h, uct_completion_t*)>;
 
     bool check_caps_v2(uint64_t required_flags)
     {
@@ -1565,6 +1575,31 @@ protected:
         EXPECT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
 
         return ucs_test_all_flags(attr.cap.flags, required_flags);
+    }
+
+    void post_op(uct_ep_h ep, uct_completion_t *comp,
+                 const send_func_t &send_func)
+    {
+        ucs_status_t status;
+
+        do {
+            ++comp->count;
+            status = send_func(ep, comp);
+            if (status == UCS_INPROGRESS) {
+                return;
+            }
+
+            --comp->count;
+            if (status == UCS_OK) {
+                return;
+            }
+
+            if (status != UCS_ERR_NO_RESOURCE) {
+                UCS_TEST_ABORT(ucs_status_string(status));
+            }
+
+            short_progress_loop();
+        } while (status == UCS_ERR_NO_RESOURCE);
     }
 
     void send_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
@@ -1593,6 +1628,10 @@ protected:
         purge_ctx *ctx = static_cast<purge_ctx*>(arg);
 
         ctx->self->send_op(info, ctx);
+    }
+
+    static void completion_cb(uct_completion_t*)
+    {
     }
 
     static void query_tx_token(uct_ep_h ep,
@@ -1639,10 +1678,8 @@ protected:
         uct_rc_mlx5_rx_token_t rx_token                = {};
 
         ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &invalidate_params));
-        if (flush_comp != NULL) {
-            EXPECT_EQ(UCS_INPROGRESS,
-                      uct_ep_flush(m_e1->ep(0), 0, flush_comp));
-        }
+        EXPECT_EQ(UCS_INPROGRESS,
+                  uct_ep_flush(m_e1->ep(0), 0, flush_comp));
 
         wait_for_flag(&m_err_count);
         ASSERT_EQ(1u, m_err_count);
@@ -1658,6 +1695,39 @@ protected:
         purge_params.cb       = purge_cb;
         purge_params.arg      = ctx;
         ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &purge_params));
+    }
+
+    void test_purge_outstanding(const send_func_t &send_func)
+    {
+        uct_rc_mlx5_base_ep_t *ep =
+                ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        purge_ctx ctx = {this,
+                         m_e1->ep(1),
+                         {completion_cb, 0, UCS_OK},
+                         0};
+        uct_completion_t flush_comp = {completion_cb, 1, UCS_OK};
+
+        if (!check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) ||
+            !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+            UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
+        }
+
+        for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+            post_op(m_e1->ep(0), &ctx.comp, send_func);
+        }
+
+        purge_outstanding(&ctx, &flush_comp);
+
+        EXPECT_GT(ctx.num_replayed, 0u);
+        EXPECT_LE(ctx.num_replayed, static_cast<uint32_t>(NUM_MESSAGES));
+
+        flush();
+
+        EXPECT_EQ(0, ctx.comp.count);
+        EXPECT_EQ(0, flush_comp.count);
+        EXPECT_EQ(UCS_ERR_CANCELED, flush_comp.status);
+        EXPECT_EQ(ep->tx.wq.bb_max,
+                  uct_rc_txqp_available(&ep->super.txqp));
     }
 
     unsigned m_err_count = 0;
