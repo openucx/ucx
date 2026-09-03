@@ -1619,6 +1619,15 @@ protected:
     {
         ucs_status_t status;
 
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask,
+                                       UCT_EP_OP_INFO_FIELD_OPERATION |
+                                               UCT_EP_OP_INFO_FIELD_RMA |
+                                               UCT_EP_OP_INFO_FIELD_COMP));
+        ASSERT_TRUE(ucs_test_all_flags(
+                info->rma.field_mask,
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                        UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY));
         ASSERT_EQ(UCT_EP_OP_PUT_ZCOPY, info->operation);
         UCT_TEST_CALL_AND_TRY_AGAIN(
                 uct_ep_put_zcopy(ctx->ep, info->rma.payload.zcopy.iov,
@@ -1699,7 +1708,7 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
     const uint64_t send_seed = 0x1111111111111111lu;
     const uint64_t recv_seed = 0x2222222222222222lu;
     mapped_buffer sendbuf(length, send_seed, *m_e1);
-    mapped_buffer recvbuf(length, recv_seed, *m_e2);
+    mapped_buffer recvbuf(length * NUM_MESSAGES, recv_seed, *m_e2);
     uct_ep_invalidate_params_t invalidate_params = {};
     uct_ep_outstanding_purge_params_t params     = {};
     uct_rc_mlx5_tx_token_t tx_token              = {};
@@ -1716,8 +1725,10 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
                      0};
 
     for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+        uint64_t remote_addr = recvbuf.addr() + i * length;
+
         UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_put_zcopy(m_e1->ep(0), iov, iovcnt,
-                                                     recvbuf.addr(),
+                                                     remote_addr,
                                                      recvbuf.rkey(), &ctx.comp),
                                     status);
     }
@@ -1744,7 +1755,13 @@ UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, put_zcopy,
     flush();
 
     EXPECT_EQ(0, ctx.comp.count);
-    recvbuf.pattern_check(send_seed);
+
+    for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+        void *chunk = UCS_PTR_BYTE_OFFSET(recvbuf.ptr(), i * length);
+
+        mem_buffer::pattern_check(chunk, length, send_seed,
+                                  UCS_MEMORY_TYPE_HOST);
+    }
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
