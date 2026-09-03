@@ -573,9 +573,6 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
  * @param [in]  status   Status indicating error.
  *
  * @return @ref UCS_OK         - The error was handled successfully.
- *         @ref UCS_INPROGRESS - The error handling is in progress and the
- *                               transport should not purge outstanding
- *                               operations.
  *         Otherwise           - The error was not handled and is returned back
  *                               to the transport.
  */
