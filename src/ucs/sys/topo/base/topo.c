@@ -283,17 +283,16 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
                                 char *str, size_t max)
 {
     if (abbreviate && (bus_id->domain == 0)) {
-        ucs_snprintf_safe(str, max, "%02x:%02x.%d", bus_id->bus, bus_id->slot,
-                          bus_id->function);
+        ucs_snprintf_safe(str, max, UCS_SYS_BUS_ID_ABBREVIATED_FMT,
+                          UCS_SYS_BUS_ID_ABBREVIATED_ARG(bus_id));
     } else {
-        ucs_snprintf_safe(str, max, "%04x:%02x:%02x.%d", bus_id->domain,
-                          bus_id->bus, bus_id->slot, bus_id->function);
+        ucs_snprintf_safe(str, max, UCS_SYS_BUS_ID_FMT,
+                          UCS_SYS_BUS_ID_ARG(bus_id));
     }
 }
 
-static ucs_status_t
-ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id, char *path,
-                              size_t max)
+ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
+                                           char *path, size_t max)
 {
     const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
     ucs_status_t status;
@@ -1387,8 +1386,9 @@ ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
     return status;
 }
 
-static void ucs_topo_release_group(ucs_topo_group_t *group)
+void ucs_topo_release_group(ucs_topo_group_t *group)
 {
+    ucs_assert(group != NULL);
     ucs_array_cleanup_dynamic(&group->nics);
     ucs_array_cleanup_dynamic(&group->gpus);
 }
@@ -1396,6 +1396,8 @@ static void ucs_topo_release_group(ucs_topo_group_t *group)
 void ucs_topo_release_groups(ucs_topo_groups_t *groups)
 {
     size_t i;
+
+    ucs_assert(groups != NULL);
 
     for (i = 0; i < ucs_array_length(&groups->groups); ++i) {
         ucs_topo_release_group(&ucs_array_elem(&groups->groups, i));

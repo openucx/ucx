@@ -102,6 +102,14 @@ void ucs_topo_init_group(ucs_topo_group_t *group);
 
 
 /**
+ * Release resources allocated by a topology group.
+ *
+ * @param [in] group  Group to release.
+ */
+void ucs_topo_release_group(ucs_topo_group_t *group);
+
+
+/**
  * Build system topology groups (internal function).
  *
  * @param [in]  devices      Array of registered system devices.

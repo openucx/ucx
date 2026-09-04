@@ -35,6 +35,18 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
+/* Bus ID string formatting */
+#define UCS_SYS_BUS_ID_FMT "%04x:%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ARG(_bus_id) \
+    (unsigned)(_bus_id)->domain, (unsigned)(_bus_id)->bus, \
+            (unsigned)(_bus_id)->slot, (unsigned)(_bus_id)->function
+
+/* Bus ID string formatting (abbreviated) */
+#define UCS_SYS_BUS_ID_ABBREVIATED_FMT "%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ABBREVIATED_ARG(_bus_id) \
+    (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
+            (unsigned)(_bus_id)->function
+
 /* Special values for undefined PCI identifiers */
 #define UCS_SYS_PCI_ID_VALUE_UNDEFINED 0x0000
 #define UCS_SYS_PCI_ID_UNDEFINED \
@@ -47,6 +59,7 @@ BEGIN_C_DECLS
 /* String formatting for PCI identifiers */
 #define UCS_SYS_PCI_ID_FMT         "[%04x:%04x]"
 #define UCS_SYS_PCI_ID_ARG(_pci_id) ((_pci_id)->vendor), ((_pci_id)->device)
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
