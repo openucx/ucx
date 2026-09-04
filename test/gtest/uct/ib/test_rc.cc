@@ -142,6 +142,41 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
+UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
+                     GetParam()->tl_name != "rc_mlx5",
+                     "IB_PCI_RELAXED_ORDERING=yes")
+{
+#ifdef HAVE_MLX5_DV
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(m_e1->iface(), uct_rc_mlx5_iface_common_t);
+
+    EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
+              iface->config.put_fence_flag);
+    EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
+              iface->config.atomic_fence_flag);
+#endif
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
+                     GetParam()->tl_name != "rc_verbs")
+{
+    uct_ib_md_t *md                  = uct_ib_iface_md(&rc_iface(m_e1)->super);
+    int saved_relaxed_order_required = md->relaxed_order_required;
+    uct_iface_h iface                = NULL;
+    ucs_status_t status;
+
+    md->relaxed_order_required = 1;
+    status = uct_iface_open(m_e1->md(), m_e1->worker(), &m_e1->iface_params(),
+                            m_iface_config, &iface);
+    md->relaxed_order_required = saved_relaxed_order_required;
+
+    if (status == UCS_OK) {
+        uct_iface_close(iface);
+    }
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+}
+
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 #ifdef HAVE_MLX5_DV

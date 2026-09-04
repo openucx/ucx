@@ -258,6 +258,7 @@ struct uct_ud_ep {
     } tx;
     struct {
         uct_ud_psn_t        acked_psn;    /* Last psn we acked */
+        uct_ud_psn_t        check_sn;     /* Last psn seen by liveness check */
         ucs_frag_list_t     ooo_pkts;     /* Out of order packets that can not be processed yet,
                                             also keeps last psn we successfully received and processed */
         UCS_STATS_NODE_DECLARE(stats)
