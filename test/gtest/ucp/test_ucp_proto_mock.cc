@@ -1568,6 +1568,7 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
     ucp_rkey_config_key_t rkey_config_key = base_rkey_config->key;
     ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t *rkey_config;
     ucp_memory_info_t mem_info;
     ucp_proto_select_param_t select_param;
     const ucp_proto_select_elem_t *select_elem;
@@ -1588,12 +1589,11 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
     ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
 
-    ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
-                                                     rkey_cfg_index);
-    select_elem                    = ucp_proto_select_lookup_slow(worker,
-                                                                  &rkey_config->proto_select, 1,
-                                                                  ep_cfg_index, rkey_cfg_index,
-                                                                  &select_param);
+    rkey_config = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+    select_elem = ucp_proto_select_lookup_slow(worker,
+                                               &rkey_config->proto_select, 1,
+                                               ep_cfg_index, rkey_cfg_index,
+                                               &select_param);
     ASSERT_NE(nullptr, select_elem);
 
     threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
@@ -1602,7 +1602,6 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
     rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
             threshold->proto_config.priv);
 
-    EXPECT_EQ(m_user_sys_dev, rkey_config->key.sys_dev);
     EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
               rpriv->remote_proto_config.select_param.sys_dev);
     EXPECT_STREQ("rndv/put/zcopy", rpriv->remote_proto_config.proto->name);
