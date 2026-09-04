@@ -1620,7 +1620,8 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  *
  * @return UCS_OK on success or error code in case of failure.
  */
-ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh,
+                                  const uct_rkey_bundle_t *rkey_ob,
                                   uct_device_mem_elem_t *mem_elem,
                                   void **release_handle_p);
 

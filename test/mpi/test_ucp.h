@@ -22,7 +22,7 @@ typedef struct {
 } rkey_t;
 
 
-ucp_t create_ucp(unsigned ep_flags);
+ucp_t create_ucp(uint64_t features, unsigned ep_flags);
 
 
 void destroy_ucp(ucp_t);

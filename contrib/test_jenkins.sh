@@ -951,7 +951,7 @@ run_mpi_tests() {
 				# caches unrelated to that are disabled here so they don't
 				# interfere with the memory-release check.
 				${MPIRUN_COMMON} -np 2 \
-								-x UCX_GDR_COPY_RCACHE=n \
+								-x UCX_TLS=^gdr_copy \
 								-x UCX_RCACHE_ENABLE=n \
 								./test/mpi/test_ucp_rkey_destroy
 			fi

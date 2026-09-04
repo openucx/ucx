@@ -122,6 +122,7 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
 static ucs_status_t
 uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
+                              void *rkey_handle,
                               uct_device_mem_elem_t *mem_elem_p,
                               void **release_handle_p)
 {

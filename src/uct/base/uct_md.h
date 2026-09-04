@@ -127,7 +127,7 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
                                                          ucs_memory_type_t *mem_type_p);
 
 typedef ucs_status_t (*uct_md_mem_elem_pack_func_t)(
-        uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+        uct_md_h md, uct_mem_h memh, uct_rkey_t rkey, void *rkey_handle,
         uct_device_mem_elem_t *mem_elem, void **release_handle_p);
 
 typedef void (*uct_md_mem_elem_release_func_t)(uct_md_h md,
