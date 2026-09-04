@@ -145,8 +145,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am_send(
     inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                     (void*)(ctrl + 1));
     if (!(inl->byte_count & htonl(MLX5_INLINE_SEG))) {
-        ucs_fatal("unsupported am send inline length: %zu",
-                  (inl->byte_count & htonl(MLX5_INLINE_SEG)));
+        ucs_fatal("unsupported am send with non-inline data");
     }
 
     uct_rc_mlx5_op_info_fill_am_zcopy(info, txwq, op, ctrl, inl, wqe_size,
