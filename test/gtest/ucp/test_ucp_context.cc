@@ -520,6 +520,7 @@ protected:
     /* Count how many mlx5 devices exist */
     static unsigned get_mlx5_device_count(const entity &e)
     {
+        unsigned max_idx = 0;
         unsigned count   = 0;
 
         for (const std::string &dev_name :
@@ -528,8 +529,18 @@ protected:
             if (sscanf(dev_name.c_str(), "mlx5_%u:%u", &idx, &port) == 2) {
                 EXPECT_EQ(port, 1)
                         << "Expected port 1 for mlx5 device, found: " << port;
+                max_idx = std::max(max_idx, idx);
                 count++;
             }
+        }
+
+        /*
+        * Range tests assume devices mlx5_0 .. mlx5_<max_idx>. This assumption
+        * can break in virtualized environments with devices that may use any idx.
+        */
+        if ((count > 0) && ((max_idx + 1) != count)) {
+            UCS_TEST_SKIP_R("mlx5 devices are not numbered from 0 to " +
+                        std::to_string(max_idx));
         }
 
         return count;
