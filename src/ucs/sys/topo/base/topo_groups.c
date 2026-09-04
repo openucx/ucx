@@ -24,8 +24,8 @@ static const char *ucs_topo_groups_type_str(ucs_topo_groups_type_t type)
     switch (type) {
     case UCS_TOPO_GROUPS_TYPE_UNKNOWN:
         return "unknown";
-    case UCS_TOPO_GROUPS_TYPE_VERA_RUBIN:
-        return "vera-rubin";
+    case UCS_TOPO_GROUPS_TYPE_CLIQUE:
+        return "clique";
     default:
         return "<invalid>";
     }
