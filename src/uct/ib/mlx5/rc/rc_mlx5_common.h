@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_COMMON_H
 
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
@@ -138,6 +139,12 @@ enum {
     ((UCT_IB_MLX5_MAX_SEND_WQE_SIZE - ((_av_size) + \
      sizeof(struct mlx5_wqe_raddr_seg) + sizeof(struct mlx5_wqe_ctrl_seg))) / \
      sizeof(struct mlx5_wqe_data_seg))
+
+typedef struct {
+    uint8_t      data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
+    uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
+    uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
+} uct_rc_mlx5_op_callback_data_t;
 
 
 #if IBV_HW_TM
@@ -707,6 +714,12 @@ uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
 #endif
     rch->rc_hdr.am_id = id;
 }
+
+ucs_status_t
+uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+                         uct_rc_iface_send_op_t *op,
+                         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+                         uct_rc_mlx5_op_callback_data_t *callback_data);
 
 #if HAVE_DECL_MLX5DV_CREATE_QP
 void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
