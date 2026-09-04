@@ -1358,53 +1358,30 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
 
 /*
  * cuda_ipc can copy memory from a different node only if the allocation is
- * exportable to that node. Force the endpoint and interface to be inter-node
- * and check that the RTR protocol advertises the cuda_ipc memory domain only
- * for buffers which have UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE.
+ * exportable to that node. Force the endpoint to be inter-node and check that
+ * the RTR protocol advertises the cuda_ipc memory domain only for buffers
+ * which have UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE.
  */
 class test_ucp_proto_mock_cuda_ipc_inter_node :
         public test_ucp_proto_mock_cuda_ipc {
 public:
     test_ucp_proto_mock_cuda_ipc_inter_node() :
-        m_ep_config(nullptr), m_cuda_iface_attr(nullptr), m_ep_config_flags(0),
-        m_cuda_iface_flags(0)
+        m_ep_config(nullptr), m_ep_config_flags(0)
     {
     }
 
     virtual void init() override
     {
-        ucp_context_h context;
-        ucp_rsc_index_t rsc_index;
-        ucp_lane_index_t lane;
-
         test_ucp_proto_mock_cuda_ipc::init();
 
         m_ep_config       = ucp_ep_config(sender().ep());
         m_ep_config_flags = m_ep_config->key.flags;
         m_ep_config->key.flags &= ~(UCP_EP_CONFIG_KEY_FLAG_SELF |
                                     UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE);
-
-        ucp_context_h context = sender().ucph();
-        for (ucp_lane_index_t lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
-            rsc_index = m_ep_config->key.lanes[lane].rsc_index;
-            if ((rsc_index != UCP_NULL_RESOURCE) &&
-                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
-                 "cuda_ipc")) {
-                m_cuda_iface_attr = ucp_worker_iface_get_attr(sender().worker(),
-                                                              rsc_index);
-                m_cuda_iface_flags = m_cuda_iface_attr->cap.flags;
-                m_cuda_iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;
-                break;
-            }
-        }
     }
 
     virtual void cleanup() override
     {
-        if (m_cuda_iface_attr != nullptr) {
-            m_cuda_iface_attr->cap.flags = m_cuda_iface_flags;
-        }
-
         if (m_ep_config != nullptr) {
             m_ep_config->key.flags = m_ep_config_flags;
         }
@@ -1413,21 +1390,20 @@ public:
     }
 
 protected:
+    /* Return the memory domain index of the cuda_ipc lane, or
+     * UCP_NULL_RESOURCE if no such lane was selected. */
     ucp_md_index_t cuda_ipc_md_index()
     {
         ucp_context_h context = sender().ucph();
         ucp_lane_index_t lane;
         ucp_rsc_index_t rsc_index;
 
-        for (ucp_lane_index_t lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
-            const ucp_rsc_index_t rsc_index = m_ep_config->key.lanes[lane].rsc_index;
-            if (rsc_index == UCP_NULL_RESOURCE) {
-                continue;
-            }
-
-            auto& rsc = context->tl_rscs[rsc_index];
-            if (std::string(rsc.tl_rsc.tl_name) == "cuda_ipc") {
-                return rsc.md_index;
+        for (lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
+            rsc_index = m_ep_config->key.lanes[lane].rsc_index;
+            if ((rsc_index != UCP_NULL_RESOURCE) &&
+                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
+                 "cuda_ipc")) {
+                return context->tl_rscs[rsc_index].md_index;
             }
         }
 
@@ -1479,9 +1455,7 @@ protected:
 
 private:
     ucp_ep_config_t *m_ep_config;
-    uct_iface_attr_t *m_cuda_iface_attr;
-    unsigned         m_ep_config_flags;
-    uint64_t         m_cuda_iface_flags;
+    unsigned        m_ep_config_flags;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc_inter_node, rtr_md_map,

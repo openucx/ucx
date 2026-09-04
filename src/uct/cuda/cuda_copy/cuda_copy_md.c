@@ -901,9 +901,8 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 int is_async_managed, int is_host_located,
                                 const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
-    int close_dmabuf = 0;
-    int registrable;
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
+    int dmabuf_fd;
 
     if (is_async_managed) {
         return 0;
@@ -919,16 +918,13 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
         local_dmabuf = uct_cuda_copy_md_get_dmabuf(mem_info->base_address,
                                                    mem_info->alloc_length,
                                                    mem_info->sys_dev);
-        dmabuf       = &local_dmabuf;
-        close_dmabuf = 1;
-    }
-
-    registrable = (dmabuf->fd != UCT_DMABUF_FD_INVALID);
-    if (close_dmabuf) {
+        dmabuf_fd    = local_dmabuf.fd;
         ucs_close_fd(&local_dmabuf.fd);
+    } else {
+        dmabuf_fd = dmabuf->fd;
     }
 
-    return registrable;
+    return dmabuf_fd != UCT_DMABUF_FD_INVALID;
 }
 
 static uint8_t
