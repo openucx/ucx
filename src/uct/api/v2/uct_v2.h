@@ -1916,8 +1916,12 @@ typedef struct uct_ep_op_info {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback invoked for each undelivered outstanding operation.
+ *
+ * @return @ref UCS_OK         - The purged operation was handled successfully.
+ *         Otherwise           - The purged operation was handled with error
+ *                               and returned back to the transport.
  */
-typedef void (*uct_ep_outstanding_purge_callback_t)(
+typedef ucs_status_t (*uct_ep_outstanding_purge_callback_t)(
         const uct_ep_op_info_t *op_info, void *arg);
 
 

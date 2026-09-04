@@ -73,9 +73,10 @@ protected:
         return UCS_OK;
     }
 
-    static void purge_cb(const uct_ep_op_info_t*, void *arg)
+    static ucs_status_t purge_cb(const uct_ep_op_info_t*, void *arg)
     {
         *static_cast<bool*>(arg) = true;
+        return UCS_OK;
     }
 
     static void
