@@ -18,6 +18,16 @@
   * Use `ucs_assert*` for internal invariants, not user-input validation.
 
 
+## Comments
+  * Usually one line; use more only for a non-obvious or complex point, or
+    per the `## Doxygen` section below.
+  * Focus on "why" rather than "what"; no PR/issue references, no dev-process
+    narration.
+  * Document once, in the most relevant area.
+  * Explain locking, ownership, tradeoffs, or step-by-step processing when
+    non-obvious.
+
+
 ## Naming convention:
   * Lower case, underscores
   * Names must begin with ucp_/uct_/ucs_/ucm_

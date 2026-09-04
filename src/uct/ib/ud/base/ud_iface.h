@@ -33,6 +33,12 @@ BEGIN_C_DECLS
 #define UCT_UD_MIN_TIMER_TIMER_BACKOFF 1.0
 
 
+/* Must be less than peer_timeout to avoid false positive errors taking into
+ * account timer resolution and not too small to avoid performance degradation
+ */
+#define UCT_UD_SLOW_TIMER_MAX_TICK(_iface)  ((_iface)->config.peer_timeout / 3)
+
+
 /** @file ud_iface.h */
 
 enum {
@@ -196,6 +202,7 @@ struct uct_ud_iface {
     struct {
         ucs_time_t           linger_timeout;
         ucs_time_t           peer_timeout;
+        ucs_time_t           keepalive_interval;
         ucs_time_t           min_poke_time;
         unsigned             tx_qp_len;
         unsigned             rx_qp_len;

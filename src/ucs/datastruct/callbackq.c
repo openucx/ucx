@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -295,9 +295,7 @@ static void ucs_callbackq_spill_elems_purge(ucs_callbackq_t *cbq)
      * always be equal to dst_idx, so nothing will be actually copied/moved.
      */
     dst_idx = 0;
-    for (src_idx = 0; src_idx < ucs_array_length(&priv->spill_elems);
-         ++src_idx) {
-        src_elem = &ucs_array_elem(&priv->spill_elems, src_idx);
+    ucs_array_for_each_index(src_elem, src_idx, &priv->spill_elems) {
         if (src_elem->id != UCS_CALLBACKQ_ID_NULL) {
             ucs_assert(dst_idx <= src_idx);
             if (dst_idx != src_idx) {

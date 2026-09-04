@@ -699,10 +699,11 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     txwq->sw_pi          = 0;
     txwq->prev_sw_pi     = UINT16_MAX;
     txwq->next_wqe_psn   = 0;
+    txwq->hw_ci          = UINT16_MAX;
+    txwq->ft_ci          = UINT16_MAX;
     txwq->path_mtu_mask  = 0;
     txwq->path_mtu_shift = 0;
 #if UCS_ENABLE_ASSERT
-    txwq->hw_ci          = 0xFFFF;
     txwq->flags          = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
@@ -747,10 +748,10 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "bb_max");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->sig_pi,
                             UCS_VFS_TYPE_U16, "sig_pi");
-#if UCS_ENABLE_ASSERT
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->ft_ci,
+                            UCS_VFS_TYPE_U16, "ft_ci");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->hw_ci,
                             UCS_VFS_TYPE_U16, "hw_ci");
-#endif
 }
 
 ucs_status_t

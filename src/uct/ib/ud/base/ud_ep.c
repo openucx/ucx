@@ -22,11 +22,6 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
-/* Must be less then peer_timeout to avoid false positive errors taking into
- * account timer resolution and not too small to avoid performance degradation
- */
-#define UCT_UD_SLOW_TIMER_MAX_TICK(_iface)  ((_iface)->config.peer_timeout / 3)
-
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
 
 static void uct_ud_peer_name(uct_ud_peer_name_t *peer)
@@ -124,6 +119,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
                                         uct_ud_iface_t)->config.max_window;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    ep->tx.send_time   = ucs_get_time();
     uct_ud_ep_reset_max_psn(ep);
     ucs_queue_head_init(&ep->tx.window);
 
@@ -136,6 +132,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
                        UCS_STATS_ARG(ep->super.stats));
+    ep->rx.check_sn  = ucs_frag_list_sn(&ep->rx.ooo_pkts);
 }
 
 static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
@@ -282,7 +279,7 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
     }
 
     if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
-        ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+        uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
         uct_ep_destroy(&ep->super.super);
         goto out;
     }
@@ -330,12 +327,42 @@ static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
 
+    if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+        /* The peer is gone, stop matching the endpoint by new connections */
+        uct_ud_iface_cep_remove_ep(iface, ep);
+    }
+
     ucs_callbackq_add_oneshot(&iface->super.super.worker->super.progress_q, ep,
                               uct_ud_ep_deferred_timeout_handler, ep);
     if (iface->async.event_cb != NULL) {
         /* notify user */
         iface->async.event_cb(iface->async.event_arg, 0);
     }
+}
+
+/* A private endpoint is not owned by the upper layer, so nobody checks whether
+ * its peer is still there. Probe the peer once it becomes silent, to release an
+ * endpoint whose peer is gone. */
+static void uct_ud_ep_check_peer(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+{
+    uct_ud_psn_t check_sn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
+    ucs_time_t idle_time  = ucs_get_time() - ep->tx.send_time;
+
+    if (check_sn != ep->rx.check_sn) {
+        /* The peer is sending, so it does not have to be probed */
+        ep->rx.check_sn = check_sn;
+    } else if (idle_time >= iface->config.keepalive_interval) {
+        /* Ask for an ack, otherwise the probe is acked only after the resend
+         * flow requests it. An alive peer acks the probe, otherwise the
+         * endpoint is released by the peer timeout flow. */
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+        if (uct_ud_ep_check(&ep->super.super, 0, NULL) == UCS_OK) {
+            return;
+        }
+    }
+
+    ucs_wtimer_add(&iface->tx.timer, &ep->timer,
+                   iface->config.keepalive_interval);
 }
 
 static void uct_ud_ep_timer(ucs_wtimer_t *self)
@@ -354,6 +381,8 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
             if (status == UCS_INPROGRESS) {
                 goto timer_backoff;
             }
+        } else if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+            uct_ud_ep_check_peer(iface, ep);
         }
         return;
     }

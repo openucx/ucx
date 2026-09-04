@@ -1916,6 +1916,10 @@ typedef struct uct_ep_op_info {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback invoked for each undelivered outstanding operation.
+ *
+ * @param [in] op_info  Descriptor of the undelivered operation. The descriptor
+ *                      is valid only for the duration of the callback.
+ * @param [in] arg      User-defined argument.
  */
 typedef void (*uct_ep_outstanding_purge_callback_t)(
         const uct_ep_op_info_t *op_info, void *arg);
