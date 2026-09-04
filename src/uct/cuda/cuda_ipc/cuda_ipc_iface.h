@@ -42,7 +42,6 @@ typedef struct {
 } uct_cuda_ipc_iface_config_t;
 
 
-#if CUDA_VERSION >= 13000
 typedef struct {
     pid_t        pid;
     ucs_sys_ns_t pid_ns;
@@ -73,7 +72,6 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
 
     ucs_free(mapping);
 }
-#endif
 
 
 typedef struct {
@@ -84,9 +82,7 @@ typedef struct {
     pid_t                 pid;
     ucs_sys_ns_t          pid_ns;
     CUdevice              cuda_device;
-#if CUDA_VERSION >= 13000
     uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
-#endif
 } uct_cuda_ipc_event_desc_t;
 
 

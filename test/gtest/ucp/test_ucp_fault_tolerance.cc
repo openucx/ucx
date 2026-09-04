@@ -13,6 +13,11 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_worker.inl>
+#include <ucp/proto/proto.h>
+#include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 }
@@ -23,12 +28,21 @@ extern "C" {
 class test_ucp_fault_tolerance : public test_ucp_memheap {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        static constexpr unsigned msg_size_variants[] = {
+            TEST_MSG_SIZE_SMALL, TEST_MSG_SIZE_MEDIUM, TEST_MSG_SIZE_LARGE
+        };
+
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT,
                                op_name(TEST_OP_PUT));
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT | TEST_OP_FLUSH));
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET,
-                               op_name(TEST_OP_GET));
+
+        for (unsigned msg_size_variant : msg_size_variants) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA,
+                                   TEST_OP_GET | msg_size_variant,
+                                   op_name(TEST_OP_GET | msg_size_variant));
+        }
+
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET | TEST_OP_FLUSH,
                                op_name(TEST_OP_GET | TEST_OP_FLUSH));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
@@ -68,8 +82,16 @@ protected:
         TEST_OP_GET              = UCS_BIT(1),
         TEST_OP_AM               = UCS_BIT(2),
         TEST_OP_FLUSH            = UCS_BIT(3),
-        TEST_OP_ALL_LANES_FAILED = UCS_BIT(4)
+        TEST_OP_ALL_LANES_FAILED = UCS_BIT(4),
+        TEST_MSG_SIZE_SMALL      = UCS_BIT(5),
+        TEST_MSG_SIZE_MEDIUM     = UCS_BIT(6),
+        TEST_MSG_SIZE_LARGE      = UCS_BIT(7)
     };
+
+    /* Must stay below cap.get.min_zcopy, so GET cannot use zcopy */
+    static constexpr size_t SMALL_MSG_SIZE  = 1;
+    static constexpr size_t MEDIUM_MSG_SIZE = UCS_KBYTE;
+    static constexpr size_t LARGE_MSG_SIZE  = 100 * UCS_MBYTE;
 
     void init() override {
         if (get_variant_value() & TEST_OP_ALL_LANES_FAILED) {
@@ -224,7 +246,112 @@ protected:
 
         std::vector<ucp_lane_index_t> lanes(tmp_lanes.begin(), tmp_lanes.end());
         shuffle_lanes(lanes, lane_type_str);
+        check_proto_coverage(op_mask);
         return lanes;
+    }
+
+    void dump_proto_select_elem(ucp_worker_cfg_index_t rkey_cfg_index,
+                                const ucp_proto_select_param_t *select_param,
+                                const ucp_proto_select_elem_t *select_elem) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+        char *line;
+
+        ucp_proto_select_elem_info(sender().worker(),
+                                   sender().ep(0, INJECTED_EP_INDEX)->cfg_index,
+                                   rkey_cfg_index, select_param, select_elem, 1,
+                                   0, &strb);
+        ucs_string_buffer_for_each_token(line, &strb, "\n") {
+            UCS_TEST_MESSAGE << line;
+        }
+        ucs_string_buffer_cleanup(&strb);
+    }
+
+    /**
+     * Walk the selected message size ranges of 'op_id' and verify that every
+     * range is served by a real protocol. A range left to the 'reconfig' stub
+     * protocol can never be completed on this endpoint configuration.
+     */
+    void check_op_proto_coverage(ucp_operation_id_t op_id,
+                                 ucp_proto_select_t *proto_select,
+                                 ucp_worker_cfg_index_t rkey_cfg_index) {
+        ucp_worker_h worker = sender().worker();
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        ucp_proto_query_attr_t query_attr;
+        ucp_memory_info_t mem_info;
+        size_t range_start;
+        bool gap_found;
+
+        ucp_memory_info_set_host(&mem_info);
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+        select_elem = ucp_proto_select_lookup_slow(
+                worker, proto_select, 0,
+                sender().ep(0, INJECTED_EP_INDEX)->cfg_index, rkey_cfg_index,
+                &select_param);
+        if (select_elem == nullptr) {
+            ADD_FAILURE() << ucp_operation_names[op_id]
+                          << ": protocol selection is not initialized";
+            return;
+        }
+
+        gap_found   = false;
+        range_start = 0;
+        do {
+            if (!ucp_proto_select_elem_query(worker, select_elem, range_start,
+                                             &query_attr)) {
+                ADD_FAILURE() << ucp_operation_names[op_id]
+                              << ": no protocol for message sizes "
+                              << range_start << ".."
+                              << query_attr.max_msg_length;
+                gap_found = true;
+            }
+
+            range_start = query_attr.max_msg_length + 1;
+        } while (query_attr.max_msg_length != SIZE_MAX);
+
+        if (gap_found) {
+            dump_proto_select_elem(rkey_cfg_index, &select_param, select_elem);
+        }
+    }
+
+    /**
+     * Verify that the operations exercised by the current variant have no
+     * message size range without a protocol.
+     */
+    void check_proto_coverage(unsigned op_mask) {
+        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_proto_select_t *proto_select;
+
+        if (op_mask & TEST_OP_AM) {
+            check_op_proto_coverage(UCP_OP_ID_AM_SEND,
+                                    &ucp_ep_config(ep)->proto_select,
+                                    UCP_WORKER_CFG_INDEX_NULL);
+        }
+
+        if (!(op_mask & (TEST_OP_PUT | TEST_OP_GET))) {
+            return;
+        }
+
+        /* RMA protocols are selected per remote key configuration */
+        mapped_buffer rbuf(1, receiver());
+        ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+
+        proto_select = ucp_proto_select_get(sender().worker(), ep->cfg_index,
+                                            rkey->cfg_index, &rkey_cfg_index);
+        ASSERT_NE(nullptr, proto_select) << "no rkey protocol selection";
+
+        if (op_mask & TEST_OP_PUT) {
+            check_op_proto_coverage(UCP_OP_ID_PUT, proto_select,
+                                    rkey_cfg_index);
+        }
+
+        if (op_mask & TEST_OP_GET) {
+            check_op_proto_coverage(UCP_OP_ID_GET, proto_select,
+                                    rkey_cfg_index);
+        }
     }
 
     /**
@@ -513,8 +640,19 @@ protected:
         test_recovery(op_mask);
     }
 protected:
-    static size_t rma_msg_size() {
-        return ucs::limit_buffer_size((100 * UCS_MBYTE) / ucs::test_time_multiplier());
+    size_t rma_msg_size() const {
+        const unsigned op_mask = get_variant_value();
+
+        if (op_mask & TEST_MSG_SIZE_SMALL) {
+            return SMALL_MSG_SIZE;
+        }
+
+        if (op_mask & TEST_MSG_SIZE_MEDIUM) {
+            return ucs::limit_buffer_size(MEDIUM_MSG_SIZE);
+        }
+
+        return ucs::limit_buffer_size(LARGE_MSG_SIZE /
+                                      ucs::test_time_multiplier());
     }
 
     static size_t am_msg_size() {
@@ -543,6 +681,18 @@ protected:
 
         if (op_mask & TEST_OP_ALL_LANES_FAILED) {
             name += "ALL_LANES_FAILED|";
+        }
+
+        if (op_mask & TEST_MSG_SIZE_SMALL) {
+            name += "MSG_SMALL|";
+        }
+
+        if (op_mask & TEST_MSG_SIZE_MEDIUM) {
+            name += "MSG_MEDIUM|";
+        }
+
+        if (op_mask & TEST_MSG_SIZE_LARGE) {
+            name += "MSG_LARGE|";
         }
 
         if (!name.empty()) {

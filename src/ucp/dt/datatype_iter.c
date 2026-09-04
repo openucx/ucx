@@ -295,13 +295,12 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     /* For Coverity */
     ucs_assert(remote != NULL);
 
-    dt_iter->dt_class              = UCP_DATATYPE_SGL;
-    dt_iter->length                = count;
-    dt_iter->offset                = 0;
-    dt_iter->type.sgl.buffers      = local->buffers;
-    dt_iter->type.sgl.lengths      = local->lengths;
-    dt_iter->type.sgl.remote_addrs = remote->remote_addrs;
-    dt_iter->type.sgl.rkeys        = remote->rkeys;
+    dt_iter->dt_class             = UCP_DATATYPE_SGL;
+    dt_iter->length               = count;
+    dt_iter->offset               = 0;
+    dt_iter->type.sgl.buffers     = local->buffers;
+    dt_iter->type.sgl.lengths     = local->lengths;
+    dt_iter->type.sgl.frag_offset = 0;
 
     if (ucs_unlikely(count == 0)) {
         dt_iter->type.sgl.memhs = NULL;
@@ -332,7 +331,13 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
         }
     }
 
-    if (ENABLE_PARAMS_CHECK && (count > 1)) {
+    if (ENABLE_PARAMS_CHECK && (count > 0)) {
+        status = ucp_dt_sgl_check_matching_lengths(local->lengths,
+                                                   remote->lengths, count);
+        if (status != UCS_OK) {
+            return status;
+        }
+
         status = ucp_dt_sgl_check_same_rkey_config(remote->rkeys, count);
         if (status != UCS_OK) {
             return status;
