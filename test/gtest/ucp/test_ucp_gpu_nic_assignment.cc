@@ -145,7 +145,7 @@ protected:
         ASSERT_UCS_OK(status);
         m_assignment_initialized = true;
 
-        /* Unkown device lookup */
+        /* Unknown device lookup */
         EXPECT_EQ(nullptr,
                   ucp_gpu_nic_assignment_lookup(&m_assignment,
                                                 UCS_SYS_DEVICE_ID_UNKNOWN));
