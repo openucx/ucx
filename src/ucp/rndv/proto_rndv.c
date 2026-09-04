@@ -21,7 +21,7 @@ ucp_proto_rndv_ctrl_skip_inter_node_md(
         const ucp_proto_common_init_params_t *params,
         const uct_iface_attr_t *iface_attr, const uct_md_attr_v2_t *md_attr)
 {
-    return (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+    return (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
            (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) &&
            ucp_ep_config_is_inter_node(params->super.ep_config_key) &&
            !(params->reg_mem_info.flags &
