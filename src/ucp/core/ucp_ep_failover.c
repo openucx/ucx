@@ -189,12 +189,6 @@ ucp_ep_failover_add_lanes(ucp_ep_h ep, ucp_lane_map_t lane_map,
 
 void ucp_ep_failover_cleanup(ucp_ep_h ep)
 {
-    const ucp_ep_recovery_arg_t *rec;
-
-    ucs_assert(ep->ext != NULL);
-    rec = ucp_ep_get_recovery_arg(ep);
-    ucs_assert((rec == NULL) || (rec->failover.lane_map == 0));
-
     ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
                                  ucp_ep_failover_progress_remove_filter, ep);
 }
