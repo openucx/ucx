@@ -1439,6 +1439,9 @@ run_configure_tests() {
 # Run all tests
 #
 run_tests() {
+
+	ibv_devinfo || true
+
 	export UCX_PROTO_REQUEST_RESET=y
 
 	# all are running mpi tests
@@ -1449,6 +1452,8 @@ run_tests() {
 
 	# build for devel tests and gtest
 	build devel --enable-gtest --without-valgrind
+
+	sleep 3600
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
