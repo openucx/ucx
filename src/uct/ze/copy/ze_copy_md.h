@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -21,6 +21,7 @@ typedef struct uct_ze_copy_md {
     uct_md_t            super; /**< Domain info */
     ze_context_handle_t ze_context;
     ze_device_handle_t  ze_device;
+    int                 enable_dmabuf; /**< Expose memory as DMA-BUF */
 } uct_ze_copy_md_t;
 
 
@@ -28,8 +29,9 @@ typedef struct uct_ze_copy_md {
  * ze copy domain configuration.
  */
 typedef struct uct_ze_copy_md_config {
-    uct_md_config_t super;
-    int             device_ordinal;
+    uct_md_config_t          super;
+    int                      device_ordinal;
+    ucs_ternary_auto_value_t enable_dmabuf;
 } uct_ze_copy_md_config_t;
 
 
