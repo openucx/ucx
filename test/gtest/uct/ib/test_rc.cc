@@ -9,6 +9,8 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
+#include <functional>
+
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
@@ -1532,6 +1534,204 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
+
+class test_rc_purge_outstanding : public test_rc {
+public:
+    void init() override
+    {
+        uct_test::init();
+
+        m_e1 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e1);
+
+        check_skip_test();
+
+        m_e2 = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_e2);
+        connect();
+        m_e1->connect(1, *m_e2, 1);
+    }
+
+protected:
+    enum {
+        NUM_MESSAGES = 2000
+    };
+
+    struct purge_ctx {
+        test_rc_purge_outstanding *self;
+        uct_ep_h                  ep;
+        uct_completion_t          comp;
+        uint32_t                  num_replayed;
+    };
+
+    using send_func_t =
+            std::function<ucs_status_t(uct_ep_h, uct_completion_t*)>;
+
+    bool check_caps_v2(uint64_t required_flags)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+        EXPECT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+
+        return ucs_test_all_flags(attr.cap.flags, required_flags);
+    }
+
+    void post_op(uct_ep_h ep, uct_completion_t *comp,
+                 const send_func_t &send_func)
+    {
+        ucs_status_t status;
+
+        do {
+            ++comp->count;
+            status = send_func(ep, comp);
+            if (status == UCS_INPROGRESS) {
+                return;
+            }
+
+            --comp->count;
+            if (status == UCS_OK) {
+                return;
+            }
+
+            if (status != UCS_ERR_NO_RESOURCE) {
+                UCS_TEST_ABORT(ucs_status_string(status));
+            }
+
+            short_progress_loop();
+        } while (status == UCS_ERR_NO_RESOURCE);
+    }
+
+    void send_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+
+        switch (info->operation) {
+        default:
+            UCS_TEST_ABORT("unsupported operation " << info->operation);
+        }
+
+        ++ctx->num_replayed;
+    }
+
+    static ucs_status_t err_handler(void *arg, uct_ep_h, ucs_status_t)
+    {
+        test_rc_purge_outstanding *self =
+                static_cast<test_rc_purge_outstanding*>(arg);
+
+        ++self->m_err_count;
+        return UCS_INPROGRESS;
+    }
+
+    static void purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
+
+        ctx->self->send_op(info, ctx);
+    }
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
+    static void query_tx_token(uct_ep_h ep,
+                               uct_rc_mlx5_tx_token_t *tx_token)
+    {
+        uct_ep_attr_t attr = {};
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+        attr.tx_token   = tx_token;
+        ASSERT_UCS_OK(uct_ep_query(ep, &attr));
+    }
+
+    static void query_rx_token(uct_iface_h iface,
+                               const uct_rc_mlx5_tx_token_t *tx_token,
+                               uct_rc_mlx5_rx_token_t *rx_token)
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                          UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+        attr.tx_token   = tx_token;
+        attr.rx_token   = rx_token;
+        ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
+    }
+
+    static void ensure_undelivered(uct_ep_h ep,
+                                   uct_rc_mlx5_rx_token_t *rx_token)
+    {
+        uct_rc_mlx5_base_ep_t *rc_ep =
+                ucs_derived_of(ep, uct_rc_mlx5_base_ep_t);
+        uint32_t receiver_next_psn = be32toh(*rx_token) & UCS_MASK(24);
+
+        if (receiver_next_psn ==
+            uct_ib_mlx5_txwq_get_next_wqe_psn(&rc_ep->tx.wq)) {
+            *rx_token = htobe32((receiver_next_psn - 1) & UCS_MASK(24));
+        }
+    }
+
+    void purge_outstanding(purge_ctx *ctx, uct_completion_t *flush_comp)
+    {
+        uct_ep_outstanding_purge_params_t purge_params = {};
+        uct_ep_invalidate_params_t invalidate_params   = {};
+        uct_rc_mlx5_tx_token_t tx_token                = {};
+        uct_rc_mlx5_rx_token_t rx_token                = {};
+
+        ASSERT_UCS_OK(uct_ep_invalidate(m_e1->ep(0), &invalidate_params));
+        EXPECT_EQ(UCS_INPROGRESS,
+                  uct_ep_flush(m_e1->ep(0), 0, flush_comp));
+
+        wait_for_flag(&m_err_count);
+        ASSERT_EQ(1u, m_err_count);
+
+        query_tx_token(m_e1->ep(0), &tx_token);
+        query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+        ensure_undelivered(m_e1->ep(0), &rx_token);
+
+        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                                  UCT_EP_OUTSTANDING_FIELD_CB |
+                                  UCT_EP_OUTSTANDING_FIELD_ARG;
+        purge_params.rx_token = &rx_token;
+        purge_params.cb       = purge_cb;
+        purge_params.arg      = ctx;
+        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_e1->ep(0), &purge_params));
+    }
+
+    void test_purge_outstanding(const send_func_t &send_func)
+    {
+        uct_rc_mlx5_base_ep_t *ep =
+                ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        purge_ctx ctx = {this,
+                         m_e1->ep(1),
+                         {completion_cb, 0, UCS_OK},
+                         0};
+        uct_completion_t flush_comp = {completion_cb, 1, UCS_OK};
+
+        if (!check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) ||
+            !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+            UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
+        }
+
+        for (unsigned i = 0; i < NUM_MESSAGES; ++i) {
+            post_op(m_e1->ep(0), &ctx.comp, send_func);
+        }
+
+        purge_outstanding(&ctx, &flush_comp);
+
+        EXPECT_GT(ctx.num_replayed, 0u);
+        EXPECT_LE(ctx.num_replayed, static_cast<uint32_t>(NUM_MESSAGES));
+
+        flush();
+
+        EXPECT_EQ(0, ctx.comp.count);
+        EXPECT_EQ(0, flush_comp.count);
+        EXPECT_EQ(UCS_ERR_CANCELED, flush_comp.status);
+        EXPECT_EQ(ep->tx.wq.bb_max,
+                  uct_rc_txqp_available(&ep->super.txqp));
+    }
+
+    unsigned m_err_count = 0;
+};
 
 class test_rc_srq : public test_rc {
 public:
