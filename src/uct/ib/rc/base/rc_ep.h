@@ -90,34 +90,20 @@ enum {
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
     uct_rc_ep_atomic_handler_##_num_bits##_be##_is_be
 
-#define UCT_RC_EP_MUST_BLOCK_SEND(_ep) \
-    (!(_ep)->in_pending && !ucs_arbiter_group_is_empty(&(_ep)->arb_group))
-
-#define UCT_RC_CHECK_PENDING_RET(_ep, _ret) \
-    if (ucs_unlikely(UCT_RC_EP_MUST_BLOCK_SEND(_ep))) { \
-        UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
-        return _ret; \
-    }
-
-#define UCT_RC_CHECK_PENDING(_ep) \
-    UCT_RC_CHECK_PENDING_RET(_ep, UCS_ERR_NO_RESOURCE)
-
 /*
  * Check for send resources
  */
 #define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
-    UCT_RC_CHECK_PENDING_RET(_ep, _ret) \
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
-        (signed)(_iface)->config.tx_moderation)) { \
+                     (signed)ucs_max((_iface)->config.tx_moderation, \
+                                     (_ep)->cq_reserve))) { \
         UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, 0); \
         (_ep)->txqp.unsignaled = RC_UNSIGNALED_INF; \
     }
 
 #define UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, _value) \
-    if ((_iface)->tx.cq_available <= (signed)(_value)) { \
-        (_ep)->cq_reserve = ucs_max((_ep)->cq_reserve, \
-                                    (uint16_t)(_value)); \
+    if (uct_rc_ep_reserve_cqe(_iface, _ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -127,9 +113,7 @@ enum {
     UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
 
 #define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (uct_rc_txqp_available(&(_ep)->txqp) <= (_value)) { \
-        (_ep)->txqp_reserve = ucs_max((_ep)->txqp_reserve, \
-                                      (uint16_t)(_value)); \
+    if (uct_rc_ep_reserve_txqp(_ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -214,7 +198,8 @@ enum {
 
 #define UCT_RC_CHECK_RES_AND_FC(_iface, _ep, _am_id) \
     UCT_RC_CHECK_RES(_iface, _ep) \
-    UCT_RC_CHECK_FC(_iface, _ep, _am_id)
+    UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
+    uct_rc_iface_check_pending(_iface, &(_ep)->arb_group);
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
@@ -245,7 +230,6 @@ struct uct_rc_ep {
     uint16_t            cq_reserve;
     uint8_t             path_index;
     uint8_t             flags;
-    uint8_t             in_pending;
 };
 
 
@@ -371,6 +355,42 @@ static UCS_F_ALWAYS_INLINE void uct_rc_ep_reset_reserve(uct_rc_ep_t *ep)
 {
     ep->txqp_reserve = 0;
     ep->cq_reserve   = 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_schedule_pending(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+{
+    if (ucs_arbiter_group_is_empty(&ep->arb_group)) {
+        uct_rc_ep_reset_reserve(ep);
+    } else {
+        ucs_arbiter_group_schedule_nonempty(&iface->tx.arbiter, &ep->arb_group);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
+{
+    uint16_t reserve = ucs_max(ep->txqp_reserve, value);
+
+    if (uct_rc_txqp_available(&ep->txqp) > reserve) {
+        return 0;
+    }
+
+    ep->txqp_reserve = reserve;
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_reserve_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep, uint16_t value)
+{
+    uint16_t reserve = ucs_max(ep->cq_reserve, value);
+
+    if (iface->tx.cq_available > (signed)reserve) {
+        return 0;
+    }
+
+    ep->cq_reserve = reserve;
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)

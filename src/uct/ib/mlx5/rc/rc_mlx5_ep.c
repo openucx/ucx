@@ -275,7 +275,6 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                          "put_sgl_zcopy");
     }
 
-    UCT_RC_CHECK_PENDING(&ep->super);
     UCT_RC_CHECK_CQE_VALUE_RET(&iface->super, &ep->super,
                                UCS_ERR_NO_RESOURCE, count - 1);
 

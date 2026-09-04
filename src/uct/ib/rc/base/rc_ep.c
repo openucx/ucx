@@ -149,7 +149,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
 
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->flags      = 0;
-    self->in_pending = 0;
     uct_rc_ep_reset_reserve(self);
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
@@ -316,8 +315,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
-    if (!UCT_RC_EP_MUST_BLOCK_SEND(ep) &&
-        uct_rc_ep_have_tx_cqe_avail(ep) &&
+    if (uct_rc_ep_have_tx_cqe_avail(ep) &&
         uct_rc_ep_has_tx_resources(ep) &&
         uct_rc_iface_has_tx_resources(iface)) {
         return UCS_ERR_BUSY;
@@ -346,11 +344,8 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     uct_rc_iface_t *iface  = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     ucs_status_t status;
 
-    ep->in_pending = 1;
-    status         = uct_rc_iface_invoke_pending_cb(iface, req);
-    ep->in_pending = 0;
+    status = uct_rc_iface_invoke_pending_cb(iface, req);
     if (status == UCS_OK) {
-        uct_rc_ep_reset_reserve(ep);
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
