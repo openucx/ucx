@@ -1384,8 +1384,8 @@ public:
         m_ep_config->key.flags &= ~(UCP_EP_CONFIG_KEY_FLAG_SELF |
                                     UCP_EP_CONFIG_KEY_FLAG_INTRA_NODE);
 
-        context = sender().ucph();
-        for (lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
+        ucp_context_h context = sender().ucph();
+        for (ucp_lane_index_t lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
             rsc_index = m_ep_config->key.lanes[lane].rsc_index;
             if ((rsc_index != UCP_NULL_RESOURCE) &&
                 (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
@@ -1419,8 +1419,8 @@ protected:
         ucp_lane_index_t lane;
         ucp_rsc_index_t rsc_index;
 
-        for (lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
-            rsc_index = m_ep_config->key.lanes[lane].rsc_index;
+        for (ucp_lane_index_t lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
+            const ucp_rsc_index_t rsc_index = m_ep_config->key.lanes[lane].rsc_index;
             if (rsc_index == UCP_NULL_RESOURCE) {
                 continue;
             }

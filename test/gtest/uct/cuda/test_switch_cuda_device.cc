@@ -470,7 +470,7 @@ UCS_TEST_P(test_mem_alloc_device, legacy_cuda_no_memtype_copy_inter_node)
 {
     constexpr size_t size = 4096;
     uct_md_mem_attr_v2_t mem_attr = {};
-    CUdeviceptr dptr              = 0;
+    CUdeviceptr dptr;
 
     ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&dptr, size));
 
