@@ -166,13 +166,14 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
+    memset(info, 0, sizeof(*info));
+
     switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_RDMA_READ:
         return uct_rc_mlx5_op_info_fill_get(info, txwq, op, ctrl, wqe_size,
                                             callback_data);
     default:
         ucs_fatal("unsupported op %d", uct_ib_mlx5_wqe_opcode(ctrl));
-        return UCS_ERR_UNSUPPORTED;
     }
 }
 
