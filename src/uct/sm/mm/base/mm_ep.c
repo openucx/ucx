@@ -438,9 +438,9 @@ ucs_status_t uct_mm_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    /* check if resources became available */
-    if (uct_mm_ep_has_tx_resources(ep)) {
-        ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
+    /* BUSY only when flush reports completion, otherwise its caller would spin */
+    if (uct_mm_ep_has_tx_resources(ep) &&
+        ucs_arbiter_group_is_empty(&ep->arb_group)) {
         return UCS_ERR_BUSY;
     }
 
@@ -539,15 +539,9 @@ ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    if (!uct_mm_ep_has_tx_resources(ep)) {
-        if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
-            return UCS_ERR_NO_RESOURCE;
-        } else {
-            uct_mm_ep_update_cached_tail(ep);
-            if (!uct_mm_ep_has_tx_resources(ep)) {
-                return UCS_ERR_NO_RESOURCE;
-            }
-        }
+    /* Must not report NO_RESOURCE where uct_mm_ep_pending_add() reports BUSY */
+    if (ucs_arbiter_group_is_scheduled(&ep->arb_group)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     ucs_memory_cpu_store_fence();

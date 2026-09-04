@@ -7,11 +7,14 @@
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/sm/mm/base/mm_md.h>
+#include <uct/sm/mm/base/mm_ep.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/sys.h>
 }
 #include "uct_p2p_test.h"
 #include <common/test.h>
 #include "uct_test.h"
+#include <sys/mman.h>
 
 
 class test_uct_mm : public uct_test {
@@ -268,6 +271,195 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
 
     status = uct_md_mem_dereg(m_e1->md(), memh);
     ASSERT_UCS_OK(status);
+}
+
+static ucs_status_t mm_test_am_noop(void *arg, void *data, size_t length,
+                                    unsigned flags)
+{
+    return UCS_OK;
+}
+
+/* mprotect the page containing ep's peer fifo_ctl, to assert the tested
+ * code path never dereferences it. Caller must unprotect the returned page
+ * before the ep is destroyed. */
+static void *mm_test_protect_fifo_ctl(uct_mm_ep_t *ep)
+{
+    size_t pgsz = ucs_get_page_size();
+    void *page  = (void *)((uintptr_t)ep->fifo_ctl & ~(pgsz - 1));
+
+    EXPECT_EQ(0, mprotect(page, pgsz, PROT_NONE));
+    return page;
+}
+
+static void mm_test_unprotect_fifo_ctl(void *page)
+{
+    EXPECT_EQ(0, mprotect(page, ucs_get_page_size(), PROT_READ | PROT_WRITE));
+}
+
+/* Send AM messages on ep until the remote FIFO (associated with
+ * peer_iface) has no room left. */
+static void mm_test_saturate_fifo(uct_ep_h ep, uct_iface_h peer_iface)
+{
+    uint64_t send_data = 0xdeadbeef;
+    ucs_status_t status;
+
+    uct_iface_set_am_handler(peer_iface, 0, mm_test_am_noop, NULL, 0);
+    do {
+        status = uct_ep_am_short(ep, 0, 0xbeef, &send_data, sizeof(send_data));
+    } while (status == UCS_OK);
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    uint64_t send_data = 0xdeadbeef;
+    ucs_status_t status;
+
+    do {
+        status = uct_ep_am_short(m_e1->ep(0), 0, 0xbeef, &send_data,
+                                 sizeof(send_data));
+        if (status == UCS_ERR_NO_RESOURCE) {
+            progress();
+        }
+    } while (status == UCS_ERR_NO_RESOURCE);
+    ASSERT_UCS_OK(status);
+
+    uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+    void *page      = mm_test_protect_fifo_ctl(ep);
+
+    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+    mm_test_unprotect_fifo_ctl(page);
+    EXPECT_EQ(UCS_OK, status);
+}
+
+static ucs_status_t mm_test_pending_cb(uct_pending_req_t *self)
+{
+    return UCS_OK;
+}
+
+static void mm_test_purge_cb(uct_pending_req_t *self, void *arg)
+{
+    ++(*(unsigned *)arg);
+}
+
+typedef struct {
+    uct_pending_req_t req;
+    uct_ep_h          ep;
+    int               done;
+} mm_flush_pending_ctx_t;
+
+static ucs_status_t mm_test_flush_pending_cb(uct_pending_req_t *self)
+{
+    mm_flush_pending_ctx_t *ctx = ucs_container_of(self, mm_flush_pending_ctx_t,
+                                                   req);
+    ucs_status_t status         = uct_ep_flush(ctx->ep, 0, NULL);
+
+    if (status == UCS_OK) {
+        ctx->done = 1;
+        return UCS_OK;
+    }
+    return status;
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access_pending,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    ucs_status_t status;
+    uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+
+    mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
+    ASSERT_FALSE(ucs_arbiter_group_is_empty(&ep->arb_group));
+
+    void *page = mm_test_protect_fifo_ctl(ep);
+
+    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+
+    mm_test_unprotect_fifo_ctl(page);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+
+    while (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
+        progress();
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    ucs_status_t status;
+    uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+    uct_pending_req_t preq;
+    unsigned purged = 0;
+
+    mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
+
+    preq.func = mm_test_pending_cb;
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &preq, 0));
+
+    void *page = mm_test_protect_fifo_ctl(ep);
+
+    uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
+    status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL);
+
+    mm_test_unprotect_fifo_ctl(page);
+    EXPECT_EQ(UCS_OK, status);
+    EXPECT_EQ(1u, purged);
+    EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_dispatch_completes,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+
+    mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
+    ASSERT_TRUE(ucs_arbiter_group_is_scheduled(&ep->arb_group));
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_flush(m_e1->ep(0), 0, NULL));
+
+    mm_flush_pending_ctx_t ctx;
+    ctx.req.func = mm_test_flush_pending_cb;
+    ctx.ep       = m_e1->ep(0);
+    ctx.done     = 0;
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &ctx.req, 0));
+
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(DEFAULT_TIMEOUT_SEC);
+    while (!ctx.done && (ucs_get_time() < deadline)) {
+        progress();
+    }
+    EXPECT_TRUE(ctx.done);
+    EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
+
+    /* Unconditional, not just a fallback: if the deadline above was hit,
+     * ctx.req is still enqueued on the arbiter and points into this stack
+     * frame, so it must be purged here while ctx is still alive. */
+    unsigned purged = 0;
+    uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
+}
+
+static ucs_status_t mm_test_pending_no_res_cb(uct_pending_req_t *self)
+{
+    return UCS_ERR_NO_RESOURCE;
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_add_consistency,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
+    uct_pending_req_t preq, extra;
+    unsigned purged = 0;
+
+    mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
+
+    preq.func = mm_test_pending_no_res_cb;
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &preq, 0));
+
+    /* free the remote FIFO, then dispatch once so the cached tail is refreshed
+     * while the request stays queued and keeps the group scheduled */
+    while (m_e2->progress()) {
+    }
+    m_e1->progress();
+
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_flush(m_e1->ep(0), 0, NULL));
+
+    extra.func = mm_test_pending_cb;
+    EXPECT_NE(UCS_ERR_BUSY, uct_ep_pending_add(m_e1->ep(0), &extra, 0));
+
+    uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
 }
 
 UCT_INSTANTIATE_MM_TEST_CASE(test_uct_mm)
