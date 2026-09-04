@@ -124,7 +124,12 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY = UCS_BIT(2), /**< When tried to arm the interface
+                                                               for activation events, the interface
+                                                               is already busy, so need to keep
+                                                               checking events for it in the
+                                                               main progress loop. */
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(3)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
 };
@@ -325,6 +330,7 @@ typedef struct ucp_worker {
     int                              eventfd;             /* Event fd to support signal() calls */
     unsigned                         uct_events;          /* UCT arm events */
     ucs_list_link_t                  arm_ifaces;          /* List of interfaces to arm */
+    int                              arm_block_count;     /* If >0, ucp_worker_arm() should return UCS_ERR_BUSY */
 
     void                             *user_data;          /* User-defined data */
     ucs_strided_alloc_t              ep_alloc;            /* Endpoint allocator */
@@ -441,7 +447,8 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_signal_internal(ucp_worker_h worker);
 
-void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags,
+                               const char *reason);
 
 int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface);
 

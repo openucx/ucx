@@ -1444,7 +1444,7 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
 
-    ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
+    ucs_debug("activate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     if (ep_config->ep_count++ == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
@@ -1464,7 +1464,7 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
     }
 
     ep_config = ucp_worker_ep_config(worker, cfg_index);
-    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
+    ucs_debug("deactivate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
                 cfg_index);
@@ -1481,7 +1481,7 @@ ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t old_cfg_index,
                                        ucp_worker_cfg_index_t new_cfg_index)
 {
-    ucs_trace("worker %p: reactivating interfaces deactivate cfg_index %u "
+    ucs_debug("worker %p: reactivating interfaces deactivate cfg_index %u "
               "activate cfg_index %u", worker, old_cfg_index, new_cfg_index);
 
     if (old_cfg_index == new_cfg_index) {
@@ -3767,9 +3767,12 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     &config->tag.rndv.am_thresh);
 
             /* Max Eager short has to be set after Zcopy and RNDV thresholds */
-            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
-                                             config->tag.eager.max_short,
-                                             context->num_mem_type_detect_mds);
+            if (!context->config.ext.proto_enable) {
+                ucp_ep_config_set_memtype_thresh(
+                        &config->tag.offload.max_eager_short,
+                        config->tag.eager.max_short,
+                        context->num_mem_type_detect_mds);
+            }
         }
     }
 
@@ -3825,7 +3828,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     iface_attr->cap.am.max_short, sizeof(ucp_am_hdr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+            if (!context->config.ext.proto_enable &&
+                (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV)) {
                 ucp_ep_config_set_memtype_thresh(
                         &config->am_u.max_eager_short, am_max_eager_short,
                         context->num_mem_type_detect_mds);
@@ -3850,9 +3854,12 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 config->tag.rndv.rma_thresh = config->rndv.rma_thresh;
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
-                ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
-                                                 config->tag.eager.max_short,
-                                                 context->num_mem_type_detect_mds);
+                if (!context->config.ext.proto_enable) {
+                    ucp_ep_config_set_memtype_thresh(
+                            &config->tag.max_eager_short,
+                            config->tag.eager.max_short,
+                            context->num_mem_type_detect_mds);
+                }
             }
 
             /* Calculate max short threshold for UCP AM short reply protocol */
@@ -3862,7 +3869,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+            if (!context->config.ext.proto_enable &&
+                (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV)) {
                 ucp_ep_config_set_memtype_thresh(
                         &config->am_u.max_reply_eager_short, am_max_eager_short,
                         context->num_mem_type_detect_mds);
@@ -4740,8 +4748,8 @@ ucp_ep_select_short_init(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
     max_eager_short->memtype_on  = proto_short.max_length_host_mem;
 }
 
-static void ucp_ep_config_proto_init(ucp_worker_h worker,
-                                     ucp_worker_cfg_index_t cfg_index)
+void ucp_ep_config_proto_short_lazy_init(ucp_worker_h worker,
+                                         ucp_worker_cfg_index_t cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
     ucp_ep_config_key_t *key   = &ep_config->key;
@@ -4749,13 +4757,11 @@ static void ucp_ep_config_proto_init(ucp_worker_h worker,
     ucp_lane_index_t tag_exp_lane;
     unsigned tag_proto_flags;
 
-    /* Do protocol init once per EP config and only for protov2 */
-    if ((!worker->context->config.ext.proto_enable) ||
-        (ep_config->proto_init_flags & UCP_EP_PROTO_INITIALIZED)) {
+    if (ep_config->proto_init_flags & UCP_EP_PROTO_SHORT_INITIALIZED) {
         return;
     }
 
-    ep_config->proto_init_flags |= UCP_EP_PROTO_INITIALIZED;
+    ep_config->proto_init_flags |= UCP_EP_PROTO_SHORT_INITIALIZED;
 
     if (ucp_ep_config_key_has_tag_lane(key)) {
         tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
@@ -4793,7 +4799,6 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
     ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
-    ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
 unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)

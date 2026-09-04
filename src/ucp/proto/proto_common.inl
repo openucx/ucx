@@ -349,7 +349,7 @@ ucp_proto_request_send_op_rma(ucp_ep_h ep, ucp_rkey_h rkey, ucp_request_t *req,
 
     rkey_config  = ucp_rkey_config(worker, rkey);
     proto_select = &rkey_config->proto_select;
-    
+
     if (ucs_unlikely((proto_select->worker_epoch != worker->epoch) ||
                      (rkey_config->key.ep_cfg_index != ep->cfg_index))) {
         status = ucp_ep_update_rkey_config(ep, rkey);
