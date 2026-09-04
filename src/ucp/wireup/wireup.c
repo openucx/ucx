@@ -1976,6 +1976,7 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                             unsigned *addr_indices, ucp_ep_config_key_t *key,
                             ucp_rsc_index_t *dst_md_storage)
 {
+    unsigned select_ep_init_flags;
     ucs_status_t status;
 
     ucp_ep_config_key_reset(key);
@@ -1984,7 +1985,13 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     key->dst_version  = remote_address->dst_version;
     key->dst_md_cmpts = dst_md_storage;
 
-    status = ucp_wireup_select_lanes(ep, ep_init_flags, *tl_bitmap,
+    select_ep_init_flags = ep_init_flags;
+    if ((key->err_mode == UCP_ERR_HANDLING_MODE_PEER) &&
+        (remote_address->uuid == ep->worker->uuid)) {
+        /* Same-worker PEER EPs do not require peer-failure transports. */
+        select_ep_init_flags &= ~UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    }
+    status = ucp_wireup_select_lanes(ep, select_ep_init_flags, *tl_bitmap,
                                      remote_address, addr_indices, key, 1);
     if (status != UCS_OK) {
         return status;
