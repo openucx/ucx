@@ -1138,8 +1138,8 @@ typedef enum {
     UCT_MD_FLAG_INVALIDATE_AMO   = UCS_BIT(12),
 
     /**
-     * Memory domain can use interfaces that perform inter-process memory type
-     * related copy operations.
+     * Memory domain supports interfaces that perform inter-process memory type
+     * copy operations.
      */
     UCT_MD_FLAG_IPC_MEMTYPE_COPY = UCS_BIT(13)
 } uct_md_flags_v2_t;

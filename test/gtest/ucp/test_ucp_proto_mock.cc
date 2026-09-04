@@ -11,11 +11,11 @@ extern "C" {
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
 #include <ucp/core/ucp_worker.inl>
-#include <ucp/rndv/proto_rndv.h>
-#include <uct/base/uct_iface.h>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/rndv/proto_rndv.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>

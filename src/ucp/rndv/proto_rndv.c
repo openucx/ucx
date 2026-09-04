@@ -19,10 +19,9 @@
 static int
 ucp_proto_rndv_ctrl_skip_inter_node_md(
         const ucp_proto_common_init_params_t *params,
-        const uct_iface_attr_t *iface_attr, const uct_md_attr_v2_t *md_attr)
+        const uct_md_attr_v2_t *md_attr)
 {
     return (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
-           (iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE) &&
            ucp_ep_config_is_inter_node(params->super.ep_config_key) &&
            !(params->reg_mem_info.flags &
              UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE);
@@ -101,8 +100,7 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         }
 
         /* Inter-node memory-type copy requires an exportable memory handle. */
-        if (ucp_proto_rndv_ctrl_skip_inter_node_md(&params->super, iface_attr,
-                                                   md_attr)) {
+        if (ucp_proto_rndv_ctrl_skip_inter_node_md(&params->super, md_attr)) {
             ucs_trace_req("lane[%d]: md %s cannot copy memory inter-node, "
                           "mem_flags 0x%x",
                           lane, context->tl_mds[md_index].rsc.md_name,
