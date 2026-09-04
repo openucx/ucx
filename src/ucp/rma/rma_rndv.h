@@ -11,6 +11,9 @@
 #include <ucp/rndv/rndv.h>
 
 
+/* First release whose RMA/RNDV completion header includes operation flags. */
+#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION 24
+
 typedef struct {
     ucp_rndv_rts_hdr_t super;
     uint64_t           address;
@@ -19,9 +22,30 @@ typedef struct {
 } UCS_S_PACKED ucp_rma_rndv_rts_hdr_t;
 
 
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rma_rndv_is_peer_supported(unsigned dst_version)
+{
+    return dst_version >= UCP_PROTO_RMA_RNDV_MIN_DST_VERSION;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rma_rndv_is_err_mode_supported(ucp_err_handling_mode_t err_mode)
+{
+    return err_mode != UCP_ERR_HANDLING_MODE_FAILOVER;
+}
+
+
+
 ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
                                       const ucp_rma_rndv_rts_hdr_t *rts,
                                       size_t length);
+
+void ucp_rma_rndv_req_claim(ucp_request_t *req);
+void ucp_rma_rndv_req_release(ucp_request_t *req, ucp_ep_h ep);
+void ucp_rma_rndv_req_transfer(ucp_request_t *req, ucp_request_t *next_req);
+void ucp_rma_rndv_req_send_start(ucp_request_t *req, ucp_ep_h ep);
+void ucp_rma_rndv_req_send_cancel(ucp_request_t *req, ucp_ep_h ep);
+void ucp_rma_rndv_remote_request_completed(ucp_ep_h ep);
 
 ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req);
 

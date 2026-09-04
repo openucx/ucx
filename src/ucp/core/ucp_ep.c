@@ -44,6 +44,8 @@ __KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
              ucp_ep_peer_mem_data_t, 1,
              kh_int64_hash_func, kh_int64_hash_equal);
 
+#define UCP_EP_FENCE_PROGRESS_BATCH 16
+
 typedef struct {
     double reg_growth;
     double reg_overhead;
@@ -232,7 +234,6 @@ static void ucp_ep_deallocate(ucp_ep_h ep)
 static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 {
     ucp_ep_h ep;
-    ucp_lane_index_t lane;
     ucs_status_t status;
 
     ep = ucs_strided_alloc_get(&worker->ep_alloc, "ucp_ep");
@@ -271,9 +272,16 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #endif
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
-    ep->ext->fence_seq                    = 0;
+    ep->ext->lane_generation              = 0;
+    /* Match the initial worker fence sequence. */
+    ep->ext->fence_seq                    = 1;
+    ep->ext->fence_inflight_req           = NULL;
+    ep->ext->fence_status                 = UCS_OK;
+    ep->ext->fence_lanes_dirty            = 0;
+    ep->ext->fence_pending_scheduled      = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
+    ucs_queue_head_init(&ep->ext->fence_pending_q);
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
                       sizeof(ep->ext->flush_state));
@@ -281,9 +289,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
-    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
-        ucp_ep_set_lane(ep, lane, NULL);
-    }
+    memset(ep->uct_eps, 0, sizeof(ep->uct_eps));
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_ADDRESS_NAME_MAX, "%s",
                       peer_name);
@@ -518,14 +524,236 @@ static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
     return (elem->cb == ucp_wireup_eps_progress) && (elem->arg == arg);
 }
 
+static inline ucs_queue_elem_t*
+ucp_ep_fence_req_elem(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    return &req->send.fenced_req.fence_pending_elem;
+}
+
+static unsigned ucp_ep_fence_pending_progress(void *arg);
+
+static int
+ucp_ep_fence_pending_progress_filter(const ucs_callbackq_elem_t *elem,
+                                     void *arg)
+{
+    return (elem->cb == ucp_ep_fence_pending_progress) && (elem->arg == arg);
+}
+
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (ucp_wireup_msg_ack_cb_pred(elem, arg) ||
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_ep_fence_pending_progress_filter(elem, arg)) {
         return 1;
+    }
+
+    return 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_fence_pending_schedule(ucp_ep_h ep)
+{
+    if (ep->ext->fence_pending_scheduled) {
+        return;
+    }
+
+    ep->ext->fence_pending_scheduled = 1;
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                              ucp_ep_fence_pending_progress, ep);
+    ucp_worker_signal_internal(ep->worker);
+}
+
+void ucp_ep_fence_pending_resume(ucp_ep_h ep)
+{
+    if (!ucs_queue_is_empty(&ep->ext->fence_pending_q)) {
+        ucp_ep_fence_pending_schedule(ep);
+    }
+}
+
+void ucp_ep_fence_pending_add(ucp_ep_h ep, uct_pending_req_t *req)
+{
+    ucs_queue_head_t *queue = &ep->ext->fence_pending_q;
+    ucp_request_t *new_req  = ucs_container_of(req, ucp_request_t, send.uct);
+    ucs_queue_elem_t *elem  = ucp_ep_fence_req_elem(req);
+    ucs_queue_iter_t iter;
+    ucp_request_t *queued_req;
+
+    /* Requests can reach this queue from different UCT lanes after unrelated
+     * prerequisite retries. Keep epochs ordered so the head always represents
+     * the oldest fence dependency; preserve FIFO order within one epoch. */
+    for (iter = ucs_queue_iter_begin(queue);
+         !ucs_queue_iter_end(queue, iter);
+         iter = ucs_queue_iter_next(iter)) {
+        queued_req = ucs_container_of(
+                *iter, ucp_request_t,
+                send.fenced_req.fence_pending_elem);
+        if (queued_req->send.fenced_req.fence_seq >
+            new_req->send.fenced_req.fence_seq) {
+            elem->next = *iter;
+            *iter      = elem;
+            ucp_ep_fence_pending_schedule(ep);
+            return;
+        }
+    }
+
+    ucs_queue_push(queue, elem);
+    ucp_ep_fence_pending_schedule(ep);
+}
+
+void ucp_ep_fence_pending_purge(ucp_ep_h ep, ucs_status_t status)
+{
+    ucp_ep_ext_t *ep_ext = ep->ext;
+    ucp_request_t *req;
+
+    ucs_queue_for_each_extract(req, &ep_ext->fence_pending_q,
+                              send.fenced_req.fence_pending_elem, 1) {
+        req->flags &= ~UCP_REQUEST_FLAG_FENCE_BLOCKED;
+
+        if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
+            ucp_proto_request_abort(req, status);
+        } else {
+            ucp_request_send_state_ff(req, status);
+        }
+    }
+}
+
+/**
+ * Advance the endpoint fence epoch to @a target_fence_seq using a strong_nb
+ * flush, and spin on CQEs for up to the configured timeout.
+ *
+ * @return 1 if the epoch was advanced (caller may continue dispatching),
+ *         0 if a flush is still in-flight or an error occurred (caller
+ *         should break out of the progress loop).
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_fence_try_advance_epoch(ucp_ep_h ep, uint64_t target_fence_seq)
+{
+    ucs_status_t status;
+
+    status = ucp_ep_fence_strong_nb(ep, target_fence_seq);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucp_ep_fence_pending_purge(ep, status);
+        return 0;
+    }
+
+    if (ucs_unlikely(ep->ext->fence_inflight_req == NULL)) {
+        return ep->ext->fence_status == UCS_OK;
+    }
+
+    if (ucp_ep_fence_try_spin(ep)) {
+        return (ep->ext->fence_status == UCS_OK) &&
+               (ep->ext->fence_seq >= target_fence_seq);
+    }
+
+    return 0;
+}
+
+/**
+ * Pull the head request from the fence pending queue and try to send it.
+ * Sends up to UCP_EP_FENCE_PROGRESS_BATCH fragments before yielding.
+ *
+ * @return 1 if the request completed and the caller should continue the
+ *         progress loop, 0 if the request needs retry or the loop should
+ *         break.
+ */
+static int
+ucp_ep_fence_dispatch_request(ucp_ep_h ep)
+{
+    ucp_ep_ext_t *ep_ext = ep->ext;
+    ucp_request_t *req;
+    ucs_status_t status;
+    int is_proto;
+    int batch;
+
+    req = ucs_queue_pull_elem_non_empty(&ep_ext->fence_pending_q,
+                                        ucp_request_t,
+                                        send.fenced_req.fence_pending_elem);
+
+    if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
+        ((ep->cfg_index != req->send.proto_config->ep_cfg_index) ||
+         ep->worker->context->config.ext.proto_request_reset)) {
+        /* The request bypassed the wireup pending replay path while it was on
+         * the fence queue. Restart it against the current endpoint config
+         * before its old progress callback can use a failed/replaced lane.
+         * Its fence epoch remains captured in fenced_req across restart. */
+        ucp_trace_req(req, "restart fenced proto %s after reconfiguration",
+                      req->send.proto_config->proto->name);
+        req->flags &= ~UCP_REQUEST_FLAG_FENCE_BLOCKED;
+        ucp_proto_request_restart(req);
+        return 1;
+    }
+
+    /* Progress can complete and release the request synchronously. Save all
+     * metadata and clear the queue-owned flag before invoking it. */
+    is_proto   = req->flags & UCP_REQUEST_FLAG_PROTO_SEND;
+    req->flags &= ~UCP_REQUEST_FLAG_FENCE_BLOCKED;
+
+    for (batch = 0; batch < UCP_EP_FENCE_PROGRESS_BATCH; ++batch) {
+        /* Protect from Coverity as in ucp_request_try_send() from
+         * ucp_request.inl. */
+        /* coverity[address_free] */
+        status = req->send.uct.func(&req->send.uct);
+        if (status != UCS_INPROGRESS) {
+            break;
+        }
+    }
+
+    if ((status == UCS_INPROGRESS) ||
+        (status == UCS_ERR_NO_RESOURCE) ||
+        (status == UCP_STATUS_FENCE_DEFER)) {
+        req->flags |= UCP_REQUEST_FLAG_FENCE_BLOCKED;
+        ucs_queue_push_head(&ep_ext->fence_pending_q,
+                            &req->send.fenced_req.fence_pending_elem);
+        if (ep_ext->fence_inflight_req == NULL) {
+            ucp_ep_fence_pending_schedule(ep);
+        }
+        return 0;
+    }
+
+    if (ucs_unlikely((status != UCS_OK) && UCS_STATUS_IS_ERR(status))) {
+        if (is_proto) {
+            ucp_proto_request_abort(req, status);
+        } else {
+            ucp_request_send_state_ff(req, status);
+        }
+    } else {
+        ucs_assert(status == UCS_OK);
+    }
+
+    return 1;
+}
+
+static unsigned ucp_ep_fence_pending_progress(void *arg)
+{
+    ucp_ep_h ep          = arg;
+    ucp_ep_ext_t *ep_ext = ep->ext;
+    ucp_request_t *req;
+
+    ep_ext->fence_pending_scheduled = 0;
+
+    while (!ucs_queue_is_empty(&ep_ext->fence_pending_q)) {
+        if (ucs_unlikely(ep_ext->fence_inflight_req != NULL)) {
+            break;
+        }
+
+        req = ucs_queue_head_elem_non_empty(&ep_ext->fence_pending_q,
+                                            ucp_request_t,
+                                            send.fenced_req.fence_pending_elem);
+
+        if (ucs_unlikely(req->send.fenced_req.fence_seq > ep_ext->fence_seq)) {
+            if (!ucp_ep_fence_try_advance_epoch(
+                        ep, req->send.fenced_req.fence_seq)) {
+                break;
+            }
+        }
+
+        if (!ucp_ep_fence_dispatch_request(ep)) {
+            break;
+        }
     }
 
     return 0;
@@ -583,10 +811,12 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep)
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
                ((flush_state->send_sn == 0) &&
                 (flush_state->cmpl_sn == 0) &&
+                (flush_state->rma_rndv_ops == 0) &&
                 ucs_hlist_is_empty(&flush_state->reqs)));
 
     flush_state->send_sn         = 0;
     flush_state->cmpl_sn         = 0;
+    flush_state->rma_rndv_ops    = 0;
     flush_state->mem_in_progress = 0;
     ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
@@ -1505,7 +1735,9 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
     }
 
     ucs_trace("ep %p: discard lanes completed", arg->ucp_ep);
-    ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    ucp_ep_reqs_purge(
+            arg->ucp_ep, arg->status,
+            arg->deactivate_cfg_index == UCP_WORKER_CFG_INDEX_NULL);
     ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
                                            arg->deactivate_cfg_index);
     ucp_ep_release_discard_arg(arg);
@@ -1562,7 +1794,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
                   " argument", ep);
         ucp_ep_cleanup_lanes(ep); /* Just close all UCT endpoints */
-        ucp_ep_reqs_purge(ep, discard_status);
+        ucp_ep_reqs_purge(ep, discard_status, 1);
         return;
     }
 
@@ -4500,11 +4732,16 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
     }
 }
 
-void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status,
+                       int purge_fence_pending)
 {
     ucs_hlist_head_t *proto_reqs = &ucp_ep->ext->proto_reqs;
     ucp_ep_flush_state_t *flush_state;
     ucp_request_t *req;
+
+    if (purge_fence_pending) {
+        ucp_ep_fence_pending_purge(ucp_ep, status);
+    }
 
     while (!ucs_hlist_is_empty(proto_reqs)) {
         req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);
@@ -4530,6 +4767,7 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
                                       flush_state->send_sn)) {
             ucp_ep_rma_remote_request_completed(ucp_ep);
         }
+        flush_state->rma_rndv_ops = 0;
     }
 }
 
@@ -4707,7 +4945,13 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
                             0;
 
     for (lane = old_num_lanes; lane < new_num_lanes; ++lane) {
-        ucp_ep_set_lane(ep, lane, NULL);
+        /* New storage is not initialized yet, so bypass lane change
+         * tracking. */
+        if (lane < UCP_MAX_FAST_PATH_LANES) {
+            ep->uct_eps[lane] = NULL;
+        } else {
+            ep_ext->uct_eps[lane - UCP_MAX_FAST_PATH_LANES] = NULL;
+        }
     }
 
     return UCS_OK;

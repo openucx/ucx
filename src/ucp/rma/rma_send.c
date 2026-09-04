@@ -183,6 +183,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
                                                    rkey_config->put_short.lane),
                               buffer, length, remote_addr, tl_rkey);
     if (status == UCS_OK) {
+        ucp_ep_fence_normalize_lanes(ep);
         ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
     }
 
@@ -239,11 +240,11 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     req = ucp_request_get_param(worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                 goto out_unlock;});
-    req->send.rma.rkey        = rkey;
-    req->send.rma.remote_addr = remote_addr;
+    req->send.fenced_req.rma.rkey        = rkey;
+    req->send.fenced_req.rma.remote_addr = remote_addr;
     if (remote != NULL) {
-        req->send.rma.sgl.remote_addrs = remote->remote_addrs;
-        req->send.rma.sgl.rkeys        = remote->rkeys;
+        req->send.fenced_req.rma.sgl.remote_addrs = remote->remote_addrs;
+        req->send.fenced_req.rma.sgl.rkeys        = remote->rkeys;
     }
 
     ret = ucp_proto_request_send_op_rma(
@@ -317,8 +318,8 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                                      {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                      goto out_unlock;});
 
-    req->send.rma.rkey             = rkey;
-    req->send.rma.remote_addr      = remote_addr;
+    req->send.fenced_req.rma.rkey             = rkey;
+    req->send.fenced_req.rma.remote_addr      = remote_addr;
     req->send.state.completed_size = 0;
     if (UCP_DT_IS_CONTIG(datatype)) {
         contig_length = ucp_contig_dt_length(datatype, count);

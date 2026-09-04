@@ -489,6 +489,8 @@ typedef struct {
                               are waiting for remote completion */
     uint32_t         send_sn; /* Sequence number of sent operations */
     uint32_t         cmpl_sn; /* Sequence number of completions */
+    uint32_t         rma_rndv_ops; /* RMA RNDV operations whose nested remote
+                                      data movement is not complete */
     uint32_t         mem_in_progress; /* Track ongoing memory flushes for this endpoint */
 } ucp_ep_flush_state_t;
 
@@ -567,8 +569,21 @@ typedef struct ucp_ep_ext {
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
                                                       unflushed operations */
+    uint64_t                      lane_generation; /* Incremented whenever a lane
+                                                      is updated */
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
+
+    /* Requests blocked by EP-based strong fence enforcement. This queue is
+     * per-UCP-EP (not per lane) to preserve EP-wide ordering.
+     */
+    ucs_queue_head_t              fence_pending_q;
+    ucp_request_t                 *fence_inflight_req;
+    ucs_status_t                  fence_status;
+    uint8_t                       fence_lanes_dirty; /* Lane topology changed since
+                                                        fence lane tracking was
+                                                        normalized */
+    uint8_t                       fence_pending_scheduled;
 
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
@@ -761,6 +776,21 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags);
 
+/**
+ * @brief Flush a subset of endpoint lanes specified by @a lane_mask.
+ *
+ * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
+ * @a lane_mask are flushed; the remaining lanes are skipped immediately.
+ * Used by the EP-based strong fence to flush only unflushed_lanes.
+ */
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask);
+
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
@@ -929,6 +959,12 @@ ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
                       ucs_status_t status, int recursive);
 
+void ucp_ep_fence_pending_add(ucp_ep_h ep, uct_pending_req_t *req);
+
+void ucp_ep_fence_pending_purge(ucp_ep_h ep, ucs_status_t status);
+
+void ucp_ep_fence_pending_resume(ucp_ep_h ep);
+
 
 /**
  * @brief Purge flush and protocol requests scheduled on a given UCP endpoint.
@@ -936,8 +972,11 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
  * @param [in]     ucp_ep           Endpoint object on which requests should be
  *                                  purged.
  * @param [in]     status           Completion status.
+ * @param [in]     purge_fence_pending Whether to abort requests waiting in the
+ *                                  endpoint fence queue.
  */
-void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status,
+                       int purge_fence_pending);
 
 
 /**
