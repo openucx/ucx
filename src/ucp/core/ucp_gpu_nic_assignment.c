@@ -79,9 +79,7 @@ ucp_gpu_nic_assignment_log_group(const ucp_gpu_nic_assignment_t *assignment,
     }
 
     ucs_string_buffer_appendf(&strb, "[");
-    for (nic_idx = 0; nic_idx < num_nics; ++nic_idx) {
-        nic = &ucs_array_elem(&group->nics, nic_idx);
-
+    ucs_array_for_each_index(nic, nic_idx, &group->nics) {
         if (nic_idx == 0) {
             ucs_string_buffer_appendf(&strb, " ");
         } else {
@@ -180,26 +178,23 @@ ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
                                  size_t base_bitmap_idx, size_t group_idx)
 {
     size_t num_gpus = ucs_array_length(&group->gpus);
-    size_t nic_idx  = 0;
     ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap;
     const ucs_topo_nic_t *nic;
     const ucs_topo_gpu_t *gpu;
+    size_t nic_idx;
     size_t gpu_idx;
     size_t bitmap_idx;
 
     ucs_assert((base_bitmap_idx + num_gpus) <= assignment->num_bitmaps);
 
-    ucs_array_for_each(nic, &group->nics) {
-        gpu_idx = ucp_gpu_nic_assignment_get_gpu_idx(policy, num_gpus,
-                                                     nic_idx++);
+    ucs_array_for_each_index(nic, nic_idx, &group->nics) {
+        gpu_idx = ucp_gpu_nic_assignment_get_gpu_idx(policy, num_gpus, nic_idx);
         nic_sys_dev_bitmap =
                 &assignment->nic_sys_dev_bitmaps[base_bitmap_idx + gpu_idx];
         ucp_gpu_nic_bitmap_add_nic(nic_sys_dev_bitmap, nic);
     }
 
-    for (gpu_idx = 0; gpu_idx < num_gpus; ++gpu_idx) {
-        gpu = &ucs_array_elem(&group->gpus, gpu_idx);
-
+    ucs_array_for_each_index(gpu, gpu_idx, &group->gpus) {
         bitmap_idx         = base_bitmap_idx + gpu_idx;
         nic_sys_dev_bitmap = &assignment->nic_sys_dev_bitmaps[bitmap_idx];
         ucs_assert((gpu->num_devices > 0) &&
@@ -238,10 +233,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
         goto err_cleanup_sys_dev_bitmaps;
     }
 
-    for (group_idx = 0; group_idx < ucs_array_length(&groups->groups);
-         ++group_idx) {
-        group = &ucs_array_elem(&groups->groups, group_idx);
-
+    ucs_array_for_each_index(group, group_idx, &groups->groups) {
         if (ucs_array_is_empty(&group->gpus)) {
             ucs_debug("group #%zu has 0 GPUs, skipping", group_idx);
             continue;
