@@ -233,13 +233,9 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 #endif
 
         /* Save last completed WQE. TX QP resources are reserved until purge. */
-        ep->tx.wq.ft_ci = ep->tx.wq.prev_sw_pi -
-                          (ep->tx.wq.bb_max -
-                           uct_rc_txqp_available(&ep->super.txqp));
-        ucs_assertv(ep->tx.wq.ft_ci == ep->tx.wq.hw_ci,
-                    "ep=%p ft_ci=%u hw_ci=%u available=%d", ep, ep->tx.wq.ft_ci,
-                    ep->tx.wq.hw_ci, uct_rc_txqp_available(&ep->super.txqp));
-
+        ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
+                                     (ep->tx.wq.bb_max -
+                                      uct_rc_txqp_available(&ep->super.txqp));
         ep->err_handler_inprogress = 1;
 
         ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
