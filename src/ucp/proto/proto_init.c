@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -274,6 +275,23 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
     return status;
 }
 
+/*
+ * Whether copying between the given memory types is done by a CPU memcpy rather
+ * than by a memtype endpoint. Protocols which access the buffer directly don't
+ * set a memtype operation, see ucp_proto_common_check_mem_access().
+ */
+static int
+ucp_proto_buffer_copy_is_memcpy(ucs_memory_type_t local_mem_type,
+                                ucs_memory_type_t remote_mem_type,
+                                uct_ep_operation_t memtype_op)
+{
+    return (UCP_MEM_IS_HOST(local_mem_type) &&
+            UCP_MEM_IS_HOST(remote_mem_type)) ||
+           ((memtype_op == UCT_EP_OP_LAST) &&
+            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) &&
+            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(remote_mem_type));
+}
+
 static ucp_proto_perf_factor_id_t
 ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
                                 ucs_memory_type_t remote_mem_type,
@@ -286,6 +304,17 @@ ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
      * while eager procols that imply blocking copy set SHORT */
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
         (memtype_op == UCT_EP_OP_PUT_SHORT) || h2h) {
+        return ucp_proto_buffer_copy_cpu_factor_id(is_local);
+    }
+
+    /* Direct buffer access is allowed only when both buffers are CPU
+     * accessible, in which case the copy is done by the CPU */
+    if (memtype_op == UCT_EP_OP_LAST) {
+        ucs_assertv(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) &&
+                    UCP_MEM_IS_ACCESSIBLE_FROM_CPU(remote_mem_type),
+                    "local_mem_type=%s remote_mem_type=%s",
+                    ucs_memory_type_names[local_mem_type],
+                    ucs_memory_type_names[remote_mem_type]);
         return ucp_proto_buffer_copy_cpu_factor_id(is_local);
     }
 
@@ -322,7 +351,8 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     buffer_copy_factor_id = ucp_proto_buffer_copy_factor_id(local_mem_type,
                                                             remote_mem_type,
                                                             memtype_op, local);
-    if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
+    if (ucp_proto_buffer_copy_is_memcpy(local_mem_type, remote_mem_type,
+                                        memtype_op)) {
         perf_factors[buffer_copy_factor_id] =
                 ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
         perf_node = ucp_proto_perf_node_new_data(title, "memcpy");
