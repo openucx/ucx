@@ -245,6 +245,8 @@ static double uct_cuda_ipc_iface_get_bw()
         }
 
         return 800000.0 * UCS_MBYTE;
+    case UCT_CUDA_BASE_GEN_BRTX:
+        return 50000.0 * UCS_MBYTE;
     default:
         return 6911.0  * UCS_MBYTE;
     }
