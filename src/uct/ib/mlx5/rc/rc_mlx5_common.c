@@ -56,36 +56,6 @@ static void uct_rc_mlx5_callback_data_fill_iov(
     }
 }
 
-static void uct_rc_mlx5_op_info_fill_zcopy_iov(
-        const uct_ib_mlx5_txwq_t *txwq, const struct mlx5_wqe_data_seg *dptr,
-        size_t dptrs_size, uct_rc_mlx5_op_callback_data_t *callback_data,
-        size_t *iovcnt_p)
-{
-    size_t iovcnt = dptrs_size / sizeof(*dptr);
-    size_t i;
-
-    ucs_assert(iovcnt * sizeof(*dptr) == dptrs_size);
-    ucs_assert(iovcnt <= ucs_static_array_size(callback_data->iov));
-
-    dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq, (void*)dptr);
-    for (i = 0; i < iovcnt; ++i) {
-        callback_data->memh[i].lkey  = ntohl(dptr->lkey);
-        callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;
-        callback_data->memh[i].flags = 0;
-
-        callback_data->iov[i].buffer = (void*)(uintptr_t)be64toh(dptr->addr);
-        callback_data->iov[i].length = ntohl(dptr->byte_count);
-        callback_data->iov[i].memh   = &callback_data->memh[i];
-        callback_data->iov[i].stride = 0;
-        callback_data->iov[i].count  = 1;
-
-        dptr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
-                                         (void*)(dptr + 1));
-    }
-
-    *iovcnt_p = iovcnt;
-}
-
 static void uct_rc_mlx5_op_info_fill_am_zcopy(
         uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
         uct_rc_iface_send_op_t *op, const struct mlx5_wqe_ctrl_seg *ctrl,
