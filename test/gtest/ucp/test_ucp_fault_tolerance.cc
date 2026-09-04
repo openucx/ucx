@@ -5,20 +5,22 @@
 */
 
 #include "test_ucp_memheap.h"
-#include <common/test_helpers.h>
 #include <algorithm>
+#include <random>
 #include <string>
 
 extern "C" {
-#include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_multi.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/proto/proto_single.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <uct/api/v2/uct_v2.h>
 #include <uct/base/uct_iface.h>
 }
 
@@ -47,9 +49,6 @@ public:
                                op_name(TEST_OP_GET | TEST_OP_FLUSH));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
                                op_name(TEST_OP_AM));
-        add_variant_with_value(variants, UCP_FEATURE_AM,
-                               TEST_OP_AM | TEST_OP_ALL_LANES_FAILED,
-                               op_name(TEST_OP_AM | TEST_OP_ALL_LANES_FAILED));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_AM | TEST_OP_FLUSH));
 
@@ -88,17 +87,28 @@ protected:
         TEST_MSG_SIZE_LARGE      = UCS_BIT(7)
     };
 
+    enum failover_proto_t {
+        TEST_FAILOVER_PROTO_AM_EGR_SHORT,
+        TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY,
+        TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY,
+        TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY,
+        TEST_FAILOVER_PROTO_AM_EGR_MULTI_BCOPY,
+        TEST_FAILOVER_PROTO_PUT_AM_BCOPY,
+        TEST_FAILOVER_PROTO_LAST
+    };
+
+    struct failover_proto_info_t {
+        const char *proto_name;
+        uint64_t   tl_cap;
+        size_t     thresh;
+    };
+
     /* Must stay below cap.get.min_zcopy, so GET cannot use zcopy */
     static constexpr size_t SMALL_MSG_SIZE  = 1;
     static constexpr size_t MEDIUM_MSG_SIZE = UCS_KBYTE;
     static constexpr size_t LARGE_MSG_SIZE  = 100 * UCS_MBYTE;
 
     void init() override {
-        if (get_variant_value() & TEST_OP_ALL_LANES_FAILED) {
-            modify_config("RECOVERY_RETRIES", "1");
-            modify_config("KEEPALIVE_INTERVAL", std::to_string(3) + "s");
-        }
-
         ucp_test::init();
 
         ucp_ep_params_t ep_params = get_ep_params();
@@ -115,9 +125,11 @@ protected:
     void set_am_handler() {
         ucp_am_handler_param_t param;
         param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_FLAGS |
                            UCP_AM_HANDLER_PARAM_FIELD_CB |
                            UCP_AM_HANDLER_PARAM_FIELD_ARG;
         param.id         = AM_ID;
+        param.flags      = UCP_AM_FLAG_PERSISTENT_DATA;
         param.cb         = am_recv_cb;
         param.arg        = reinterpret_cast<void*>(this);
 
@@ -132,14 +144,26 @@ protected:
         test_ucp_fault_tolerance *self =
             reinterpret_cast<test_ucp_fault_tolerance*>(arg);
 
+        EXPECT_EQ(0ul, header_length);
+        EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)
+                << "RNDV is not covered yet";
+        EXPECT_TRUE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
+        EXPECT_EQ(self->m_am_expect_reply,
+                  !!(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP));
+        EXPECT_EQ(self->m_am_expect_reply, param->reply_ep != nullptr);
         if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
+            const size_t msg_index = self->m_am_recv_count;
+            if (self->m_am_expected_count > 0) {
+                EXPECT_LT(msg_index, self->m_am_expected_count);
+            }
+            EXPECT_EQ(self->m_am_expected_size, length);
+            mem_buffer::pattern_check(
+                    data, length,
+                    m_seed + ((self->m_am_expected_count > 1) ? msg_index : 0));
             self->m_am_rbuf.resize(length);
             memcpy(self->m_am_rbuf.data(), data, length);
-            self->m_am_received = true;
+            ++self->m_am_recv_count;
         }
-
-        EXPECT_FALSE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) <<
-                "RNDV is not covered yet";
 
         return UCS_OK;
     }
@@ -186,7 +210,11 @@ protected:
                             " available");
         }
 
-        std::random_shuffle(lanes.begin(), lanes.end(), ucs::rand_range);
+        /* Allocate randomizer on heap to avoid exceeding stack frame size limits. */
+        std::unique_ptr<std::random_device> rnd_device(new std::random_device);
+        std::unique_ptr<std::mt19937> rng(new std::mt19937((*rnd_device)()));
+        std::shuffle(lanes.begin(), lanes.end(), *rng);
+
         for (ucp_lane_index_t lane : lanes) {
             UCS_TEST_MESSAGE << lane_type << ": " << size_t(lane) << "/" << lanes.size();
         }
@@ -195,6 +223,13 @@ protected:
     ucp_ep_h get_ucp_ep_for_err_injection(failure_side_t failure_side) {
         return (failure_side == FAILURE_SIDE_INITIATOR) ? sender().ep(0, INJECTED_EP_INDEX) :
                receiver().ep(0, INJECTED_EP_INDEX);
+    }
+
+    ucs_status_t invalidate_uct_ep(uct_ep_h uct_ep)
+    {
+        uct_ep_invalidate_params_t params = {};
+
+        return uct_ep_invalidate(uct_ep, &params);
     }
 
     std::vector<ucp_lane_index_t> get_lanes(unsigned op_mask) {
@@ -370,12 +405,14 @@ protected:
         mapped_buffer rbuf(size, receiver());
         ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
 
+        lbuf.pattern_fill(m_seed);
+
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
         for (size_t lane_idx = 0; lane_idx < lanes.size() - 1; ++lane_idx) {
             std::vector<ucs_status_ptr_t> status_ptrs;
             ucp_lane_index_t lane = lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            ucs_status_t status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            ucs_status_t status = invalidate_uct_ep(uct_ep_for_injection);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -434,9 +471,7 @@ protected:
                                   << ucs_status_string(status);
 
         ucp_ep_h ucp_ep_for_injection = get_ucp_ep_for_err_injection(failure_side);
-        for (size_t num_lanes_to_fail = (op_mask & TEST_OP_ALL_LANES_FAILED) ? am_bw_lanes.size() :
-                                        (am_bw_lanes.size() - 1),
-             lane_idx = 0; lane_idx < num_lanes_to_fail; ++lane_idx) {
+        for (size_t lane_idx = 0; lane_idx < am_bw_lanes.size(); ++lane_idx) {
             ucp_lane_index_t lane = am_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
             const bool last_lane = (lane_idx == (am_bw_lanes.size() - 1));
@@ -449,7 +484,7 @@ protected:
                 break;
             }
 
-            status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            status = invalidate_uct_ep(uct_ep_for_injection);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -466,32 +501,65 @@ protected:
                 slh.reset(new scoped_log_handler(hide_errors_logger));
             }
 
-            status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX), am_msg_size(),
-                                         op_mask & TEST_OP_FLUSH);
+            status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
+                                         am_msg_size(),
+                                         op_mask & TEST_OP_FLUSH, last_lane);
             if (!last_lane) {
                 EXPECT_EQ(UCS_OK, status) << op_str << " operation returned status: "
                                           << ucs_status_string(status);
                 ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
-            } else if ((failure_side == FAILURE_SIDE_TARGET) &&
-                       has_transport("dc_x")) {
-                /* DC cannot detect remote DCI failure (connect2iface); test limitation. */
-            } else if (status == UCS_OK) {
-                /* Some lanes recovered; EP still operable, no error callback required. */
             } else {
-                /* Operation failed => EP must fail with exactly one initiator err CB. */
-                ucs_time_t deadline = ucs::get_deadline();
-                while ((m_initiator_err_count == 0) &&
-                       (ucs_get_time() < deadline)) {
-                    short_progress_loop();
-                }
+                /* Last lane: either the initiator EP fails, or it still has a
+                 * live AM path and the message is delivered. */
+                short_progress_loop();
+                if ((failure_side == FAILURE_SIDE_TARGET) &&
+                    has_transport("dc_x")) {
+                    /* DC cannot detect remote DCI failure (connect2iface). */
+                } else {
+                    ucs_time_t deadline = ucs::get_deadline();
 
-                ASSERT_EQ(1, m_initiator_err_count)
-                        << "Error callback invoked " << m_initiator_err_count
-                        << " times";
-                /* Remote may detect failure via KA/control msgs, at most once. */
-                ASSERT_LE(m_total_err_count - m_initiator_err_count, 1)
-                        << "Error callback invoked " << m_total_err_count
-                        << " times";
+                    while ((m_initiator_err_count == 0) &&
+                           (m_am_recv_count == 0) &&
+                           (ucs_get_time() < deadline)) {
+                        short_progress_loop();
+                    }
+
+                    if (m_initiator_err_count == 0) {
+                        ucp_ep_h sender_ep = sender().ep(0, INJECTED_EP_INDEX);
+                        const ucp_ep_config_key_t &key =
+                                ucp_ep_config(sender_ep)->key;
+
+                        EXPECT_EQ(UCS_OK, status)
+                                << op_str << " operation returned status: "
+                                << ucs_status_string(status);
+                        EXPECT_EQ(0, sender_ep->flags & UCP_EP_FLAG_FAILED)
+                                << "Initiator EP is failed without error "
+                                   "callback";
+                        EXPECT_NE(0, ucp_ep_get_live_lanes(sender_ep))
+                                << "Initiator has no live lanes";
+                        EXPECT_NE(UCP_NULL_LANE, key.am_lane)
+                                << "Initiator has no AM lane";
+                        if (key.am_lane != UCP_NULL_LANE) {
+                            EXPECT_FALSE(key.lanes[key.am_lane].lane_types &
+                                         UCS_BIT(UCP_LANE_TYPE_FAILED))
+                                    << "AM lane " << size_t(key.am_lane)
+                                    << " is marked failed";
+                        }
+
+                        wait_for_value(&m_am_recv_count, 1ul);
+                        EXPECT_EQ(1ul, m_am_recv_count);
+                        EXPECT_EQ(am_msg_size(), m_am_rbuf.size());
+                        mem_buffer::pattern_check(m_am_rbuf.data(),
+                                                  am_msg_size(), m_seed);
+                    } else {
+                        EXPECT_EQ(1, m_initiator_err_count)
+                                << "Error callback invoked "
+                                << m_initiator_err_count << " times";
+                        EXPECT_LE(m_total_err_count - m_initiator_err_count, 1)
+                                << "Error callback invoked "
+                                << m_total_err_count << " times";
+                    }
+                }
             }
         }
 
@@ -531,7 +599,7 @@ protected:
         for (size_t lane_idx = 0; lane_idx < rma_bw_lanes.size() - 1; ++lane_idx) {
             ucp_lane_index_t lane = rma_bw_lanes[lane_idx];
             uct_ep_h uct_ep_for_injection = ucp_ep_get_lane(ucp_ep_for_injection, lane);
-            status = uct_ep_invalidate(uct_ep_for_injection, 0);
+            status = invalidate_uct_ep(uct_ep_for_injection);
             if (status == UCS_ERR_UNSUPPORTED) {
                 UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
             }
@@ -562,68 +630,6 @@ protected:
         UCS_TEST_MESSAGE << "Success";
     }
 
-    void test_recovery(unsigned op_mask) {
-        if (op_mask & TEST_OP_ALL_LANES_FAILED) {
-            // Recovery is not expected, it depends on timings
-            return;
-        }
-
-        UCS_TEST_MESSAGE << "Checking recovery status...";
-
-        wait_for_cond([this]() {
-            return ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX)) == 0;
-        }, [this]() {
-            short_progress_loop();
-        });
-
-        const ucp_lane_map_t failed_lanes =
-                ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX));
-        ASSERT_EQ(0, failed_lanes)
-            << "Failed lanes are not recovered" << std::hex << failed_lanes;
-        for (ucp_lane_index_t lane_idx = 0;
-             lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
-            if (ucp_wireup_ep_test(ucp_ep_get_lane(sender().ep(0, INJECTED_EP_INDEX), lane_idx))) {
-                short_progress_loop();
-                continue;
-            }
-
-            ++lane_idx;
-        }
-
-        if (op_mask & TEST_OP_AM) {
-            ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
-                                                      am_msg_size(), true);
-            EXPECT_EQ(UCS_OK, status) << "AM operation returned status: "
-                                      << ucs_status_string(status);
-        }
-
-        if (op_mask & TEST_OP_PUT) {
-            mem_buffer lbuf(rma_msg_size(), UCS_MEMORY_TYPE_HOST);
-            mapped_buffer rbuf(rma_msg_size(), receiver());
-            ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
-            lbuf.pattern_fill(m_seed);
-            ucs_status_t status = do_put_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf,
-                                                  rkey, rma_msg_size(), true);
-            EXPECT_EQ(UCS_OK, status) << "PUT operation returned status: "
-                                      << ucs_status_string(status);
-        }
-
-        if (op_mask & TEST_OP_GET) {
-            mem_buffer lbuf(rma_msg_size(), UCS_MEMORY_TYPE_HOST);
-            mapped_buffer rbuf(rma_msg_size(), receiver());
-            ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
-            rbuf.pattern_fill(m_seed);
-            ucs_status_t status = do_get_and_wait(sender().ep(0, INJECTED_EP_INDEX), lbuf, rbuf,
-                                                  rkey, rma_msg_size(), true);
-            EXPECT_EQ(UCS_OK, status) << "GET operation returned status: "
-                                      << ucs_status_string(status);
-        }
-
-        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
-                                        << " times";
-        UCS_TEST_MESSAGE << "All lanes are operational";
-    }
-
     void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
 
@@ -636,10 +642,7 @@ protected:
             ASSERT_TRUE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_rma_with_injected_failure(failure_side, op_mask);
         }
-
-        test_recovery(op_mask);
     }
-protected:
     size_t rma_msg_size() const {
         const unsigned op_mask = get_variant_value();
 
@@ -702,8 +705,15 @@ protected:
         return name;
     }
 
-    ucs_status_t do_am_send_and_wait(ucp_ep_h ep, size_t size, bool flush_after) {
-        m_am_received = false;
+    /* @param expect_failure  Caller knows the send cannot be delivered (e.g. no
+     *                        healthy lane is left), so only the status is
+     *                        returned and delivery is not verified. */
+    ucs_status_t do_am_send_and_wait(ucp_ep_h ep, size_t size, bool flush_after,
+                                     bool expect_failure = false) {
+        m_am_expected_size  = size;
+        m_am_expected_count = 1;
+        m_am_recv_count     = 0;
+        m_am_expect_reply   = false;
 
         mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
         sbuf.pattern_fill(m_seed, size);
@@ -722,11 +732,13 @@ protected:
         }
 
         ucs_status_t status = request_wait(sptr);
-        if (status != UCS_OK) {
+        if ((status != UCS_OK) || expect_failure) {
             return status;
         }
 
-        wait_for_value(&m_am_received, true);
+        wait_for_value(&m_am_recv_count, 1ul);
+        EXPECT_EQ(1ul, m_am_recv_count);
+        EXPECT_EQ(size, m_am_rbuf.size());
         mem_buffer::pattern_check(m_am_rbuf.data(), size, m_seed);
         return UCS_OK;
     }
@@ -738,14 +750,24 @@ protected:
                                                         rkey, &m_req_empty_param);
         ucs_status_ptr_t flush_status_ptr = flush ? ucp_ep_flush_nbx(ep, &m_req_empty_param) : NULL;
         ucs_status_t status               = request_wait(put_status_ptr);
-        if (status == UCS_OK) {
-            rbuf.pattern_check(m_seed, size);
-        }
 
         EXPECT_EQ(UCS_OK, status) << "put operation returned status: " << ucs_status_string(status);
         if (flush) {
             status = request_wait(flush_status_ptr);
-            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: " << ucs_status_string(status);
+            EXPECT_EQ(UCS_OK, status) << "flush operation returned status: "
+                                     << ucs_status_string(status);
+        } else if (status == UCS_OK) {
+            wait_for_cond(
+                    [&]() {
+                        return mem_buffer::compare(
+                                lbuf.ptr(), rbuf.ptr(), size,
+                                UCS_MEMORY_TYPE_HOST);
+                    },
+                    [this]() { short_progress_loop(); });
+        }
+
+        if (status == UCS_OK) {
+            rbuf.pattern_check(m_seed, size);
         }
 
         return status;
@@ -787,101 +809,361 @@ protected:
     }
 
 protected:
+    static const failover_proto_info_t &
+    get_failover_proto_info(failover_proto_t proto)
+    {
+        static const failover_proto_info_t proto_info[] = {
+            {"am/egr/short", UCT_IFACE_FLAG_AM_SHORT, 8},
+            {"am/egr/short/reply", UCT_IFACE_FLAG_AM_SHORT, 8},
+            {"am/egr/single/bcopy", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE},
+            {"am/egr/single/bcopy/reply", UCT_IFACE_FLAG_AM_BCOPY, UCS_KBYTE},
+            {"am/egr/multi/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE},
+            {"put/am/bcopy", UCT_IFACE_FLAG_AM_BCOPY, 64 * UCS_KBYTE}
+        };
+
+        UCS_STATIC_ASSERT((sizeof(proto_info) / sizeof(proto_info[0])) ==
+                          TEST_FAILOVER_PROTO_LAST);
+        ucs_assert(proto < TEST_FAILOVER_PROTO_LAST);
+        return proto_info[proto];
+    }
+
+    static bool is_am_proto(failover_proto_t proto)
+    {
+        return (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_MULTI_BCOPY);
+    }
+
+    static bool is_put_proto(failover_proto_t proto)
+    {
+        return (proto == TEST_FAILOVER_PROTO_PUT_AM_BCOPY);
+    }
+
+    static bool is_single_proto(failover_proto_t proto)
+    {
+        return (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY);
+    }
+
+    static bool is_reply_proto(failover_proto_t proto)
+    {
+        return (proto == TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY);
+    }
+
+    static bool is_single_am_bcopy_proto(failover_proto_t proto)
+    {
+        return (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY) ||
+               (proto == TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY);
+    }
+
+    size_t get_failover_proto_size(ucp_ep_h ep, failover_proto_t proto) const
+    {
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
+
+        if (!is_single_am_bcopy_proto(proto)) {
+            return info.thresh;
+        }
+
+        const ssize_t max_short = ucp_ep_config(ep)->am.max_short;
+        if ((max_short >= 0) &&
+            (static_cast<size_t>(max_short) >= info.thresh)) {
+            return static_cast<size_t>(max_short) + 1;
+        }
+
+        return info.thresh;
+    }
+
+    bool is_failover_proto_supported(ucp_ep_h ep, failover_proto_t proto) const
+    {
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
+        uint64_t required_v2_caps         = UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        unsigned failover_lane_count      = 0;
+        unsigned native_put_count         = 0;
+        const size_t size                 = get_failover_proto_size(ep, proto);
+
+        if (is_single_am_bcopy_proto(proto) &&
+            (size > ucp_ep_config(ep)->am.max_bcopy)) {
+            return false;
+        }
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+            if (uct_ep == nullptr) {
+                continue;
+            }
+
+            const uct_iface_attr_t *attr = ucp_ep_get_iface_attr(ep, lane);
+            native_put_count            += !!ucs_test_flags(attr->cap.flags,
+                                                            UCT_IFACE_FLAG_PUT_SHORT,
+                                                            UCT_IFACE_FLAG_PUT_BCOPY,
+                                                            UCT_IFACE_FLAG_PUT_ZCOPY);
+            if (!ucs_test_all_flags(attr->cap.flags, info.tl_cap)) {
+                continue;
+            }
+
+            uct_iface_attr_v2_t attr_v2;
+            attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+            if ((uct_iface_query_v2(uct_ep->iface, &attr_v2) == UCS_OK) &&
+                ucs_test_all_flags(attr_v2.cap.flags, required_v2_caps)) {
+                ++failover_lane_count;
+            }
+        }
+
+        if ((failover_lane_count < 2) ||
+            ((proto == TEST_FAILOVER_PROTO_PUT_AM_BCOPY) &&
+             (native_put_count > 0))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    static ucp_request_t *get_proto_request(void *status_ptr)
+    {
+        return UCS_PTR_IS_PTR(status_ptr) ?
+                       reinterpret_cast<ucp_request_t*>(status_ptr) - 1 :
+                       nullptr;
+    }
+
+    static ucp_lane_index_t get_request_lane_single(const ucp_request_t *req)
+    {
+        const ucp_proto_single_priv_t *spriv =
+                static_cast<const ucp_proto_single_priv_t*>(
+                        req->send.proto_config->priv);
+        return spriv->super.lane;
+    }
+
+    static ucp_lane_index_t get_request_lane_multi(const ucp_request_t *req)
+    {
+        const ucp_proto_multi_priv_t *mpriv =
+                static_cast<const ucp_proto_multi_priv_t*>(
+                        req->send.proto_config->priv);
+        return mpriv->lanes[0].super.lane;
+    }
+
+    ucp_request_t *
+    check_failover_request(void *status_ptr, const failover_proto_info_t &info)
+    {
+        ucp_request_t *req = get_proto_request(status_ptr);
+        EXPECT_NE(nullptr, req)
+                << "failover operation did not return a request";
+        if (req == nullptr) {
+            return nullptr;
+        }
+
+        EXPECT_TRUE(req->flags & UCP_REQUEST_FLAG_PROTO_SEND);
+        if (!(req->flags & UCP_REQUEST_FLAG_PROTO_SEND)) {
+            request_wait(status_ptr);
+            return nullptr;
+        }
+
+        EXPECT_STREQ(info.proto_name, req->send.proto_config->proto->name);
+        if (strcmp(info.proto_name, req->send.proto_config->proto->name)) {
+            request_wait(status_ptr);
+            return nullptr;
+        }
+
+        return req;
+    }
+
+    void do_outstanding_am(failover_proto_t proto, ucp_ep_h ep)
+    {
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
+        const size_t size                 = get_failover_proto_size(ep, proto);
+        mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
+        ucp_request_param_t param;
+
+        sbuf.pattern_fill(m_seed, size);
+        m_am_expected_size  = size;
+        m_am_expected_count = 1;
+        m_am_recv_count     = 0;
+        m_am_expect_reply   = is_reply_proto(proto);
+        param.op_attr_mask  = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        if (m_am_expect_reply) {
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
+            param.flags         = UCP_AM_SEND_FLAG_REPLY;
+        }
+
+        void *request = ucp_am_send_nbx(ep, AM_ID, nullptr, 0, sbuf.ptr(), size,
+                                        &param);
+        ucp_request_t *req = check_failover_request(request, info);
+        ASSERT_NE(nullptr, req);
+
+        ucp_lane_index_t lane = is_single_proto(proto) ?
+                                        get_request_lane_single(req) :
+                                        get_request_lane_multi(req);
+        ucs_status_t status = invalidate_uct_ep(ucp_ep_get_lane(ep, lane));
+        if (status == UCS_ERR_UNSUPPORTED) {
+            request_wait(request);
+            UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
+        }
+        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(request_wait(request));
+        ASSERT_UCS_OK(request_wait(ucp_ep_flush_nbx(ep, &m_req_empty_param)));
+        wait_for_value(&m_am_recv_count, 1ul);
+        ASSERT_EQ(1ul, m_am_recv_count);
+        ASSERT_EQ(size, m_am_rbuf.size());
+        mem_buffer::pattern_check(m_am_rbuf.data(), size, m_seed);
+    }
+
+    void test_outstanding_queue(failover_proto_t proto)
+    {
+        static const size_t max_msg_count = 64;
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
+        std::vector<std::unique_ptr<mem_buffer>> sbufs;
+        std::vector<ucs_status_ptr_t> requests;
+        ucp_lane_index_t request_lane = UCP_NULL_LANE;
+        size_t completed_count        = 0;
+        size_t pending_count          = 0;
+        ucp_request_param_t param;
+        ucp_ep_h ep;
+
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+
+        flush_workers();
+        ep = sender().ep(0, INJECTED_EP_INDEX);
+        if (!is_failover_proto_supported(ep, proto)) {
+            UCS_TEST_SKIP_R(
+                    "failover protocol is not supported by the endpoint lanes");
+        }
+
+        const size_t size = get_failover_proto_size(ep, proto);
+
+        ucs_assert(is_am_proto(proto) && is_single_proto(proto));
+        m_am_expected_size  = size;
+        m_am_expected_count = max_msg_count;
+        m_am_recv_count     = 0;
+        m_am_expect_reply   = false;
+        param.op_attr_mask  = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+
+        while ((pending_count == 0) && (requests.size() < max_msg_count)) {
+            size_t msg_index = requests.size();
+            sbufs.emplace_back(new mem_buffer(size, UCS_MEMORY_TYPE_HOST));
+            sbufs.back()->pattern_fill(m_seed + msg_index, size);
+
+            ucs_status_ptr_t request = ucp_am_send_nbx(ep, AM_ID, nullptr, 0,
+                                                       sbufs.back()->ptr(),
+                                                       size, &param);
+            ucp_request_t *req       = check_failover_request(request, info);
+            ASSERT_NE(nullptr, req);
+
+            ucp_lane_index_t lane = get_request_lane_single(req);
+            if (request_lane == UCP_NULL_LANE) {
+                request_lane = lane;
+            } else {
+                ASSERT_EQ(request_lane, lane);
+            }
+
+            if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+                ++completed_count;
+            } else {
+                ++pending_count;
+            }
+            requests.push_back(request);
+        }
+
+        ASSERT_GT(completed_count, 0ul);
+        ASSERT_GT(pending_count, 0ul);
+        m_am_expected_count = completed_count + pending_count;
+
+        ucs_status_t status = invalidate_uct_ep(ucp_ep_get_lane(ep, request_lane));
+        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(requests_wait(requests));
+        ASSERT_UCS_OK(request_wait(ucp_ep_flush_nbx(ep, &m_req_empty_param)));
+        wait_for_value(&m_am_recv_count, m_am_expected_count);
+        short_progress_loop();
+        EXPECT_EQ(m_am_expected_count, m_am_recv_count);
+        ASSERT_EQ(size, m_am_rbuf.size());
+        mem_buffer::pattern_check(m_am_rbuf.data(), size,
+                                  m_seed + m_am_expected_count - 1);
+    }
+
+    void do_outstanding_put(failover_proto_t proto, ucp_ep_h ep)
+    {
+        const failover_proto_info_t &info = get_failover_proto_info(proto);
+        mem_buffer lbuf(info.thresh, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(info.thresh, receiver());
+        ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+        ucp_request_param_t param;
+
+        lbuf.pattern_fill(m_seed, info.thresh);
+        rbuf.memset(0);
+        param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+
+        void *request      = ucp_put_nbx(ep, lbuf.ptr(), info.thresh,
+                                         uintptr_t(rbuf.ptr()), rkey.get(), &param);
+        ucp_request_t *req = check_failover_request(request, info);
+        ASSERT_NE(nullptr, req);
+
+        ucp_lane_index_t lane = is_single_proto(proto) ?
+                                        get_request_lane_single(req) :
+                                        get_request_lane_multi(req);
+        ucs_status_t status = invalidate_uct_ep(ucp_ep_get_lane(ep, lane));
+        if (status == UCS_ERR_UNSUPPORTED) {
+            request_wait(request);
+            UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
+        }
+        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(request_wait(request));
+        ASSERT_UCS_OK(request_wait(ucp_ep_flush_nbx(ep, &m_req_empty_param)));
+        rbuf.pattern_check(m_seed, info.thresh);
+    }
+
+    void test_outstanding_proto(failover_proto_t proto)
+    {
+        if (!is_proto_enabled()) {
+            UCS_TEST_SKIP_R("proto v1");
+        }
+
+        flush_workers();
+        ucp_ep_h ep                       = sender().ep(0, INJECTED_EP_INDEX);
+
+        if (!is_failover_proto_supported(ep, proto)) {
+            UCS_TEST_SKIP_R(
+                    "failover protocol is not supported by the endpoint lanes");
+        }
+
+        if (is_am_proto(proto) && (get_variant_value() & TEST_OP_AM)) {
+            do_outstanding_am(proto, ep);
+        }
+
+        if (is_put_proto(proto) && (get_variant_value() & TEST_OP_PUT)) {
+            do_outstanding_put(proto, ep);
+        }
+
+        short_progress_loop();
+        if (is_am_proto(proto) && (get_variant_value() & TEST_OP_AM)) {
+            EXPECT_EQ(1ul, m_am_recv_count);
+        }
+    }
+
+    void test_outstanding_am(failover_proto_t proto)
+    {
+        ASSERT_TRUE(get_variant_value() & TEST_OP_AM);
+        test_outstanding_proto(proto);
+    }
+
+    void test_outstanding_put(failover_proto_t proto)
+    {
+        ASSERT_TRUE(get_variant_value() & TEST_OP_PUT);
+        test_outstanding_proto(proto);
+    }
+
     static constexpr uint64_t m_seed = 0x12345678;
 
-    void skip_unless_rc_probe_gate() {
-        if (get_variant_value() != TEST_OP_AM) {
-            UCS_TEST_SKIP_R("pure AM variant only");
-        }
-        if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5", "rc_verbs", "ib"})) {
-            UCS_TEST_SKIP_R("probe gate applies to RC p2p lanes only");
-        }
-    }
-
-    static ucs_status_t recovery_probe_fail(uct_ep_h ep, unsigned flags,
-                                            uct_completion_t *comp)
-    {
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    }
-
-    static ucs_status_t recovery_probe_hold(uct_ep_h ep, unsigned flags,
-                                            uct_completion_t *comp)
-    {
-        if ((m_held_probe_comp == NULL) && (comp != NULL)) {
-            m_held_probe_comp = comp;
-            return UCS_INPROGRESS;
-        }
-
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    }
-
-    static void mock_recovery_probe(ucp_worker_h worker, ucs::mock &mock,
-                                    uct_ep_check_func_t ep_check)
-    {
-        ucp_context_h context = worker->context;
-        ucp_rsc_index_t rsc_index;
-
-        for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
-            if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
-                continue;
-            }
-
-            ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
-            if ((wiface == NULL) || (wiface->iface == NULL)) {
-                continue;
-            }
-
-            uint64_t flags = wiface->attr.cap.flags;
-            if ((flags & UCT_IFACE_FLAG_EP_CHECK) &&
-                (flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE)) {
-                mock.setup(&wiface->iface->ops.ep_check, ep_check);
-            }
-        }
-    }
-
-    static void mock_invoke_completion(ucs_status_t status)
-    {
-        uct_completion_t *comp = m_held_probe_comp;
-        m_held_probe_comp      = NULL;
-        if (comp == NULL) {
-            UCS_TEST_ABORT("hold mock did not capture the in-flight probe completion");
-        }
-
-        uct_invoke_completion(comp, status);
-    }
-
-    bool wait_for_recovery_probe_in_flight(ucp_ep_h ep, ucs_time_t deadline)
-    {
-        ucp_ep_recovery_arg_t *arg;
-        ucp_lane_index_t lane;
-
-        while (ucs_get_time() < deadline) {
-            short_progress_loop();
-
-            arg = ep->ext->recovery_arg;
-            if (arg == NULL) {
-                continue;
-            }
-
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.count != 0) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
     const ucp_request_param_t m_req_empty_param = { 0 };
-    std::vector<uint8_t> m_am_rbuf              = std::vector<uint8_t>(am_msg_size());
-    volatile bool m_am_received                 = false;
-
-    size_t total_err_count() const {
-        return m_total_err_count;
-    }
-
-    static uct_completion_t *m_held_probe_comp;
+    size_t m_am_expected_size                   = am_msg_size();
+    size_t m_am_expected_count                  = 0;
+    volatile size_t m_am_recv_count             = 0;
+    bool m_am_expect_reply                      = false;
+    std::vector<uint8_t> m_am_rbuf;
 
 private:
     size_t m_initiator_err_count = 0;
@@ -889,118 +1171,88 @@ private:
     ucs_status_t m_err_status    = UCS_OK;
 };
 
-uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
-
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8")
 {
-    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) && has_any_transport({"ud_v", "ud_x"})) {
-        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes leads to "
-                        "assertion failure in ud_ep_purge");
-    }
-
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8")
 {
     do_test(FAILURE_SIDE_TARGET);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+                     initiator_failure_am_egr_short_outstanding,
+                     !(get_variant_value() & TEST_OP_AM), "MAX_EAGER_LANES=8",
+                     "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
-    skip_unless_rc_probe_gate();
-
-    bool probe_armed = false;
-
-    test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
-
-    wait_for_cond([this, &probe_armed]() {
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-        ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
-        ucp_lane_index_t lane;
-
-        if (arg != NULL) {
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.func != NULL) {
-                    probe_armed = true;
-                    break;
-                }
-            }
-        }
-
-        return ucp_ep_get_failed_lanes(ep) == 0;
-    }, [this]() {
-        short_progress_loop();
-    });
-
-    EXPECT_TRUE(probe_armed)
-            << "RC p2p lane recovery completed without arming an aux probe";
+    test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SHORT);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000")
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+           initiator_failure_am_egr_short_reply_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
+           "MAX_EAGER_LANES=8", "BCOPY_THRESH=inf", "ZCOPY_THRESH=inf",
+           "RNDV_THRESH=inf")
 {
-    skip_unless_rc_probe_gate();
-
-    m_held_probe_comp = NULL;
-
-    ucs::mock mock;
-    mock_recovery_probe(sender().worker(), mock, recovery_probe_hold);
-
-    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_AM);
-
-    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    if (ucp_ep_get_failed_lanes(ep) == 0) {
-        UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
-    }
-
-    ASSERT_TRUE(wait_for_recovery_probe_in_flight(
-            ep, ucs_get_time() + ucs_time_from_sec(5.0)))
-            << "could not catch an aux probe in flight to exercise teardown";
-
-    void *creq = sender().disconnect_nb(0, INJECTED_EP_INDEX,
-                                        UCP_EP_CLOSE_FLAG_FORCE);
-    mock_invoke_completion(UCS_ERR_CANCELED);
-    ASSERT_FALSE(UCS_PTR_IS_ERR(creq))
-            << "disconnect failed: "
-            << ucs_status_string(UCS_PTR_STATUS(creq));
-    if (UCS_PTR_IS_PTR(creq)) {
-        EXPECT_EQ(UCS_OK, request_wait(creq));
-    }
+    test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SHORT_REPLY);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", "KEEPALIVE_INTERVAL=0.1s")
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+           initiator_failure_am_egr_single_bcopy_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
-    skip_unless_rc_probe_gate();
+    test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY);
+}
 
-    ucs::mock mock;
-    mock_recovery_probe(sender().worker(), mock, recovery_probe_fail);
-    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_AM);
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+           initiator_failure_am_egr_single_bcopy_reply_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY_REPLY);
+}
 
-    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    if (ucp_ep_get_failed_lanes(ep) == 0) {
-        UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
-    }
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+           initiator_failure_am_egr_single_bcopy_queue_outstanding,
+           !((get_variant_value() & TEST_OP_AM) && !(get_variant_value() & TEST_OP_PUT)),
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf",
+           "RC_TX_QUEUE_LEN?=8", "RC_TX_MAX_BB?=4")
+{
+    test_outstanding_queue(TEST_FAILOVER_PROTO_AM_EGR_SINGLE_BCOPY);
+}
 
-    ASSERT_NE(nullptr, ep->ext->recovery_arg);
-    wait_for_cond([ep]() {
-        return ep->ext->recovery_arg == NULL;
-    }, [this]() {
-        short_progress_loop();
-    });
-    ASSERT_EQ(nullptr, ep->ext->recovery_arg)
-            << "recovery retries were not exhausted";
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance,
+           initiator_failure_am_egr_multi_bcopy_outstanding,
+           !(get_variant_value() & TEST_OP_AM),
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    test_outstanding_am(TEST_FAILOVER_PROTO_AM_EGR_MULTI_BCOPY);
+}
 
-    EXPECT_EQ(0, total_err_count())
-            << "EP was failed even though live lanes remained";
-    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep))
-            << "failed lanes were cleared without a successful probe";
-    EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true))
-            << "data did not flow on live lanes after recovery give-up";
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, initiator_failure_put_am_bcopy_outstanding,
+                     !(get_variant_value() & TEST_OP_PUT),
+           "MAX_EAGER_LANES=8", "MAX_RMA_LANES=8", "MAX_RMA_RAILS=8",
+           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    test_outstanding_put(TEST_FAILOVER_PROTO_PUT_AM_BCOPY);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, initiator_failure_am_egr_bcopy,
+                !((get_variant_value() & TEST_OP_AM) &&
+                  !(get_variant_value() & TEST_OP_PUT)),
+           "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    do_test(FAILURE_SIDE_INITIATOR);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_fault_tolerance, target_failure_am_egr_bcopy,
+                !((get_variant_value() & TEST_OP_AM) &&
+                  !(get_variant_value() & TEST_OP_PUT)),
+                "MAX_EAGER_LANES=8", "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    do_test(FAILURE_SIDE_TARGET);
 }

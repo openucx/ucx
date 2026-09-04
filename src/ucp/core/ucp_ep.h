@@ -25,6 +25,8 @@
 
 #define UCP_MAX_IOV                16UL
 
+typedef struct ucp_ep_failover_ctx ucp_ep_failover_ctx_t;
+
 
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
@@ -104,7 +106,9 @@ enum {
                                                         while merging pending queues */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    /* 11 bit is vacant for a flag */
+    UCP_EP_FLAG_FAILURE_PENDING        = UCS_BIT(11),/* EP-wide failure was decided and its
+                                                        lanes are being torn down, but the
+                                                        discard did not complete yet */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -513,6 +517,10 @@ typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
     uint8_t                 state;
+    /* Generation of the LANES_ADDR exchange, pre-incremented by every request
+     * and echoed by the peer in its answers. Matched against ADDR RX tokens
+     * in ucp_ep_failover_apply_rx_tokens(). */
+    uint32_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
@@ -525,6 +533,9 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    /* Failover progress callback is already scheduled. Placed here to fit in
+     * the padding after cm_idx. */
+    uint8_t                       failover_progress_scheduled;
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -581,6 +592,10 @@ typedef struct ucp_ep_ext {
      * Map of system devices that require a flush operation
      */
     ucp_sys_dev_map_t             flush_sys_dev_map;
+
+    struct {
+        ucp_ep_failover_ctx_t *ctx;
+    } failover;
 } ucp_ep_ext_t;
 
 

@@ -18,6 +18,7 @@
 
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/core/ucp_ep_failover.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
@@ -66,6 +67,11 @@ typedef struct {
 /**
  * Argument for discarding UCP endpoint's lanes
  */
+enum ucp_ep_discard_lanes_flags {
+    UCP_EP_DISCARD_LANES_FLAG_PURGE = UCS_BIT(0)
+};
+
+
 typedef struct ucp_ep_discard_lanes_arg {
     uct_ep_t               failed_ep;
     /* How many discarding operations on UCT lanes are in-progress if purging of
@@ -79,6 +85,7 @@ typedef struct ucp_ep_discard_lanes_arg {
     ucp_worker_cfg_index_t deactivate_cfg_index;
     /* Completion status of operations after discarding is * done */
     ucs_status_t           status;
+    unsigned               flags;
 } ucp_ep_discard_lanes_arg_t;
 
 
@@ -223,6 +230,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 
 static void ucp_ep_deallocate(ucp_ep_h ep)
 {
+    ucp_ep_failover_cleanup(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep->ext->uct_eps);
     ucs_free(ep->ext);
@@ -280,6 +288,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
+    ucp_ep_failover_init(ep);
 
     for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
         ucp_ep_set_lane(ep, lane, NULL);
@@ -1500,12 +1509,18 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
     ucs_assert(arg != NULL);
     ucs_assert(arg->discard_counter > 0);
 
+    if (status != UCS_OK) {
+        arg->flags |= UCP_EP_DISCARD_LANES_FLAG_PURGE;
+    }
+
     if (--arg->discard_counter > 0) {
         return;
     }
 
     ucs_trace("ep %p: discard lanes completed", arg->ucp_ep);
-    ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    if (arg->flags & UCP_EP_DISCARD_LANES_FLAG_PURGE) {
+        ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    }
     ucp_ep_config_deactivate_worker_ifaces(arg->ucp_ep->worker,
                                            arg->deactivate_cfg_index);
     ucp_ep_release_discard_arg(arg);
@@ -1536,12 +1551,14 @@ static void ucp_ep_failed_destroy(uct_ep_h ep)
 
 static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                  ucs_status_t discard_status,
-                                 ucp_worker_cfg_index_t old_cfg_index)
+                                 ucp_worker_cfg_index_t old_cfg_index,
+                                 ucp_lane_map_t *failover_lanes_p)
 {
     unsigned ep_flush_flags         = ucp_ep_config_err_handling_enabled(ep) ?
                                       UCT_FLUSH_FLAG_CANCEL :
                                       UCT_FLUSH_FLAG_LOCAL;
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
+    ucp_lane_map_t discard_lanes    = lanes;
     ucp_ep_discard_lanes_arg_t *discard_arg;
     ucs_status_t status;
     ucp_lane_index_t lane;
@@ -1571,6 +1588,9 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
     discard_arg->discard_counter      = 1;
     discard_arg->destroy_counter      = ucs_popcount(lanes);
     discard_arg->status               = discard_status;
+    discard_arg->flags                = (failover_lanes_p == NULL) ?
+                                        UCP_EP_DISCARD_LANES_FLAG_PURGE :
+                                        0;
 
     /* Activate ifaces for the new configuration upfront before discard callback
      * completion to avoid race condition which leads to negative EP reference
@@ -1584,7 +1604,31 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
 
     ucs_debug("ep %p: discarding lanes", ep);
     ucp_ep_extract_failed_lanes(ep, lanes, &discard_arg->failed_ep, uct_eps);
-    ucs_for_each_bit(lane, lanes) {
+
+    if (failover_lanes_p != NULL) {
+        status = ucp_ep_failover_add_lanes(ep, lanes, uct_eps,
+                                           ucp_ep_discard_lanes_callback,
+                                           discard_arg, failover_lanes_p);
+        if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+            ucs_debug("ep %p: failed to start failover for lanes 0x%lx: %s", ep,
+                      lanes, ucs_status_string(status));
+        }
+
+        ucs_assert((*failover_lanes_p == 0) || (*failover_lanes_p == lanes));
+
+        if (*failover_lanes_p != 0) {
+            /* Tokens travel with the recovery ADDR generation; keep the
+             * discard refs until extract/replay completes. */
+            discard_arg->discard_counter += ucs_popcount(*failover_lanes_p);
+            discard_lanes                ^= *failover_lanes_p;
+        }
+    }
+
+    if (discard_lanes != 0) {
+        discard_arg->flags |= UCP_EP_DISCARD_LANES_FLAG_PURGE;
+    }
+
+    ucs_for_each_bit(lane, discard_lanes) {
         uct_ep = uct_eps[lane];
         if (uct_ep == NULL) {
             continue;
@@ -1632,12 +1676,21 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         return UCS_OK;
     }
 
+    /* Establish the endpoint-wide failure state before aborting failover:
+     * closing the failover lanes purges their outstanding operations, and the
+     * resulting completions must terminate their requests rather than restart
+     * them on an endpoint which is already going down. */
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
+
+    /* Drop in-flight failover extraction so worker flush_ops can drain. */
+    ucp_ep_failover_abort(ucp_ep, status);
+
     ++ucp_ep->worker->counters.ep_failures;
 
     /* The EP is unrecoverable - discard ALL lanes, including those already
      * marked UCP_LANE_TYPE_FAILED. */
     ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
-                         ucp_ep->cfg_index);
+                         ucp_ep->cfg_index, NULL);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
@@ -1718,7 +1771,9 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
     const unsigned ep_init_flags = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
                                     UCP_EP_INIT_FLAG_INTERNAL : 0;
+    ucs_status_t am_lane_status  = UCS_OK;
     int port_speed_changed       = 0;
+    int reactivate               = 0;
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
     ucp_worker_cfg_index_t new_cfg_index;
@@ -1747,7 +1802,14 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
         (ep->worker->context->config.features & UCP_FEATURE_AM)) {
         ucs_diag("ep %p: AM lane not found after reconfiguration with "
                  "failed lanes 0x%lx", ep, failed_lanes);
-        return UCS_ERR_UNREACHABLE;
+        /* Apply the configuration anyway, so the failed lanes are visible to
+         * protocol selection before the caller fails the endpoint: a request
+         * restarted while failover is being aborted must not be able to select
+         * a lane whose transmit queue is already dead. Reactivate the ifaces
+         * here, because the caller discards lanes without the previous
+         * configuration index. */
+        am_lane_status = UCS_ERR_UNREACHABLE;
+        reactivate     = 1;
     }
 
     if (port_speed_changed) {
@@ -1764,9 +1826,9 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
         return status;
     }
 
-    ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
+    ucp_ep_set_cfg_index(ep, new_cfg_index, reactivate);
 out:
-    return UCS_OK;
+    return am_lane_status;
 }
 
 ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
@@ -1799,6 +1861,10 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
         cfg_key.lanes[lane].lane_types &= ~UCS_BIT(UCP_LANE_TYPE_FAILED);
     }
 
+    /* Re-evaluate am_lane from scratch so a recovered AM lane can become the
+     * short-protocol lane again; keeping a post-failover fallback here races
+     * with proto short selection (lane mismatch assert). */
+    cfg_key.am_lane = UCP_NULL_LANE;
     cfg_key.am_lane = ucp_ep_config_key_find_am_lane(&cfg_key);
 
     if (ucp_ep_config_is_equal(&cfg_key, &ucp_ep_config(ep)->key)) {
@@ -2262,8 +2328,13 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
 {
     ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
     ucp_lane_map_t recovery_lanes;
+    uint32_t request_id;
 
-    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
+    if (ucp_ep_config(ep)->key.am_lane == UCP_NULL_LANE) {
+        ucs_error("ep %p: recovery needs AM lane for ADDR handshake", ep);
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_UNREACHABLE);
+        return 0;
+    }
 
     recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
     if (recovery_lanes == 0) {
@@ -2271,11 +2342,21 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
         return 0;
     }
 
-    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
-              " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
+    /* A request answers no other message, so requested_lane_map is empty. */
+    if (++ep->ext->recovery_arg->request_id == 0) {
+        /* 0 is the no-trailer sentinel on the wire */
+        ep->ext->recovery_arg->request_id = 1;
+    }
 
-    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
-                                   failed_lanes, recovery_lanes);
+    request_id = ep->ext->recovery_arg->request_id;
+    ucp_ep_failover_set_request_id(ep, request_id);
+
+    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
+              " recovery=0x%" PRIx64 " req_id=0x%" PRIx32,
+              ep, failed_lanes, recovery_lanes, request_id);
+
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST, 0,
+                                   recovery_lanes, request_id, NULL, NULL);
     return 1;
 }
 
@@ -2318,11 +2399,15 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
 
-    if (ucp_ep_config(ep)->key.dst_version < 22) {
-        ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
-                 "remote peer version %d is not supported",
-                 ep, ucp_ep_config(ep)->key.dst_version);
-        return UCS_OK;
+    if (ucp_ep_config(ep)->key.dst_version <
+        UCP_WIREUP_ADDR_TOKEN_MIN_VERSION) {
+        /* Address recovery may still run from version 22; tokens need 24. */
+        if (ucp_ep_config(ep)->key.dst_version < 22) {
+            ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
+                     "remote peer version %d is not supported",
+                     ep, ucp_ep_config(ep)->key.dst_version);
+            return UCS_OK;
+        }
     }
 
     if (arg == NULL) {
@@ -2376,7 +2461,14 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         goto done;
     }
 
-    ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
+    if (ucp_ep_config(ep)->key.am_lane == UCP_NULL_LANE) {
+        if (ucp_ep_failover_pending_rx_lanes(ep) != 0) {
+            ucs_error("ep %p: no live AM lane for ADDR token handshake", ep);
+            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_UNREACHABLE);
+            ret = 1;
+        }
+        goto done;
+    }
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
@@ -2466,6 +2558,18 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
               ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
 
     ucs_assert(ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_IDLE);
+
+    if (ucp_ep_config(ep)->key.am_lane == UCP_NULL_LANE) {
+        if (ucp_ep_failover_pending_rx_lanes(ep) != 0) {
+            ucs_error("ep %p: no AM lane for ADDR token handshake", ep);
+            ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
+            ucp_ep_failover_abort(ep, UCS_ERR_UNREACHABLE);
+            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_UNREACHABLE);
+            ret = 1;
+            goto done;
+        }
+    }
+
     ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_WAIT_REPLY;
     if (ucp_ep_recovery_send_request(ep)) {
         ret = 1;
@@ -2476,6 +2580,14 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     goto done;
 
 exhausted:
+    /* Token extract cannot finish without ADDR replies; release failover
+     * ownership so flush_ops_count can reach zero on teardown. */
+    if (ucp_ep_get_live_lanes(ep) == 0) {
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
+    }
+
+    ucp_ep_failover_abort(ep, UCS_ERR_ENDPOINT_TIMEOUT);
+
     if (ucp_ep_get_live_lanes(ep) == 0) {
         ucs_error("ep %p: recovery retries exhausted", ep);
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_ENDPOINT_TIMEOUT);
@@ -2484,7 +2596,7 @@ exhausted:
         ucs_diag("ep %p: recovery retries exhausted, giving up on "
                     "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
         ucp_ep_discard_lanes(ep, failed, UCS_ERR_ENDPOINT_TIMEOUT,
-                             ep->cfg_index);
+                             ep->cfg_index, NULL);
         ucp_ep_recovery_arg_free(ep);
         ret = 1;
     }
@@ -2499,6 +2611,7 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)
 {
     ucp_worker_cfg_index_t old_cfg_index = ucp_ep->cfg_index;
+    ucp_lane_map_t failover_lanes        = 0;
     ucs_status_t status;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
@@ -2511,16 +2624,16 @@ ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
 
     status = ucp_ep_reconfig_internal(ucp_ep, failed_lanes);
     if (status != UCS_OK) {
-        ucs_assertv(ucp_ep->cfg_index == old_cfg_index,
-                    "ep %p: cfg_index %u -> %u after reconfiguration error %s",
-                    ucp_ep, old_cfg_index, ucp_ep->cfg_index,
-                    ucs_status_string(status));
         /* No AM lane (or other reconfig failure): fail the whole EP so all
-         * lanes are discarded and flush can complete. Do not arm recovery. */
+         * lanes are discarded and flush can complete. Do not arm recovery.
+         * Abort any already-armed failover from earlier lane failures. */
+        ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILURE_PENDING, 0);
+        ucp_ep_failover_abort(ucp_ep, status);
         return status;
     }
 
-    ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index);
+    ucp_ep_discard_lanes(ucp_ep, failed_lanes, discard_status, old_cfg_index,
+                         &failover_lanes);
     return ucp_ep_recovery_arm(ucp_ep);
 }
 
@@ -2753,7 +2866,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
         ucp_ep_discard_lanes(ep, UCS_MASK(ucp_ep_num_lanes(ep)),
-                             UCS_ERR_CANCELED, ep->cfg_index);
+                             UCS_ERR_CANCELED, ep->cfg_index, NULL);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
@@ -2823,6 +2936,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
+            ucp_ep_failover_is_uct_ep(ucp_ep, lane, uct_ep) ||
             ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
             return lane;
         }
@@ -4727,11 +4841,16 @@ ucp_ep_select_short_init(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
                                     cfg_index, UCP_WORKER_CFG_INDEX_NULL,
                                     op_id, proto_flags, &proto_short);
 
-        /* Short protocol should be either disabled, or use expected lane */
-        ucs_assertv((proto_short.max_length_host_mem < 0) ||
-                    (proto_short.lane == exp_lane),
-                    "max_length_host_mem %ld, lane %d",
-                    proto_short.max_length_host_mem, proto_short.lane);
+        /* Short protocol should be either disabled, or use expected lane.
+         * After failover recovery am_lane can briefly disagree with the
+         * freshly selected short lane; disable short rather than asserting. */
+        if ((proto_short.max_length_host_mem >= 0) &&
+            (proto_short.lane != exp_lane)) {
+            ucs_debug("cfg %u: short lane %u != expected %u for %s, disable short",
+                      cfg_index, proto_short.lane, exp_lane,
+                      ucp_operation_names[op_id]);
+            ucp_proto_select_short_disable(&proto_short);
+        }
     } else {
         ucp_proto_select_short_disable(&proto_short);
     }

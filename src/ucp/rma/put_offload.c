@@ -164,7 +164,8 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
     return status;
 }
 
-static ucs_status_t ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
+static ucs_status_t
+ucp_proto_put_offload_bcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
@@ -212,7 +213,8 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING,
+                               UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING  |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESUME,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .max_lanes           = UCP_PROTO_RMA_MAX_BCOPY_LANES,
@@ -226,6 +228,11 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
+        return;
+    }
+
+    if ((init_params->rkey_config_key != NULL) &&
+        ucp_rkey_need_remote_flush(init_params->rkey_config_key)) {
         return;
     }
 
