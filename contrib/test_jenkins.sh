@@ -876,8 +876,7 @@ run_ucx_perftest_rma_iov() {
 
 	ucp_test_args="-b $ucx_inst_ptest/test_types_rma_iov_ucp -w 1"
 
-	my_devices=$(get_my_tasks $(get_active_ib_devices))
-	for ucx_dev in $my_devices
+	for ucx_dev in $(get_active_ib_devices)
 	do
 		echo "==== Running ucx_perftest IOV RMA on $ucx_dev ===="
 		export UCX_NET_DEVICES=$ucx_dev
