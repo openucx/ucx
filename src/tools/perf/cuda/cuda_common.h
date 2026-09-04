@@ -31,6 +31,31 @@ BEGIN_C_DECLS
 #define CUDA_CALL_WARN(_func, ...) \
     CUDA_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
 
+/* Same as CUDA_CALL* above, but for CUresult-returning CUDA driver API calls
+ * (e.g. cuMemCreate, cuMemMap), as opposed to cudaError_t-returning CUDA
+ * runtime API calls. */
+#define CUDA_DRV_CALL(_handler, _log_level, _func, ...) \
+    do { \
+        CUresult _cerr = _func(__VA_ARGS__); \
+        if (_cerr != CUDA_SUCCESS) { \
+            const char *_name = "unknown", *_desc = "no description"; \
+            cuGetErrorName(_cerr, &_name); \
+            cuGetErrorString(_cerr, &_desc); \
+            ucs_log(_log_level, "%s() failed: %s (%s)", \
+                    UCS_PP_MAKE_STRING(_func), _name, _desc); \
+            _handler; \
+        } \
+    } while (0)
+
+#define CUDA_DRV_CALL_RET(_ret, _func, ...) \
+    CUDA_DRV_CALL(return _ret, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CUDA_DRV_CALL_ERR(_func, ...) \
+    CUDA_DRV_CALL(, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CUDA_DRV_CALL_WARN(_func, ...) \
+    CUDA_DRV_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
+
 END_C_DECLS
 
 #endif /* CUDA_COMMON_H_ */
