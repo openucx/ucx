@@ -525,6 +525,8 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    ucp_lane_index_t              next_multi_send_lane; /* Next lane for a
+                                                            multi-send request */
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */

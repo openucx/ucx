@@ -154,6 +154,18 @@ UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth_explicit_num_paths,
     check_get_put_bandwidth(true);
 }
 
+UCS_TEST_P(test_uct_ib_perf, get_num_paths, "IB_NUM_PATHS=4")
+{
+    uct_perf_attr_t perf_attr = {};
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_NUM_PATHS;
+    perf_attr.operation  = UCT_EP_OP_GET_ZCOPY;
+
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &perf_attr));
+    EXPECT_EQ(4, perf_attr.num_paths);
+}
+
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_perf);
 
 class test_uct_ib_addr : public test_uct_ib {

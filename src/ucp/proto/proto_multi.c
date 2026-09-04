@@ -531,12 +531,58 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
                              int fixed_first_lane, unsigned req_sys_dev_ord,
                              ucp_proto_lane_selection_t *selection)
 {
+    const ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_map_t index_map;
+    ucp_lane_index_t i, lane, lane_index;
+    ucp_rsc_index_t dev_index;
+    unsigned max_paths;
+
     ucs_log_indent(1);
 
     ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
                                     params->max_lanes, lanes_perf,
                                     fixed_first_lane, req_sys_dev_ord,
                                     selection);
+
+    max_paths = params->max_lanes;
+    if (params->use_device_num_paths) {
+        ucs_for_each_bit(lane, selection->lane_map) {
+            max_paths = ucs_max(max_paths, lanes_perf[lane].num_paths);
+        }
+    }
+
+    max_paths = ucs_min(max_paths, UCP_PROTO_MAX_LANES);
+    while (selection->num_lanes < max_paths) {
+        index_map = 0;
+        for (i = 0; i < num_lanes; ++i) {
+            lane = lanes[i];
+            if (selection->lane_map & UCS_BIT(lane)) {
+                continue;
+            }
+
+            lane_perf = &lanes_perf[lane];
+            dev_index = ucp_proto_common_get_dev_index(&params->super.super,
+                                                        lane);
+            if ((selection->dev_count[dev_index] > 0) &&
+                (selection->dev_count[dev_index] < lane_perf->num_paths)) {
+                index_map |= UCS_BIT(i);
+            }
+        }
+
+        if (index_map == 0) {
+            break;
+        }
+
+        lane_index = ucp_proto_multi_find_max_avail_bw_lane(
+                &params->super.super, lanes, lanes_perf, selection, index_map,
+                req_sys_dev_ord);
+        if (lane_index == UCP_NULL_LANE) {
+            break;
+        }
+
+        ucp_proto_select_add_lane(selection, &params->super.super,
+                                  lanes[lane_index]);
+    }
 
     ucs_assertv(ucs_ilog2(selection->lane_map) < UCP_MAX_LANES,
                 "lane_map exceeds max number of lanes: lane_map=0x%" PRIx64,
@@ -546,6 +592,26 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
 
     ucs_trace("selected %u lanes for %s", selection->num_lanes,
               ucp_proto_id_field(params->super.super.proto_id, name));
+}
+
+static void ucp_proto_multi_adjust_path_perf(
+        const ucp_proto_multi_init_params_t *params,
+        const ucp_proto_lane_selection_t *selection,
+        ucp_proto_common_tl_perf_t *lanes_perf)
+{
+    double scale = (double)params->max_lanes / selection->num_lanes;
+    ucp_proto_common_tl_perf_t *lane_perf;
+    ucp_lane_index_t lane;
+
+    /* Extra device paths distribute whole requests without increasing the
+     * configured lane count, so keep its performance estimate. */
+    ucs_for_each_bit(lane, selection->lane_map) {
+        lane_perf = &lanes_perf[lane];
+        lane_perf->bandwidth          *= scale;
+        lane_perf->send_pre_overhead  *= scale;
+        lane_perf->send_post_overhead *= scale;
+        lane_perf->recv_overhead      *= scale;
+    }
 }
 
 /* Calculate the aggregate performance of the selected lanes. */
@@ -815,6 +881,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_md_map_t reg_md_map;
     ucs_status_t status;
     int fixed_first_lane;
+    int lane_per_request;
     unsigned req_sys_dev_ord;
 
     status = ucp_proto_multi_check_params(params);
@@ -856,6 +923,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     /* Select the lanes to use, and calculate their aggregate performance */
     ucp_proto_multi_select_lanes(params, lanes, num_lanes, lanes_perf,
                                  fixed_first_lane, req_sys_dev_ord, &selection);
+    lane_per_request = params->use_device_num_paths &&
+                       (selection.num_lanes > params->max_lanes);
+    if (lane_per_request) {
+        ucp_proto_multi_adjust_path_perf(params, &selection, lanes_perf);
+    }
+
     ucp_proto_multi_aggregate_perf(params, &selection, lanes_perf, &perf,
                                    &max_frag_ratio, &min_bandwidth);
 
@@ -865,6 +938,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     if (status != UCS_OK) {
         goto out_cleanup_lanes;
     }
+
+    mpriv->lane_per_request = lane_per_request;
 
     status = ucp_proto_multi_init_perf(params, perf_name, &selection,
                                        lanes_perf, mpriv, reg_md_map, &perf,

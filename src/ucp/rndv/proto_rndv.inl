@@ -415,7 +415,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_bulk_request_init(ucp_request_t *req,
                                  const ucp_proto_rndv_bulk_priv_t *rpriv)
 {
-    if (req->send.rndv.offset == 0) {
+    if (rpriv->mpriv.lane_per_request) {
+        ucp_proto_multi_request_init_lane(req, &rpriv->mpriv);
+    } else if (req->send.rndv.offset == 0) {
         req->send.multi_lane_idx = 0;
     } else {
         ucp_proto_rndv_bulk_request_init_lane_idx(req, rpriv);
@@ -438,6 +440,10 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
     size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
     size_t lane_offset, max_payload, weight_end_offset, end_offset;
+
+    if (rpriv->mpriv.lane_per_request) {
+        return lpriv->max_frag;
+    }
 
     if (ucs_likely(total_length < max_frag_sum)) {
         /**
@@ -505,6 +511,10 @@ ucp_proto_rndv_bulk_max_payload_align(ucp_request_t *req,
     ucs_assertv(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG,
                 "dt_class=%d (%s)", req->send.state.dt_iter.dt_class,
                 ucp_datatype_class_names[req->send.state.dt_iter.dt_class]);
+
+    if (rpriv->mpriv.lane_per_request) {
+        *lane_shift = 0;
+    }
 
     max_payload = ucp_proto_rndv_bulk_max_payload(req, rpriv, lpriv);
     if (max_payload < align_thresh) {

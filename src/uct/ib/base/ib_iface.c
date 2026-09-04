@@ -38,6 +38,7 @@
  */
 #define UCT_IB_NDR_READ_PATH_BANDWIDTH            38e9
 #define UCT_IB_XDR_READ_PATH_BANDWIDTH            35e9
+#define UCT_IB_XDR_READ_NUM_PATHS                  4
 #define UCT_IB_HIGH_SPEED_NUM_PATHS               2
 #define UCT_IB_PORT_SPEED_UNIT_GBPS               0.1
 #define UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS      800.0
@@ -1461,6 +1462,8 @@ int uct_ib_iface_is_multiplane_xdr_bw(uct_ib_iface_t *iface)
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
@@ -1474,12 +1477,23 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
             iface->num_paths = iface->path_bits_count;
         }
 
+        if (uct_ib_iface_port_is_xdr(iface) &&
+            (uct_ib_device_spec(dev)->flags &
+             UCT_IB_DEVICE_FLAG_XDR_READ_4_PATHS)) {
+            iface->get_num_paths = UCT_IB_XDR_READ_NUM_PATHS;
+            iface->num_paths     = ucs_max(iface->num_paths,
+                                           iface->get_num_paths);
+        } else {
+            iface->get_num_paths = 1;
+        }
+
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
             iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
         }
     } else {
-        iface->num_paths = config->num_paths;
+        iface->num_paths     = config->num_paths;
+        iface->get_num_paths = config->num_paths;
     }
 }
 
@@ -2239,6 +2253,11 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_FLAGS) {
         perf_attr->flags = 0;
+    }
+
+    if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_NUM_PATHS) &&
+        uct_ep_op_is_get(op)) {
+        perf_attr->num_paths = ib_iface->get_num_paths;
     }
 
     return UCS_OK;
