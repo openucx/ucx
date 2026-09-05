@@ -2408,7 +2408,7 @@ public:
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 
-private:
+protected:
     std::map<std::string, double> m_port_speed;
 };
 
@@ -2431,5 +2431,135 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rcx, "rc_x")
+
+#ifdef ENABLE_STATS
+
+class test_ucp_proto_mock_rcx_speed_change_stats :
+    public test_ucp_proto_mock_rcx_speed_change {
+public:
+    test_ucp_proto_mock_rcx_speed_change_stats()
+    {
+        stats_activate();
+    }
+
+    ~test_ucp_proto_mock_rcx_speed_change_stats()
+    {
+        stats_restore();
+    }
+
+    uint64_t get_zcopy_bytes_sent(ucp_ep_h ep, ucp_lane_index_t lane_index)
+    {
+        uct_base_ep_t *uct_ep = ucs_derived_of(ucp_ep_get_lane(ep, lane_index),
+                                               uct_base_ep_t);
+
+        return UCS_STATS_GET_COUNTER(uct_ep->stats, UCT_EP_STAT_BYTES_ZCOPY);
+    }
+
+    std::vector<uint64_t> get_zcopy_bytes_each_lane(ucp_ep_h ep)
+    {
+        const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep);
+        std::vector<uint64_t> bytes;
+
+        bytes.reserve(num_lanes);
+        for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+            bytes.push_back(get_zcopy_bytes_sent(ep, lane));
+        }
+
+        return bytes;
+    }
+
+    void expect_byte_distribution(
+            ucp_ep_h ep, const std::vector<uint64_t> &bytes_before,
+            size_t expected_bytes,
+            const std::map<std::string, double> &expected_rates,
+            double byte_tolerance)
+    {
+        const ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep);
+        uint64_t bytes_sent              = 0;
+        unsigned used_lanes              = 0;
+        double total_rate                = 0.0;
+        std::map<std::string, uint64_t> device_bytes;
+
+        for (const auto &entry : expected_rates) {
+            total_rate += entry.second;
+        }
+
+        ASSERT_GT(total_rate, 0.0);
+        for (ucp_lane_index_t lane = 0; lane < num_lanes; ++lane) {
+            const ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+
+            if (rsc_index == UCP_NULL_RESOURCE) {
+                continue;
+            }
+
+            const uint64_t lane_bytes = get_zcopy_bytes_sent(ep, lane) -
+                                        bytes_before[lane];
+            const uct_tl_resource_desc_t *tl_rsc = ucp_ep_get_tl_rsc(ep, lane);
+
+            UCS_TEST_MESSAGE << "lane[" << static_cast<unsigned>(lane)
+                             << "] (" << tl_rsc->dev_name << ") sent "
+                             << lane_bytes << " zcopy bytes";
+            if (lane_bytes > 0) {
+                ++used_lanes;
+            }
+
+            device_bytes[tl_rsc->dev_name] += lane_bytes;
+            bytes_sent += lane_bytes;
+        }
+
+        for (const auto &entry : expected_rates) {
+            const auto actual = device_bytes.find(entry.first);
+            const double expected = expected_bytes * entry.second / total_rate;
+
+            ASSERT_TRUE(actual != device_bytes.end())
+                    << "no lane found for " << entry.first;
+            EXPECT_NEAR(expected, actual->second, byte_tolerance)
+                    << "unexpected zcopy distribution for " << entry.first;
+        }
+
+        EXPECT_EQ(expected_rates.size(), static_cast<size_t>(used_lanes));
+        EXPECT_EQ(expected_bytes, bytes_sent);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change_stats, two_rails,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    /* Message sizes are set proportional to the total rail rates and below the
+     * fixed-point weight scale, so the expected byte counts are integers.
+     */
+    const size_t initial_msg_size   = 52 * UCS_KBYTE;
+    const size_t reduced_msg_size   = 38 * UCS_KBYTE;
+    constexpr double byte_tolerance = 1.0;
+    ucp_ep_h sender_ep              = sender().ep();
+    auto bytes_before               = get_zcopy_bytes_each_lane(sender_ep);
+    ucp_worker_cfg_index_t initial_rkey_cfg_index;
+    ucp_worker_cfg_index_t reduced_rkey_cfg_index;
+
+    initial_rkey_cfg_index = send_recv_rma(initial_msg_size, UCP_OP_ID_PUT);
+    expect_byte_distribution(sender_ep, bytes_before, initial_msg_size,
+                             m_port_speed, byte_tolerance);
+    bytes_before = get_zcopy_bytes_each_lane(sender_ep);
+    send_recv_rma(initial_msg_size, UCP_OP_ID_GET);
+    expect_byte_distribution(sender_ep, bytes_before, initial_msg_size,
+                             m_port_speed, byte_tolerance);
+
+    set_port_speed("mock_0:1", 14e9);
+    bytes_before = get_zcopy_bytes_each_lane(sender_ep);
+
+    reduced_rkey_cfg_index = send_recv_rma(reduced_msg_size, UCP_OP_ID_PUT);
+    EXPECT_NE(initial_rkey_cfg_index, reduced_rkey_cfg_index);
+    expect_byte_distribution(sender_ep, bytes_before, reduced_msg_size,
+                             m_port_speed, byte_tolerance);
+    bytes_before = get_zcopy_bytes_each_lane(sender_ep);
+    send_recv_rma(reduced_msg_size, UCP_OP_ID_GET);
+    expect_byte_distribution(sender_ep, bytes_before, reduced_msg_size,
+                             m_port_speed, byte_tolerance);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(
+        test_ucp_proto_mock_rcx_speed_change_stats, rcx, "rc_x")
+
+#endif // ENABLE_STATS
 
 #endif // HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
