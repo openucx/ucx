@@ -788,6 +788,23 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
+    /**
+     * Traffic class for this endpoint, as a full 8-bit Type of Service value:
+     * a 6-bit Differentiated Services Code Point (DSCP) followed by 2 ECN
+     * bits. On InfiniBand it is used as the GRH Traffic Class; on RoCEv2 its
+     * upper 6 bits are used as the DSCP field of the IP header. It overrides
+     * the transport's default traffic class for this endpoint only, using the
+     * same format.
+     *
+     * Currently implemented by the RC transport over mlx5 devices with DEVX
+     * enabled, including the GGA and GDAKI transports which are based on it.
+     * Transports which do not support it, such as DC, ignore this value and
+     * keep using their default traffic class.
+     *
+     * This setting is optional. To enable it, the corresponding @ref
+     * UCP_EP_PARAM_FIELD_TRAFFIC_CLASS bit in the field mask must be set.
+     */
+    uint8_t                 traffic_class;
 } ucp_ep_params_t;
 
 
