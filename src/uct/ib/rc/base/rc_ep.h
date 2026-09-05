@@ -96,15 +96,14 @@ enum {
 #define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
-        (signed)(_iface)->config.tx_moderation)) { \
+                     (signed)ucs_max((_iface)->config.tx_moderation, \
+                                     (_ep)->cq_reserve))) { \
         UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, 0); \
         (_ep)->txqp.unsignaled = RC_UNSIGNALED_INF; \
     }
 
 #define UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, _value) \
-    if ((_iface)->tx.cq_available <= (signed)(_value)) { \
-        (_ep)->cq_reserve = ucs_max((_ep)->cq_reserve, \
-                                    (uint16_t)(_value)); \
+    if (uct_rc_ep_reserve_cqe(_iface, _ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -114,9 +113,7 @@ enum {
     UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
 
 #define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (uct_rc_txqp_available(&(_ep)->txqp) <= (_value)) { \
-        (_ep)->txqp_reserve = ucs_max((_ep)->txqp_reserve, \
-                                      (uint16_t)(_value)); \
+    if (uct_rc_ep_reserve_txqp(_ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -352,6 +349,48 @@ static UCS_F_ALWAYS_INLINE void uct_rc_fc_restore_wnd(uct_rc_iface_t *iface,
 {
     fc->fc_wnd = iface->config.fc_wnd_size;
     UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
+}
+
+static UCS_F_ALWAYS_INLINE void uct_rc_ep_reset_reserve(uct_rc_ep_t *ep)
+{
+    ep->txqp_reserve = 0;
+    ep->cq_reserve   = 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_schedule_pending(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+{
+    if (ucs_arbiter_group_is_empty(&ep->arb_group)) {
+        uct_rc_ep_reset_reserve(ep);
+    } else {
+        ucs_arbiter_group_schedule_nonempty(&iface->tx.arbiter, &ep->arb_group);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
+{
+    uint16_t reserve = ucs_max(ep->txqp_reserve, value);
+
+    if (uct_rc_txqp_available(&ep->txqp) > reserve) {
+        return 0;
+    }
+
+    ep->txqp_reserve = reserve;
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_reserve_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep, uint16_t value)
+{
+    uint16_t reserve = ucs_max(ep->cq_reserve, value);
+
+    if (iface->tx.cq_available > (signed)reserve) {
+        return 0;
+    }
+
+    ep->cq_reserve = reserve;
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)

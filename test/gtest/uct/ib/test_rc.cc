@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -140,6 +140,65 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING  |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    uct_iface_attr_v2_t attr = {};
+    const size_t length      = 64;
+    const size_t count       = 2;
+    unsigned n;
+    ucs_status_t status;
+    uct_pending_req_t pend_req;
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+        (attr.max_put_sgl_zcopy_count < count)) {
+        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    }
+
+    mapped_buffer s0(length, 0ul, *m_e1), s1(length, 0ul, *m_e1);
+    mapped_buffer r0(length, 0ul, *m_e2), r1(length, 0ul, *m_e2);
+    void *buffers[]    = {s0.ptr(), s1.ptr()};
+    size_t lengths[]   = {length, length};
+    uct_mem_h memhs[]  = {s0.memh(), s1.memh()};
+    uint64_t raddrs[]  = {r0.addr(), r1.addr()};
+    uct_rkey_t rkeys[] = {r0.rkey(), r1.rkey()};
+
+    n = 0;
+    while (uct_rc_txqp_available(&rc_ep(m_e1)->txqp) > (int16_t)(count - 1)) {
+        ASSERT_LT(n++, 1024u);
+        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
+                                       r0.rkey()));
+    }
+
+    ASSERT_GT(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), 0);
+    ASSERT_LT(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)count);
+    ASSERT_GT(rc_iface(m_e1)->tx.cq_available, (int16_t)(count - 1));
+
+    status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs, raddrs,
+                                  rkeys, NULL, NULL, count, NULL);
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+
+    pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
+        return UCS_ERR_NO_RESOURCE;
+    };
+
+    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    flush();
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
@@ -1025,12 +1084,11 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and send short put message to force
-     * pending queue dispatch. Can't send AM message for that, because it may
-     * trigger reordering assert due to disable/enable entity hack. */
+    /* Enable send capabilities of m_e2 and dispatch the pending queue.
+     * Can't send AM/PUT for that, because it is blocked while FC grant is
+     * queued. */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 0);
-    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
+    uct_rc_iface_arbiter_dispatch(rc_iface(m_e2));
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);
