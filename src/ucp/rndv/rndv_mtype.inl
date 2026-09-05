@@ -10,6 +10,7 @@
 #include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
+#include <ucs/sys/topo/base/topo.h>
 
 
 static ucp_ep_h ucp_proto_rndv_mtype_ep(ucp_worker_t *worker,
@@ -47,17 +48,38 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   ucs_memory_type_t frag_mem_type,
-                                  ucs_sys_device_t frag_sys_dev)
+                                  ucs_sys_device_t frag_sys_dev,
+                                  unsigned fc_op)
 {
     ucp_worker_h worker = req->send.ep->worker;
+    ucs_status_t status;
 
-    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                              frag_sys_dev);
-    if (req->send.rndv.mdesc == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    req->send.rndv.mdesc = NULL;
+    status               = ucp_rndv_mpool_get(worker, frag_mem_type,
+                                              frag_sys_dev,
+                                              &req->send.rndv.mdesc);
+    if (status != UCS_ERR_NO_RESOURCE) {
+        return status;
     }
 
-    return UCS_OK;
+    /* Mpool quota exhausted - throttle by queuing the request in the
+     * appropriate pending queue ordered by priority. */
+    ucp_trace_req(req,
+                  "mtype_fc: mpool exhausted, queue %s mem_type %s "
+                  "sys_dev %s",
+                  (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
+                  ucs_memory_type_names[frag_mem_type],
+                  ucs_topo_sys_device_get_name(frag_sys_dev));
+    UCS_STATS_UPDATE_COUNTER(worker->stats,
+                             UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
+    ucs_assert(!(req->flags &
+                 (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
+                  UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED)));
+    req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+    ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
+                   &req->send.rndv.ppln.queue_elem);
+
+    return UCS_ERR_NO_RESOURCE;
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
@@ -166,6 +188,97 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     }
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_mtype_fc_reschedule_pred(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
+{
+    return (elem->cb == ucp_proto_rndv_mtype_fc_reschedule_cb) &&
+           (elem->arg == arg);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
+    ucs_assert(fc_op < UCP_WORKER_RNDV_FC_OP_LAST);
+    ucs_assert(!ucs_test_all_flags(req->flags,
+                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
+                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED));
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED) {
+        ucp_trace_req(req, "mtype_fc: remove aborted request from queue");
+        ucs_queue_remove(&worker->rndv_mtype_fc.pending_q[fc_op],
+                         &req->send.rndv.ppln.queue_elem);
+        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED) {
+        ucp_trace_req(req, "mtype_fc: remove aborted reschedule callback");
+        ucs_callbackq_remove_oneshot(
+                &worker->uct->progress_q, req,
+                ucp_proto_rndv_mtype_fc_reschedule_pred, req);
+        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
+    }
+}
+
+/**
+ * Reschedule a pending throttled request after a fragment is released back to
+ * the mpool.  Dequeue priority: PUT/GET > RTR.
+ *
+ * Priority rationale:
+ * PUT/GET - Completing a PUT or GET frees a staging buffer, reducing memory
+ *           pressure. PUT also unblocks the remote side.
+ * RTR     - Scheduling RTR triggers a remote PUT allocation, increasing total
+ *           memory pressure.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+    ucp_request_t *pending_req;
+    unsigned q_index;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
+
+    /* Dequeue from highest-priority non-empty queue (PUT/GET before RTR) */
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
+        if (ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[q_index])) {
+            continue;
+        }
+
+        pending_req = ucs_queue_pull_elem_non_empty(
+                &worker->rndv_mtype_fc.pending_q[q_index], ucp_request_t,
+                send.rndv.ppln.queue_elem);
+        ucs_assert(pending_req->flags &
+                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED);
+        ucs_assert(!(pending_req->flags &
+                     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED));
+        pending_req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+        pending_req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
+        ucp_trace_req(pending_req, "mtype_fc: dequeue %s",
+                      (q_index == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get");
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
+                                  ucp_proto_rndv_mtype_fc_reschedule_cb,
+                                  pending_req);
+        return;
+    }
+}
+
+/**
+ * Release the staging buffer back to the mpool and reschedule any pending
+ * throttled request.  This pairs with ucp_proto_rndv_mtype_request_init()
+ * which allocates the mdesc from the mpool.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_mdesc_release(ucp_request_t *req)
+{
+    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    req->send.rndv.mdesc = NULL;
+    ucp_proto_rndv_mtype_fc_reschedule_pending(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

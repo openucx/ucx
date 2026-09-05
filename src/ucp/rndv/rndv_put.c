@@ -520,16 +520,23 @@ static UCS_F_INLINE_OPTIMIZED ucs_status_t ucp_proto_rndv_put_mtype_send_func(
 static ucs_status_t
 ucp_proto_rndv_put_mtype_copy_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req                     = ucs_container_of(uct_req,
-                                                              ucp_request_t,
-                                                              send.uct);
-    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    const ucp_proto_rndv_put_priv_t *rpriv;
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
 
+    rpriv = req->send.proto_config->priv;
+
+    /* Try to allocate a staging buffer. If the mpool quota is exhausted
+     * the request is queued and will be rescheduled later. */
     status = ucp_proto_rndv_mtype_request_init(req, rpriv->bulk.frag_mem_type,
-                                               rpriv->bulk.frag_sys_dev);
+                                               rpriv->bulk.frag_sys_dev,
+                                               UCP_WORKER_RNDV_FC_OP_PUT);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return UCS_OK;
+    }
+
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;
@@ -565,7 +572,10 @@ static void ucp_proto_rndv_put_mtype_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "rndv_put_mtype_completion");
-    ucs_mpool_put(req->send.rndv.mdesc);
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_proto_rndv_mtype_mdesc_release(req);
+    }
+
     ucp_proto_rndv_put_common_complete(req);
 }
 
@@ -575,7 +585,10 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "rndv_put_mtype_frag_completion");
-    ucs_mpool_put(req->send.rndv.mdesc);
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_proto_rndv_mtype_mdesc_release(req);
+    }
+
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 
@@ -660,6 +673,20 @@ ucp_proto_rndv_put_mtype_query(const ucp_proto_query_params_t *params,
                                     put_desc);
 }
 
+static void
+ucp_proto_rndv_put_mtype_abort(ucp_request_t *req, ucs_status_t status)
+{
+    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_PUT);
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_proto_completion_init(&req->send.state.uct_comp,
+                                  rpriv->put_comp_cb);
+    }
+
+    ucp_proto_rndv_stub_abort(req, status);
+}
+
 ucp_proto_t ucp_rndv_put_mtype_proto = {
     .name     = "rndv/put/mtype",
     .desc     = NULL,
@@ -674,6 +701,6 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
-    .abort    = ucp_proto_rndv_stub_abort,
+    .abort    = ucp_proto_rndv_put_mtype_abort,
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };

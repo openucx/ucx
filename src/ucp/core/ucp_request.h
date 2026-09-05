@@ -69,7 +69,9 @@ enum {
     UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
     UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
-    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
+    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED  = UCS_BIT(30),
+    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED = UCS_BIT(31)
 };
 
 
@@ -331,7 +333,10 @@ struct ucp_request {
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
                                     /* Size to send in ack message */
-                                    ssize_t ack_data_size;
+                                    ssize_t          ack_data_size;
+                                    /* Element in worker-level pending queue
+                                     * for throttled ppln requests */
+                                    ucs_queue_elem_t queue_elem;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */

@@ -404,6 +404,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Force-enable the RMA rendezvous put/get protocols.",
    ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_FRAG_WORKER_MAX_MEM", "auto",
+   "Maximum amount of memory a worker may use for rendezvous staging\n"
+   "fragments, or \"inf\" for no limit. The same limit is applied\n"
+   "independently to each fragment memory type, and per device when\n"
+   "available. It is converted to a fragment count using RNDV_FRAG_SIZE and\n"
+   "RNDV_FRAG_ALLOC_COUNT. When the limit is reached, further fragment\n"
+   "requests are queued until fragments are released",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"

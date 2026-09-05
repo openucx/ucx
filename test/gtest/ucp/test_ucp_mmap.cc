@@ -1013,15 +1013,90 @@ UCS_TEST_P(test_ucp_mmap, gva, "GVA_ENABLE=y")
     }
 }
 
+static ucs_status_t
+rndv_mpool_chunk_alloc_fail(ucs_mpool_t*, size_t*, void**)
+{
+    return UCS_ERR_NO_MEMORY;
+}
+
 UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 {
     ucp_worker_h worker = sender().worker();
     for (auto mem_type : mem_buffer::supported_mem_types()) {
-        ucp_mem_desc_t *mdesc = ucp_rndv_mpool_get(worker, mem_type,
-                                                   UCS_SYS_DEVICE_ID_UNKNOWN);
+        ucp_mem_desc_t *mdesc;
+
+        ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, mem_type,
+                                         UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc));
+        ASSERT_NE(nullptr, mdesc);
         EXPECT_EQ(mdesc->memh, mdesc->memh->parent);
         ucs_mpool_put(mdesc);
     }
+}
+
+UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
+           "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
+           "RNDV_FRAG_WORKER_MAX_MEM=8K")
+{
+    ucp_mem_desc_t *mdesc1;
+    ucp_mem_desc_t *mdesc2;
+    ucp_mem_desc_t *mdesc3;
+    ucp_worker_h worker = sender().worker();
+
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3));
+
+    ucs_mpool_put(mdesc2);
+    ucs_mpool_put(mdesc1);
+}
+
+UCS_TEST_P(test_ucp_mmap, rndv_mpool_allocation_failure,
+           "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
+           "RNDV_FRAG_WORKER_MAX_MEM=16K")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_worker_mpool_key_t key;
+    ucp_mem_desc_t *mdesc1;
+    ucp_mem_desc_t *mdesc2;
+    ucp_mem_desc_t *mdesc3;
+    ucs_mpool_ops_t fail_ops;
+    const ucs_mpool_ops_t *orig_ops;
+    ucs_status_t status;
+
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
+    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
+
+    key.mem_type          = UCS_MEMORY_TYPE_HOST;
+    key.sys_dev           = UCS_SYS_DEVICE_ID_UNKNOWN;
+    const khiter_t khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash,
+                                   key);
+    ASSERT_NE(kh_end(&worker->mpool_hash), khiter);
+    ucs_mpool_t *mpool = &kh_val(&worker->mpool_hash, khiter);
+
+    /* The first chunk is exhausted, but the pool still has quota. Make the
+     * next chunk allocation fail and verify it is not reported as quota
+     * exhaustion. */
+    orig_ops             = mpool->data->ops;
+    fail_ops             = *orig_ops;
+    fail_ops.chunk_alloc = rndv_mpool_chunk_alloc_fail;
+    mpool->data->ops     = &fail_ops;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                    UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3);
+    }
+    mpool->data->ops = orig_ops;
+
+    EXPECT_EQ(UCS_ERR_NO_MEMORY, status);
+
+    ucs_mpool_put(mdesc2);
+    ucs_mpool_put(mdesc1);
 }
 
 UCS_TEST_P(test_ucp_mmap, no_sys_dev_with_zero_md_map)
