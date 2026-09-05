@@ -85,6 +85,25 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "The configuration parameter replaced by UCX_MEM_CUDA_HOOK_MODE",
    UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
+  {"ROCM_HOOK_MODE",
+#if UCM_BISTRO_HOOKS
+   UCM_MMAP_HOOK_BISTRO_STR,
+#else
+   UCM_MMAP_HOOK_RELOC_STR,
+#endif
+   "ROCm memory hook modes. A combination of:\n"
+   " none   - Don't set ROCm hooks.\n"
+   " reloc  - Use ELF relocation table to set hooks. In this mode, if a caller\n"
+   "          resolves the HSA memory APIs via dlopen/dlsym rather than the GOT,\n"
+   "          its allocations may be missed and reported as host memory.\n"
+#if UCM_BISTRO_HOOKS
+   "\n bistro - Use binary instrumentation to set hooks. In this mode, calls\n"
+   "          into the HSA runtime are intercepted regardless of how the symbol\n"
+   "          was resolved, so device allocations are reported properly."
+#endif
+   ,ucs_offsetof(ucm_global_config_t, rocm_hook_modes),
+                 UCS_CONFIG_TYPE_BITMAP(ucm_mmap_hook_modes)},
+
   {"DYNAMIC_MMAP_THRESH", "yes",
    "Enable dynamic mmap threshold: for every released block, the\n"
    "mmap threshold is adjusted upward to the size of the size of\n"
