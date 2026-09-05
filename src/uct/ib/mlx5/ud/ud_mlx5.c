@@ -879,6 +879,9 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .create_qp               = uct_ud_mlx5_iface_create_qp,
     .destroy_qp              = uct_ud_mlx5_iface_destroy_qp,
     .unpack_peer_address     = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_resolve_peer_address = (ucs_status_t(*)(uct_ud_ep_t*,
+                                                const uct_ib_address_t*))
+                               ucs_empty_function_return_success,
     .ep_get_peer_address     = uct_ud_mlx5_ep_get_peer_address,
     .get_peer_address_length = uct_ud_mlx5_get_peer_address_length,
     .peer_address_str        = uct_ud_mlx5_iface_peer_address_str,

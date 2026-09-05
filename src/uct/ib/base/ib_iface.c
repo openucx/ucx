@@ -1023,35 +1023,23 @@ int uct_ib_iface_is_reachable_v2(const uct_iface_h tl_iface,
     return 1;
 }
 
-ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
-                                    struct ibv_ah_attr *ah_attr,
-                                    const char *usage, struct ibv_ah **ah_p)
+ucs_status_t uct_ib_iface_ah_get(uct_ib_iface_t *iface,
+                                 struct ibv_ah_attr *ah_attr,
+                                 const char *usage,
+                                 uct_ib_ah_entry_t **entry_p)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-
-    if (dev->ah_cache_ttl == 0) {
-        return uct_ib_device_create_ah(dev, ah_attr, uct_ib_iface_md(iface)->pd,
-                                       usage, ah_p);
-    }
-
-    return uct_ib_device_create_ah_cached(dev, ah_attr,
-                                          uct_ib_iface_md(iface)->pd, usage,
-                                          ah_p);
+    return uct_ib_device_ah_get(uct_ib_iface_device(iface), ah_attr,
+                                uct_ib_iface_md(iface)->pd, usage, entry_p);
 }
 
-void uct_ib_iface_release_ah(uct_ib_iface_t *iface, struct ibv_ah *ah)
+void uct_ib_iface_ah_put(uct_ib_iface_t *iface, uct_ib_ah_entry_t *entry)
 {
-    int ret;
+    uct_ib_device_ah_put(uct_ib_iface_device(iface), entry);
+}
 
-    if (uct_ib_iface_device(iface)->ah_cache_ttl != 0) {
-        return;
-    }
-
-    ret = ibv_destroy_ah(ah);
-    if (ret != 0) {
-        ucs_warn("%s: ibv_destroy_ah() failed with error %d: %m",
-                 uct_ib_device_name(uct_ib_iface_device(iface)), ret);
-    }
+void uct_ib_iface_ah_hold(uct_ib_iface_t *iface, uct_ib_ah_entry_t *entry)
+{
+    uct_ib_device_ah_hold(uct_ib_iface_device(iface), entry);
 }
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
@@ -2317,28 +2305,4 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
     return UCS_OK;
-}
-
-int uct_ib_iface_is_connected(uct_ib_iface_t *ib_iface,
-                              const uct_ib_address_t *ib_addr,
-                              unsigned path_index, struct ibv_ah *peer_ah)
-{
-    enum ibv_mtu path_mtu;
-    ucs_status_t status;
-    struct ibv_ah_attr ah_attr;
-    struct ibv_ah *ah;
-
-    status = uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
-                                                 &ah_attr, &path_mtu);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    status = uct_ib_device_get_ah_cached(uct_ib_iface_device(ib_iface),
-                                         &ah_attr, &ah);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return ah == peer_ah;
 }

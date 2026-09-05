@@ -46,9 +46,9 @@ typedef struct uct_srd_ctl_hdr {
 
 
 typedef struct uct_srd_ctl_op {
-    ucs_queue_elem_t queue; /* Entry in iface tx pending control queue */
-    struct ibv_ah    *ah;
-    uint32_t         remote_qpn;
+    ucs_queue_elem_t   queue;    /* Entry in iface tx pending control queue */
+    uct_ib_ah_entry_t  *ah_entry; /* Owns one AH cache reference */
+    uint32_t           remote_qpn;
 } uct_srd_ctl_op_t;
 
 

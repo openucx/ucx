@@ -168,7 +168,18 @@ typedef struct uct_ib_device_spec {
 } uct_ib_device_spec_t;
 
 
-KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
+/**
+ * Refcounted, TTL'd address handle cache entry.
+ */
+typedef struct uct_ib_ah_entry {
+    struct ibv_ah *ah;
+    int            refcount;      /* Includes the cache's own reference
+                                    * while the entry is in ah_hash */
+    ucs_time_t     creation_time;
+} uct_ib_ah_entry_t;
+
+
+KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, uct_ib_ah_entry_t*);
 
 
 /**
@@ -244,7 +255,7 @@ typedef struct uct_ib_device {
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
-    ucs_time_t                  ah_cache_ttl; /* 0 or inf */
+    ucs_time_t                  ah_cache_ttl;    /* 0 disables the cache */
     /* Async event subscribers */
     ucs_spinlock_t              async_event_lock;
     khash_t(uct_ib_async_event) async_events_hash;
@@ -383,17 +394,20 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
-/* Creates an AH outside the device cache; caller must destroy it */
+/**
+ * Get a reference to a cached AH matching ah_attr, creating one if needed.
+ * Release with uct_ib_device_ah_put().
+ */
 ucs_status_t
-uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
-                        struct ibv_pd *pd, const char *usage,
-                        struct ibv_ah **ah_p);
+uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                     struct ibv_pd *pd, const char *usage,
+                     uct_ib_ah_entry_t **entry_p);
 
-/* Bypasses ah_cache_ttl; cache-owned, caller must not destroy the AH */
-ucs_status_t
-uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
-                               struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
-                               const char *usage, struct ibv_ah **ah_p);
+/* Release a reference obtained from ah_get() or ah_hold(). */
+void uct_ib_device_ah_put(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry);
+
+/* Duplicate a reference already held by the caller. */
+void uct_ib_device_ah_hold(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry);
 
 ucs_status_t uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev,
                                               uint8_t port_num,
@@ -465,10 +479,6 @@ void uct_ib_device_async_event_cancel(uct_ib_device_t *dev,
 void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,
                                           uint32_t resource_id);
-
-ucs_status_t uct_ib_device_get_ah_cached(uct_ib_device_t *dev,
-                                         struct ibv_ah_attr *ah_attr,
-                                         struct ibv_ah **ah_p);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
 
