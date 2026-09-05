@@ -817,6 +817,279 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                        IBV_QPS_ERR);
 }
 
+static uint8_t
+uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    return ctrl->opmod_idx_opcode >> 24;
+}
+
+static void
+uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
+                           void *dst, size_t length)
+{
+    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
+
+    memcpy(dst, src, copy_len);
+    if (copy_len < length) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
+               length - copy_len);
+    }
+}
+
+static ucs_status_t
+uct_rc_mlx5_op_info_fill_am_short(const uct_ib_mlx5_txwq_t *txwq,
+                                  const struct mlx5_wqe_inl_data_seg *inl,
+                                  size_t wqe_size, void *callback_data,
+                                  int *skip_p, uct_ep_op_info_t *info)
+{
+    size_t inline_length   = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
+    size_t inline_wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
+                             ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                              UCT_IB_MLX5_WQE_SEG_SIZE);
+    uct_rc_mlx5_am_short_hdr_t *am;
+
+    if ((inline_length < sizeof(uct_rc_mlx5_hdr_t)) ||
+        (wqe_size != inline_wqe_size)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    uct_ib_mlx5_txwq_copy_segs(txwq, inl + 1, callback_data, inline_length);
+
+    am = callback_data;
+    if ((am->rc_hdr.rc_hdr.am_id & UCT_RC_EP_FC_MASK) ==
+        UCT_RC_EP_FC_PURE_GRANT) {
+        *skip_p = 1;
+        return UCS_OK;
+    }
+
+    if (inline_length < sizeof(*am)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    info->field_mask       = UCT_EP_OP_INFO_FIELD_OPERATION |
+                             UCT_EP_OP_INFO_FIELD_AM;
+    info->operation        = UCT_EP_OP_AM_SHORT;
+    info->am.field_mask    = UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                             UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+                             UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+    info->am.am_id         = am->rc_hdr.rc_hdr.am_id & ~UCT_RC_EP_FC_MASK;
+    info->am.header.value  = am->am_hdr;
+    info->am.payload.data.buffer = am + 1;
+    info->am.payload.data.length = inline_length - sizeof(*am);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rc_mlx5_op_info_fill_am(
+        const uct_ib_mlx5_txwq_t *txwq,
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+        void *callback_data, int *skip_p, uct_ep_op_info_t *info)
+{
+    const struct mlx5_wqe_inl_data_seg *inl;
+
+    memset(info, 0, sizeof(*info));
+    *skip_p = 0;
+    ucs_assert(uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_SEND);
+
+    ucs_assertv_always(
+            (wqe_size >= (sizeof(*ctrl) + sizeof(*inl))) &&
+            (wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE),
+            "wqe_size=%zu", wqe_size);
+
+    inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                    (void*)(ctrl + 1));
+    if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
+        return uct_rc_mlx5_op_info_fill_am_short(
+                txwq, inl, wqe_size, callback_data, skip_p, info);
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static ucs_status_t uct_ib_mlx5_psn_delivery_status(uint32_t wqe_first_psn,
+                                                    uint32_t receiver_next_psn,
+                                                    uint32_t num_packets)
+{
+    const uint32_t psn_half = UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1);
+    uint32_t diff;
+
+    ucs_assert(num_packets > 0);
+
+    diff = (receiver_next_psn - wqe_first_psn) & UCT_IB_MLX5_PSN_MASK;
+    if (diff == psn_half) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((diff == 0) || (diff > psn_half) || (diff < num_packets)) {
+        return UCS_INPROGRESS;
+    }
+
+    return UCS_OK;
+}
+
+static uint32_t uct_rc_mlx5_op_num_packets(
+        const uct_ib_mlx5_txwq_t *txwq,
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size)
+{
+    const struct mlx5_wqe_inl_data_seg *inl;
+    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+
+    switch (opcode) {
+    case MLX5_OPCODE_NOP:
+        return 0;
+    case MLX5_OPCODE_SEND:
+        ucs_assertv_always(
+                wqe_size >= (sizeof(*ctrl) + sizeof(*inl)),
+                "wqe_size=%zu", wqe_size);
+        inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
+                                        (void*)(ctrl + 1));
+        if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
+            return 1;
+        }
+
+        ucs_fatal("rc mlx5: unsupported outstanding SEND WQE");
+    default:
+        ucs_fatal("rc mlx5: unsupported outstanding WQE opcode 0x%x", opcode);
+    }
+}
+
+static uint32_t uct_rc_mlx5_ep_outstanding_num_packets(
+        uct_ib_mlx5_txwq_t *txwq, uint16_t start_ci, uint16_t end_ci)
+{
+    const struct mlx5_wqe_ctrl_seg *ctrl;
+    uint32_t num_packets = 0;
+    uint16_t ci;
+    size_t wqe_size;
+
+    for (ci = start_ci; ci != end_ci;
+         ci = uct_ib_mlx5_txwq_next_ci(ci, wqe_size)) {
+        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        if ((wqe_size == 0) ||
+            (wqe_size > UCT_IB_MLX5_MAX_SEND_WQE_SIZE)) {
+            ucs_fatal("rc mlx5: invalid outstanding WQE size %zu", wqe_size);
+        }
+
+        num_packets += uct_rc_mlx5_op_num_packets(txwq, ctrl, wqe_size);
+    }
+
+    return num_packets;
+}
+
+static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
+        const uct_ep_outstanding_purge_params_t *params)
+{
+    if (params == NULL) {
+        ucs_error("rc mlx5: outstanding purge parameters are NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN)) {
+        ucs_error("rc mlx5: rx token is not set");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_assert(params->rx_token != NULL);
+
+    if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_CB) ||
+        (params->cb == NULL)) {
+        ucs_error("rc mlx5: callback is not set or is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    const uct_rc_mlx5_rx_token_t *rx_token;
+    const struct mlx5_wqe_ctrl_seg *ctrl;
+    uint8_t callback_data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
+    uct_ep_op_info_t info;
+    uint16_t ci, end_ci, start_ci;
+    uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
+    uint32_t num_outstanding_packets, num_packets;
+    size_t wqe_size;
+    int skip;
+    void *callback_arg;
+    ucs_status_t delivery_status, status;
+
+    status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    callback_arg = (params->field_mask & UCT_EP_OUTSTANDING_FIELD_ARG) ?
+                   params->arg : NULL;
+
+    ucs_assert(ep->err_handler_inprogress);
+
+    end_ci   = txwq->sw_pi;
+    ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
+    start_ci = uct_ib_mlx5_txwq_next_ci(txwq->ft_ci,
+                                        uct_ib_mlx5_wqe_size(ctrl));
+
+    if (start_ci == end_ci) {
+        goto out_purge;
+    }
+
+    num_outstanding_packets = uct_rc_mlx5_ep_outstanding_num_packets(
+            txwq, start_ci, end_ci);
+
+    rx_token          = params->rx_token;
+    receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
+    first_failed_psn  = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
+                         num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
+    ucs_assert(num_outstanding_packets <
+               UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1));
+    psn_diff = (receiver_next_psn - first_failed_psn) &
+               UCT_IB_MLX5_PSN_MASK;
+    if (psn_diff > num_outstanding_packets) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    wqe_first_psn = first_failed_psn;
+    for (ci = start_ci; ci != end_ci;
+         ci = uct_ib_mlx5_txwq_next_ci(ci, wqe_size)) {
+        ctrl        = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
+        wqe_size    = uct_ib_mlx5_wqe_size(ctrl);
+        num_packets = uct_rc_mlx5_op_num_packets(txwq, ctrl, wqe_size);
+        if (num_packets == 0) {
+            continue;
+        }
+
+        delivery_status = uct_ib_mlx5_psn_delivery_status(
+                wqe_first_psn, receiver_next_psn, num_packets);
+        ucs_assertv_always((delivery_status == UCS_OK) ||
+                           (delivery_status == UCS_INPROGRESS),
+                           "delivery_status=%s",
+                           ucs_status_string(delivery_status));
+        wqe_first_psn = (wqe_first_psn + num_packets) &
+                        UCT_IB_MLX5_PSN_MASK;
+
+        if (delivery_status == UCS_INPROGRESS) {
+            status = uct_rc_mlx5_op_info_fill_am(
+                    txwq, ctrl, wqe_size, callback_data, &skip, &info);
+            if (status != UCS_OK) {
+                ucs_fatal("rc mlx5: failed to parse outstanding WQE at ci %u",
+                          ci);
+            }
+
+            if (!skip) {
+                params->cb(&info, callback_arg);
+            }
+        }
+    }
+
+out_purge:
+    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
+                                  UCS_ERR_CANCELED, txwq->prev_sw_pi, 0);
+    uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
+    return UCS_OK;
+}
+
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req)
 {
