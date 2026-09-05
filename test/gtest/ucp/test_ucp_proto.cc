@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1074,6 +1075,49 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
                               "rc_x,cuda_copy")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
+
+class test_ucp_proto_ze : public test_ucp_proto {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+
+protected:
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_HOST)) {
+            UCS_TEST_SKIP_R("ZE memory is not supported");
+        }
+
+        test_ucp_proto::init();
+    }
+};
+
+/* ZE-host and ZE-managed memory is accessible from the CPU, so protocols which
+ * access the payload directly (memtype_op == UCT_EP_OP_LAST) have to stay
+ * eligible for it. This covers protocol selection only, it does not exercise
+ * data movement. */
+UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_direct_proto_eligible,
+           "RNDV_THRESH=inf")
+{
+    static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_ZE_HOST,
+                                                  UCS_MEMORY_TYPE_ZE_MANAGED};
+
+    for (auto mem_type : mem_types) {
+        if (!mem_buffer::is_mem_type_supported(mem_type)) {
+            continue;
+        }
+
+        const ucp_proto_threshold_elem_t *thresh =
+                select_tag_send_protocol(mem_type, 1);
+        ASSERT_NE(nullptr, thresh);
+        EXPECT_STREQ("egr/short", thresh->proto_config.proto->name)
+                << "mem_type=" << ucs_memory_type_names[mem_type];
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze, rcx_ze, "rc_x,ze_copy")
 
 class test_perf_node : public test_ucp_proto {
 };
