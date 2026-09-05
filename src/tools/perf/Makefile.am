@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
@@ -44,6 +44,7 @@ dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp_daemon \
 	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp_device_cuda \
+	$(top_srcdir)/contrib/ucx_perftest_config/test_types_ucp_sgl \
 	$(top_srcdir)/contrib/ucx_perftest_config/transports
 
 
