@@ -14,6 +14,7 @@ extern "C" {
 #include <uct/base/uct_iface.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -46,15 +47,17 @@ public:
         m_mock.cleanup();
     }
 
-    void add_mock_iface(const std::string &dev_name = "mock",
-                        iface_attr_func_t cb =
-                                [](uct_iface_attr_t &iface_attr) {},
-                        perf_attr_func_t perf_cb = default_perf_mock,
-                        ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN)
+    void add_mock_iface(
+            const std::string &dev_name = "mock",
+            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+            perf_attr_func_t perf_cb = default_perf_mock,
+            ucs_sys_device_t sys_device = UCS_SYS_DEVICE_ID_UNKNOWN,
+            bool use_real_sys_device = false)
     {
-        m_iface_attrs_funcs[dev_name] = std::move(cb);
-        m_perf_attrs_funcs[dev_name]  = std::move(perf_cb);
-        m_sys_devices[dev_name]       = sys_device;
+        m_iface_attrs_funcs[dev_name]   = std::move(cb);
+        m_perf_attrs_funcs[dev_name]    = std::move(perf_cb);
+        m_sys_devices[dev_name]         = sys_device;
+        m_use_real_sys_device[dev_name] = use_real_sys_device;
     }
 
     void add_mock_iface_on_sys_device(
@@ -66,11 +69,46 @@ public:
                        sys_device);
     }
 
+    void add_mock_iface_on_real_device(
+            const std::string &dev_name,
+            iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
+            perf_attr_func_t perf_cb = default_perf_mock)
+    {
+        add_mock_iface(dev_name, std::move(cb), std::move(perf_cb),
+                       UCS_SYS_DEVICE_ID_UNKNOWN, true);
+    }
+
     /* Return the sys_dev assigned to a mock device during topology
      * registration in query_devices_mock(). */
     ucs_sys_device_t get_mock_sys_dev_by_name(const std::string &dev_name) const
     {
         return m_sys_devs_by_name.at(dev_name);
+    }
+
+    const std::vector<ucs_sys_device_t> &real_sys_devices() const
+    {
+        return m_real_sys_devices;
+    }
+
+    /* Retarget a mock resource after context creation and before connect(). */
+    void set_mock_sys_dev(ucp_context_h context, const std::string &dev_name,
+                          ucs_sys_device_t sys_dev)
+    {
+        unsigned count = 0;
+
+        for (ucp_rsc_index_t rsc_index = 0; rsc_index < context->num_tls;
+             ++rsc_index) {
+            uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
+
+            if ((dev_name == tl_rsc->dev_name) &&
+                (m_tl->name == std::string(tl_rsc->tl_name))) {
+                tl_rsc->sys_device = sys_dev;
+                ++count;
+            }
+        }
+
+        ASSERT_GT(count, 0);
+        m_sys_devs_by_name.at(dev_name) = sys_dev;
     }
 
     void mock_transport(const std::string &tl_name)
@@ -169,6 +207,17 @@ private:
             return UCS_OK;
         }
 
+        for (unsigned i = 0; i < *num_tl_devices_p; ++i) {
+            ucs_sys_device_t sys_dev = (*tl_devices_p)[i].sys_device;
+
+            if ((sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                (std::find(m_self->m_real_sys_devices.begin(),
+                           m_self->m_real_sys_devices.end(),
+                           sys_dev) == m_self->m_real_sys_devices.end())) {
+                m_self->m_real_sys_devices.push_back(sys_dev);
+            }
+        }
+
         /* Instantiate mock devices only for the first available device */
         const char *first_dev_name = (*tl_devices_p)[0].name;
         if (m_self->m_real_dev_name.empty()) {
@@ -183,9 +232,9 @@ private:
          * The number of real devices (and their names) do not match the mocked
          * ones. In order to pretend that all the mocked devices are supported,
          * we remember the first real device name, and then substitute the
-         * response with the mocked devices names. Each mocked device is
-         * assigned a distinct sys_device: either the one explicitly requested
-         * via add_mock_iface(), or a freshly registered synthetic topology
+         * response with the mocked devices names. Each mock is assigned either
+         * the first real device's sys_device, one explicitly requested via
+         * add_mock_iface(), or a freshly registered synthetic topology
          * device (so that mocked distances can be set) when none was requested.
          * The resulting sys_device is recorded per name for later lookup. Later
          * on the iface_open_mock will use the real device name (same for all
@@ -202,7 +251,9 @@ private:
             mock_devices[dev_count].type = (*tl_devices_p)[0].type;
 
             ucs_sys_device_t sys_dev = m_self->m_sys_devices[it.first];
-            if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            if (m_self->m_use_real_sys_device[it.first]) {
+                sys_dev = (*tl_devices_p)[0].sys_device;
+            } else if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
                 ucs_sys_bus_id_t bus_id = {
                     .domain   = 0xffff,
                     .bus      = 0xff,
@@ -318,7 +369,9 @@ private:
     std::map<std::string, iface_attr_func_t>            m_iface_attrs_funcs;
     std::map<std::string, perf_attr_func_t>             m_perf_attrs_funcs;
     std::map<std::string, ucs_sys_device_t>             m_sys_devices;
+    std::map<std::string, bool>                         m_use_real_sys_device;
     std::map<std::string, ucs_sys_device_t>             m_sys_devs_by_name;
+    std::vector<ucs_sys_device_t>                       m_real_sys_devices;
     std::string                                         m_real_dev_name;
     uct_md_h                                            m_real_md;
 };
@@ -1307,6 +1360,283 @@ UCS_TEST_P(test_ucp_proto_mock_gpu, cuda_managed_ppln_host_frag,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_gpu, rcx_gpu,
+                              "rc_x,cuda,rocm")
+
+class test_ucp_proto_mock_mtype_sys_dev : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_mtype_sys_dev() :
+        m_user_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_transfer_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN),
+        m_topo_state(nullptr),
+        m_sibling_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN)
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        auto iface_attr_func = [](uct_iface_attr_t &iface_attr) {
+            iface_attr.cap.am.max_short = 2000;
+            iface_attr.bandwidth.shared = 28e9;
+            iface_attr.latency.c        = 600e-9;
+            iface_attr.latency.m        = 1e-9;
+        };
+
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            UCS_TEST_SKIP_R("CUDA managed memory is unavailable");
+        }
+
+        m_topo_state = ucs_topo_extract_state();
+        ASSERT_NE(nullptr, m_topo_state);
+
+        try {
+            add_mock_iface_on_real_device("mock", iface_attr_func);
+            test_ucp_proto_mock::init();
+        } catch (...) {
+            cleanup();
+            throw;
+        }
+    }
+
+    virtual void post_ucp_init() override
+    {
+        setup_fake_sibling_topology();
+    }
+
+    virtual void cleanup() override
+    {
+        test_ucp_proto_mock::cleanup();
+        if (m_topo_state != nullptr) {
+            ucs_topo_restore_state(m_topo_state);
+            m_topo_state = nullptr;
+            ucs_sys_topo_reset_provider();
+        }
+
+        m_user_sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
+        m_transfer_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        m_sibling_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+protected:
+    void
+    check_mtype_uses_host_frag(ucp_operation_id_t op_id, const char *proto_name)
+    {
+        static constexpr size_t msg_size = UCS_KBYTE;
+        uint8_t remote                   = 0;
+        ucp_worker_h worker              = sender().worker();
+
+        if (worker->mem_type_ep[UCS_MEMORY_TYPE_CUDA_MANAGED] == NULL) {
+            UCS_TEST_SKIP_R("CUDA managed memory type endpoint is unavailable");
+        }
+
+        auto memh           = mem_map(receiver(), &remote, sizeof(remote));
+        auto rkey_packed    = rkey_pack(receiver(), memh);
+        auto rkey           = rkey_unpack(sender().ep(), rkey_packed);
+        ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
+        ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
+                                                         rkey->cfg_index);
+        ucp_memory_info_t mem_info;
+        ucp_proto_select_param_t select_param;
+        const ucp_proto_select_elem_t *select_elem;
+        const ucp_proto_threshold_elem_t *threshold;
+        ucp_proto_query_attr_t attr;
+
+        ASSERT_FALSE(ucs_topo_is_reachable(m_transfer_sys_dev, m_user_sys_dev));
+
+        mem_info.type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        mem_info.sys_dev = m_user_sys_dev;
+        mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(worker,
+                                                   &rkey_config->proto_select,
+                                                   1, ep_cfg_index,
+                                                   rkey->cfg_index,
+                                                   &select_param);
+        ASSERT_NE(nullptr, select_elem);
+
+        threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                     msg_size);
+        ASSERT_STREQ(proto_name, threshold->proto_config.proto->name);
+        EXPECT_EQ(m_user_sys_dev, threshold->proto_config.select_param.sys_dev);
+        if (op_id == UCP_OP_ID_RNDV_RECV) {
+            const auto *rpriv =
+                    static_cast<const ucp_proto_rndv_bulk_priv_t*>(
+                            threshold->proto_config.priv);
+            EXPECT_EQ(UCS_MEMORY_TYPE_HOST, rpriv->frag_mem_type);
+            EXPECT_TRUE(ucs_topo_is_reachable(m_transfer_sys_dev,
+                                              rpriv->frag_sys_dev));
+        }
+
+        ucp_proto_config_query(worker, &threshold->proto_config, msg_size,
+                               &attr);
+        EXPECT_STREQ("rc_mlx5/mock", attr.config);
+    }
+
+    ucs_sys_device_t m_user_sys_dev;
+    ucs_sys_device_t m_transfer_sys_dev;
+
+private:
+    void setup_fake_sibling_topology()
+    {
+        static constexpr uintptr_t fake_sibling_value  = 0x11685001;
+        static constexpr uintptr_t fake_dma_value      = 0x11685002;
+        static constexpr uintptr_t fake_user_value     = 0x11685003;
+        static constexpr uintptr_t fake_transfer_value = 0x11685004;
+        ucs_sys_device_t dma_sys_dev, transfer_sys_dev;
+        ucs_sys_bus_id_t cuda_bus_id, transfer_bus_id;
+        ucp_memory_info_t cuda_mem_info;
+
+        /* CUDA managed memory is host-preferred on some systems and therefore
+         * has no device identity. Use a real CUDA allocation to discover the
+         * GPU BDF, then create a distinct alias so the test does not modify the
+         * topology state of the real GPU. */
+        mem_buffer cuda_buffer(1, UCS_MEMORY_TYPE_CUDA);
+        ucp_memory_detect(sender().ucph(), cuda_buffer.ptr(),
+                          cuda_buffer.size(), &cuda_mem_info);
+        ASSERT_EQ(UCS_MEMORY_TYPE_CUDA, cuda_mem_info.type);
+        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, cuda_mem_info.sys_dev);
+        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(cuda_mem_info.sys_dev,
+                                                 &cuda_bus_id));
+
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &cuda_bus_id, fake_sibling_value, &m_sibling_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &cuda_bus_id, fake_dma_value, &dma_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                &cuda_bus_id, fake_user_value, &m_user_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(m_sibling_sys_dev,
+                                                   "fake_sibling_nic", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(dma_sys_dev,
+                                                   "fake_sibling_dma", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_name(m_user_sys_dev,
+                                                   "fake_user_acc", 10));
+        ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(m_user_sys_dev));
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(m_sibling_sys_dev,
+                                                          dma_sys_dev));
+        ASSERT_TRUE(ucs_topo_is_sibling(m_sibling_sys_dev, m_user_sys_dev));
+
+        /* Use an alias of a real transport device as the non-sibling mock NIC.
+         * This keeps all topology entries resolvable through sysfs. */
+        for (ucs_sys_device_t sys_dev : real_sys_devices()) {
+            ASSERT_UCS_OK(
+                    ucs_topo_get_device_bus_id(sys_dev, &transfer_bus_id));
+            ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                    &transfer_bus_id, fake_transfer_value, &transfer_sys_dev));
+            ASSERT_UCS_OK(ucs_topo_sys_device_set_name(transfer_sys_dev,
+                                                       "fake_transfer_nic",
+                                                       10));
+            m_transfer_sys_dev = transfer_sys_dev;
+            ASSERT_UCS_OK(
+                    ucs_topo_sys_device_set_sys_dev_aux(transfer_sys_dev,
+                                                        transfer_sys_dev));
+
+            if (!ucs_topo_is_reachable(transfer_sys_dev, m_user_sys_dev)) {
+                break;
+            }
+
+            /* This candidate shares the user's PCIe bridge. Demote it before
+             * trying another BDF, then restore the intended sibling. */
+            ASSERT_UCS_OK(
+                    ucs_topo_sys_device_enable_aux_path(transfer_sys_dev));
+            m_transfer_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(m_sibling_sys_dev,
+                                                              dma_sys_dev));
+        }
+
+        if (m_transfer_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            UCS_TEST_SKIP_R("no real NIC BDF outside the fake sibling path");
+        }
+
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter) {
+            set_mock_sys_dev((*iter)->ucph(), "mock", m_transfer_sys_dev);
+        }
+
+        ASSERT_FALSE(ucs_topo_is_reachable(m_transfer_sys_dev, m_user_sys_dev));
+    }
+
+    ucs_global_state_t *m_topo_state;
+    ucs_sys_device_t    m_sibling_sys_dev;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, get_host_frag_non_sibling,
+           "RNDV_SCHEME=get_ppln", "RNDV_THRESH=1", "RNDV_FRAG_MEM_TYPES=host",
+           "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+{
+    check_mtype_uses_host_frag(UCP_OP_ID_RNDV_RECV, "rndv/get/mtype");
+}
+
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev, put_host_frag_non_sibling,
+           "RNDV_SCHEME=put_ppln", "RNDV_THRESH=1", "RNDV_FRAG_MEM_TYPES=host",
+           "RNDV_FRAG_SIZE=host:8K", "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+{
+    check_mtype_uses_host_frag(UCP_OP_ID_RNDV_SEND, "rndv/put/mtype");
+}
+
+/* A wire-packed rkey sys_dev belongs to the peer's topology namespace. Model
+ * a numeric collision with our unreachable fake GPU alias and verify that the
+ * nested remote selection does not reuse it as a local device. */
+UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
+           put_zcopy_remote_sys_dev_namespace, "RNDV_SCHEME=put_zcopy",
+           "IB_NUM_PATHS?=1", "MAX_RNDV_LANES=1")
+{
+    static constexpr size_t select_size = UCS_MBYTE;
+    uint8_t remote                      = 0;
+    ucp_worker_h worker                 = sender().worker();
+
+    auto memh        = mem_map(receiver(), &remote, sizeof(remote));
+    auto rkey_packed = rkey_pack(receiver(), memh);
+    auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+    ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
+    const ucp_rkey_config_t *base_rkey_config =
+            &ucs_array_elem(&worker->rkey_config, rkey->cfg_index);
+    const ucp_ep_config_t *ep_config      = ucp_worker_ep_config(worker,
+                                                                 ep_cfg_index);
+    ucp_rkey_config_key_t rkey_config_key = base_rkey_config->key;
+    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t *rkey_config;
+    ucp_memory_info_t mem_info;
+    ucp_proto_select_param_t select_param;
+    const ucp_proto_select_elem_t *select_elem;
+    const ucp_proto_threshold_elem_t *threshold;
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
+
+    ASSERT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, rkey_config_key.sys_dev);
+    memcpy(lanes_distance, base_rkey_config->lanes_distance,
+           ep_config->key.num_lanes * sizeof(lanes_distance[0]));
+
+    rkey_config_key.sys_dev = m_user_sys_dev;
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                             lanes_distance, &rkey_cfg_index));
+
+    mem_info.type    = UCS_MEMORY_TYPE_HOST;
+    mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info.flags   = UCS_MEM_FLAG_REGISTRABLE;
+    ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
+                                UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    rkey_config = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+    select_elem = ucp_proto_select_lookup_slow(worker,
+                                               &rkey_config->proto_select, 1,
+                                               ep_cfg_index, rkey_cfg_index,
+                                               &select_param);
+    ASSERT_NE(nullptr, select_elem);
+
+    threshold = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                 select_size);
+    ASSERT_STREQ("rndv/rtr", threshold->proto_config.proto->name);
+    rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+            threshold->proto_config.priv);
+
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+              rpriv->remote_proto_config.select_param.sys_dev);
+    EXPECT_STREQ("rndv/put/zcopy", rpriv->remote_proto_config.proto->name);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_mtype_sys_dev, rcx_gpu,
                               "rc_x,cuda,rocm")
 
 class test_ucp_proto_mock_cuda_ipc : public test_ucp_proto_mock {

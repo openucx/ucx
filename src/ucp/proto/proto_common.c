@@ -532,6 +532,17 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                       ucs_memory_type_names[reg_mem_type]);
             return 0;
         }
+
+        /* The lane's device and the memory that will actually be registered
+         * on it (which may differ from select_param's buffer, e.g. a staging
+         * fragment for mtype protocols) must be topologically reachable. */
+        if (!ucs_topo_is_reachable(
+                    context->tl_rscs[rsc_index].tl_rsc.sys_device,
+                    common_params->reg_mem_info.sys_dev)) {
+            ucs_trace("%s: no reachability to reg mem sys_dev=%u", lane_desc,
+                      common_params->reg_mem_info.sys_dev);
+            return 0;
+        }
     }
 
     iface_attr = ucp_proto_common_get_iface_attr(params, lane);
@@ -716,13 +727,19 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             }
         }
 
-        /* The two devices must also have internal reachability */
-        lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
-        if (!ucs_topo_is_reachable(lane_sys_dev, select_param->sys_dev)) {
-            ucs_trace("%s: no reachability between lane_sys_dev=%u and "
-                      "sys_dev=%u",
-                      lane_desc, lane_sys_dev, select_param->sys_dev);
-            continue;
+        /* Check internal reachability only when the selected buffer is
+         * registered on this lane. For non-zcopy protocols, either no buffer
+         * is registered or the lane filter checks the buffer described by
+         * reg_mem_info. */
+        if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
+            lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
+            if (!ucs_topo_is_reachable(lane_sys_dev,
+                                       select_param->sys_dev)) {
+                ucs_trace("%s: no reachability between lane_sys_dev=%u and "
+                          "sys_dev=%u",
+                          lane_desc, lane_sys_dev, select_param->sys_dev);
+                continue;
+            }
         }
 
         ucs_trace("%s: added as lane %d", lane_desc, lane);
