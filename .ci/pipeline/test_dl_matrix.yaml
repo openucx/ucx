@@ -1,7 +1,13 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
-# UCX DL Cluster (GB300/aarch64) test matrix.
+# UCX DL Cluster (GB200/aarch64) test matrix.
+#
+# One Slurm allocation per build. A build step compiles UCX once and packs the
+# tree into a tarball on the service user's NFS home; four worker steps then run
+# concurrently on the same node, each extracting that tarball and taking its
+# share of the tests. The dl-base image puts the workspace at the same absolute
+# path in every container, which is what lets the workers reuse the build tree.
 ---
 job: ucx-test-dl-gpu
 
@@ -28,17 +34,31 @@ env:
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
-  NWORKERS: "1"
-  WORKER: "0"
+  # Must match the number of worker steps below.
+  NWORKERS: "4"
   SLURM_NODES: 1
-  SLURM_PARTITION: gb300nvl72_ci
+  # The account is bound to the partition by the cluster's cli_filter; the two
+  # move together. gb200nvl72_ci carries 99 nodes against gb300nvl72_ci's 36,
+  # and allocation is plain FIFO by queue age with no per-account priority.
+  SLURM_PARTITION: gb200nvl72_ci
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
-  SLURM_ACCOUNT: blackwell-ci
+  SLURM_ACCOUNT: oberon-gb-ci
   SLURM_JOB_TIMEOUT: '02:45:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  # The service user's home is NFS, shared by every login and compute node, so
+  # a tarball written by the build step is visible to the workers. The path is
+  # spelled out in both entries rather than composed: the matrix engine expands
+  # env values one level deep in a single ordered pass, so a value built from
+  # another value that itself expands is fragile.
+  TARBALL_DIR: "/home/${SLURM_HEAD_USER}/ucx-ci"
+  BUILD_TARBALL: "/home/${SLURM_HEAD_USER}/ucx-ci/ucx-build-${BUILD_NUMBER}.tar"
+  # dlcluster's UCX_NET_DEVICES preset breaks UCX loopback; memlock unlimited is
+  # required for UCX.
+  CHECKOUT_CMD: "unset UCX_NET_DEVICES && ulimit -l unlimited && git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+  BUILD_TIMEOUT: 45
   TEST_TIMEOUT: 140
   CI_IMAGE_TAG: "20260504-1"
 
@@ -86,32 +106,141 @@ steps:
       credentialsId: "${SSH_CREDENTIALS_ID}"
       extraArgs: ["--account=${SLURM_ACCOUNT}"]
 
-  - name: Checkout & test
+  - name: Build
     containerSelector: "{name: 'build_helper_dl'}"
-    timeout: "${TEST_TIMEOUT}"
+    timeout: "${BUILD_TIMEOUT}"
     parallel: false
     shell: action
     module: slurmCI
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
-      # Workaround: dlcluster's UCX_NET_DEVICES preset breaks UCX loopback.
-      # memlock unlimited is required for UCX.
-      testScript: "unset UCX_NET_DEVICES && ulimit -l unlimited && git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1} && ./contrib/test_jenkins.sh"
+      # Tarballs from earlier builds are pruned here rather than at pipeline
+      # stop, so a build that dies mid-way still leaves its own for inspection.
+      testScript: "${CHECKOUT_CMD} && mkdir -p ${TARBALL_DIR} && find ${TARBALL_DIR} -name 'ucx-build-*.tar' -mtime +2 -delete && ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SSH_CREDENTIALS_ID}"
-      containerName: "ucx-ci-dl-${BUILD_NUMBER}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-build"
+      slurmEnv: [
+        "RUN_TESTS=${RUN_TESTS}",
+        "ASAN_CHECK=${ASAN_CHECK}",
+        "VALGRIND_CHECK=${VALGRIND_CHECK}",
+        "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
+        "BUILD_ONLY_TARBALL=${BUILD_TARBALL}"
+      ]
+
+  # The four worker steps are identical modulo the worker index and run
+  # concurrently against the one allocation. Each gets its own container so
+  # the checkouts do not collide; EXECUTOR_NUMBER keeps their TCP port ranges,
+  # IB service levels and traffic classes apart.
+  - name: Test w0
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: true
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      testScript: "${CHECKOUT_CMD} && ./contrib/test_jenkins.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w0"
       slurmEnv: [
         "RUN_TESTS=${RUN_TESTS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}",
         "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
-        "EXECUTOR_NUMBER=${WORKER}",
+        "PREBUILT_TARBALL=${BUILD_TARBALL}",
+        "EXECUTOR_NUMBER=0",
         "nworkers=${NWORKERS}",
-        "worker=${WORKER}"
+        "worker=0"
+      ]
+
+  - name: Test w1
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: true
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      testScript: "${CHECKOUT_CMD} && ./contrib/test_jenkins.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w1"
+      slurmEnv: [
+        "RUN_TESTS=${RUN_TESTS}",
+        "TEST_PERF=${TEST_PERF}",
+        "ASAN_CHECK=${ASAN_CHECK}",
+        "VALGRIND_CHECK=${VALGRIND_CHECK}",
+        "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
+        "PREBUILT_TARBALL=${BUILD_TARBALL}",
+        "EXECUTOR_NUMBER=1",
+        "nworkers=${NWORKERS}",
+        "worker=1"
+      ]
+
+  - name: Test w2
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: true
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      testScript: "${CHECKOUT_CMD} && ./contrib/test_jenkins.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w2"
+      slurmEnv: [
+        "RUN_TESTS=${RUN_TESTS}",
+        "TEST_PERF=${TEST_PERF}",
+        "ASAN_CHECK=${ASAN_CHECK}",
+        "VALGRIND_CHECK=${VALGRIND_CHECK}",
+        "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
+        "PREBUILT_TARBALL=${BUILD_TARBALL}",
+        "EXECUTOR_NUMBER=2",
+        "nworkers=${NWORKERS}",
+        "worker=2"
+      ]
+
+  - name: Test w3
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: true
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      testScript: "${CHECKOUT_CMD} && ./contrib/test_jenkins.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w3"
+      slurmEnv: [
+        "RUN_TESTS=${RUN_TESTS}",
+        "TEST_PERF=${TEST_PERF}",
+        "ASAN_CHECK=${ASAN_CHECK}",
+        "VALGRIND_CHECK=${VALGRIND_CHECK}",
+        "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
+        "PREBUILT_TARBALL=${BUILD_TARBALL}",
+        "EXECUTOR_NUMBER=3",
+        "nworkers=${NWORKERS}",
+        "worker=3"
       ]
 
 pipeline_stop:
