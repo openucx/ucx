@@ -31,7 +31,7 @@ static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
     uct_md_base_md_query(md_attr);
     md_attr->rkey_packed_size = sizeof(uct_rocm_ipc_key_t);
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
-                                UCT_MD_FLAG_MEMTYPE_COPY;
+                                UCT_MD_FLAG_IPC_MEMTYPE_COPY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
