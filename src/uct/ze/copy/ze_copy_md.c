@@ -22,6 +22,11 @@
 #include <ucs/memory/memtype_cache.h>
 
 
+/* Memory types which can be exported as a DMA-BUF file descriptor */
+#define UCT_ZE_COPY_MD_DMABUF_MEM_TYPES \
+    (UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) | UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE))
+
+
 static ucs_config_field_t uct_ze_copy_md_config_table[] = {
     {"", "", NULL, ucs_offsetof(uct_ze_copy_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -31,11 +36,43 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
      ucs_offsetof(uct_ze_copy_md_config_t, device_ordinal),
      UCS_CONFIG_TYPE_INT},
 
+    {"DMABUF", "try",
+     "Enable using cross-device dmabuf file descriptor.\n"
+     "Level Zero device memory may have to be allocated with external\n"
+     "DMA-BUF export enabled. Without it, registration can succeed but an\n"
+     "RDMA device may read incorrect data, and no error is reported. Set to\n"
+     "'n' if the application allocates Level Zero memory without\n"
+     "requesting external export.",
+     ucs_offsetof(uct_ze_copy_md_config_t, enable_dmabuf),
+     UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 
+static int uct_ze_copy_md_is_dmabuf_supported(ze_device_handle_t ze_device)
+{
+    ze_device_external_memory_properties_t props = {
+        .stype = ZE_STRUCTURE_TYPE_DEVICE_EXTERNAL_MEMORY_PROPERTIES
+    };
+    int supported;
+
+    if (UCT_ZE_FUNC_LOG_DEBUG(
+                zeDeviceGetExternalMemoryProperties(ze_device, &props)) !=
+        UCS_OK) {
+        return 0;
+    }
+
+    supported = !!(props.memoryAllocationExportTypes &
+                   ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF);
+    ucs_debug("ze device %p: DMA-BUF export is%s supported", ze_device,
+              supported ? "" : " not");
+    return supported;
+}
+
 static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
+    uct_ze_copy_md_t *ze_md = ucs_derived_of(md, uct_ze_copy_md_t);
+
     uct_md_base_md_query(md_attr);
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
@@ -55,8 +92,8 @@ static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
-    md_attr->dmabuf_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE);
+    md_attr->dmabuf_mem_types = ze_md->enable_dmabuf ?
+                                UCT_ZE_COPY_MD_DMABUF_MEM_TYPES : 0;
     md_attr->max_alloc        = SIZE_MAX;
     return UCS_OK;
 }
@@ -66,7 +103,18 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
                       ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
                       unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
-    uct_ze_copy_md_t *md                = ucs_derived_of(tl_md, uct_ze_copy_md_t);
+    uct_ze_copy_md_t *md = ucs_derived_of(tl_md, uct_ze_copy_md_t);
+    /* Request DMA-BUF exportability for the memory types advertised in
+     * 'dmabuf_mem_types', and only for those, so that allocating a type without
+     * a DMA-BUF path cannot fail because of the descriptor. Level Zero may
+     * return a DMA-BUF for an allocation which was not created for external
+     * export, but such a handle does not necessarily describe the requested
+     * range, and an RDMA device may read incorrect data through it. */
+    ze_external_memory_export_desc_t export_desc = {
+        .stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_DESC,
+        .flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF
+    };
+    void *export_desc_p                 = NULL;
     ze_host_mem_alloc_desc_t host_desc  = {
         .stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC
     };
@@ -76,13 +124,20 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     size_t alignment                    = ucs_get_page_size();
     ucs_status_t status;
 
+    if (md->enable_dmabuf &&
+        (UCS_BIT(mem_type) & UCT_ZE_COPY_MD_DMABUF_MEM_TYPES)) {
+        export_desc_p = &export_desc;
+    }
+
     switch (mem_type) {
     case UCS_MEMORY_TYPE_ZE_HOST:
+        host_desc.pNext = export_desc_p;
         status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocHost(md->ze_context, &host_desc,
                                                     *length_p, alignment,
                                                     address_p));
         break;
     case UCS_MEMORY_TYPE_ZE_DEVICE:
+        dev_desc.pNext = export_desc_p;
         status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocDevice(md->ze_context, &dev_desc,
                                                       *length_p, alignment,
                                                       md->ze_device,
@@ -198,12 +253,14 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
                                              const size_t length,
                                              uct_md_mem_attr_v2_t *mem_attr_p)
 {
-    int dmabuf_fd    = UCT_DMABUF_FD_INVALID;
-    int *dmabuf_fd_p = NULL;
+    uct_ze_copy_md_t *ze_md = ucs_derived_of(md, uct_ze_copy_md_t);
+    int dmabuf_fd           = UCT_DMABUF_FD_INVALID;
+    int *dmabuf_fd_p        = NULL;
     ucs_memory_info_t mem_info;
     ucs_status_t status;
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
+    if ((mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) &&
+        ze_md->enable_dmabuf) {
         mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
         dmabuf_fd_p           = &dmabuf_fd;
     }
@@ -302,6 +359,7 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     ze_context_desc_t context_desc = {};
     ze_result_t ret;
     const uct_ze_subdevice_t *subdevice;
+    int dmabuf_supported;
 
     ze_driver = uct_ze_base_get_driver();
     if (ze_driver == NULL) {
@@ -337,6 +395,16 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
         return UCS_ERR_NO_DEVICE;
     }
 
+    dmabuf_supported = uct_ze_copy_md_is_dmabuf_supported(md->ze_device);
+    if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
+        ucs_error("%s: DMA-BUF is not supported by the Level Zero device",
+                  md_name);
+        zeContextDestroy(md->ze_context);
+        ucs_free(md);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    md->enable_dmabuf   = (config->enable_dmabuf != UCS_NO) && dmabuf_supported;
     md->super.ops       = &md_ops;
     md->super.component = &uct_ze_copy_component;
 

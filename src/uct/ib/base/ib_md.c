@@ -2,6 +2,7 @@
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1446,14 +1447,13 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
-        /* Check if Intel Xe driver is loaded */
-        uct_ib_check_gpudirect_driver(md, "/sys/module/xe/srcversion",
-                                      UCS_MEMORY_TYPE_ZE_DEVICE);
-
         /* Check for HabanaLabs Gaudi DMABuf support */
         uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
                                       UCS_MEMORY_TYPE_GAUDI);
         uct_ib_check_gpudirect_driver(md, "/dev/hl0", UCS_MEMORY_TYPE_GAUDI);
+
+        /* Do not infer Level Zero device-memory registration support from the
+         * presence of the Xe module. DMA-BUF support is detected below. */
 
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);
@@ -1463,15 +1463,19 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         !(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
         (md_config->enable_gpudirect_rdma == UCS_YES)) {
         ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure "
-                  "nv_peer_mem, amdgpu plugin, or Intel Xe driver is "
-                  "installed correctly, or dmabuf is supported.",
+                  "nv_peer_mem or amdgpu plugin is installed correctly, or "
+                  "dmabuf is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
         goto err_cleanup_device;
     }
 
+    /* Limit the number of SGEs dumped by the packet tracer, so that it does not
+     * dereference non-host memory from the CPU. DMA-BUF registration makes such
+     * memory reachable without it being listed in 'reg_mem_types'. */
     md->dev.max_zcopy_log_sge = INT_MAX;
-    if (md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+    if ((md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) ||
+        (md->cap_flags & UCT_MD_FLAG_REG_DMABUF)) {
         md->dev.max_zcopy_log_sge = 1;
     }
 
