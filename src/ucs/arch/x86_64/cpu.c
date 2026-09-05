@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 
@@ -624,6 +625,10 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 {
     if (user_val != UCS_MEMUNITS_AUTO) {
+#if ENABLE_BUILTIN_MEMCPY
+        /* Let the NT dispatcher select the copy implementation. */
+        ucs_global_opts.arch.builtin_memcpy_max = 0;
+#endif
         return user_val;
     }
 
@@ -637,7 +642,7 @@ static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 static size_t ucs_cpu_nt_dest_thresh()
 {
     if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) {
-        return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 9 / 8;
+        return ucs_cpu_get_cache_size(UCS_CPU_CACHE_L3) * 3 / 4;
     } else {
         return UCS_MEMUNITS_INF;
     }
@@ -768,48 +773,54 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 #ifdef __AVX__
 #include "cpu_nt_avx2.inl"
 
-/* This is an adaptation of the memcpy code from https://github.com/amd/aocl-libmem
- * TODO: Provide an option to copy from backwards, in this way
- * application can choose the cache hotness of the final buffer
- */
 void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
                                 ucs_arch_memcpy_hint_t hint, size_t total_len)
 {
-    size_t tail_bytes;
+    const size_t min_nt_buffer_transfer_size = 3072;
 
-    if (ucs_likely(len <= 128)) {
-        goto copy_bytes_le_128;
+    if (ucs_likely(len < min_nt_buffer_transfer_size)) {
+        memcpy(dst, src, len);
+        return;
     }
 
+    /* force nontemporal stores for large transfers */
     if (ucs_unlikely(total_len > ucs_global_opts.arch.nt_dest_threshold)) {
-        if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
-            /*
-             * If the lines prefetched with 'NTA' are in 'MODIFIED' state
-             * evicting them will result in a memory write, along
-             * with the already committed streaming stores to destination
-             * buffer, it can make this path more bandwidth intensive.
-             */
-            tail_bytes = ucs_x86_nt_all_buffer_transfer(dst, src, len);
-        } else {
-            tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, total_len);
-        }
-    } else {
-        if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
-            tail_bytes = ucs_x86_nt_dst_buffer_transfer(dst, src, len, total_len);
-        } else if (hint & UCS_ARCH_MEMCPY_NT_SOURCE) {
-            tail_bytes = ucs_x86_nt_src_buffer_transfer(dst, src, len);
-        } else {
-            memcpy(dst, src, len);
-            tail_bytes = 0;
-        }
+        hint = UCS_ARCH_MEMCPY_NT_DEST;
     }
 
-    dst = UCS_PTR_BYTE_OFFSET(dst, len - tail_bytes);
-    src = UCS_PTR_BYTE_OFFSET(src, len - tail_bytes);
-    len = tail_bytes;
+    if (hint & UCS_ARCH_MEMCPY_NT_DEST) {
+        ucs_x86_nt_dst_buffer_transfer(dst, src, len);
+        return;
+    }
 
-copy_bytes_le_128:
-    ucs_x86_copy_bytes_le_128(dst, src, len);
+    /*
+     * NT_SOURCE (copy-out) path, taken for the UCS_ARCH_MEMCPY_NT_SOURCE
+     * hint. We do not non-temporally prefetch the source: an NT prefetch on
+     * a source line still in the Modified state can trigger a write-back, so
+     * a copy-out would generate writes for both the source (evicted) and the
+     * destination and double the receiver's memory-write pressure.  The
+     * UCS_ARCH_MEMCPY_NT_SOURCE hint is therefore serviced as a plain
+     * cache-respecting copy-out with a vectorized implementation and,
+     * when built-in memcpy is enabled, an ERMS implementation:
+     *
+     *   - rep movsb (ERMS), selected when len exceeds builtin_memcpy_min.
+     *   - an optimized vectorized copy routine (fallback when ERMS is
+     *     disabled for this size).
+     *
+     * ERMS is gated in two places. The outer size window in
+     * ucs_memcpy_relaxed() may return before this function is reached.
+     * Setting NT_BUFFER_TRANSFER_MIN explicitly closes that window during
+     * initialization. The inner gate here then selects rep movsb; otherwise
+     * the vectorized routine runs.
+     */
+#if ENABLE_BUILTIN_MEMCPY
+    if (len > ucs_global_opts.arch.builtin_memcpy_min) {
+        ucs_x86_memcpy_erms(dst, src, len);
+        return;
+    }
+#endif
+
+    ucs_x86_nt_src_buffer_transfer(dst, src, len);
 }
 #endif
 
