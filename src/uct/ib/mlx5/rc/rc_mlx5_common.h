@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_COMMON_H
 
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/base/ib_md.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
@@ -245,6 +246,16 @@ typedef struct uct_rc_mlx5_mp_hash_key {
     uint64_t                      guid;
     uint32_t                      qp_num;
 } uct_rc_mlx5_mp_hash_key_t;
+
+typedef struct {
+    uint8_t data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
+} uct_rc_mlx5_op_callback_data_t;
+
+ucs_status_t
+uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
+                         uct_rc_iface_send_op_t *op,
+                         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
+                         uct_rc_mlx5_op_callback_data_t *callback_data);
 
 
 static UCS_F_ALWAYS_INLINE int
