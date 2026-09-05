@@ -17,6 +17,8 @@
 #  - TEST_PERF         : whether to validate performance
 #  - ASAN_CHECK        : set to enable Address Sanitizer instrumentation build
 #  - VALGRIND_CHECK    : set to enable running tests with Valgrind
+#  - BUILD_ONLY_TARBALL: build for tests, pack the tree into this tarball, exit
+#  - PREBUILT_TARBALL  : use the build tree from this tarball instead of building
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
@@ -1436,10 +1438,13 @@ run_configure_tests() {
 }
 
 #
-# Run all tests
+# Build for devel tests and gtest, or for ASAN
 #
-run_tests() {
-	export UCX_PROTO_REQUEST_RESET=y
+build_for_tests() {
+	if [[ "$ASAN_CHECK" == "yes" ]]; then
+		build devel --enable-gtest --enable-asan --without-valgrind
+		return
+	fi
 
 	# all are running mpi tests
 	run_mpi_tests
@@ -1447,8 +1452,16 @@ run_tests() {
 	# configuration related tests
 	run_configure_tests
 
-	# build for devel tests and gtest
 	build devel --enable-gtest --without-valgrind
+}
+
+#
+# Run all tests
+#
+run_tests() {
+	export UCX_PROTO_REQUEST_RESET=y
+
+	[ -n "$PREBUILT_TARBALL" ] || build_for_tests
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
@@ -1486,7 +1499,7 @@ run_tests() {
 }
 
 run_asan_check() {
-	build devel --enable-gtest --enable-asan --without-valgrind
+	[ -n "$PREBUILT_TARBALL" ] || build_for_tests
 
 	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
 	then
@@ -1518,12 +1531,22 @@ run_valgrind_check() {
 prepare
 try_load_cuda_env
 
+if [ -n "$PREBUILT_TARBALL" ]
+then
+	# -m stamps the extracted files with the current time, so make treats the
+	# prebuilt objects as newer than the fresh checkout
+	tar -xmf "$PREBUILT_TARBALL" -C ${WORKSPACE}
+fi
+
 if [ "$RUN_TESTS" == "yes" ]
 then
     check_machine
     set_ucx_common_test_env
 
-    if [[ "$ASAN_CHECK" == "yes" ]]; then
+    if [ -n "$BUILD_ONLY_TARBALL" ]; then
+        build_for_tests
+        tar -cf "$BUILD_ONLY_TARBALL" -C ${WORKSPACE} build-test install
+    elif [[ "$ASAN_CHECK" == "yes" ]]; then
         run_asan_check
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
         run_valgrind_check
