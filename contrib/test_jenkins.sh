@@ -945,10 +945,14 @@ run_mpi_tests() {
 				# The test checks that after destroying a UCP remote key on the
 				# remote process, the local memory can be released. However, the
 				# internal caches may hold references to the memory, e.g. via
-				# opened CUDA IPC memory handle. All the caches are disabled
-				# to be able to release the memory after the remote key is
-				# destroyed.
-				${MPIRUN_COMMON} -np 2 -x UCX_MEMTYPE_CACHE=n \
+				# opened CUDA IPC memory handle. The test creates its endpoint
+				# with UCP_EP_PARAMS_FLAGS_RKEY_BOUND_LIFETIME so the CUDA IPC
+				# handle is released when the remote key is destroyed; other
+				# caches unrelated to that are disabled here so they don't
+				# interfere with the memory-release check.
+				${MPIRUN_COMMON} -np 2 \
+								-x UCX_TLS=^gdr_copy \
+								-x UCX_RCACHE_ENABLE=n \
 								./test/mpi/test_ucp_rkey_destroy
 			fi
 

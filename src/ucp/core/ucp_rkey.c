@@ -976,6 +976,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
 
     unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
     unpack_params.sys_device = sys_dev;
+    if (ep->ext->flags & UCP_EP_EXT_FLAG_RKEY_BOUND_LIFETIME) {
+        unpack_params.field_mask |= UCT_RKEY_UNPACK_FIELD_FLAGS;
+        unpack_params.flags       = UCT_RKEY_UNPACK_FLAG_BOUND_LIFETIME;
+    }
 
     /* Go over remote MD indices and unpack rkey of each UCT MD */
     rkey_index = 0; /* Index of the rkey in the array */

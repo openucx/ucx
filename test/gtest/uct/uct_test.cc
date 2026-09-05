@@ -1558,6 +1558,10 @@ void *uct_test::mapped_buffer::reg_addr() const
     return m_mem.address;
 }
 
+const uct_rkey_bundle_t *uct_test::mapped_buffer::rkey_bundle() const {
+    return &m_rkey;
+}
+
 uct_rkey_t uct_test::mapped_buffer::rkey() const {
     return m_rkey.rkey;
 }

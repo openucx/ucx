@@ -751,11 +751,13 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
-ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
+ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh,
+                                  const uct_rkey_bundle_t *rkey_ob,
                                   uct_device_mem_elem_t *mem_elem,
                                   void **release_handle_p)
 {
-    return md->ops->mem_elem_pack(md, memh, rkey, mem_elem, release_handle_p);
+    return md->ops->mem_elem_pack(md, memh, rkey_ob->rkey, rkey_ob->handle,
+                                  mem_elem, release_handle_p);
 }
 
 void uct_md_mem_elem_release(uct_md_h md, void *release_handle)
