@@ -77,8 +77,9 @@ typedef struct {
             void * const     *buffers;
             const size_t     *lengths;
             ucp_mem_h        *memhs;
+            size_t           elem_count;  /* Number of SGL elements */
+            size_t           elem_index;  /* Current SGL element */
             size_t           frag_offset; /* Offset in the current element */
-            /* length = element count, offset = current element index */
         } sgl;
     } type;
 } ucp_datatype_iter_t;
@@ -118,7 +119,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,
-                                        size_t count,
+                                        size_t count, size_t length,
                                         const ucp_request_param_t *param);
 
 ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,

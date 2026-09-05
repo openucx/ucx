@@ -445,9 +445,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     void *const *buffers         = dt_iter->type.sgl.buffers;
     const size_t *lengths        = dt_iter->type.sgl.lengths;
     const uint64_t *remote_addrs = req->send.rma.sgl.remote_addrs;
-    size_t start_index           = dt_iter->offset;
+    size_t start_index           = dt_iter->type.sgl.elem_index;
     size_t max_elem_count        = ucs_min(lpriv->max_sgl_zcopy_count,
-                                           dt_iter->length - start_index);
+                                           dt_iter->type.sgl.elem_count - start_index);
     size_t uct_rkeys_size        = max_elem_count * sizeof(uct_rkey_t);
     size_t uct_memhs_size        = max_elem_count * sizeof(uct_mem_h);
     uct_rkey_t *uct_rkeys;
@@ -459,7 +459,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     ucs_assert(max_elem_count > 0);
 
     /* Silence compiler warning, in case of an early return below */
-    next_iter->offset               = start_index;
+    next_iter->offset               = dt_iter->offset;
+    next_iter->type.sgl.elem_index  = start_index;
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
     if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||
@@ -486,6 +487,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
             break;
         }
 
+        next_iter->offset += lengths[idx];
         uct_memhs[elem_count] = (sgl_memhs != NULL) ?
                                 ucp_datatype_iter_uct_memh(sgl_memhs[idx],
                                                            md_index) :
@@ -494,8 +496,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                                      rkey_index);
     }
 
-    next_iter->offset               = start_index + elem_count;
+    next_iter->type.sgl.elem_index  = start_index + elem_count;
     next_iter->type.sgl.frag_offset = 0;
+    ucs_assert(next_iter->offset <= dt_iter->length);
 
     status = ucp_proto_put_sgl_offload_post(req, lpriv, &buffers[start_index],
                                             &lengths[start_index], uct_memhs,
