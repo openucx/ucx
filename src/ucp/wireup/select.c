@@ -554,11 +554,30 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             continue;
         }
 
+        /* A memory type copy MD which needs an rkey, such as cuda_ipc,
+         * copies non-host memory of another process. Using it is a protocol
+         * choice which the user can disable by UCX_MEMTYPE_COPY_ENABLE. */
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            ucs_test_all_flags(md_attr->flags, UCT_MD_FLAG_MEMTYPE_COPY |
+                                               UCT_MD_FLAG_NEED_RKEY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : disabled to avoid memory type copies",
+                      UCT_TL_RESOURCE_DESC_ARG(resource));
+            continue;
+        }
+
+        /* A memory type copy MD which does not need an rkey, such as
+         * cuda_copy, copies within the local address space, so it can only
+         * reach the same worker, i.e. memory type and loopback endpoints.
+         * A packed rkey does not describe the system device of the remote
+         * buffer, so reaching even another worker of the same process would
+         * make the peers select different rendezvous protocols. */
+        if ((md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            !(md_attr->flags & UCT_MD_FLAG_NEED_RKEY) &&
+            (address->uuid != worker->uuid)) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                      " : memory type copy can only reach the same worker",
                       UCT_TL_RESOURCE_DESC_ARG(resource));
             continue;
         }

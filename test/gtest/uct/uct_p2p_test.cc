@@ -148,13 +148,15 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
 void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
                                    size_t max_length, unsigned flags)
 {
+    const uint64_t access_mem_types = sender().xfer_mem_types();
+
     for (auto mem_type : mem_buffer::supported_mem_types()) {
         /* test mem type if md supports mem type
          * (or) if HOST MD can register mem type
          */
-        if (!((sender().md_attr().access_mem_types & UCS_BIT(mem_type)) ||
-            ((sender().md_attr().access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
-		sender().md_attr().reg_mem_types & UCS_BIT(mem_type)))) {
+        if (!((access_mem_types & UCS_BIT(mem_type)) ||
+              ((access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
+               (sender().md_attr().reg_mem_types & UCS_BIT(mem_type))))) {
             continue;
         }
         if (mem_type == UCS_MEMORY_TYPE_CUDA) {

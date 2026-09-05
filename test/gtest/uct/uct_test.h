@@ -167,6 +167,8 @@ protected:
 
         const uct_md_attr_v2_t& md_attr() const;
 
+        uint64_t xfer_mem_types() const;
+
         uct_worker_h worker() const;
 
         uct_cm_h cm() const;

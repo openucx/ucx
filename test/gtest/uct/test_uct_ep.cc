@@ -209,7 +209,8 @@ UCS_TEST_P(test_uct_ep, is_connected)
     /* The following transports are always connected to remote side on the same
      * process/machine, so we modify remote id to simulate no-connection
      * scenario. */
-    if (has_cma() || has_cuda_ipc() || has_transport("knem")) {
+    if (has_cma() || has_cuda_ipc() || has_transport("knem") ||
+        has_transport("cuda_copy")) {
         modify_remote_id(has_cuda_ipc() ? *m_receiver : *e);
     }
 
