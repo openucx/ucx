@@ -400,9 +400,8 @@ ucp_proto_put_sgl_offload_send_frag(ucp_request_t *req,
                                     size_t max_frag_length,
                                     ucp_datatype_iter_t *next_iter)
 {
-    ucp_ep_t *ep                 = req->send.ep;
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    ucp_md_index_t md_index      = ucp_ep_md_index(ep, lpriv->super.lane);
+    ucp_rsc_index_t md_index     = lpriv->super.md_index;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
     void *buffer                 = NULL;
     size_t length                = 0;
@@ -419,8 +418,10 @@ ucp_proto_put_sgl_offload_send_frag(ucp_request_t *req,
         return UCS_OK;
     }
 
-    uct_memh = (sgl_memhs != NULL) ? sgl_memhs[elem_index]->uct[md_index] :
-                                     UCT_MEM_HANDLE_NULL;
+    uct_memh = (sgl_memhs != NULL) ?
+                       ucp_datatype_iter_uct_memh(sgl_memhs[elem_index],
+                                                  md_index) :
+                       UCT_MEM_HANDLE_NULL;
     uct_rkey = ucp_rkey_get_tl_rkey(req->send.rma.sgl.rkeys[elem_index],
                                     lpriv->super.rkey_index);
 
@@ -435,9 +436,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                     ucp_datatype_iter_t *next_iter,
                                     ucp_lane_index_t *lane_shift)
 {
-    ucp_ep_t *ep                 = req->send.ep;
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    ucp_md_index_t md_index      = ucp_ep_md_index(ep, lpriv->super.lane);
+    ucp_rsc_index_t md_index     = lpriv->super.md_index;
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t max_frag_length       = lpriv->max_frag;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
@@ -487,7 +487,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
         }
 
         uct_memhs[elem_count] = (sgl_memhs != NULL) ?
-                                sgl_memhs[idx]->uct[md_index] :
+                                ucp_datatype_iter_uct_memh(sgl_memhs[idx],
+                                                           md_index) :
                                 UCT_MEM_HANDLE_NULL;
         uct_rkeys[elem_count] = ucp_rkey_get_tl_rkey(sgl_rkeys[idx],
                                                      rkey_index);
@@ -549,7 +550,7 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ucp_lane_index_t lane        = lpriv->super.lane;
     uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
-    ucp_md_index_t md_index      = ucp_ep_md_index(ep, lane);
+    ucp_rsc_index_t md_index     = lpriv->super.md_index;
     ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
     size_t max_frag_length       = lpriv->max_frag;
     ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
@@ -581,8 +582,10 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
     tl_rkey    = ucp_rkey_get_tl_rkey(sgl_rkeys[elem_index], rkey_index);
     iov.buffer = buffer;
     iov.length = length;
-    iov.memh   = (sgl_memhs != NULL) ? sgl_memhs[elem_index]->uct[md_index] :
-                                       UCT_MEM_HANDLE_NULL;
+    iov.memh   = (sgl_memhs != NULL) ?
+                         ucp_datatype_iter_uct_memh(sgl_memhs[elem_index],
+                                                    md_index) :
+                         UCT_MEM_HANDLE_NULL;
     iov.stride = 0;
     iov.count  = 1;
 

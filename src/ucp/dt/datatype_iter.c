@@ -357,13 +357,16 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
     ucp_mem_h *memhs;
     size_t i;
 
-    if ((md_map == 0) || (dt_iter->type.sgl.memhs != NULL)) {
+    if (md_map == 0) {
         return UCS_OK;
     }
 
-    memhs = ucs_calloc(count, sizeof(*memhs), "dt_sgl_memh");
+    memhs = dt_iter->type.sgl.memhs;
     if (memhs == NULL) {
-        return UCS_ERR_NO_MEMORY;
+        memhs = ucs_calloc(count, sizeof(*memhs), "dt_sgl_memh");
+        if (memhs == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
     }
 
     for (i = 0; i < count; ++i) {
@@ -372,10 +375,14 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
                 dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
                 md_map, uct_flags, &memhs[i]);
         if (status != UCS_OK) {
-            while (i-- > 0) {
-                ucp_datatype_iter_mem_dereg_single(&memhs[i]);
+            if (dt_iter->type.sgl.memhs == NULL) {
+                /* Roll back only handles we own */
+                while (i-- > 0) {
+                    ucp_datatype_iter_mem_dereg_single(&memhs[i]);
+                }
+                ucs_free(memhs);
             }
-            ucs_free(memhs);
+
             return status;
         }
     }
