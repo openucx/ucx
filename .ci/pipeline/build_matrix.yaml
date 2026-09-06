@@ -19,6 +19,7 @@ runs_on_dockers:
   - { name: "ubuntu2204-mofed5.7", url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0", arch: x86_64 }
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
   - { name: "ubuntu2604-mofed26.04", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu26.04/builder:mofed-26.04-0.7.6.0", arch: x86_64 }
+  - { name: "ubuntu2610-inbox", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu26.10/builder:inbox", arch: x86_64 }
   - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/x86_64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: x86_64 }
   - { name: "rocky96-mofed24.10", url: "harbor.mellanox.com/hpcx/x86_64/rocky9.6/builder:mofed-24.10-3.2.5.0", arch: x86_64 }
   - { name: "debian125-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/debian12.5/builder:doca-2.9.0", arch: x86_64 }
@@ -26,6 +27,9 @@ runs_on_dockers:
   - { name: "debian130-doca3.2", url: "harbor.mellanox.com/hpcx/x86_64/debian13.0/builder:doca-3.2.0", arch: x86_64 }
   - { name: "centos10stream-inbox", url: "harbor.mellanox.com/hpcx/x86_64/centos10stream/builder:inbox", arch: x86_64 }
   - { name: "fedora41-inbox", url: "harbor.mellanox.com/hpcx/x86_64/fedora41/builder:inbox", arch: x86_64 }
+  - { name: "fedora44-inbox", url: "harbor.mellanox.com/hpcx/x86_64/fedora44/builder:inbox", arch: x86_64 }
+  # Azure Linux 4.0 is in public preview; the image tracks the azurelinux-beta channel.
+  - { name: "azurelinux40-inbox", url: "harbor.mellanox.com/hpcx/x86_64/azurelinux4.0/builder:inbox", arch: x86_64 }
   - { name: "rhel82-mofed5.0", url: "harbor.mellanox.com/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0", arch: x86_64 }
   - { name: "rhel90-mofed5.6", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64 }
   - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: x86_64 }
@@ -33,13 +37,25 @@ runs_on_dockers:
   - { name: "sles16sp0-mofed26.01", url: "harbor.mellanox.com/hpcx/x86_64/sles16sp0/builder:mofed-26.01-0.8.0.0", arch: x86_64 }
   - { name: "kylin10sp3-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/kylin10sp3/builder:doca-2.9.0", arch: x86_64 }
   - { name: "euleros2sp12-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/euleros2.0sp12/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "openeuler2203sp4-doca3.5", url: "harbor.mellanox.com/hpcx/x86_64/openeuler22.03sp4/builder:doca-3.5.0", arch: x86_64 }
+  - { name: "openeuler2403sp3-doca3.5", url: "harbor.mellanox.com/hpcx/x86_64/openeuler24.03sp3/builder:doca-3.5.0", arch: x86_64 }
   - { name: "ctyunos2507-mofed26.01", url: "harbor.mellanox.com/hpcx/x86_64/ctyunos25.07/builder:mofed-26.01-0.8.0.0", arch: x86_64 }
   - { name: "tencentos44-mofed26.04", url: "harbor.mellanox.com/hpcx/x86_64/tencentos4.4/builder:mofed-26.04-0.7.6.0", arch: x86_64 }
+  # 20.1060a is the newest UOS rootfs on urm; DOCA publishes it for x86_64 only.
+  - { name: "uos201060a-doca3.4", url: "harbor.mellanox.com/hpcx/x86_64/uos20.1060a/builder:doca-3.4.0", arch: x86_64 }
   - { name: "ubuntu2004-rocm5.4", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2004:rocm_5_4_0", arch: x86_64 }
   - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64 }
   # aarch64
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0", arch: aarch64 }
   - { name: "ubuntu2604-mofed26.04", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu26.04/builder:mofed-26.04-0.7.6.0", arch: aarch64 }
+  - { name: "ubuntu2610-inbox", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu26.10/builder:inbox", arch: aarch64 }
+  - { name: "fedora44-inbox", url: "harbor.mellanox.com/hpcx/aarch64/fedora44/builder:inbox", arch: aarch64 }
+  - { name: "azurelinux40-inbox", url: "harbor.mellanox.com/hpcx/aarch64/azurelinux4.0/builder:inbox", arch: aarch64 }
+  # DOCA publishes no aarch64 openEuler, so these take the MOFED route.
+  - { name: "openeuler2203sp4-mofed26.07", url: "harbor.mellanox.com/hpcx/aarch64/openeuler22.03sp4/builder:mofed-26.07-0.7.7.0", arch: aarch64 }
+  - { name: "openeuler2403sp3-mofed26.07", url: "harbor.mellanox.com/hpcx/aarch64/openeuler24.03sp3/builder:mofed-26.07-0.7.7.0", arch: aarch64 }
+  # No DOCA or MOFED for UOS 20.1060a on aarch64, so inbox (rdma-core 37).
+  - { name: "uos201060a-inbox", url: "harbor.mellanox.com/hpcx/aarch64/uos20.1060a/builder:inbox", arch: aarch64 }
   - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
   - { name: "rocky96-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky9.6/builder:mofed-24.10-3.2.5.0", arch: aarch64 }
   - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: aarch64 }

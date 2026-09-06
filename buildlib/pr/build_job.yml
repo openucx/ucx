@@ -102,6 +102,24 @@ jobs:
           tencentos44:
             CONTAINER: tencentos44
             build_mode: short
+          fedora44:
+            CONTAINER: fedora44
+            build_mode: sanity
+          ubuntu2610:
+            CONTAINER: ubuntu2610
+            build_mode: sanity
+          azurelinux40:
+            CONTAINER: azurelinux40
+            build_mode: sanity
+          openeuler2203sp4:
+            CONTAINER: openeuler2203sp4
+            build_mode: short
+          openeuler2403sp3:
+            CONTAINER: openeuler2403sp3
+            build_mode: short
+          uos201060a:
+            CONTAINER: uos201060a
+            build_mode: short
           ubuntu2404_ze:
             CONTAINER: ubuntu2404_ze
             build_mode: ze
@@ -141,6 +159,24 @@ jobs:
             build_mode: short
           tencentos44_aarch64:
             CONTAINER: tencentos44_aarch64
+            build_mode: short
+          fedora44_aarch64:
+            CONTAINER: fedora44_aarch64
+            build_mode: short
+          ubuntu2610_aarch64:
+            CONTAINER: ubuntu2610_aarch64
+            build_mode: short
+          azurelinux40_aarch64:
+            CONTAINER: azurelinux40_aarch64
+            build_mode: short
+          openeuler2203sp4_aarch64:
+            CONTAINER: openeuler2203sp4_aarch64
+            build_mode: short
+          openeuler2403sp3_aarch64:
+            CONTAINER: openeuler2403sp3_aarch64
+            build_mode: short
+          uos201060a_aarch64:
+            CONTAINER: uos201060a_aarch64
             build_mode: short
     timeoutInMinutes: 340
 

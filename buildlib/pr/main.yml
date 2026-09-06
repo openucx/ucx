@@ -98,6 +98,46 @@ resources:
     - container: tencentos44_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/tencentos4.4/builder:mofed-26.04-0.7.6.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: fedora44
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/fedora44/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: fedora44_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/fedora44/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2610
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu26.10/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ubuntu2610_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu26.10/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    # Azure Linux 4.0 is in public preview; the image tracks the azurelinux-beta channel.
+    - container: azurelinux40
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/azurelinux4.0/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: azurelinux40_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/azurelinux4.0/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    # DOCA publishes no aarch64 openEuler, so aarch64 takes the MOFED route.
+    - container: openeuler2203sp4
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/openeuler22.03sp4/builder:doca-3.5.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: openeuler2203sp4_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/openeuler22.03sp4/builder:mofed-26.07-0.7.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: openeuler2403sp3
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/openeuler24.03sp3/builder:doca-3.5.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: openeuler2403sp3_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/openeuler24.03sp3/builder:mofed-26.07-0.7.7.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    # 20.1060a is the newest UOS rootfs on urm; DOCA publishes it for x86_64 only, so
+    # aarch64 is inbox (rdma-core 37).
+    - container: uos201060a
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/uos20.1060a/builder:doca-3.4.0
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: uos201060a_aarch64
+      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/uos20.1060a/builder:inbox
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: debian113
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
