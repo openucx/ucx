@@ -272,6 +272,18 @@ static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
            ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
 }
 
+/* recovery_arg shares a union with close_req. Sockaddr EPs store close_req
+ * there, so recovery/failover must not dereference the pointer. */
+static UCS_F_ALWAYS_INLINE ucp_ep_recovery_arg_t *
+ucp_ep_get_recovery_arg(ucp_ep_h ep)
+{
+    if (ucp_ep_has_cm_lane(ep)) {
+        return NULL;
+    }
+
+    return ep->ext->recovery_arg;
+}
+
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.cm_lane;

@@ -508,12 +508,27 @@ enum {
 };
 
 
-/* Per-EP recovery retry state. */
+/* Per failed-lane context while failover owns the UCT endpoint. */
+typedef struct ucp_ep_failover_lane {
+    uct_ep_h                uct_ep;
+    ucp_rsc_index_t         rsc_index;
+    ucp_send_nbx_callback_t done_cb;
+    void                    *done_arg;
+} ucp_ep_failover_lane_t;
+
+
+/* Per-EP recovery and token-failover state. */
 typedef struct ucp_ep_recovery_arg {
-    /* number of retries left before giving up */
-    unsigned                retries_left;
-    uint8_t                 state;
-    ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+    struct {
+        uint8_t                 state;
+        unsigned                retries_left;
+        ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+    } recovery;
+    struct {
+        ucp_lane_map_t         lane_map;
+        ucs_status_t           status;
+        ucp_ep_failover_lane_t lanes[UCP_MAX_LANES];
+    } failover;
 } ucp_ep_recovery_arg_t;
 
 
@@ -530,10 +545,14 @@ typedef struct ucp_ep_ext {
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
     union {
         ucp_request_t             *close_req;    /* Close protocol request */
-        ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
-                                                    United with close request since:
-                                                    1) recovery is not supported for connected to sockaddr EPs
-                                                    2) it does not make sense to recover lanes during close protocol */
+        ucp_ep_recovery_arg_t     *recovery_arg; /* Recovery and token-failover
+                                                    state. United with close
+                                                    request since:
+                                                    1) recovery is not supported
+                                                       for sockaddr EPs
+                                                    2) it does not make sense to
+                                                       recover or failover during
+                                                       close */
     };
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
