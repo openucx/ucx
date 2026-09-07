@@ -27,6 +27,7 @@
 
 typedef struct {
     const struct sockaddr *sa_remote;
+    uint32_t               table_id;
     int                    if_index;
     int                    netmask_len;
 } ucs_netlink_route_info_t;
@@ -329,17 +330,18 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
     iface_rules       = &kh_val(&ucs_netlink_routing_table_cache, iter);
     info->netmask_len = ucs_netlink_lookup_in_iface_rules(info->sa_remote,
                                                           iface_rules,
-                                                          RT_TABLE_UNSPEC);
+                                                          info->table_id);
 }
 
-static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
+static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote,
+                                       uint32_t table_id)
 {
     int max_netmask_len = -1;
     ucs_netlink_rt_rules_t iface_rules;
 
     kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
         int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(
-                sa_remote, &iface_rules, RT_TABLE_UNSPEC);
+                sa_remote, &iface_rules, table_id);
         if (curr_netmask_len > max_netmask_len) {
             max_netmask_len = curr_netmask_len;
         }
@@ -348,12 +350,15 @@ static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
     return max_netmask_len;
 }
 
-int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int *netmask_len_p)
+static int ucs_netlink_route_exists_by_table(int if_index,
+                                             const struct sockaddr *sa_remote,
+                                             uint32_t table_id,
+                                             int *netmask_len_p)
 {
     ucs_netlink_route_info_t info = {
         .if_index    = if_index,
         .sa_remote   = sa_remote,
+        .table_id    = table_id,
         .netmask_len = -1
     };
 
@@ -364,6 +369,13 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
     }
 
     return (info.netmask_len > -1);
+}
+
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
+                             int *netmask_len_p)
+{
+    return ucs_netlink_route_exists_by_table(
+            if_index, sa_remote, RT_TABLE_UNSPEC, netmask_len_p);
 }
 
 int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
@@ -387,14 +399,17 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
     return best_if_index;
 }
 
-int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
-                              ucs_netlink_route_check_t route_check)
+int ucs_netlink_route_matches_by_table(int if_index,
+                                       const struct sockaddr *sa_remote,
+                                       ucs_netlink_route_check_t route_check,
+                                       uint32_t table_id)
 {
     int netmask_len;
 
     /* If there is no route to the destination through this interface, not even
      * a default route, return 0. */
-    if (!ucs_netlink_route_exists(if_index, sa_remote, &netmask_len)) {
+    if (!ucs_netlink_route_exists_by_table(if_index, sa_remote,
+                                           table_id, &netmask_len)) {
         return 0;
     }
 
@@ -407,7 +422,14 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
     /* Accept the route if it is the best match. In relaxed mode, this check is
      * reached only for a default route, so the default is accepted only when
      * no interface has a more specific route. */
-    return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
+    return (ucs_netlink_max_netmask_len(sa_remote, table_id) == netmask_len);
+}
+
+int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
+                              ucs_netlink_route_check_t route_check)
+{
+    return ucs_netlink_route_matches_by_table(
+            if_index, sa_remote, route_check, RT_TABLE_UNSPEC);
 }
 
 static uint32_t ucs_netlink_get_vrf_table_id(const struct rtattr *slave_rta)

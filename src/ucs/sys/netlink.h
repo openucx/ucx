@@ -109,6 +109,26 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
 
 /**
+ * Check whether a route to a given destination address through a network
+ * interface matches the requested policy.
+ *
+ * @param [in] if_index         Network interface index.
+ * @param [in] sa_remote        Pointer to the destination address.
+ * @param [in] route_check      When set to UCS_NETLINK_ROUTE_CHECK_RELAXED,
+ *                              accept any non-default route, or a default
+ *                              route if nothing better exists. Otherwise,
+ *                              accept only the best route.
+ * @param [in] table_id         Routing table ID, or RT_TABLE_UNSPEC to search
+ *                              all routing tables.
+ *
+ * @return 1 if the route is accepted by the requested policy, or 0 otherwise.
+ */
+int ucs_netlink_route_matches_by_table(int if_index,
+                                       const struct sockaddr *sa_remote,
+                                       ucs_netlink_route_check_t route_check,
+                                       uint32_t table_id);
+
+/**
  * Get VRF information associated with a network interface.
  *
  * @param [in]  if_index         Network interface index to query.
