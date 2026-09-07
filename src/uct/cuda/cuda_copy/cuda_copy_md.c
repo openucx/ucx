@@ -533,6 +533,12 @@ static int uct_cuda_copy_detect_vmm(const void *address,
 #endif
     if (prop.location.type == CU_MEM_LOCATION_TYPE_DEVICE) {
         *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+    } else if (prop.location.type ==
+               CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN) {
+        *cuda_device  = (CUdevice)prop.location.localized.deviceId;
+        *vmm_mem_type = UCS_MEMORY_TYPE_CUDA;
+#endif
     }
 
 out:
