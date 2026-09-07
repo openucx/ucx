@@ -6,6 +6,40 @@
 
 #include "ucp_test.h"
 
+extern "C" {
+#include <ucp/core/ucp_request.inl>
+#include <ucp/rma/rma.h>
+#include <uct/base/uct_iface.h>
+}
+
+static unsigned test_flush_call_count;
+static uct_completion_t *test_flush_comp;
+
+static ucs_status_t
+test_flush_inprogress(uct_ep_h, unsigned, uct_completion_t *comp)
+{
+    ++test_flush_call_count;
+    test_flush_comp = comp;
+    return UCS_INPROGRESS;
+}
+
+static int test_fence_count_oneshot(const ucs_callbackq_elem_t *, void *arg)
+{
+    ++*static_cast<unsigned*>(arg);
+    return 0;
+}
+
+static ucs_status_t test_fence_defer_once(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    if (req->send.state.completed_size++ == 0) {
+        return UCP_STATUS_FENCE_DEFER;
+    }
+
+    return UCS_OK;
+}
+
 
 class test_ucp_fence : public ucp_test {
 public:
@@ -178,6 +212,183 @@ public:
 UCS_TEST_P(test_ucp_fence32, atomic_add_fadd) {
     test<uint32_t>(&test_ucp_fence32::blocking_add<uint32_t>,
                    &test_ucp_fence32::blocking_fadd<uint32_t>);
+}
+
+UCS_TEST_P(test_ucp_fence32, async_fence_tracks_inflight_flush)
+{
+    ucp_request_t blocked_req = {};
+    unsigned ep_refcount;
+    uint64_t prev_fence_seq;
+    uint64_t fence_seq;
+    uct_iface_h iface;
+    uct_ep_flush_func_t flush_func;
+    ucp_ep_h ep;
+
+    if (!is_self()) {
+        UCS_TEST_SKIP_R("Direct flush interception requires self transport");
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    ep                    = sender().ep();
+    iface                 = ucp_ep_get_lane(ep, 0)->iface;
+    flush_func            = iface->ops.ep_flush;
+    fence_seq             = ep->ext->fence_seq + 1;
+    ep->ext->unflushed_lanes = UCS_BIT(0);
+    test_flush_call_count = 0;
+    test_flush_comp       = NULL;
+    iface->ops.ep_flush   = test_flush_inprogress;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    EXPECT_UCS_OK(ucp_ep_fence_strong_nb(ep, fence_seq));
+    EXPECT_EQ(1u, test_flush_call_count);
+    EXPECT_TRUE(ep->ext->fence_inflight_req != NULL);
+    EXPECT_EQ(UCS_INPROGRESS, ep->ext->fence_status);
+    EXPECT_NE(fence_seq, ep->ext->fence_seq);
+
+    ASSERT_NE(static_cast<uct_completion_t*>(NULL), test_flush_comp);
+    uct_invoke_completion(test_flush_comp, UCS_OK);
+
+    EXPECT_TRUE(ep->ext->fence_inflight_req == NULL);
+    EXPECT_EQ(UCS_OK, ep->ext->fence_status);
+    EXPECT_EQ(fence_seq, ep->ext->fence_seq);
+    EXPECT_EQ(0, ep->ext->unflushed_lanes);
+
+    prev_fence_seq                    = ep->ext->fence_seq;
+    fence_seq                         = prev_fence_seq + 1;
+    blocked_req.id                    = UCS_PTR_MAP_KEY_INVALID;
+    blocked_req.send.ep               = ep;
+    blocked_req.send.fence_seq        = fence_seq;
+    blocked_req.send.uct.func         = test_fence_defer_once;
+    blocked_req.flags                 = UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    ep->ext->unflushed_lanes          = UCS_BIT(0);
+    test_flush_comp                   = NULL;
+    ep_refcount                       = ep->refcount;
+    EXPECT_UCS_OK(ucp_ep_fence_strong_nb(ep, fence_seq));
+    EXPECT_EQ(ep_refcount + 1, ep->refcount);
+    ucp_ep_fence_pending_add(ep, &blocked_req.send.uct);
+    ASSERT_NE(static_cast<uct_completion_t*>(NULL), test_flush_comp);
+    uct_invoke_completion(test_flush_comp, UCS_ERR_IO_ERROR);
+    EXPECT_EQ(ep_refcount, ep->refcount);
+    EXPECT_EQ(NULL, ep->ext->fence_inflight_req);
+    EXPECT_EQ(UCS_ERR_IO_ERROR, ep->ext->fence_status);
+    EXPECT_EQ(prev_fence_seq, ep->ext->fence_seq);
+    EXPECT_TRUE(ucs_queue_is_empty(&ep->ext->fence_pending_q));
+    EXPECT_TRUE(blocked_req.flags & UCP_REQUEST_FLAG_COMPLETED);
+    EXPECT_EQ(UCS_ERR_IO_ERROR, blocked_req.status);
+
+    iface->ops.ep_flush = flush_func;
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+
+    disconnect(sender());
+    disconnect(receiver());
+}
+
+UCS_TEST_P(test_ucp_fence32, pending_purge_preserves_scheduled_progress)
+{
+    ucp_request_t purged_req  = {};
+    ucp_request_t readded_req = {};
+    unsigned num_oneshots;
+    ucp_ep_h ep;
+
+    if (!is_self()) {
+        UCS_TEST_SKIP_R("Synthetic fence-queue test uses stack requests");
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    ep = sender().ep();
+
+    purged_req.id                        = UCS_PTR_MAP_KEY_INVALID;
+    purged_req.send.ep                   = ep;
+    purged_req.send.fence_seq            = ep->ext->fence_seq;
+    purged_req.send.uct.func             = test_fence_defer_once;
+    purged_req.flags                     = UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    readded_req.id                       = UCS_PTR_MAP_KEY_INVALID;
+    readded_req.send.ep                  = ep;
+    readded_req.send.fence_seq           = ep->ext->fence_seq;
+    readded_req.send.uct.func            = test_fence_defer_once;
+    readded_req.send.state.completed_size = 1;
+    readded_req.flags                    = UCP_REQUEST_FLAG_FENCE_BLOCKED;
+
+    ucp_ep_fence_pending_add(ep, &purged_req.send.uct);
+    ASSERT_TRUE(ep->ext->fence_pending_scheduled);
+
+    num_oneshots = 0;
+    ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                 test_fence_count_oneshot, &num_oneshots);
+    EXPECT_EQ(1u, num_oneshots);
+
+    ucp_ep_fence_pending_purge(ep, UCS_ERR_IO_ERROR);
+    EXPECT_TRUE(ucs_queue_is_empty(&ep->ext->fence_pending_q));
+    EXPECT_TRUE(ep->ext->fence_pending_scheduled);
+    EXPECT_FALSE(purged_req.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+    EXPECT_TRUE(purged_req.flags & UCP_REQUEST_FLAG_COMPLETED);
+    EXPECT_EQ(UCS_ERR_IO_ERROR, purged_req.status);
+
+    ucp_ep_fence_pending_add(ep, &readded_req.send.uct);
+    progress({&sender()});
+
+    EXPECT_TRUE(ucs_queue_is_empty(&ep->ext->fence_pending_q));
+    EXPECT_FALSE(ep->ext->fence_pending_scheduled);
+    EXPECT_FALSE(readded_req.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+    EXPECT_EQ(2, readded_req.send.state.completed_size);
+
+    disconnect(sender());
+    disconnect(receiver());
+}
+
+UCS_TEST_P(test_ucp_fence32, pending_queue_orders_fence_epochs)
+{
+    ucp_request_t first_epoch         = {};
+    ucp_request_t second_epoch_first  = {};
+    ucp_request_t second_epoch_second = {};
+    ucp_ep_h ep;
+
+    if (!is_self()) {
+        UCS_TEST_SKIP_R("Synthetic fence-queue test uses stack requests");
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    ep = sender().ep();
+
+    first_epoch.send.ep                   = ep;
+    first_epoch.send.fence_seq            = 1;
+    first_epoch.send.uct.func             = test_fence_defer_once;
+    first_epoch.send.state.completed_size = 1;
+    first_epoch.flags                     = UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    second_epoch_first.send.ep            = ep;
+    second_epoch_first.send.fence_seq     = 2;
+    second_epoch_first.send.uct.func      = test_fence_defer_once;
+    second_epoch_first.send.state.completed_size = 1;
+    second_epoch_first.flags                     =
+            UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    second_epoch_second.send.ep                  = ep;
+    second_epoch_second.send.fence_seq            = 2;
+    second_epoch_second.send.uct.func              = test_fence_defer_once;
+    second_epoch_second.send.state.completed_size  = 1;
+    second_epoch_second.flags                      =
+            UCP_REQUEST_FLAG_FENCE_BLOCKED;
+
+    ucp_ep_fence_pending_add(ep, &second_epoch_first.send.uct);
+    ucp_ep_fence_pending_add(ep, &first_epoch.send.uct);
+    ucp_ep_fence_pending_add(ep, &second_epoch_second.send.uct);
+
+    EXPECT_EQ(&first_epoch.send.fence_pending_elem,
+              ep->ext->fence_pending_q.head);
+    EXPECT_EQ(&second_epoch_first.send.fence_pending_elem,
+              ep->ext->fence_pending_q.head->next);
+    EXPECT_EQ(&second_epoch_second.send.fence_pending_elem,
+              ep->ext->fence_pending_q.head->next->next);
+
+    while (!ucs_queue_is_empty(&ep->ext->fence_pending_q)) {
+        progress({&sender()});
+    }
+
+    EXPECT_FALSE(first_epoch.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+    EXPECT_FALSE(second_epoch_first.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+    EXPECT_FALSE(second_epoch_second.flags & UCP_REQUEST_FLAG_FENCE_BLOCKED);
+
+    disconnect(sender());
+    disconnect(receiver());
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fence32)
