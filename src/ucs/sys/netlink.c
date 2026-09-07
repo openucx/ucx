@@ -396,3 +396,76 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
      * no interface has a more specific route. */
     return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
 }
+
+static uint32_t ucs_netlink_get_vrf_table_id(const struct rtattr *slave_rta)
+{
+    const struct rtattr *rta = RTA_DATA(slave_rta);
+    int attr_len             = RTA_PAYLOAD(slave_rta);
+
+    for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+        if (rta->rta_type == IFLA_VRF_PORT_TABLE) {
+            return *((const uint32_t *)RTA_DATA(rta));
+        }
+    }
+
+    return RT_TABLE_UNSPEC;
+}
+
+static int ucs_netlink_is_vrf_slave(const struct rtattr *link_info_rta,
+                                    uint32_t *table_id_p)
+{
+    const struct rtattr *rta       = RTA_DATA(link_info_rta);
+    int attr_len                   = RTA_PAYLOAD(link_info_rta);
+    const struct rtattr *slave_rta = NULL;
+    int is_vrf_slave               = 0;
+
+    for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+        if (rta->rta_type == IFLA_INFO_SLAVE_KIND) {
+            is_vrf_slave = (0 == strcmp((const char *)RTA_DATA(rta), "vrf"));
+        } else if (rta->rta_type == IFLA_INFO_SLAVE_DATA) {
+            slave_rta = rta;
+        }
+    }
+
+    if (is_vrf_slave && (slave_rta != NULL)) {
+        *table_id_p = ucs_netlink_get_vrf_table_id(slave_rta);
+    }
+
+    return is_vrf_slave;
+}
+
+static ucs_status_t
+ucs_netlink_parse_vrf_master_info_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    ucs_netlink_vrf_info_t *vrf_info_p = (ucs_netlink_vrf_info_t *)arg;
+    const struct ifinfomsg *ifm        = NLMSG_DATA(nlh);
+    const struct rtattr *rta           = IFLA_RTA(ifm);
+    int attr_len                       = IFLA_PAYLOAD(nlh);
+    uint32_t master_if_index           = 0;
+    unsigned is_vrf_slave              = 0;
+
+    for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+        if (rta->rta_type == IFLA_MASTER) {
+            master_if_index = *((const uint32_t *)RTA_DATA(rta));
+        } else if (rta->rta_type == IFLA_LINKINFO) {
+            is_vrf_slave = ucs_netlink_is_vrf_slave(rta, &vrf_info_p->table_id);
+        }
+    }
+
+    vrf_info_p->master_if_index = is_vrf_slave ? master_if_index : 0;
+    return UCS_OK;
+}
+
+ucs_status_t
+ucs_netlink_get_vrf_master_info(unsigned if_index,
+                                ucs_netlink_vrf_info_t *vrf_info_p)
+{
+    struct ifinfomsg ifm = {
+        .ifi_family = AF_UNSPEC,
+        .ifi_index  = if_index
+    };
+
+    return ucs_netlink_send_request(
+            NETLINK_ROUTE, RTM_GETLINK, 0, &ifm, sizeof(ifm),
+            ucs_netlink_parse_vrf_master_info_cb, vrf_info_p);
+}

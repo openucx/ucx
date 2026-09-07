@@ -10,9 +10,25 @@
 #include <ucs/type/status.h>
 
 #include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 #include <netinet/in.h>
 
 BEGIN_C_DECLS
+
+/**
+ * Information about the VRF associated with a network interface.
+ */
+typedef struct {
+    /**
+     * VRF master index, or 0 if not a VRF slave.
+     */
+    unsigned master_if_index;
+
+    /**
+     * VRF master table index, or RT_TABLE_UNSPEC if none.
+     */
+    uint32_t table_id;
+} ucs_netlink_vrf_info_t;
 
 typedef enum {
     UCS_NETLINK_ROUTE_CHECK_BEST,
@@ -91,6 +107,19 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
  */
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
+
+/**
+ * Get VRF information associated with a network interface.
+ *
+ * @param [in]  if_index         Network interface index to query.
+ * @param [out] vrf_info_p       VRF information. Set only when the function
+ *                               returns UCS_OK.
+ *
+ * @return UCS_OK if the query succeeded, otherwise an error status.
+ */
+ucs_status_t
+ucs_netlink_get_vrf_master_info(unsigned if_index,
+                                ucs_netlink_vrf_info_t *vrf_info_p);
 
 END_C_DECLS
 
