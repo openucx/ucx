@@ -1411,13 +1411,6 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
 
     ucs_assert(put_req->addr || !put_req->length);
 
-    if (ucs_unlikely(ep->flags & UCT_TCP_EP_FLAG_DESTROYED)) {
-        /* EP is destroyed and the target memory may be reused. Do not write
-         * the data, close the connection so the peer's PUT fails */
-        uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
-        return;
-    }
-
     copied_length  = ucs_min(put_req->length, extra_recvd_length);
     memcpy((void*)(uintptr_t)put_req->addr,
            UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset),
@@ -1525,6 +1518,14 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             }
         } else if (hdr->am_id == UCT_TCP_EP_PUT_REQ_AM_ID) {
             ucs_assert(hdr->length == sizeof(uct_tcp_ep_put_req_hdr_t));
+            if (ucs_unlikely(ep->flags & UCT_TCP_EP_FLAG_DESTROYED)) {
+                /* EP is destroyed and the target memory may be reused. Do not
+                 * write the data, close the connection so the peer's PUT
+                 * fails */
+                uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
+                goto out;
+            }
+
             uct_tcp_ep_handle_put_req(ep, (uct_tcp_ep_put_req_hdr_t*)(hdr + 1),
                                       ep->rx.length - ep->rx.offset);
             handled++;
