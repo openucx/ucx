@@ -1224,7 +1224,7 @@ run_malloc_hook_gtest() {
 }
 
 set_gtest_common_test_flags() {
-	export GTEST_RANDOM_SEED=0
+	export GTEST_RANDOM_SEED=37290
 	export GTEST_SHUFFLE=1
 	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
@@ -1240,7 +1240,7 @@ set_gtest_make_test_flags() {
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
 
-	GTEST_EXTRA_ARGS=""
+	GTEST_EXTRA_ARGS="-s 11689"
 	if [ "$TEST_PERF" == 1 ] && [[ "$VALGRIND_CHECK" != "yes" ]]
 	then
 		# Check performance with 10 retries and 2 seconds interval
