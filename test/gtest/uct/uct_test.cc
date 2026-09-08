@@ -1142,6 +1142,17 @@ const uct_md_attr_v2_t& uct_test::entity::md_attr() const {
     return m_md_attr;
 }
 
+uint64_t uct_test::entity::xfer_mem_types() const {
+    uint64_t mem_types = md_attr().access_mem_types;
+
+    /* Memory-type copy MDs do not support host-to-host transfers. */
+    if (md_attr().flags & UCT_MD_FLAG_MEMTYPE_COPY) {
+        mem_types &= ~UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    }
+
+    return mem_types;
+}
+
 uct_worker_h uct_test::entity::worker() const {
     return m_worker;
 }

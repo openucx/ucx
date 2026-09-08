@@ -16,6 +16,9 @@ protected:
     {
         uct_test::init();
         m_entities.push_back(uct_test::create_entity(0));
+        if (has_transport("cuda_copy")) {
+            m_entities.push_back(uct_test::create_entity(0));
+        }
     }
 
     entity &get_entity()
@@ -28,7 +31,9 @@ protected:
 
 void test_uct_iface::test_is_reachable()
 {
-    const auto &iface_attr = get_entity().iface_attr();
+    /* Use a separate cuda_copy iface; other transports keep the self-check. */
+    entity &remote         = *m_entities.back();
+    const auto &iface_attr = remote.iface_attr();
     auto iface             = get_entity().iface();
     uct_iface_is_reachable_params_t params;
     ucs_status_t status;
@@ -50,11 +55,12 @@ void test_uct_iface::test_is_reachable()
     params.iface_addr         = (uct_iface_addr_t*)&iface_addr[0];
     params.iface_addr_length  = iface_attr.iface_addr_len;
 
-    status = uct_iface_get_device_address(iface,
+    status = uct_iface_get_device_address(remote.iface(),
                                           (uct_device_addr_t*)&dev_addr[0]);
     ASSERT_UCS_OK(status);
 
-    status = uct_iface_get_address(iface, (uct_iface_addr_t*)&iface_addr[0]);
+    status = uct_iface_get_address(remote.iface(),
+                                   (uct_iface_addr_t*)&iface_addr[0]);
     ASSERT_UCS_OK(status);
 
     bool is_reachable = uct_iface_is_reachable_v2(iface, &params);

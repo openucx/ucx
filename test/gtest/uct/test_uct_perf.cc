@@ -259,17 +259,18 @@ class test_uct_loopback_cuda : public test_uct_perf {
 public:
     const std::vector<std::vector<ucs_memory_type_t>> mem_type_pairs() {
         std::vector<std::vector<ucs_memory_type_t>> result;
-        std::vector<ucs_memory_type_t> input = {UCS_MEMORY_TYPE_HOST,
-                                                UCS_MEMORY_TYPE_CUDA};
 
         /* gdr_copy test supports from host to GPU mem case only */
         if (has_transport("gdr_copy")) {
-            result.push_back(input);
+            result.push_back({UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA});
         } else if (has_transport("cuda_ipc")) {
             /* cuda_ipc test only supports GPU-GPU case */
             result.push_back({UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA});
         } else {
-            result = ucs::make_pairs(input);
+            /* cuda_copy does not support host-host memory copy */
+            result.push_back({UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA});
+            result.push_back({UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_HOST});
+            result.push_back({UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA});
         }
 
         return result;

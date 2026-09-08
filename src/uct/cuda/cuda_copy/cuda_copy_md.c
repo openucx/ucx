@@ -119,7 +119,8 @@ uct_cuda_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC |
+                                UCT_MD_FLAG_MEMTYPE_COPY;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                 UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);

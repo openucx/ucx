@@ -801,6 +801,20 @@ UCS_TEST_P(test_ucp_proto, dt_iter_mem_reg)
     }
 }
 
+/* cuda_copy is a memory type copy MD, but unlike cuda_ipc it copies within the
+ * local address space and is what memory type staging is built on. Disabling
+ * memory type copies must not remove it from wireup. */
+UCS_TEST_P(test_ucp_proto, memtype_copy_disable_keeps_staging_ep,
+           "MEMTYPE_COPY_ENABLE=n")
+{
+    require_cuda_memory();
+    if (!has_resource(sender(), "cuda_copy")) {
+        UCS_TEST_SKIP_R("cuda_copy transport is not available");
+    }
+
+    EXPECT_NE(nullptr, worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA]);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_proto)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto, shm_ipc,
                                         "shm,cuda_ipc,rocm_ipc")

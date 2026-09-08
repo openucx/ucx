@@ -60,7 +60,7 @@ typedef struct {
 
 typedef struct uct_cuda_copy_iface {
     uct_cuda_iface_t            super;
-    /* used to store uuid and check iface reachability */
+    /* process-wide uuid used to check iface reachability */
     uct_cuda_copy_iface_addr_t  id;
     /* config parameters to control cuda copy transport */
     struct {
