@@ -288,3 +288,173 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
+
+
+/* PUT data must not be written to the target address after the EP which
+ * receives it was destroyed, since the user may have already released this
+ * memory. Both EPs are connected to the peer's interface, so the two
+ * directions share one TCP connection and uct_tcp_ep_destroy() keeps the
+ * receiver's EP to get CONN_FIN - the path which is tested here */
+class test_uct_tcp_ep_destroy : public uct_test {
+public:
+    static const uint8_t PATTERN     = 0xc7;
+    static constexpr double TIMEOUT_SEC = 10.0;
+
+    test_uct_tcp_ep_destroy() : m_sender(NULL), m_receiver(NULL), m_err_count(0)
+    {
+        m_comp.func   = NULL;
+        m_comp.count  = INT_MAX;
+        m_comp.status = UCS_OK;
+    }
+
+    void init()
+    {
+        if (RUNNING_ON_VALGRIND) {
+            modify_config("TCP_TX_SEG_SIZE", "1kb");
+            modify_config("TCP_RX_SEG_SIZE", "1kb");
+        }
+
+        uct_test::init();
+
+        m_sender = create_entity(0, err_handler_cb);
+        m_entities.push_back(m_sender);
+
+        m_receiver = create_entity(0, err_handler_cb);
+        m_entities.push_back(m_receiver);
+
+        m_sender->connect_to_iface(0, *m_receiver);
+        m_receiver->connect_to_iface(0, *m_sender);
+    }
+
+    static ucs_status_t
+    err_handler_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        test_uct_tcp_ep_destroy *self =
+                reinterpret_cast<test_uct_tcp_ep_destroy*>(arg);
+        self->m_err_count++;
+        return UCS_OK;
+    }
+
+    /* PUT data is written in order, so the length of the pattern prefix is
+     * how much of the PUT was received so far */
+    size_t received(const mapped_buffer &buf) const
+    {
+        const uint8_t *data = (const uint8_t*)buf.ptr();
+        size_t length       = 0;
+
+        while ((length < buf.length()) && (data[length] == PATTERN)) {
+            ++length;
+        }
+
+        return length;
+    }
+
+    size_t put_size() const
+    {
+        /* Several RX segments, so that the PUT is also received by
+         * uct_tcp_ep_progress_put_rx() and not only by the first PUT request */
+        return ucs_min(m_sender->iface_attr().cap.put.max_zcopy,
+                       RUNNING_ON_VALGRIND ? UCS_MBYTE : (64 * UCS_MBYTE));
+    }
+
+    void post_put(const mapped_buffer &sendbuf, const mapped_buffer &recvbuf)
+    {
+        ucs_time_t deadline = ucs::get_deadline(TIMEOUT_SEC);
+        ucs_status_t status;
+
+        do {
+            status = uct_ep_put_zcopy(m_sender->ep(0), sendbuf.iov(), 1,
+                                      recvbuf.addr(), recvbuf.rkey(), &m_comp);
+            if (status != UCS_ERR_NO_RESOURCE) {
+                break;
+            }
+            progress();
+        } while (ucs_get_time() < deadline);
+
+        EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status);
+    }
+
+    /* Progress until the sender is notified that the connection was closed,
+     * then some more, so that data which is still on the connection would be
+     * written if it is not fenced */
+    void wait_for_error()
+    {
+        ucs_time_t deadline = ucs::get_deadline(TIMEOUT_SEC);
+
+        while ((m_err_count == 0) && (ucs_get_time() < deadline)) {
+            progress();
+        }
+
+        EXPECT_GT(m_err_count, 0ul) << "sender was not notified about the "
+                                       "closed connection";
+
+        for (unsigned i = 0; i < 100; ++i) {
+            progress();
+        }
+    }
+
+protected:
+    entity           *m_sender;
+    entity           *m_receiver;
+    size_t            m_err_count;
+    uct_completion_t  m_comp;
+};
+
+/* Destroy the EP while its peer is sending a multi-segment PUT to it */
+UCS_TEST_P(test_uct_tcp_ep_destroy, put_zcopy_in_flight)
+{
+    const size_t size = put_size();
+    mapped_buffer sendbuf(size, 0, *m_sender);
+    mapped_buffer recvbuf(size, 0, *m_receiver);
+    scoped_log_handler slh(wrap_errors_logger);
+    ucs_time_t deadline = ucs::get_deadline(TIMEOUT_SEC);
+
+    memset(sendbuf.ptr(), PATTERN, sendbuf.length());
+    memset(recvbuf.ptr(), 0, recvbuf.length());
+
+    /* Establish the connection before the PUT is sent on it */
+    flush();
+
+    post_put(sendbuf, recvbuf);
+
+    while ((received(recvbuf) == 0) && (ucs_get_time() < deadline)) {
+        m_sender->progress();
+        m_receiver->progress();
+    }
+
+    size_t received_before = received(recvbuf);
+    ASSERT_GT(received_before, 0ul);
+    ASSERT_LT(received_before, recvbuf.length()) << "the whole PUT was "
+                                                    "received, nothing to test";
+
+    m_receiver->destroy_ep(0);
+
+    wait_for_error();
+
+    EXPECT_EQ(received_before, received(recvbuf));
+}
+
+/* Send a PUT to an EP which was already destroyed */
+UCS_TEST_P(test_uct_tcp_ep_destroy, put_zcopy_after_destroy)
+{
+    const size_t size = put_size();
+    mapped_buffer sendbuf(size, 0, *m_sender);
+    mapped_buffer recvbuf(size, 0, *m_receiver);
+    scoped_log_handler slh(wrap_errors_logger);
+
+    memset(sendbuf.ptr(), PATTERN, sendbuf.length());
+    memset(recvbuf.ptr(), 0, recvbuf.length());
+
+    /* Make sure the connection is established before it is destroyed */
+    flush();
+
+    m_receiver->destroy_ep(0);
+
+    post_put(sendbuf, recvbuf);
+
+    wait_for_error();
+
+    EXPECT_EQ(0ul, received(recvbuf));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_ep_destroy, tcp)
