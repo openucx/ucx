@@ -598,6 +598,7 @@ static void
 ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context = init_params->worker->context;
+    ucp_proto_rndv_mtype_init_params_t mtype_init_params;
     ucs_memory_type_t frag_mem_type;
     uct_completion_callback_t comp_cb;
     ucp_md_map_t mdesc_md_map;
@@ -642,10 +643,14 @@ ucp_proto_rndv_put_mtype_probe(const ucp_proto_init_params_t *init_params)
         comp_cb = ucp_proto_rndv_put_mtype_completion;
     }
 
-    ucp_proto_rndv_put_common_probe(
-            init_params, UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE), frag_size,
-            UCT_EP_OP_GET_ZCOPY, flags, mdesc_md_map, comp_cb, 1,
-            UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, &frag_mem_info);
+    ucp_proto_rndv_mtype_init_params_prepare(init_params, &frag_mem_info,
+                                             &mtype_init_params);
+    ucp_proto_rndv_put_common_probe(&mtype_init_params.super,
+                                    UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE),
+                                    frag_size, UCT_EP_OP_GET_ZCOPY, flags,
+                                    mdesc_md_map, comp_cb, 1,
+                                    UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY,
+                                    &frag_mem_info);
 }
 
 static void
