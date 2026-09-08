@@ -456,12 +456,17 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
     if (/* EPs that are connected as CONNECT_TO_EP have to be full duplex */
         !(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP) &&
         (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
-        ucs_test_all_flags(ep->flags, UCT_TCP_EP_CTX_CAPS)) {
+        ucs_test_all_flags(ep->flags, UCT_TCP_EP_CTX_CAPS) &&
+        /* PUT data is still being received, close the connection so no more
+         * data is written to memory which may already be freed */
+        !(ep->flags & UCT_TCP_EP_FLAG_PUT_RX)) {
         /* remove from the expected queue and then add it to the
          * unexpected queue */
         uct_tcp_cm_remove_ep(iface, ep);
         /* remove TX capability, but still will be able to receive data */
         uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
+        /* PUT data arriving from now on must not be written */
+        ep->flags |= UCT_TCP_EP_FLAG_DESTROYED;
         /* purge all outstanding operations (GET/PUT Zcopy, flush operations) */
         uct_tcp_ep_purge(ep, UCS_ERR_CANCELED);
         uct_tcp_cm_insert_ep(iface, ep);
@@ -1405,6 +1410,13 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
     ucs_status_t status;
 
     ucs_assert(put_req->addr || !put_req->length);
+
+    if (ucs_unlikely(ep->flags & UCT_TCP_EP_FLAG_DESTROYED)) {
+        /* EP is destroyed and the target memory may be reused. Do not write
+         * the data, close the connection so the peer's PUT fails */
+        uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
+        return;
+    }
 
     copied_length  = ucs_min(put_req->length, extra_recvd_length);
     memcpy((void*)(uintptr_t)put_req->addr,
