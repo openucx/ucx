@@ -390,8 +390,10 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
         lane = key->rma_bw_lanes[i];
 
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
+            /* An RMA BW lane can be selected for get_zcopy or for put_zcopy,
+             * see ucp_wireup_init_rma_bw_criteria_iface_flags() */
             ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
-                       UCT_IFACE_FLAG_GET_ZCOPY);
+                       (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY));
             ucs_assert(ucp_ep_md_attr(ep, lane)->flags &
                        UCT_MD_FLAG_INVALIDATE_RMA);
             inv_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
