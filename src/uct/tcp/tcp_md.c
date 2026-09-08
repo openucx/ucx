@@ -31,6 +31,11 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     uct_md_base_md_query(attr);
     attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    /* No memory is registered, so there is nothing to invalidate, and PUT data
+     * is not written after the EP was canceled, see UCT_TCP_EP_FLAG_CANCELED.
+     * TCP has no atomics, so INVALIDATE_AMO, and with it INVALIDATE which
+     * means both, are not reported */
+    attr->flags           |= UCT_MD_FLAG_INVALIDATE_RMA;
     return UCS_OK;
 }
 
