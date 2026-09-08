@@ -15,31 +15,14 @@ jobs:
       # x86_64 matrix
       ${{ if contains(parameters.name, 'x86_64') }}:
         matrix:
-          rhel76:
-            CONTAINER: rhel76
-            build_mode: short
-          ubuntu2004:
-            CONTAINER: ubuntu2004
-            build_mode: short
-            extra_modules: ""
-          ubuntu1804:
-            CONTAINER: ubuntu1804
-            build_mode: sanity
-            extra_modules: ""
           ubuntu2204:
             CONTAINER: ubuntu2204
             build_mode: short
           ubuntu2404:
             CONTAINER: ubuntu2404
             build_mode: long
-          ubuntu2210:
-            CONTAINER: ubuntu2210
-            build_mode: sanity
           debian113:
             CONTAINER: debian113
-            build_mode: short
-          debian109:
-            CONTAINER: debian109
             build_mode: sanity
           debian125:
             CONTAINER: debian125
@@ -72,26 +55,14 @@ jobs:
           rocky96:
             CONTAINER: rocky96
             build_mode: sanity
-          fedora41:
-            CONTAINER: fedora41
-            build_mode: sanity
           centos7:
             CONTAINER: centos7_ib
             build_mode: sanity
           centos10stream:
             CONTAINER: centos10stream
             build_mode: sanity
-          ubuntu2004_rocm:
-            CONTAINER: ubuntu2004_rocm_5_4_0
-            build_mode: short
           ubuntu2204_rocm:
             CONTAINER: ubuntu2204_rocm_6_0_0
-            build_mode: short
-          kylin10sp3:
-            CONTAINER: kylin10sp3
-            build_mode: short
-          euleros2sp12:
-            CONTAINER: euleros2sp12
             build_mode: short
           ctyunos2507:
             CONTAINER: ctyunos2507
