@@ -288,3 +288,129 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
+
+
+/* uct_ep_flush(UCT_FLUSH_FLAG_CANCEL) means the user gives up on the
+ * operations of this EP and may reuse their memory. On RDMA the QP moves to
+ * the error state and the peer's writes stop landing. This checks that TCP
+ * behaves the same: PUT data which arrives after the cancel is not written to
+ * the target address */
+class test_uct_tcp_cancel : public uct_test {
+public:
+    static const uint8_t PATTERN = 0xc7;
+
+    test_uct_tcp_cancel() : m_sender(NULL), m_receiver(NULL), m_err_count(0)
+    {
+        m_comp.func   = NULL;
+        m_comp.count  = INT_MAX;
+        m_comp.status = UCS_OK;
+    }
+
+    static ucs_status_t
+    err_handler_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        test_uct_tcp_cancel *self = reinterpret_cast<test_uct_tcp_cancel*>(arg);
+        self->m_err_count++;
+        return UCS_OK;
+    }
+
+    void init()
+    {
+        if (RUNNING_ON_VALGRIND) {
+            modify_config("TCP_TX_SEG_SIZE", "1kb");
+            modify_config("TCP_RX_SEG_SIZE", "1kb");
+        }
+
+        uct_test::init();
+
+        m_sender = create_entity(0, err_handler_cb);
+        m_entities.push_back(m_sender);
+
+        m_receiver = create_entity(0, err_handler_cb);
+        m_entities.push_back(m_receiver);
+
+        m_sender->connect_to_iface(0, *m_receiver);
+        m_receiver->connect_to_iface(0, *m_sender);
+    }
+
+    /* PUT data is written in order, so the length of the pattern prefix is how
+     * much of the PUT was received so far */
+    size_t received(const mapped_buffer &buf) const
+    {
+        const uint8_t *data = (const uint8_t*)buf.ptr();
+        size_t length       = 0;
+
+        while ((length < buf.length()) && (data[length] == PATTERN)) {
+            ++length;
+        }
+
+        return length;
+    }
+
+protected:
+    entity          *m_sender;
+    entity          *m_receiver;
+    size_t           m_err_count;
+    uct_completion_t m_comp;
+};
+
+UCS_TEST_P(test_uct_tcp_cancel, put_zcopy_after_cancel)
+{
+    /* Several RX segments, so that the PUT is also received by
+     * uct_tcp_ep_progress_put_rx() and not only by the first PUT request */
+    const size_t size   = ucs_min(m_sender->iface_attr().cap.put.max_zcopy,
+                                  RUNNING_ON_VALGRIND ? UCS_MBYTE :
+                                                        (64 * UCS_MBYTE));
+    ucs_time_t deadline = ucs::get_deadline(10.0);
+    mapped_buffer sendbuf(size, 0, *m_sender);
+    mapped_buffer recvbuf(size, 0, *m_receiver);
+    ucs_status_t status;
+
+    memset(sendbuf.ptr(), PATTERN, sendbuf.length());
+    memset(recvbuf.ptr(), 0, recvbuf.length());
+
+    /* Establish the connection before the PUT is sent on it */
+    flush();
+
+    do {
+        status = uct_ep_put_zcopy(m_sender->ep(0), sendbuf.iov(), 1,
+                                  recvbuf.addr(), recvbuf.rkey(), &m_comp);
+        if (status != UCS_ERR_NO_RESOURCE) {
+            break;
+        }
+        progress();
+    } while (ucs_get_time() < deadline);
+    EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status);
+
+    while ((received(recvbuf) == 0) && (ucs_get_time() < deadline)) {
+        m_sender->progress();
+        m_receiver->progress();
+    }
+
+    size_t received_before = received(recvbuf);
+    ASSERT_GT(received_before, 0ul);
+    ASSERT_LT(received_before, recvbuf.length())
+            << "the whole PUT was received, nothing to test";
+
+    /* The receiver gives up on this EP and may reuse the target buffer */
+    scoped_log_handler slh(wrap_errors_logger);
+    status = uct_ep_flush(m_receiver->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL);
+    ASSERT_UCS_OK(status);
+
+    /* Progress until the sender is told that the connection was closed, and
+     * some more, so that data still on the connection would be written if it
+     * is not fenced */
+    while ((m_err_count == 0) && (ucs_get_time() < deadline)) {
+        progress();
+    }
+    EXPECT_GT(m_err_count, 0ul) << "the peer's PUT was not failed";
+
+    for (unsigned i = 0; i < 1000; ++i) {
+        progress();
+    }
+
+    EXPECT_EQ(received_before, received(recvbuf))
+            << "PUT data was written after the EP was canceled";
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_cancel, tcp)
