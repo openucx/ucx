@@ -344,6 +344,20 @@ ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
     return (uint16_t)value;
 }
 
+ucs_sys_pci_id_t
+ucs_topo_get_sysfs_pci_id(const char *dev_name, const char *sysfs_path)
+{
+    ucs_sys_pci_id_t pci_id;
+
+    if (sysfs_path == NULL) {
+        return UCS_SYS_PCI_ID_UNDEFINED;
+    }
+
+    pci_id.vendor = ucs_topo_read_pci_id_value(dev_name, sysfs_path, "vendor");
+    pci_id.device = ucs_topo_read_pci_id_value(dev_name, sysfs_path, "device");
+    return pci_id;
+}
+
 static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
                                             const char *dev_name,
                                             ucs_numa_node_t *numa_node_p,
@@ -366,9 +380,7 @@ static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
     }
 
     *numa_node_p = ucs_numa_node_of_device(path);
-
-    pci_id_p->vendor = ucs_topo_read_pci_id_value(dev_name, path, "vendor");
-    pci_id_p->device = ucs_topo_read_pci_id_value(dev_name, path, "device");
+    *pci_id_p    = ucs_topo_get_sysfs_pci_id(dev_name, path);
 
     ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
               dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);

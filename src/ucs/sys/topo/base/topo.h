@@ -345,6 +345,18 @@ ucs_sys_device_t ucs_topo_get_sysfs_dev(const char *dev_name,
                                         unsigned name_priority);
 
 /**
+ * Read the PCI identifier of a device from sysfs, without adding it as a system
+ * device.
+ *
+ * @param [in]  dev_name    Device name, used for logging.
+ * @param [in]  sysfs_path  sysfs path for the required device, or NULL.
+ *
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if it could not be read.
+ */
+ucs_sys_pci_id_t ucs_topo_get_sysfs_pci_id(const char *dev_name,
+                                           const char *sysfs_path);
+
+/**
  * Return system device name in BDF format: "<domain>:<bus>:<device>.<function>".
  *
  * @param [in]  sys_dev  System device id, as returned from

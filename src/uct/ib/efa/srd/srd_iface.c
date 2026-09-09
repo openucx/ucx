@@ -1009,6 +1009,10 @@ uct_srd_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
     struct efadv_device_attr efa_attr;
     int ret;
 
+    if (!uct_ib_efadv_pci_vendor_match(&ib_md->dev.pci_id)) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     ctx = ibv_open_device(ib_md->dev.ibv_context->device);
     if (ctx == NULL) {
         return UCS_ERR_NO_DEVICE;
