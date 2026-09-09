@@ -670,11 +670,11 @@ public:
         return uct_rc_iface_flush_rkey_enabled(rc_iface);
     }
 
-    int rc_iface_mr_id(entity *e)
+    int rc_iface_flush_rkey_valid(entity *e)
     {
         uct_rc_iface_t *rc_iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
         uct_ib_md_t *md          = uct_ib_iface_md(&rc_iface->super);
-        return uct_ib_md_get_atomic_mr_id(md);
+        return uct_ib_md_is_flush_rkey_valid(md->flush_rkey);
     }
 
     uct_iface_params_t iface_params()
@@ -731,10 +731,13 @@ public:
 
 UCS_TEST_P(test_rc_iface_flush_remote, size_no_flush_remote)
 {
+    /* rc_verbs appends the atomic MR id and flush rkey to the endpoint address
+     * only when the MD provides a valid flush rkey. */
+    int flush_rkey_valid = rc_iface_flush_rkey_valid(m_e1);
     map_size_t sizes = {
         {"rc_mlx5", {7, 1}},
         {"dc_mlx5", {0, 5}},
-        {"rc_verbs", {7, 0}},
+        {"rc_verbs", {flush_rkey_valid ? 7 : 4, 0}},
         {"gga_mlx5", {7, 8}},
     };
     check_sizes(m_e1, sizes);
@@ -743,11 +746,11 @@ UCS_TEST_P(test_rc_iface_flush_remote, size_no_flush_remote)
 UCS_TEST_P(test_rc_iface_flush_remote, size_flush_remote)
 {
     int flush_rkey_enabled = rc_iface_flush_rkey_enabled(m_entity_flush_rkey);
-    int mr_id              = rc_iface_mr_id(m_entity_flush_rkey);
+    int flush_rkey_valid   = rc_iface_flush_rkey_valid(m_entity_flush_rkey);
     map_size_t sizes = {
         {"rc_mlx5", {flush_rkey_enabled ? 10 : 7, 1}},
         {"dc_mlx5", {0, flush_rkey_enabled ? 7 : 5}},
-        {"rc_verbs", {flush_rkey_enabled || (mr_id != 0) ? 7 : 4, 0}},
+        {"rc_verbs", {flush_rkey_valid ? 7 : 4, 0}},
         {"gga_mlx5", {7, 8}},
     };
     check_sizes(m_entity_flush_rkey, sizes);
