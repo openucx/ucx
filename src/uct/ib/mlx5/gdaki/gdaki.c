@@ -1104,7 +1104,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     uct_rc_gdaki_iface_config_t *config =
             ucs_derived_of(tl_config, uct_rc_gdaki_iface_config_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    uct_ib_iface_init_attr_t init_attr = {};
+    uct_rc_iface_init_attr_t init_attr = {};
     uct_md_mem_reg_params_t reg_params = {};
     UCS_STRING_BUFFER_ONSTACK(strb, 64);
     char *gpu_name, *ib_name;
@@ -1133,10 +1133,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     gpu_name = ucs_string_buffer_next_token(&strb, NULL, "-");
     ib_name  = ucs_string_buffer_next_token(&strb, gpu_name, "-");
 
-    init_attr.seg_size      = config->super.super.seg_size;
-    init_attr.qp_type       = IBV_QPT_RC;
-    init_attr.dev_name      = ib_name;
-    init_attr.max_rd_atomic = IBV_DEV_ATTR(&md->super.dev, max_qp_rd_atom);
+    init_attr.super.seg_size      = config->super.super.seg_size;
+    init_attr.super.qp_type       = IBV_QPT_RC;
+    init_attr.super.dev_name      = ib_name;
+    init_attr.super.max_rd_atomic = IBV_DEV_ATTR(&md->super.dev,
+                                                 max_qp_rd_atom);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_gdaki_iface_tl_ops,

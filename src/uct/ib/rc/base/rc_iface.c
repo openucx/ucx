@@ -572,7 +572,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_common_config_t *config,
-                    const uct_ib_iface_init_attr_t *init_attr)
+                    const uct_rc_iface_init_attr_t *init_attr)
 {
     uct_ib_md_t *md      = ucs_derived_of(tl_md, uct_ib_md_t);
     uct_ib_device_t *dev = &md->dev;
@@ -582,9 +582,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, tl_md,
-                              worker, params, &config->super, init_attr);
+                              worker, params, &config->super,
+                              &init_attr->super);
 
-    tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
+    tx_cq_size                  = uct_ib_cq_size(&self->super,
+                                                 &init_attr->super,
                                                  UCT_IB_DIR_TX);
     /* Prevent title CQE overwriting */
     self->tx.cq_available       = uct_rc_iface_tx_cq_capacity(tx_cq_size);
@@ -593,7 +595,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
-    self->config.tx_moderation  = init_attr->tx_moderation;
+    self->config.tx_moderation  = init_attr->super.tx_moderation;
     self->config.tx_poll_always = config->tx.poll_always;
     self->config.tx_cq_len      = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
@@ -620,7 +622,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 
     self->config.ece = config->ece;
 
-    status = uct_rc_iface_init_max_rd_atomic(self, config, init_attr);
+    status = uct_rc_iface_init_max_rd_atomic(self, config, &init_attr->super);
     if (status != UCS_OK) {
         goto err;
     }
@@ -703,7 +705,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 
     /* Create mempool for pending requests */
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = ucs_max(init_attr->fc_req_size,
+    mp_params.elem_size       = ucs_max(init_attr->super.fc_req_size,
                                         sizeof(uct_rc_pending_req_t));
     mp_params.alignment       = 1;
     mp_params.elems_per_chunk = 128;
