@@ -269,6 +269,9 @@ typedef struct uct_ib_iface_init_attr {
     size_t      xport_hdr_len;           /* How many bytes this transport adds on top
                                           * of IB header (LRH+BTH+iCRC+vCRC) */
     unsigned    fc_req_size;             /* Flow control request size */
+    /* Maximum flow control window; if zero, the receive queue length is used */
+    unsigned    fc_max_wnd_size;
+    uint8_t     srq_disable;             /* Create RC QPs without an SRQ */
     int         qp_type;                 /* IB QP type */
     int         flags;                   /* Various flags (see enum) */
     /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
