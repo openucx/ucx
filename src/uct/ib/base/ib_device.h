@@ -421,6 +421,11 @@ static inline int uct_ib_device_has_pci_atomics(uct_ib_device_t *dev)
               (sizeof(uint32_t) | sizeof(uint64_t)));
 }
 
+static inline int uct_ib_device_has_srq(uct_ib_device_t *dev)
+{
+    return IBV_DEV_ATTR(dev, max_srq) != 0;
+}
+
 const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver);
 
 const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size);
