@@ -102,7 +102,7 @@ if __name__ == '__main__':
                        {'UCX_RLS' : ['UCX_TLS']}]
 
         if has_ib():
-            test_cases += [{'UCX_RC_VERBS_RX_MAX_BUF' : ['UCX_RC_VERBS_TX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_BUFS', 'UCX_UD_VERBS_RX_MAX_BUFS']}]
+            test_cases += [{'UCX_RC_VERBS_RX_MAX_BUF' : ['UCX_RC_VERBS_TX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_BUFS', 'UCX_RC_VERBS_RX_MAX_WR', 'UCX_UD_VERBS_RX_MAX_BUFS']}]
 
         for test_case in test_cases:
             runner.run(test_case)

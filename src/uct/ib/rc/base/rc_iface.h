@@ -299,6 +299,8 @@ struct uct_rc_iface {
         uint16_t             fc_wnd_size;
         uint8_t              fc_enabled;
 
+        uint8_t              srq_disable;
+
         uint8_t              min_rnr_timer;
         uint8_t              timeout;
         uint8_t              rnr_retry;
