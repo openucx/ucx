@@ -126,7 +126,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
     UCP_PARAM_FIELD_NAME              = UCS_BIT(8), /**< name */
-    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9)
+    UCP_PARAM_FIELD_NODE_LOCAL_ID     = UCS_BIT(9), /**< node_local_id */
+    UCP_PARAM_FIELD_CTRL_FEATURES     = UCS_BIT(10) /**< ctrl_features */
 };
 
 
@@ -1278,6 +1279,21 @@ typedef struct ucp_params {
      * A numeric UCX_NODE_LOCAL_ID environment value overrides @e node_local_id.
      */
     size_t                             node_local_id;
+
+    /**
+     * UCP @ref ucp_feature "features" that are used by the context for
+     * control-path operations. When this field is specified,
+     * @ref ucp_params_t::features describes data-path features, and this field
+     * describes control-path features that use the transport policy configured by
+     * UCX_CTRL_FEATURES_TLS. This field defaults to 0 if not specified.
+     * @note A control-path feature is enabled for the API in the same way as a
+     *       data-path feature. This field only changes which transports are
+     *       selected for it.
+     * @note Currently only @ref UCP_FEATURE_AM is supported as a control-path
+     *       feature
+     * @note Intersected sets of data-path and control-path features are not supported
+     */
+    uint64_t                           ctrl_features;
 } ucp_params_t;
 
 
