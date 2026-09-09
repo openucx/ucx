@@ -75,6 +75,34 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         return status;
     }
 
+#ifdef HAVE_ROCM_VMM_TYPE
+    if (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+        hsa_amd_vmem_alloc_handle_t vmem_handle;
+
+        status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, base_ptr);
+        if (status != HSA_STATUS_SUCCESS) {
+            ucs_error("hsa_amd_vmem_retain_alloc_handle failed for %p", base_ptr);
+            return status;
+        }
+
+        status = hsa_amd_vmem_export_shareable_handle(&key->vmm.fd, vmem_handle, 0);
+        hsa_amd_vmem_handle_release(vmem_handle);
+        if (status != HSA_STATUS_SUCCESS) {
+            ucs_error("hsa_amd_vmem_export_shareable_handle failed for %p", base_ptr);
+            return status;
+        }
+
+        key->vmm.pid = getpid();
+        key->address = (uintptr_t)base_ptr;
+        key->length  = size;
+        key->dev_num = uct_rocm_base_get_dev_num(agent);
+        key->is_vmm  = 1;
+        key->pid     = getpid();
+        key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+        return HSA_STATUS_SUCCESS;
+    }
+#endif
+
     status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to create ipc for %p/%lx", address, length);
@@ -84,6 +112,7 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->address = (uintptr_t)base_ptr;
     key->length  = size;
     key->dev_num = uct_rocm_base_get_dev_num(agent);
+    key->is_vmm  = 0;
     key->pid     = getpid();
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 

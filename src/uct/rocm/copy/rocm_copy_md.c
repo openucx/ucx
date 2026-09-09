@@ -145,9 +145,13 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         return UCS_ERR_IO_ERROR;
     }
 
-    if (mem_type == HSA_EXT_POINTER_TYPE_HSA) {
-        /* This covers device memory and memory allocated
-           with hipHostMalloc */
+    if ((mem_type == HSA_EXT_POINTER_TYPE_HSA)
+#ifdef HAVE_ROCM_VMM_TYPE
+        || (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
+#endif
+    ) {
+        /* This covers device memory, hipHostMalloc, and VMM-mapped memory.
+         * VMM memory is already device-accessible; hsa_amd_memory_lock hangs on it. */
         dev_addr = address;
     } else {
         if (pg_align_addr) {
