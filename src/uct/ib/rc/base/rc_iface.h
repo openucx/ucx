@@ -252,6 +252,11 @@ typedef struct uct_rc_srq {
 
 typedef struct uct_rc_iface_init_attr {
     uct_ib_iface_init_attr_t super;
+
+    uint8_t                  srq_disable;     /* create QPs without an SRQ */
+    unsigned                 fc_max_wnd_size; /* maximum flow control window;
+                                               * if zero, the receive queue
+                                               * length is used */
 } uct_rc_iface_init_attr_t;
 
 
@@ -303,6 +308,8 @@ struct uct_rc_iface {
 
         uint16_t             fc_wnd_size;
         uint8_t              fc_enabled;
+
+        uint8_t              srq_disable;
 
         uint8_t              min_rnr_timer;
         uint8_t              timeout;
