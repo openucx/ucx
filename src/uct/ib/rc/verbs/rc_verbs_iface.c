@@ -351,7 +351,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
     /* Create a dummy QP in order to find out max_inline */
     status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
-                                    self->super.config.tx_qp_len,
+                                    self->super.config.tx_qp_len, 0,
                                     self->srq);
     if (status != UCS_OK) {
         goto err_common_cleanup;
