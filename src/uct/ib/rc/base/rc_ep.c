@@ -118,7 +118,6 @@ void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
 
     ucs_assertv(cq_credits < (UINT16_MAX / 2), "cq_credits=%d", cq_credits);
 
-    ucs_list_del(&ep->list);
     uct_rc_iface_remove_qp(iface, qp_num);
 
     cleanup_ctx->super.cbq  = &iface->super.super.worker->super.progress_q;
@@ -186,6 +185,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_debug("destroy rc ep %p", self);
 
+    ucs_list_del(&self->list);
     uct_rc_ep_pending_purge(&self->super.super,
                             uct_rc_ep_pending_purge_warn_cb, self);
     uct_rc_fc_cleanup(&self->fc);
