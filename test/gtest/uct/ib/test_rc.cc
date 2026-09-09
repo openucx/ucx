@@ -1323,16 +1323,42 @@ protected:
 
 size_t test_rc_ece::m_recv_count = 0;
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_0, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
-                     "RC_ECE=0")
+/* An explicit ECE value makes interface creation fail on devices without ECE;
+ * check the MD capability before opening the interface. */
+class test_rc_ece_supported : public test_rc_ece {
+public:
+    void init()
+    {
+        ucs::handle<uct_md_h> md;
+
+        UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                               GetParam()->component,
+                               GetParam()->md_name.c_str(), m_md_config);
+        if (!ucs_derived_of(md, uct_ib_md_t)->ece_enable) {
+            UCS_TEST_SKIP_R("device does not support ECE");
+        }
+
+        test_rc_ece::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_ece_supported, ece_0,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=0")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 0);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_custom,
+UCS_TEST_SKIP_COND_P(test_rc_ece_supported, ece_custom,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=43223")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 43223);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_ece_supported, ece_inf,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=inf")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
+              UCS_ULUNITS_INF);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
@@ -1342,14 +1368,8 @@ UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
               UCS_ULUNITS_AUTO);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_inf, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
-                     "RC_ECE=inf")
-{
-    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
-              UCS_ULUNITS_INF);
-}
-
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece)
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece_supported)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
