@@ -31,6 +31,14 @@ UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
 UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_free, hsa_status_t,
                               HSA_STATUS_ERROR, void*)
 
+#ifdef HAVE_ROCM_VMM_TYPE
+UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_vmem_map, hsa_status_t,
+                              HSA_STATUS_ERROR, void*, size_t, size_t,
+                              hsa_amd_vmem_alloc_handle_t, uint64_t)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_vmem_unmap, hsa_status_t,
+                              HSA_STATUS_ERROR, void*, size_t)
+#endif
+
 static UCS_F_ALWAYS_INLINE void
 ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucs_memory_type_t mem_type)
 {
@@ -129,11 +137,52 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     return status;
 }
 
+#ifdef HAVE_ROCM_VMM_TYPE
+hsa_status_t ucm_hsa_amd_vmem_map(void* va, size_t size, size_t in_offset,
+                                   hsa_amd_vmem_alloc_handle_t handle,
+                                   uint64_t flags)
+{
+    hsa_status_t status;
+
+    ucm_event_enter();
+
+    status = ucm_orig_hsa_amd_vmem_map(va, size, in_offset, handle, flags);
+    if (status == HSA_STATUS_SUCCESS) {
+        ucm_trace("ucm_hsa_amd_vmem_map(va=%p size:%lu)", va, size);
+        ucm_dispatch_mem_type_alloc(va, size, UCS_MEMORY_TYPE_ROCM);
+    }
+
+    ucm_event_leave();
+    return status;
+}
+
+hsa_status_t ucm_hsa_amd_vmem_unmap(void* va, size_t size)
+{
+    hsa_status_t status;
+
+    ucm_event_enter();
+
+    ucm_trace("ucm_hsa_amd_vmem_unmap(va=%p size:%lu)", va, size);
+    ucm_dispatch_mem_type_free(va, size, UCS_MEMORY_TYPE_ROCM);
+
+    status = ucm_orig_hsa_amd_vmem_unmap(va, size);
+
+    ucm_event_leave();
+    return status;
+}
+#endif
+
 static ucm_reloc_patch_t patches[] = {
     {UCS_PP_MAKE_STRING(hsa_amd_memory_pool_allocate),
      ucm_override_hsa_amd_memory_pool_allocate},
     {UCS_PP_MAKE_STRING(hsa_amd_memory_pool_free),
      ucm_override_hsa_amd_memory_pool_free},
+#ifdef HAVE_ROCM_VMM_TYPE
+    {UCS_PP_MAKE_STRING(hsa_amd_vmem_map),
+     ucm_override_hsa_amd_vmem_map},
+    {UCS_PP_MAKE_STRING(hsa_amd_vmem_unmap),
+     ucm_override_hsa_amd_vmem_unmap},
+#endif
     {NULL, NULL}
 };
 

@@ -27,6 +27,28 @@
 #define uct_rocm_memcpy_h2d(_d,_s,_l)  memcpy((_d),(_s),(_l))
 #define uct_rocm_memcpy_d2h(_d,_s,_l)  ucs_memcpy_nontemporal((_d),(_s),(_l))
 
+#ifdef HAVE_ROCM_VMM_TYPE
+/* VMM device memory (HSA_EXT_POINTER_TYPE_HSA_VMEM) is GPU-only and cannot
+ * be accessed via CPU memcpy. Returns 1 if addr must use async HSA copy.
+ * Calls hsa_amd_pointer_info directly to avoid logging errors for non-ROCM
+ * addresses (e.g. plain host buffers), which is a normal and expected case. */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_is_vmm_addr(const void *addr, size_t length)
+{
+    hsa_amd_pointer_info_t info = {.size = sizeof(info)};
+
+    return (hsa_amd_pointer_info((void*)addr, &info, NULL, NULL, NULL) ==
+            HSA_STATUS_SUCCESS) &&
+           (info.type == HSA_EXT_POINTER_TYPE_HSA_VMEM);
+}
+#else
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_is_vmm_addr(const void *addr, size_t length)
+{
+    return 0;
+}
+#endif
+
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
 {
     uct_rocm_copy_iface_t *iface = ucs_derived_of(params->iface, uct_rocm_copy_iface_t);
@@ -108,7 +130,11 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+    if ((remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA)
+#ifdef HAVE_ROCM_VMM_TYPE
+        || (remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
+#endif
+    ) {
         remote_addr_mod = (void*)remote_addr;
         if (dev_type == HSA_DEVICE_TYPE_GPU) {
             /* UCS_MEMORY_TYPE_ROCM */
@@ -143,7 +169,11 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+    if ((iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA)
+#ifdef HAVE_ROCM_VMM_TYPE
+        || (iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
+#endif
+    ) {
         iov_buffer_mod = iov->buffer;
         if (dev_type == HSA_DEVICE_TYPE_GPU) {
             /* UCS_MEMORY_TYPE_ROCM */
@@ -238,7 +268,8 @@ ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
     ucs_status_t status;
 
-    if (size < iface->config.d2h_thresh) {
+    if ((size < iface->config.d2h_thresh) &&
+        !uct_rocm_is_vmm_addr((void*)remote_addr, size)) {
         uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
         status = UCS_OK;
     } else {
@@ -261,7 +292,8 @@ ucs_status_t uct_rocm_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
     ucs_status_t status;
 
-    if (size < iface->config.h2d_thresh) {
+    if ((size < iface->config.h2d_thresh) &&
+        !uct_rocm_is_vmm_addr((void*)remote_addr, size)) {
         uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
         status = UCS_OK;
     } else {
@@ -285,7 +317,8 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     ucs_status_t status          = UCS_OK;
     uct_iov_t *iov;
 
-    if (length <= iface->config.h2d_thresh) {
+    if ((length <= iface->config.h2d_thresh) &&
+        !uct_rocm_is_vmm_addr((void*)remote_addr, length)) {
         uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
@@ -321,7 +354,8 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     ucs_status_t status          = UCS_OK;
     uct_iov_t *iov;
 
-    if (length <= iface->config.d2h_thresh) {
+    if ((length <= iface->config.d2h_thresh) &&
+        !uct_rocm_is_vmm_addr((void*)remote_addr, length)) {
         uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
