@@ -483,8 +483,8 @@ public:
                                   ucp_proto_select_key_t key,
                                   ucp_worker_cfg_index_t rkey_cfg_index)
     {
-        ucp_rkey_config_t *config = ucs_array_elem(&e.worker()->rkey_config,
-                                                   rkey_cfg_index);
+        ucp_rkey_config_t *config = ucp_worker_rkey_config(e.worker(),
+                                                           rkey_cfg_index);
         check_proto_select(e, config->proto_select, data_vec, key,
                            rkey_cfg_index);
     }
@@ -1688,8 +1688,8 @@ protected:
         auto rkey_packed = rkey_pack(receiver(), memh);
         auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
         ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
-        ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
-                                                         rkey->cfg_index);
+        ucp_rkey_config_t *rkey_config =
+                ucp_worker_rkey_config(worker, rkey->cfg_index);
         ucp_memory_info_t mem_info;
         ucp_proto_select_param_t select_param;
         const ucp_proto_select_elem_t *select_elem;
@@ -1842,7 +1842,7 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
 
     ucp_worker_cfg_index_t ep_cfg_index = ep_config_index(sender());
     const ucp_rkey_config_t *base_rkey_config =
-            &ucs_array_elem(&worker->rkey_config, rkey->cfg_index);
+            ucp_worker_rkey_config(worker, rkey->cfg_index);
     const ucp_ep_config_t *ep_config      = ucp_worker_ep_config(worker,
                                                                  ep_cfg_index);
     ucp_rkey_config_key_t rkey_config_key = base_rkey_config->key;
@@ -1869,7 +1869,7 @@ UCS_TEST_P(test_ucp_proto_mock_mtype_sys_dev,
     ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
 
-    rkey_config = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+    rkey_config = ucp_worker_rkey_config(worker, rkey_cfg_index);
     select_elem = ucp_proto_select_lookup_slow(worker,
                                                &rkey_config->proto_select, 1,
                                                ep_cfg_index, rkey_cfg_index,

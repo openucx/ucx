@@ -783,14 +783,18 @@ protected:
 
     static void setup_progress_mock(ucp_worker_h worker, ucs::mock &mock)
     {
+        ucp_worker_cfg_index_t rkey_cfg_index;
         ucp_ep_config_t *ep_config;
+        ucp_rkey_config_t *rkey_config;
+
         ucs_array_for_each(ep_config, &worker->ep_config) {
             setup_progress_mock(ep_config->proto_select, mock);
         }
 
-        ucp_rkey_config_t **rkey_config_p;
-        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
-            ucp_rkey_config_t *rkey_config = *rkey_config_p;
+        for (rkey_cfg_index = 0;
+             rkey_cfg_index < ucs_array_length(&worker->rkey_config);
+             ++rkey_cfg_index) {
+            rkey_config = ucp_worker_rkey_config(worker, rkey_cfg_index);
             setup_progress_mock(rkey_config->proto_select, mock);
         }
     }
