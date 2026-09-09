@@ -1667,7 +1667,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                                                         uct_dc_mlx5_iface_config_t);
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
                                                         uct_ib_mlx5_md_t);
-    uct_ib_iface_init_attr_t init_attr = {};
+    uct_rc_iface_init_attr_t init_attr = {};
     unsigned tx_queue_len              = config->super.super.tx.queue_len;
     size_t sq_length;
     ucs_status_t status;
@@ -1697,20 +1697,20 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                                      UCT_DC_MLX5_HW_DCI_INDEX :
                                      -1;
 
-    init_attr.qp_type       = UCT_IB_QPT_DCI;
-    init_attr.flags         = UCT_IB_TX_OPS_PER_PATH;
-    init_attr.fc_req_size   = sizeof(uct_dc_fc_request_t);
-    init_attr.max_rd_atomic = md->max_rd_atomic_dc;
-    init_attr.tx_moderation = 0; /* disable tx moderation for dcs */
-    init_attr.dev_name      = params->mode.device.dev_name;
+    init_attr.super.qp_type       = UCT_IB_QPT_DCI;
+    init_attr.super.flags         = UCT_IB_TX_OPS_PER_PATH;
+    init_attr.super.fc_req_size   = sizeof(uct_dc_fc_request_t);
+    init_attr.super.max_rd_atomic = md->max_rd_atomic_dc;
+    init_attr.super.tx_moderation = 0; /* disable tx moderation for dcs */
+    init_attr.super.dev_name      = params->mode.device.dev_name;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
-        init_attr.flags  |= UCT_IB_TM_SUPPORTED;
+        init_attr.super.flags |= UCT_IB_TM_SUPPORTED;
     }
 
     if ((md->dp_ordering_cap_devx.dc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
         md->ddp_support_dv.dc) {
-        init_attr.flags |= UCT_IB_DDP_SUPPORTED;
+        init_attr.super.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
     status = uct_dc_mlx5_calc_sq_length(md, tx_queue_len, &sq_length);
@@ -1718,7 +1718,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return status;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
+    init_attr.super.cq_len[UCT_IB_DIR_TX] = sq_length * self->tx.ndci;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap_devx.dc,
@@ -1734,7 +1734,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                               tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 
-    tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
+    tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr.super,
                                 UCT_IB_DIR_TX);
 
     /* driver will round up num cqes to pow of 2 if needed */
