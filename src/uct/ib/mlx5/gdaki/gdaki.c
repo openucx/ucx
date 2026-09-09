@@ -458,7 +458,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
+                           iface->super.super.config.tx_qp_len, 0, NULL);
 
     cq_attr.flags                           |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
     qp_attr.mmio_mode                        = UCT_IB_MLX5_MMIO_MODE_DB;
@@ -622,7 +622,7 @@ uct_rc_gdaki_iface_init_channel_pool(uct_rc_gdaki_iface_t *iface,
     }
 
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
+                           iface->super.super.config.tx_qp_len, 0, NULL);
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
     priv = ucs_mpool_priv(&iface->channel_pool);
@@ -687,7 +687,7 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
     ucs_status_t status;
 
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
+                           iface->super.super.config.tx_qp_len, 0, NULL);
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
     uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, qp_attr.len,
                                     &dev_ep_size, &pgsz_bitmap);
