@@ -387,7 +387,7 @@ private:
             ucs_status_t status;
 
             status = uct_rc_iface_qp_create(&m_iface->super, &m_ibqp, &attr,
-                                            m_iface->super.config.tx_qp_len,
+                                            m_iface->super.config.tx_qp_len, 0,
                                             m_iface->srq);
             ASSERT_UCS_OK(status);
 
