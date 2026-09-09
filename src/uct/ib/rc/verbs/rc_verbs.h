@@ -36,6 +36,13 @@ enum {
 };
 
 
+enum {
+    UCT_RC_VERBS_SRQ_MODE_AUTO, /* use an SRQ if the device supports it */
+    UCT_RC_VERBS_SRQ_MODE_OFF,  /* create QPs without an SRQ */
+    UCT_RC_VERBS_SRQ_MODE_LAST
+};
+
+
 typedef struct uct_rc_verbs_ep_addr {
     uint8_t          flags;
     uct_ib_uint24_t  qp_num;
@@ -62,6 +69,7 @@ typedef struct uct_rc_verbs_ep {
     uct_rc_ep_t            super;
     uct_rc_verbs_txcnt_t   txcnt;
     uct_ib_fence_info_t    fi;
+    uint16_t               rx_available; /* free receive WR slots without SRQ */
     struct ibv_qp          *qp;
 } uct_rc_verbs_ep_t;
 
@@ -70,6 +78,7 @@ typedef struct uct_rc_verbs_ep {
 typedef struct {
     uct_rc_iface_qp_cleanup_ctx_t super;
     struct ibv_qp                 *qp;
+    uint16_t                      rx_remaining; /* receive WRs left to drain */
 } uct_rc_verbs_iface_qp_cleanup_ctx_t;
 
 
@@ -80,7 +89,9 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
+    unsigned                           rx_max_wr; /* receive WRs per QP */
     unsigned                           flush_mode;
+    unsigned                           srq_mode;
 } uct_rc_verbs_iface_config_t;
 
 
@@ -96,11 +107,14 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
     uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
+    int                         rx_cq_available; /* RX CQ space for new EPs */
+    uint8_t                     rx_post_recv_pending; /* retry QP receives */
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;
         size_t                  max_send_sge;
         unsigned                tx_max_wr;
+        uint16_t                rx_max_wr; /* receive WRs per QP without SRQ */
         uint8_t                 flush_by_fc;
     } config;
 } uct_rc_verbs_iface_t;

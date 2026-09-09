@@ -577,6 +577,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     uct_ib_md_t *md      = ucs_derived_of(tl_md, uct_ib_md_t);
     uct_ib_device_t *dev = &md->dev;
     uint32_t max_ib_msg_size;
+    unsigned fc_max_wnd_size;
     ucs_status_t status;
     unsigned tx_cq_size;
     ucs_mpool_params_t mp_params;
@@ -592,6 +593,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->tx.cq_available       = uct_rc_iface_tx_cq_capacity(tx_cq_size);
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
+    self->config.srq_disable    = init_attr->srq_disable;
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
@@ -722,8 +724,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
          * Then FC window size is the same for all endpoints as well.
          * TODO: Make wnd size to be a property of the particular interface.
          * We could distribute it via rc address then.*/
+        fc_max_wnd_size             = (init_attr->fc_max_wnd_size != 0) ?
+                                      init_attr->fc_max_wnd_size :
+                                      config->super.rx.queue_len;
         self->config.fc_wnd_size    = ucs_min(config->fc.wnd_size,
-                                              config->super.rx.queue_len);
+                                              fc_max_wnd_size);
         self->config.fc_hard_thresh = ucs_max((int)(self->config.fc_wnd_size *
                                               config->fc.hard_thresh), 1);
     } else {
@@ -755,9 +760,11 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
     uct_rc_iface_t *iface                      = cleanup_ctx->iface;
     uct_rc_iface_ops_t *ops;
 
-    uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         cleanup_ctx->qp_num);
+    if (!iface->config.srq_disable) {
+        uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
+                                             IBV_EVENT_QP_LAST_WQE_REACHED,
+                                             cleanup_ctx->qp_num);
+    }
 
     ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
     ops->cleanup_qp(cleanup_ctx);
