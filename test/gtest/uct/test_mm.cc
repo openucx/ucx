@@ -279,21 +279,17 @@ static ucs_status_t mm_test_am_noop(void *arg, void *data, size_t length,
     return UCS_OK;
 }
 
-/* mprotect the page containing ep's peer fifo_ctl, to assert the tested
- * code path never dereferences it. Caller must unprotect the returned page
- * before the ep is destroyed. */
-static void *mm_test_protect_fifo_ctl(uct_mm_ep_t *ep)
+/* Protect ep's peer fifo_ctl to assert the tested code path never dereferences
+ * it. head and tail sit on separate cache lines, so the struct may span two
+ * pages. Must be restored before the ep is destroyed. */
+static void mm_test_fifo_ctl_prot(uct_mm_ep_t *ep, int prot)
 {
-    size_t pgsz = ucs_get_page_size();
-    void *page  = (void *)((uintptr_t)ep->fifo_ctl & ~(pgsz - 1));
+    size_t pgsz     = ucs_get_page_size();
+    uintptr_t start = (uintptr_t)ep->fifo_ctl & ~(pgsz - 1);
+    uintptr_t last  = ((uintptr_t)ep->fifo_ctl + sizeof(*ep->fifo_ctl) - 1) &
+                      ~(pgsz - 1);
 
-    EXPECT_EQ(0, mprotect(page, pgsz, PROT_NONE));
-    return page;
-}
-
-static void mm_test_unprotect_fifo_ctl(void *page)
-{
-    EXPECT_EQ(0, mprotect(page, ucs_get_page_size(), PROT_READ | PROT_WRITE));
+    EXPECT_EQ(0, mprotect((void*)start, last - start + pgsz, prot));
 }
 
 /* Send AM messages on ep until the remote FIFO (associated with
@@ -325,10 +321,10 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access,
     ASSERT_UCS_OK(status);
 
     uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
-    void *page      = mm_test_protect_fifo_ctl(ep);
 
+    mm_test_fifo_ctl_prot(ep, PROT_NONE);
     status = uct_ep_flush(m_e1->ep(0), 0, NULL);
-    mm_test_unprotect_fifo_ctl(page);
+    mm_test_fifo_ctl_prot(ep, PROT_READ | PROT_WRITE);
     EXPECT_EQ(UCS_OK, status);
 }
 
@@ -369,11 +365,11 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access_pending,
     mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
     ASSERT_FALSE(ucs_arbiter_group_is_empty(&ep->arb_group));
 
-    void *page = mm_test_protect_fifo_ctl(ep);
+    mm_test_fifo_ctl_prot(ep, PROT_NONE);
 
     status = uct_ep_flush(m_e1->ep(0), 0, NULL);
 
-    mm_test_unprotect_fifo_ctl(page);
+    mm_test_fifo_ctl_prot(ep, PROT_READ | PROT_WRITE);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
 
     while (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
@@ -393,12 +389,12 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
     preq.func = mm_test_pending_cb;
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &preq, 0));
 
-    void *page = mm_test_protect_fifo_ctl(ep);
+    mm_test_fifo_ctl_prot(ep, PROT_NONE);
 
     uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
     status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL);
 
-    mm_test_unprotect_fifo_ctl(page);
+    mm_test_fifo_ctl_prot(ep, PROT_READ | PROT_WRITE);
     EXPECT_EQ(UCS_OK, status);
     EXPECT_EQ(1u, purged);
     EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
