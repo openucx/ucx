@@ -886,6 +886,9 @@ void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
 {
     size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
 
+    ucs_assert((src >= (const void*)txwq->qstart) &&
+               (src <= (const void*)txwq->qend));
+
     memcpy(dst, src, copy_len);
     if (copy_len < length) {
         memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,

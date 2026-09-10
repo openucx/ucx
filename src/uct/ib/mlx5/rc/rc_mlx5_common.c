@@ -122,14 +122,12 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
 
     ucs_assert(wqe_size >= header_size);
 
-    raddr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
-                                      (void*)(ctrl + 1));
+    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     if (wqe_size == header_size) {
         goto out;
     }
 
-    inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
-                                    (void*)(raddr + 1));
+    inl = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
     if (inl->byte_count & htonl(MLX5_INLINE_SEG)) {
         uct_rc_mlx5_op_info_fill_put_short(info, txwq, inl, raddr,
                                            callback_data);

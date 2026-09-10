@@ -318,6 +318,23 @@ uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
 }
 
 
+/* const-safe version of uct_ib_mlx5_txwq_wrap_any() */
+static UCS_F_ALWAYS_INLINE const void *
+uct_ib_mlx5_txwq_wrap_any_const(const uct_ib_mlx5_txwq_t *txwq, const void *seg)
+{
+    if (ucs_unlikely(seg >= txwq->qend)) {
+        seg = UCS_PTR_BYTE_OFFSET(seg,
+                                  -UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
+    }
+
+    ucs_assertv(((unsigned long)seg % UCT_IB_MLX5_WQE_SEG_SIZE) == 0, "seg=%p",
+                seg);
+    ucs_assertv(seg >= txwq->qstart, "seg=%p qstart=%p", seg, txwq->qstart);
+    ucs_assertv(seg < txwq->qend, "seg=%p qend=%p", seg, txwq->qend);
+    return seg;
+}
+
+
 /* Wrapping of 'data' could happen, even past 'qend' boundary.
  * Do not check for alignment. */
 static UCS_F_ALWAYS_INLINE void *
