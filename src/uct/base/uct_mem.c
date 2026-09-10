@@ -483,6 +483,7 @@ UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_iface_mp_chunk_alloc,
     if (mem.memh == UCT_MEM_HANDLE_NULL) {
         ucs_diag("%s: md %s did not provide a memory handle for the chunk",
                  ucs_mpool_name(mp), iface->md->component->name);
+        /* coverity[var_deref_model] */
         uct_mem_free(&mem);
         return UCS_ERR_NO_RESOURCE;
     }
