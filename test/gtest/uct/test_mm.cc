@@ -352,8 +352,8 @@ static ucs_status_t mm_test_flush_pending_cb(uct_pending_req_t *self)
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access_pending,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    ucs_status_t status;
     uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+    ucs_status_t status;
 
     mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
     ASSERT_FALSE(ucs_arbiter_group_is_empty(&ep->arb_group));
@@ -372,10 +372,10 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access_pending,
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    ucs_status_t status;
     uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
-    uct_pending_req_t preq;
     unsigned purged = 0;
+    uct_pending_req_t preq;
+    ucs_status_t status;
 
     mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
 
@@ -428,8 +428,8 @@ static ucs_status_t mm_test_pending_no_res_cb(uct_pending_req_t *self)
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_add_consistency,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    uct_pending_req_t preq, extra;
     unsigned purged = 0;
+    uct_pending_req_t preq, extra;
 
     mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
 
