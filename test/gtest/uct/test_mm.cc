@@ -290,7 +290,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, iface_open_no_memh,
     uct_md_h md                = m_e1->md();
     uct_iface_config_t *config = NULL;
     uct_iface_h iface          = NULL;
-    uct_iface_params_t params;
+    uct_iface_params_t params  = {};
     ucs_status_t status;
 
     status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,

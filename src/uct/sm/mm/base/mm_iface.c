@@ -820,7 +820,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     /* A NULL memh is dereferenced by uct_mm_iface_get_address() */
     if (self->recv_fifo_mem.memh == UCT_MEM_HANDLE_NULL) {
-        ucs_debug("md %s did not provide a memory handle for the receive FIFO",
+        ucs_error("md %s did not provide a memory handle for the receive FIFO",
                   self->super.super.md->component->name);
         status = UCS_ERR_NO_DEVICE;
         goto err_free_fifo;
