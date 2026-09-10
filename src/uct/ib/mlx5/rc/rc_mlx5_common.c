@@ -74,11 +74,6 @@ static void uct_rc_mlx5_op_info_fill_put_short(
 
     uct_rc_mlx5_op_info_fill_rma_raddr(info, raddr);
 
-    if (inl == NULL) {
-        uct_rc_mlx5_op_info_fill_put_data(info, 0, NULL);
-        return;
-    }
-
     inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
     ucs_assert(inline_length <= sizeof(callback_data->data));
 
