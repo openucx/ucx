@@ -125,11 +125,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     raddr = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
                                       (void*)(ctrl + 1));
     if (wqe_size == header_size) {
-        if (op == NULL) {
-            uct_rc_mlx5_op_info_fill_put_short(info, txwq, NULL, raddr,
-                                               callback_data);
-            return UCS_OK;
-        }
+        goto out;
     }
 
     inl = uct_ib_mlx5_txwq_wrap_any((uct_ib_mlx5_txwq_t*)txwq,
@@ -147,6 +143,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         return UCS_OK;
     }
 
+out:
     ucs_fatal("unsupported put op %p handler %s", (void*)op,
               (op != NULL) ? ucs_debug_get_symbol_name((void*)op->handler) :
                              "none");
