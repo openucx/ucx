@@ -285,11 +285,10 @@ static ucs_status_t mm_test_am_noop(void *arg, void *data, size_t length,
 static void mm_test_fifo_ctl_prot(uct_mm_ep_t *ep, int prot)
 {
     size_t pgsz     = ucs_get_page_size();
-    uintptr_t start = (uintptr_t)ep->fifo_ctl & ~(pgsz - 1);
-    uintptr_t last  = ((uintptr_t)ep->fifo_ctl + sizeof(*ep->fifo_ctl) - 1) &
-                      ~(pgsz - 1);
+    uintptr_t start = ucs_align_down_pow2((uintptr_t)ep->fifo_ctl, pgsz);
+    uintptr_t end   = ucs_align_up_pow2((uintptr_t)(ep->fifo_ctl + 1), pgsz);
 
-    EXPECT_EQ(0, mprotect((void*)start, last - start + pgsz, prot));
+    EXPECT_EQ(0, mprotect((void*)start, end - start, prot));
 }
 
 /* Send AM messages on ep until the remote FIFO (associated with
@@ -309,18 +308,12 @@ static void mm_test_saturate_fifo(uct_ep_h ep, uct_iface_h peer_iface)
 UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     uint64_t send_data = 0xdeadbeef;
+    uct_mm_ep_t *ep    = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
     ucs_status_t status;
 
-    do {
-        status = uct_ep_am_short(m_e1->ep(0), 0, 0xbeef, &send_data,
-                                 sizeof(send_data));
-        if (status == UCS_ERR_NO_RESOURCE) {
-            progress();
-        }
-    } while (status == UCS_ERR_NO_RESOURCE);
-    ASSERT_UCS_OK(status);
-
-    uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+    /* the FIFO is empty, so a single send always has room */
+    ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0xbeef, &send_data,
+                                  sizeof(send_data)));
 
     mm_test_fifo_ctl_prot(ep, PROT_NONE);
     status = uct_ep_flush(m_e1->ep(0), 0, NULL);
@@ -392,7 +385,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
     mm_test_fifo_ctl_prot(ep, PROT_NONE);
 
     uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
-    status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL);
+    status = uct_ep_flush(m_e1->ep(0), 0, NULL);
 
     mm_test_fifo_ctl_prot(ep, PROT_READ | PROT_WRITE);
     EXPECT_EQ(UCS_OK, status);
@@ -400,6 +393,9 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
     EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
 }
 
+/* Pins the is_scheduled() rather than is_empty() choice in uct_mm_ep_flush():
+ * a group is not scheduled while its element is dispatched, so a flush issued
+ * from a pending callback must complete instead of rescheduling itself */
 UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_dispatch_completes,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
