@@ -403,29 +403,25 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
 UCS_TEST_SKIP_COND_P(test_uct_mm, flush_pending_dispatch_completes,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     uct_mm_ep_t *ep = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
+    unsigned purged = 0;
+    mm_flush_pending_ctx_t ctx;
 
     mm_test_saturate_fifo(m_e1->ep(0), m_e2->iface());
     ASSERT_TRUE(ucs_arbiter_group_is_scheduled(&ep->arb_group));
     ASSERT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_flush(m_e1->ep(0), 0, NULL));
 
-    mm_flush_pending_ctx_t ctx;
     ctx.req.func = mm_test_flush_pending_cb;
     ctx.ep       = m_e1->ep(0);
     ctx.done     = 0;
     ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &ctx.req, 0));
 
-    ucs_time_t deadline = ucs_get_time() +
-                          ucs_time_from_sec(DEFAULT_TIMEOUT_SEC);
-    while (!ctx.done && (ucs_get_time() < deadline)) {
-        progress();
-    }
+    wait_for_flag(&ctx.done);
     EXPECT_TRUE(ctx.done);
     EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
 
-    /* Unconditional, not just a fallback: if the deadline above was hit,
-     * ctx.req is still enqueued on the arbiter and points into this stack
-     * frame, so it must be purged here while ctx is still alive. */
-    unsigned purged = 0;
+    /* Unconditional, not just a fallback: if the wait timed out, ctx.req is
+     * still enqueued on the arbiter and points into this stack frame, so it
+     * must be purged while ctx is still alive. */
     uct_ep_pending_purge(m_e1->ep(0), mm_test_purge_cb, &purged);
 }
 
