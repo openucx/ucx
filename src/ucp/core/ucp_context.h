@@ -39,8 +39,8 @@ KHASH_IMPL(ucp_context_imported_mem_hash, uint64_t, ucs_rcache_t*, 1,
 
 
 enum {
-    /* The flag indicates that the resource may be used for auxiliary
-     * wireup communications only */
+    /* The flag indicates that the resource may be used only when auxiliary
+     * transports are explicitly allowed by lane selection */
     UCP_TL_RSC_FLAG_AUX = UCS_BIT(0)
 };
 
@@ -174,6 +174,8 @@ typedef struct ucp_context_config {
     ucp_fence_mode_t                       fence_mode;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
+    /** Allow auxiliary transports for the active-message lane */
+    int                                    allow_am_aux_tl;
     /** Enable cm wireup message exchange to select the best transports
      *  for all lanes after cm phase is done */
     int                                    cm_use_all_devices;

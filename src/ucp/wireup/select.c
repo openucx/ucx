@@ -1600,22 +1600,25 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_criteria_t criteria = {};
     const uct_iface_attr_t *iface_attr;
     ucs_status_t status;
+    int allow_aux, aux_fallback;
 
     if (!ucp_wireup_is_am_required(select_params, select_ctx)) {
         memset(am_info, 0, sizeof(*am_info));
         return UCS_OK;
     }
 
-    /* Select one lane for active messages */
+    allow_aux    = !!(ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL);
+    aux_fallback = worker->context->config.ext.allow_am_aux_tl;
+
+    /* Select one lane for active messages. Prefer primary transports and use
+     * auxiliary transports only if no primary transport is available. */
     for (;;) {
         ucp_wireup_criteria_init(&criteria);
         criteria.title              = "active messages";
         criteria.calc_score         = ucp_wireup_am_score_func;
         criteria.calc_tiebreak      = ucp_wireup_tiebreak_func;
         criteria.lane_type          = UCP_LANE_TYPE_AM;
-        criteria.tl_rsc_flags       =
-                (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) ?
-                UCP_TL_RSC_FLAG_AUX : 0;
+        criteria.tl_rsc_flags       = allow_aux ? UCP_TL_RSC_FLAG_AUX : 0;
         ucp_wireup_init_select_flags(&criteria.local_iface_flags,
                                      UCT_IFACE_FLAG_AM_BCOPY, 0);
         ucp_wireup_init_select_flags(&criteria.remote_iface_flags,
@@ -1631,10 +1634,17 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
 
         status = ucp_wireup_select_transport(select_ctx, select_params,
                                              &criteria, tl_bitmap, UINT64_MAX,
-                                             UINT64_MAX, UINT64_MAX, 1,
+                                             UINT64_MAX, UINT64_MAX,
+                                             allow_aux || !aux_fallback,
                                              am_info);
         if (status != UCS_OK) {
-            return status;
+            if (allow_aux || (status != UCS_ERR_UNREACHABLE) ||
+                !aux_fallback) {
+                return status;
+            }
+
+            allow_aux = 1;
+            continue;
         }
 
         /* If max_bcopy is too small, try again */
