@@ -748,7 +748,6 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                     ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
     size_t alignment, align_offset, payload_offset;
-    uct_md_attr_t md_attr;
     ucs_status_t status;
     unsigned i;
 
@@ -809,17 +808,6 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                      params->rx_headroom : 0;
     self->release_desc.cb          = uct_mm_iface_release_desc;
 
-    status = uct_md_query(self->super.super.md, &md_attr);
-    if (status != UCS_OK) {
-        goto err;
-    }
-    if (!(md_attr.cap.flags & (UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG))) {
-        ucs_debug("md %s cannot allocate or register memory, not opening mm "
-                  "iface", self->super.super.md->component->name);
-        status = UCS_ERR_NO_DEVICE;
-        goto err;
-    }
-
     /* Allocate the receive FIFO */
     status = uct_iface_mem_alloc(&self->super.super.super,
                                  UCT_MM_GET_FIFO_SIZE(self),
@@ -828,6 +816,14 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     if (status != UCS_OK) {
         ucs_error("mm_iface failed to allocate receive FIFO");
         return status;
+    }
+
+    /* A NULL memh is dereferenced later by uct_mm_iface_recv_desc_init() */
+    if (self->recv_fifo_mem.memh == UCT_MEM_HANDLE_NULL) {
+        ucs_debug("md %s did not provide a memory handle for the receive FIFO",
+                  self->super.super.md->component->name);
+        status = UCS_ERR_NO_DEVICE;
+        goto err_free_fifo;
     }
 
     uct_mm_iface_set_fifo_ptrs(self->recv_fifo_mem.address,

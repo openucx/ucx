@@ -274,36 +274,51 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
 
 static ucs::mock *mm_md_query_mock = NULL;
 
-static ucs_status_t mm_md_query_no_memh(uct_md_h md, uct_md_attr_v2_t *attr)
+/* Drop UCT_MD_FLAG_ALLOC, as uct_posix_md_query() does once the file system
+ * has less than UCX_POSIX_SHM_MIN_SIZE left */
+static ucs_status_t mm_md_query_no_alloc(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     ucs::mock &mck = *mm_md_query_mock;
+
     UCS_MOCK_ORIG_FUNC(mck, &md->ops->query, md, attr);
-    attr->flags &= ~((uint64_t)(UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_REG));
-    attr->flags |= UCT_MD_FLAG_NEED_MEMH;
+    attr->flags &= ~((uint64_t)UCT_MD_FLAG_ALLOC);
     return UCS_OK;
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_mm, iface_mem_alloc_no_memh,
+UCS_TEST_SKIP_COND_P(test_uct_mm, iface_open_no_memh,
                      !check_md_caps(UCT_MD_FLAG_ALLOC)) {
-    uct_md_h md = m_e1->md();
-    uct_allocated_memory_t mem;
+    uct_md_h md               = m_e1->md();
+    uct_iface_config_t *config = NULL;
+    uct_iface_h iface;
+    uct_iface_params_t params;
     ucs_status_t status;
+
+    status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,
+                                      NULL, &config);
+    ASSERT_UCS_OK(status);
+
+    params.field_mask      = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                             UCT_IFACE_PARAM_FIELD_DEVICE;
+    params.open_mode       = UCT_IFACE_OPEN_MODE_DEVICE;
+    params.mode.device.tl_name  = GetParam()->tl_name.c_str();
+    params.mode.device.dev_name = GetParam()->dev_name.c_str();
 
     {
         /* clear the mock pointer only after the mock restores md->ops->query */
         ucs::mock m;
 
         mm_md_query_mock = &m;
-        m.setup(&md->ops->query, mm_md_query_no_memh);
+        m.setup(&md->ops->query, mm_md_query_no_alloc);
 
-        status = uct_iface_mem_alloc(m_e1->iface(), 8192,
-                                     UCT_MD_MEM_ACCESS_ALL, "test", &mem);
+        scoped_log_handler slh(wrap_errors_logger);
+        status = uct_iface_open(md, m_e1->worker(), &params, config, &iface);
     }
     mm_md_query_mock = NULL;
+    uct_config_release(config);
 
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+    EXPECT_EQ(UCS_ERR_NO_DEVICE, status);
     if (status == UCS_OK) {
-        uct_iface_mem_free(&mem);
+        uct_iface_close(iface);
     }
 }
 
