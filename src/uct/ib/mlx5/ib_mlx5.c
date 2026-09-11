@@ -881,8 +881,8 @@ uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
     return ctrl->opmod_idx_opcode >> 24;
 }
 
-void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, const void *src,
-                                void *dst, size_t length)
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, void *dst,
+                                const void *src, size_t length)
 {
     size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
 

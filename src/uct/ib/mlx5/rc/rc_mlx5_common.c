@@ -77,7 +77,7 @@ static void uct_rc_mlx5_op_info_fill_put_short(
     inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
     ucs_assert(inline_length <= sizeof(callback_data->data));
 
-    uct_ib_mlx5_txwq_copy_segs(txwq, inl + 1, callback_data->data,
+    uct_ib_mlx5_txwq_copy_segs(txwq, callback_data->data, inl + 1,
                                inline_length);
     uct_rc_mlx5_op_info_fill_put_data(info, inline_length, callback_data->data);
 }
