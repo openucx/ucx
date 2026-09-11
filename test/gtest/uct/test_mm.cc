@@ -311,6 +311,8 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access,
     uct_mm_ep_t *ep    = ucs_derived_of(m_e1->ep(0), uct_mm_ep_t);
     ucs_status_t status;
 
+    uct_iface_set_am_handler(m_e2->iface(), 0, mm_test_am_noop, NULL, 0);
+
     /* the FIFO is empty, so a single send always has room */
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0xbeef, &send_data,
                                   sizeof(send_data)));
@@ -365,9 +367,9 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, flush_no_peer_access_pending,
     mm_test_fifo_ctl_prot(ep, PROT_READ | PROT_WRITE);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
 
-    while (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
-        progress();
-    }
+    wait_for_cond([ep]() { return ucs_arbiter_group_is_empty(&ep->arb_group); },
+                  [this]() { progress(); });
+    EXPECT_TRUE(ucs_arbiter_group_is_empty(&ep->arb_group));
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_mm, pending_purge_no_peer_access,
