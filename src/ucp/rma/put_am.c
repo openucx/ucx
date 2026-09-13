@@ -18,11 +18,10 @@
 
 
 typedef struct {
-    ucp_request_t     *req;
-    const void        *buffer;
-    uint64_t          remote_addr;
-    size_t            length;
-    ucs_memory_type_t remote_mem_type;
+    ucp_request_t *req;
+    const void    *buffer;
+    uint64_t      remote_addr;
+    size_t        length;
 } ucp_proto_put_sgl_am_bcopy_pack_ctx_t;
 
 
@@ -75,7 +74,7 @@ static size_t ucp_proto_put_sgl_am_bcopy_pack(void *dest, void *arg)
     ucp_put_hdr_t *puth                             = dest;
 
     ucp_proto_put_am_bcopy_pack_hdr(puth, req, pack_ctx->remote_addr,
-                                    pack_ctx->remote_mem_type);
+                                    req->send.rma.rkey->mem_type);
 
     ucp_dt_contig_pack(req->send.ep->worker, puth + 1, pack_ctx->buffer,
                        pack_ctx->length,
@@ -111,11 +110,10 @@ ucp_proto_put_sgl_am_bcopy_send_func(ucp_request_t *req,
         return UCS_OK;
     }
 
-    pack_ctx.req             = req;
-    pack_ctx.buffer          = buffer;
-    pack_ctx.remote_addr     = remote_addr;
-    pack_ctx.length          = length;
-    pack_ctx.remote_mem_type = req->send.rma.sgl.rkeys[elem_index]->mem_type;
+    pack_ctx.req         = req;
+    pack_ctx.buffer      = buffer;
+    pack_ctx.remote_addr = remote_addr;
+    pack_ctx.length      = length;
 
     return ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_PUT, lpriv->super.lane,
                                   ucp_proto_put_sgl_am_bcopy_pack, &pack_ctx,
