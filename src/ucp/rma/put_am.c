@@ -27,12 +27,11 @@ typedef struct {
 
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_put_am_bcopy_pack_hdr(ucp_put_hdr_t *puth, ucp_request_t *req,
-                                uint64_t remote_addr,
-                                ucs_memory_type_t remote_mem_type)
+                                uint64_t remote_addr)
 {
     puth->address  = remote_addr;
     puth->ep_id    = ucp_send_request_get_ep_remote_id(req);
-    puth->mem_type = remote_mem_type;
+    puth->mem_type = req->send.rma.rkey->mem_type;
 }
 
 static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
@@ -43,8 +42,7 @@ static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
 
     ucp_proto_put_am_bcopy_pack_hdr(puth, req,
                                     req->send.rma.remote_addr +
-                                            req->send.state.dt_iter.offset,
-                                    req->send.rma.rkey->mem_type);
+                                            req->send.state.dt_iter.offset);
 
     return sizeof(*puth) + ucp_proto_multi_data_pack(pack_ctx, puth + 1);
 }
@@ -73,8 +71,7 @@ static size_t ucp_proto_put_sgl_am_bcopy_pack(void *dest, void *arg)
     ucp_datatype_iter_t *dt_iter                    = &req->send.state.dt_iter;
     ucp_put_hdr_t *puth                             = dest;
 
-    ucp_proto_put_am_bcopy_pack_hdr(puth, req, pack_ctx->remote_addr,
-                                    req->send.rma.rkey->mem_type);
+    ucp_proto_put_am_bcopy_pack_hdr(puth, req, pack_ctx->remote_addr);
 
     ucp_dt_contig_pack(req->send.ep->worker, puth + 1, pack_ctx->buffer,
                        pack_ctx->length,
