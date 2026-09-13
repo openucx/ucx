@@ -17,16 +17,35 @@
 #include <ucp/proto/proto_multi.inl>
 
 
+typedef struct {
+    ucp_request_t     *req;
+    const void        *buffer;
+    uint64_t          remote_addr;
+    size_t            length;
+    ucs_memory_type_t remote_mem_type;
+} ucp_proto_put_sgl_am_bcopy_pack_ctx_t;
+
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_put_am_bcopy_pack_hdr(ucp_put_hdr_t *puth, ucp_request_t *req,
+                                uint64_t remote_addr,
+                                ucs_memory_type_t remote_mem_type)
+{
+    puth->address  = remote_addr;
+    puth->ep_id    = ucp_send_request_get_ep_remote_id(req);
+    puth->mem_type = remote_mem_type;
+}
+
 static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
 {
     ucp_proto_multi_pack_ctx_t *pack_ctx = arg;
     ucp_request_t                   *req = pack_ctx->req;
     ucp_put_hdr_t                  *puth = dest;
 
-    puth->address  = req->send.rma.remote_addr +
-                     req->send.state.dt_iter.offset;
-    puth->ep_id    = ucp_send_request_get_ep_remote_id(req);
-    puth->mem_type = req->send.rma.rkey->mem_type;
+    ucp_proto_put_am_bcopy_pack_hdr(puth, req,
+                                    req->send.rma.remote_addr +
+                                            req->send.state.dt_iter.offset,
+                                    req->send.rma.rkey->mem_type);
 
     return sizeof(*puth) + ucp_proto_multi_data_pack(pack_ctx, puth + 1);
 }
@@ -48,7 +67,65 @@ ucp_proto_put_am_bcopy_send_func(ucp_request_t *req,
                                   ucp_proto_put_am_bcopy_pack, &pack_ctx, NULL);
 }
 
-static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
+static size_t ucp_proto_put_sgl_am_bcopy_pack(void *dest, void *arg)
+{
+    ucp_proto_put_sgl_am_bcopy_pack_ctx_t *pack_ctx = arg;
+    ucp_request_t *req                              = pack_ctx->req;
+    ucp_datatype_iter_t *dt_iter                    = &req->send.state.dt_iter;
+    ucp_put_hdr_t *puth                             = dest;
+
+    ucp_proto_put_am_bcopy_pack_hdr(puth, req, pack_ctx->remote_addr,
+                                    pack_ctx->remote_mem_type);
+
+    ucp_dt_contig_pack(req->send.ep->worker, puth + 1, pack_ctx->buffer,
+                       pack_ctx->length,
+                       (ucs_memory_type_t)dt_iter->mem_info.type,
+                       pack_ctx->length);
+
+    return sizeof(*puth) + pack_ctx->length;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_sgl_am_bcopy_send_func(ucp_request_t *req,
+                                     const ucp_proto_multi_lane_priv_t *lpriv,
+                                     ucp_datatype_iter_t *next_iter,
+                                     ucp_lane_index_t *lane_shift)
+{
+    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    void *buffer                 = NULL;
+    size_t length                = 0;
+    uint64_t remote_addr         = 0;
+    size_t elem_index            = 0;
+    ucp_proto_put_sgl_am_bcopy_pack_ctx_t pack_ctx;
+    size_t max_payload;
+
+    ucs_assertv(lpriv->max_frag > sizeof(ucp_put_hdr_t), "max_frag=%zu",
+                lpriv->max_frag);
+    max_payload = lpriv->max_frag - sizeof(ucp_put_hdr_t);
+
+    if (ucp_datatype_iter_next_sgl_frags(dt_iter,
+                                         req->send.rma.sgl.remote_addrs, 1,
+                                         max_payload, next_iter, &buffer,
+                                         &length, &remote_addr,
+                                         &elem_index) == 0) {
+        return UCS_OK;
+    }
+
+    pack_ctx.req             = req;
+    pack_ctx.buffer          = buffer;
+    pack_ctx.remote_addr     = remote_addr;
+    pack_ctx.length          = length;
+    pack_ctx.remote_mem_type = req->send.rma.sgl.rkeys[elem_index]->mem_type;
+
+    return ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_PUT, lpriv->super.lane,
+                                  ucp_proto_put_sgl_am_bcopy_pack, &pack_ctx,
+                                  NULL);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_am_bcopy_common_progress(uct_pending_req_t *self,
+                                       ucp_proto_send_multi_cb_t send_func,
+                                       unsigned dt_mask)
 {
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
@@ -74,10 +151,22 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, mpriv,
-                                    ucp_proto_put_am_bcopy_send_func,
+    return ucp_proto_multi_progress(req, mpriv, send_func,
                                     ucp_proto_request_bcopy_complete_success,
-                                    UCP_DT_MASK_CONTIG_IOV);
+                                    dt_mask);
+}
+
+static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
+{
+    return ucp_proto_put_am_bcopy_common_progress(
+            self, ucp_proto_put_am_bcopy_send_func, UCP_DT_MASK_CONTIG_IOV);
+}
+
+static ucs_status_t ucp_proto_put_sgl_am_bcopy_progress(uct_pending_req_t *self)
+{
+    return ucp_proto_put_am_bcopy_common_progress(
+            self, ucp_proto_put_sgl_am_bcopy_send_func,
+            UCS_BIT(UCP_DATATYPE_SGL));
 }
 
 static void
@@ -134,6 +223,18 @@ ucp_proto_t ucp_put_am_bcopy_proto = {
     .probe    = ucp_proto_put_am_bcopy_probe,
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_am_bcopy_progress},
+    .abort    = ucp_proto_request_bcopy_abort,
+    .reset    = ucp_proto_request_bcopy_reset
+};
+
+ucp_proto_t ucp_put_sgl_am_bcopy_proto = {
+    .name     = "put/sgl/am/bcopy",
+    .desc     = "sgl " UCP_PROTO_RMA_EMULATION_DESC,
+    .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
+    .probe    = ucp_proto_put_am_bcopy_probe,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_put_sgl_am_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };

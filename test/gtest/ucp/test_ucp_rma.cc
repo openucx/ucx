@@ -1014,11 +1014,6 @@ public:
     }
 
     virtual void init() override {
-        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
-            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
-        }
-
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1242,7 +1237,10 @@ protected:
             return;
         }
 
-        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+        const bool completed_in_place = !UCS_PTR_IS_PTR(sptr);
+        if (completed_in_place) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+        }
 
         auto verify_sgl_buffers = [&]() {
             ucs_memory_type_t mtype = mem_type();
@@ -1260,20 +1258,23 @@ protected:
             }
         };
 
-        if (use_callback) {
-            while (!cb.completed) {
-                ucp_worker_progress(sender().worker());
-                ucp_worker_progress(receiver().worker());
+        if (!completed_in_place) {
+            if (use_callback) {
+                while (!cb.completed) {
+                    ucp_worker_progress(sender().worker());
+                    ucp_worker_progress(receiver().worker());
+                }
+                EXPECT_UCS_OK(cb.status);
+            } else {
+                while (!ucp_request_is_completed(sptr)) {
+                    ucp_worker_progress(sender().worker());
+                    ucp_worker_progress(receiver().worker());
+                }
             }
-            EXPECT_UCS_OK(cb.status);
-        } else {
-            while (!ucp_request_is_completed(sptr)) {
-                ucp_worker_progress(sender().worker());
-                ucp_worker_progress(receiver().worker());
-            }
+
+            ucp_request_release(sptr);
         }
 
-        ucp_request_release(sptr);
         flush_ep(sender());
         verify_sgl_buffers();
     }
@@ -1432,7 +1433,13 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
     ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
                                             UCP_REMOTE_ADDR_INVALID,
                                             UCP_RKEY_INVALID, &param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    if (!UCS_PTR_IS_PTR(sptr)) {
+        /* An emulated protocol copies the data to a bounce buffer, so it
+         * completes in-place and has no outstanding posts to inspect */
+        ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
+        flush_ep(sender());
+        UCS_TEST_SKIP_R("put was completed in place");
+    }
 
     /* All the elements fit into a single post, so at least one outstanding post
        per lane of the selected protocol means they were split between them */
