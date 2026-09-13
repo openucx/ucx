@@ -1001,8 +1001,6 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
-/* Select the emulation protocol, which is otherwise used only when the
-   offload protocols have no suitable lane */
 #define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
 
 class test_ucp_rma_sgl : public test_ucp_rma {
@@ -1031,6 +1029,8 @@ protected:
         SGL_OP_PUT,
         SGL_OP_GET
     };
+
+    bool m_require_zcopy_lane = true;
 
     struct sgl_ctx {
         std::vector<mapped_buffer>           src;
@@ -1193,7 +1193,7 @@ protected:
 
         uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
                                                   UCT_IFACE_FLAG_GET_ZCOPY;
-        if (!sender().has_lane_with_caps(zcopy_cap)) {
+        if (m_require_zcopy_lane && !sender().has_lane_with_caps(zcopy_cap)) {
             UCS_TEST_SKIP_R("zcopy is not supported");
         }
 
@@ -1258,8 +1258,6 @@ protected:
         };
 
         if (!UCS_PTR_IS_PTR(sptr)) {
-            /* The emulation protocol copies the data to a bounce buffer, so it
-               may complete the operation in-place, without a callback */
             ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
         } else {
             if (use_callback) {
@@ -1432,23 +1430,25 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
     test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
     test_put_sgl(10, UCS_KBYTE, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
     test_put_sgl(4, 2 * UCS_KBYTE, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
-    /* Each element is larger than the AM segment size, so it is sent by
-       several messages */
+    m_require_zcopy_lane = false;
     test_put_sgl(4, 256 * UCS_KBYTE);
 }
 
@@ -1470,8 +1470,6 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
                                             UCP_REMOTE_ADDR_INVALID,
                                             UCP_RKEY_INVALID, &param);
     if (!offload_proto_selected(sptr)) {
-        /* The emulation protocol posts AM messages rather than per-lane zcopy
-           operations, so it has no outstanding posts to inspect */
         ASSERT_UCS_OK(request_wait(sptr));
         flush_ep(sender());
         UCS_TEST_SKIP_R("SGL offload protocol was not selected");
@@ -1741,3 +1739,4 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
