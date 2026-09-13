@@ -287,10 +287,11 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
             ucp_proto_request_zcopy_completion);
 }
 
-static void
+static ucs_status_t
 ucp_proto_put_offload_zcopy_probe_param(
         const ucp_proto_init_params_t *init_params, unsigned cfg_priority,
-        uint64_t extra_flags, uint64_t tl_v2_cap_flags)
+        uint64_t extra_flags, uint64_t tl_v2_cap_flags,
+        ucp_lane_type_t lane_type)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -324,25 +325,26 @@ ucp_proto_put_offload_zcopy_probe_param(
         .initial_reg_md_map     = 0,
         .first.tl_cap_flags     = UCT_IFACE_FLAG_PUT_ZCOPY,
         .first.tl_v2_cap_flags  = tl_v2_cap_flags,
-        .first.lane_type        = UCP_LANE_TYPE_RMA_BW,
+        .first.lane_type        = lane_type,
         .middle.tl_cap_flags    = UCT_IFACE_FLAG_PUT_ZCOPY,
         .middle.tl_v2_cap_flags = tl_v2_cap_flags,
-        .middle.lane_type       = UCP_LANE_TYPE_RMA_BW,
+        .middle.lane_type       = lane_type,
         .opt_align_offs         = UCP_PROTO_COMMON_OFFSET_INVALID,
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
-        return;
+        return UCS_ERR_UNSUPPORTED;
     }
 
-    ucp_proto_multi_probe(&params);
+    return ucp_proto_multi_probe(&params);
 }
 
 static void
 ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_put_offload_zcopy_probe_param(
-            init_params, 30, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER, 0);
+            init_params, 30, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER, 0,
+            UCP_LANE_TYPE_RMA_BW);
 }
 
 ucp_proto_t ucp_put_offload_zcopy_proto = {
@@ -361,7 +363,8 @@ static void
 ucp_proto_put_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_put_offload_zcopy_probe_param(
-            init_params, 30, 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY);
+            init_params, 30, 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY,
+            UCP_LANE_TYPE_RMA_BW);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -546,7 +549,16 @@ ucp_proto_t ucp_put_sgl_offload_proto = {
 static void
 ucp_proto_put_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_proto_put_offload_zcopy_probe_param(init_params, 20, 0, 0);
+    ucs_status_t status;
+
+    status = ucp_proto_put_offload_zcopy_probe_param(init_params, 20, 0, 0,
+                                                     UCP_LANE_TYPE_RMA_BW);
+    if (status == UCS_OK) {
+        return;
+    }
+
+    ucp_proto_put_offload_zcopy_probe_param(init_params, 20, 0, 0,
+                                            UCP_LANE_TYPE_RMA);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

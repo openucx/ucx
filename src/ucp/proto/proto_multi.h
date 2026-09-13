@@ -186,7 +186,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv);
 
 
-void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params);
+ucs_status_t ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params);
 
 
 void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,

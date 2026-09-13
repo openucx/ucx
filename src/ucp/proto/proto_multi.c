@@ -861,7 +861,7 @@ size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv)
             ucs_field_sizeof(ucp_proto_multi_priv_t, lanes[0]));
 }
 
-void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
+ucs_status_t ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
 {
     const char *proto_name = ucp_proto_id_field(params->super.super.proto_id,
                                                 name);
@@ -871,12 +871,13 @@ void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params)
 
     status = ucp_proto_multi_init(params, proto_name, &perf, &mpriv);
     if (status != UCS_OK) {
-        return;
+        return status;
     }
 
     ucp_proto_select_add_proto(&params->super.super, params->super.cfg_thresh,
                                params->super.cfg_priority, perf, &mpriv,
                                ucp_proto_multi_priv_size(&mpriv));
+    return UCS_OK;
 }
 
 static const ucp_ep_config_key_lane_t *
