@@ -1221,7 +1221,8 @@ protected:
 
         if (use_callback) {
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                  UCP_OP_ATTR_FIELD_USER_DATA;
+                                  UCP_OP_ATTR_FIELD_USER_DATA |
+                                  UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
             param.cb.send = [](void *request, ucs_status_t status,
                                void *user_data) {
                 cb_state *s  = static_cast<cb_state*>(user_data);
