@@ -22,6 +22,7 @@ typedef struct {
     const void    *buffer;
     uint64_t      remote_addr;
     size_t        length;
+    size_t        elem_length;
 } ucp_proto_put_sgl_am_bcopy_pack_ctx_t;
 
 
@@ -76,7 +77,7 @@ static size_t ucp_proto_put_sgl_am_bcopy_pack(void *dest, void *arg)
     ucp_dt_contig_pack(req->send.ep->worker, puth + 1, pack_ctx->buffer,
                        pack_ctx->length,
                        (ucs_memory_type_t)dt_iter->mem_info.type,
-                       pack_ctx->length);
+                       pack_ctx->elem_length);
 
     return sizeof(*puth) + pack_ctx->length;
 }
@@ -111,6 +112,7 @@ ucp_proto_put_sgl_am_bcopy_send_func(ucp_request_t *req,
     pack_ctx.buffer      = buffer;
     pack_ctx.remote_addr = remote_addr;
     pack_ctx.length      = length;
+    pack_ctx.elem_length = dt_iter->type.sgl.lengths[elem_index];
 
     return ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_PUT, lpriv->super.lane,
                                   ucp_proto_put_sgl_am_bcopy_pack, &pack_ctx,
