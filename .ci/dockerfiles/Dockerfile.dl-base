@@ -1,15 +1,19 @@
-# Wraps the hpcx aarch64 builder with the svcnbu-swx-hpcx user pyxis maps to on dlcluster.
+# UCX's aarch64 CUDA 13 + MOFED 24.10 release image plus what the DL cluster job
+# needs on top: gdrcopy, which the cluster has no environment module for, and
+# the Python packaging module test_ucx_tls.py imports.
 
-ARG BASE_IMAGE=harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:mofed-24.10-3.2.5.0
-FROM ${BASE_IMAGE}
+FROM harbor.mellanox.com/ucx/aarch64/ubuntu24.04-mofed24.10-cuda13:1
 
-# Workaround: pyxis on dlcluster invokes a csh login flow when /bin/csh is
-# present, which aborts container start by reading bash-syntax env scripts.
-RUN apt-get -y purge tcsh && \
-    apt-get -y autoremove && \
+ARG GDRCOPY_VERSION=2.5.1
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3-setuptools && \
     rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -f -g 30 hardware && \
-    useradd -u 149917 -g 30 -m -s /bin/bash svcnbu-swx-hpcx
+# configure finds gdrcopy under /usr/local on its own.
+RUN git clone --depth 1 --branch v${GDRCOPY_VERSION} https://github.com/NVIDIA/gdrcopy.git /tmp/gdrcopy && \
+    make -C /tmp/gdrcopy prefix=/usr/local CUDA=/usr/local/cuda lib lib_install && \
+    ldconfig && \
+    rm -rf /tmp/gdrcopy
 
-ENTRYPOINT ["/bin/bash", "-c", "exec \"$@\"", "--"]
+WORKDIR /ucx

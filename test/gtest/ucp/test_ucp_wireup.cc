@@ -2206,7 +2206,7 @@ public:
         has_cm  = ucp_ep_init_flags_has_cm(ep_init_flags);
 
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             return 0;
         }
@@ -2459,3 +2459,66 @@ UCS_TEST_P(test_ucp_reconfig_connect_remote, put_canceled)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfig_connect_remote, tcp, "tcp")
+
+
+/* The token sections of a LANES_ADDR message are parsed before the addresses,
+ * so a malformed section must be rejected rather than shift the addresses. */
+class test_ucp_wireup_token_section : public ucs::test {
+protected:
+    /* One length byte per lane, followed by the tokens themselves */
+    static std::vector<uint8_t>
+    make_section(const std::vector<uint8_t> &lengths)
+    {
+        std::vector<uint8_t> section(lengths);
+
+        for (std::vector<uint8_t>::const_iterator it = lengths.begin();
+             it != lengths.end(); ++it) {
+            section.insert(section.end(), *it, 0xab);
+        }
+
+        return section;
+    }
+
+    static const ucp_lane_map_t THREE_LANES;
+};
+
+const ucp_lane_map_t test_ucp_wireup_token_section::THREE_LANES =
+        UCS_BIT(0) | UCS_BIT(3) | UCS_BIT(5);
+
+UCS_TEST_F(test_ucp_wireup_token_section, skip) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    size_t consumed;
+
+    /* The address follows the section, so extra bytes must be left alone */
+    section.push_back(0xff);
+
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed));
+    EXPECT_EQ(section.size() - 1, consumed);
+
+    /* Without lanes there is no section at all */
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(0, &section[0], section.size(),
+                                                &consumed));
+    EXPECT_EQ(0ul, consumed);
+
+    /* Empty tokens: one zero length per lane, which is what the wire carries
+     * until tokens are exchanged */
+    section = make_section({0, 0, 0});
+    section.push_back(0xff);
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed));
+    EXPECT_EQ(3ul, consumed);
+}
+
+UCS_TEST_F(test_ucp_wireup_token_section, skip_truncated) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    size_t consumed;
+
+    /* Cut in the length array, and then in the tokens themselves */
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED,
+              ucp_wireup_skip_token_section(THREE_LANES, &section[0], 2,
+                                            &consumed));
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED,
+              ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                            section.size() - 1, &consumed));
+}
