@@ -1280,10 +1280,10 @@ protected:
         verify_sgl_buffers();
     }
 
-    /* An in-place completion means the emulation protocol was selected, since
-       only it copies the data to a bounce buffer */
     static bool offload_proto_selected(ucs_status_ptr_t sptr) {
         if (!UCS_PTR_IS_PTR(sptr)) {
+            /* Only the emulation protocol can complete the put in-place, by
+               copying the data to a bounce buffer */
             return false;
         }
 
