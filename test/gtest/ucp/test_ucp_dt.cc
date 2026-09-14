@@ -763,3 +763,19 @@ UCS_TEST_F(test_ucp_dt_sgl, init_zero_count) {
     EXPECT_EQ(UCS_MEMORY_TYPE_HOST, m_dt_iter.mem_info.type);
     EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, m_dt_iter.mem_info.sys_dev);
 }
+
+UCS_TEST_F(test_ucp_dt_sgl, init_all_zero_length) {
+    static constexpr size_t NUM_ELEMS = 3;
+
+    init_sgl_iter(NUM_ELEMS, std::vector<size_t>(NUM_ELEMS, 0));
+
+    /* The length counts bytes, so it is zero while the SGL has elements */
+    EXPECT_EQ(0u, m_dt_iter.length);
+    EXPECT_EQ(NUM_ELEMS, m_dt_iter.type.sgl.elem_count);
+    check_position(0, 0);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    /* Zero-length elements produce no descriptor */
+    EXPECT_EQ(0u, next_frag(SIZE_MAX));
+    check_next_iter(NUM_ELEMS, 0);
+}

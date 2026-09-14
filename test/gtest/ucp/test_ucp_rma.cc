@@ -1303,6 +1303,12 @@ protected:
         sgl_ctx ctx;
         init_sgl_ctx(ctx, num_elems, buf_size);
 
+        std::vector<uint64_t> seeds(num_elems);
+        for (size_t i = 0; i < num_elems; ++i) {
+            seeds[i] = ucs::rand();
+            ctx.src[i].pattern_fill(seeds[i]);
+        }
+
         ucp_dt_local_sgl_t local   = make_local_sgl(
                 ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
         ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
@@ -1319,6 +1325,11 @@ protected:
         EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
 
         request_wait(sptr);
+        flush_ep(sender());
+
+        for (size_t i = 0; i < num_elems; ++i) {
+            ctx.dst[i].pattern_check(seeds[i]);
+        }
     }
 
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
