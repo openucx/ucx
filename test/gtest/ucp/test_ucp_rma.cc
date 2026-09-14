@@ -1295,6 +1295,32 @@ protected:
                      expect_immediate_completion);
     }
 
+    void test_put_sgl_split(size_t num_elems, size_t buf_size) {
+        /* Complete the wireup, so that the operation below is posted rather
+           than added to a pending queue */
+        test_put_sgl(1, UCS_KBYTE);
+
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, num_elems, buf_size);
+
+        ucp_dt_local_sgl_t local   = make_local_sgl(
+                ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        ucp_request_param_t param  = make_sgl_param(&remote, num_elems);
+        ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, num_elems,
+                                                UCP_REMOTE_ADDR_INVALID,
+                                                UCP_RKEY_INVALID, &param);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        const ucp_proto_multi_priv_t *mpriv =
+                static_cast<const ucp_proto_multi_priv_t*>(
+                        req->send.proto_config->priv);
+        EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
+
+        request_wait(sptr);
+    }
+
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
             UCP_DT_LOCAL_SGL_FIELD_BUFFERS | UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
 
@@ -1416,63 +1442,14 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
-    static constexpr size_t NUM_ELEMS = 16;
-
-    /* Complete the wireup, so that the operation below is posted rather than
-       added to a pending queue */
-    test_put_sgl(1, UCS_KBYTE);
-
-    sgl_ctx ctx;
-    init_sgl_ctx(ctx, NUM_ELEMS, 64 * UCS_KBYTE);
-
-    ucp_dt_local_sgl_t local   = make_local_sgl(
-            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
-    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
-                                            UCP_REMOTE_ADDR_INVALID,
-                                            UCP_RKEY_INVALID, &param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
-    /* All the elements fit into a single post, so at least one outstanding post
-       per lane of the selected protocol means they were split between them */
-    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-    const ucp_proto_multi_priv_t *mpriv =
-            static_cast<const ucp_proto_multi_priv_t*>(
-                    req->send.proto_config->priv);
-    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
-
-    request_wait(sptr);
+    /* Multiple elements are spread between the lanes by the element count */
+    test_put_sgl_split(16, 64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_split_single_element) {
-    static constexpr size_t ELEM_SIZE = UCS_MBYTE;
-
-    /* Complete the wireup, so that the operation below is posted rather than
-       added to a pending queue */
-    test_put_sgl(1, UCS_KBYTE);
-
-    sgl_ctx ctx;
-    init_sgl_ctx(ctx, 1, ELEM_SIZE);
-
-    ucp_dt_local_sgl_t local   = make_local_sgl(
-            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, 1);
-    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, 1,
-                                            UCP_REMOTE_ADDR_INVALID,
-                                            UCP_RKEY_INVALID, &param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
     /* A lone element cannot be spread by the element count, so reaching every
        lane of the selected protocol requires fragmenting it */
-    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-    const ucp_proto_multi_priv_t *mpriv =
-            static_cast<const ucp_proto_multi_priv_t*>(
-                    req->send.proto_config->priv);
-    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
-
-    request_wait(sptr);
+    test_put_sgl_split(1, UCS_MBYTE);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
