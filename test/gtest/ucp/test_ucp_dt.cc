@@ -416,14 +416,14 @@ protected:
     }
 
     void check_frag(size_t elem_index, size_t frag_offset, size_t length,
-                    size_t next_offset, size_t next_frag_offset)
+                    size_t next_elem_index, size_t next_frag_offset)
     {
         EXPECT_EQ(elem_index, m_elem_index);
         EXPECT_EQ(length, m_length);
         EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[elem_index], frag_offset),
                   m_buffer);
         EXPECT_EQ(m_remote_addrs[elem_index] + frag_offset, m_remote_addr);
-        check_next_iter(next_offset, next_frag_offset);
+        check_next_iter(next_elem_index, next_frag_offset);
     }
 
     void check_desc(size_t desc_index, size_t elem_index, size_t frag_offset,
