@@ -1445,6 +1445,36 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
     request_wait(sptr);
 }
 
+UCS_TEST_P(test_ucp_rma_sgl, put_split_single_element) {
+    static constexpr size_t ELEM_SIZE = UCS_MBYTE;
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_put_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 1, ELEM_SIZE);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, 1);
+    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, 1,
+                                            UCP_REMOTE_ADDR_INVALID,
+                                            UCP_RKEY_INVALID, &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* A lone element cannot be spread by the element count, so reaching every
+       lane of the selected protocol requires fragmenting it */
+    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+    const ucp_proto_multi_priv_t *mpriv =
+            static_cast<const ucp_proto_multi_priv_t*>(
+                    req->send.proto_config->priv);
+    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
+
+    request_wait(sptr);
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
                      RUNNING_ON_VALGRIND) {
     static const char *rail_counts[] = {"1", "4", "6", "8"};
@@ -1453,6 +1483,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
         modify_config("MAX_RMA_RAILS", rails);
         test_ucp_rma::init();
         test_put_sgl(100, 2 * UCS_KBYTE);
+        test_put_sgl(1, UCS_MBYTE);
         if (HasFailure() || (num_errors() > 0)) {
             break;
         }
