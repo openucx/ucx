@@ -753,23 +753,13 @@ ucp_datatype_iter_rewind(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_sgl_seek(ucp_datatype_iter_t *dt_iter, size_t offset)
 {
-    size_t elem_index  = 0;
-    size_t elem_offset = offset;
-    size_t elem_length;
+    ucp_datatype_iter_sgl_check(dt_iter);
 
-    while (elem_index < dt_iter->type.sgl.elem_count) {
-        elem_length = dt_iter->type.sgl.lengths[elem_index];
-        if (elem_offset < elem_length) {
-            break;
-        }
-
-        elem_offset -= elem_length;
-        ++elem_index;
+    if (ucs_likely(offset == dt_iter->offset)) {
+        return;
     }
 
-    dt_iter->offset               = offset;
-    dt_iter->type.sgl.elem_index  = elem_index;
-    dt_iter->type.sgl.frag_offset = elem_offset;
+    ucp_datatype_iter_sgl_seek_always(dt_iter, offset);
 }
 
 static UCS_F_ALWAYS_INLINE void

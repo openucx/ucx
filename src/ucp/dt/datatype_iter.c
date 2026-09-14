@@ -407,6 +407,31 @@ void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
     dt_iter->type.sgl.memhs = NULL;
 }
 
+void ucp_datatype_iter_sgl_seek_always(ucp_datatype_iter_t *dt_iter,
+                                       size_t offset)
+{
+    size_t count       = dt_iter->type.sgl.elem_count;
+    size_t elem_index  = 0;
+    size_t elem_offset = offset;
+    size_t elem_length;
+
+    /* The elements do not store their start offset, so the position is
+       recalculated from the beginning of the SGL */
+    while (elem_index < count) {
+        elem_length = dt_iter->type.sgl.lengths[elem_index];
+        if (elem_offset < elem_length) {
+            break;
+        }
+
+        elem_offset -= elem_length;
+        ++elem_index;
+    }
+
+    dt_iter->offset               = offset;
+    dt_iter->type.sgl.elem_index  = elem_index;
+    dt_iter->type.sgl.frag_offset = elem_offset;
+}
+
 void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
 {
     size_t i;

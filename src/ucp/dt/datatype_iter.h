@@ -129,6 +129,9 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
 
 void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter);
 
+void ucp_datatype_iter_sgl_seek_always(ucp_datatype_iter_t *dt_iter,
+                                       size_t offset);
+
 void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg);
 
 #endif
