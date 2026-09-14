@@ -139,8 +139,9 @@ static void uct_rc_mlx5_op_info_fill_am_zcopy(
 {
     const uct_rc_mlx5_hdr_t *rch;
 
-    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION | UCT_EP_OP_INFO_FIELD_AM;
-    info->operation  = UCT_EP_OP_AM_ZCOPY;
+    info->field_mask |= UCT_EP_OP_INFO_FIELD_OPERATION |
+                        UCT_EP_OP_INFO_FIELD_AM;
+    info->operation   = UCT_EP_OP_AM_ZCOPY;
 
     uct_ib_mlx5_txwq_copy_segs(txwq, callback_data->data, inl + 1,
                                inline_length);
@@ -173,7 +174,6 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am_send(
     size_t inline_length, inline_seg_size, iovcnt;
 
     ucs_assert(wqe_size >= (sizeof(*ctrl) + sizeof(*inl)));
-    ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
 
     inl = uct_ib_mlx5_txwq_wrap_any_const(txwq, (ctrl + 1));
     if (!(inl->byte_count & htonl(MLX5_INLINE_SEG))) {
@@ -210,10 +210,13 @@ uct_rc_mlx5_op_info_fill(uct_ep_op_info_t *info, const uct_ib_mlx5_txwq_t *txwq,
                          const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
                          uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
+    uint8_t opcode;
+
+    ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
 
     memset(info, 0, sizeof(*info));
 
+    opcode = uct_ib_mlx5_wqe_opcode(ctrl);
     switch (opcode) {
     case MLX5_OPCODE_RDMA_WRITE:
         return uct_rc_mlx5_op_info_fill_put(info, txwq, op, ctrl, wqe_size,
