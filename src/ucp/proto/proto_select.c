@@ -188,22 +188,23 @@ static ucs_status_t ucp_proto_thresholds_next_range(
                   proto->cfg_priority, max_prio_proto_name, max_cfg_priority);
     }
 
+    /* If all protocols were disabled, we couldn't have any configured protocol
+     * (because that protocol would be enabled). In this case we allow using
+     * disabled protocols as well.
+     */
+    if (ucs_dynamic_bitmap_is_equal(proto_mask, &disabled_proto_mask)) {
+        ucs_assert(max_cfg_priority == 0);
+        ucs_dynamic_bitmap_reset_all(&disabled_proto_mask);
+    }
+
     ucp_proto_select_disable_superseded(proto_init, proto_mask,
                                         &disabled_proto_mask);
 
-    /* Remove disabled protocols. 'disabled_proto_mask' must be contained in
-     * 'valid_proto_mask'. */
-    if (ucs_dynamic_bitmap_is_equal(proto_mask, &disabled_proto_mask)) {
-        /* If all protocols were disabled, we couldn't have any configured
-         * protocol (because that protocol would be enabled). In this case we
-         * allow using disabled protocols as well.
-         */
-        ucs_assert(max_cfg_priority == 0);
-    } else {
-        ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
-                                       ucs_dynamic_bitmap_num_bits(proto_mask));
-        ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
-    }
+    /* Remove disabled protocols. 'disabled_proto_mask' is contained in
+     * 'proto_mask', and the supersede rule never disables all protocols. */
+    ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
+                                   ucs_dynamic_bitmap_num_bits(proto_mask));
+    ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
     ucs_assert(!ucs_dynamic_bitmap_is_zero(proto_mask));
 
     /* Add data to perf_list */

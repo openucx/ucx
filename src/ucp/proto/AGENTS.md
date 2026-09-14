@@ -65,7 +65,9 @@ should plug in here rather than going through the legacy direct paths.
 - `proto_class`/`superseded_by` (`ucp_proto_t`) override the cost model: a
   proto is dropped from any range where a class it lists is available, even
   if cheaper. Keep the relation acyclic; to select a superseded proto in a
-  test, exclude the superseding proto with `UCX_PROTOS`.
+  test, exclude the superseding proto with `UCX_PROTOS`. If configuration
+  disables every proto in a range, the supersede rule still applies after
+  they are re-enabled as a fallback.
 - Stage callbacks must drain all pending `UCS_INPROGRESS` on completion
   before transitioning. The framework will call `progress[stage]` again
   on `UCS_ERR_NO_RESOURCE`.

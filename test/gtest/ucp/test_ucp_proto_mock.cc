@@ -1037,6 +1037,13 @@ public:
     }
 
 protected:
+    void require_cuda_net_md()
+    {
+        if (!check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
+        }
+    }
+
     /* Add the mocked device the test selects protocols on */
     virtual void add_cuda_mock_iface() = 0;
 
@@ -1079,10 +1086,27 @@ protected:
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get, "IB_NUM_PATHS?=1")
 {
+    require_cuda_net_md();
+
     /* On message sizes larger than about 1KB, get/rndv is cheaper than
      * get/zcopy, since it makes the remote side write the data by the fast data
      * path. It is not selected on any message size, because it is superseded by
      * get/zcopy. */
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {1, INF, "zero-copy", "rc_mlx5/mock"},
+    });
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get_zcopy_thresh,
+           "IB_NUM_PATHS?=1", "ZCOPY_THRESH=4k",
+           "PROTO_EMULATION_ENABLE=n")
+{
+    require_cuda_net_md();
+
+    /* With software emulation disabled, get/zcopy and get/rndv are the only
+     * candidates. Below ZCOPY_THRESH both are disabled by configuration and
+     * re-enabled as a fallback; get/rndv must still be superseded, leaving
+     * only get/zcopy. */
     test_cuda_rma(UCP_OP_ID_GET, {
         {1, INF, "zero-copy", "rc_mlx5/mock"},
     });
@@ -1106,6 +1130,8 @@ protected:
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_no_get_zcopy, get, "IB_NUM_PATHS?=1")
 {
+    require_cuda_net_md();
+
     /* No get/zcopy protocol is available, so no protocol supersedes get/rndv
      * and it is selected, without having to exclude get/zcopy by UCX_PROTOS. */
     test_cuda_rma(UCP_OP_ID_GET, {
