@@ -56,10 +56,15 @@ public:
         return m_size;
     }
 
-    CUresult alloc(size_t size, unsigned handle_type,
-                   CUmemLocationType location_type  = CU_MEM_LOCATION_TYPE_DEVICE,
-                   size_t num_chunks                = 1,
-                   unsigned char locality_domain_id = 0)
+    size_t chunk_size() const
+    {
+        return m_chunk_size;
+    }
+
+    CUresult alloc(
+            size_t size, unsigned handle_type,
+            CUmemLocationType location_type = CU_MEM_LOCATION_TYPE_DEVICE,
+            size_t num_chunks = 1, unsigned char locality_domain_id = 0)
     {
         size_t granularity             = 0;
         CUmemAllocationProp prop       = {};
@@ -185,9 +190,11 @@ private:
 #if HAVE_CUDA_FABRIC
 class cuda_fabric_mem_buffer : public cuda_vmm_mem_buffer {
 public:
-    cuda_fabric_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    cuda_fabric_mem_buffer(size_t size, ucs_memory_type_t mem_type,
+                           size_t num_chunks = 1)
     {
-        skip_unless_ok(alloc(size, CU_MEM_HANDLE_TYPE_FABRIC));
+        skip_unless_ok(alloc(size, CU_MEM_HANDLE_TYPE_FABRIC,
+                             CU_MEM_LOCATION_TYPE_DEVICE, num_chunks));
     }
 };
 #endif

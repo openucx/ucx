@@ -43,10 +43,11 @@ typedef struct {
 
 
 typedef struct {
-    pid_t        pid;
-    ucs_sys_ns_t pid_ns;
-    uintptr_t    d_bptr;
-    const void   *mapped_addr;
+    pid_t                       pid;
+    ucs_sys_ns_t                pid_ns;
+    uintptr_t                   d_bptr;
+    const void                  *mapped_addr;
+    uct_cuda_ipc_cache_region_t *cache_region;
 } uct_cuda_ipc_sgl_entry_t;
 
 
@@ -67,7 +68,9 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
                                      mapping->entries[i].pid_ns,
                                      mapping->entries[i].d_bptr,
                                      mapping->entries[i].mapped_addr,
-                                     cuda_device, enable_cache);
+                                     cuda_device,
+                                     mapping->entries[i].cache_region,
+                                     enable_cache);
     }
 
     ucs_free(mapping);
@@ -75,14 +78,15 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
 
 
 typedef struct {
-    uct_cuda_event_desc_t super;
-    const void            *mapped_addr;
-    uct_cuda_ipc_ep_t     *ep;
-    uintptr_t             d_bptr;
-    pid_t                 pid;
-    ucs_sys_ns_t          pid_ns;
-    CUdevice              cuda_device;
-    uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
+    uct_cuda_event_desc_t        super;
+    const void                   *mapped_addr;
+    uct_cuda_ipc_ep_t            *ep;
+    uintptr_t                    d_bptr;
+    pid_t                        pid;
+    ucs_sys_ns_t                 pid_ns;
+    CUdevice                     cuda_device;
+    uct_cuda_ipc_cache_region_t *cache_region;
+    uct_cuda_ipc_sgl_mapping_t  *sgl_mapping;
 } uct_cuda_ipc_event_desc_t;
 
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -12,6 +12,7 @@
 
 #include <cuda_runtime.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include <uct/test_md.h>
@@ -19,6 +20,7 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_vmm_multi.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/sys/uid.h>
 #include <uct/cuda/base/cuda_util.h>
@@ -114,6 +116,7 @@ protected:
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
     }
+
 #endif
 
     void test_mkey_pack_on_thread(void *ptr, size_t size)
@@ -320,6 +323,235 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
 }
 
+UCS_TEST_P(test_cuda_ipc_md, release_empty_rkey)
+{
+    uct_rkey_bundle_t bundle = {};
+
+    EXPECT_UCS_OK(uct_rkey_release(md()->component, &bundle));
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mpack_vmm_multi)
+{
+#if HAVE_CUDA_FABRIC
+    cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, 4);
+    uct_mem_h memh;
+    uct_cuda_ipc_extended_rkey_t rkey;
+
+    EXPECT_UCS_OK(md()->ops->mem_reg(md(), alloc.ptr(), alloc.size(), NULL,
+                                     &memh));
+    EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, alloc.ptr(), alloc.size(),
+                                       NULL, &rkey));
+
+    EXPECT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              rkey.super.ph.handle_type);
+
+    uct_md_mem_dereg_params_t params;
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, vmm_multi_repack_preserves_metadata)
+{
+#if HAVE_CUDA_FABRIC
+    constexpr unsigned narrow_num_chunks  = 2;
+    constexpr unsigned wide_num_chunks    = 3;
+    cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, wide_num_chunks);
+    uct_cuda_ipc_unpacked_rkey_t unpacked = {};
+    uct_cuda_ipc_extended_rkey_t narrow_rkey, wide_rkey;
+    uct_md_mem_dereg_params_t dereg_params;
+    uct_mem_h memh;
+    CUdevice cu_dev;
+
+    ASSERT_UCS_OK(md()->ops->mem_reg(md(), alloc.ptr(), alloc.size(), NULL,
+                                     &memh));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(
+            md(), memh, alloc.ptr(), narrow_num_chunks * alloc.chunk_size(),
+            NULL, &narrow_rkey));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(md(), memh, alloc.ptr(), alloc.size(),
+                                       NULL, &wide_rkey));
+
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              narrow_rkey.super.ph.handle_type);
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              wide_rkey.super.ph.handle_type);
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_dev));
+
+    /* Fetch the first key only after packing the wider key. */
+    unpacked.super = narrow_rkey;
+    EXPECT_UCS_OK(uct_cuda_ipc_vmm_multi_fetch_chunks(
+            &unpacked, cu_dev, UCS_LOG_LEVEL_ERROR));
+    EXPECT_EQ(narrow_num_chunks, unpacked.num_chunks);
+    ucs_free(unpacked.chunks);
+
+    dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    dereg_params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &dereg_params));
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, vmm_multi_overlap_cache)
+{
+#if HAVE_CUDA_FABRIC
+    constexpr unsigned num_chunks                    = 4;
+    constexpr unsigned view_num_chunks               = 3;
+    constexpr unsigned request_num_chunks            = 2;
+    const ucs_sys_ns_t pid_ns =
+            ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
+    uct_cuda_ipc_unpacked_rkey_t unpacked_a           = {};
+    uct_cuda_ipc_unpacked_rkey_t unpacked_b           = {};
+    uct_cuda_ipc_unpacked_rkey_t unpacked_request     = {};
+    cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, num_chunks);
+    uct_cuda_ipc_extended_rkey_t rkey_a               = {};
+    uct_cuda_ipc_extended_rkey_t rkey_b               = {};
+    uct_cuda_ipc_extended_rkey_t rkey_request         = {};
+    uct_cuda_ipc_cache_region_t *region_a, *region_b, *region_request,
+            *region_retry, *expected_region;
+    void *mapped_a, *mapped_b, *mapped_request, *mapped_retry,
+            *expected_mapped;
+    uct_md_mem_dereg_params_t params;
+    uct_mem_h memh_a, memh_b, memh_request;
+    size_t view_size, request_size;
+    uint16_t stale_chunk_idx;
+    CUdevice cu_dev;
+
+    if (!uct_cuda_ipc_component.enable_remote_cache) {
+        UCS_TEST_SKIP_R("CUDA IPC cache is disabled");
+    }
+
+    view_size    = view_num_chunks * alloc.chunk_size();
+    request_size = request_num_chunks * alloc.chunk_size();
+    ASSERT_UCS_OK(md()->ops->mem_reg(md(), alloc.ptr(), view_size, NULL,
+                                     &memh_a));
+    ASSERT_UCS_OK(md()->ops->mem_reg(
+            md(), UCS_PTR_BYTE_OFFSET(alloc.ptr(), alloc.chunk_size()),
+            view_size, NULL, &memh_b));
+    ASSERT_UCS_OK(md()->ops->mem_reg(
+            md(), UCS_PTR_BYTE_OFFSET(alloc.ptr(), alloc.chunk_size()),
+            request_size, NULL, &memh_request));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(md(), memh_a, alloc.ptr(), view_size,
+                                       NULL, &rkey_a));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(
+            md(), memh_b,
+            UCS_PTR_BYTE_OFFSET(alloc.ptr(), alloc.chunk_size()), view_size,
+            NULL, &rkey_b));
+    ASSERT_UCS_OK(md()->ops->mkey_pack(
+            md(), memh_request,
+            UCS_PTR_BYTE_OFFSET(alloc.ptr(), alloc.chunk_size()), request_size,
+            NULL, &rkey_request));
+
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              rkey_a.super.ph.handle_type);
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              rkey_b.super.ph.handle_type);
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI,
+              rkey_request.super.ph.handle_type);
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_dev));
+
+    /* Force remote import with A=[C0,C2], B=[C1,C3], and a request for
+     * their shared range [C1,C2]. */
+    rkey_a.super.pid         = getpid() + 100000;
+    rkey_b.super.pid         = rkey_a.super.pid;
+    rkey_request.super.pid   = rkey_a.super.pid;
+    unpacked_a.super              = rkey_a;
+    unpacked_b.super              = rkey_b;
+    unpacked_request.super        = rkey_request;
+    unpacked_a.super.pid_ns       = pid_ns;
+    unpacked_b.super.pid_ns       = pid_ns;
+    unpacked_request.super.pid_ns = pid_ns;
+    ASSERT_UCS_OK(uct_cuda_ipc_vmm_multi_fetch_chunks(
+            &unpacked_a, cu_dev, UCS_LOG_LEVEL_ERROR));
+    ASSERT_UCS_OK(uct_cuda_ipc_vmm_multi_fetch_chunks(
+            &unpacked_b, cu_dev, UCS_LOG_LEVEL_ERROR));
+    ASSERT_UCS_OK(uct_cuda_ipc_vmm_multi_fetch_chunks(
+            &unpacked_request, cu_dev, UCS_LOG_LEVEL_ERROR));
+
+    ASSERT_UCS_OK(uct_cuda_ipc_map_memhandle(
+            &unpacked_a, cu_dev, &mapped_a, &region_a, UCS_LOG_LEVEL_ERROR));
+    ASSERT_UCS_OK(uct_cuda_ipc_map_memhandle(
+            &unpacked_b, cu_dev, &mapped_b, &region_b, UCS_LOG_LEVEL_ERROR));
+    ASSERT_NE(region_a, region_b);
+
+    ASSERT_UCS_OK(uct_cuda_ipc_map_memhandle(
+            &unpacked_request, cu_dev, &mapped_request, &region_request,
+            UCS_LOG_LEVEL_ERROR));
+    ASSERT_TRUE((region_request == region_a) ||
+                (region_request == region_b));
+    uct_cuda_ipc_unmap_memhandle(
+            unpacked_request.super.super.pid, unpacked_request.super.pid_ns,
+            unpacked_request.super.super.d_bptr, mapped_request, cu_dev,
+            region_request, 1);
+
+    /* Make the interval map's preferred view stale. The next lookup must
+     * retire it and retry the other containing view instead of importing a
+     * third view. */
+    for (stale_chunk_idx = 0; stale_chunk_idx < region_request->num_chunks;
+         stale_chunk_idx++) {
+        if (region_request->chunks[stale_chunk_idx].start ==
+            unpacked_request.chunks[0].d_bptr) {
+            break;
+        }
+    }
+    ASSERT_LT(stale_chunk_idx, region_request->num_chunks);
+    region_request->chunks[stale_chunk_idx].buffer_id =
+            ~unpacked_request.chunks[0].buffer_id;
+
+    expected_region = (region_request == region_a) ? region_b : region_a;
+    expected_mapped = UCS_PTR_BYTE_OFFSET(
+            expected_region->mapped_addr,
+            unpacked_request.super.super.d_bptr -
+                    expected_region->key.d_bptr);
+    ASSERT_UCS_OK(uct_cuda_ipc_map_memhandle(
+            &unpacked_request, cu_dev, &mapped_retry, &region_retry,
+            UCS_LOG_LEVEL_ERROR));
+    EXPECT_EQ(expected_region, region_retry);
+    EXPECT_EQ(expected_mapped, mapped_retry);
+
+    /* Release the request and both original view references, forcing the empty
+     * cache entries to be torn down before freeing the exported allocation. */
+    uct_cuda_ipc_unmap_memhandle(
+            unpacked_request.super.super.pid, unpacked_request.super.pid_ns,
+            unpacked_request.super.super.d_bptr, mapped_retry, cu_dev,
+            region_retry, 0);
+    uct_cuda_ipc_unmap_memhandle(
+            unpacked_a.super.super.pid, unpacked_a.super.pid_ns,
+            unpacked_a.super.super.d_bptr, mapped_a, cu_dev, region_a, 0);
+    uct_cuda_ipc_unmap_memhandle(
+            unpacked_b.super.super.pid, unpacked_b.super.pid_ns,
+            unpacked_b.super.super.d_bptr, mapped_b, cu_dev, region_b, 0);
+
+    ucs_free(unpacked_request.chunks);
+    ucs_free(unpacked_b.chunks);
+    ucs_free(unpacked_a.chunks);
+
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh_request;
+    ASSERT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    params.memh = memh_b;
+    ASSERT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    params.memh = memh_a;
+    ASSERT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, mkey_pack_vmm_multi)
+{
+#if HAVE_CUDA_FABRIC
+    cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, 4);
+
+    test_mkey_pack_on_thread(alloc.ptr(), alloc.size());
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
@@ -357,9 +589,11 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 
             uct_cuda_ipc_unpacked_rkey_t *unpacked =
                     (uct_cuda_ipc_unpacked_rkey_t*)rkey_bundle.rkey;
+            uct_cuda_ipc_cache_region_t *cache_region;
             void *mapped_addr;
             ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
-                    &unpacked->super, dev, &mapped_addr, UCS_LOG_LEVEL_ERROR);
+                    unpacked, dev, &mapped_addr, &cache_region,
+                    UCS_LOG_LEVEL_ERROR);
             ASSERT_UCS_OK(map_status);
 
             std::vector<uint8_t> host_buf(size);
@@ -372,7 +606,8 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 
             uct_cuda_ipc_unmap_memhandle(
                     unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+                    unpacked->super.super.d_bptr, mapped_addr, dev,
+                    cache_region, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
