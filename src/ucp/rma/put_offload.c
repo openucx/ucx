@@ -13,6 +13,7 @@
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
+#include <ucp/dt/dt_sgl.h>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
@@ -497,7 +498,6 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
             break;
         }
 
-        next_iter->offset    += lengths[idx];
         uct_memhs[elem_count] = (sgl_memhs != NULL) ?
                                 ucp_datatype_iter_uct_memh(sgl_memhs[idx],
                                                            md_index) :
@@ -506,6 +506,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                                      rkey_index);
     }
 
+    next_iter->offset               = dt_iter->offset +
+                                      ucp_dt_sgl_length(&lengths[start_index],
+                                                        elem_count);
     next_iter->type.sgl.elem_index  = start_index + elem_count;
     next_iter->type.sgl.frag_offset = 0;
     ucs_assert(next_iter->offset <= dt_iter->length);
