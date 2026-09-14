@@ -927,6 +927,11 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
         return 0;
     }
 
+    /* Managed memory is registered through ODP and is not dmabuf-exportable. */
+    if (mem_info->type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        return 1;
+    }
+
     /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
     if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         !md->config.dmabuf_supported) {
@@ -982,8 +987,9 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     int is_host_located        = 0;
     CUdevice cur_cuda_device   = CU_DEVICE_INVALID;
     CUdevice avail_cuda_device = CU_DEVICE_INVALID;
+    ucs_memory_info_t detected_mem_info = {};
+    ucs_memory_info_t addr_mem_info     = {};
     ucs_memory_info_t cached_mem_info;
-    ucs_memory_info_t addr_mem_info;
     ucs_status_t cache_status;
     ucs_status_t status;
 
@@ -1009,8 +1015,10 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
             return status;
         }
 
-        /* CUDA reports device symbols as device memory, so preserve the type
-         * explicitly provided by the UCM allocation event. */
+        /* Preserve the driver-reported type for flags. CUDA reports device
+         * symbols as device memory, so use the UCM event type for callers. */
+        detected_mem_info = addr_mem_info;
+
         if ((cache_status == UCS_OK) &&
             (cached_mem_info.type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
             addr_mem_info.type = cached_mem_info.type;
@@ -1064,7 +1072,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (address != NULL) {
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
-                md, &addr_mem_info, is_async_managed, is_host_located,
+                md, &detected_mem_info, is_async_managed, is_host_located,
                 dmabuf_queried ? &dmabuf : NULL);
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
