@@ -349,6 +349,9 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_purge_outstanding : public uct_test {
 public:
+    static const uint64_t SEND_SEED = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED = 0xb2b2b2b2b2b2b2b2ul;
+
     void init() override
     {
         uct_test::init();
@@ -375,9 +378,13 @@ public:
 protected:
     struct purge_ctx {
         test_uct_purge_outstanding *self;
-        uct_completion_t           op_comp;
-        uint32_t                   num_ops_purged;
-        uint32_t                   num_flush_purged;
+        uct_completion_t           op_comp = {completion_cb, 0, UCS_OK};
+        uint32_t                   num_ops_purged = 0;
+        uint32_t                   num_flush_purged = 0;
+        uint64_t                   remote_addr = 0;
+        uct_rkey_t                 rkey = UCT_INVALID_RKEY;
+        const uct_iov_t            *iov = NULL;
+        size_t                     iovcnt = 0;
     };
 
     using send_func_t =
@@ -446,6 +453,9 @@ protected:
     void validate_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         switch (info->operation) {
+        case UCT_EP_OP_PUT_ZCOPY:
+            validate_put_zcopy(info, ctx);
+            return;
         case UCT_EP_OP_FLUSH:
             validate_flush(info, ctx);
             return;
@@ -454,6 +464,34 @@ protected:
                                                      << " at index "
                                                      << ctx->num_ops_purged);
         }
+    }
+
+    static void validate_put_zcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
+                                         UCT_EP_OP_INFO_FIELD_RMA;
+        const uint16_t expected_rma_fields =
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+
+        EXPECT_EQ(&ctx->op_comp, info->comp);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        /* The reported rkey holds only the direct key part */
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer,
+                      info->rma.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length,
+                      info->rma.payload.zcopy.iov[i].length);
+        }
+
+        ++ctx->num_ops_purged;
     }
 
     static void validate_flush(const uct_ep_op_info_t *info, purge_ctx *ctx)
@@ -533,11 +571,9 @@ protected:
                                                &purge_params));
     }
 
-    void test_purge_outstanding(const send_func_t &send_func)
+    void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx)
     {
         uct_ep_invalidate_params_t invalidate_params = {};
-        purge_ctx                   ctx               = {
-                this, {completion_cb, 0, UCS_OK}, 0, 0};
         uint32_t num_posted;
         bool flush_outstanding;
         ucs_status_t status;
@@ -581,6 +617,37 @@ protected:
     entity   *m_receiver;
     unsigned m_err_count = 0;
 };
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+
+    const size_t num_iov = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size    = ucs_max(attr.cap.put.min_zcopy,
+                                   ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx{};
+    ctx.self        = this;
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t send_func = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(send_func, ctx);
+}
+
+UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
 
 class test_uct_peer_failure_multiple : public test_uct_peer_failure
 {
