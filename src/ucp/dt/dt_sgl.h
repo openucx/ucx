@@ -16,6 +16,18 @@
     (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_SGL)
 
 
+static inline size_t ucp_dt_sgl_length(const size_t *lengths, size_t count)
+{
+    size_t elem_it, total_length = 0;
+
+    for (elem_it = 0; elem_it < count; ++elem_it) {
+        total_length += lengths[elem_it];
+    }
+
+    return total_length;
+}
+
+
 /**
  * Check that all SGL entries match the given memory info
  *
