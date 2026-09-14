@@ -136,20 +136,25 @@ uct_srd_ep_send_op_complete(uct_srd_send_op_t *send_op, uct_srd_iface_t *iface,
     iface->tx.outstanding--;
 }
 
-void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
+void uct_srd_ep_send_op_completion(uct_srd_iface_t *iface,
+                                   uct_srd_send_op_t *send_op)
 {
     uct_srd_ep_t *ep = send_op->ep;
-    uct_srd_iface_t *iface;
     uct_srd_send_op_t *flush_op;
     ucs_status_t comp_status;
 
     if (ucs_unlikely(ep == NULL)) {
+        /* The device is done with the WQE, so the AH may be released now */
         ucs_list_del(&send_op->list);
+        uct_ib_iface_ah_put(&iface->super, send_op->ah_entry);
         ucs_mpool_put(send_op);
         return;
     }
 
-    iface       = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
+    ucs_assertv(&iface->super.super.super == ep->super.super.iface,
+                "iface=%p ep=%p ep_iface=%p", iface, ep,
+                ep->super.super.iface);
+
     comp_status = (ep->flags & UCT_SRD_EP_FLAG_CANCELED)?
                   UCS_ERR_CANCELED : UCS_OK;
 
@@ -211,7 +216,12 @@ void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
             ucs_list_del(&send_op->list);
             ucs_mpool_put(send_op);
         } else {
-            send_op->ep = NULL;
+            /* The ep reference is about to be dropped, but the device may
+             * still consume the posted WQE, so keep the AH alive until the
+             * send completion is polled */
+            uct_ib_iface_ah_hold(&iface->super, ep->ah_entry);
+            send_op->ah_entry = ep->ah_entry;
+            send_op->ep       = NULL;
         }
 
         iface->tx.outstanding--;

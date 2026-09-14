@@ -48,7 +48,7 @@ enum {
 };
 
 
-typedef struct uct_srd_iface {
+struct uct_srd_iface {
     uct_ib_iface_t                   super;
     struct ibv_qp                    *qp;
 #ifdef HAVE_EFA_RMA
@@ -96,7 +96,7 @@ typedef struct uct_srd_iface {
         size_t                       max_rdma_zcopy;
         size_t                       max_rdma_bcopy;
     } config;
-} uct_srd_iface_t;
+};
 
 
 #if ENABLE_PARAMS_CHECK

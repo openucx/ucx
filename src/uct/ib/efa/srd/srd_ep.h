@@ -68,7 +68,8 @@ ucs_status_t uct_srd_ep_flush(uct_ep_h ep_h, unsigned flags,
                               uct_completion_t *comp);
 void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep);
 
-void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
+void uct_srd_ep_send_op_completion(uct_srd_iface_t *iface,
+                                   uct_srd_send_op_t *send_op);
 
 ucs_status_t
 uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags);

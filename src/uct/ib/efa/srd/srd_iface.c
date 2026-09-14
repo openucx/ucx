@@ -148,6 +148,9 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
 
     send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
     send_op->ep      = NULL;
+    /* Take over the control operation's AH reference, so that the AH outlives
+     * the WQE posted below */
+    send_op->ah_entry = ctl_op->ah_entry;
 
     iface->tx.sge[0].addr   = (uintptr_t)hdr;
     iface->tx.sge[0].length = sizeof(*hdr);
@@ -178,8 +181,8 @@ void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
             break;
         }
 
+        /* The AH reference is now owned by the posted send_op */
         ucs_queue_pull_non_empty(&iface->tx.ctl_queue);
-        uct_ib_iface_ah_put(&iface->super, ctl_op->ah_entry);
         ucs_free(ctl_op);
     }
 }
@@ -398,6 +401,7 @@ static void uct_srd_iface_send_op_purge(uct_srd_iface_t *iface)
                                         list);
 
         ucs_assertv(send_op->ep == NULL, "send_op_ep=%p", send_op->ep);
+        uct_ib_iface_ah_put(&iface->super, send_op->ah_entry);
         ucs_mpool_put(send_op);
     }
 }
@@ -593,10 +597,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    uct_srd_iface_send_op_purge(self);
     uct_srd_iface_ctl_op_purge(self);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
+    /* Release the AH references owned by outstanding send operations only
+     * after the QP is gone, as until then the device could consume their
+     * posted WQEs */
+    uct_srd_iface_send_op_purge(self);
     kh_foreach_value(&self->rx.ctx_hash, ctx, {
         uct_iface_rx_ctx_cleanup(ctx);
     });
@@ -655,7 +662,7 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
             uct_srd_iface_pending_ctl_progress(iface);
         }
 
-        uct_srd_ep_send_op_completion(send_op);
+        uct_srd_ep_send_op_completion(iface, send_op);
     }
 
     iface->tx.available += num_wcs;
