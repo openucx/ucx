@@ -24,8 +24,6 @@
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
 #define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
-#define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
-#define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
 
 
 static int
@@ -162,11 +160,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        /* Keep PUT/RNDV less preferable on message sizes where no PUT zcopy
-         * protocol is available, and therefore no protocol supersedes it.
-         * TODO: Check whether this penalty is still useful. */
-        .super.overhead      = context->config.ext.proto_overhead_rndv_rts +
-                               UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY,
+        .super.overhead      = context->config.ext.proto_overhead_rndv_rts,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 5,
         .super.min_length    = 0,
@@ -252,11 +246,7 @@ ucp_proto_get_rndv_zero_length_variant(const ucp_proto_init_elem_t *proto)
 static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
                                                   ucp_proto_init_elem_t *proto)
 {
-    /* Keep GET/RNDV less preferable on message sizes where no GET zcopy
-     * protocol is available, and therefore no protocol supersedes it.
-     * TODO: Check whether these penalties are still useful. */
-    double overhead = context->config.ext.proto_overhead_rndv_rtr +
-                      UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY;
+    double overhead = context->config.ext.proto_overhead_rndv_rtr;
 
     if (ucp_proto_get_rndv_zero_length_variant(proto)) {
         overhead += UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY;

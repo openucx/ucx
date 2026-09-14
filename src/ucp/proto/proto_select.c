@@ -54,17 +54,24 @@ static void ucp_proto_select_disable_superseded(
         ucs_dynamic_bitmap_t *disabled_proto_mask)
 {
     const ucp_proto_init_elem_t *proto;
-    unsigned avail_classes, superseded_by;
+    unsigned avail_classes, proto_class, superseded_by;
     unsigned proto_idx;
 
     avail_classes = 0;
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto         = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        proto_class   = ucp_proto_id_field(proto->proto_id, proto_class);
+        superseded_by = ucp_proto_id_field(proto->proto_id, superseded_by);
+        ucs_assertv((proto_class & superseded_by) == 0,
+                    "%s: proto_class 0x%x overlaps superseded_by 0x%x",
+                    ucp_proto_id_field(proto->proto_id, name), proto_class,
+                    superseded_by);
+
         if (ucs_dynamic_bitmap_get(disabled_proto_mask, proto_idx)) {
             continue;
         }
 
-        proto          = &ucs_array_elem(&proto_init->protocols, proto_idx);
-        avail_classes |= ucp_proto_id_field(proto->proto_id, proto_class);
+        avail_classes |= proto_class;
     }
 
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
