@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/core/ucp_request.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
@@ -1251,3 +1252,80 @@ UCS_TEST_P(test_worker_cpu_mask, all_cpus)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_worker_cpu_mask, all, "all")
+
+class test_ucp_worker_rkey_config : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+protected:
+    void init() override
+    {
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_rkey_config, stable_after_array_growth)
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_rkey_config_key_t key;
+    ucp_worker_cfg_index_t first_config_index;
+    ucp_worker_cfg_index_t config_index;
+    khiter_t khiter;
+
+    key.md_map             = 0;
+    key.ep_cfg_index       = sender().ep()->cfg_index;
+    key.sys_dev            = UCS_SYS_DEVICE_ID_UNKNOWN;
+    key.flags              = 0;
+    key.mem_type           = UCS_MEMORY_TYPE_HOST;
+    key.unreachable_md_map = 0;
+
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &key, NULL,
+                                             &first_config_index));
+    ucp_rkey_config_t *first_config = ucs_array_elem(
+            &worker->rkey_config, first_config_index);
+    const ucp_proto_select_short_t first_put_short = first_config->put_short;
+    const size_t initial_capacity = ucs_array_capacity(&worker->rkey_config);
+
+    ASSERT_GT(initial_capacity, 0);
+    ASSERT_LE(ucs_array_length(&worker->rkey_config), initial_capacity);
+    while (ucs_array_length(&worker->rkey_config) < initial_capacity) {
+        ucp_rkey_config_t *config = static_cast<ucp_rkey_config_t *>(
+                ucs_calloc(1, sizeof(*config), "test_rkey_config"));
+
+        ASSERT_TRUE(config != NULL);
+        ASSERT_UCS_OK(ucp_proto_select_init(&config->proto_select,
+                                            worker->epoch));
+        *ucs_array_append(&worker->rkey_config, FAIL()) = config;
+    }
+
+    /* Use the production insertion path to cross the growth boundary. */
+    do {
+        ++key.md_map;
+        khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
+                        key);
+    } while (khiter != kh_end(&worker->rkey_config_hash));
+
+    ASSERT_EQ(initial_capacity, ucs_array_length(&worker->rkey_config));
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &key, NULL,
+                                             &config_index));
+    EXPECT_EQ(initial_capacity, config_index);
+    ASSERT_GT(ucs_array_length(&worker->rkey_config), initial_capacity);
+
+    ucp_rkey_config_t *current_first_config = ucs_array_elem(
+            &worker->rkey_config, first_config_index);
+
+    EXPECT_EQ(first_config, current_first_config);
+    EXPECT_EQ(first_put_short.max_length_host_mem,
+              current_first_config->put_short.max_length_host_mem);
+    EXPECT_EQ(first_put_short.max_length_unknown_mem,
+              current_first_config->put_short.max_length_unknown_mem);
+    EXPECT_EQ(first_put_short.lane, current_first_config->put_short.lane);
+    EXPECT_EQ(first_put_short.rkey_index,
+              current_first_config->put_short.rkey_index);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_rkey_config, self, "self")
