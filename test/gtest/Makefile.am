@@ -349,6 +349,8 @@ noinst_HEADERS = \
 	common/test_helpers.h \
 	common/test_perf.h \
 	\
+	ucs/rbtree_check.h \
+	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \
 	uct/ib/test_ib.h \
