@@ -916,15 +916,15 @@ static int uct_ib_mlx5_wqe_is_delivered(uint32_t wqe_first_psn,
 
 static UCS_F_NOINLINE UCS_F_NORETURN void
 uct_rc_mlx5_wqe_unsupported(uct_ib_iface_t *iface,
-                             const uct_ib_mlx5_txwq_t *txwq,
-                             const struct mlx5_wqe_ctrl_seg *ctrl,
-                             size_t wqe_size)
+                            const uct_ib_mlx5_txwq_t *txwq,
+                            const struct mlx5_wqe_ctrl_seg *ctrl,
+                            size_t wqe_size)
 {
     char wqe_dump[256] = {0};
 
     uct_ib_mlx5_wqe_dump(iface, (void*)ctrl, txwq->qstart, txwq->qend,
-                          INT_MAX, 0, NULL, wqe_dump, sizeof(wqe_dump) - 1,
-                          NULL);
+                         INT_MAX, 0, NULL, wqe_dump, sizeof(wqe_dump) - 1,
+                         NULL);
     ucs_fatal("rc mlx5: unsupported outstanding WQE opcode 0x%x size %zu: %s",
               uct_rc_mlx5_wqe_opcode(ctrl), wqe_size, wqe_dump);
 }

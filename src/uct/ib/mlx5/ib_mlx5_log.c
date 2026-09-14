@@ -277,9 +277,9 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
 }
 
 void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
-                                 void *qend, int max_sge, int dump_qp,
-                                 uct_log_data_dump_func_t packet_dump_cb,
-                                 char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
+                          void *qend, int max_sge, int dump_qp,
+                          uct_log_data_dump_func_t packet_dump_cb,
+                          char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
 {
     static uct_ib_opcode_t opcodes[] = {
         [MLX5_OPCODE_NOP]              = { "NOP",        0 },
@@ -303,7 +303,7 @@ void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     uint8_t opcode                 = ctrl->opmod_idx_opcode >> 24;
     uint8_t opmod                  = ctrl->opmod_idx_opcode & 0xff;
     uint32_t qp_num                = ntohl(ctrl->qpn_ds) >> 8;
-    int ds                         = ctrl->qpn_ds >> 24;
+    int ds                         = ntohl(ctrl->qpn_ds) & UINT8_MAX;
     uct_ib_opcode_t *op;
     char *s                        = buffer;
     char *ends                     = buffer + max;
