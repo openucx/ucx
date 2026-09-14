@@ -68,6 +68,10 @@ static void ucp_proto_select_disable_superseded(
     }
 
     UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        if (ucs_dynamic_bitmap_get(disabled_proto_mask, proto_idx)) {
+            continue;
+        }
+
         proto         = &ucs_array_elem(&proto_init->protocols, proto_idx);
         superseded_by = ucp_proto_id_field(proto->proto_id, superseded_by) &
                         avail_classes;

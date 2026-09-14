@@ -1017,11 +1017,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
 
-/* Device which reads from remote memory much slower than it writes to it, like
- * a GPU with no direct read data path to the peer memory */
-class test_ucp_proto_mock_rcx_slow_get : public test_ucp_proto_mock {
+/* Base class for RMA protocol selection on CUDA memory, over a single mocked
+ * high bandwidth device */
+class test_ucp_proto_mock_rcx_cuda : public test_ucp_proto_mock {
 public:
-    test_ucp_proto_mock_rcx_slow_get()
+    test_ucp_proto_mock_rcx_cuda()
     {
         mock_transport("rc_mlx5");
     }
@@ -1032,10 +1032,30 @@ public:
             UCS_TEST_SKIP_R("CUDA memory is not supported");
         }
 
+        add_cuda_mock_iface();
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    /* Add the mocked device the test selects protocols on */
+    virtual void add_cuda_mock_iface() = 0;
+
+    static void set_mock_iface_attr(uct_iface_attr_t &iface_attr)
+    {
+        iface_attr.bandwidth.shared = 28e9;
+        iface_attr.latency.c        = 500e-9;
+        iface_attr.latency.m        = 1e-9;
+    }
+};
+
+/* Device which reads from remote memory much slower than it writes to it, like
+ * a GPU with no direct read data path to the peer memory */
+class test_ucp_proto_mock_rcx_slow_get : public test_ucp_proto_mock_rcx_cuda {
+protected:
+    virtual void add_cuda_mock_iface() override
+    {
         add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
-            iface_attr.bandwidth.shared  = 28e9;
-            iface_attr.latency.c         = 500e-9;
-            iface_attr.latency.m         = 1e-9;
+            set_mock_iface_attr(iface_attr);
             /* Keep get_zcopy available on all message sizes */
             iface_attr.cap.get.min_zcopy = 0;
         }, [](uct_perf_attr_t &perf_attr) {
@@ -1054,7 +1074,6 @@ public:
                 perf_attr.path_bandwidth.shared    = UCS_MBYTE;
             }
         });
-        test_ucp_proto_mock::init();
     }
 };
 
@@ -1070,6 +1089,33 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get, "IB_NUM_PATHS?=1")
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_slow_get, rcx_gpu,
+                              "rc_x,cuda,rocm")
+
+/* Device with no get_zcopy data path at all, like cuda_ipc without NVLink */
+class test_ucp_proto_mock_rcx_no_get_zcopy :
+    public test_ucp_proto_mock_rcx_cuda {
+protected:
+    virtual void add_cuda_mock_iface() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            set_mock_iface_attr(iface_attr);
+            iface_attr.cap.get.max_zcopy = 0;
+        });
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_no_get_zcopy, get, "IB_NUM_PATHS?=1")
+{
+    /* No get/zcopy protocol is available, so no protocol supersedes get/rndv
+     * and it is selected, without having to exclude get/zcopy by UCX_PROTOS. */
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {1,    1928, "rndv using zero-copy", "rc_mlx5/mock"},
+        {1929, INF,  "rndv using zero-copy fenced write to remote",
+         "rc_mlx5/mock"},
+    });
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_no_get_zcopy, rcx_gpu,
                               "rc_x,cuda,rocm")
 
 class test_ucp_proto_mock_rcx_numa : public test_ucp_proto_mock {
