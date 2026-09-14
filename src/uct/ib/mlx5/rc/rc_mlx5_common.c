@@ -147,6 +147,12 @@ static void uct_rc_mlx5_op_info_fill_am_zcopy(
                                inline_length);
     rch = (const uct_rc_mlx5_hdr_t*)callback_data->data;
 
+#if IBV_HW_TM
+    if (rch->tmh_opcode != IBV_TMH_NO_TAG) {
+        ucs_fatal("unsupported tag matching send");
+    }
+#endif
+
     info->am.field_mask         |= UCT_EP_OP_INFO_AM_FIELD_AM_ID |
                                    UCT_EP_OP_INFO_AM_FIELD_FLAGS |
                                    UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY;
