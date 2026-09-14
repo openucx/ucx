@@ -64,8 +64,8 @@ should plug in here rather than going through the legacy direct paths.
   rely on this for deterministic test output.
 - `proto_class`/`superseded_by` (`ucp_proto_t`) override the cost model: a
   proto is dropped from any range where a class it lists is available, even
-  if cheaper. Keep the relation acyclic; `UCX_PROTOS` excludes the
-  superseding proto.
+  if cheaper. Keep the relation acyclic; to select a superseded proto in a
+  test, exclude the superseding proto with `UCX_PROTOS`.
 - Stage callbacks must drain all pending `UCS_INPROGRESS` on completion
   before transitioning. The framework will call `progress[stage]` again
   on `UCS_ERR_NO_RESOURCE`.

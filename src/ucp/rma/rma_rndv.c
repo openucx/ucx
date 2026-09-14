@@ -248,6 +248,7 @@ static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
 {
     double overhead = context->config.ext.proto_overhead_rndv_rtr;
 
+    /* Avoid RNDV for a zero-length GET when no zcopy protocol supersedes it */
     if (ucp_proto_get_rndv_zero_length_variant(proto)) {
         overhead += UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY;
     }
