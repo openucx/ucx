@@ -29,6 +29,16 @@
 #define ucp_trace_req(_sreq, _message, ...) \
     ucs_trace_req("req %p: " _message, (_sreq), ## __VA_ARGS__)
 
+#define UCP_STATUS_FENCE_DEFER ((ucs_status_t)(UCS_ERR_LAST + 1))
+#ifdef __cplusplus
+static_assert((UCP_STATUS_FENCE_DEFER < UCS_OK) &&
+              (UCP_STATUS_FENCE_DEFER >= UCS_ERR_LAST),
+              "fence defer status must be an error pointer");
+#else
+_Static_assert((UCP_STATUS_FENCE_DEFER < UCS_OK) &&
+               (UCP_STATUS_FENCE_DEFER >= UCS_ERR_LAST),
+               "fence defer status must be an error pointer");
+#endif
 
 /**
  * Request flags
@@ -69,7 +79,8 @@ enum {
     UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
     UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
-    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
+    UCP_REQUEST_FLAG_FENCE_BLOCKED         = UCS_BIT(30)
 };
 
 
@@ -242,14 +253,31 @@ struct ucp_request {
                 } msg_proto;
 
                 struct {
-                    uint64_t   remote_addr; /* Remote address */
-                    ucp_rkey_h rkey; /* Remote memory key */
+                    /* Fence state shared by RMA and atomic send requests. */
+                    uint64_t         fence_seq;
+                    ucs_queue_elem_t fence_pending_elem;
 
-                    struct {
-                        const uint64_t   *remote_addrs;
-                        ucp_rkey_h const *rkeys;
-                    } sgl;
-                } rma;
+                    union {
+                        struct {
+                            uint64_t   remote_addr; /* Remote address */
+                            ucp_rkey_h rkey;        /* Remote memory key */
+
+                            struct {
+                                const uint64_t   *remote_addrs;
+                                ucp_rkey_h const *rkeys;
+                            } sgl;
+                        } rma;
+
+                        struct {
+                            uint64_t        remote_addr; /* Remote address */
+                            ucp_rkey_h      rkey;        /* Remote memory key */
+                            uint64_t        value;       /* Atomic argument */
+                            uint64_t        result;      /* Atomic result */
+                            void           *reply_buffer;
+                            uct_atomic_op_t uct_op;      /* Requested UCT AMO */
+                        } amo;
+                    };
+                };
 
                 struct {
                     /* Remote request ID received from a peer */
@@ -359,6 +387,8 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
+                    /* Fence epoch advanced by this flush */
+                    uint64_t           fence_seq;
                     /* All lanes that are being flushed */
                     ucp_lane_map_t     all_lanes;
                     /* Which lanes flush has been started on */
@@ -373,8 +403,19 @@ struct ucp_request {
                     uint8_t            uct_flags_orig;
                     uint8_t            sw_started;
                     uint8_t            sw_done;
-                    /* Memory specific flushes */
-                    ucp_mem_flush_t    mem;
+                    union {
+                        struct {
+                            /* Snapshot used to detect same-index lane
+                             * replacement */
+                            uint64_t       lane_generation;
+                            /* Lanes targeted by this flush. Replacement lanes
+                             * are added if endpoint failover changes the live
+                             * topology. */
+                            ucp_lane_map_t lane_mask;
+                        } lanes;
+                        /* Used only after transport lane flushes complete */
+                        ucp_mem_flush_t mem;
+                    };
                 } flush;
 
                 struct {
@@ -389,15 +430,6 @@ struct ucp_request {
                     /* Index of UCT EP to be flushed and destroyed */
                     ucp_rsc_index_t    rsc_index;
                 } discard_uct_ep;
-
-                struct {
-                    uint64_t              remote_addr; /* Remote address */
-                    ucp_rkey_h            rkey;        /* Remote memory key */
-                    uint64_t              value;       /* Atomic argument */
-                    uint64_t              result;      /* Atomic result */
-                    void                  *reply_buffer;
-                    uct_atomic_op_t       uct_op;      /* Requested UCT AMO */
-                } amo;
 
                 struct {
                     ucs_queue_elem_t  queue;     /* Elem in outgoing ssend reqs queue */
@@ -506,6 +538,8 @@ struct ucp_request {
 
         struct {
             ucp_worker_h            worker;       /* Worker to flush */
+            /* Fence work from later epochs does not delay this flush. */
+            uint64_t                fence_seq_th;
             ucp_send_nbx_callback_t cb;           /* Completion callback */
             uct_worker_cb_id_t      prog_id;      /* Progress callback ID */
             ucp_ep_ext_t            *next_ep_ext; /* Extension of the next endpoint to flush */

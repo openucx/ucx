@@ -11,6 +11,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_common.h>
 #include <ucs/debug/log.h>
 
 
@@ -160,30 +161,120 @@ ucp_ep_rma_get_fence_flag(ucp_ep_h ep)
     return 0;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_fence_normalize_lanes(ucp_ep_h ep)
+{
+    ep->ext->unflushed_lanes = ucp_ep_fence_lane_map_normalize(
+            ep->ext->unflushed_lanes, ucp_ep_get_live_lanes(ep),
+            ep->ext->fence_lanes_dirty);
+    ep->ext->fence_lanes_dirty = 0;
+}
+
+/**
+ * Admit an RMA/atomic request after its fence dependency is satisfied.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_fence_admit_request(ucp_ep_h ep, ucp_request_t *req,
+                           ucp_lane_map_t lane_map)
+{
+    req->flags &= ~UCP_REQUEST_FLAG_FENCE_REQUIRED;
+    ucp_ep_fence_normalize_lanes(ep);
+    ep->ext->unflushed_lanes |= lane_map;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
                         ucp_lane_map_t lane_map)
 {
     ucs_status_t status;
+    uint64_t fence_seq;
 
-    /* Apply a fence if EP's sequence is behind worker's */
-    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
-        if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
-            status = UCS_OK;
-        } else if (ucs_likely(
-            ucs_is_pow2_or_zero(ep->ext->unflushed_lanes | lane_map))) {
-            status = ucp_ep_fence_weak(ep);
-        } else {
-            status = ucp_ep_fence_strong(ep);
-        }
-    } else {
-        status = UCS_OK;
+    ucp_ep_fence_normalize_lanes(ep);
+
+    if (ucs_likely(!(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED))) {
+        ep->ext->unflushed_lanes |= lane_map;
+        return UCS_OK;
     }
 
-    /* Re-set the lanes of the current operation for future fences */
-    ep->ext->unflushed_lanes |= lane_map;
+    ucs_assert(req->send.fence_seq > 0);
+    fence_seq = req->send.fence_seq;
 
-    return status;
+    if (ep->ext->fence_seq >= fence_seq) {
+        ucp_ep_fence_admit_request(ep, req, lane_map);
+        return UCS_OK;
+    }
+
+    if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
+        ep->ext->fence_seq = fence_seq;
+        ucp_ep_fence_admit_request(ep, req, lane_map);
+        return UCS_OK;
+    }
+
+    if (ucs_likely(ucs_is_pow2(ep->ext->unflushed_lanes) &&
+                   ((lane_map & ep->ext->unflushed_lanes) == lane_map))) {
+        status = ucp_ep_fence_weak(ep);
+        if (ucs_likely(status == UCS_OK)) {
+            ep->ext->unflushed_lanes = 0;
+            ep->ext->fence_seq       = fence_seq;
+            ucp_ep_fence_admit_request(ep, req, lane_map);
+            return UCS_OK;
+        }
+        return status;
+    }
+
+    if (ep->ext->fence_inflight_req == NULL) {
+        status = ucp_ep_fence_strong_nb(ep, fence_seq);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
+
+        if (ep->ext->fence_inflight_req == NULL) {
+            status = ep->ext->fence_status;
+            if (ucs_unlikely(status != UCS_OK)) {
+                return status;
+            }
+
+            ucs_assert(ep->ext->fence_seq >= fence_seq);
+            ucp_ep_fence_admit_request(ep, req, lane_map);
+            return UCS_OK;
+        }
+    }
+
+    req->flags |= UCP_REQUEST_FLAG_FENCE_BLOCKED;
+    return UCP_STATUS_FENCE_DEFER;
+}
+
+/**
+ * Perform fence admission before protocol initialization can add the request
+ * to a UCT pending queue.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rma_fence_progress(ucp_request_t *req, ucp_lane_map_t lane_map,
+                             ucs_status_t *status_p)
+{
+    ucs_status_t status;
+
+    status = ucp_ep_rma_handle_fence(req->send.ep, req, lane_map);
+    if (status == UCP_STATUS_FENCE_DEFER) {
+        if (req->send.pending_lane != UCP_NULL_LANE) {
+            ucp_ep_fence_pending_add(req->send.ep, &req->send.uct);
+            req->send.pending_lane = UCP_NULL_LANE;
+            *status_p              = UCS_OK;
+        } else {
+            *status_p = status;
+        }
+        return 0;
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        *status_p = status;
+        return 0;
+    } else if (status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        *status_p = UCS_OK;
+        return 0;
+    }
+
+    *status_p = UCS_OK;
+    return 1;
 }
 
 #endif

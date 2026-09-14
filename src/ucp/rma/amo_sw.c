@@ -389,15 +389,14 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
             req->flags |= UCP_REQUEST_FLAG_PROTO_AMO_PACKED;
         }
 
-        status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
-        if (status != UCS_OK) {
+        if (!ucp_proto_rma_fence_progress(
+                    req, UCS_BIT(spriv->super.lane), &status)) {
             return status;
         }
 
-        status = ucp_ep_rma_handle_fence(ep, req, UCS_BIT(spriv->super.lane));
+        status = ucp_ep_resolve_remote_id(ep, spriv->super.lane);
         if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
+            return status;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;

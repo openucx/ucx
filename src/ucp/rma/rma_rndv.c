@@ -36,6 +36,12 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
     const ucp_context_h context               = init_params->worker->context;
 
+    /* RMA rendezvous needs separate remote-operation accounting before it can
+     * participate safely in endpoint-based fence ordering. */
+    if (context->config.worker_fence_mode == UCP_FENCE_MODE_EP_BASED) {
+        return 0;
+    }
+
     /* TODO: We prefer to use direct zcopy when possible, remove this check when
      * prioritization of protocols is implemented. */
     if (!context->config.ext.rma_ppln_enable &&
