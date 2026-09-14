@@ -119,7 +119,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,
-                                        size_t count, size_t length,
+                                        size_t count,
                                         const ucp_request_param_t *param);
 
 ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,

@@ -287,7 +287,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         ucp_datatype_iter_t *dt_iter,
                                         const ucp_dt_local_sgl_t *local,
                                         const ucp_dt_remote_sgl_t *remote,
-                                        size_t count, size_t length,
+                                        size_t count,
                                         const ucp_request_param_t *param)
 {
     ucs_status_t status;
@@ -296,7 +296,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     ucs_assert(remote != NULL);
 
     dt_iter->dt_class             = UCP_DATATYPE_SGL;
-    dt_iter->length               = length;
+    dt_iter->length               = ucp_dt_sgl_length(local->lengths, count);
     dt_iter->offset               = 0;
     dt_iter->type.sgl.buffers     = local->buffers;
     dt_iter->type.sgl.lengths     = local->lengths;
