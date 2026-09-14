@@ -709,17 +709,19 @@ err:
     return status;
 }
 
+static void uct_ib_ah_entry_release(uct_ib_ah_entry_t *entry);
+
 static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 {
     uct_ib_ah_entry_t *entry;
 
     kh_foreach_value(&dev->ah_hash, entry, {
         if (entry->refcount != 1) {
-            ucs_warn("ah_entry %p (ah=%p) destroyed with refcount=%d",
+            ucs_warn("ah_entry %p (ah=%p) is still referenced, refcount=%d",
                      entry, entry->ah, entry->refcount);
         }
-        ibv_destroy_ah(entry->ah);
-        ucs_free(entry);
+        /* Drop the cache's own reference, a referenced entry stays valid */
+        uct_ib_ah_entry_release(entry);
     });
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 }
