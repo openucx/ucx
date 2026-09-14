@@ -311,11 +311,10 @@ public:
     /* Single unconnected entity: some transports (e.g. ud_verbs, srd) keep
      * a persistent AH ref on connected peers, which would skew the refcount
      * baseline these tests rely on. */
-    void init() {
-        uct_test::init();
+    void create_connected_entities() override
+    {
         m_e1 = uct_test::create_entity(0);
         m_entities.push_back(m_e1);
-        check_skip_test();
     }
 
     uct_ib_iface_t *ib_iface() {

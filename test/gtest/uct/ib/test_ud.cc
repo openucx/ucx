@@ -1156,7 +1156,7 @@ UCS_TEST_P(test_ud_verbs_ah_cache, ep_churn_does_not_leak_ah_refs,
     wait_for_cond([&]() {
         return (kh_size(&dev()->ah_hash) == hash_size_before) &&
                (entry->refcount == refcount_before);
-    }, []() { usleep(1000); });
+    }, [this]() { short_progress_loop(); });
 
     EXPECT_EQ(hash_size_before, kh_size(&dev()->ah_hash));
     EXPECT_EQ(refcount_before, entry->refcount);

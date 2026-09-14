@@ -1503,12 +1503,11 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
             ((ucs_get_time() - kh_value(&dev->ah_hash, iter)->creation_time) >=
              dev->ah_cache_ttl)) {
             /* Stale: drop the cache's own reference and forget this entry */
+            entry = kh_value(&dev->ah_hash, iter);
             ucs_trace("evicting stale ah_entry %p (ah %p) refcount %d %s",
-                      kh_value(&dev->ah_hash, iter),
-                      kh_value(&dev->ah_hash, iter)->ah,
-                      kh_value(&dev->ah_hash, iter)->refcount,
+                      entry, entry->ah, entry->refcount,
                       uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
-            uct_ib_ah_entry_release(kh_value(&dev->ah_hash, iter));
+            uct_ib_ah_entry_release(entry);
             kh_del(uct_ib_ah, &dev->ah_hash, iter);
             iter = kh_end(&dev->ah_hash);
         }
