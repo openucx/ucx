@@ -493,6 +493,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
     ucp_memory_info_t cur, ref;
     ucp_mem_h sgl_memh;
     size_t iov_count;
+    size_t count;
     size_t i;
 
     if (memh == NULL) {
@@ -518,8 +519,9 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
         }
         break;
     case UCP_DATATYPE_SGL:
-        ref = ucp_memory_info_from_memh(memh);
-        for (i = 0; i < dt_iter->type.sgl.elem_count; ++i) {
+        count = dt_iter->type.sgl.elem_count;
+        ref   = ucp_memory_info_from_memh(memh);
+        for (i = 0; i < count; ++i) {
             sgl_memh = dt_iter->type.sgl.memhs[i];
             if (sgl_memh == NULL) {
                 ucs_error("sgl[%zu]: got NULL memory handle", i);
@@ -538,9 +540,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
             }
 
             cur = ucp_memory_info_from_memh(sgl_memh);
-            if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref,
-                                       dt_iter->type.sgl.elem_count) !=
-                UCS_OK) {
+            if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref, count) != UCS_OK) {
                 return 0;
             }
         }
