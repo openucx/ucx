@@ -382,16 +382,30 @@ protected:
                           m_desc_elem_indices.data());
     }
 
-    void check_next_iter(size_t next_offset, size_t next_frag_offset)
+    size_t flat_offset(size_t elem_index, size_t frag_offset) const
     {
-        EXPECT_EQ(next_offset, m_next_iter.offset);
-        EXPECT_EQ(next_frag_offset, m_next_iter.type.sgl.frag_offset);
+        size_t offset = frag_offset;
+
+        for (size_t i = 0; i < elem_index; ++i) {
+            offset += m_lengths[i];
+        }
+
+        return offset;
     }
 
-    void check_position(size_t offset, size_t frag_offset)
+    void check_next_iter(size_t next_elem_index, size_t next_frag_offset)
     {
-        EXPECT_EQ(offset, m_dt_iter.offset);
+        EXPECT_EQ(next_elem_index, m_next_iter.type.sgl.elem_index);
+        EXPECT_EQ(next_frag_offset, m_next_iter.type.sgl.frag_offset);
+        EXPECT_EQ(flat_offset(next_elem_index, next_frag_offset),
+                  m_next_iter.offset);
+    }
+
+    void check_position(size_t elem_index, size_t frag_offset)
+    {
+        EXPECT_EQ(elem_index, m_dt_iter.type.sgl.elem_index);
         EXPECT_EQ(frag_offset, m_dt_iter.type.sgl.frag_offset);
+        EXPECT_EQ(flat_offset(elem_index, frag_offset), m_dt_iter.offset);
     }
 
     void start_partial_elem(size_t max_frag_length)
@@ -481,11 +495,13 @@ UCS_TEST_F(test_ucp_dt_sgl, mem_reg_provided_memh_missing_md) {
 
     ucp_datatype_iter_t dt_iter  = {};
     dt_iter.dt_class             = UCP_DATATYPE_SGL;
-    dt_iter.length               = NUM_ELEMS;
+    dt_iter.length               = NUM_ELEMS * LENGTH;
     dt_iter.offset               = 0;
     dt_iter.type.sgl.buffers     = buffers.data();
     dt_iter.type.sgl.lengths     = lengths.data();
     dt_iter.type.sgl.memhs       = memhs.data();
+    dt_iter.type.sgl.elem_count  = NUM_ELEMS;
+    dt_iter.type.sgl.elem_index  = 0;
     dt_iter.type.sgl.frag_offset = 0;
     ucp_memory_info_set_host(&dt_iter.mem_info);
 
@@ -645,12 +661,10 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_zero_length) {
     EXPECT_EQ(1u, next_frag(MAX_FRAG));
     check_frag(3, 0, MAX_FRAG, 4, 0);
     advance();
-    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
-    /* Trailing zero-length element produces no descriptor */
-    EXPECT_EQ(0u, next_frag(MAX_FRAG));
-    check_next_iter(5, 0);
-    advance();
+    /* All the bytes are consumed, so the trailing zero-length element does not
+       need another iteration */
+    check_position(4, 0);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
@@ -687,14 +701,32 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
     init_sgl_iter(2, {96, 64});
     start_partial_elem(MAX_FRAG);
 
-    ucp_datatype_iter_seek(&m_dt_iter, 1, UCS_BIT(UCP_DATATYPE_SGL));
+    /* Seek to an element boundary */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, 0),
+                           UCS_BIT(UCP_DATATYPE_SGL));
     check_position(1, 0);
     EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
     EXPECT_EQ(1u, next_frag(MAX_FRAG));
     check_frag(1, 0, MAX_FRAG, 1, MAX_FRAG);
 
-    ucp_datatype_iter_seek(&m_dt_iter, 2, UCS_BIT(UCP_DATATYPE_SGL));
+    /* Seek backwards into the middle of an element */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(0, MAX_FRAG),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(0, MAX_FRAG);
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(0, MAX_FRAG, MAX_FRAG, 0, 2 * MAX_FRAG);
+
+    /* Seek forward into the middle of the last element */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, MAX_FRAG),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, MAX_FRAG);
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    /* Seek to the end */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(2, 0),
+                           UCS_BIT(UCP_DATATYPE_SGL));
     check_position(2, 0);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
