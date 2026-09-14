@@ -29,48 +29,6 @@ static int uct_ib_mlx5_ext_is_unsupported_op(const void *op)
            (op == (const void*)ucs_empty_function_return_unsupported);
 }
 
-static uint64_t uct_ib_mlx5_ext_iface_query_cap_flags(uct_iface_h iface)
-{
-    uint64_t cap_flags = 0;
-    uct_ib_mlx5_ext_iface_query_attr_t attr;
-    uct_ib_mlx5_ext_plugin_t *plugin;
-    ucs_status_t status;
-
-    ucs_list_for_each(plugin, &uct_ib_mlx5_ext_plugins, list) {
-        if (ucs_unlikely(uct_ib_mlx5_ext_is_unsupported_op(
-                    (const void*)plugin->ops.iface_query))) {
-            continue;
-        }
-
-        attr.field_mask = UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
-        status = plugin->ops.iface_query(iface, &attr);
-        if (status != UCS_OK) {
-            continue;
-        }
-
-        cap_flags |= attr.cap.flags;
-    }
-
-    ucs_debug("ib mlx5 ext: iface query cap flags: %" PRIu64, cap_flags);
-    return cap_flags;
-}
-
-ucs_status_t
-uct_ib_mlx5_ext_iface_query(uct_iface_h iface,
-                            uct_ib_mlx5_ext_iface_query_attr_t *attr)
-{
-    if (attr == NULL) {
-        ucs_error("ib mlx5 ext: iface query attribute is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (attr->field_mask & UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS) {
-        attr->cap.flags = uct_ib_mlx5_ext_iface_query_cap_flags(iface);
-    }
-
-    return UCS_OK;
-}
-
 size_t uct_ib_mlx5_ext_max_put_sgl_zcopy_count(void)
 {
     uct_ib_mlx5_ext_plugin_t *plugin;
@@ -210,13 +168,9 @@ ucs_status_t uct_ib_mlx5_ext_register(const uct_ib_mlx5_ext_ops_t *ops)
     ucs_list_add_tail(&uct_ib_mlx5_ext_plugins, &plugin->list);
     num_plugins = ucs_list_length(&uct_ib_mlx5_ext_plugins);
 
-    ucs_debug("ib mlx5 ext: registered plugin name=%s iface_query=%s "
-              "put_sgl_zcopy=%s outstanding_purge=%s (total=%u)",
+    ucs_debug("ib mlx5 ext: registered plugin name=%s put_sgl_zcopy=%s "
+              "outstanding_purge=%s (total=%u)",
               plugin->ops.name,
-              uct_ib_mlx5_ext_is_unsupported_op(
-                      (const void*)plugin->ops.iface_query) ?
-                      "unsupported" :
-                      "supported",
               uct_ib_mlx5_ext_is_unsupported_op(
                       (const void*)plugin->ops.ep_put_sgl_zcopy) ?
                       "unsupported" :
