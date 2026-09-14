@@ -731,6 +731,32 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
+UCS_TEST_F(test_ucp_dt_sgl, iter_seek_zero_length) {
+    init_sgl_iter(5, {0, 96, 0, 32, 0});
+
+    /* Seek past the leading zero-length element */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, 32),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, 32);
+
+    /* Seek forward across a zero-length element */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(3, 16),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(3, 16);
+
+    /* Seek to the end, past the trailing zero-length element */
+    ucp_datatype_iter_seek(&m_dt_iter, m_dt_iter.length,
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(5, 0);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    /* Seek backwards over the zero-length elements */
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, 0),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, 0);
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
 UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
     static constexpr size_t MAX_FRAG = 32;
 

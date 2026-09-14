@@ -410,21 +410,29 @@ void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
 void ucp_datatype_iter_sgl_seek_always(ucp_datatype_iter_t *dt_iter,
                                        size_t offset)
 {
-    size_t count       = dt_iter->type.sgl.elem_count;
-    size_t elem_index  = 0;
-    size_t elem_offset = offset;
-    size_t elem_length;
+    const size_t *lengths = dt_iter->type.sgl.lengths;
+    size_t count          = dt_iter->type.sgl.elem_count;
+    size_t elem_index     = dt_iter->type.sgl.elem_index;
+    ssize_t elem_offset;
+    size_t length_it;
 
-    /* The elements do not store their start offset, so the position is
-       recalculated from the beginning of the SGL */
-    while (elem_index < count) {
-        elem_length = dt_iter->type.sgl.lengths[elem_index];
-        if (elem_offset < elem_length) {
-            break;
+    elem_offset = dt_iter->type.sgl.frag_offset + (offset - dt_iter->offset);
+    if (elem_offset < 0) {
+        /* seek backwards */
+        do {
+            ucs_assertv(elem_index > 0, "dt_iter=%p", dt_iter);
+            --elem_index;
+            elem_offset += lengths[elem_index];
+        } while (elem_offset < 0);
+    } else {
+        /* Seek forward. Unlike IOV, the loop is bounded by the element count,
+           because an SGL may end with zero-length elements and may be sought
+           to its end. */
+        while ((elem_index < count) &&
+               (elem_offset >= (ssize_t)(length_it = lengths[elem_index]))) {
+            elem_offset -= length_it;
+            ++elem_index;
         }
-
-        elem_offset -= elem_length;
-        ++elem_index;
     }
 
     dt_iter->offset               = offset;
