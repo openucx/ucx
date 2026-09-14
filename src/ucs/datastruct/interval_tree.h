@@ -7,6 +7,7 @@
 #ifndef UCS_INTERVAL_TREE_H_
 #define UCS_INTERVAL_TREE_H_
 
+#include <ucs/datastruct/rbtree.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
@@ -24,31 +25,34 @@ typedef struct {
 } ucs_interval_tree_range_t;
 
 
-/** Red-Black tree node color */
-enum {
-    UCS_INTERVAL_NODE_BLACK = 0,
-    UCS_INTERVAL_NODE_RED   = 1
-};
-
 /**
- * Interval tree node structure (Red-Black tree)
+ * Interval tree node structure
+ *
+ * Merges overlapping or touching intervals into one node.
  */
 typedef struct ucs_interval_node {
-    struct ucs_interval_node *left;   /**< Left child node */
-    struct ucs_interval_node *right;  /**< Right child node */
-    struct ucs_interval_node *parent; /**< Parent node (NULL for root) */
-    uint64_t                 start;  /**< Start of interval */
-    uint64_t                 end;    /**< End of interval */
-    uint8_t                  color;  /**< UCS_INTERVAL_NODE_BLACK or UCS_INTERVAL_NODE_RED */
+    ucs_rbtree_node_t super; /**< Balancing links, must be first */
+    uint64_t          start; /**< Start of interval */
+    uint64_t          end;   /**< End of interval */
 } ucs_interval_node_t;
 
 
 typedef struct {
-    ucs_interval_node_t *root;       /**< Root node of the tree */
-    ucs_mpool_t         *mpool;      /**< Memory pool for node allocation */
-    size_t              num_nodes;   /**< Number of nodes in the tree */
-    size_t              total_size;  /**< Sum of (end - start) across all nodes */
+    ucs_rbtree_t rb;         /**< Balanced tree ordered by 'start' */
+    ucs_mpool_t *mpool;      /**< Memory pool for node allocation */
+    size_t       num_nodes;  /**< Number of nodes in the tree */
+    size_t       total_size; /**< Sum of (end - start) across all nodes */
 } ucs_interval_tree_t;
+
+
+/**
+ * Return the tree's root node
+ */
+static UCS_F_ALWAYS_INLINE ucs_interval_node_t *
+ucs_interval_tree_root(const ucs_interval_tree_t *tree)
+{
+    return ucs_derived_of(tree->rb.root, ucs_interval_node_t);
+}
 
 
 /**
@@ -84,7 +88,7 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
 static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
         ucs_interval_tree_t *tree, ucs_interval_tree_range_t range)
 {
-    ucs_interval_node_t *root = tree->root;
+    ucs_interval_node_t *root = ucs_interval_tree_root(tree);
 
     ucs_assertv(range.start <= (range.end + 1),
                 "tree=%p, start=%lu, end=%lu", tree, range.start, range.end);
@@ -157,7 +161,7 @@ static UCS_F_ALWAYS_INLINE int
 ucs_interval_tree_is_equal_range(const ucs_interval_tree_t *tree,
                                  ucs_interval_tree_range_t range)
 {
-    ucs_interval_node_t *root = tree->root;
+    ucs_interval_node_t *root = ucs_interval_tree_root(tree);
 
     ucs_assertv(range.start <= (range.end + 1),
                 "tree=%p, start=%lu, end=%lu", tree, range.start, range.end);

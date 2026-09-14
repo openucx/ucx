@@ -111,6 +111,7 @@ noinst_HEADERS = \
 	datastruct/mpool_set.inl \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
+	datastruct/rbtree.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/conn_match.h \
@@ -190,6 +191,7 @@ libucs_la_SOURCES = \
 	datastruct/piecewise_func.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
+	datastruct/rbtree.c \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \

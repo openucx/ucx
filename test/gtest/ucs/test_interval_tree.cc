@@ -6,6 +6,8 @@
 
 #include <common/test.h>
 
+#include "rbtree_check.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -69,77 +71,54 @@ protected:
         }
     }
 
-    /* Red-Black tree test helpers (use public node layout) */
-    static size_t tree_height(const ucs_interval_node_t *node)
+    /* Red-Black tree test helpers */
+    static ucs_interval_node_t *node_of(const ucs_rbtree_node_t *rb_node)
     {
-        if (node == NULL) {
-            return 0;
-        }
-        return 1 + std::max(tree_height(node->left), tree_height(node->right));
+        return ucs_derived_of(const_cast<ucs_rbtree_node_t*>(rb_node),
+                              ucs_interval_node_t);
     }
 
     size_t tree_height() const
     {
-        return tree_height(m_tree.root);
+        return rbtree_check::height(m_tree.rb.root);
     }
 
-    void collect_inorder(const ucs_interval_node_t *node,
+    void collect_inorder(const ucs_rbtree_node_t *rb_node,
                          interval_vector_t &out) const
     {
-        if (node == NULL) {
+        if (rb_node == NULL) {
             return;
         }
-        collect_inorder(node->left, out);
-        out.push_back({node->start, node->end});
-        collect_inorder(node->right, out);
+
+        collect_inorder(rb_node->left, out);
+        out.push_back({node_of(rb_node)->start, node_of(rb_node)->end});
+        collect_inorder(rb_node->right, out);
     }
 
     interval_vector_t collect_inorder() const
     {
         interval_vector_t out;
-        collect_inorder(m_tree.root, out);
+
+        collect_inorder(m_tree.rb.root, out);
         return out;
     }
 
-    /* Returns black height if valid, or (size_t)-1 if RB invariant violated */
-    static size_t check_rb_invariant(const ucs_interval_node_t *node,
-                                    int parent_red,
-                                    size_t *out_black_height)
+    /* Coalescing keeps the ranges disjoint, so consecutive nodes must be
+     * ordered and separated by a gap */
+    static void check_node(const ucs_rbtree_node_t *rb_node)
     {
-        if (node == NULL) {
-            *out_black_height = 1;
-            return 1;
+        if (rb_node->left != NULL) {
+            EXPECT_LT(node_of(rb_node->left)->start, node_of(rb_node)->start);
         }
-        if (parent_red && (node->color == UCS_INTERVAL_NODE_RED)) {
-            return (size_t)-1; /* double red */
+        if (rb_node->right != NULL) {
+            EXPECT_GT(node_of(rb_node->right)->start, node_of(rb_node)->start);
         }
-        size_t left_bh, right_bh;
-        if (check_rb_invariant(node->left, node->color == UCS_INTERVAL_NODE_RED,
-                               &left_bh) == (size_t)-1) {
-            return (size_t)-1;
-        }
-        if (check_rb_invariant(node->right,
-                               node->color == UCS_INTERVAL_NODE_RED,
-                               &right_bh) == (size_t)-1) {
-            return (size_t)-1;
-        }
-        if (left_bh != right_bh) {
-            return (size_t)-1; /* unequal black heights */
-        }
-        *out_black_height = left_bh + (node->color == UCS_INTERVAL_NODE_BLACK ? 1 : 0);
-        return *out_black_height;
     }
 
     bool check_rb_invariant() const
     {
-        if (m_tree.root == NULL) {
-            return true;
-        }
-        if (m_tree.root->color != UCS_INTERVAL_NODE_BLACK) {
-            return false; /* root must be black */
-        }
-        size_t bh;
-        return check_rb_invariant(m_tree.root, 0, &bh) != (size_t)-1;
+        return rbtree_check::validate(&m_tree.rb, m_tree.num_nodes,
+                                      check_node);
     }
 
     ucs_interval_tree_t m_tree;
