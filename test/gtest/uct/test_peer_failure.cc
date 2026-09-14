@@ -349,6 +349,9 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_purge_outstanding : public uct_test {
 public:
+    static const uint64_t SEND_SEED = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED = 0xb2b2b2b2b2b2b2b2ul;
+
     void init() override
     {
         uct_test::init();
@@ -375,9 +378,16 @@ public:
 protected:
     struct purge_ctx {
         test_uct_purge_outstanding *self;
-        uct_completion_t           op_comp;
-        uint32_t                   num_ops_purged;
-        uint32_t                   num_flush_purged;
+        uct_completion_t           op_comp = {completion_cb, 0, UCS_OK};
+        uint32_t                   num_ops_purged = 0;
+        uint32_t                   num_flush_purged = 0;
+        uint64_t                   remote_addr = 0;
+        uct_rkey_t                 rkey = UCT_INVALID_RKEY;
+        const uct_iov_t            *iov = NULL;
+        size_t                     iovcnt = 0;
+        uct_unpack_callback_t      unpack_cb = NULL;
+        void                       *unpack_arg = NULL;
+        size_t                     unpack_length = 0;
     };
 
     using send_func_t =
@@ -446,6 +456,13 @@ protected:
     void validate_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         switch (info->operation) {
+        case UCT_EP_OP_PUT_ZCOPY:
+        case UCT_EP_OP_GET_ZCOPY:
+            validate_rma_zcopy(info, ctx);
+            return;
+        case UCT_EP_OP_GET_BCOPY:
+            validate_get_bcopy(info, ctx);
+            return;
         case UCT_EP_OP_FLUSH:
             validate_flush(info, ctx);
             return;
@@ -454,6 +471,57 @@ protected:
                                                      << " at index "
                                                      << ctx->num_ops_purged);
         }
+    }
+
+    static void validate_rma_zcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
+                                         UCT_EP_OP_INFO_FIELD_RMA;
+        const uint16_t expected_rma_fields =
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+
+        EXPECT_EQ(&ctx->op_comp, info->comp);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        /* The reported rkey holds only the direct key part */
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer,
+                      info->rma.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length,
+                      info->rma.payload.zcopy.iov[i].length);
+        }
+
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_get_bcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
+                                         UCT_EP_OP_INFO_FIELD_RMA;
+        const uint16_t expected_rma_fields =
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+
+        EXPECT_EQ(&ctx->op_comp, info->comp);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+        EXPECT_EQ(ctx->unpack_cb, info->rma.payload.unpack.unpack_cb);
+        EXPECT_EQ(ctx->unpack_arg, info->rma.payload.unpack.arg);
+        EXPECT_EQ(ctx->unpack_length, info->rma.payload.unpack.length);
+
+        ++ctx->num_ops_purged;
     }
 
     static void validate_flush(const uct_ep_op_info_t *info, purge_ctx *ctx)
@@ -497,6 +565,10 @@ protected:
     {
     }
 
+    static void unpack_cb(void *arg, const void *data, size_t length)
+    {
+    }
+
     void purge_outstanding(purge_ctx *ctx)
     {
         uct_ep_outstanding_purge_params_t purge_params = {};
@@ -533,11 +605,9 @@ protected:
                                                &purge_params));
     }
 
-    void test_purge_outstanding(const send_func_t &send_func)
+    void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx)
     {
         uct_ep_invalidate_params_t invalidate_params = {};
-        purge_ctx                   ctx               = {
-                this, {completion_cb, 0, UCS_OK}, 0, 0};
         uint32_t num_posted;
         bool flush_outstanding;
         ucs_status_t status;
@@ -581,6 +651,90 @@ protected:
     entity   *m_receiver;
     unsigned m_err_count = 0;
 };
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+
+    const size_t num_iov = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size    = ucs_max(attr.cap.put.min_zcopy,
+                                   ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx{};
+    ctx.self        = this;
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t send_func = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(send_func, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+
+    const size_t num_iov = ucs_min(attr.cap.get.max_iov, 2);
+    const size_t size    = ucs_max(attr.cap.get.min_zcopy,
+                                   ucs_min((size_t)4096, attr.cap.get.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx{};
+    ctx.self        = this;
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t get_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_get_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(get_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size = ucs_min((size_t)4096, attr.cap.get.max_bcopy);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    purge_ctx ctx{};
+    ctx.self          = this;
+    ctx.remote_addr   = recvbuf.addr();
+    ctx.rkey          = recvbuf.rkey();
+    ctx.unpack_cb     = unpack_cb;
+    ctx.unpack_arg    = this;
+    ctx.unpack_length = size;
+
+    send_func_t get_bcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_get_bcopy(ep, ctx.unpack_cb, ctx.unpack_arg,
+                                ctx.unpack_length, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(get_bcopy, ctx);
+}
+
+UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
 
 class test_uct_peer_failure_multiple : public test_uct_peer_failure
 {
