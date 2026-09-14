@@ -16,6 +16,14 @@
     (((_datatype) & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_SGL)
 
 
+/**
+ * Get the total length of all SGL elements
+ *
+ * @param [in]     lengths        Array of element lengths
+ * @param [in]     count          Number of entries in the @a lengths array
+ *
+ * @return Total length of all the SGL elements
+ */
 static inline size_t ucp_dt_sgl_length(const size_t *lengths, size_t count)
 {
     size_t elem_it, total_length = 0;
