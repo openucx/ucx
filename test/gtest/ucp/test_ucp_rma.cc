@@ -1295,6 +1295,8 @@ protected:
                      expect_immediate_completion);
     }
 
+    /* Post one SGL with the given element count and size, and expect the
+       selected protocol to split it between all its lanes */
     void test_put_sgl_split(size_t num_elems, size_t buf_size) {
         /* Complete the wireup, so that the operation below is posted rather
            than added to a pending queue */
@@ -1303,6 +1305,9 @@ protected:
         sgl_ctx ctx;
         init_sgl_ctx(ctx, num_elems, buf_size);
 
+        /* init_sgl_ctx() fills every element with one repeated byte, so it
+           cannot detect a fragment which is written to a wrong offset inside
+           its element. Use a pattern which depends on the position instead. */
         std::vector<uint64_t> seeds(num_elems);
         for (size_t i = 0; i < num_elems; ++i) {
             seeds[i] = ucs::rand();
@@ -1453,13 +1458,10 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
-    /* Multiple elements are spread between the lanes by the element count */
     test_put_sgl_split(16, 64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_split_single_element) {
-    /* A lone element cannot be spread by the element count, so reaching every
-       lane of the selected protocol requires fragmenting it */
     test_put_sgl_split(1, UCS_MBYTE);
 }
 

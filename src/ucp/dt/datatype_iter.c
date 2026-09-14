@@ -425,9 +425,8 @@ void ucp_datatype_iter_sgl_seek_always(ucp_datatype_iter_t *dt_iter,
             elem_offset += lengths[elem_index];
         } while (elem_offset < 0);
     } else {
-        /* Seek forward. Unlike IOV, the loop is bounded by the element count,
-           because an SGL may end with zero-length elements and may be sought
-           to its end. */
+        /* Unlike IOV, the loop is limited by the element count, because an SGL
+           can end with zero-length elements and a seek can reach its end */
         while ((elem_index < count) &&
                (elem_offset >= (ssize_t)(length_it = lengths[elem_index]))) {
             elem_offset -= length_it;
