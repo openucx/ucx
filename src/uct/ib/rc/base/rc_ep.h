@@ -403,6 +403,15 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
     uct_rc_txqp_add_send_op(txqp, op);
 }
 
+static inline void
+uct_rc_ep_init_send_op(uct_rc_iface_send_op_t *op, unsigned flags,
+                       uct_completion_t *comp, uct_rc_send_handler_t handler)
+{
+    op->flags     = flags;
+    op->user_comp = comp;
+    op->handler   = handler;
+}
+
 /* Always create a send op, even if comp is NULL, so that outstanding purge can
  * identify the operation by its completion handler. */
 static UCS_F_ALWAYS_INLINE void
@@ -414,14 +423,15 @@ uct_rc_txqp_add_send_comp_always(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 {
     uct_rc_iface_send_op_t *op = uct_rc_iface_get_send_op(iface);
 
-    op->handler   = handler;
-    op->user_comp = comp;
-    op->flags    |= flags;
-    op->length    = length;
+    uct_rc_ep_init_send_op(op, flags | UCT_RC_IFACE_SEND_OP_FLAG_IFACE, comp,
+                           handler);
+
     if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV) {
         /* coverity[dead_error_line] */
         uct_rc_ep_send_op_set_iov(op, iov, iovcnt);
     }
+    op->length = length;
+
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
@@ -437,16 +447,6 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
     uct_rc_txqp_add_send_comp_always(iface, txqp, handler, comp, sn, flags, iov,
                                      iovcnt, length);
-}
-
-static inline void
-uct_rc_ep_init_send_op(uct_rc_iface_send_op_t *op, unsigned flags,
-                       uct_completion_t *comp,
-                       uct_rc_send_handler_t handler)
-{
-    op->flags     = flags;
-    op->user_comp = comp;
-    op->handler   = handler;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

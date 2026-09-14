@@ -230,8 +230,8 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
         uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
                                          uct_rc_ep_put_zcopy_completion_handler,
                                          NULL, ep->tx.wq.sig_pi,
-                                         UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, iov,
-                                         iovcnt, 0);
+                                         UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL,
+                                         0, 0);
     }
 
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
@@ -718,7 +718,6 @@ uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uint64_t dummy = 0; /* Dummy buffer to suppress compiler warning */
-    uct_rc_iface_send_op_t *op;
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_RDMA_WRITE, &dummy, 0, 0, 0, 0, 0,
@@ -727,11 +726,9 @@ uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
     /* Always create an op so that the WQE is distinguishable from a zero-length
      * put short during outstanding WQE parsing. uct_rc_ep_check_internal()
      * already verified a CQ credit is available. */
-    op = uct_rc_iface_get_send_op(&iface->super);
-    uct_rc_ep_init_send_op(op, UCT_RC_IFACE_SEND_OP_FLAG_IFACE, comp,
-                           uct_rc_ep_check_completion_handler);
-    uct_rc_iface_send_op_set_name(op, "rc_ep_check");
-    uct_rc_txqp_add_send_op_sn(&ep->super.txqp, op, ep->tx.wq.sig_pi);
+    uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
+                                     uct_rc_ep_check_completion_handler, comp,
+                                     ep->tx.wq.sig_pi, 0, NULL, 0, 0);
 
     if (comp != NULL) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
