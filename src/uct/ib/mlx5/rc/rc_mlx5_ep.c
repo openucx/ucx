@@ -18,7 +18,6 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/string.h>
 #include <ucs/type/serialize.h>
 #include <arpa/inet.h> /* For htonl */
 
@@ -916,22 +915,22 @@ static int uct_ib_mlx5_wqe_is_delivered(uint32_t wqe_first_psn,
 }
 
 static UCS_F_NOINLINE UCS_F_NORETURN void
-uct_rc_mlx5_wqe_unsupported(const uct_ib_mlx5_txwq_t *txwq,
+uct_rc_mlx5_wqe_unsupported(uct_ib_iface_t *iface,
+                             const uct_ib_mlx5_txwq_t *txwq,
                              const struct mlx5_wqe_ctrl_seg *ctrl,
                              size_t wqe_size)
 {
-    uint8_t wqe[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
-    char wqe_dump[3 * sizeof(wqe)];
+    char wqe_dump[256] = {0};
 
-    uct_rc_mlx5_txwq_copy_segs(txwq, ctrl, wqe, wqe_size);
+    uct_ib_mlx5_wqe_dump(iface, (void*)ctrl, txwq->qstart, txwq->qend,
+                          INT_MAX, 0, NULL, wqe_dump, sizeof(wqe_dump) - 1,
+                          NULL);
     ucs_fatal("rc mlx5: unsupported outstanding WQE opcode 0x%x size %zu: %s",
-              uct_rc_mlx5_wqe_opcode(ctrl), wqe_size,
-              ucs_str_dump_hex(wqe, wqe_size, wqe_dump, sizeof(wqe_dump),
-                               SIZE_MAX));
+              uct_rc_mlx5_wqe_opcode(ctrl), wqe_size, wqe_dump);
 }
 
 static uint32_t uct_ib_mlx5_wqe_num_packets(
-        const uct_ib_mlx5_txwq_t *txwq,
+        uct_ib_iface_t *iface, const uct_ib_mlx5_txwq_t *txwq,
         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size)
 {
     const struct mlx5_wqe_inl_data_seg *inl;
@@ -961,12 +960,13 @@ static uint32_t uct_ib_mlx5_wqe_num_packets(
 
         /* Fall through */
     default:
-        uct_rc_mlx5_wqe_unsupported(txwq, ctrl, wqe_size);
+        uct_rc_mlx5_wqe_unsupported(iface, txwq, ctrl, wqe_size);
     }
 }
 
 static uint32_t uct_rc_mlx5_txwq_outstanding_num_packets(
-        uct_ib_mlx5_txwq_t *txwq, uint16_t start_ci, uint16_t end_ci)
+        uct_ib_iface_t *iface, uct_ib_mlx5_txwq_t *txwq, uint16_t start_ci,
+        uint16_t end_ci)
 {
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uint32_t num_packets = 0;
@@ -978,7 +978,7 @@ static uint32_t uct_rc_mlx5_txwq_outstanding_num_packets(
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
         wqe_size = uct_ib_mlx5_wqe_size(ctrl);
 
-        num_packets += uct_ib_mlx5_wqe_num_packets(txwq, ctrl, wqe_size);
+        num_packets += uct_ib_mlx5_wqe_num_packets(iface, txwq, ctrl, wqe_size);
     }
 
     return num_packets;
@@ -1046,7 +1046,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     }
 
     num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
-            txwq, start_ci, end_ci);
+            &iface->super.super, txwq, start_ci, end_ci);
 
     rx_token          = params->rx_token;
     receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
@@ -1063,7 +1063,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
          ci = uct_ib_mlx5_txwq_next_wqe_index(ci, wqe_size)) {
         ctrl        = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
         wqe_size    = uct_ib_mlx5_wqe_size(ctrl);
-        num_packets = uct_ib_mlx5_wqe_num_packets(txwq, ctrl, wqe_size);
+        num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
+                                                  ctrl, wqe_size);
         if (num_packets == 0) {
             continue;
         }
