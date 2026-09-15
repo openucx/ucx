@@ -16,7 +16,10 @@
 
 ## Choosing a Level
 
-* Choose the level from the audience and the frequency of the message
+* Use `error`, `warn`, `diag`, and `info` for messages addressed to the user,
+  and `debug` and `trace` for messages addressed to a UCX developer
+* Use `ucs_trace_req()` for per-request events and `ucs_trace_data()` for
+  per-packet events, and not `trace` for either
 * Use `debug` and not `trace` for one-time flows such as initialization and
   device discovery, because release builds compile out levels above `debug`
 * Keep the same level for the same event in different code paths
@@ -46,7 +49,9 @@
 * Identify the object with the values which are relevant to it, such as device
   name, `sys_dev`, bus id, lane index, md map, etc., using the existing
   `*_FMT`/`*_ARG` pairs
-* Print the observation together with its consequence when applicable
+* Print the decision which follows an unexpected value: prefer
+  `"unsupported memory type %s, falling back to host"` instead of
+  `"unsupported memory type %s"`
 
 ## Errors
 
