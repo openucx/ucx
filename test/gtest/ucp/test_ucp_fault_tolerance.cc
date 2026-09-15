@@ -893,7 +893,11 @@ protected:
                                    uct_completion_t *comp)
     {
         ucs_assert(m_flush_mock != NULL);
-        ucs_assert(comp != NULL);
+
+        if (comp == NULL) {
+            return m_flush_mock->orig_func(&ep->iface->ops.ep_flush, ep, flags,
+                                           comp);
+        }
 
         if (m_held_flush_comp == NULL) {
             m_held_flush_comp = comp;
@@ -910,31 +914,6 @@ protected:
 
         return m_flush_mock->orig_func(&ep->iface->ops.ep_flush, ep, flags,
                                        comp);
-    }
-
-    static void mock_ep_flush(ucp_ep_h ep, ucs::mock &mock)
-    {
-        uct_iface_h ifaces[UCP_MAX_LANES];
-        uct_iface_h iface;
-        ucp_lane_index_t lane;
-        unsigned i;
-        unsigned num_ifaces = 0;
-
-        for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            iface = ucp_ep_get_lane(ep, lane)->iface;
-            for (i = 0; i < num_ifaces; ++i) {
-                if (iface == ifaces[i]) {
-                    break;
-                }
-            }
-
-            if (i != num_ifaces) {
-                continue;
-            }
-
-            ifaces[num_ifaces++] = iface;
-            mock.setup(&iface->ops.ep_flush, hold_flush);
-        }
     }
 
     static void drain_held_flush(ucp_ep_h ep, ucp_request_t *req)
@@ -967,18 +946,34 @@ protected:
 
         ~held_flush_request_guard()
         {
-            m_flush_mock = NULL;
-            drain_held_flush(m_ep, m_req);
+            cleanup_flush();
+        }
+
+        void cleanup()
+        {
+            ucs_status_ptr_t request;
+
+            cleanup_flush();
             if (m_req != NULL) {
                 EXPECT_EQ(0, m_req->send.state.uct_comp.count);
             }
 
-            if (UCS_PTR_IS_PTR(m_request)) {
-                EXPECT_UCS_OK(m_test.request_wait(m_request));
+            request   = m_request;
+            m_request = NULL;
+            m_req     = NULL;
+            if (UCS_PTR_IS_PTR(request)) {
+                EXPECT_UCS_OK(m_test.request_wait(request));
             }
         }
 
     private:
+
+        void cleanup_flush()
+        {
+            m_flush_mock = NULL;
+            drain_held_flush(m_ep, m_req);
+        }
+
         test_ucp_fault_tolerance &m_test;
         ucp_ep_h m_ep;
         ucs_status_ptr_t &m_request;
@@ -1037,47 +1032,52 @@ UCS_TEST_P(test_ucp_flush_lane_recovery, lane_replaced_during_inprogress_flush,
 
     {
         held_flush_request_guard guard(*this, ep, request, req);
-        ucs::mock mock;
-        m_flush_mock = &mock;
-        mock_ep_flush(ep, mock);
+        {
+            ucs::mock mock;
+            m_flush_mock = &mock;
+            mock_ep_flush(ep, mock, hold_flush);
 
-        request = ucp_ep_flush_nbx(ep, &param);
-        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
-        req = static_cast<ucp_request_t*>(request) - 1;
-        ASSERT_TRUE(m_held_flush_comp != NULL);
-        ASSERT_EQ(req->send.state.uct_comp.func, m_held_flush_comp->func);
+            request = ucp_ep_flush_nbx(ep, &param);
+            ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+            req = static_cast<ucp_request_t*>(request) - 1;
+            ASSERT_TRUE(m_held_flush_comp != NULL);
+            ASSERT_EQ(req->send.state.uct_comp.func, m_held_flush_comp->func);
 
-        invalidate_status = uct_ep_invalidate(original_uct_ep, 0);
-        if (invalidate_status != UCS_ERR_UNSUPPORTED) {
-            ASSERT_UCS_OK(invalidate_status);
-            ASSERT_UCS_OK(do_am_send_and_wait(ep, am_msg_size(), false));
+            invalidate_status = uct_ep_invalidate(original_uct_ep, 0);
+            if (invalidate_status != UCS_ERR_UNSUPPORTED) {
+                ASSERT_UCS_OK(invalidate_status);
+                ASSERT_UCS_OK(do_am_send_and_wait(ep, am_msg_size(), false));
 
-            wait_for_cond([ep, lane, original_uct_ep]() {
-                uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+                wait_for_cond([ep, lane, original_uct_ep]() {
+                    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
 
-                return (uct_ep != original_uct_ep) &&
-                       !ucp_wireup_ep_test(uct_ep) &&
-                       (ucp_ep_get_failed_lanes(ep) == 0);
-            }, [this]() {
-                short_progress_loop();
-            });
+                    return (uct_ep != original_uct_ep) &&
+                           !ucp_wireup_ep_test(uct_ep) &&
+                           (ucp_ep_get_failed_lanes(ep) == 0);
+                }, [this]() {
+                    short_progress_loop();
+                });
 
-            m_replacement_uct_ep = ucp_ep_get_lane(ep, lane);
-            mock_ep_flush(ep, mock);
-            ASSERT_NE(lane_generation, ep->ext->lane_generation);
-            initial_flush_count = m_held_flush_count;
+                m_replacement_uct_ep = ucp_ep_get_lane(ep, lane);
+                mock_ep_flush(ep, mock, hold_flush);
+                ASSERT_NE(lane_generation, ep->ext->lane_generation);
+                initial_flush_count = m_held_flush_count;
 
-            UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-            for (i = 0; i < initial_flush_count; ++i) {
-                uct_invoke_completion(m_held_flush_comp, UCS_OK);
+                UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+                for (i = 0; (i < initial_flush_count) &&
+                            (req->send.state.uct_comp.count > 0); ++i) {
+                    uct_invoke_completion(m_held_flush_comp, UCS_OK);
+                }
+                UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+
+                EXPECT_GT(m_held_flush_count, initial_flush_count);
+                EXPECT_GT(m_replacement_flush_count, 0u);
+            } else {
+                invalidate_unsupported = true;
             }
-            UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
-
-            EXPECT_GT(m_held_flush_count, initial_flush_count);
-            EXPECT_GT(m_replacement_flush_count, 0u);
-        } else {
-            invalidate_unsupported = true;
         }
+
+        guard.cleanup();
     }
 
     if (invalidate_unsupported) {

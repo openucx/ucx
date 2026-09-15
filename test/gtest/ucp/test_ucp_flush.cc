@@ -50,33 +50,6 @@ test_flush_inprogress_except_ep(uct_ep_h ep, unsigned flags,
     return test_flush_inprogress(ep, flags, comp);
 }
 
-static void
-test_flush_mock_ep_flush(ucp_ep_h ep, ucs::mock &mock,
-                         uct_ep_flush_func_t flush_func = test_flush_inprogress)
-{
-    uct_iface_h ifaces[UCP_MAX_LANES];
-    uct_iface_h iface;
-    unsigned lane;
-    unsigned i;
-    unsigned num_ifaces = 0;
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        iface = ucp_ep_get_lane(ep, lane)->iface;
-        for (i = 0; i < num_ifaces; ++i) {
-            if (iface == ifaces[i]) {
-                break;
-            }
-        }
-
-        if (i != num_ifaces) {
-            continue;
-        }
-
-        ifaces[num_ifaces++] = iface;
-        mock.setup(&iface->ops.ep_flush, flush_func);
-    }
-}
-
 static ucs_status_t
 test_flush_no_resource(uct_ep_h, unsigned, uct_completion_t *)
 {
@@ -93,6 +66,22 @@ static void test_flush_completion(ucp_request_t *req)
 {
     ucp_request_complete_send(req, req->status);
 }
+
+class test_flush_worker_cs_guard {
+public:
+    explicit test_flush_worker_cs_guard(ucp_worker_h worker) : m_worker(worker)
+    {
+        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(m_worker);
+    }
+
+    ~test_flush_worker_cs_guard()
+    {
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(m_worker);
+    }
+
+private:
+    ucp_worker_h m_worker;
+};
 
 class test_ucp_flush : public ucp_test {
 public:
@@ -172,7 +161,7 @@ UCS_TEST_P(test_ucp_flush, replace_lane_during_selective_flush)
     test_flush_eps[1]        = NULL;
     {
         ucs::mock mock;
-        test_flush_mock_ep_flush(ep, mock);
+        mock_ep_flush(ep, mock, test_flush_inprogress);
 
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
         request = ucp_ep_flush_lanes_internal(
@@ -240,7 +229,7 @@ UCS_TEST_P(test_ucp_flush, replace_other_lane_during_inprogress_flush)
     test_flush_eps[3]             = NULL;
     {
         ucs::mock mock;
-        test_flush_mock_ep_flush(ep, mock);
+        mock_ep_flush(ep, mock, test_flush_inprogress);
 
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
         request = ucp_ep_flush_lanes_internal(
@@ -352,35 +341,39 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
     test_flush_no_resource_ep = ucp_ep_get_lane(ep, 1);
     {
         ucs::mock mock;
-        test_flush_mock_ep_flush(ep, mock, test_flush_inprogress_except_ep);
+        mock_ep_flush(ep, mock, test_flush_inprogress_except_ep);
         mock.setup(&test_flush_no_resource_ep->iface->ops.ep_pending_add,
                    test_flush_pending_add);
 
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-        request = ucp_ep_flush_lanes_internal(
-                ep, 0, &param, NULL, test_flush_completion,
-                "restart_pending_skips_stale_resume", UCT_FLUSH_FLAG_LOCAL,
-                UCS_BIT(1));
-        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
-        req = static_cast<ucp_request_t*>(request) - 1;
-        initial_flush_count = test_flush_call_count;
-        ASSERT_GT(initial_flush_count, 0u);
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
 
-        ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
-        ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
-        ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
-        req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_RESTART_PENDING;
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+            request = ucp_ep_flush_lanes_internal(
+                    ep, 0, &param, NULL, test_flush_completion,
+                    "restart_pending_skips_stale_resume", UCT_FLUSH_FLAG_LOCAL,
+                    UCS_BIT(1));
+            ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+            req = static_cast<ucp_request_t*>(request) - 1;
+            initial_flush_count = test_flush_call_count;
+            ASSERT_GT(initial_flush_count, 0u);
+
+            ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
+            ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+            ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
+            req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_RESTART_PENDING;
+        }
 
         sender().progress();
         EXPECT_EQ(initial_flush_count, test_flush_call_count);
 
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-        req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_NOT_STARTED;
-        req->send.flush.uct_flags_orig |= UCT_FLUSH_FLAG_CANCEL;
-        req->send.lane = UCP_NULL_LANE;
-        ucp_ep_flush_request_ff(req, UCS_ERR_CANCELED);
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+
+            req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_NOT_STARTED;
+            req->send.flush.uct_flags_orig |= UCT_FLUSH_FLAG_CANCEL;
+            req->send.lane = UCP_NULL_LANE;
+            ucp_ep_flush_request_ff(req, UCS_ERR_CANCELED);
+        }
     }
 
     EXPECT_EQ(UCS_ERR_CANCELED, ucp_request_check_status(request));
