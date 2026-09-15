@@ -216,6 +216,8 @@ ucs_x86_nt_dst_avx2_buffer_transfer(void *dst, const void *src, size_t len)
     size_t offset;
     int src_aligned;
 
+    ucs_assert(len >= 64);
+
     /* (1) copy prefix to the next 64B cache-line boundary. */
     offset = ucs_x86_avx2_nt_prefix_to_line(dp, sp);
 
@@ -264,6 +266,8 @@ ucs_x86_nt_src_avx2_buffer_transfer(void *dst, const void *src, size_t len)
     const char *sp = src;
     size_t offset;
     int src_aligned;
+
+    ucs_assert(len >= 64);
 
     /* (1) copy prefix to the next 64B cache-line boundary. */
     offset = ucs_x86_avx2_nt_prefix_to_line(dp, sp);
