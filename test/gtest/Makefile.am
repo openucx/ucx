@@ -149,6 +149,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_fault_tolerance.cc \
 	ucp/test_ucp_atomic.cc \
+	ucp/test_ucp_gpu_nic_assignment.cc \
 	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_tls.cc \
 	ucp/test_ucp_memheap.cc \
