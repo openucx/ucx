@@ -801,6 +801,33 @@ protected:
 
         return rkey->cfg_index;
     }
+
+    static ucp_proto_t *find_proto(const std::string &name)
+    {
+        for (ucp_proto_id_t id = 0; id < ucp_protocols_count(); ++id) {
+            if (name == ucp_protocols[id]->name) {
+                /* The protocols are defined as non-const objects */
+                return const_cast<ucp_proto_t*>(ucp_protocols[id]);
+            }
+        }
+
+        return nullptr;
+    }
+
+    void test_cuda_rma(ucp_operation_id_t op_id,
+                       const proto_select_data_vec_t &data_vec)
+    {
+        auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
+                                            UCS_MEMORY_TYPE_CUDA);
+        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
+
+        ucp_proto_select_key_t key = any_key();
+        key.param.op_id_flags      = op_id;
+        key.param.op_attr          = 0;
+        key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
+
+        check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
+    }
 };
 
 class test_ucp_proto_mock_rcx : public test_ucp_proto_mock {
@@ -1042,6 +1069,133 @@ UCS_TEST_P(test_ucp_proto_mock_rcx3, single_lane_no_zcopy,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx3, rcx, "rc_x")
 
+/* Base class for RMA protocol selection on CUDA memory, over a single mocked
+ * high bandwidth device */
+class test_ucp_proto_mock_rcx_cuda : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_cuda()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        add_cuda_mock_iface();
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    void require_cuda_net_md()
+    {
+        if (!check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
+        }
+    }
+
+    /* Add the mocked device the test selects protocols on */
+    virtual void add_cuda_mock_iface() = 0;
+
+    static void set_mock_iface_attr(uct_iface_attr_t &iface_attr)
+    {
+        iface_attr.bandwidth.shared = 28e9;
+        iface_attr.latency.c        = 500e-9;
+        iface_attr.latency.m        = 1e-9;
+    }
+};
+
+/* Device which reads from remote memory much slower than it writes to it, like
+ * a GPU with no direct read data path to the peer memory */
+class test_ucp_proto_mock_rcx_slow_get : public test_ucp_proto_mock_rcx_cuda {
+protected:
+    virtual void add_cuda_mock_iface() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            set_mock_iface_attr(iface_attr);
+            /* Keep get_zcopy available on all message sizes */
+            iface_attr.cap.get.min_zcopy = 0;
+        }, [](uct_perf_attr_t &perf_attr) {
+            if (!(perf_attr.field_mask & UCT_PERF_ATTR_FIELD_OPERATION) ||
+                (perf_attr.operation != UCT_EP_OP_GET_ZCOPY)) {
+                return;
+            }
+
+            if (perf_attr.field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+                perf_attr.bandwidth.dedicated = 0;
+                perf_attr.bandwidth.shared    = UCS_MBYTE;
+            }
+
+            if (perf_attr.field_mask & UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH) {
+                perf_attr.path_bandwidth.dedicated = 0;
+                perf_attr.path_bandwidth.shared    = UCS_MBYTE;
+            }
+        });
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get, "IB_NUM_PATHS?=1")
+{
+    require_cuda_net_md();
+
+    /* On message sizes larger than about 1KB, get/rndv is cheaper than
+     * get/zcopy, since it makes the remote side write the data by the fast data
+     * path. It is not selected on any message size, because it is superseded by
+     * get/zcopy. */
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {1, INF, "zero-copy", "rc_mlx5/mock"},
+    });
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get_zcopy_thresh,
+           "IB_NUM_PATHS?=1", "ZCOPY_THRESH=4k",
+           "PROTO_EMULATION_ENABLE=n")
+{
+    require_cuda_net_md();
+
+    /* With software emulation disabled, get/zcopy and get/rndv are the only
+     * candidates. Below ZCOPY_THRESH both are disabled by configuration and
+     * re-enabled as a fallback; get/rndv must still be superseded, leaving
+     * only get/zcopy. */
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {1, INF, "zero-copy", "rc_mlx5/mock"},
+    });
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_slow_get, rcx_gpu,
+                              "rc_x,cuda,rocm")
+
+/* Device with no get_zcopy data path at all, like cuda_ipc without NVLink */
+class test_ucp_proto_mock_rcx_no_get_zcopy :
+    public test_ucp_proto_mock_rcx_cuda {
+protected:
+    virtual void add_cuda_mock_iface() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            set_mock_iface_attr(iface_attr);
+            iface_attr.cap.get.max_zcopy = 0;
+        });
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_no_get_zcopy, get, "IB_NUM_PATHS?=1")
+{
+    require_cuda_net_md();
+
+    /* No get/zcopy protocol is available, so no protocol supersedes get/rndv
+     * and it is selected, without having to exclude get/zcopy by UCX_PROTOS. */
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {1,    1928, "rndv using zero-copy", "rc_mlx5/mock"},
+        {1929, INF,  "rndv using zero-copy fenced write to remote",
+         "rc_mlx5/mock"},
+    });
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_no_get_zcopy, rcx_gpu,
+                              "rc_x,cuda,rocm")
+
 class test_ucp_proto_mock_rcx_numa : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_rcx_numa() :
@@ -1254,6 +1408,87 @@ UCS_TEST_P(test_ucp_proto_mock_cma, am_send_1_lane)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_cma, mm_cma, "posix,cma")
+
+/*
+ * Test the protocol supersede rule, which is used to keep put/rndv and
+ * get/rndv out of protocol selection wherever a zcopy protocol is available.
+ * Those protocols require non-host memory, so the rule is tested here on the
+ * eager protocols selected by test_ucp_proto_mock_cma.am_send_1_lane, which
+ * uses the same mock configuration.
+ */
+class test_ucp_proto_mock_supersede : public test_ucp_proto_mock_cma {
+public:
+    /* Protocol selection is done when the endpoint is connected, so the rule
+     * must be added before that */
+    virtual void post_ucp_init() override
+    {
+        ucp_proto_t *superseded = find_proto("am/egr/short");
+        ucp_proto_t *superseder = find_proto("am/egr/single/bcopy");
+        ASSERT_NE(nullptr, superseded);
+        ASSERT_NE(nullptr, superseder);
+
+        m_supersede.reset(
+                new scoped_supersede(superseded, superseder, TEST_PROTO_CLASS));
+
+        test_ucp_proto_mock_cma::post_ucp_init();
+    }
+
+private:
+    /* Declares a supersede rule between two protocols, and restores the global
+     * 'ucp_protocols[]' entries when destroyed. The rule is scoped to the test
+     * object rather than to cleanup(), which is not called when init() fails
+     * after the rule was added.
+     */
+    class scoped_supersede {
+    public:
+        scoped_supersede(ucp_proto_t *superseded, ucp_proto_t *superseder,
+                         unsigned proto_class) :
+            m_superseded(superseded),
+            m_superseder(superseder),
+            m_superseded_by(superseded->superseded_by),
+            m_proto_class(superseder->proto_class)
+        {
+            m_superseded->superseded_by = proto_class;
+            m_superseder->proto_class   = proto_class;
+        }
+
+        ~scoped_supersede()
+        {
+            m_superseded->superseded_by = m_superseded_by;
+            m_superseder->proto_class   = m_proto_class;
+        }
+
+    private:
+        ucp_proto_t *m_superseded;
+        ucp_proto_t *m_superseder;
+        unsigned    m_superseded_by;
+        unsigned    m_proto_class;
+    };
+
+    /* Protocol class which is not used by any protocol, so that the test does
+     * not depend on the classes declared by the RMA protocols */
+    static const unsigned TEST_PROTO_CLASS = UCS_BIT(31);
+
+    std::unique_ptr<scoped_supersede> m_supersede;
+};
+
+UCS_TEST_P(test_ucp_proto_mock_supersede, am_send_1_lane)
+{
+    ucp_proto_select_key_t key = any_key();
+    key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
+    key.param.op_attr          = 0;
+
+    /* The short protocol is superseded by the copy-in protocol, so it is not
+     * selected anymore, even though it is faster on small message sizes. The
+     * ranges which the copy-in protocol does not cover are not affected. */
+    check_ep_config(sender(), {
+        {0,    5028, "copy-in",                               "posix/memory"},
+        {5029, INF,  "rendezvous zero-copy read from remote", "cma/mock"},
+    }, key);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_supersede, mm_cma,
+                              "posix,cma")
 
 class test_ucp_proto_mock_tcp : public test_ucp_proto_mock {
 public:
@@ -1670,21 +1905,6 @@ public:
     {
         mock_cuda_ipc_remote_pid(sender().worker());
         mock_cuda_ipc_remote_pid(receiver().worker());
-    }
-
-    void test_cuda_rma(ucp_operation_id_t op_id,
-                       const proto_select_data_vec_t &data_vec)
-    {
-        auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
-                                            UCS_MEMORY_TYPE_CUDA);
-        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
-
-        ucp_proto_select_key_t key = any_key();
-        key.param.op_id_flags      = op_id;
-        key.param.op_attr          = 0;
-        key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
-
-        check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
     }
 };
 

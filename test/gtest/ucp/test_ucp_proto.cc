@@ -999,9 +999,11 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
 }
 
+/* Remove the GET zcopy protocol, which supersedes GET/RNDV on registrable
+ * memory, so that GET/RNDV is always selected */
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
            cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",
-           "RNDV_SCHEME=get_zcopy", "RMA_PPLN_ENABLE=y")
+           "RNDV_SCHEME=get_zcopy", "PROTOS=^get/zcopy")
 {
     /* Keep the real CUDA allocation small, but inspect a large protocol range
      * where RMA GET/RNDV is selected. */

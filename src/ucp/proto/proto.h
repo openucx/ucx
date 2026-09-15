@@ -86,6 +86,17 @@ enum {
 
 
 /**
+ * Protocol classes, used to prioritize protocols which implement the same
+ * operation by a different data path. A class must not be superseded, directly
+ * or indirectly, by a class it supersedes.
+ */
+enum {
+    /* RMA by a direct uct_ep_put_zcopy()/uct_ep_get_zcopy() data path */
+    UCP_PROTO_CLASS_RMA_ZCOPY = UCS_BIT(0)
+};
+
+
+/**
  * Parameters for protocol initialization function
  */
 typedef struct {
@@ -201,6 +212,15 @@ struct ucp_proto {
     const char               *name; /* Protocol name */
     const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
+
+    /* Bitmap of UCP_PROTO_CLASS_xxx classes this protocol belongs to */
+    unsigned                 proto_class;
+
+    /* Bitmap of UCP_PROTO_CLASS_xxx classes which supersede this protocol. It
+     * is not selected on message sizes where a protocol of any of these
+     * classes is available.
+     */
+    unsigned                 superseded_by;
 
     /* Bitmap of UCS_BIT(UCP_DATATYPE_xxx) classes this protocol supports.
      * Probe is skipped for any other dt_class. Must be non-zero.

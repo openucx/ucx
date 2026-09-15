@@ -45,6 +45,54 @@ static const void *ucp_proto_select_init_priv_buf(
 }
 
 /*
+ * Disables the protocols which are superseded by a protocol class available on
+ * the current message size range.
+ */
+static void ucp_proto_select_disable_superseded(
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *proto_mask,
+        ucs_dynamic_bitmap_t *disabled_proto_mask)
+{
+    const ucp_proto_init_elem_t *proto;
+    unsigned avail_classes, proto_class, superseded_by;
+    unsigned proto_idx;
+
+    avail_classes = 0;
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto         = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        proto_class   = ucp_proto_id_field(proto->proto_id, proto_class);
+        superseded_by = ucp_proto_id_field(proto->proto_id, superseded_by);
+        ucs_assertv((proto_class & superseded_by) == 0,
+                    "%s: proto_class 0x%x overlaps superseded_by 0x%x",
+                    ucp_proto_id_field(proto->proto_id, name), proto_class,
+                    superseded_by);
+
+        if (ucs_dynamic_bitmap_get(disabled_proto_mask, proto_idx)) {
+            continue;
+        }
+
+        avail_classes |= proto_class;
+    }
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        if (ucs_dynamic_bitmap_get(disabled_proto_mask, proto_idx)) {
+            continue;
+        }
+
+        proto         = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        superseded_by = ucp_proto_id_field(proto->proto_id, superseded_by) &
+                        avail_classes;
+        if (superseded_by == 0) {
+            continue;
+        }
+
+        ucs_dynamic_bitmap_set(disabled_proto_mask, proto_idx);
+        ucs_trace("disable %s: superseded by protocol class 0x%x",
+                  ucp_proto_id_field(proto->proto_id, name), superseded_by);
+    }
+}
+
+/*
  * Fills 'proto_mask' and 'perf_list' with candidate protocols for the next
  * range, and sets *max_length_p to the end of that range.
  */
@@ -140,19 +188,23 @@ static ucs_status_t ucp_proto_thresholds_next_range(
                   proto->cfg_priority, max_prio_proto_name, max_cfg_priority);
     }
 
-    /* Remove disabled protocols. 'disabled_proto_mask' must be contained in
-     * 'valid_proto_mask'. */
+    /* If all protocols were disabled, we couldn't have any configured protocol
+     * (because that protocol would be enabled). In this case we allow using
+     * disabled protocols as well.
+     */
     if (ucs_dynamic_bitmap_is_equal(proto_mask, &disabled_proto_mask)) {
-        /* If all protocols were disabled, we couldn't have any configured
-         * protocol (because that protocol would be enabled). In this case we
-         * allow using disabled protocols as well.
-         */
         ucs_assert(max_cfg_priority == 0);
-    } else {
-        ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
-                                       ucs_dynamic_bitmap_num_bits(proto_mask));
-        ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
+        ucs_dynamic_bitmap_reset_all(&disabled_proto_mask);
     }
+
+    ucp_proto_select_disable_superseded(proto_init, proto_mask,
+                                        &disabled_proto_mask);
+
+    /* Remove disabled protocols. 'disabled_proto_mask' is contained in
+     * 'proto_mask', and the supersede rule never disables all protocols. */
+    ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
+                                   ucs_dynamic_bitmap_num_bits(proto_mask));
+    ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
     ucs_assert(!ucs_dynamic_bitmap_is_zero(proto_mask));
 
     /* Add data to perf_list */

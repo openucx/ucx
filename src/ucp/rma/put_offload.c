@@ -346,15 +346,16 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 }
 
 ucp_proto_t ucp_put_offload_zcopy_proto = {
-    .name     = "put/offload/zcopy",
-    .desc     = UCP_PROTO_ZCOPY_DESC,
-    .flags    = 0,
-    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
-    .probe    = ucp_proto_put_offload_zcopy_probe,
-    .query    = ucp_proto_multi_query,
-    .progress = {ucp_proto_put_offload_zcopy_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = ucp_proto_offload_zcopy_reset
+    .name        = "put/offload/zcopy",
+    .desc        = UCP_PROTO_ZCOPY_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_ZCOPY,
+    .dt_mask     = UCP_DT_MASK_CONTIG_IOV,
+    .probe       = ucp_proto_put_offload_zcopy_probe,
+    .query       = ucp_proto_multi_query,
+    .progress    = {ucp_proto_put_offload_zcopy_progress},
+    .abort       = ucp_proto_request_zcopy_abort,
+    .reset       = ucp_proto_offload_zcopy_reset
 };
 
 static void
