@@ -405,7 +405,7 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
                       &prop, 0);
 
     status = UCS_ERR_NO_MEMORY;
-    CUDA_DRV_CALL(goto release_handle, UCS_LOG_LEVEL_ERROR,
+    CUDA_DRV_CALL(goto out_release_handle, UCS_LOG_LEVEL_ERROR,
                   cuMemAddressReserve, &dptr, alloc_length, granularity, 0, 0);
 
     CUDA_DRV_CALL(goto err_address_free, UCS_LOG_LEVEL_ERROR, cuMemMap, dptr,
@@ -422,13 +422,13 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
      * and the memory is reclaimed when the range is unmapped. */
     *address_p = (void*)dptr;
     status     = UCS_OK;
-    goto release_handle;
+    goto out_release_handle;
 
 err_unmap:
     CUDA_DRV_CALL_WARN(cuMemUnmap, dptr, alloc_length);
 err_address_free:
     CUDA_DRV_CALL_WARN(cuMemAddressFree, dptr, alloc_length);
-release_handle:
+out_release_handle:
     CUDA_DRV_CALL_WARN(cuMemRelease, handle);
     return status;
 }
@@ -479,48 +479,6 @@ static void ucx_perf_cuda_localized_uct_free(const ucx_perf_context_t *perf,
 {
     ucx_perf_cuda_uct_dereg(perf, alloc_mem);
     ucx_perf_cuda_localized_mem_free(perf, alloc_mem->address);
-}
-
-#else /* !HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN */
-
-static ucs_status_t
-ucx_perf_cuda_localized_init(ucx_perf_context_t *UCS_V_UNUSED perf)
-{
-    ucs_error("cuda-localized requires CUDA headers with "
-              "CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN (CUDA >= 13.4); "
-              "this build was compiled without that support");
-    return UCS_ERR_UNSUPPORTED;
-}
-
-static ucs_status_t
-ucx_perf_cuda_localized_mem_alloc(const ucx_perf_context_t *UCS_V_UNUSED perf,
-                                  size_t UCS_V_UNUSED length,
-                                  void **UCS_V_UNUSED address_p)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-static void
-ucx_perf_cuda_localized_mem_free(const ucx_perf_context_t *UCS_V_UNUSED perf,
-                                 void *UCS_V_UNUSED address)
-{
-}
-
-static ucs_status_t
-ucx_perf_cuda_localized_uct_alloc(const ucx_perf_context_t *UCS_V_UNUSED perf,
-                                  size_t UCS_V_UNUSED length,
-                                  unsigned UCS_V_UNUSED flags,
-                                  uct_allocated_memory_t
-                                          *UCS_V_UNUSED alloc_mem)
-{
-    return UCS_ERR_UNSUPPORTED;
-}
-
-static void
-ucx_perf_cuda_localized_uct_free(
-        const ucx_perf_context_t *UCS_V_UNUSED perf,
-        uct_allocated_memory_t *UCS_V_UNUSED alloc_mem)
-{
 }
 
 #endif /* HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN */
@@ -591,10 +549,7 @@ static ucx_perf_allocator_t cuda_managed_allocator = {
     .memset           = ucx_perf_cuda_memset
 };
 
-/* Always registered, regardless of build-time CUDA header support: this
- * allocator must always show up in the allocator list, and instead fail
- * clearly from init() when unsupported (see the
- * HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN branches above). */
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
 static ucx_perf_allocator_t cuda_localized_allocator = {
     .name             = "cuda-localized",
     .default_mem_type = UCS_MEMORY_TYPE_CUDA,
@@ -607,12 +562,15 @@ static ucx_perf_allocator_t cuda_localized_allocator = {
     .memcpy           = ucx_perf_cuda_memcpy,
     .memset           = ucx_perf_cuda_memset
 };
+#endif
 
 UCS_STATIC_INIT {
     ucx_perf_allocator_register(&cuda_ucp_allocator);
     ucx_perf_allocator_register(&cuda_alloc_allocator);
     ucx_perf_allocator_register(&cuda_managed_allocator);
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
     ucx_perf_allocator_register(&cuda_localized_allocator);
+#endif
 #if CUDART_VERSION >= 11020
     ucx_perf_allocator_register(&cuda_async_allocator);
 #endif
@@ -622,7 +580,9 @@ UCS_STATIC_CLEANUP {
 #if CUDART_VERSION >= 11020
     ucx_perf_allocator_unregister(&cuda_async_allocator);
 #endif
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
     ucx_perf_allocator_unregister(&cuda_localized_allocator);
+#endif
     ucx_perf_allocator_unregister(&cuda_managed_allocator);
     ucx_perf_allocator_unregister(&cuda_alloc_allocator);
     ucx_perf_allocator_unregister(&cuda_ucp_allocator);
