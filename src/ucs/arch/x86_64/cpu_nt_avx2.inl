@@ -15,7 +15,9 @@ static UCS_F_ALWAYS_INLINE void
 ucs_x86_avx2_nt_tail_copy(void *dst, const void *src, size_t len)
 {
     __m256i y0, y1;
+
     dst = __builtin_assume_aligned(dst, 64);
+
     if (len >= 32) {
         y0 = _mm256_loadu_si256(src);
         y1 = _mm256_loadu_si256(UCS_PTR_BYTE_OFFSET(src, len - 32));
