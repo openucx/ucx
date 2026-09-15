@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -49,9 +49,6 @@ BEGIN_C_DECLS
 
 #define CUDA_DRV_CALL_RET(_ret, _func, ...) \
     CUDA_DRV_CALL(return _ret, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
-
-#define CUDA_DRV_CALL_ERR(_func, ...) \
-    CUDA_DRV_CALL(, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
 
 #define CUDA_DRV_CALL_WARN(_func, ...) \
     CUDA_DRV_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)

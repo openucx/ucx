@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -405,8 +405,8 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
                        &prop, 0);
 
     status = UCS_ERR_NO_MEMORY;
-    CUDA_DRV_CALL(goto err_release, UCS_LOG_LEVEL_ERROR, cuMemAddressReserve,
-                  &dptr, alloc_length, granularity, 0, 0);
+    CUDA_DRV_CALL(goto release_handle, UCS_LOG_LEVEL_ERROR,
+                  cuMemAddressReserve, &dptr, alloc_length, granularity, 0, 0);
 
     CUDA_DRV_CALL(goto err_address_free, UCS_LOG_LEVEL_ERROR, cuMemMap, dptr,
                   alloc_length, 0, handle, 0);
@@ -418,14 +418,17 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
     CUDA_DRV_CALL(goto err_unmap, UCS_LOG_LEVEL_ERROR, cuMemSetAccess, dptr,
                   alloc_length, &access_desc, 1);
 
+    /* The mapping keeps the allocation alive, so the handle is released here
+     * and the memory is reclaimed when the range is unmapped. */
     *address_p = (void*)dptr;
-    return UCS_OK;
+    status     = UCS_OK;
+    goto release_handle;
 
 err_unmap:
     CUDA_DRV_CALL_WARN(cuMemUnmap, dptr, alloc_length);
 err_address_free:
     CUDA_DRV_CALL_WARN(cuMemAddressFree, dptr, alloc_length);
-err_release:
+release_handle:
     CUDA_DRV_CALL_WARN(cuMemRelease, handle);
     return status;
 }
@@ -435,22 +438,18 @@ ucx_perf_cuda_localized_mem_free(const ucx_perf_context_t *UCS_V_UNUSED perf,
                                  void *address)
 {
     CUdeviceptr dptr = (CUdeviceptr)address;
-    CUmemGenericAllocationHandle handle;
     CUdeviceptr base;
     size_t alloc_length;
 
     /* mem_alloc()/uct_alloc() only return a bare address, with no slot to
-     * stash the allocation handle across the buffer's lifetime, so the
-     * handle is re-derived here (same technique as
-     * uct_cuda_ipc_mem_export_fabric()) right before releasing it. */
+     * stash the mapped length across the buffer's lifetime, so it is
+     * re-derived here. The range cannot be unmapped without it, and the query
+     * only fails for an address which was never mapped. */
     CUDA_DRV_CALL(return, UCS_LOG_LEVEL_ERROR, cuMemGetAddressRange, &base,
                   &alloc_length, dptr);
-    CUDA_DRV_CALL(return, UCS_LOG_LEVEL_ERROR, cuMemRetainAllocationHandle,
-                  &handle, address);
 
     CUDA_DRV_CALL_WARN(cuMemUnmap, dptr, alloc_length);
     CUDA_DRV_CALL_WARN(cuMemAddressFree, dptr, alloc_length);
-    CUDA_DRV_CALL_WARN(cuMemRelease, handle);
 }
 
 static ucs_status_t ucx_perf_cuda_localized_uct_alloc(
