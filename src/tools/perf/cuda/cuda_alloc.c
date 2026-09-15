@@ -118,9 +118,12 @@ static void ucx_perf_cuda_async_mem_free(
 }
 #endif
 
+/* Register the already allocated buffer, releasing it with @a mem_free if the
+ * registration fails */
 static ucs_status_t ucx_perf_cuda_uct_reg_mem(
         const ucx_perf_context_t *perf, size_t length,
         ucs_memory_type_t mem_type, unsigned flags,
+        ucx_perf_mem_free_func_t mem_free,
         uct_allocated_memory_t *alloc_mem)
 {
     uct_md_attr_v2_t md_attr = {.field_mask = UCT_MD_ATTR_FIELD_REG_ALIGNMENT};
@@ -131,7 +134,7 @@ static ucs_status_t ucx_perf_cuda_uct_reg_mem(
     status = uct_md_query_v2(perf->uct.md, &md_attr);
     if (status != UCS_OK) {
         ucs_error("uct_md_query_v2() returned %d", status);
-        return status;
+        goto err_free;
     }
 
     /* Register memory respecting MD reg_alignment */
@@ -143,13 +146,17 @@ static ucs_status_t ucx_perf_cuda_uct_reg_mem(
                                  mem_type, &alloc_mem->memh);
     if (status != UCS_OK) {
         ucs_error("failed to register memory");
-        return status;
+        goto err_free;
     }
 
     alloc_mem->mem_type = mem_type;
     alloc_mem->md       = perf->uct.md;
     alloc_mem->length   = length;
     return UCS_OK;
+
+err_free:
+    mem_free(perf, alloc_mem->address);
+    return status;
 }
 
 static ucs_status_t ucx_perf_cuda_uct_alloc_reg_mem(
@@ -164,14 +171,8 @@ static ucs_status_t ucx_perf_cuda_uct_alloc_reg_mem(
         return status;
     }
 
-    status = ucx_perf_cuda_uct_reg_mem(perf, length, mem_type, flags,
-                                       alloc_mem);
-    if (status != UCS_OK) {
-        CUDA_CALL_WARN(cudaFree, alloc_mem->address);
-        return status;
-    }
-
-    return UCS_OK;
+    return ucx_perf_cuda_uct_reg_mem(perf, length, mem_type, flags,
+                                     ucx_perf_cuda_alloc_mem_free, alloc_mem);
 }
 
 static ucs_status_t ucx_perf_cuda_uct_alloc(const ucx_perf_context_t *perf,
@@ -310,14 +311,8 @@ static ucs_status_t ucx_perf_cuda_async_uct_alloc(
     }
 
     mem_type = ucx_perf_cuda_async_mem_type(perf, alloc_mem->address, length);
-    status = ucx_perf_cuda_uct_reg_mem(perf, length, mem_type, flags,
-                                       alloc_mem);
-    if (status != UCS_OK) {
-        ucx_perf_cuda_async_mem_free(perf, alloc_mem->address);
-        return status;
-    }
-
-    return UCS_OK;
+    return ucx_perf_cuda_uct_reg_mem(perf, length, mem_type, flags,
+                                     ucx_perf_cuda_async_mem_free, alloc_mem);
 }
 #endif
 
@@ -351,26 +346,6 @@ static void ucx_perf_cuda_async_uct_free(const ucx_perf_context_t *perf,
 #endif
 
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
-
-static ucs_status_t ucx_perf_cuda_localized_init(ucx_perf_context_t *perf)
-{
-    int driver_version;
-    ucs_status_t status;
-
-    status = ucx_perf_cuda_init(perf);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    CUDA_DRV_CALL_RET(UCS_ERR_IO_ERROR, cuDriverGetVersion, &driver_version);
-    if (driver_version < 13040) {
-        ucs_error("cuda-localized requires CUDA driver >= 13.4, found %d.%d",
-                  driver_version / 1000, (driver_version % 1000) / 10);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    return UCS_OK;
-}
 
 static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
         const ucx_perf_context_t *perf, size_t length, void **address_p)
@@ -464,14 +439,9 @@ static ucs_status_t ucx_perf_cuda_localized_uct_alloc(
         return status;
     }
 
-    status = ucx_perf_cuda_uct_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA,
-                                       flags, alloc_mem);
-    if (status != UCS_OK) {
-        ucx_perf_cuda_localized_mem_free(perf, alloc_mem->address);
-        return status;
-    }
-
-    return UCS_OK;
+    return ucx_perf_cuda_uct_reg_mem(perf, length, UCS_MEMORY_TYPE_CUDA, flags,
+                                     ucx_perf_cuda_localized_mem_free,
+                                     alloc_mem);
 }
 
 static void ucx_perf_cuda_localized_uct_free(const ucx_perf_context_t *perf,
@@ -553,7 +523,7 @@ static ucx_perf_allocator_t cuda_managed_allocator = {
 static ucx_perf_allocator_t cuda_localized_allocator = {
     .name             = "cuda-localized",
     .default_mem_type = UCS_MEMORY_TYPE_CUDA,
-    .init             = ucx_perf_cuda_localized_init,
+    .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_localized_uct_alloc,
     .uct_free         = ucx_perf_cuda_localized_uct_free,
     .mem_alloc        = ucx_perf_cuda_localized_mem_alloc,
