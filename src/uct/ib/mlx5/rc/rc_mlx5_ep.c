@@ -1058,7 +1058,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             txwq->ft_ci, uct_ib_mlx5_wqe_size(ctrl));
 
     if (start_ci == end_ci) {
-        goto out_purge;
+        goto out;
     }
 
     num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
@@ -1082,7 +1082,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
         if (num_packets == 0) {
-            continue;
+            goto purge_completions;
         }
 
         is_delivered = uct_ib_mlx5_wqe_is_delivered(
@@ -1094,7 +1094,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             status = uct_rc_mlx5_op_info_fill_am(
                     txwq, ctrl, wqe_size, callback_data, &info);
             if (status == UCS_ERR_NO_ELEM) {
-                continue;
+                goto purge_completions;
             }
 
             if (status != UCS_OK) {
@@ -1104,11 +1104,14 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
             params->cb(&info, callback_arg);
         }
+
+purge_completions:
+        /* Complete flushes after their WQE, before later AM purge callbacks. */
+        uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
+                                      UCS_ERR_CANCELED, ci, 0);
     }
 
-out_purge:
-    uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
-                                  UCS_ERR_CANCELED, txwq->prev_sw_pi, 0);
+out:
     uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;

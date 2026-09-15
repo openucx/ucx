@@ -377,6 +377,8 @@ protected:
         test_uct_purge_outstanding *self;
         uct_completion_t           comp;
         uint32_t                   num_ops_purged;
+        uint32_t                   num_ops_purged_at_completion;
+        uint32_t                   num_ops_posted_after_flush;
         uint32_t                   num_flush_purged;
         unsigned                   num_completions;
         uint8_t                    am_short_id;
@@ -523,6 +525,7 @@ protected:
     {
         purge_ctx *ctx = ucs_container_of(comp, purge_ctx, comp);
 
+        ctx->num_ops_purged_at_completion = ctx->num_ops_purged;
         ++ctx->num_completions;
     }
 
@@ -573,6 +576,7 @@ protected:
         static constexpr uint32_t NUM_MSG_BEFORE_INVALIDATE = 2;
         uct_ep_invalidate_params_t invalidate_params = {};
         uint32_t num_posted = 0;
+        uint32_t num_ops_purged;
         unsigned num_outstanding, num_completions;
         ucs_status_t status;
 
@@ -582,10 +586,15 @@ protected:
         }
 
         ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
-        /* Post after invalidation so flush exercises local cancellation. */
+        /* Make flush wait for failed work even if it reuses a signaled WQE. */
+        status = post_op(m_sender->ep(0), &ctx.comp, send_func);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        ++num_posted;
+
         post_flush(m_sender->ep(0), &ctx.comp);
-        num_posted += post_until_error(m_sender->ep(0), &ctx.comp,
-                                       send_func);
+        ctx.num_ops_posted_after_flush = post_until_error(
+                m_sender->ep(0), &ctx.comp, send_func);
+        num_posted += ctx.num_ops_posted_after_flush;
 
         wait_for_flag(&m_err_count);
         ASSERT_EQ(1u, m_err_count);
@@ -606,6 +615,11 @@ protected:
 
         EXPECT_EQ(num_completions, ctx.num_completions);
 
+        num_ops_purged = ctx.num_ops_purged;
+        purge_outstanding(&ctx);
+        EXPECT_EQ(num_ops_purged, ctx.num_ops_purged);
+        EXPECT_EQ(num_completions, ctx.num_completions);
+
         flush();
         EXPECT_EQ(0, ctx.comp.count);
     }
@@ -618,7 +632,7 @@ protected:
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    purge_ctx ctx = {this, {completion_cb, 0, UCS_OK}, 0, 0, 0,
+    purge_ctx ctx = {this, {completion_cb, 0, UCS_OK}, 0, 0, 0, 0, 0,
                      3, 0x0123456789abcdefull, {1, 2, 3, 4}};
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), ctx.am_short_id,
@@ -629,6 +643,11 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                                ctx.am_short_payload.data(),
                                ctx.am_short_payload.size());
     }, ctx);
+
+    EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
+    EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
+    EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
+                                  ctx.num_ops_posted_after_flush);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
