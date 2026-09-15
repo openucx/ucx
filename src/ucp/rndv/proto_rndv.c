@@ -16,6 +16,56 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK);
+    ucs_hlist_del(&ep->ext->rndv_mtype_fc_reqs,
+                  &req->send.rndv.fc.ep_list);
+    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK;
+}
+
+unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert((req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK) ==
+               UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
+    ucp_proto_rndv_mtype_fc_leave(req);
+    ucp_request_send(req);
+    return 1;
+}
+
+int ucp_proto_rndv_mtype_fc_reschedule_filter(
+        const ucs_callbackq_elem_t *elem, void *arg)
+{
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    ucs_assertv(0, "ep %p still has mtype FC reschedule callback for req %p",
+                arg, elem->arg);
+    ucs_error("ep %p still has mtype FC reschedule callback for req %p", arg,
+              elem->arg);
+    return 1;
+}
+
+void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
+{
+    ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
+    ucp_request_t *req;
+
+    while (!ucs_hlist_is_empty(fc_reqs)) {
+        req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                  send.rndv.fc.ep_list);
+        ucp_proto_request_abort(req, status);
+        ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
+                   (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                        send.rndv.fc.ep_list) != req));
+    }
+}
+
 static void
 ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucp_md_map_t *md_map,

@@ -21,16 +21,6 @@
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 
-unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
-{
-    ucp_request_t *req = arg;
-
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
-    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
-    ucp_request_send(req);
-    return 1;
-}
-
 static UCS_F_ALWAYS_INLINE int
 ucp_rndv_frag_mem_type(ucp_context_t *context)
 {

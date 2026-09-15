@@ -74,6 +74,10 @@ enum {
     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED = UCS_BIT(31)
 };
 
+#define UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK \
+    (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED | \
+     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED)
+
 
 /**
  * Protocols enumerator to work with send request state
@@ -328,15 +332,17 @@ struct ucp_request {
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
                                     /* Size to send in ack message */
-                                    ssize_t          ack_data_size;
-                                    /* Element in worker-level pending queue for
-                                     * throttled ppln, put/mtype, get/mtype and
-                                     * rtr/mtype requests. Sibling union members
-                                     * (e.g. put.*) must stay unused until
-                                     * UCP_REQUEST_FLAG_PROTO_INITIALIZED is
-                                     * set. */
-                                    ucs_queue_elem_t queue_elem;
+                                    ssize_t ack_data_size;
                                 } ppln;
+
+                                /* Used by throttled rndv mtype requests before
+                                 * UCP_REQUEST_FLAG_PROTO_INITIALIZED is set. */
+                                struct {
+                                    /* Element in worker-level pending queue */
+                                    ucs_queue_elem_t queue_elem;
+                                    /* Element in per-EP list */
+                                    ucs_hlist_link_t ep_list;
+                                } fc;
 
                                 /* Used by rndv/rkey_ptr */
                                 struct {

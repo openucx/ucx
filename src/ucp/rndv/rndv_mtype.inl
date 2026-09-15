@@ -50,7 +50,8 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                                   ucs_sys_device_t frag_sys_dev,
                                   unsigned fc_op)
 {
-    ucp_worker_h worker = req->send.ep->worker;
+    ucp_ep_h ep         = req->send.ep;
+    ucp_worker_h worker = ep->worker;
     ucs_status_t status;
 
     req->send.rndv.mdesc = NULL;
@@ -71,12 +72,12 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                   frag_sys_dev);
     UCS_STATS_UPDATE_COUNTER(worker->stats,
                              UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
-    ucs_assert(!(req->flags &
-                 (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
-                  UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED)));
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK));
     req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
-                   &req->send.rndv.ppln.queue_elem);
+                   &req->send.rndv.fc.queue_elem);
+    ucs_hlist_add_tail(&ep->ext->rndv_mtype_fc_reqs,
+                       &req->send.rndv.fc.ep_list);
 
     return UCS_ERR_NO_RESOURCE;
 }
@@ -200,27 +201,26 @@ ucp_proto_rndv_mtype_fc_reschedule_pred(const ucs_callbackq_elem_t *elem,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
 {
-    ucp_worker_h worker = req->send.ep->worker;
+    ucp_ep_h ep = req->send.ep;
 
     ucs_assert(fc_op < UCP_WORKER_RNDV_FC_OP_LAST);
     ucs_assert(!ucs_test_all_flags(req->flags,
-                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED |
-                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED));
+                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK));
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED) {
         ucp_trace_req(req, "mtype_fc: remove aborted request from queue");
-        ucs_queue_remove(&worker->rndv_mtype_fc.pending_q[fc_op],
-                         &req->send.rndv.ppln.queue_elem);
-        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+        ucs_queue_remove(&ep->worker->rndv_mtype_fc.pending_q[fc_op],
+                         &req->send.rndv.fc.queue_elem);
+    } else if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED) {
+        ucp_trace_req(req, "mtype_fc: remove aborted reschedule callback");
+        ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, ep,
+                                     ucp_proto_rndv_mtype_fc_reschedule_pred,
+                                     req);
+    } else {
+        return;
     }
 
-    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED) {
-        ucp_trace_req(req, "mtype_fc: remove aborted reschedule callback");
-        ucs_callbackq_remove_oneshot(
-                &worker->uct->progress_q, req,
-                ucp_proto_rndv_mtype_fc_reschedule_pred, req);
-        req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
-    }
+    ucp_proto_rndv_mtype_fc_leave(req);
 }
 
 /**
@@ -248,16 +248,15 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_request_t *req)
 
         pending_req = ucs_queue_pull_elem_non_empty(
                 &worker->rndv_mtype_fc.pending_q[q_index], ucp_request_t,
-                send.rndv.ppln.queue_elem);
-        ucs_assert(pending_req->flags &
+                send.rndv.fc.queue_elem);
+        ucs_assert((pending_req->flags &
+                    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK) ==
                    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED);
-        ucs_assert(!(pending_req->flags &
-                     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED));
         pending_req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
         pending_req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
         ucp_trace_req(pending_req, "mtype_fc: dequeue %s",
                       (q_index == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get");
-        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req,
+        ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req->send.ep,
                                   ucp_proto_rndv_mtype_fc_reschedule_cb,
                                   pending_req);
         return;

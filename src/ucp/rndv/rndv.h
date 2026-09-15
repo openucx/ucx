@@ -120,6 +120,17 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
 
 unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg);
 
+int ucp_proto_rndv_mtype_fc_reschedule_filter(
+        const ucs_callbackq_elem_t *elem, void *arg);
+
+void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req);
+
+/**
+ * Abort every request of an endpoint that is waiting for an rndv mtype
+ * fragment.
+ */
+void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status);
+
 void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                       const void *rkey_buf);

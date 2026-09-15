@@ -391,6 +391,8 @@ ucp_proto_rndv_rtr_mtype_abort(ucp_request_t *req, ucs_status_t status)
 
 static ucs_status_t ucp_proto_rndv_rtr_mtype_reset(ucp_request_t *req)
 {
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_RTR);
+
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucp_proto_rndv_mtype_mdesc_release(req);
     }

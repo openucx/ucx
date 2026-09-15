@@ -376,6 +376,8 @@ ucp_proto_rndv_get_mtype_query(const ucp_proto_query_params_t *params,
 
 static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
 {
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_GET);
+
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         return UCS_OK;
     }
@@ -391,6 +393,33 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
     return UCS_OK;
 }
 
+static void
+ucp_proto_rndv_get_mtype_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_request_t *super_req;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK)) {
+        ucp_proto_abort_fatal_not_implemented(req, status);
+        return;
+    }
+
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_GET);
+    if (ucp_proto_rndv_request_is_ppln_frag(req)) {
+        super_req         = ucp_request_get_super(req);
+        super_req->status = status;
+
+        /* The pipeline has a top-level receive request that also needs to be
+         * completed with the error. */
+        ucp_request_get_super(super_req)->status = status;
+        ucp_proto_rndv_ppln_recv_frag_complete(req, 0, 1);
+    } else {
+        if (req->send.rndv.rkey != NULL) {
+            ucp_proto_rndv_rkey_destroy(req);
+        }
+        ucp_proto_rndv_recv_complete_status(req, status);
+    }
+}
+
 ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
@@ -402,6 +431,6 @@ ucp_proto_t ucp_rndv_get_mtype_proto = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_rndv_get_mtype_abort,
     .reset    = ucp_proto_rndv_get_mtype_reset
 };

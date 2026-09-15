@@ -817,28 +817,13 @@ protected:
         }
     }
 
-    static unsigned abort_fc_pending_cb(void *arg)
+    static unsigned close_fc_pending_ep_cb(void *arg)
     {
         auto *test = static_cast<test_ucp_peer_failure_rndv_abort *>(arg);
-        ucp_worker_h worker = test->receiver().worker();
-        std::vector<ucp_request_t *> pending_reqs;
-        ucp_request_t *req;
 
-        /* Abort may remove the current request, so snapshot the queue first. */
-        for (unsigned i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; ++i) {
-            auto *queue = &worker->rndv_mtype_fc.pending_q[i];
-
-            ucs_queue_for_each(req, queue, send.rndv.ppln.queue_elem) {
-                pending_reqs.push_back(req);
-            }
-        }
-
-        for (auto *pending_req : pending_reqs) {
-            ucp_proto_request_abort(pending_req, UCS_ERR_CONNECTION_RESET);
-        }
-
-        /* Complete the top-level send after aborting receiver fragments. */
-        test->sender().close_all_eps(*test, 0, UCP_EP_CLOSE_FLAG_FORCE);
+        /* Endpoint purge must abort requests waiting for a staging fragment. */
+        test->m_fc_pending_entity->close_all_eps(*test, 0,
+                                                 UCP_EP_CLOSE_FLAG_FORCE);
         test->m_is_peer_closed = true;
         return 1;
     }
@@ -868,7 +853,8 @@ protected:
         auto *worker = req->send.ep->worker;
         ucs::mock mock;
 
-        if (proto->name == self->m_proto_name) {
+        if (!self->m_proto_name.empty() &&
+            (proto->name == self->m_proto_name)) {
             if (self->m_replace_ops) {
                 mock_rndv_ops(req->send.ep, mock);
             }
@@ -882,27 +868,21 @@ protected:
         const ucs_status_t status = self->m_progress_mock.orig_func(
                                             &proto->progress[stage], uct_req);
 
-        if (self->m_abort_fc_pending &&
-            (worker == self->receiver().worker()) &&
-            self->has_fc_pending(worker)) {
-            self->m_abort_fc_pending = false;
-            /* Abort after the current protocol-progress call returns. */
+        if (self->m_close_fc_pending_ep &&
+            (worker == self->m_fc_pending_entity->worker()) &&
+            self->has_fc_pending(worker, self->m_fc_op)) {
+            self->m_close_fc_pending_ep = false;
+            /* Close after the current protocol-progress call returns. */
             ucs_callbackq_add_oneshot(&worker->uct->progress_q, self,
-                                      abort_fc_pending_cb, self);
+                                      close_fc_pending_ep_cb, self);
         }
 
         return status;
     }
 
-    static bool has_fc_pending(ucp_worker_h worker)
+    static bool has_fc_pending(ucp_worker_h worker, unsigned fc_op)
     {
-        for (unsigned i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; ++i) {
-            if (!ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i])) {
-                return true;
-            }
-        }
-
-        return false;
+        return !ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[fc_op]);
     }
 
     static std::vector<ucp_mem_desc_t *>
@@ -943,8 +923,8 @@ protected:
 
         for (auto *mdesc : held) {
             /*
-             * Return the descriptor without invoking FC rescheduling. Aborted
-             * requests must already have been removed from pending_q.
+             * Return the descriptor without invoking FC rescheduling. Endpoint
+             * purge must already have removed requests from pending_q.
              */
             ucs_mpool_put_inline(mdesc);
         }
@@ -1018,7 +998,7 @@ protected:
         ASSERT_TRUE(m_is_peer_closed);
     }
 
-    void rndv_fc_pending_abort_test()
+    void rndv_fc_pending_abort_test(entity &fc_entity, unsigned fc_op)
     {
         ucp_ep_config_t *sender_config = ucp_ep_config(sender().ep());
         std::pair<ucs_status_t, ucs_status_t> result;
@@ -1031,11 +1011,13 @@ protected:
 
         /* Complete one transfer so the CUDA fragment mpool is created. */
         smoke_test(true);
-        std::vector<ucp_mem_desc_t *> held_mdescs = hold_cuda_fragments(
-                                                          receiver().worker());
+        std::vector<ucp_mem_desc_t *> held_mdescs =
+                hold_cuda_fragments(fc_entity.worker());
         ASSERT_FALSE(held_mdescs.empty());
 
-        m_abort_fc_pending = true;
+        m_fc_pending_entity    = &fc_entity;
+        m_fc_op                = fc_op;
+        m_close_fc_pending_ep  = true;
         setup_progress_mock(sender().worker(), m_progress_mock);
         setup_progress_mock(receiver().worker(), m_progress_mock);
 
@@ -1045,23 +1027,24 @@ protected:
             result = smoke_test(true);
         }
 
-        release_cuda_fragments(receiver().worker(), held_mdescs);
+        release_cuda_fragments(fc_entity.worker(), held_mdescs);
         m_progress_mock.cleanup();
 
         EXPECT_TRUE(UCS_STATUS_IS_ERR(result.first));
         EXPECT_TRUE(UCS_STATUS_IS_ERR(result.second));
         EXPECT_TRUE(m_is_peer_closed);
-        EXPECT_FALSE(has_fc_pending(sender().worker()));
-        EXPECT_FALSE(has_fc_pending(receiver().worker()));
+        EXPECT_FALSE(has_fc_pending(fc_entity.worker(), fc_op));
     }
 
     ucs::mock         m_progress_mock;
     bool              m_is_peer_closed{false};
-    bool              m_abort_fc_pending{false};
+    bool              m_close_fc_pending_ep{false};
     std::string       m_proto_name{};
     /* Protocol stage during which data transfer happens */
     uint8_t           m_proto_xfer_stage{};
     entity            *m_peer_to_close{nullptr};
+    entity            *m_fc_pending_entity{nullptr};
+    unsigned          m_fc_op{UCP_WORKER_RNDV_FC_OP_LAST};
     /* Even if we close peer EP with the force flag, the next proto progress call
        probably would return UCS_OK. This option enables emulation of certain
        progress call failure. */
@@ -1163,7 +1146,16 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_fc_pending,
            "RNDV_FRAG_WORKER_MAX_MEM=8K",
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
-    rndv_fc_pending_abort_test();
+    rndv_fc_pending_abort_test(receiver(), UCP_WORKER_RNDV_FC_OP_RTR);
+}
+
+UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_fc_pending,
+           "RNDV_FRAG_SIZE=host:8K,cuda:8K",
+           "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
+           "RNDV_FRAG_WORKER_MAX_MEM=8K",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    rndv_fc_pending_abort_test(sender(), UCP_WORKER_RNDV_FC_OP_PUT);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
