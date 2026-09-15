@@ -11,6 +11,7 @@
 
 #ifdef HAVE_MLX5_DV
 extern "C" {
+#include <uct/ib/base/ib_md.h>
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 }
@@ -1532,6 +1533,297 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
+
+class test_rc_purge_outstanding : public test_rc {
+protected:
+    struct atomic_state {
+        uct_ep_operation_t operation;
+        uint64_t           remote_addr;
+        uct_rkey_t         rkey;
+        uct_atomic_op_t    op;
+        uint64_t           value;
+        uint64_t           compare;
+        size_t             size;
+        void               *result;
+        uct_completion_t   *comp;
+        unsigned           count;
+    };
+
+    static void completion_cb(uct_completion_t*)
+    {
+    }
+
+    uct_rc_mlx5_ep_t *mlx5_ep()
+    {
+        return ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_ep_t);
+    }
+
+    ucs_status_t purge_stub(atomic_state *state)
+    {
+        uct_rc_mlx5_ep_t *ep     = mlx5_ep();
+        uct_ib_mlx5_txwq_t *txwq = &ep->super.tx.wq;
+        uct_rc_txqp_t *txqp      = &ep->super.super.txqp;
+        uint16_t ci              = 0;
+        uct_rc_mlx5_op_callback_data_t callback_data;
+        uct_ep_op_info_t info;
+        const struct mlx5_wqe_ctrl_seg *ctrl;
+        uct_rc_iface_send_op_t *op, *t_op;
+        size_t wqe_size;
+        ucs_status_t status;
+
+        while (ci != txwq->sw_pi) {
+            ctrl     = static_cast<const struct mlx5_wqe_ctrl_seg*>(
+                    uct_ib_mlx5_txwq_get_wqe(txwq, ci));
+            wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+            op       = NULL;
+
+            ucs_queue_for_each(t_op, &txqp->outstanding, queue) {
+                if (t_op->sn == ci) {
+                    op = t_op;
+                    break;
+                }
+            }
+
+            memset(&info, 0, sizeof(info));
+            status = uct_rc_mlx5_op_info_fill(&info, txwq, op, ctrl, wqe_size,
+                                              &callback_data);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            atomic_cb(&info, state);
+            ci += ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        }
+
+        return UCS_OK;
+    }
+
+    static void atomic_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        atomic_state *state = static_cast<atomic_state*>(arg);
+        uint64_t field_mask = UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR |
+                              UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY |
+                              UCT_EP_OP_INFO_ATOMIC_FIELD_OP |
+                              UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE |
+                              UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE;
+
+        ++state->count;
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        EXPECT_EQ(state->operation, info->operation);
+
+        EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_ATOMIC);
+
+        EXPECT_TRUE(info->atomic.field_mask &
+                    UCT_EP_OP_INFO_ATOMIC_FIELD_REMOTE_ADDR);
+        EXPECT_EQ(state->remote_addr, info->atomic.remote_addr);
+
+        EXPECT_TRUE(info->atomic.field_mask & UCT_EP_OP_INFO_ATOMIC_FIELD_RKEY);
+        EXPECT_EQ(state->rkey, info->atomic.rkey);
+
+        EXPECT_TRUE(info->atomic.field_mask & UCT_EP_OP_INFO_ATOMIC_FIELD_OP);
+        EXPECT_EQ(state->op, info->atomic.op);
+
+        EXPECT_TRUE(info->atomic.field_mask &
+                    UCT_EP_OP_INFO_ATOMIC_FIELD_VALUE);
+        EXPECT_EQ(state->value, info->atomic.value);
+
+        EXPECT_TRUE(info->atomic.field_mask & UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE);
+        EXPECT_EQ(state->size, info->atomic.size);
+
+        if (state->op == UCT_ATOMIC_OP_CSWAP) {
+            EXPECT_TRUE(info->atomic.field_mask &
+                        UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE);
+            EXPECT_EQ(state->compare, info->atomic.compare);
+        }
+
+        if (state->result != NULL) {
+            EXPECT_TRUE(info->atomic.field_mask &
+                        UCT_EP_OP_INFO_ATOMIC_FIELD_RESULT);
+            EXPECT_EQ(state->result, info->atomic.result);
+        }
+
+        if (state->comp != NULL) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(state->comp, info->comp);
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        }
+    }
+
+    void resolve_atomic_rkey(atomic_state &state, const mapped_buffer &remote)
+    {
+        state.remote_addr = remote.addr();
+        state.rkey        = uct_ib_resolve_atomic_rkey(
+                remote.rkey(), mlx5_ep()->super.super.atomic_mr_offset,
+                &state.remote_addr);
+        state.rkey       |= (uct_rkey_t)UCT_IB_INVALID_MKEY << 32;
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, atomic32_post_and,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_AND), OP32))
+{
+    mapped_buffer remote(sizeof(uint32_t), *m_e2);
+    atomic_state state = {UCT_EP_OP_ATOMIC_POST,
+                          0,
+                          0,
+                          UCT_ATOMIC_OP_AND,
+                          0xf0f0,
+                          0,
+                          4,
+                          NULL,
+                          NULL,
+                          0};
+
+    resolve_atomic_rkey(state, remote);
+    ASSERT_UCS_OK(uct_ep_atomic32_post(m_e1->ep(0), UCT_ATOMIC_OP_AND, 0xf0f0,
+                                       remote.addr(), remote.rkey()));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, atomic32_fetch_xor,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), FOP32))
+{
+    uct_completion_t comp = {completion_cb, 1, UCS_OK};
+    uint32_t result       = 0;
+
+    mapped_buffer remote(sizeof(uint32_t), *m_e2);
+    atomic_state state = {UCT_EP_OP_ATOMIC_FETCH,
+                          0,
+                          0,
+                          UCT_ATOMIC_OP_XOR,
+                          0xaa,
+                          0,
+                          4,
+                          &result,
+                          &comp,
+                          0};
+
+    resolve_atomic_rkey(state, remote);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_atomic32_fetch(m_e1->ep(0), UCT_ATOMIC_OP_XOR, 0xaa,
+                                    &result, remote.addr(), remote.rkey(),
+                                    &comp));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, atomic64_post_xor,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_XOR), OP64))
+{
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    atomic_state state = {UCT_EP_OP_ATOMIC_POST,
+                          0,
+                          0,
+                          UCT_ATOMIC_OP_XOR,
+                          0x55,
+                          0,
+                          8,
+                          NULL,
+                          NULL,
+                          0};
+
+    resolve_atomic_rkey(state, remote);
+    ASSERT_UCS_OK(uct_ep_atomic64_post(m_e1->ep(0), UCT_ATOMIC_OP_XOR, 0x55,
+                                       remote.addr(), remote.rkey()));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, atomic64_fetch_add,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64))
+{
+    uct_completion_t comp = {completion_cb, 1, UCS_OK};
+    uint64_t result       = 0;
+
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    atomic_state state = {UCT_EP_OP_ATOMIC_FETCH,
+                          0,
+                          0,
+                          UCT_ATOMIC_OP_ADD,
+                          3,
+                          0,
+                          8,
+                          &result,
+                          &comp,
+                          0};
+
+    resolve_atomic_rkey(state, remote);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_atomic64_fetch(m_e1->ep(0), UCT_ATOMIC_OP_ADD, 3, &result,
+                                    remote.addr(), remote.rkey(), &comp));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, atomic64_fetch_swap,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_SWAP), FOP64))
+{
+    uct_completion_t comp = {completion_cb, 1, UCS_OK};
+    uint64_t result       = 0;
+
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    atomic_state state = {UCT_EP_OP_ATOMIC_FETCH,
+                          0,
+                          0,
+                          UCT_ATOMIC_OP_SWAP,
+                          0x1234,
+                          0,
+                          8,
+                          &result,
+                          &comp,
+                          0};
+
+    resolve_atomic_rkey(state, remote);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_atomic64_fetch(m_e1->ep(0), UCT_ATOMIC_OP_SWAP, 0x1234,
+                                    &result, remote.addr(), remote.rkey(),
+                                    &comp));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_purge_outstanding, atomic64_fetch_cswap,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64))
+{
+    uct_completion_t comp = {completion_cb, 1, UCS_OK};
+    uint64_t result       = 0;
+
+    mapped_buffer remote(sizeof(uint64_t), *m_e2);
+    atomic_state state = {UCT_EP_OP_ATOMIC_FETCH,
+                          0,
+                          0,
+                          UCT_ATOMIC_OP_CSWAP,
+                          0x5678,
+                          0x9abc,
+                          8,
+                          &result,
+                          &comp,
+                          0};
+
+    resolve_atomic_rkey(state, remote);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_atomic_cswap64(m_e1->ep(0), 0x9abc, 0x5678, remote.addr(),
+                                    remote.rkey(), &result, &comp));
+    ASSERT_UCS_OK(purge_stub(&state));
+
+    flush();
+    EXPECT_EQ(1u, state.count);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_purge_outstanding, rc_mlx5)
 
 class test_rc_srq : public test_rc {
 public:
