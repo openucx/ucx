@@ -23,10 +23,10 @@ static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
     ucp_request_t                   *req = pack_ctx->req;
     ucp_put_hdr_t                  *puth = dest;
 
-    puth->address  = req->send.rma.remote_addr +
+    puth->address  = req->send.fenced_req.rma.remote_addr +
                      req->send.state.dt_iter.offset;
     puth->ep_id    = ucp_send_request_get_ep_remote_id(req);
-    puth->mem_type = req->send.rma.rkey->mem_type;
+    puth->mem_type = req->send.fenced_req.rma.rkey->mem_type;
 
     return sizeof(*puth) + ucp_proto_multi_data_pack(pack_ctx, puth + 1);
 }
@@ -57,18 +57,15 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_proto_multi_request_init(req);
+        if (!ucp_proto_rma_fence_progress(req, mpriv->lane_map, &status)) {
+            return status;
+        }
+
         status = ucp_ep_resolve_remote_id(req->send.ep,
                                           mpriv->lanes[0].super.lane);
         if (status != UCS_OK) {
             return status;
-        }
-
-        ucp_proto_multi_request_init(req);
-
-        status = ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
-        if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
