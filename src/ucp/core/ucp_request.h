@@ -371,9 +371,9 @@ struct ucp_request {
                     ucp_lane_map_t     all_lanes;
                     /* Which lanes flush has been started on */
                     ucp_lane_map_t     started_lanes;
-                    /* Sequence number of the remote completion this request is
-                     * waiting for */
-                    uint32_t           cmpl_sn;
+                    /* Lanes targeted by this flush. Replacement lanes are
+                     * added if endpoint failover changes the live topology. */
+                    ucp_lane_map_t     lane_mask;
                     /* Flags to pass to @ref uct_ep_flush */
                     uint8_t            uct_flags;
                     /* Originally requested UCT flush flags, used to restore
@@ -381,26 +381,19 @@ struct ucp_request {
                     uint8_t            uct_flags_orig;
                     uint8_t            sw_state;
                     uint8_t            sw_done;
-                    /*
-                     * The members are mutually exclusive: 'lanes' is used
-                     * only during the transport lane-flush stage. 'mem' is
-                     * initialized only after ucp_ep_flush_is_completed()
-                     * finds the lane and remote stages complete (including
-                     * forced completion on error). A
-                     * pending failover restart keeps the flush incomplete, so
-                     * it cannot start 'mem' before resetting the lane state.
-                     */
+                    /* Snapshot used to detect same-index lane replacement */
+                    uint32_t           lane_generation;
+                    /* 'cmpl_sn' is valid only while this request is linked in
+                     * the endpoint remote-completion queue. The queue removes
+                     * the request before calling ucp_ep_flush_remote_completed(),
+                     * which may start 'mem'. A failover restart also removes a
+                     * queued request before resetting the flush state. */
                     union {
-                        struct {
-                            /* Snapshot used to detect same-index lane
-                             * replacement */
-                            uint32_t       lane_generation;
-                            /* Lanes targeted by this flush. Replacement lanes
-                             * are added if endpoint failover changes the live
-                             * topology. */
-                            ucp_lane_map_t lane_mask;
-                        } lanes;
-                        /* Used only after transport lane flushes complete */
+                        /* Sequence number of the remote completion this
+                         * request is waiting for */
+                        uint32_t        cmpl_sn;
+                        /* Used after the transport and remote-completion
+                         * stages complete */
                         ucp_mem_flush_t mem;
                     };
                 } flush;
