@@ -219,6 +219,7 @@ typedef struct ucm_global_config {
     int                  enable_malloc_hooks;         /* Enable installing malloc hooks */
     int                  enable_malloc_reloc;         /* Enable installing malloc relocations */
     uint64_t             cuda_hook_modes;             /* Bitmap of allowed cuda hooks modes */
+    uint64_t             rocm_hook_modes;             /* Bitmap of allowed rocm hooks modes */
     int                  enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t               alloc_alignment;             /* Alignment for memory allocations */
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */

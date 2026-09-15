@@ -65,6 +65,18 @@ typedef struct {
     uint64_t                  addr;
 } UCS_S_PACKED ucm_bistro_jcc_xlt_t;
 
+/* Translation of RIP-relative "mov %reg, disp32(%rip)" (load form) into a
+ * position-independent sequence, since the relocated code is not guaranteed to
+ * be within 32-bit range of the referenced address:
+ *   movabs $addr64, %reg  ; $addr64 = $disp32 + %rip
+ *   mov    (%reg), %reg
+ */
+typedef struct {
+    uint8_t  movabs_reg[2]; /* REX.W ; 0xB8+reg */
+    uint64_t addr;
+    uint8_t  mov_load[3];   /* REX.W ; 0x8B ; ModR/M */
+} UCS_S_PACKED ucm_bistro_mov_rip_xlt_t;
+
 
 /* REX prefix */
 #define UCM_BISTRO_X86_REX_MASK  0xF0 /* Mask */
@@ -87,6 +99,15 @@ typedef struct {
 
 /* MOV Ev,Gv */
 #define UCM_BISTRO_X86_MOV_EV_GV 0x89
+
+/* MOV Gv,Ev - load form "mov r64, r/m64" */
+#define UCM_BISTRO_X86_MOV_GV_EV 0x8B
+
+/* ENDBR64 (CET landing pad): F3 0F 1E FA */
+#define UCM_BISTRO_X86_ENDBR64_B0 0xF3
+#define UCM_BISTRO_X86_ENDBR64_B1 0x0F
+#define UCM_BISTRO_X86_ENDBR64_B2 0x1E
+#define UCM_BISTRO_X86_ENDBR64_B3 0xFA
 
 /* MOV immediate word or double into word, double, or quad register
  * "mov $imm32, %reg"
@@ -138,7 +159,8 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
         .jmp_out = {0xeb, 0x0e},
         .jmp_rip = {0xff, 0x25, 0}
     };
-    uint8_t rex, opcode, modrm, mod;
+    ucm_bistro_mov_rip_xlt_t mov_rip;
+    uint8_t rex, opcode, modrm, mod, reg;
     size_t dst_length;
     uint64_t jmpdest;
     int32_t disp32;
@@ -154,7 +176,16 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
         rex = 0;
     }
 
-    if (((rex == 0) || rex == UCM_BISTRO_X86_REX_B) &&
+    if ((rex == 0) && (opcode == UCM_BISTRO_X86_ENDBR64_B0) &&
+        (*(const uint8_t*)ctx->src_p                 == UCM_BISTRO_X86_ENDBR64_B1) &&
+        (((const uint8_t*)ctx->src_p)[1]             == UCM_BISTRO_X86_ENDBR64_B2) &&
+        (((const uint8_t*)ctx->src_p)[2]             == UCM_BISTRO_X86_ENDBR64_B3)) {
+        /* endbr64 (CET landing pad) - position independent, copy verbatim */
+        ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0x0F */
+        ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0x1E */
+        ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0xFA */
+        goto out_copy_src;
+    } else if (((rex == 0) || rex == UCM_BISTRO_X86_REX_B) &&
         ((opcode & UCM_BISTRO_X86_PUSH_R_MASK) == UCM_BISTRO_X86_PUSH_R)) {
         /* push reg */
         goto out_copy_src;
@@ -193,6 +224,36 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
             } else if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP32) {
                 ucs_serialize_next(&ctx->src_p, const uint32_t); /* skip disp32 */
                 goto out_copy_src;
+            }
+        }
+    } else if ((rex == UCM_BISTRO_X86_REX_W) &&
+               (opcode == UCM_BISTRO_X86_MOV_GV_EV)) {
+        modrm = *ucs_serialize_next(&ctx->src_p, const uint8_t);
+        /* Handle RIP-relative load "mov disp32(%rip), %reg" (mod=00, r/m=101).
+         * Emitted e.g. by CET-built dispatch thunks that load an API table
+         * pointer. Translate to an absolute-address load, because the relocated
+         * code is not guaranteed to be within 32-bit range of the target. */
+        if ((modrm & 0xC7) == 0x05) {
+            reg = (modrm >> UCM_BISTRO_X86_MODRM_REG_SHIFT) &
+                  UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS);
+            /* rm=100 (SIB) and rm=101 (disp8/RIP) can't encode "mov (%reg),
+             * %reg" directly; %rsp/%rbp are never used to hold a loaded
+             * pointer, so leave those unsupported. */
+            if ((reg != UCM_BISTRO_X86_MODRM_RM_SIB) && (reg != 0x05)) {
+                disp32              = *ucs_serialize_next(&ctx->src_p,
+                                                          const int32_t);
+                mov_rip.movabs_reg[0] = UCM_BISTRO_X86_REX_W;
+                mov_rip.movabs_reg[1] = UCM_BISTRO_X86_MOV_IR | reg;
+                mov_rip.addr          = (uintptr_t)UCS_PTR_BYTE_OFFSET(
+                                                ctx->src_p, disp32);
+                mov_rip.mov_load[0]   = UCM_BISTRO_X86_REX_W;
+                mov_rip.mov_load[1]   = UCM_BISTRO_X86_MOV_GV_EV;
+                /* ModR/M: mod=00, reg=reg, r/m=reg -> "mov (%reg), %reg" */
+                mov_rip.mov_load[2]   = (reg << UCM_BISTRO_X86_MODRM_REG_SHIFT) |
+                                        reg;
+                copy_src              = &mov_rip;
+                dst_length            = sizeof(mov_rip);
+                goto out_copy;
             }
         }
     } else if ((rex == 0) && ((opcode & UCM_BISTRO_X86_MOV_IR_MASK) ==
