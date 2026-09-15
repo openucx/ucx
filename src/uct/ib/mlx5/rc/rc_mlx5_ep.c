@@ -225,6 +225,10 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
             remote_addr, rkey, 0ul, 0, 0, NULL,
             fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
             uct_rc_ep_put_zcopy_completion_handler, 0, comp);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
     if (comp == NULL) {
         /* Outstanding purge can identify put zcopy by distinct handler. */
         uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
@@ -342,7 +346,6 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
     uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
-    /* Outstanding purge can identify the SGL request by distinct handler. */
     uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
                                      uct_rc_ep_put_sgl_zcopy_completion_handler,
                                      comp, txwq->sig_pi,

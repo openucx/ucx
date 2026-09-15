@@ -289,7 +289,6 @@ void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
     ucs_mpool_put(desc);
 }
 
-/* Invoke user completion if set, and put the send op back to the free list. */
 static UCS_F_ALWAYS_INLINE void
 uct_rc_ep_send_op_complete(uct_rc_iface_send_op_t *op)
 {
