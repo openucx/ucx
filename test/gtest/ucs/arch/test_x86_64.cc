@@ -18,23 +18,6 @@ extern "C" {
 
 class test_arch : public ucs::test {
 protected:
-    class scoped_builtin_memcpy_min {
-    public:
-        scoped_builtin_memcpy_min(size_t value) :
-            m_saved_value(ucs_global_opts.arch.builtin_memcpy_min)
-        {
-            ucs_global_opts.arch.builtin_memcpy_min = value;
-        }
-
-        ~scoped_builtin_memcpy_min()
-        {
-            ucs_global_opts.arch.builtin_memcpy_min = m_saved_value;
-        }
-
-    private:
-        size_t m_saved_value;
-    };
-
     /* have to add wrapper for ucs_memcpy_relaxed because pure "C" inline call could
      * not be used as template argument */
     static inline void *memcpy_relaxed(void *dst, const void *src, size_t size)
@@ -221,7 +204,8 @@ UCS_TEST_F(test_arch, nt_buffer_transfer_explicit_threshold) {
 #endif
 
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
-    scoped_builtin_memcpy_min memcpy_min(UCS_MEMUNITS_INF);
+    ucs_global_opts.arch.builtin_memcpy_min = UCS_MEMUNITS_INF;
+    ucs_global_opts.arch.nt_dest_threshold  = UCS_MEMUNITS_INF;
 
     /* Exercise the vectorized NT_SOURCE path */
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
@@ -229,7 +213,8 @@ UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
 
 #if ENABLE_BUILTIN_MEMCPY
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src_erms) {
-    scoped_builtin_memcpy_min memcpy_min(0);
+    ucs_global_opts.arch.builtin_memcpy_min = 0;
+    ucs_global_opts.arch.nt_dest_threshold  = UCS_MEMUNITS_INF;
 
     /* Exercise the ERMS NT_SOURCE path */
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
