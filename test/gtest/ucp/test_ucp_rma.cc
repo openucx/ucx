@@ -1008,14 +1008,25 @@ public:
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_base_variants,
-                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                             UCS_BIT(UCS_MEMORY_TYPE_HOST));
+        static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_HOST,
+                                                      UCS_MEMORY_TYPE_CUDA};
+
+        for (ucs_memory_type_t src : mem_types) {
+            for (ucs_memory_type_t dst : mem_types) {
+                if (mem_buffer::is_mem_type_supported(src) &&
+                    mem_buffer::is_mem_type_supported(dst)) {
+                    add_variant_values(variants, get_base_variants,
+                                       mem_types_variant(src, dst),
+                                       mem_types_variant_name(src, dst));
+                }
+            }
+        }
     }
 
     virtual void init() override {
         /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
+        if ((src_mem_type() == UCS_MEMORY_TYPE_CUDA) &&
+            (dst_mem_type() == UCS_MEMORY_TYPE_CUDA)) {
             UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
         }
 
@@ -1023,11 +1034,34 @@ public:
         test_ucp_rma::init();
     }
 
-    ucs_memory_type_t mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value());
+    ucs_memory_type_t src_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value() >>
+                                              MEM_TYPE_SHIFT);
+    }
+
+    ucs_memory_type_t dst_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value() &
+                                              MEM_TYPE_MASK);
     }
 
 protected:
+    static constexpr int MEM_TYPE_SHIFT = 8;
+    static constexpr int MEM_TYPE_MASK  = UCS_MASK(MEM_TYPE_SHIFT);
+
+    static int mem_types_variant(ucs_memory_type_t src_mem_type,
+                                 ucs_memory_type_t dst_mem_type) {
+        return (src_mem_type << MEM_TYPE_SHIFT) | dst_mem_type;
+    }
+
+    static std::string mem_types_variant_name(ucs_memory_type_t src_mem_type,
+                                              ucs_memory_type_t dst_mem_type) {
+        auto name = [](ucs_memory_type_t mem_type) {
+            return (mem_type == UCS_MEMORY_TYPE_HOST) ? "dram" : "vram";
+        };
+
+        return std::string(name(src_mem_type)) + "_to_" + name(dst_mem_type);
+    }
+
     enum sgl_op_t {
         SGL_OP_PUT,
         SGL_OP_GET
@@ -1049,8 +1083,7 @@ protected:
 
     void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
                       sgl_op_t op = SGL_OP_PUT) {
-        ucs_memory_type_t mtype = mem_type();
-        size_t num              = elem_sizes.size();
+        size_t num = elem_sizes.size();
 
         ctx.rkey_handles.resize(num);
         ctx.buffers.resize(num);
@@ -1062,8 +1095,8 @@ protected:
         ctx.dst.reserve(num);
 
         for (size_t i = 0; i < num; i++) {
-            ctx.src.emplace_back(elem_sizes[i], sender(), 0, mtype);
-            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, mtype);
+            ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_mem_type());
+            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_mem_type());
         }
 
         for (size_t i = 0; i < num; i++) {
@@ -1245,14 +1278,13 @@ protected:
         ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
         auto verify_sgl_buffers = [&]() {
-            ucs_memory_type_t mtype = mem_type();
             for (size_t i = 0; i < num; i++) {
-                uint8_t expected = static_cast<uint8_t>(i + 1);
-                void *result     = (op == SGL_OP_PUT) ? ctx.dst[i].ptr() :
-                                                        ctx.src[i].ptr();
+                uint8_t expected            = static_cast<uint8_t>(i + 1);
+                const mapped_buffer &result = (op == SGL_OP_PUT) ? ctx.dst[i] :
+                                                                   ctx.src[i];
                 std::vector<uint8_t> host_buf(ctx.lengths[i]);
-                mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
-                                      mtype);
+                mem_buffer::copy_from(host_buf.data(), result.ptr(),
+                                      ctx.lengths[i], result.mem_type());
                 for (size_t j = 0; j < ctx.lengths[i]; j++) {
                     ASSERT_EQ(expected, host_buf[j])
                         << "Mismatch at element " << i << " byte " << j;
