@@ -1024,6 +1024,21 @@ static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
     return UCS_OK;
 }
 
+static void
+uct_rc_mlx5_ep_purge_flushes(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
+{
+    uct_rc_iface_send_op_t *op;
+
+    ucs_queue_for_each_extract(
+            op, &ep->super.txqp.outstanding, queue,
+            (op->handler == uct_rc_ep_flush_op_completion_handler) &&
+            UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
+        op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
+        uct_invoke_completion(op->user_comp, UCS_ERR_CANCELED);
+        ucs_mpool_put(op);
+    }
+}
+
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
@@ -1031,7 +1046,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
     const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
-    uct_rc_iface_send_op_t *op;
     uint8_t callback_data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
     uct_ep_op_info_t info;
     uint16_t ci, end_ci, start_ci;
@@ -1039,7 +1053,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
-    int is_delivered;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1082,40 +1095,24 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         wqe_size    = uct_ib_mlx5_wqe_size(ctrl);
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
-        if (num_packets == 0) {
-            goto complete_flushes;
-        }
-
-        is_delivered = uct_ib_mlx5_wqe_is_delivered(
-                wqe_first_psn, receiver_next_psn, num_packets);
-        wqe_first_psn = (wqe_first_psn + num_packets) &
-                        UCT_IB_MLX5_PSN_MASK;
-
-        if (!is_delivered) {
+        if ((num_packets != 0) &&
+            !uct_ib_mlx5_wqe_is_delivered(wqe_first_psn, receiver_next_psn,
+                                          num_packets)) {
             status = uct_rc_mlx5_op_info_fill_am(
                     txwq, ctrl, wqe_size, callback_data, &info);
-            if (status == UCS_ERR_NO_ELEM) {
-                goto complete_flushes;
-            }
-
-            if (status != UCS_OK) {
+            if (status == UCS_OK) {
+                params->cb(&info, callback_arg);
+            } else if (status != UCS_ERR_NO_ELEM) {
                 ucs_fatal("rc mlx5: failed to parse outstanding WQE at ci %u",
                           ci);
             }
-
-            params->cb(&info, callback_arg);
         }
 
-complete_flushes:
+        wqe_first_psn = (wqe_first_psn + num_packets) &
+                        UCT_IB_MLX5_PSN_MASK;
+
         /* Complete flushes after their WQE, before later AM purge callbacks. */
-        ucs_queue_for_each_extract(
-                op, &ep->super.txqp.outstanding, queue,
-                (op->handler == uct_rc_ep_flush_op_completion_handler) &&
-                UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
-            op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
-            uct_invoke_completion(op->user_comp, UCS_ERR_CANCELED);
-            ucs_mpool_put(op);
-        }
+        uct_rc_mlx5_ep_purge_flushes(ep, ci);
     }
 
 out:
