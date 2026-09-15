@@ -304,9 +304,9 @@ void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     uint8_t opmod                  = ctrl->opmod_idx_opcode & 0xff;
     uint32_t qp_num                = ntohl(ctrl->qpn_ds) >> 8;
     int ds                         = ntohl(ctrl->qpn_ds) & UINT8_MAX;
-    uct_ib_opcode_t *op;
     char *s                        = buffer;
     char *ends                     = buffer + max;
+    uct_ib_opcode_t *op;
     const char *sg_prefix_arr;
     struct ibv_sge sg_list[16];
     uint64_t inline_bitmap;
@@ -390,8 +390,8 @@ void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
 
     /* Extended atomic segment */
     if (op->flags & UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC) {
-        uint64_t add, boundary, compare, swap, compare_mask, swap_mask;
         int size = 1 << ((opmod & 7) + 2);
+        uint64_t add, boundary, compare, swap, compare_mask, swap_mask;
 
         if (opcode == MLX5_OPCODE_ATOMIC_MASKED_FA) {
             add      = network_to_host(seg, size);
