@@ -25,7 +25,8 @@
   per-packet events, and not `trace` for either
 * Use `debug` and not `trace` for one-time flows such as initialization and
   device discovery, because `--disable-logging`, used by
-  `contrib/configure-release`, compiles out levels above `debug`
+  `contrib/configure-release`, compiles out all levels more verbose than
+  `debug`
 * Keep the same level for the same event in different code paths
 
 ## General
