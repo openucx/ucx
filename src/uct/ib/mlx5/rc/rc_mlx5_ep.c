@@ -208,13 +208,14 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                            uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    size_t length;
     ucs_status_t status;
     uint8_t fm_ce_se;
 
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(0),
                        "uct_rc_mlx5_ep_put_zcopy");
-    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0, UCT_IB_MAX_MESSAGE_SIZE,
-                     "put_zcopy");
+    length = uct_iov_total_length(iov, iovcnt);
+    UCT_CHECK_LENGTH(length, 0, UCT_IB_MAX_MESSAGE_SIZE, "put_zcopy");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
@@ -225,8 +226,8 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
             remote_addr, rkey, 0ul, 0, 0, NULL,
             fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
             uct_rc_ep_send_op_completion_handler, 0, comp);
-    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
-                                 uct_iov_total_length(iov, iovcnt));
+
+    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY, length);
     uct_rc_ep_enable_flush_remote(&ep->super);
     return status;
 }
