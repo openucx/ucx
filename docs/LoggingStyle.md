@@ -28,6 +28,8 @@
   `contrib/configure-release`, compiles out all levels more verbose than
   `debug`
 * Keep the same level for the same event in different code paths
+* Use `ucs_print()`, which logs at the `print` level, only for temporary
+  debugging, and do not commit it
 
 ## General
 
