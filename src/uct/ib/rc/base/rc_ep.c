@@ -217,6 +217,20 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     }
 }
 
+#ifndef NVALGRIND
+static struct iovec *uct_rc_ep_send_op_alloc_elems(uct_rc_iface_send_op_t *op,
+                                                   size_t count,
+                                                   const char *name)
+{
+    if (!RUNNING_ON_VALGRIND) {
+        return NULL;
+    }
+
+    op->iov = ucs_malloc(sizeof(*op->iov) * count, name);
+    return op->iov;
+}
+#endif
+
 void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
                                size_t iovcnt)
 {
@@ -224,17 +238,33 @@ void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
     size_t op_iovcnt = iovcnt;
     ucs_iov_iter_t iov_iter;
 
-    if (!RUNNING_ON_VALGRIND) {
-        return;
-    }
-
-    op->iov = ucs_malloc(sizeof(*op->iov) * iovcnt, "rc_get_zcopy_iov");
-    if (op->iov == NULL) {
+    if (uct_rc_ep_send_op_alloc_elems(op, iovcnt, "rc_get_zcopy_iov") == NULL) {
         return;
     }
 
     ucs_iov_iter_init(&iov_iter);
     uct_iov_to_iovec(op->iov, &op_iovcnt, iov, iovcnt, SIZE_MAX, &iov_iter);
+#endif
+}
+
+void uct_rc_ep_send_op_set_sgl(uct_rc_iface_send_op_t *op,
+                               void *const *buffers, const size_t *lengths,
+                               size_t count)
+{
+#ifndef NVALGRIND
+    size_t i;
+
+    ucs_assert(count > 0);
+
+    if (uct_rc_ep_send_op_alloc_elems(op, count, "rc_get_sgl_zcopy_iov") ==
+        NULL) {
+        return;
+    }
+
+    for (i = 0; i < count; ++i) {
+        op->iov[i].iov_base = buffers[i];
+        op->iov[i].iov_len  = lengths[i];
+    }
 #endif
 }
 
