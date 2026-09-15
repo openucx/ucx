@@ -1465,6 +1465,23 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_single_element) {
     test_put_sgl_split(1, UCS_MBYTE);
 }
 
+/* An element count which is not a multiple of the lane count makes a lane
+   payload end in the middle of an element */
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_split_uneven_elements,
+                     RUNNING_ON_VALGRIND) {
+    static const char *rail_counts[] = {"2", "4"};
+    for (const char *rails : rail_counts) {
+        cleanup();
+        modify_config("MAX_RMA_RAILS", rails);
+        test_ucp_rma::init();
+        test_put_sgl_split(3, UCS_MBYTE);
+        test_put_sgl_split(5, UCS_MBYTE);
+        if (HasFailure() || (num_errors() > 0)) {
+            break;
+        }
+    }
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
                      RUNNING_ON_VALGRIND) {
     static const char *rail_counts[] = {"1", "4", "6", "8"};
