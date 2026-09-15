@@ -1391,8 +1391,6 @@ public:
 
     virtual void cleanup() override
     {
-        test_ucp_proto_mock_cma::cleanup();
-
         if (m_superseded != nullptr) {
             m_superseded->superseded_by = m_superseded_by;
         }
@@ -1400,6 +1398,8 @@ public:
         if (m_superseder != nullptr) {
             m_superseder->proto_class = m_proto_class;
         }
+
+        test_ucp_proto_mock_cma::cleanup();
     }
 
 private:
