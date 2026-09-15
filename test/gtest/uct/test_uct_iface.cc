@@ -98,3 +98,4 @@ UCS_TEST_P(test_uct_iface, is_reachable)
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_iface)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_iface, rc_gda)

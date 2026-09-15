@@ -15,6 +15,12 @@ extern "C" {
 #include <random>
 
 
+static constexpr ucs_sys_pci_id_t pci_id_cx9 = {
+    UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID,
+    UCS_TOPO_GROUPS_CX9_DEVICE_ID,
+};
+
+
 class test_topo_groups : public ucs::test {
 protected:
     using physical_device = std::vector<ucs_sys_device_t>;
@@ -156,11 +162,6 @@ protected:
 
     void add_vera_rubin_nics(unsigned numa_idx, numa_devices &numa)
     {
-        const ucs_sys_pci_id_t pci_id_cx9 = {
-            UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID,
-            UCS_TOPO_GROUPS_CX9_DEVICE_ID,
-        };
-
         for (unsigned nic_idx = 0; nic_idx < 5; ++nic_idx) {
             const bool is_cx9                  = nic_idx < 4;
             const ucs_sys_bus_id_t slot_bus_id = generate_bus_id();
@@ -223,6 +224,19 @@ protected:
         return status;
     }
 
+    std::string render()
+    {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+        ucs_status_t status;
+
+        status = ucs_topo_groups_render(m_devices.data(), &m_groups, &strb);
+        EXPECT_EQ(UCS_OK, status);
+
+        std::string out(ucs_string_buffer_cstr(&strb));
+        ucs_string_buffer_cleanup(&strb);
+        return out;
+    }
+
     void expect_group(const ucs_topo_group_t &group,
                       const std::vector<physical_device> &expected_gpus,
                       const std::vector<physical_device> &expected_nics)
@@ -275,4 +289,123 @@ UCS_TEST_F(test_topo_groups, vera_groups_by_numa) {
         expect_group(ucs_array_elem(&m_groups, i),
                      expected_groups[i].gpus, expected_groups[i].nics);
     }
+}
+
+UCS_TEST_F(test_topo_groups, undefined_numa_elements_are_skipped) {
+    /* Add devices with valid numa node */
+    ucs_numa_node_t numa_node    = 0;
+    ucs_sys_device_t gpu_sys_dev = add_device("gpu", generate_bus_id(),
+                                              UCS_TOPO_DEVICE_CLASS_ACC,
+                                              numa_node, nullptr, 0);
+    ucs_sys_device_t nic_sys_dev = add_device("nic", generate_bus_id(),
+                                              UCS_TOPO_DEVICE_CLASS_NET,
+                                              numa_node, &pci_id_cx9,
+                                              UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+
+    /* Add devices with undefined numa node */
+    add_device("undefined_gpu", generate_bus_id(), UCS_TOPO_DEVICE_CLASS_ACC,
+               UCS_NUMA_NODE_UNDEFINED, nullptr, 0);
+    add_device("undefined_nic", generate_bus_id(), UCS_TOPO_DEVICE_CLASS_NET,
+               UCS_NUMA_NODE_UNDEFINED, &pci_id_cx9,
+               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+
+    ASSERT_UCS_OK(build());
+    ASSERT_EQ(1, ucs_array_length(&m_groups));
+    expect_group(ucs_array_elem(&m_groups, 0), {{gpu_sys_dev}},
+                 {{nic_sys_dev}});
+}
+
+UCS_TEST_F(test_topo_groups, nic_only_group) {
+    ucs_sys_bus_id_t port0_bus_id = generate_bus_id();
+    ucs_sys_bus_id_t port1_bus_id = port0_bus_id;
+
+    port1_bus_id.function = 1;
+
+    const ucs_sys_device_t port1 = add_device("nic.1", port1_bus_id,
+                                              UCS_TOPO_DEVICE_CLASS_NET, 0,
+                                              &pci_id_cx9,
+                                              UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+    const ucs_sys_device_t port0 = add_device("nic.0", port0_bus_id,
+                                              UCS_TOPO_DEVICE_CLASS_NET, 0,
+                                              &pci_id_cx9,
+                                              UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+
+
+    ASSERT_UCS_OK(build());
+    ASSERT_EQ(1, ucs_array_length(&m_groups));
+    expect_group(ucs_array_elem(&m_groups, 0), {}, {{port0, port1}});
+}
+
+UCS_TEST_F(test_topo_groups, table) {
+    const ucs_sys_bus_id_t gpu0_bus_id    = {0, 1, 0, 0};
+    const ucs_sys_bus_id_t gpu1_bus_id    = {0, 2, 0, 0};
+    const ucs_sys_bus_id_t nic0_port0_bdf = {0, 3, 0, 0};
+    const ucs_sys_bus_id_t nic0_port1_bdf = {0, 3, 0, 1};
+    const ucs_sys_bus_id_t nic1_bus_id    = {0, 4, 0, 0};
+    const ucs_sys_bus_id_t gpu2_bus_id    = {0, 5, 0, 0};
+    const ucs_sys_bus_id_t nic2_bus_id    = {0, 6, 0, 0};
+
+    add_device("gpu0.1", gpu0_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 1);
+    add_device("gpu0.0", gpu0_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 0);
+    add_device("gpu1", gpu1_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 0);
+    add_device("gpu2", gpu2_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 1, nullptr, 0);
+    add_device("nic0.1", nic0_port1_bdf, UCS_TOPO_DEVICE_CLASS_NET, 0,
+               &pci_id_cx9, UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+    add_device("nic0.0", nic0_port0_bdf, UCS_TOPO_DEVICE_CLASS_NET, 0,
+               &pci_id_cx9, UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+    add_device("nic1", nic1_bus_id, UCS_TOPO_DEVICE_CLASS_NET, 0, &pci_id_cx9,
+               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+    add_device("nic2", nic2_bus_id, UCS_TOPO_DEVICE_CLASS_NET, 1, &pci_id_cx9,
+               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+
+    {
+        /* Exercise the debug-log integration in addition to the renderer. */
+        ucs::scoped_log_level log_level(UCS_LOG_LEVEL_DEBUG);
+        ASSERT_UCS_OK(build());
+    }
+
+    /* clang-format off */
+    EXPECT_EQ("+---------+----------------------+----------------------+\n"
+              "| Group # | GPUs                 | NICs                 |\n"
+              "+---------+----------------------+----------------------+\n"
+              "|       0 | [gpu0.0;gpu0.1] gpu1 | [nic0.0;nic0.1] nic1 |\n"
+              "|       1 | gpu2                 | nic2                 |\n"
+              "+---------+----------------------+----------------------+",
+              render());
+    /* clang-format on */
+}
+
+UCS_TEST_F(test_topo_groups, table_empty_columns) {
+    const ucs_sys_bus_id_t gpu_bus_id = {0, 1, 0, 0};
+    const ucs_sys_bus_id_t nic_bus_id = {0, 2, 0, 0};
+    ucs_topo_group_t *empty_group;
+
+    add_device("gpu", gpu_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 0);
+    add_device("nic", nic_bus_id, UCS_TOPO_DEVICE_CLASS_NET, 1, &pci_id_cx9,
+               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+
+    ASSERT_UCS_OK(build());
+
+    empty_group = ucs_array_append(&m_groups, FAIL());
+    ucs_topo_init_group(empty_group);
+
+    EXPECT_EQ("+---------+------+------+\n"
+              "| Group # | GPUs | NICs |\n"
+              "+---------+------+------+\n"
+              "|       0 | gpu  |      |\n"
+              "|       1 |      | nic  |\n"
+              "|       2 |      |      |\n"
+              "+---------+------+------+",
+              render());
+}
+
+UCS_TEST_F(test_topo_groups, table_empty) {
+    ASSERT_UCS_OK(build());
+
+    EXPECT_EQ("+---------+------+------+\n"
+              "| Group # | GPUs | NICs |\n"
+              "+---------+------+------+\n"
+              "| <empty>               |\n"
+              "+---------+------+------+",
+              render());
 }

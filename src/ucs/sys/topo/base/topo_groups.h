@@ -9,6 +9,7 @@
 
 #include <ucs/sys/topo/base/topo_int.h>
 #include <ucs/datastruct/array.h>
+#include <ucs/datastruct/string_buffer.h>
 
 BEGIN_C_DECLS
 
@@ -90,6 +91,21 @@ void ucs_topo_init_group(ucs_topo_group_t *group);
  * @param [in] group  Group to release.
  */
 void ucs_topo_release_group(ucs_topo_group_t *group);
+
+
+/**
+ * Render system topology groups as a table.
+ *
+ * @param [in]  devices  Array of registered system devices.
+ * @param [in]  groups   System topology groups to render.
+ * @param [out] strb     String buffer to append the rendered table to.
+ *
+ * @return UCS_OK on success, or an error status if table rendering was
+ *         incomplete.
+ */
+ucs_status_t ucs_topo_groups_render(const ucs_topo_sys_device_info_t *devices,
+                                    const ucs_topo_groups_t *groups,
+                                    ucs_string_buffer_t *strb);
 
 
 /**

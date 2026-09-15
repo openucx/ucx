@@ -545,15 +545,15 @@ ucs_topo_groups_format_elements(const ucs_topo_sys_device_info_t *devices,
     }
 }
 
-static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
-                                const ucs_topo_groups_t *groups)
+ucs_status_t ucs_topo_groups_render(const ucs_topo_sys_device_info_t *devices,
+                                    const ucs_topo_groups_t *groups,
+                                    ucs_string_buffer_t *strb)
 {
     const ucs_table_config_t table_config = {
         .n_cols = 3
     };
     ucs_string_buffer_t gpus_strb         = UCS_STRING_BUFFER_INITIALIZER;
     ucs_string_buffer_t nics_strb         = UCS_STRING_BUFFER_INITIALIZER;
-    ucs_string_buffer_t table_strb        = UCS_STRING_BUFFER_INITIALIZER;
     const ucs_topo_group_t *group;
     ucs_table_row_h row;
     ucs_status_t status;
@@ -567,6 +567,12 @@ static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "GPUs");
     ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "NICs");
     ucs_table_add_separator(&table);
+
+    if (ucs_array_is_empty(groups)) {
+        ucs_table_add_row(&table, &row);
+        ucs_table_row_add_cell_fmt(&table, row, 3, UCS_TABLE_ALIGN_LEFT,
+                                   "<empty>");
+    }
 
     group_idx = 0;
     ucs_array_for_each(group, groups) {
@@ -584,19 +590,29 @@ static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
                                    ucs_string_buffer_cstr(&nics_strb));
     }
 
-    ucs_table_render(&table, &table_strb);
+    ucs_table_render(&table, strb);
     status = ucs_table_get_status(&table);
+
+    ucs_table_cleanup(&table);
+    ucs_string_buffer_cleanup(&nics_strb);
+    ucs_string_buffer_cleanup(&gpus_strb);
+    return status;
+}
+
+static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
+                                const ucs_topo_groups_t *groups)
+{
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+    ucs_status_t status;
+
+    status = ucs_topo_groups_render(devices, groups, &strb);
     if (status != UCS_OK) {
         ucs_warn("topology groups table render incomplete: %s",
                  ucs_status_string(status));
     }
 
-    ucs_log_print_compact(ucs_string_buffer_cstr(&table_strb));
-
-    ucs_table_cleanup(&table);
-    ucs_string_buffer_cleanup(&table_strb);
-    ucs_string_buffer_cleanup(&nics_strb);
-    ucs_string_buffer_cleanup(&gpus_strb);
+    ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
 }
 
 ucs_status_t
