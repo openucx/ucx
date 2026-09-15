@@ -35,14 +35,12 @@ git -C "$repo_dir" rev-parse HEAD
 
 1. Identify the base branch, changed files, added/deleted line count, CI state,
    and author intent from the PR title and description.
-2. Read existing PR discussion first and apply the existing-comments rules
-   below.
-3. Treat the GitHub/app/`gh` PR diff as authoritative for changed files and
+2. Treat the GitHub/app/`gh` PR diff as authoritative for changed files and
    review line anchors.
-4. Apply the PR size and scope rules from `REVIEW.md`.
-5. Apply the risk order and checklist from `REVIEW.md`.
-6. Run the candidate-comment gate below before keeping any finding.
-7. Run the review-submission self-check before returning or posting the review.
+3. Apply the PR size and scope rules from `REVIEW.md`.
+4. Apply the risk order and checklist from `REVIEW.md`.
+5. Run the candidate-comment gate below before keeping any finding.
+6. Run the review-submission self-check before returning or posting the review.
 
 If the `gh` CLI is available and the user permits network access, useful
 commands are:
@@ -53,12 +51,27 @@ gh pr diff <PR>
 gh pr checks <PR>
 ```
 
-## Existing Comments
+## Prior Discussion
 
-- Avoid adding a comment that duplicates a previous comment.
-- If the same issue was already raised in an unresolved thread, add a `+1`
-  reaction with `gh api` instead of opening a new thread. For inline PR review
-  comments, use:
+Before reviewing the diff and again immediately before submitting, fetch the
+complete paginated history of inline comments, top-level comments, reviews, and
+replies; `gh pr view` alone does not provide it:
+
+```sh
+gh api --paginate repos/<owner>/<repo>/pulls/<PR>/comments
+gh api --paginate repos/<owner>/<repo>/issues/<PR>/comments
+gh api --paginate repos/<owner>/<repo>/pulls/<PR>/reviews
+```
+
+If any fetch fails, do not submit findings; report that duplicate detection
+could not be completed. Build or update one ledger, grouping inline replies by
+`in_reply_to_id`. Compare every candidate comment with the full conversation by
+meaning, not exact wording or line. Discard it if the same concern, question,
+requested change, explanation, or intent is already present, or if a reply
+already answers it, including when the code moved in a newer revision.
+
+If the same issue remains unresolved, add a `+1` reaction instead of opening a
+new thread. For inline PR review comments, use:
 
 ```sh
 gh api -X POST repos/<owner>/<repo>/pulls/comments/<comment-id>/reactions \
@@ -66,18 +79,15 @@ gh api -X POST repos/<owner>/<repo>/pulls/comments/<comment-id>/reactions \
   -f content="+1"
 ```
 
-  For top-level PR conversation comments, use
-  `repos/<owner>/<repo>/issues/comments/<comment-id>/reactions` instead.
-- If the author replied with a good explanation, accept the intent unless the
-  current code or CI contradicts it.
-- If new evidence changes an existing concern, reply in the existing thread
-  instead of opening a duplicate thread.
+For top-level PR conversation comments, use
+`repos/<owner>/<repo>/issues/comments/<comment-id>/reactions` instead. If new
+evidence changes an existing concern, reply in its thread. If the author gave a
+good explanation, move on unless the current code or CI contradicts it.
 
 ## Candidate Comment Gate
 
 Keep a finding only after verifying all of these:
 
-- It is not already covered by an existing comment.
 - The issue is still present in the latest diff.
 - The comment is anchored to a changed line, or clearly belongs as PR-level
   feedback.
@@ -93,9 +103,8 @@ Keep a finding only after verifying all of these:
 - Leave the review body empty unless there is a real PR-level concern.
 - Do not generate boilerplate review summaries, finding counts, severity
   counts, or `Code Review` headings.
-- Remove comments about intentional tradeoffs that were already explained,
-  comments that are only interesting observations, and any finding whose impact
-  is unclear.
+- Remove comments that are only interesting observations and any finding whose
+  impact is unclear.
 - Scrub comments for `REVIEW.md` style violations such as severity headings,
   emoji labels, `[P*]` labels, and uppercase severity labels.
 - Check every inline comment for suggestion eligibility. If the requested fix is

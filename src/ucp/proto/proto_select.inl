@@ -84,6 +84,10 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
     ucp_proto_select_key_t key;
     khiter_t khiter;
 
+    /* Protocol selection should not be triggered from async context, since
+       it may race with protocol table updates from main thread */
+    ucs_assert(!ucs_async_is_from_async(&worker->async));
+
     UCS_STATIC_ASSERT(sizeof(key.param) == sizeof(key.u64));
     key.param = *select_param;
 
@@ -104,6 +108,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
             }
         }
 
+        /* FIXME proto_select could get invalidated by adding rkey config */
         proto_select->cache.key   = key.u64;
         proto_select->cache.value = select_elem;
     }

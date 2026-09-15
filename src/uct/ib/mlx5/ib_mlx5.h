@@ -695,10 +695,11 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+    uint16_t                    hw_ci;      /* First BB index of last completed WQE */
+    uint16_t                    ft_ci;      /* First BB index of last ft completed WQE */
     uint16_t                    path_mtu_mask;  /* Path MTU in bytes - 1 */
     uint8_t                     path_mtu_shift; /* log2(path MTU in bytes) */
 #if UCS_ENABLE_ASSERT
-    uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
@@ -1290,6 +1291,17 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char* name, size_t size,
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);
 #endif
+
+/**
+ * Compare firmware AA.BB.CCCC against a minimum BB.CCCC, ignoring the
+ * device-family prefix AA.
+ *
+ * @return 1 if @a fw_ver parses and is at least
+ *         @a min_release.@a min_build, otherwise 0.
+ */
+int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
+                                        unsigned min_release,
+                                        unsigned min_build);
 
 ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                                    ucs_ternary_auto_value_t ar_enable,

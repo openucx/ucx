@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucp/proto/proto_multi.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -1412,6 +1413,36 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_memhs) {
 
 UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
     test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
+    static constexpr size_t NUM_ELEMS = 16;
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_put_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 64 * UCS_KBYTE);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
+    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
+                                            UCP_REMOTE_ADDR_INVALID,
+                                            UCP_RKEY_INVALID, &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* All the elements fit into a single post, so at least one outstanding post
+       per lane of the selected protocol means they were split between them */
+    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+    const ucp_proto_multi_priv_t *mpriv =
+            static_cast<const ucp_proto_multi_priv_t*>(
+                    req->send.proto_config->priv);
+    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
+
+    request_wait(sptr);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,

@@ -415,6 +415,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
                     const uct_ud_iface_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
+    ucs_time_t keepalive_interval;
     ucs_status_t status;
     size_t data_size;
     int mtu;
@@ -492,6 +493,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     } else {
         self->tx.tick = ucs_time_from_sec(config->timer_tick);
     }
+
+    /* A private endpoint is not owned by the upper layer, so it has to check
+     * its peer by itself, reusing the keepalive interval of the upper layer */
+    keepalive_interval = (params->field_mask &
+                          UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL) ?
+                         params->keepalive_interval :
+                         UCT_UD_SLOW_TIMER_MAX_TICK(self);
+    self->config.keepalive_interval = ucs_max(keepalive_interval,
+                                              self->tx.tick);
 
     if (config->timer_backoff < UCT_UD_MIN_TIMER_TIMER_BACKOFF) {
         ucs_error("The timer back off must be >= %lf (%lf)",
