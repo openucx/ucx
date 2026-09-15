@@ -132,6 +132,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_assertv(!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH), "req=%p ep=%p", req,
                 ep);
 
+    if (req->send.flush.sw_state == UCP_EP_FLUSH_SW_STATE_RESTART_PENDING) {
+        return;
+    }
+
     /* If the set of live lanes changed since flush operation was submitted,
      * adjust the number of expected completions. Decrement the count only for
      * lanes we never started: started lanes are already accounted for - by
