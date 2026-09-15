@@ -395,6 +395,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                  cuda_ipc_event->d_bptr,
                                  cuda_ipc_event->mapped_addr,
                                  cuda_ipc_event->cuda_device,
+                                 cuda_ipc_event->cache_region,
                                  uct_cuda_ipc_component.enable_remote_cache);
 }
 
