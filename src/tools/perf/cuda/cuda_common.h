@@ -38,9 +38,13 @@ BEGIN_C_DECLS
     do { \
         CUresult _cerr = _func(__VA_ARGS__); \
         if (_cerr != CUDA_SUCCESS) { \
-            const char *_name = "unknown", *_desc = "no description"; \
-            cuGetErrorName(_cerr, &_name); \
-            cuGetErrorString(_cerr, &_desc); \
+            const char *_name, *_desc; \
+            if (cuGetErrorName(_cerr, &_name) != CUDA_SUCCESS) { \
+                _name = "unknown"; \
+            } \
+            if (cuGetErrorString(_cerr, &_desc) != CUDA_SUCCESS) { \
+                _desc = "no description"; \
+            } \
             ucs_log(_log_level, "%s() failed: %s (%s)", \
                     UCS_PP_MAKE_STRING(_func), _name, _desc); \
             _handler; \

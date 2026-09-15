@@ -397,12 +397,12 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
     prop.allocFlags.gpuDirectRDMACapable     = 0;
 
     CUDA_DRV_CALL_RET(UCS_ERR_NO_MEMORY, cuMemGetAllocationGranularity,
-                       &granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
+                      &granularity, &prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM);
 
     alloc_length = ucs_align_up(length, granularity);
 
     CUDA_DRV_CALL_RET(UCS_ERR_NO_MEMORY, cuMemCreate, &handle, alloc_length,
-                       &prop, 0);
+                      &prop, 0);
 
     status = UCS_ERR_NO_MEMORY;
     CUDA_DRV_CALL(goto release_handle, UCS_LOG_LEVEL_ERROR,
