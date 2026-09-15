@@ -1366,51 +1366,58 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_cma, mm_cma, "posix,cma")
  */
 class test_ucp_proto_mock_supersede : public test_ucp_proto_mock_cma {
 public:
-    test_ucp_proto_mock_supersede() :
-        m_superseded(nullptr), m_superseder(nullptr), m_superseded_by(0),
-        m_proto_class(0)
-    {
-    }
-
     /* Protocol selection is done when the endpoint is connected, so the rule
      * must be added before that */
     virtual void post_ucp_init() override
     {
-        m_superseded = find_proto("am/egr/short");
-        m_superseder = find_proto("am/egr/single/bcopy");
-        ASSERT_NE(nullptr, m_superseded);
-        ASSERT_NE(nullptr, m_superseder);
+        ucp_proto_t *superseded = find_proto("am/egr/short");
+        ucp_proto_t *superseder = find_proto("am/egr/single/bcopy");
+        ASSERT_NE(nullptr, superseded);
+        ASSERT_NE(nullptr, superseder);
 
-        m_superseded_by             = m_superseded->superseded_by;
-        m_proto_class               = m_superseder->proto_class;
-        m_superseded->superseded_by = TEST_PROTO_CLASS;
-        m_superseder->proto_class   = TEST_PROTO_CLASS;
+        m_supersede.reset(
+                new scoped_supersede(superseded, superseder, TEST_PROTO_CLASS));
 
         test_ucp_proto_mock_cma::post_ucp_init();
     }
 
-    virtual void cleanup() override
-    {
-        if (m_superseded != nullptr) {
-            m_superseded->superseded_by = m_superseded_by;
-        }
-
-        if (m_superseder != nullptr) {
-            m_superseder->proto_class = m_proto_class;
-        }
-
-        test_ucp_proto_mock_cma::cleanup();
-    }
-
 private:
+    /* Declares a supersede rule between two protocols, and restores the global
+     * 'ucp_protocols[]' entries when destroyed. The rule is scoped to the test
+     * object rather than to cleanup(), which is not called when init() fails
+     * after the rule was added.
+     */
+    class scoped_supersede {
+    public:
+        scoped_supersede(ucp_proto_t *superseded, ucp_proto_t *superseder,
+                         unsigned proto_class) :
+            m_superseded(superseded),
+            m_superseder(superseder),
+            m_superseded_by(superseded->superseded_by),
+            m_proto_class(superseder->proto_class)
+        {
+            m_superseded->superseded_by = proto_class;
+            m_superseder->proto_class   = proto_class;
+        }
+
+        ~scoped_supersede()
+        {
+            m_superseded->superseded_by = m_superseded_by;
+            m_superseder->proto_class   = m_proto_class;
+        }
+
+    private:
+        ucp_proto_t *m_superseded;
+        ucp_proto_t *m_superseder;
+        unsigned    m_superseded_by;
+        unsigned    m_proto_class;
+    };
+
     /* Protocol class which is not used by any protocol, so that the test does
      * not depend on the classes declared by the RMA protocols */
     static const unsigned TEST_PROTO_CLASS = UCS_BIT(31);
 
-    ucp_proto_t *m_superseded;
-    ucp_proto_t *m_superseder;
-    unsigned    m_superseded_by;
-    unsigned    m_proto_class;
+    std::unique_ptr<scoped_supersede> m_supersede;
 };
 
 UCS_TEST_P(test_ucp_proto_mock_supersede, am_send_1_lane)
