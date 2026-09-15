@@ -79,7 +79,7 @@ typedef struct ucs_topo_global_ctx {
 
 struct ucs_global_state {
     unsigned                   num_devices;
-    unsigned                   class_incomplete_mask;
+    unsigned                   device_class_incomplete_mask;
     ucs_topo_sys_device_info_t devices[];
 };
 
@@ -1137,7 +1137,7 @@ ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class)
 }
 
 static int
-ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class)
+ucs_topo_device_class_is_incomplete_nolock(ucs_topo_device_class_t device_class)
 {
     return UCS_BIT_GET(ucs_topo_global_ctx.device_class_incomplete_mask,
                        device_class);
@@ -1162,7 +1162,7 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 
     device_class = ucs_topo_global_ctx.devices[sys_dev].device_class;
     if ((device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
-        ucs_topo_device_class_is_incomplete(device_class)) {
+        ucs_topo_device_class_is_incomplete_nolock(device_class)) {
         ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
         goto out_unlock;
     }
@@ -1483,7 +1483,7 @@ ucs_global_state_t *ucs_topo_extract_state(void)
 
     memcpy(state->devices, ucs_topo_global_ctx.devices, devices_size);
     state->num_devices = ucs_topo_global_ctx.num_devices;
-    state->class_incomplete_mask =
+    state->device_class_incomplete_mask =
             ucs_topo_global_ctx.device_class_incomplete_mask;
 
     ucs_topo_global_ctx.num_devices                  = 0;
@@ -1509,7 +1509,7 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
            sizeof(ucs_topo_sys_device_info_t) * state->num_devices);
     ucs_topo_global_ctx.num_devices = state->num_devices;
     ucs_topo_global_ctx.device_class_incomplete_mask =
-            state->class_incomplete_mask;
+            state->device_class_incomplete_mask;
 
     /* Create the hash table */
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);

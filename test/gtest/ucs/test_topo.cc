@@ -550,6 +550,14 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
     ASSERT_UCS_OK(
             ucs_topo_sys_device_set_class(net_dev, UCS_TOPO_DEVICE_CLASS_NET));
 
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_class(acc_hi,
+                                                UCS_TOPO_DEVICE_CLASS_LAST));
+    }
+
     /* Ordinals follow the bus id (BDF) order within the ACC class, regardless
      * of registration order. */
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo));
