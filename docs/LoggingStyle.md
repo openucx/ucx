@@ -4,6 +4,7 @@
 
 | Level   | Description                                                     |
 |---------|-----------------------------------------------------------------|
+| `fatal` | Unrecoverable error and the program is aborted immediately      |
 | `error` | Unexpected error and the program could not continue as usual    |
 | `warn`  | Unexpected situation but the program can continue running       |
 | `diag`  | Silent adjustment or handled error a user would want to know    |
@@ -17,7 +18,7 @@
 
 * Choose the level from the audience and the frequency of the message
 * Use `debug` and not `trace` for one-time flows such as initialization and
-  device discovery, because release builds print only `debug` and above
+  device discovery, because release builds compile out levels above `debug`
 * Keep the same level for the same event in different code paths
 
 ## General
@@ -53,8 +54,6 @@
 * Print error message in the first place the error is detected
 * Print the exact cause of the error and not the assumed reason, because the
   assumption may not be true on all systems / in the future
-* Prefer `ucs_assertv()` over `ucs_assert()`, to print the values which failed
-  the check
 
 ## InfiniBand
 
