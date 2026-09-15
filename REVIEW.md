@@ -91,6 +91,8 @@ Focused checks:
   trace the object from acquisition to first use. The fix should be placed at
   the earliest point where the invariant becomes true, before any consumer can
   observe the old state.
+- When a PR adds or changes log messages, check the level, the printed
+  identifiers, and the message content against `docs/LoggingStyle.md`.
 - When a PR adds or changes `AC_ARG_WITH`, `AC_ARG_ENABLE`, `AC_DEFINE`, or an
   `AM_CONDITIONAL`, trace the option through `configure.m4`, `Makefile.am`,
   and CI/build scripts. Check explicit `--with-*`/`--enable-*` failure paths,
