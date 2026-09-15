@@ -13,15 +13,19 @@
 | `trace` | Larger volume of logging, in special flows during runtime       |
 | `req`   | UCP requests                                                    |
 | `data`  | Dumps every packet sent/received                                |
+| `async` | Async context events, such as timers and signal handlers        |
+| `func`  | Function calls, printed as the function name and arguments      |
+| `poll`  | Every polling iteration, including the ones which found nothing |
 
 ## Choosing a Level
 
-* Use `error`, `warn`, `diag`, and `info` for messages addressed to the user,
-  and `debug` and `trace` for messages addressed to a UCX developer
+* Use `fatal`, `error`, `warn`, `diag`, and `info` for messages addressed to
+  the user, and `debug` and `trace` for messages addressed to a UCX developer
 * Use `ucs_trace_req()` for per-request events and `ucs_trace_data()` for
   per-packet events, and not `trace` for either
 * Use `debug` and not `trace` for one-time flows such as initialization and
-  device discovery, because release builds compile out levels above `debug`
+  device discovery, because `--disable-logging`, used by
+  `contrib/configure-release`, compiles out levels above `debug`
 * Keep the same level for the same event in different code paths
 
 ## General
