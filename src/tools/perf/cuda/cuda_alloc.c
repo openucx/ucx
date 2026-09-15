@@ -352,7 +352,8 @@ static void ucx_perf_cuda_async_uct_free(const ucx_perf_context_t *perf,
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
 
 static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
-        const ucx_perf_context_t *perf, size_t length, void **address_p)
+        const ucx_perf_context_t *UCS_V_UNUSED perf, size_t length,
+        void **address_p)
 {
     CUmemAllocationProp prop    = {};
     CUmemAccessDesc access_desc = {};
@@ -365,6 +366,9 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
     CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetDevice, &device);
 
     /* Request a VMM allocation localized to a specific GPU locality domain.
+     * localityDomainId is always 0: perftest has no parameter to select a
+     * domain, and the other domains of a multi-domain GPU can be exposed
+     * later if there is a need for it.
      * gpuDirectRDMACapable is always 0: this allocator's purpose is strict
      * domain-local placement, and requesting GDR-capable placement is
      * rejected by the driver for locality-domain allocations. */
@@ -387,6 +391,7 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
     CUDA_DRV_CALL(goto out_release_handle, UCS_LOG_LEVEL_ERROR,
                   cuMemAddressReserve, &dptr, alloc_length, granularity, 0, 0);
 
+    status = UCS_ERR_IO_ERROR;
     CUDA_DRV_CALL(goto err_address_free, UCS_LOG_LEVEL_ERROR, cuMemMap, dptr,
                   alloc_length, 0, handle, 0);
 
