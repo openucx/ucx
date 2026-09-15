@@ -35,6 +35,12 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
     [UCT_RC_VERBS_FLUSH_MODE_LAST]         = NULL
 };
 
+static const char *uct_rc_verbs_srq_mode_names[] = {
+    [UCT_RC_VERBS_SRQ_MODE_AUTO] = "auto",
+    [UCT_RC_VERBS_SRQ_MODE_OFF]  = "n",
+    [UCT_RC_VERBS_SRQ_MODE_LAST] = NULL
+};
+
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {"RC_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_RC_VERBS_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
@@ -49,6 +55,19 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    "Limits the number of outstanding posted work requests. The actual limit is\n"
    "a minimum between this value and the TX queue length. -1 means no limit.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
+
+  {"RX_MAX_WR", "128",
+   "Number of receive WRs posted to each QP created without an SRQ, in the\n"
+   "range 1 to 65535, and limited by the device's max_qp_wr. Receive-buffer\n"
+   "and RX CQ requirements grow with the number of endpoints.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, rx_max_wr), UCS_CONFIG_TYPE_UINT},
+
+  {"SRQ_ENABLE", "auto",
+   "Whether QPs use an SRQ:\n"
+   " - auto : Use an SRQ if the device supports it\n"
+   " - n    : Create QPs without an SRQ",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, srq_mode),
+   UCS_CONFIG_TYPE_ENUM(uct_rc_verbs_srq_mode_names)},
 
   {"FLUSH_MODE", "auto",
    "Method to use for posting flush operation:\n"
@@ -166,17 +185,28 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     return num_wcs;
 }
 
-static unsigned uct_rc_verbs_iface_progress(void *arg)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_verbs_iface_progress(void *arg, int nosrq)
 {
     uct_rc_verbs_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_verbs_iface_poll_rx_common(iface);
+    count = uct_rc_verbs_iface_poll_rx(iface, nosrq);
     if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
 
     return count + uct_rc_verbs_iface_poll_tx(iface);
+}
+
+static unsigned uct_rc_verbs_iface_progress_srq(void *arg)
+{
+    return uct_rc_verbs_iface_progress(arg, 0);
+}
+
+static unsigned uct_rc_verbs_iface_progress_nosrq(void *arg)
+{
+    return uct_rc_verbs_iface_progress(arg, 1);
 }
 
 static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
@@ -231,6 +261,11 @@ uct_rc_iface_verbs_init_rx(uct_rc_iface_t *rc_iface,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
 
+    if (rc_iface->config.srq_disable) {
+        iface->srq = NULL;
+        return UCS_OK;
+    }
+
     return uct_rc_iface_init_rx(rc_iface, config, &iface->srq);
 }
 
@@ -238,8 +273,28 @@ void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
 
+    if (rc_iface->config.srq_disable) {
+        return;
+    }
+
     /* TODO flush RX buffers */
     uct_ib_destroy_srq(iface->srq);
+}
+
+/* Finalize cleanup after all receive WR flush completions have been polled.
+ * QPs attached to an SRQ are cleaned up by the LAST_WQE event instead. */
+void uct_rc_verbs_iface_gc_drain_check(uct_rc_verbs_iface_t *iface)
+{
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx, *tmp;
+
+    ucs_assert(iface->super.config.srq_disable);
+
+    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->super.qp_gc_list,
+                           super.list) {
+        if (cleanup_ctx->rx_remaining == 0) {
+            uct_rc_iface_qp_cleanup_progress(&cleanup_ctx->super);
+        }
+    }
 }
 
 static void
@@ -247,7 +302,11 @@ uct_rc_verbs_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
 {
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx =
             ucs_derived_of(rc_cleanup_ctx, uct_rc_verbs_iface_qp_cleanup_ctx_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_cleanup_ctx->iface,
+                                                 uct_rc_verbs_iface_t);
+
     uct_ib_destroy_qp(cleanup_ctx->qp);
+    iface->rx_cq_available += iface->config.rx_max_wr;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
@@ -258,8 +317,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
     uct_ib_iface_config_t *ib_config    = &config->super.super.super;
     uct_ib_md_t *ib_md                  = ucs_derived_of(tl_md, uct_ib_md_t);
-    uct_ib_iface_init_attr_t init_attr  = {};
+    uct_rc_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
+    unsigned rx_wr_limit, rx_batch_limit, num_eps;
+    unsigned rx_max_wr, rx_cq_len;
     const char *dev_name;
     ucs_status_t status;
     struct ibv_qp *qp;
@@ -269,29 +330,74 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
-    init_attr.rx_hdr_len            = sizeof(uct_rc_hdr_t);
-    init_attr.qp_type               = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
-    init_attr.seg_size              = ib_config->seg_size;
-    init_attr.xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t), UCT_IB_RETH_LEN);
-    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
-    init_attr.tx_moderation         = config->super.tx_cq_moderation;
-    init_attr.dev_name              = params->mode.device.dev_name;
+    /* Use an SRQ unless disabled or unsupported by the device. */
+    init_attr.srq_disable = (config->srq_mode == UCT_RC_VERBS_SRQ_MODE_OFF) ||
+                            !uct_ib_device_has_srq(&ib_md->dev);
+
+    if (init_attr.srq_disable) {
+        rx_wr_limit = ucs_min(IBV_DEV_ATTR(&ib_md->dev, max_qp_wr), UINT16_MAX);
+        if ((config->rx_max_wr == 0) || (config->rx_max_wr > rx_wr_limit)) {
+            ucs_error(UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_MAX_WR must be "
+                      "between 1 and %u when QPs are created without an SRQ",
+                      rx_wr_limit);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        rx_max_wr                 = config->rx_max_wr;
+        rx_batch_limit            = ucs_min(ib_config->rx.max_batch,
+                                            ucs_max(rx_max_wr / 4, 1));
+        /* Room for the receive WRs of all endpoints; the 64-bit endpoint
+         * count is capped by the largest CQ before multiplying. */
+        num_eps   = ucs_min(ib_config->super.max_num_eps,
+                            IBV_DEV_ATTR(&ib_md->dev, max_cqe) / rx_max_wr);
+        rx_cq_len = ucs_max(num_eps * rx_max_wr, ib_config->rx.queue_len);
+        ucs_debug("%s: RX CQ length %u for %u receive WRs per endpoint",
+                  uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr);
+
+        /* Leave a batch of receive WRs unreposted, to avoid RNR. */
+        init_attr.fc_max_wnd_size = ucs_max(rx_max_wr - rx_batch_limit, 1);
+    } else {
+        rx_max_wr                 = 0;
+        rx_batch_limit            = 0;
+        rx_cq_len                 = ib_config->rx.queue_len;
+    }
+
+    init_attr.super.fc_req_size           = sizeof(uct_rc_pending_req_t);
+    init_attr.super.rx_hdr_len            = sizeof(uct_rc_hdr_t);
+    init_attr.super.qp_type               = IBV_QPT_RC;
+    init_attr.super.cq_len[UCT_IB_DIR_RX] = rx_cq_len;
+    init_attr.super.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.super.seg_size              = ib_config->seg_size;
+    init_attr.super.xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t),
+                                                    UCT_IB_RETH_LEN);
+    init_attr.super.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev,
+                                                         max_qp_rd_atom);
+    init_attr.super.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.super.dev_name              = params->mode.device.dev_name;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
                               &config->super.super, &init_attr);
 
+    self->config.rx_max_wr               = rx_max_wr;
+    self->rx_cq_available                = rx_cq_len;
+    self->rx_post_recv_pending           = 0;
     self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
                                                    self->super.config.tx_qp_len);
     self->super.config.tx_moderation     = ucs_min(self->super.config.tx_moderation,
                                                    self->config.tx_max_wr / 4);
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
-    self->super.progress                 = uct_rc_verbs_iface_progress;
+    self->super.progress                 = self->super.config.srq_disable ?
+                                           uct_rc_verbs_iface_progress_nosrq :
+                                           uct_rc_verbs_iface_progress_srq;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
+
+    /* A QP must be able to reach the repost threshold. */
+    if (self->super.config.srq_disable) {
+        self->super.super.config.rx_max_batch =
+                ucs_min(self->super.super.config.rx_max_batch, rx_batch_limit);
+    }
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {
@@ -350,7 +456,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     /* Create a dummy QP in order to find out max_inline */
     status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
                                     self->super.config.tx_qp_len,
-                                    self->srq);
+                                    self->config.rx_max_wr, self->srq);
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
@@ -388,7 +494,7 @@ uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface)
     iface->super.rx.srq.available = iface->super.rx.srq.quota;
     iface->super.rx.srq.quota     = 0;
     while (iface->super.rx.srq.available > 0) {
-        if (uct_rc_verbs_iface_post_recv_common(iface, 1) == 0) {
+        if (uct_rc_verbs_iface_post_recv_common(iface, NULL, 1) == 0) {
             ucs_error("failed to post receives");
             return UCS_ERR_NO_MEMORY;
         }
@@ -414,7 +520,9 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
                                       flags);
 }
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsigned max)
+unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
+                                             uct_rc_verbs_ep_t *ep,
+                                             unsigned max)
 {
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
@@ -429,13 +537,40 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface, unsign
         return 0;
     }
 
-    ret = ibv_post_srq_recv(iface->srq, &wrs[0].ibwr, &bad_wr);
-    if (ret != 0) {
-        ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
+    if (ep == NULL) {
+        ret = ibv_post_srq_recv(iface->srq, &wrs[0].ibwr, &bad_wr);
+        if (ret != 0) {
+            ucs_fatal("ibv_post_srq_recv() returned %d: %m", ret);
+        }
+        iface->super.rx.srq.available -= count;
+    } else {
+        ret = ibv_post_recv(ep->qp, &wrs[0].ibwr, &bad_wr);
+        if (ret != 0) {
+            ucs_fatal("ibv_post_recv() on QP 0x%x returned %d: %m",
+                      ep->qp->qp_num, ret);
+        }
+        ep->rx_available -= count;
     }
-    iface->super.rx.srq.available -= count;
 
     return count;
+}
+
+void uct_rc_verbs_iface_eps_post_recv(uct_rc_verbs_iface_t *iface)
+{
+    unsigned batch = iface->super.super.config.rx_max_batch;
+    uct_rc_verbs_ep_t *ep;
+    uct_rc_ep_t *rc_ep;
+
+    iface->rx_post_recv_pending = 0;
+    ucs_list_for_each(rc_ep, &iface->super.ep_list, list) {
+        ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
+        if (!uct_rc_verbs_ep_can_post_recv(ep) || (ep->rx_available < batch)) {
+            continue;
+        }
+
+        /* Requeue the scan if the pool cannot supply a full batch. */
+        uct_rc_verbs_iface_post_recv_common(iface, ep, 0);
+    }
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
@@ -590,8 +725,9 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
         return status;
     }
 
-    return uct_ib_device_query_ports(&ib_md->dev, UCT_IB_DEVICE_FLAG_SRQ,
-                                     tl_devices_p, num_tl_devices_p);
+    /* Devices without SRQ support can use receive WRs posted to each QP. */
+    return uct_ib_device_query_ports(&ib_md->dev, 0, tl_devices_p,
+                                     num_tl_devices_p);
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,

@@ -250,6 +250,16 @@ typedef struct uct_rc_srq {
 } uct_rc_srq_t;
 
 
+typedef struct uct_rc_iface_init_attr {
+    uct_ib_iface_init_attr_t super;
+
+    uint8_t                  srq_disable;     /* create QPs without an SRQ */
+    unsigned                 fc_max_wnd_size; /* maximum flow control window;
+                                               * if zero, the receive queue
+                                               * length is used */
+} uct_rc_iface_init_attr_t;
+
+
 struct uct_rc_iface {
     uct_ib_iface_t              super;
 
@@ -299,6 +309,8 @@ struct uct_rc_iface {
         uint16_t             fc_wnd_size;
         uint8_t              fc_enabled;
 
+        uint8_t              srq_disable;
+
         uint8_t              min_rnr_timer;
         uint8_t              timeout;
         uint8_t              rnr_retry;
@@ -328,7 +340,7 @@ struct uct_rc_iface {
 UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_rc_iface_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
                   const uct_rc_iface_common_config_t*,
-                  const uct_ib_iface_init_attr_t*);
+                  const uct_rc_iface_init_attr_t*);
 
 
 struct uct_rc_iface_send_op {
@@ -408,11 +420,12 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
  */
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     uct_ib_qp_attr_t *attr, unsigned max_send_wr,
-                                    struct ibv_srq *srq);
+                                    unsigned max_recv_wr, struct ibv_srq *srq);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
                             uct_ib_qp_attr_t *qp_init_attr,
                             unsigned max_send_wr,
+                            unsigned max_recv_wr,
                             struct ibv_srq *srq);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
