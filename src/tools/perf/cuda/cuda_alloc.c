@@ -11,7 +11,6 @@
 #include "cuda_common.h"
 #include <tools/perf/lib/libperf_int.h>
 
-#include <cuda.h>
 #include <cuda_runtime.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/ptr_arith.h>
