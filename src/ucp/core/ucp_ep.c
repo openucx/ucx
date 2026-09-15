@@ -232,7 +232,6 @@ static void ucp_ep_deallocate(ucp_ep_h ep)
 static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 {
     ucp_ep_h ep;
-    ucp_lane_index_t lane;
     ucs_status_t status;
 
     ep = ucs_strided_alloc_get(&worker->ep_alloc, "ucp_ep");
@@ -271,6 +270,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #endif
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
+    ep->ext->lane_generation              = 0;
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
@@ -281,9 +281,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
 
-    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
-        ucp_ep_set_lane(ep, lane, NULL);
-    }
+    memset(ep->uct_eps, 0, sizeof(ep->uct_eps));
 #if ENABLE_DEBUG_DATA
     ucs_snprintf_zero(ep->peer_name, UCP_WORKER_ADDRESS_NAME_MAX, "%s",
                       peer_name);
@@ -4722,7 +4720,13 @@ ucs_status_t ucp_ep_realloc_lanes(ucp_ep_h ep, unsigned new_num_lanes)
                             0;
 
     for (lane = old_num_lanes; lane < new_num_lanes; ++lane) {
-        ucp_ep_set_lane(ep, lane, NULL);
+        if (lane < UCP_MAX_FAST_PATH_LANES) {
+            ucp_ep_set_lane(ep, lane, NULL);
+        } else {
+            /* Slow-lane storage was just reallocated and is not initialized,
+             * so avoid reading it in ucp_ep_set_lane(). */
+            ep_ext->uct_eps[lane - UCP_MAX_FAST_PATH_LANES] = NULL;
+        }
     }
 
     return UCS_OK;
