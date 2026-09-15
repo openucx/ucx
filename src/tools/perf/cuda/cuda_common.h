@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -7,6 +7,7 @@
 #ifndef CUDA_COMMON_H_
 #define CUDA_COMMON_H_
 
+#include <cuda.h>
 #include <ucs/debug/log_def.h>
 
 BEGIN_C_DECLS
@@ -30,6 +31,32 @@ BEGIN_C_DECLS
 
 #define CUDA_CALL_WARN(_func, ...) \
     CUDA_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
+
+/* Same as CUDA_CALL* above, but for CUresult-returning CUDA driver API calls
+ * (e.g. cuMemCreate, cuMemMap), as opposed to cudaError_t-returning CUDA
+ * runtime API calls. */
+#define CUDA_DRV_CALL(_handler, _log_level, _func, ...) \
+    do { \
+        CUresult _cerr = _func(__VA_ARGS__); \
+        if (_cerr != CUDA_SUCCESS) { \
+            const char *_name, *_desc; \
+            if (cuGetErrorName(_cerr, &_name) != CUDA_SUCCESS) { \
+                _name = "unknown"; \
+            } \
+            if (cuGetErrorString(_cerr, &_desc) != CUDA_SUCCESS) { \
+                _desc = "no description"; \
+            } \
+            ucs_log(_log_level, "%s() failed: %s (%s)", \
+                    UCS_PP_MAKE_STRING(_func), _name, _desc); \
+            _handler; \
+        } \
+    } while (0)
+
+#define CUDA_DRV_CALL_RET(_ret, _func, ...) \
+    CUDA_DRV_CALL(return _ret, UCS_LOG_LEVEL_ERROR, _func, __VA_ARGS__)
+
+#define CUDA_DRV_CALL_WARN(_func, ...) \
+    CUDA_DRV_CALL(, UCS_LOG_LEVEL_WARN, _func, __VA_ARGS__)
 
 END_C_DECLS
 
