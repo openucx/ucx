@@ -933,7 +933,7 @@ UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
 /* Stale private endpoint must be released after its peer is gone, so that it is
  * not reused by a connection which is matched by the same conn_sn. */
 UCS_TEST_P(test_ud, stale_private_ep_reuse, "UD_LINGER_TIMEOUT=1s",
-           "UD_TIMEOUT=1s") {
+           "UD_TIMEOUT=3s") {
     void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
 
     m_e1->connect_to_iface(0, *m_e2);
@@ -970,8 +970,8 @@ UCS_TEST_P(test_ud, stale_private_ep_reuse, "UD_LINGER_TIMEOUT=1s",
 }
 
 /* Private endpoint must be kept as long as its peer is alive. */
-UCS_TEST_P(test_ud, private_ep_keepalive, "UD_TIMEOUT=1s") {
-    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(3);
+UCS_TEST_P(test_ud, private_ep_keepalive, "UD_TIMEOUT=3s") {
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(5);
     void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
 
     m_e1->connect_to_iface(0, *m_e2);

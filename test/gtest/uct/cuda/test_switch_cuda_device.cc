@@ -342,6 +342,44 @@ protected:
         EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
     }
 
+    void check_managed_memory_context(void *address)
+    {
+        CUpointer_attribute attr_type = CU_POINTER_ATTRIBUTE_CONTEXT;
+        CUcontext cuda_mem_ctx        = nullptr;
+
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuPointerGetAttribute(&cuda_mem_ctx, attr_type,
+                                        (CUdeviceptr)address));
+        EXPECT_NE(nullptr, cuda_mem_ctx);
+    }
+
+    void query_managed_registrable(void *address, size_t size)
+    {
+        uct_md_mem_attr_v2_t mem_attr = {};
+
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+        EXPECT_UCS_OK(uct_md_mem_query_v2(md(), address, size, &mem_attr));
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA_MANAGED, mem_attr.mem_type);
+        EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    }
+
+    void test_async_managed_mem_pool_registrable()
+    {
+        constexpr size_t size = 192;
+
+        if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            UCS_TEST_SKIP_R("asynchronous CUDA managed memory is not "
+                            "supported");
+        }
+
+        mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA_MANAGED,
+                          mem_buffer::alloc_mode::ASYNC);
+        buffer.memset(0);
+
+        query_managed_registrable(buffer.ptr(), size);
+    }
+
 private:
     std::vector<ucs_sys_device_t> m_sys_dev;
 
@@ -439,6 +477,46 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_user_mem_registrable,
     query_registrable_no_current_context(reinterpret_cast<void*>(dptr), size);
 
     EXPECT_EQ(CUDA_SUCCESS, cuMemFree(dptr));
+}
+
+UCS_TEST_P(test_mem_alloc_device, user_managed_mem_registrable,
+           "CUDA_COPY_PREF_LOC=gpu")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    check_managed_memory_context(buffer.ptr());
+    query_managed_registrable(buffer.ptr(), size);
+}
+
+UCS_TEST_P(test_mem_alloc_device, uct_alloc_managed_mem_registrable,
+           "CUDA_COPY_PREF_LOC=gpu")
+{
+    ASSERT_UCS_OK(allocate(UCS_MEMORY_TYPE_CUDA_MANAGED));
+
+    check_managed_memory_context(mem.address);
+    query_managed_registrable(mem.address, mem.length);
+
+    EXPECT_UCS_OK(uct_mem_free(&mem));
+}
+
+UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_registrable,
+           "CUDA_COPY_DMABUF=try")
+{
+    test_async_managed_mem_pool_registrable();
+}
+
+UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_gpu_pref_loc,
+           "CUDA_COPY_DMABUF=try", "CUDA_COPY_PREF_LOC=gpu")
+{
+    test_async_managed_mem_pool_registrable();
+}
+
+UCS_TEST_P(test_mem_alloc_device,
+           async_managed_mem_pool_registrable_cuda_type,
+           "CUDA_COPY_DMABUF=try", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    test_async_managed_mem_pool_registrable();
 }
 
 UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,

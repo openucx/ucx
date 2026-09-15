@@ -19,7 +19,6 @@
 #include <ucs/type/serialize.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
-#include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
 #include <uct/cuda/base/cuda_nvml.h>
@@ -93,30 +92,53 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
     {NULL}
 };
 
-
-ucs_status_t
-uct_rc_gdaki_alloc(size_t size, size_t align, void **buf_p, CUdeviceptr *orig_p)
+static ucs_status_t
+uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
+                         uct_cuda_copy_alloc_handle_t *alloc_handle)
 {
-    unsigned int flag = 1;
+    CUdevice cu_device;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(orig_p, size + align - 1));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&cu_device));
     if (status != UCS_OK) {
         return status;
     }
 
-    *buf_p = (void*)ucs_align_up_pow2_ptr(*orig_p, align);
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                  (CUdeviceptr)*buf_p));
+    return uct_cuda_mem_alloc(UCS_LOG_LEVEL_ERROR, UCS_MEMORY_TYPE_CUDA,
+                              UCS_TRY, cu_device, size, granularity_p,
+                              alloc_handle);
+}
+
+static ucs_status_t
+uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
+                   uct_cuda_copy_alloc_handle_t *alloc_handle, void **buf_p)
+{
+    unsigned int flag = 1;
+    ucs_status_t status;
+    void *buf;
+
+    status = uct_gdaki_cuda_mem_alloc(size + align - 1, granularity_p,
+                                      alloc_handle);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
+    buf = (void*)ucs_align_up_pow2_ptr(alloc_handle->ptr, align);
+
+    if (!alloc_handle->is_vmm) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                      (CUdeviceptr)buf));
+        if (status != UCS_OK) {
+            goto err;
+        }
+    }
+
+    *buf_p = buf;
     return UCS_OK;
 
 err:
-    cuMemFree(*orig_p);
+    uct_cuda_mem_free(alloc_handle);
     return status;
 }
 
@@ -142,16 +164,19 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 {
     int ret = 0;
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
+    size_t granularity                 = SIZE_MAX;
     struct mlx5dv_devx_umem_in umem_in = {};
+    uct_cuda_copy_alloc_handle_t alloc_handle;
+    ucs_status_t status;
     struct mlx5dv_devx_umem *umem;
     uct_cuda_copy_md_dmabuf_t dmabuf;
-    CUdeviceptr buff;
 
-    if (UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc(&buff, 1)) != UCS_OK) {
+    status = uct_gdaki_cuda_mem_alloc(1, &granularity, &alloc_handle);
+    if (status != UCS_OK) {
         goto out;
     }
 
-    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)buff, 1,
+    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)alloc_handle.ptr, 1,
                                          UCS_SYS_DEVICE_ID_UNKNOWN);
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         goto out_free;
@@ -175,7 +200,7 @@ out_dereg:
 out_close:
     ucs_close_fd(&dmabuf.fd);
 out_free:
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemFree(buff));
+    uct_cuda_mem_free(&alloc_handle);
 out:
 #endif
     return ret;
@@ -368,13 +393,14 @@ uct_rc_gdaki_init_umem(uct_rc_gdaki_iface_t *iface, uint64_t pgsz_bitmap,
                                      uct_ib_md_t);
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda.ctx));
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_rc_gdaki_alloc(mem_size, ucs_get_page_size(), &mem->gpu_mem,
-                                &mem->gpu_raw);
+    status = uct_rc_gdaki_alloc(mem_size, ucs_get_page_size(),
+                                &iface->cuda.alloc_granularity, &mem->gpu_raw,
+                                &mem->gpu_mem);
     if (status != UCS_OK) {
         goto out_ctx;
     }
@@ -393,9 +419,8 @@ uct_rc_gdaki_init_umem(uct_rc_gdaki_iface_t *iface, uint64_t pgsz_bitmap,
     return UCS_OK;
 
 err_umem:
-    cuMemFree(mem->gpu_raw);
+    uct_cuda_mem_free(&mem->gpu_raw);
     mem->gpu_mem = NULL;
-    mem->gpu_raw = 0;
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     return status;
@@ -564,7 +589,7 @@ uct_rc_gdaki_pool_chunk_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
 err_umem:
     mlx5dv_devx_umem_dereg(hdr->umem);
-    cuMemFree(hdr->gpu_raw);
+    uct_cuda_mem_free(&hdr->gpu_raw);
 err_free_hdr:
     ucs_free(hdr);
     return status;
@@ -584,7 +609,7 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
                                         mp_chunk->num_elems,
                                         iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(hdr->umem);
-    cuMemFree(hdr->gpu_raw);
+    uct_cuda_mem_free(&hdr->gpu_raw);
     ucs_free(hdr);
 }
 
@@ -660,7 +685,6 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
 {
     ep->mem.umem      = NULL;
     ep->mem.gpu_mem   = NULL;
-    ep->mem.gpu_raw   = 0;
     ep->channel_block = NULL;
 }
 
@@ -714,7 +738,7 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
 
 err_umem:
     mlx5dv_devx_umem_dereg(ep->mem.umem);
-    cuMemFree(ep->mem.gpu_raw);
+    uct_cuda_mem_free(&ep->mem.gpu_raw);
 err_block:
     ucs_free(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
@@ -731,7 +755,7 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
     uct_rc_gdaki_chunk_channels_destroy(iface, NULL, ep->channel_block, 1, 1,
                                         iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(ep->mem.umem);
-    cuMemFree(ep->mem.gpu_raw);
+    uct_cuda_mem_free(&ep->mem.gpu_raw);
     ucs_free(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }
@@ -757,19 +781,44 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
     uct_rc_gdaki_cleanup_channels_direct(iface, ep);
 }
 
+static ucs_status_t
+uct_rc_gdaki_iface_cuda_ctx_init(uct_rc_gdaki_iface_t *iface)
+{
+    CUcontext cuda_ctx;
+    ucs_status_t status;
+
+    if (iface->cuda.ctx != NULL) {
+        return UCS_OK;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDevicePrimaryCtxRetain(&cuda_ctx, iface->cuda.dev));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
+    if (status != UCS_OK) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(
+                cuDevicePrimaryCtxRelease(iface->cuda.dev));
+        return status;
+    }
+
+    (void)uct_cuda_copy_set_ctx_sync_memops(UCS_LOG_LEVEL_WARN);
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    iface->cuda.ctx = cuda_ctx;
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_rc_gdaki_iface_t);
     ucs_status_t status;
 
-    if (iface->cuda_ctx == NULL) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
-                cuDevicePrimaryCtxRetain(&iface->cuda_ctx, iface->cuda_dev));
-        if (status != UCS_OK) {
-            iface->cuda_ctx = NULL;
-            return status;
-        }
+    status = uct_rc_gdaki_iface_cuda_ctx_init(iface);
+    if (status != UCS_OK) {
+        return status;
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
@@ -931,7 +980,7 @@ uct_rc_gdaki_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy =
             uct_ib_iface_port_attr(&iface->super.super.super)->max_msg_sz;
-    iface_attr->ctl_device    = uct_cuda_get_sys_dev(iface->cuda_dev);
+    iface_attr->ctl_device    = uct_cuda_get_sys_dev(iface->cuda.dev);
     iface_attr->dev_num_paths = 1;
 
     return UCS_OK;
@@ -965,7 +1014,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     pthread_mutex_lock(&iface->ep_init_lock);
 
     if (!ep->dev_ep_init) {
-        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda_ctx));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda.ctx));
         if (status != UCS_OK) {
             goto out_unlock;
         }
@@ -1058,7 +1107,7 @@ static uct_rc_iface_ops_t uct_rc_gdaki_internal_ops = {
             .ep_query               = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate          = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
             .ep_connect_to_ep_v2    = uct_rc_gdaki_ep_connect_to_ep_v2,
-            .iface_is_reachable_v2  = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_one_int,
+            .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
             .ep_is_connected        = uct_rc_gdaki_ep_is_connected,
             .ep_get_device_ep       = uct_rc_gdaki_ep_get_device_ep,
             .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
@@ -1112,6 +1161,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     ucs_status_t status;
     int cuda_id;
     int ret;
+    CUdevice cuda_dev;
 
     if (config->num_channels > UINT8_MAX + 1) {
          ucs_error("num_channels exceeds maximum value of 256");
@@ -1155,12 +1205,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&self->cuda_dev, cuda_id));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_dev, cuda_id));
     if (status != UCS_OK) {
         return status;
     }
-
-    self->cuda_ctx = NULL;
 
     ret = ucs_posix_memalign((void**)&self->atomic_buff,
                              UCS_SYS_CACHE_LINE_SIZE, sizeof(uint64_t),
@@ -1189,6 +1237,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         }
     }
 
+    self->cuda.dev               = cuda_dev;
+    self->cuda.ctx               = NULL;
+    self->cuda.alloc_granularity = SIZE_MAX;
+
     return UCS_OK;
 
 err_pool:
@@ -1209,9 +1261,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
 
-    if (self->cuda_ctx != NULL) {
+    if (self->cuda.ctx != NULL) {
         (void)UCT_CUDADRV_FUNC_LOG_WARN(
-                cuDevicePrimaryCtxRelease(self->cuda_dev));
+                cuDevicePrimaryCtxRelease(self->cuda.dev));
     }
 }
 
@@ -1270,7 +1322,8 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 }
 
 static ucs_status_t
-uct_gdaki_get_cuda_sys_dev(int cuda_idx, ucs_sys_device_t *sys_dev_p)
+uct_gdaki_get_cuda_sys_dev_and_bus_id(int cuda_idx, ucs_sys_device_t *sys_dev_p,
+                                      ucs_sys_bus_id_t *bus_id_p)
 {
     ucs_status_t status;
     CUdevice cuda_dev;
@@ -1280,8 +1333,7 @@ uct_gdaki_get_cuda_sys_dev(int cuda_idx, ucs_sys_device_t *sys_dev_p)
         return status;
     }
 
-    *sys_dev_p = uct_cuda_get_sys_dev(cuda_dev);
-    return UCS_OK;
+    return uct_cuda_get_sys_dev_and_bus_id(cuda_dev, sys_dev_p, bus_id_p);
 }
 
 static ucs_status_t
@@ -1306,12 +1358,8 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
 
     cuda_gpu_count = 0;
     for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
-        status = uct_gdaki_get_cuda_sys_dev(cuda_idx, &sys_dev);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = ucs_topo_get_device_bus_id(sys_dev, &bus_id);
+        status = uct_gdaki_get_cuda_sys_dev_and_bus_id(cuda_idx, &sys_dev,
+                                                       &bus_id);
         if (status != UCS_OK) {
             return status;
         }
