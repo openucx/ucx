@@ -643,7 +643,7 @@ static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
                                  const uint64_t *remote_addrs,
                                  size_t max_frag_count,
-                                 size_t max_frag_length,
+                                 size_t max_total_length,
                                  ucp_datatype_iter_t *next_iter,
                                  void **out_buffers, size_t *out_lengths,
                                  uint64_t *out_remote_addrs,
@@ -657,15 +657,16 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
     ucs_assert(max_frag_count >= 1);
-    ucs_assert(max_frag_length > 0);
+    ucs_assert(max_total_length > 0);
     ucp_datatype_iter_sgl_check(dt_iter);
 
-    while ((desc_count < max_frag_count) &&
+    while ((desc_count < max_frag_count) && (total_length < max_total_length) &&
            (elem_index < dt_iter->type.sgl.elem_count)) {
         elem_length = dt_iter->type.sgl.lengths[elem_index];
         if (elem_length > 0) {
             ucs_assert(elem_length > frag_offset);
-            frag_length = ucs_min(elem_length - frag_offset, max_frag_length);
+            frag_length = ucs_min(elem_length - frag_offset,
+                                  max_total_length - total_length);
 
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
                     dt_iter->type.sgl.buffers[elem_index], frag_offset);
