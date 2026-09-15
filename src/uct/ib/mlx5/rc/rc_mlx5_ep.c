@@ -1031,6 +1031,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
     const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
+    uct_rc_iface_send_op_t *op;
     uint8_t callback_data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
     uct_ep_op_info_t info;
     uint16_t ci, end_ci, start_ci;
@@ -1082,7 +1083,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
         if (num_packets == 0) {
-            goto purge_completions;
+            goto complete_flushes;
         }
 
         is_delivered = uct_ib_mlx5_wqe_is_delivered(
@@ -1094,7 +1095,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             status = uct_rc_mlx5_op_info_fill_am(
                     txwq, ctrl, wqe_size, callback_data, &info);
             if (status == UCS_ERR_NO_ELEM) {
-                goto purge_completions;
+                goto complete_flushes;
             }
 
             if (status != UCS_OK) {
@@ -1105,10 +1106,16 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             params->cb(&info, callback_arg);
         }
 
-purge_completions:
+complete_flushes:
         /* Complete flushes after their WQE, before later AM purge callbacks. */
-        uct_rc_txqp_purge_outstanding(&iface->super, &ep->super.txqp,
-                                      UCS_ERR_CANCELED, ci, 0);
+        ucs_queue_for_each_extract(
+                op, &ep->super.txqp.outstanding, queue,
+                (op->handler == uct_rc_ep_flush_op_completion_handler) &&
+                UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
+            op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
+            uct_invoke_completion(op->user_comp, UCS_ERR_CANCELED);
+            ucs_mpool_put(op);
+        }
     }
 
 out:
