@@ -626,12 +626,14 @@ static size_t ucs_cpu_nt_bt_thresh_min(size_t user_val)
 {
     if (user_val != UCS_MEMUNITS_AUTO) {
 #if ENABLE_BUILTIN_MEMCPY
-        /*
-         * The outer ERMS gate uses fragment length, while NT eligibility uses
-         * total transfer length. Close the outer window so fragments of an
-         * eligible transfer cannot bypass the explicit NT threshold.
-         */
-        ucs_global_opts.arch.builtin_memcpy_max = 0;
+        if (user_val != UCS_MEMUNITS_INF) {
+            /*
+             * The outer ERMS gate uses fragment length, while NT eligibility
+             * uses total transfer length. Close the outer window so fragments
+             * of an eligible transfer cannot bypass the explicit NT threshold.
+             */
+            ucs_global_opts.arch.builtin_memcpy_max = 0;
+        }
 #endif
         return user_val;
     }

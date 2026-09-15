@@ -202,6 +202,24 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
     }
 }
 
+#if ENABLE_BUILTIN_MEMCPY
+UCS_TEST_F(test_arch, nt_buffer_transfer_explicit_threshold) {
+    const size_t configured_max = 8 * UCS_MBYTE;
+
+    ucs_global_opts.arch.builtin_memcpy_min     = UCS_KBYTE;
+    ucs_global_opts.arch.builtin_memcpy_max     = configured_max;
+    ucs_global_opts.arch.nt_buffer_transfer_min = 4 * UCS_MBYTE;
+    ucs_cpu_init();
+    EXPECT_EQ(static_cast<size_t>(0),
+              ucs_global_opts.arch.builtin_memcpy_max);
+
+    ucs_global_opts.arch.builtin_memcpy_max     = configured_max;
+    ucs_global_opts.arch.nt_buffer_transfer_min = UCS_MEMUNITS_INF;
+    ucs_cpu_init();
+    EXPECT_EQ(configured_max, ucs_global_opts.arch.builtin_memcpy_max);
+}
+#endif
+
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
     scoped_builtin_memcpy_min memcpy_min(UCS_MEMUNITS_INF);
 

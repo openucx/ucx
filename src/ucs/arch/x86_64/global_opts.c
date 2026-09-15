@@ -29,8 +29,9 @@ ucs_config_field_t ucs_arch_global_opts_table[] = {
 #endif
   {"NT_BUFFER_TRANSFER_MIN", "auto",
    "Minimal threshold of total buffer length for using non-temporal buffer "
-   "transfer. Setting it explicitly disables the outer built-in memcpy window "
-   "so fragments of an eligible transfer reach the NT dispatcher.",
+   "transfer. Setting it explicitly to a finite value disables the outer "
+   "built-in memcpy window so fragments of an eligible transfer reach the NT "
+   "dispatcher.",
    ucs_offsetof(ucs_arch_global_opts_t, nt_buffer_transfer_min),
    UCS_CONFIG_TYPE_MEMUNITS},
   {NULL}
