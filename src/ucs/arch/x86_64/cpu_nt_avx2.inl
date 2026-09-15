@@ -53,6 +53,7 @@ static UCS_F_ALWAYS_INLINE void
 ucs_x86_avx2_loadu_storeu_32(void *dst, const void *src)
 {
     __m256i y0 = _mm256_loadu_si256(src);
+
     _mm256_storeu_si256((__m256i *)dst, y0);
 }
 
@@ -61,6 +62,7 @@ static UCS_F_ALWAYS_INLINE void
 ucs_x86_avx2_loadu_store_32(void *dst, const void *src)
 {
     __m256i y0 = _mm256_loadu_si256(src);
+
     _mm256_store_si256((__m256i *)dst, y0);
 }
 
@@ -94,6 +96,7 @@ ucs_x86_avx2_loadu_stream_64(void *dst, const void *src)
     __m256i *da       = dst;
     __m256i y0        = _mm256_loadu_si256(sa);
     __m256i y1        = _mm256_loadu_si256(sa + 1);
+
     _mm256_stream_si256(da, y0);
     _mm256_stream_si256(da + 1, y1);
 }
@@ -112,6 +115,7 @@ ucs_x86_avx2_loadu_stream_256(void *dst, const void *src)
     __m256i y5        = _mm256_loadu_si256(sa + 5);
     __m256i y6        = _mm256_loadu_si256(sa + 6);
     __m256i y7        = _mm256_loadu_si256(sa + 7);
+
     _mm256_stream_si256(da, y0);
     _mm256_stream_si256(da + 1, y1);
     _mm256_stream_si256(da + 2, y2);
@@ -136,6 +140,7 @@ ucs_x86_avx2_loada_stream_256(void *dst, const void *src)
     __m256i y5        = _mm256_load_si256(sa + 5);
     __m256i y6        = _mm256_load_si256(sa + 6);
     __m256i y7        = _mm256_load_si256(sa + 7);
+
     _mm256_stream_si256(da, y0);
     _mm256_stream_si256(da + 1, y1);
     _mm256_stream_si256(da + 2, y2);
@@ -154,6 +159,7 @@ ucs_x86_avx2_loadu_store_64(void *dst, const void *src)
     __m256i *da       = dst;
     __m256i y0        = _mm256_loadu_si256(sa);
     __m256i y1        = _mm256_loadu_si256(sa + 1);
+
     _mm256_store_si256(da, y0);
     _mm256_store_si256(da + 1, y1);
 }
@@ -172,6 +178,7 @@ ucs_x86_avx2_loadu_store_256(void *dst, const void *src)
     __m256i y5        = _mm256_loadu_si256(sa + 5);
     __m256i y6        = _mm256_loadu_si256(sa + 6);
     __m256i y7        = _mm256_loadu_si256(sa + 7);
+
     _mm256_store_si256(da, y0);
     _mm256_store_si256(da + 1, y1);
     _mm256_store_si256(da + 2, y2);
@@ -196,6 +203,7 @@ ucs_x86_avx2_loada_store_256(void *dst, const void *src)
     __m256i y5        = _mm256_load_si256(sa + 5);
     __m256i y6        = _mm256_load_si256(sa + 6);
     __m256i y7        = _mm256_load_si256(sa + 7);
+
     _mm256_store_si256(da, y0);
     _mm256_store_si256(da + 1, y1);
     _mm256_store_si256(da + 2, y2);
