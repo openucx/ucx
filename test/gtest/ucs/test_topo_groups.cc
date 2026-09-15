@@ -25,8 +25,11 @@ class test_topo_groups : public ucs::test {
 protected:
     using physical_device = std::vector<ucs_sys_device_t>;
 
-    static constexpr int num_devices_per_gpu = 2;
-    static constexpr int num_ports_per_nic   = 2;
+    static constexpr int num_devices_per_gpu   = 2;
+    static constexpr int num_gpus_per_numa     = 2;
+    static constexpr int num_ports_per_nic     = 2;
+    static constexpr int num_cx9_nics_per_numa = 4;
+    static constexpr int num_nics_per_numa     = num_cx9_nics_per_numa + 1;
 
     struct numa_devices {
         ucs_numa_node_t              numa_node;
@@ -36,10 +39,7 @@ protected:
 
     virtual void cleanup()
     {
-        if (m_groups_initialized) {
-            ucs_topo_release_groups(&m_groups);
-        }
-
+        ucs_topo_release_groups(&m_groups);
         ucs::test::cleanup();
     }
 
@@ -133,7 +133,7 @@ protected:
 
     void add_vera_rubin_gpus(unsigned numa_idx, numa_devices &numa)
     {
-        for (unsigned gpu_idx = 0; gpu_idx < 2; ++gpu_idx) {
+        for (unsigned gpu_idx = 0; gpu_idx < num_gpus_per_numa; ++gpu_idx) {
             const ucs_sys_bus_id_t bus_id = generate_bus_id();
             physical_device gpu_devices;
 
@@ -162,8 +162,8 @@ protected:
 
     void add_vera_rubin_nics(unsigned numa_idx, numa_devices &numa)
     {
-        for (unsigned nic_idx = 0; nic_idx < 5; ++nic_idx) {
-            const bool is_cx9                  = nic_idx < 4;
+        for (unsigned nic_idx = 0; nic_idx < num_nics_per_numa; ++nic_idx) {
+            const bool is_cx9 = nic_idx < num_cx9_nics_per_numa;
             const ucs_sys_bus_id_t slot_bus_id = generate_bus_id();
             physical_device nic_ports;
 
@@ -213,15 +213,10 @@ protected:
 
     ucs_status_t build()
     {
-        ucs_status_t const status = ucs_topo_build_groups_inner(
-                m_devices.data(), static_cast<unsigned>(m_devices.size()),
-                &m_groups);
-
-        if (status == UCS_OK) {
-            m_groups_initialized = true;
-        }
-
-        return status;
+        return ucs_topo_build_groups_inner(m_devices.data(),
+                                           static_cast<unsigned>(
+                                                   m_devices.size()),
+                                           &m_groups);
     }
 
     std::string render()
@@ -245,8 +240,8 @@ protected:
         ASSERT_EQ(expected_nics.size(), ucs_array_length(&group.nics));
 
         for (size_t i = 0; i < expected_gpus.size(); ++i) {
-            const ucs_topo_group_element_t &gpu =
-                    ucs_array_elem(&group.gpus, i);
+            const ucs_topo_group_element_t &gpu = ucs_array_elem(&group.gpus,
+                                                                 i);
 
             ASSERT_EQ(expected_gpus[i].size(), gpu.num_sys_devs);
             for (size_t j = 0; j < expected_gpus[i].size(); ++j) {
@@ -255,8 +250,8 @@ protected:
         }
 
         for (size_t i = 0; i < expected_nics.size(); ++i) {
-            const ucs_topo_group_element_t &nic =
-                    ucs_array_elem(&group.nics, i);
+            const ucs_topo_group_element_t &nic = ucs_array_elem(&group.nics,
+                                                                 i);
 
             ASSERT_EQ(expected_nics[i].size(), nic.num_sys_devs);
             for (size_t j = 0; j < expected_nics[i].size(); ++j) {
@@ -273,8 +268,7 @@ protected:
     std::set<ucs_bus_id_bit_rep_t> m_bus_id_bits;
     std::deque<std::string> m_device_names;
     std::vector<ucs_topo_sys_device_info_t> m_devices;
-    ucs_topo_groups_t m_groups;
-    bool m_groups_initialized = false;
+    ucs_topo_groups_t m_groups = {};
 };
 
 
@@ -286,8 +280,8 @@ UCS_TEST_F(test_topo_groups, vera_groups_by_numa) {
     ASSERT_EQ(expected_groups.size(), ucs_array_length(&m_groups));
 
     for (size_t i = 0; i < expected_groups.size(); ++i) {
-        expect_group(ucs_array_elem(&m_groups, i),
-                     expected_groups[i].gpus, expected_groups[i].nics);
+        expect_group(ucs_array_elem(&m_groups, i), expected_groups[i].gpus,
+                     expected_groups[i].nics);
     }
 }
 

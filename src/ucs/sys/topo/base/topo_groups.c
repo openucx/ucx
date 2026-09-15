@@ -431,13 +431,9 @@ static ucs_status_t ucs_topo_groups_get_or_add_group_by_numa_node(
         }
     }
 
-    *ucs_array_append(numa_nodes,
-                      ucs_error("failed to append to numa nodes array");
-                      return UCS_ERR_NO_MEMORY) = numa_node;
+    *ucs_array_append(numa_nodes, return UCS_ERR_NO_MEMORY) = numa_node;
 
-    group = ucs_array_append(groups,
-                             ucs_error("failed to append to groups array");
-                             return UCS_ERR_NO_MEMORY);
+    group = ucs_array_append(groups, return UCS_ERR_NO_MEMORY);
     ucs_topo_init_group(group);
 
     *group_p = group;
@@ -473,9 +469,7 @@ static ucs_status_t ucs_topo_groups_add_elements_by_numa_node(
         }
 
         group_elements = UCS_PTR_BYTE_OFFSET(group, group_elements_offset);
-        *ucs_array_append(group_elements,
-                          ucs_error("failed to append to group elements array");
-                          return UCS_ERR_NO_MEMORY) = *element;
+        *ucs_array_append(group_elements, return UCS_ERR_NO_MEMORY) = *element;
     }
 
     return UCS_OK;
@@ -570,8 +564,8 @@ ucs_status_t ucs_topo_groups_render(const ucs_topo_sys_device_info_t *devices,
 
     if (ucs_array_is_empty(groups)) {
         ucs_table_add_row(&table, &row);
-        ucs_table_row_add_cell_fmt(&table, row, 3, UCS_TABLE_ALIGN_LEFT,
-                                   "<empty>");
+        ucs_table_row_add_cell_fmt(&table, row, table_config.n_cols,
+                                   UCS_TABLE_ALIGN_LEFT, "<empty>");
     }
 
     group_idx = 0;
@@ -633,7 +627,7 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
 
     status = ucs_topo_groups_build_groups(devices, &inventory, &groups);
     if (status != UCS_OK) {
-        goto err_cleanup_groups;
+        goto err_cleanup;
     }
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
@@ -648,8 +642,8 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
     *groups_p = groups;
     return UCS_OK;
 
-err_cleanup_groups:
-    ucs_topo_release_groups(&groups);
+err_cleanup:
     ucs_topo_release_group(&inventory);
+    ucs_topo_release_groups(&groups);
     return status;
 }
