@@ -283,14 +283,23 @@ uct_ib_mlx5_inline_iov_copy(void *restrict dest, const uct_iov_t *iov,
 }
 
 
-/* wrapping of 'seg' should not happen */
-static UCS_F_ALWAYS_INLINE void*
-uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
+/* Const-safe version of uct_ib_mlx5_txwq_wrap_none() */
+static UCS_F_ALWAYS_INLINE const void *
+uct_ib_mlx5_txwq_wrap_none_const(const uct_ib_mlx5_txwq_t *txwq,
+                                 const void *seg)
 {
     ucs_assertv(((unsigned long)seg % UCT_IB_MLX5_WQE_SEG_SIZE) == 0, "seg=%p", seg);
     ucs_assertv(seg >= txwq->qstart, "seg=%p qstart=%p", seg, txwq->qstart);
     ucs_assertv(seg <  txwq->qend,   "seg=%p qend=%p",   seg, txwq->qend);
     return seg;
+}
+
+
+/* wrapping of 'seg' should not happen */
+static UCS_F_ALWAYS_INLINE void*
+uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
+{
+    return (void*)uct_ib_mlx5_txwq_wrap_none_const(txwq, seg);
 }
 
 
@@ -306,15 +315,23 @@ uct_ib_mlx5_txwq_wrap_exact(uct_ib_mlx5_txwq_t *txwq, void *seg)
 }
 
 
-/* wrapping of 'seg' could happen, even past 'qend' boundary */
-static UCS_F_ALWAYS_INLINE void *
-uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
+/* Const-safe version of uct_ib_mlx5_txwq_wrap_any() */
+static UCS_F_ALWAYS_INLINE const void *
+uct_ib_mlx5_txwq_wrap_any_const(const uct_ib_mlx5_txwq_t *txwq, const void *seg)
 {
     if (ucs_unlikely(seg >= txwq->qend)) {
         seg = UCS_PTR_BYTE_OFFSET(seg, -UCS_PTR_BYTE_DIFF(txwq->qstart,
                                                           txwq->qend));
     }
-    return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
+    return uct_ib_mlx5_txwq_wrap_none_const(txwq, seg);
+}
+
+
+/* wrapping of 'seg' could happen, even past 'qend' boundary */
+static UCS_F_ALWAYS_INLINE void *
+uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
+{
+    return (void*)uct_ib_mlx5_txwq_wrap_any_const(txwq, seg);
 }
 
 

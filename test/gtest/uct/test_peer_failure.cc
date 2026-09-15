@@ -349,6 +349,9 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_purge_outstanding : public uct_test {
 public:
+    static const uint64_t SEND_SEED = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED = 0xb2b2b2b2b2b2b2b2ul;
+
     void init() override
     {
         uct_test::init();
@@ -369,19 +372,39 @@ public:
         m_entities.push_back(m_receiver);
         m_sender->connect(0, *m_receiver, 0);
 
+        ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_ID,
+                                               am_dummy_handler, NULL,
+                                               UCT_CB_FLAG_ASYNC));
+
         flush();
     }
 
 protected:
+    static const uint64_t AM_HDR_SEED = 0xc3c3c3c3c3c3c3c3ul;
+    static const uint8_t AM_ID        = 1;
+
     struct purge_ctx {
         test_uct_purge_outstanding *self;
-        uct_completion_t           op_comp;
-        uint32_t                   num_ops_purged;
-        uint32_t                   num_flush_purged;
+        uct_completion_t           op_comp = {completion_cb, 0, UCS_OK};
+        uint32_t                   num_ops_purged = 0;
+        uint32_t                   num_flush_purged = 0;
+        uint64_t                   remote_addr = 0;
+        uct_rkey_t                 rkey = UCT_INVALID_RKEY;
+        uint32_t                   am_id = 0;
+        void                       *am_header = NULL;
+        size_t                     am_header_length = 0;
+        const uct_iov_t            *iov = NULL;
+        size_t                     iovcnt = 0;
     };
 
     using send_func_t =
             std::function<ucs_status_t(uct_ep_h, uct_completion_t*)>;
+
+    static ucs_status_t
+    am_dummy_handler(void *arg, void *data, size_t length, unsigned flags)
+    {
+        return UCS_OK;
+    }
 
     bool check_caps_v2(uint64_t required_flags)
     {
@@ -446,6 +469,12 @@ protected:
     void validate_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         switch (info->operation) {
+        case UCT_EP_OP_PUT_ZCOPY:
+            validate_put_zcopy(info, ctx);
+            return;
+        case UCT_EP_OP_AM_ZCOPY:
+            validate_am_zcopy(info, ctx);
+            return;
         case UCT_EP_OP_FLUSH:
             validate_flush(info, ctx);
             return;
@@ -454,6 +483,61 @@ protected:
                                                      << " at index "
                                                      << ctx->num_ops_purged);
         }
+    }
+
+    static void validate_put_zcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
+                                         UCT_EP_OP_INFO_FIELD_RMA;
+        const uint16_t expected_rma_fields =
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+
+        EXPECT_EQ(&ctx->op_comp, info->comp);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        /* The reported rkey holds only the direct key part */
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer,
+                      info->rma.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length,
+                      info->rma.payload.zcopy.iov[i].length);
+        }
+
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_am_zcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_AM |
+                                         UCT_EP_OP_INFO_FIELD_COMP;
+        const uint64_t expected_am_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID | UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->am.field_mask, expected_am_fields));
+
+        EXPECT_EQ(ctx->am_id, info->am.am_id);
+        EXPECT_EQ(&ctx->op_comp, info->comp);
+        ASSERT_EQ(ctx->am_header_length, info->am.header.zcopy.length);
+        EXPECT_EQ(0, memcmp(ctx->am_header, info->am.header.zcopy.buffer,
+                            ctx->am_header_length));
+        ASSERT_EQ(ctx->iovcnt, info->am.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer, info->am.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length, info->am.payload.zcopy.iov[i].length);
+        }
+
+        ++ctx->num_ops_purged;
     }
 
     static void validate_flush(const uct_ep_op_info_t *info, purge_ctx *ctx)
@@ -533,11 +617,9 @@ protected:
                                                &purge_params));
     }
 
-    void test_purge_outstanding(const send_func_t &send_func)
+    void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx)
     {
         uct_ep_invalidate_params_t invalidate_params = {};
-        purge_ctx                   ctx               = {
-                this, {completion_cb, 0, UCS_OK}, 0, 0};
         uint32_t num_posted;
         bool flush_outstanding;
         ucs_status_t status;
@@ -581,6 +663,69 @@ protected:
     entity   *m_receiver;
     unsigned m_err_count = 0;
 };
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+
+    const size_t num_iov = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size    = ucs_max(attr.cap.put.min_zcopy,
+                                   ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx{};
+    ctx.self        = this;
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t send_func = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(send_func, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+
+    const size_t num_iov  = ucs_min(attr.cap.am.max_iov, 2);
+    const size_t hdr_size = ucs_min((size_t)64, attr.cap.am.max_hdr);
+    const size_t size     = ucs_min((size_t)4096, attr.cap.am.max_zcopy);
+    std::vector<uint8_t> hdr(hdr_size);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+
+    mem_buffer::pattern_fill(hdr.data(), hdr.size(), AM_HDR_SEED);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx{};
+    ctx.self             = this;
+    ctx.am_id            = AM_ID;
+    ctx.am_header        = hdr.data();
+    ctx.am_header_length = hdr.size();
+    ctx.iov              = iov;
+    ctx.iovcnt           = iovcnt;
+
+    send_func_t am_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_am_zcopy(ep, ctx.am_id, ctx.am_header,
+                               ctx.am_header_length, iov, iovcnt, 0, comp);
+    };
+
+    test_purge_outstanding(am_zcopy, ctx);
+}
+
+UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
 
 class test_uct_peer_failure_multiple : public test_uct_peer_failure
 {
