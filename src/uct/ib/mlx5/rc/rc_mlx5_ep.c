@@ -947,8 +947,6 @@ static void uct_rc_mlx5_op_info_fill_put_short(
 {
     size_t inline_length = ntohl(inl->byte_count) & ~MLX5_INLINE_SEG;
 
-    ucs_assert(inline_length <= sizeof(callback_data->data));
-
     info->operation  = UCT_EP_OP_PUT_SHORT;
     info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION |
                        UCT_EP_OP_INFO_FIELD_RMA;
@@ -1003,7 +1001,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         return UCS_OK;
     }
 
-    dptr = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
+    dptr = (struct mlx5_wqe_data_seg *)inl;
     if ((op != NULL) && ((void*)op->handler == (void*)ucs_mpool_put)) {
         uct_rc_mlx5_op_info_fill_put_bcopy(op, dptr, raddr, info);
         return UCS_OK;
@@ -1080,7 +1078,7 @@ static size_t uct_rc_mlx5_wqe_put_length(const uct_ib_mlx5_txwq_t *txwq,
     const struct mlx5_wqe_data_seg *dptr;
     size_t length, remaining;
 
-    ucs_assert(wqe_size >= header_size);
+    ucs_assertv_always(wqe_size >= header_size, "wqe_size=%zu", wqe_size);
     if (wqe_size == header_size) {
         return 0;
     }
@@ -1088,7 +1086,10 @@ static size_t uct_rc_mlx5_wqe_put_length(const uct_ib_mlx5_txwq_t *txwq,
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     dptr  = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
     if (dptr->byte_count & htonl(MLX5_INLINE_SEG)) {
-        return ntohl(dptr->byte_count) & ~MLX5_INLINE_SEG;
+        length = ntohl(dptr->byte_count) & ~MLX5_INLINE_SEG;
+        ucs_assertv_always(length <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE,
+                           "inline_length=%zu", length);
+        return length;
     }
 
     length    = 0;
@@ -1284,7 +1285,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                                                   ctrl, wqe_size);
         if (num_packets == 0) {
             /* NOP WQE (flush op) */
-            goto next_wqe;
+            uct_rc_mlx5_ep_purge_flushes(ep, ci);
+            continue;
         }
 
         op = uct_rc_mlx5_ep_outstanding_get_send_op(ep, ci);
@@ -1306,7 +1308,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             }
         }
 
-    next_wqe:
         wqe_first_psn = (wqe_first_psn + num_packets) &
                         UCT_IB_MLX5_PSN_MASK;
 
