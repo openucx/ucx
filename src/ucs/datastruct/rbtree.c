@@ -309,10 +309,6 @@ void ucs_rbtree_remove(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
         successor->color        = node->color;
     }
 
-    /* 'child_parent' is at or below the deepest node whose subtree changed, so
-     * walking up from it refreshes every stale value, including the one at the
-     * successor's new position. */
-
     if (removed_color == UCS_RBTREE_BLACK) {
         ucs_rbtree_remove_fixup(tree, child, child_parent);
     }
