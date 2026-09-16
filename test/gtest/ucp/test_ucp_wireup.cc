@@ -24,17 +24,6 @@ extern "C" {
 #include <ucs/sys/math.h>
 }
 
-class test_ucp_wireup_err_mode : public ucs::test {
-};
-
-UCS_TEST_F(test_ucp_wireup_err_mode, init_flags)
-{
-    EXPECT_EQ(UCP_EP_INIT_ERR_MODE_PEER_FAILURE,
-              ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_PEER));
-    EXPECT_EQ(UCP_EP_INIT_ERR_MODE_FAILOVER_MASK,
-              ucp_ep_err_mode_init_flags(UCP_ERR_HANDLING_MODE_FAILOVER));
-}
-
 class test_ucp_wireup : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -982,14 +971,35 @@ public:
 
 UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
 {
+    ucp_ep_params_t ep_params = get_ep_params();
+    ucp_address_t *address;
+    ucp_ep_h ep;
+    size_t address_length;
+    ucs_status_t status;
+
     EXPECT_FALSE(ep_iface_has_caps(sender(), "self",
                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE));
 
-    sender().connect(&receiver(), get_ep_params());
+    status = ucp_worker_get_address(receiver().worker(), &address,
+                                    &address_length);
+    ASSERT_UCS_OK(status);
 
-    const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(sender().worker(), &ep_params, &ep);
+    }
+
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_UCS_OK(status);
+
+    const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
     EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
     EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
+    EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, key.am_lane)->tl_name);
+
+    disconnect(ep);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_errh_peer_self, self, "self")
