@@ -64,6 +64,8 @@
 #define UCT_IB_MLX5_CQ_SET_CI            0
 #define UCT_IB_MLX5_CQ_ARM_DB            1
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE     30
+#define UCT_IB_MLX5_PSN_BITS             24
+#define UCT_IB_MLX5_PSN_MASK             UCS_MASK(UCT_IB_MLX5_PSN_BITS)
 #define UCT_IB_MLX5_ATOMIC_MODE_COMP     1
 #define UCT_IB_MLX5_ATOMIC_MODE_EXT      3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
@@ -686,6 +688,8 @@ typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
     uint16_t                    prev_sw_pi; /* PI where last WQE *started*  */
+    uint32_t                    next_wqe_psn; /* 1st PSN of the next WQE to be
+                                                posted */
     uct_ib_mlx5_mmio_reg_t      *reg;
     void                        *curr;
     volatile uint32_t           *dbrec;
@@ -693,12 +697,22 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
+    uint16_t                    hw_ci;      /* First BB index of last completed WQE */
+    uint16_t                    ft_ci;      /* First BB index of last ft completed WQE */
+    uint16_t                    path_mtu_mask;  /* Path MTU in bytes - 1 */
+    uint8_t                     path_mtu_shift; /* log2(path MTU in bytes) */
 #if UCS_ENABLE_ASSERT
-    uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
 } uct_ib_mlx5_txwq_t;
+
+
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ib_mlx5_txwq_get_next_wqe_psn(const uct_ib_mlx5_txwq_t *txwq)
+{
+    return txwq->next_wqe_psn & UCT_IB_MLX5_PSN_MASK;
+}
 
 
 /* Receive work-queue */
@@ -905,6 +919,12 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 /* Get pointer to a WQE by producer index */
 void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
 
+/* Get the WQE size in bytes from its control segment */
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl);
+
+/* Get the index of the WQE that follows a WQE of the given size */
+uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size);
+
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding);
@@ -995,6 +1015,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         const void *in, size_t inlen,
                                         void *out, size_t outlen);
+
+ucs_status_t uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in,
+                                       size_t inlen, void *out, size_t outlen);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
@@ -1276,6 +1299,17 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char* name, size_t size,
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);
 #endif
+
+/**
+ * Compare firmware AA.BB.CCCC against a minimum BB.CCCC, ignoring the
+ * device-family prefix AA.
+ *
+ * @return 1 if @a fw_ver parses and is at least
+ *         @a min_release.@a min_build, otherwise 0.
+ */
+int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
+                                        unsigned min_release,
+                                        unsigned min_build);
 
 ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                                    ucs_ternary_auto_value_t ar_enable,

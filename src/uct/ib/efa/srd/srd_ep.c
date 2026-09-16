@@ -69,8 +69,10 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
         goto err_arb_cleanup;
     }
 
-    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH",
-                                    &self->ah);
+    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
+                                            &ah_attr,
+                                            uct_ib_iface_md(&iface->super)->pd,
+                                            "SRD AH", &self->ah);
     if (status != UCS_OK) {
         goto err_arb_cleanup;
     }

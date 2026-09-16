@@ -93,6 +93,26 @@ ucp_proto_request_zcopy_clean(ucp_request_t *req, unsigned dt_mask)
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 }
 
+/* Restart a failed request on another lane if the endpoint is in failover mode
+ * and still has a chance to recover, otherwise complete it with 'status'. */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_restart_or_complete(ucp_request_t *req, ucs_status_t status,
+                                      ucp_request_callback_t complete_cb)
+{
+    if (ucs_unlikely(status != UCS_OK) &&
+        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
+        ucp_proto_request_restart(req);
+        return;
+    }
+
+    if (complete_cb != NULL) {
+        complete_cb(req);
+    }
+
+    ucp_request_complete_send(req, status);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_complete_cb(ucp_request_t *req, ucs_status_t status,
                                     ucp_request_callback_t complete_cb)
@@ -105,17 +125,7 @@ ucp_proto_request_zcopy_complete_cb(ucp_request_t *req, ucs_status_t status,
         UCP_EP_STAT_TAG_OP(req->send.ep, EAGER)
     }
 
-    if (ucs_unlikely(status != UCS_OK) &&
-        ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
-        !(req->send.ep->flags & UCP_EP_FLAG_FAILED)) {
-        ucp_proto_request_restart(req);
-    } else {
-        if (complete_cb != NULL) {
-            complete_cb(req);
-        }
-
-        ucp_request_complete_send(req, status);
-    }
+    ucp_proto_request_restart_or_complete(req, status, complete_cb);
 }
 
 static UCS_F_ALWAYS_INLINE void

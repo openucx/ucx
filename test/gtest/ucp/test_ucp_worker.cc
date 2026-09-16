@@ -8,6 +8,7 @@
 #include <uct/api/uct.h>
 #include <uct/api/tl.h>
 #include <fenv.h>
+#include <string>
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
@@ -839,6 +840,117 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
         add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "unified");
     }
+
+protected:
+    enum class address_device_type {
+        any,
+        net,
+        non_net
+    };
+
+    std::string find_address_device(const address_device_type device_type)
+    {
+        ucp_worker_h worker   = sender().worker();
+        ucp_context_h context = worker->context;
+        ucp_rsc_index_t tl_id;
+
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+            const auto &resource   = context->tl_rscs[tl_id].tl_rsc;
+            const auto &iface_attr = *ucp_worker_iface_get_attr(worker, tl_id);
+            const auto is_network  = (iface_attr.cap.flags &
+                                      UCT_IFACE_FLAG_INTER_NODE) != 0;
+
+            if (iface_can_connect(iface_attr) &&
+                ((device_type == address_device_type::any) ||
+                 ((device_type == address_device_type::net) == is_network))) {
+                return resource.dev_name;
+            }
+        }
+
+        return {};
+    }
+
+    void check_address_by_device(const std::string &address_device_name,
+                                 const uint32_t address_flags)
+    {
+        ucp_worker_h worker                      = sender().worker();
+        ucp_context_h context                    = worker->context;
+        const ucp_address_entry_t *address_entry = nullptr;
+        ucp_worker_attr_t worker_attr{};
+        ucp_unpacked_address_t unpacked_address{};
+        ucp_tl_bitmap_t tl_bitmap;
+        ucp_rsc_index_t tl_id;
+        ucs_status_t status;
+
+        ucp_context_dev_tl_bitmap(context, address_device_name.c_str(),
+                                  &tl_bitmap);
+        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+            const auto &iface_attr = *ucp_worker_iface_get_attr(worker, tl_id);
+
+            if (!iface_matches_address_flags(iface_attr, address_flags)) {
+                UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
+            }
+        }
+
+        ASSERT_FALSE(UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
+
+        worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS |
+                                 UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
+        if (address_flags != 0) {
+            worker_attr.field_mask   |= UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS;
+            worker_attr.address_flags = address_flags;
+        }
+
+        worker_attr.address_device_name = address_device_name.c_str();
+
+        status = ucp_worker_query(worker, &worker_attr);
+        ASSERT_UCS_OK(status);
+        if (worker_attr.address == nullptr) {
+            UCS_TEST_ABORT("ucp_worker_query() returned a null address");
+        }
+
+        status = ucp_address_unpack(worker, worker_attr.address,
+                                    ucp_worker_default_address_pack_flags(
+                                            worker),
+                                    &unpacked_address);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(UCS_STATIC_BITMAP_POPCOUNT(tl_bitmap),
+                  unpacked_address.address_count);
+
+        ucp_unpacked_address_for_each(address_entry, &unpacked_address) {
+            auto found = false;
+
+            UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+                const auto &resource = context->tl_rscs[tl_id];
+
+                if ((resource.md_index == address_entry->md_index) &&
+                    (resource.tl_name_csum == address_entry->tl_name_csum)) {
+                    found = true;
+                    break;
+                }
+            }
+
+            EXPECT_TRUE(found);
+        }
+
+        ucs_free(unpacked_address.address_list);
+        ucp_worker_release_address(worker, worker_attr.address);
+    }
+
+private:
+    static bool iface_can_connect(const uct_iface_attr_t &attrs)
+    {
+        return (attrs.cap.flags & (UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                   UCT_IFACE_FLAG_CONNECT_TO_EP)) != 0;
+    }
+
+    static bool iface_matches_address_flags(const uct_iface_attr_t &iface_attr,
+                                            const uint32_t address_flags)
+    {
+        return iface_can_connect(iface_attr) &&
+               (((address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) == 0) ||
+                ((iface_attr.cap.flags & UCT_IFACE_FLAG_INTER_NODE) != 0));
+    }
 };
 
 UCS_TEST_P(test_ucp_worker_address_query, query)
@@ -858,6 +970,62 @@ UCS_TEST_P(test_ucp_worker_address_query, query)
 
     EXPECT_EQ(sender().worker()->uuid, address_attr.worker_uid);
     ucp_worker_release_address(sender().worker(), worker_attr.address);
+}
+
+UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device)
+{
+    const auto address_device_name = find_address_device(
+            address_device_type::any);
+
+    ASSERT_FALSE(address_device_name.empty());
+    check_address_by_device(address_device_name, 0);
+}
+
+UCS_TEST_P(test_ucp_worker_address_query, query_address_by_device_net_only)
+{
+    const auto address_device_name = find_address_device(
+            address_device_type::net);
+
+    if (address_device_name.empty()) {
+        UCS_TEST_SKIP_R("no network device");
+    }
+
+    check_address_by_device(address_device_name,
+                            UCP_WORKER_ADDRESS_FLAG_NET_ONLY);
+}
+
+UCS_TEST_P(test_ucp_worker_address_query, empty_intersection)
+{
+    const auto address_device_name = find_address_device(
+            address_device_type::non_net);
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucp_worker_attr_t worker_attr;
+
+    if (address_device_name.empty()) {
+        UCS_TEST_SKIP_R("no non-network device");
+    }
+
+    worker_attr.field_mask          = UCP_WORKER_ATTR_FIELD_ADDRESS |
+                                      UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS |
+                                      UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
+    worker_attr.address_flags       = UCP_WORKER_ADDRESS_FLAG_NET_ONLY;
+    worker_attr.address_device_name = address_device_name.c_str();
+
+    EXPECT_EQ(UCS_ERR_NO_DEVICE,
+              ucp_worker_query(sender().worker(), &worker_attr));
+}
+
+UCS_TEST_P(test_ucp_worker_address_query, query_address_unknown_device)
+{
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucp_worker_attr_t worker_attr;
+
+    worker_attr.field_mask          = UCP_WORKER_ATTR_FIELD_ADDRESS |
+                                      UCP_WORKER_ATTR_FIELD_ADDRESS_DEVICE_NAME;
+    worker_attr.address_device_name = "no-such-ucx-device";
+    const auto status = ucp_worker_query(sender().worker(), &worker_attr);
+
+    EXPECT_EQ(UCS_ERR_NO_DEVICE, status);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_worker_address_query)

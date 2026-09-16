@@ -68,6 +68,17 @@ void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
     }
 }
 
+static int
+ucp_proto_rndv_ctrl_skip_inter_node_md(
+        const ucp_proto_common_init_params_t *params,
+        const uct_md_attr_v2_t *md_attr)
+{
+    return (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
+           ucp_ep_config_is_inter_node(params->super.ep_config_key) &&
+           !(params->reg_mem_info.flags &
+             UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE);
+}
+
 static void
 ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucp_md_map_t *md_map,
@@ -76,8 +87,8 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
 {
     ucp_context_h context                    = params->super.super.worker->context;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
-    ucp_rsc_index_t mem_sys_dev              = params->super.reg_mem_info.sys_dev;
-    ucp_rsc_index_t ep_sys_dev;
+    ucs_sys_device_t mem_sys_dev             = params->super.reg_mem_info.sys_dev;
+    ucs_sys_device_t ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_v2_t *md_attr;
     const uct_component_attr_t *cmpt_attr;
@@ -136,6 +147,15 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                           "mem_flags 0x%x",
                           lane, context->tl_mds[md_index].rsc.md_name,
                           md_attr->required_mem_flags,
+                          params->super.reg_mem_info.flags);
+            continue;
+        }
+
+        /* Inter-node memory-type copy requires an exportable memory handle. */
+        if (ucp_proto_rndv_ctrl_skip_inter_node_md(&params->super, md_attr)) {
+            ucs_trace_req("lane[%d]: md %s cannot copy memory inter-node, "
+                          "mem_flags 0x%x",
+                          lane, context->tl_mds[md_index].rsc.md_name,
                           params->super.reg_mem_info.flags);
             continue;
         }
@@ -222,6 +242,14 @@ ucp_proto_rndv_rkey_mem_flags_estimate(const ucp_proto_init_params_t *params)
         /*
          * Derive UCS_MEM_FLAG_REGISTRABLE from matching local MDs which
          * require it and whose remote MDs are present in the rkey.
+         *
+         * UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE is intentionally not inferred
+         * here: unlike REGISTRABLE it is not an MD required_mem_flags bit,
+         * and is checked only when packing keys in
+         * ucp_proto_rndv_ctrl_get_md_map(). Runtime packing uses the real
+         * local buffer flags; omitting it from this estimate can only make
+         * nested ctrl modeling (e.g. peer rndv/rtr) slightly pessimistic
+         * for fabric-exportable remotes, not incorrect.
          */
         md_index   = context->tl_rscs[lane_cfg->rsc_index].md_index;
         mem_flags |= context->tl_mds[md_index].attr.required_mem_flags;
@@ -392,11 +420,12 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
                                     select_param->dt_class,
                                     &mem_info, select_param->sg_count);
     } else {
-        /* If we know the remote buffer parameters, these are actually the local
-         * parameters for the remote protocol
-         */
-        mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
         mem_info.type    = init_params->rkey_config_key->mem_type;
+        /* If the local and remote memory types match, use the local system
+         * device as a namespace-safe proxy for remote protocol estimation. */
+        mem_info.sys_dev = (mem_info.type == select_param->mem_type) ?
+                                   select_param->sys_dev :
+                                   UCS_SYS_DEVICE_ID_UNKNOWN;
         mem_info.flags   = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, params->remote_op_flags,

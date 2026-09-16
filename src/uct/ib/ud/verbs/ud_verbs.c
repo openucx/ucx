@@ -603,8 +603,11 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
         return status;
     }
 
-    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
-                                    &peer_address->ah);
+    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(ib_iface),
+                                            &ah_attr,
+                                            uct_ib_iface_md(ib_iface)->pd,
+                                            "UD verbs connect",
+                                            &peer_address->ah);
     if (status != UCS_OK) {
         return status;
     }

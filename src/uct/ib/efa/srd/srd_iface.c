@@ -802,7 +802,10 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         goto out;
     }
 
-    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
+    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
+                                            &ah_attr,
+                                            uct_ib_iface_md(&iface->super)->pd,
+                                            "SRD AH", &ah);
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u failed to create ah"
                   "status=%s",
@@ -1005,6 +1008,10 @@ uct_srd_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
     struct ibv_context *ctx;
     struct efadv_device_attr efa_attr;
     int ret;
+
+    if (!uct_ib_efadv_pci_vendor_match(&ib_md->dev.pci_id)) {
+        return UCS_ERR_NO_DEVICE;
+    }
 
     ctx = ibv_open_device(ib_md->dev.ibv_context->device);
     if (ctx == NULL) {

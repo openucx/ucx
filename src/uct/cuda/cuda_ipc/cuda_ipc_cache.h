@@ -47,7 +47,7 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
                                        const char *name);
 
 
-void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
+void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache, int close_handles);
 
 
 /**

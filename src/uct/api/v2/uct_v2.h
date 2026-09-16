@@ -1119,7 +1119,7 @@ typedef struct {
  * @brief  Memory domain capability flags.
  */
 typedef enum {
-    UCT_MD_FLAG_V2_FIRST       = UCT_MD_FLAG_LAST,
+    UCT_MD_FLAG_V2_FIRST         = UCT_MD_FLAG_LAST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1127,7 +1127,7 @@ typedef enum {
      * key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
-    UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
+    UCT_MD_FLAG_INVALIDATE_RMA   = UCT_MD_FLAG_V2_FIRST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1135,12 +1135,13 @@ typedef enum {
      * packed key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12),
+    UCT_MD_FLAG_INVALIDATE_AMO   = UCS_BIT(12),
 
     /**
-     * Memory domain performs memory type related copy operations.
+     * Memory domain supports interfaces that perform inter-process memory type
+     * copy operations.
      */
-    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13)
+    UCT_MD_FLAG_IPC_MEMTYPE_COPY = UCS_BIT(13)
 } uct_md_flags_v2_t;
 
 
@@ -1916,6 +1917,10 @@ typedef struct uct_ep_op_info {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback invoked for each undelivered outstanding operation.
+ *
+ * @param [in] op_info  Descriptor of the undelivered operation. The descriptor
+ *                      is valid only for the duration of the callback.
+ * @param [in] arg      User-defined argument.
  */
 typedef void (*uct_ep_outstanding_purge_callback_t)(
         const uct_ep_op_info_t *op_info, void *arg);
@@ -1941,7 +1946,7 @@ typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
      *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. */
     uint64_t                            field_mask;
 
     /**
@@ -1966,6 +1971,10 @@ typedef struct {
  *
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ *
+ * @note This routine should be called only after the error handler for @a ep
+ *       returns @ref UCS_INPROGRESS. It can be used only if the interface
+ *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,

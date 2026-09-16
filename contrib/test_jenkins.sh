@@ -690,6 +690,17 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory ===="
 
+		if $ucx_perftest -h 2>&1 | grep -q "cuda-async"
+		then
+			echo "==== Running ucx_perf with cuda-async memory ===="
+			cuda_async_test_args="-t tag_lat -D contig,contig"
+			cuda_async_test_args+=" -m cuda-async,cuda-async -s 8 -n 10 -w 1"
+			run_client_server_app "$ucx_perftest" "$cuda_async_test_args" \
+					      "$(hostname)" 0 0
+		else
+			echo "==== cuda-async memory is not supported, skipping ===="
+		fi
+
 		for memtype_cache in y n
 		do
 			for gdr in $gdr_options
@@ -845,6 +856,33 @@ run_ucx_perftest_cuda_device() {
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 	done
 	unset UCX_TLS
+}
+
+#
+# Run UCX one-sided performance test with IOV datatype
+#
+run_ucx_perftest_rma_iov() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+
+	if [ "X$have_cuda" != "Xno" ] && [ "$(get_num_gpus)" -gt 0 ]; then
+		cat $ucx_inst_ptest/test_types_ucp_rma_iov | \
+			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+	else
+		echo "==== CUDA not available, running host-only IOV RMA tests ===="
+		cat $ucx_inst_ptest/test_types_ucp_rma_iov | grep -v cuda | \
+			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+	fi
+
+	ucp_test_args="-b $ucx_inst_ptest/test_types_rma_iov_ucp -w 1"
+
+	for ucx_dev in $(get_active_ib_devices)
+	do
+		echo "==== Running ucx_perftest IOV RMA on $ucx_dev ===="
+		export UCX_NET_DEVICES=$ucx_dev
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_NET_DEVICES
+	done
 }
 
 #
@@ -1451,6 +1489,7 @@ run_tests() {
 	do_distributed_task 0 4 test_no_cuda_context
 	do_distributed_task 1 4 run_ucx_perftest_with_daemon
 	do_distributed_task 1 4 run_ucx_perftest_cuda_device
+	do_distributed_task 2 4 run_ucx_perftest_rma_iov
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

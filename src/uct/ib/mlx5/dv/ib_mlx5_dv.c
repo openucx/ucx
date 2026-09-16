@@ -364,9 +364,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
-                          void *out, size_t outlen)
+ucs_status_t uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in,
+                                       size_t inlen, void *out, size_t outlen)
 {
     int ret;
 

@@ -18,8 +18,9 @@
 BEGIN_C_DECLS
 
 
-/* Upper limit on system device id */
-#define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
+/* Maximal valid system device id and number of valid ids */
+#define UCS_SYS_DEVICE_ID_MAX   (UINT8_MAX - 1)
+#define UCS_SYS_DEVICE_ID_COUNT (UCS_SYS_DEVICE_ID_MAX + 1)
 
 /* Indicate that the ucs_sys_device_t for the device has no real bus_id
  * e.g. virtual devices like CMA/knem */
@@ -34,6 +35,31 @@ BEGIN_C_DECLS
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
 
+/* Bus ID string formatting */
+#define UCS_SYS_BUS_ID_FMT "%04x:%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ARG(_bus_id) \
+    (unsigned)(_bus_id)->domain, (unsigned)(_bus_id)->bus, \
+            (unsigned)(_bus_id)->slot, (unsigned)(_bus_id)->function
+
+/* Bus ID string formatting without the domain */
+#define UCS_SYS_BUS_ID_ABBREVIATED_FMT "%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ABBREVIATED_ARG(_bus_id) \
+    (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
+            (unsigned)(_bus_id)->function
+
+/* Special values for undefined PCI identifiers */
+#define UCS_SYS_PCI_ID_VALUE_UNDEFINED 0x0000
+#define UCS_SYS_PCI_ID_UNDEFINED \
+    (ucs_sys_pci_id_t) \
+    { \
+        .vendor = UCS_SYS_PCI_ID_VALUE_UNDEFINED, \
+        .device = UCS_SYS_PCI_ID_VALUE_UNDEFINED \
+    }
+
+/* String formatting for PCI identifiers */
+#define UCS_SYS_PCI_ID_FMT         "[%04x:%04x]"
+#define UCS_SYS_PCI_ID_ARG(_pci_id) ((_pci_id)->vendor), ((_pci_id)->device)
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -41,6 +67,15 @@ typedef struct ucs_sys_bus_id {
     uint8_t  slot;     /* range: 0 to 1f */
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
+
+
+/**
+ * PCI identifier of a system device.
+ */
+typedef struct ucs_sys_pci_id {
+    uint16_t vendor;
+    uint16_t device;
+} ucs_sys_pci_id_t;
 
 
 /* Packed bit representation of a PCI bus id */
@@ -218,6 +253,18 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 
 
 /**
+ * Compare two PCI identifiers.
+ *
+ * @param [in] pci_id1  First PCI identifier.
+ * @param [in] pci_id2  Second PCI identifier.
+ *
+ * @return Nonzero if the PCI identifiers are equal, zero otherwise.
+ */
+int ucs_topo_pci_id_equal(const ucs_sys_pci_id_t *pci_id1,
+                          const ucs_sys_pci_id_t *pci_id2);
+
+
+/**
  * Pack a PCI bus id into its bit representation.
  *
  * @param [in] bus_id  Bus id to pack.
@@ -226,6 +273,22 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
  */
 ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Compare two system devices by their topology identity.
+ *
+ * Registered devices are ordered by PCI bus id, then by user-defined value.
+ * Device identifiers must be valid and registered (not UNKNOWN).
+ *
+ * @param [in] sys_dev1  First system device.
+ * @param [in] sys_dev2  Second system device.
+ *
+ * @return A negative value if @a sys_dev1 precedes @a sys_dev2, a positive
+ *         value if @a sys_dev2 precedes @a sys_dev1, or zero if equal.
+ */
+int ucs_topo_sys_device_cmp(ucs_sys_device_t sys_dev1,
+                            ucs_sys_device_t sys_dev2);
 
 
 /**
@@ -309,6 +372,18 @@ int ucs_topo_distance_cmp(const ucs_sys_dev_distance_t *distance1,
 ucs_sys_device_t ucs_topo_get_sysfs_dev(const char *dev_name,
                                         const char *sysfs_path,
                                         unsigned name_priority);
+
+/**
+ * Read the PCI identifier of a device from sysfs, without adding it as a system
+ * device.
+ *
+ * @param [in]  dev_name    Device name, used for logging.
+ * @param [in]  sysfs_path  sysfs path for the required device, or NULL.
+ *
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if it could not be read.
+ */
+ucs_sys_pci_id_t ucs_topo_get_sysfs_pci_id(const char *dev_name,
+                                           const char *sysfs_path);
 
 /**
  * Return system device name in BDF format: "<domain>:<bus>:<device>.<function>".
@@ -422,6 +497,17 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev);
  * @return The number of NUMA node closest to given device.
  */
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
+
+
+/**
+ * Get the PCI identifier of a given system device.
+ *
+ * @param [in] sys_dev System device index.
+ *
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if the system device is
+ *         invalid or its PCI identifier is unavailable.
+ */
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev);
 
 
 /**

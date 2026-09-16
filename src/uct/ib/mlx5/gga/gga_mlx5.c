@@ -532,6 +532,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return status;
     }
 
+    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
     ep->super.super.atomic_mr_offset = 0;
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
     ep->super.super.flush_rkey       =

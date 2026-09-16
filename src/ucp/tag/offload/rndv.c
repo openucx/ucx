@@ -44,7 +44,7 @@ ucp_tag_rndv_offload_proto_probe(const ucp_proto_init_params_t *init_params)
        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
-       .super.exclude_map   = 0,
+       .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
        .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
        .lane_type           = UCP_LANE_TYPE_TAG,

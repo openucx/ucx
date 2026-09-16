@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 extern "C" {
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -55,6 +56,15 @@ topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
                           ucs_sys_dev_distance_t *distance)
 {
     *distance = ucs_topo_default_distance;
+}
+
+static int topo_test_sys_device_cmp(const void *elem1, const void *elem2,
+                                    void *UCS_V_UNUSED arg)
+{
+    const auto sys_dev1 = *static_cast<const ucs_sys_device_t*>(elem1);
+    const auto sys_dev2 = *static_cast<const ucs_sys_device_t*>(elem2);
+
+    return ucs_topo_sys_device_cmp(sys_dev1, sys_dev2);
 }
 
 class test_topo : public ucs::test {
@@ -136,7 +146,7 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
 
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev1);
     ASSERT_UCS_OK(status);
-    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
+    EXPECT_LE(dev1, UCS_SYS_DEVICE_ID_MAX);
     status = ucs_topo_sys_device_set_name(dev1, "test_bus_id_1", 10);
     ASSERT_UCS_OK(status);
 
@@ -153,7 +163,7 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev2);
     ASSERT_UCS_OK(status);
     EXPECT_EQ((unsigned)dev1 + 1, dev2);
-    EXPECT_LT(dev2, UCS_SYS_DEVICE_ID_MAX);
+    EXPECT_LE(dev2, UCS_SYS_DEVICE_ID_MAX);
     status = ucs_topo_sys_device_set_name(dev2, "test_bus_id_2", 10);
     ASSERT_UCS_OK(status);
 
@@ -166,6 +176,136 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_EQ(bus_id2.function, dummy_bus_id.function);
 
     EXPECT_GE(ucs_topo_num_devices(), 2);
+}
+
+UCS_TEST_F(test_topo, sys_device_cmp) {
+    static const uintptr_t user_value1 = 17;
+    static const uintptr_t user_value2 = 42;
+    const ucs_sys_bus_id_t bus_id1     = {0, 1, 2, 0};
+    const ucs_sys_bus_id_t bus_id2     = {0, 2, 2, 0};
+    ucs_sys_device_t dev1, dev1_alias1, dev1_alias2, dev2, dev2_alias1;
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id1, &dev1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id2, &dev2));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id1,
+                                                                user_value1,
+                                                                &dev1_alias1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id1,
+                                                                user_value2,
+                                                                &dev1_alias2));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id2,
+                                                                user_value1,
+                                                                &dev2_alias1));
+
+    /* Identical devices compare equal; BDF is the primary key. */
+    EXPECT_EQ(0, ucs_topo_sys_device_cmp(dev1, dev1));
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1, dev2), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev2, dev1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias2, dev2_alias1), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev2_alias1, dev1_alias2), 0);
+
+    /* User value breaks BDF ties; the empty value sorts last. */
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias1, dev1_alias2), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev1_alias2, dev1_alias1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias2, dev1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev2_alias1, dev2), 0);
+
+    /* Validate sorting order. */
+    std::vector<ucs_sys_device_t> sys_devs = {dev2, dev1, dev2_alias1,
+                                              dev1_alias2, dev1_alias1};
+
+    ucs_qsort_r(sys_devs.data(), sys_devs.size(), sizeof(sys_devs[0]),
+                topo_test_sys_device_cmp, NULL);
+
+    const std::vector<ucs_sys_device_t> expected = {dev1_alias1, dev1_alias2,
+                                                    dev1, dev2_alias1, dev2};
+    EXPECT_EQ(expected, sys_devs);
+}
+
+UCS_TEST_F(test_topo, pci_id_equal) {
+    const ucs_sys_pci_id_t pci_id0 = {0x15b3, 0x101b};
+    const ucs_sys_pci_id_t pci_id1 = {0x15b3, 0x101b};
+    const ucs_sys_pci_id_t pci_id2 = {0xabcd, 0x101b};
+    const ucs_sys_pci_id_t pci_id3 = {0x15b3, 0xabcd};
+    const ucs_sys_pci_id_t pci_id4 = {0xdead, 0xbeef};
+
+    EXPECT_TRUE(ucs_topo_pci_id_equal(&pci_id0, &pci_id0));
+    EXPECT_TRUE(ucs_topo_pci_id_equal(&pci_id0, &pci_id1));
+    EXPECT_FALSE(ucs_topo_pci_id_equal(&pci_id0, &pci_id2));
+    EXPECT_FALSE(ucs_topo_pci_id_equal(&pci_id0, &pci_id3));
+    EXPECT_FALSE(ucs_topo_pci_id_equal(&pci_id0, &pci_id4));
+}
+
+UCS_TEST_F(test_topo, pci_id) {
+    static const char *pci_devices_path = "/sys/bus/pci/devices";
+    std::string bdf;
+    long expected_vendor, expected_device;
+    ucs_sys_device_t sys_dev;
+    ucs_sys_pci_id_t pci_id;
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir(pci_devices_path);
+    if (dir == NULL) {
+        UCS_TEST_SKIP_R("PCI devices sysfs directory is unavailable");
+    }
+
+    /* Find a device with a valid vendor and device ID */
+    while ((entry = readdir(dir)) != NULL) {
+        const std::string sysfs_path = std::string(pci_devices_path) + "/" +
+                                       entry->d_name;
+
+        if ((ucs_read_file_number(&expected_vendor, 1, "%s/vendor",
+                                  sysfs_path.c_str()) == UCS_OK) &&
+            (ucs_read_file_number(&expected_device, 1, "%s/device",
+                                  sysfs_path.c_str()) == UCS_OK)) {
+            bdf = entry->d_name;
+            break;
+        }
+    }
+
+    closedir(dir);
+    if (bdf.empty()) {
+        UCS_TEST_SKIP_R("No PCI device with vendor and device IDs found");
+    }
+
+    sys_dev = register_device("pci_device", bdf);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
+    EXPECT_EQ(expected_vendor, pci_id.vendor);
+    EXPECT_EQ(expected_device, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_nonexistent_bdf) {
+    static const char *bdf = "ffff:ff:ff.1";
+    ucs_sys_device_t sys_dev;
+    ucs_sys_pci_id_t pci_id;
+
+    /* NOTE: Nonexistent BDF is still registered as a sys_dev */
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bdf_name(bdf, &sys_dev));
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+
+    pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_unknown_sys_dev) {
+    const ucs_sys_pci_id_t pci_id = ucs_topo_sys_device_get_pci_id(
+            UCS_SYS_DEVICE_ID_UNKNOWN);
+
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
+}
+
+UCS_TEST_F(test_topo, pci_id_invalid_sys_dev) {
+    const unsigned num_devices = ucs_topo_num_devices();
+
+    ASSERT_LT(num_devices, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const ucs_sys_pci_id_t pci_id = ucs_topo_sys_device_get_pci_id(
+            static_cast<ucs_sys_device_t>(num_devices));
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.vendor);
+    EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
 }
 
 UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
@@ -188,7 +328,7 @@ UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
                                                            user_value1, &dev1);
     ASSERT_UCS_OK(status);
-    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
+    EXPECT_LE(dev1, UCS_SYS_DEVICE_ID_MAX);
 
     status = ucs_topo_find_device_by_bus_id_and_user_value(&dummy_bus_id,
                                                            user_value1,
