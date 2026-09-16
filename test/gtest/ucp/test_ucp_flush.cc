@@ -318,6 +318,62 @@ UCS_TEST_P(test_ucp_flush, partial_mask_pending_reschedule, "MAX_EAGER_LANES=2")
     disconnect(receiver());
 }
 
+UCS_TEST_P(test_ucp_flush,
+           force_completion_removes_remote_completion_request)
+{
+    ucp_request_param_t param = {};
+    ucp_ep_flush_state_t *flush_state;
+    ucp_request_t *req        = NULL;
+    ucp_ep_h ep;
+    ucs_status_ptr_t request  = NULL;
+    uint32_t send_sn;
+
+    sender().connect(&receiver(), get_ep_params());
+    flush_ep(sender());
+    ep          = sender().ep();
+    flush_state = ucp_ep_flush_state(ep);
+    send_sn     = flush_state->send_sn;
+    ++flush_state->send_sn;
+
+    test_flush_call_count = 0;
+    test_flush_comp       = NULL;
+    {
+        ucs::mock mock;
+        mock_ep_flush(ep, mock, test_flush_inprogress);
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+
+            request = ucp_ep_flush_lanes_internal(
+                    ep, 0, &param, NULL, test_flush_completion,
+                    "force_completion_removes_remote_completion_request",
+                    0, UCS_BIT(0));
+            ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+            req = static_cast<ucp_request_t*>(request) - 1;
+            ASSERT_TRUE(test_flush_comp != NULL);
+
+            uct_invoke_completion(test_flush_comp, UCS_OK);
+            ASSERT_EQ(UCP_FLUSH_SW_STATE_STARTED,
+                      req->send.flush.sw_state);
+            ASSERT_EQ(0, req->send.flush.sw_done);
+            ASSERT_EQ(1ul, ucs_hlist_length(&flush_state->reqs));
+
+            /* Model a reissued lane flush which fails after the software
+             * completion stage has queued this request. */
+            req->send.state.uct_comp.count = 1;
+            uct_invoke_completion(test_flush_comp, UCS_ERR_ENDPOINT_TIMEOUT);
+            EXPECT_TRUE(ucs_hlist_is_empty(&flush_state->reqs));
+        }
+    }
+
+    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, ucp_request_check_status(request));
+    ucp_request_release(request);
+
+    flush_state->send_sn = send_sn;
+    disconnect(sender());
+    disconnect(receiver());
+}
+
 UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
            "MAX_EAGER_LANES=2")
 {
@@ -360,7 +416,7 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
             ep->flags |= UCP_EP_FLAG_BLOCK_FLUSH;
             ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
             ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
-            req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_RESTART_PENDING;
+            req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
         }
 
         sender().progress();
@@ -369,7 +425,7 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
         {
             test_flush_worker_cs_guard cs_guard(ep->worker);
 
-            req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_NOT_STARTED;
+            req->send.flush.sw_state = UCP_FLUSH_SW_STATE_NOT_STARTED;
             req->send.flush.uct_flags_orig |= UCT_FLUSH_FLAG_CANCEL;
             req->send.lane = UCP_NULL_LANE;
             ucp_ep_flush_request_ff(req, UCS_ERR_CANCELED);
@@ -413,7 +469,7 @@ UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
             EXPECT_TRUE(test_flush_comp != NULL);
             if (test_flush_comp != NULL) {
                 uct_invoke_completion(test_flush_comp, UCS_ERR_ENDPOINT_TIMEOUT);
-                EXPECT_EQ(UCP_EP_FLUSH_SW_STATE_RESTART_PENDING,
+                EXPECT_EQ(UCP_FLUSH_SW_STATE_RESTART_PENDING,
                           req->send.flush.sw_state);
             }
         }
@@ -486,7 +542,7 @@ UCS_TEST_P(test_ucp_flush_failover,
             ASSERT_TRUE(test_flush_comp != NULL);
 
             uct_invoke_completion(test_flush_comp, UCS_OK);
-            ASSERT_EQ(UCP_EP_FLUSH_SW_STATE_STARTED,
+            ASSERT_EQ(UCP_FLUSH_SW_STATE_STARTED,
                       req->send.flush.sw_state);
             ASSERT_EQ(0, req->send.flush.sw_done);
             ASSERT_EQ(1ul, ucs_hlist_length(&flush_state->reqs));
@@ -495,7 +551,7 @@ UCS_TEST_P(test_ucp_flush_failover,
              * completion stage has queued this request. */
             req->send.state.uct_comp.count = 1;
             uct_invoke_completion(test_flush_comp, UCS_ERR_ENDPOINT_TIMEOUT);
-            ASSERT_EQ(UCP_EP_FLUSH_SW_STATE_RESTART_PENDING,
+            ASSERT_EQ(UCP_FLUSH_SW_STATE_RESTART_PENDING,
                       req->send.flush.sw_state);
         }
 

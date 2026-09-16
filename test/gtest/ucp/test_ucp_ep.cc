@@ -194,7 +194,8 @@ UCS_TEST_P(test_ucp_ep_lane_storage, slow_lane_storage_initialization)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-UCS_TEST_P(test_ucp_ep_lane_storage, fast_lane_storage_initialization_tracks_change)
+UCS_TEST_P(test_ucp_ep_lane_storage,
+           fast_lane_storage_initialization_tracks_change)
 {
     ucp_ep_h ep;
 

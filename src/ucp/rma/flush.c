@@ -113,7 +113,7 @@ static void ucp_ep_flush_error(ucp_request_t *req, ucp_lane_index_t lane,
 
 static int ucp_ep_flush_is_completed(ucp_request_t *req)
 {
-    return (req->send.flush.sw_state != UCP_EP_FLUSH_SW_STATE_RESTART_PENDING) &&
+    return (req->send.flush.sw_state != UCP_FLUSH_SW_STATE_RESTART_PENDING) &&
            (req->send.state.uct_comp.count == 0) && req->send.flush.sw_done;
 }
 
@@ -131,7 +131,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_assertv(!(ep->flags & UCP_EP_FLAG_BLOCK_FLUSH), "req=%p ep=%p", req,
                 ep);
 
-    if (req->send.flush.sw_state == UCP_EP_FLUSH_SW_STATE_RESTART_PENDING) {
+    if (req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING) {
         return;
     }
 
@@ -203,7 +203,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
     }
 
-    if ((req->send.flush.sw_state == UCP_EP_FLUSH_SW_STATE_NOT_STARTED) &&
+    if ((req->send.flush.sw_state == UCP_FLUSH_SW_STATE_NOT_STARTED) &&
         (req->send.state.uct_comp.count == 0)) {
         /* Start waiting for remote completions only after all lanes are flushed
          * on the transport level, so we are sure all pending requests were sent.
@@ -235,7 +235,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             }
         }
 
-        req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_STARTED;
+        req->send.flush.sw_state = UCP_FLUSH_SW_STATE_STARTED;
     }
 }
 
@@ -372,7 +372,7 @@ static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req)
         }
 
         ucs_assertv(req->send.flush.sw_state ==
-                    UCP_EP_FLUSH_SW_STATE_NOT_STARTED, "req=%p sw_state=%d", req,
+                    UCP_FLUSH_SW_STATE_NOT_STARTED, "req=%p sw_state=%d", req,
                     req->send.flush.sw_state);
         req->send.lane = UCP_NULL_LANE;
     }
@@ -451,7 +451,7 @@ static void ucp_ep_flush_request_reset(ucp_request_t *req)
     req->send.flush.all_lanes       = lanes;
     req->send.flush.started_lanes   = 0;
     req->send.flush.uct_flags       = req->send.flush.uct_flags_orig;
-    req->send.flush.sw_state        = UCP_EP_FLUSH_SW_STATE_NOT_STARTED;
+    req->send.flush.sw_state        = UCP_FLUSH_SW_STATE_NOT_STARTED;
     req->send.flush.sw_done         = 0;
     req->send.flush.lane_generation =
             req->send.ep->ext->lane_generation;
@@ -462,7 +462,7 @@ static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg)
     ucp_request_t *req = arg;
 
     ucp_trace_req(req, "flush restart");
-    ucs_assert(req->send.flush.sw_state == UCP_EP_FLUSH_SW_STATE_RESTART_PENDING);
+    ucs_assert(req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING);
     req->send.flush.lane_mask |= ucp_ep_get_live_lanes(req->send.ep);
     ucp_ep_flush_request_reset(req);
     ucp_ep_flush_progress(req);
@@ -489,30 +489,31 @@ void ucp_ep_flush_completion(uct_completion_t *self)
         /* In case of lane failure the flush operation should be resubmitted
          * as well as any other outstanding requests on this EP since
          * the flush guarantees ordering. */
+        if ((req->send.flush.sw_state == UCP_FLUSH_SW_STATE_STARTED) &&
+            !req->send.flush.sw_done) {
+            ucs_hlist_del(&ucp_ep_flush_state(req->send.ep)->reqs,
+                          &req->send.list);
+        }
+
         if (ucp_ep_err_mode_eq(req->send.ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
             !(req->send.flush.uct_flags_orig & UCT_FLUSH_FLAG_CANCEL) &&
             !(req->send.ep->flags & UCP_EP_FLAG_CLOSED) &&
             (ucp_ep_get_live_lanes(req->send.ep) != 0)) {
-                ucp_trace_req(req,
-                              "flush completion error: %s, scheduling failover "
-                              "and restart", ucs_status_string(status));
-                if ((req->send.flush.sw_state == UCP_EP_FLUSH_SW_STATE_STARTED) &&
-                    !req->send.flush.sw_done) {
-                    ucs_hlist_del(&ucp_ep_flush_state(req->send.ep)->reqs,
-                                  &req->send.list);
-                }
-                req->send.flush.sw_state = UCP_EP_FLUSH_SW_STATE_RESTART_PENDING;
-                ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q,
-                                          req, ucp_ep_flush_failover_oneshot_cb, req);
-                ucp_worker_signal_internal(req->send.ep->worker);
-                return;
+            ucp_trace_req(req,
+                          "flush completion error: %s, scheduling failover "
+                          "and restart", ucs_status_string(status));
+            req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
+            ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q,
+                                      req, ucp_ep_flush_failover_oneshot_cb,
+                                      req);
+            ucp_worker_signal_internal(req->send.ep->worker);
+            return;
         }
 
         /* force flush completion in case of error */
         req->send.flush.sw_done        = 1;
         req->send.state.uct_comp.count = 0;
     }
-
 
     ucp_trace_req(req, "flush completion comp_count %d status %s",
                   req->send.state.uct_comp.count, ucs_status_string(status));

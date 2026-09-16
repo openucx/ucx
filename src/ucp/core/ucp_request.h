@@ -146,9 +146,9 @@ typedef struct {
 
 /* Remote-completion stage of an endpoint lane flush. */
 enum {
-    UCP_EP_FLUSH_SW_STATE_NOT_STARTED,
-    UCP_EP_FLUSH_SW_STATE_STARTED,
-    UCP_EP_FLUSH_SW_STATE_RESTART_PENDING
+    UCP_FLUSH_SW_STATE_NOT_STARTED,
+    UCP_FLUSH_SW_STATE_STARTED,
+    UCP_FLUSH_SW_STATE_RESTART_PENDING
 };
 
 
