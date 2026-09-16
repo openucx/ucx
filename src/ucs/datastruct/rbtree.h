@@ -33,19 +33,27 @@ struct ucs_rbtree_node {
 
 
 /**
+ * Invoked bottom-up on every node whose subtree changed.
+ */
+typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
+
+
+/**
  * Intrusive red-black tree.
  */
 typedef struct {
-    ucs_rbtree_node_t *root; /**< Root node, NULL when empty */
+    ucs_rbtree_node_t      *root;    /**< Root node, NULL when empty */
+    ucs_rbtree_augment_cb_t augment; /**< Derived-data hook, NULL if unused */
 } ucs_rbtree_t;
 
 
 /**
  * @brief Initialize an empty tree
  *
- * @param [in]  tree  Tree to initialize.
+ * @param [in]  tree     Tree to initialize.
+ * @param [in]  augment  Derived-data hook, or NULL if the caller keeps none.
  */
-void ucs_rbtree_init(ucs_rbtree_t *tree);
+void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment);
 
 
 /**

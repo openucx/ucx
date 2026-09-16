@@ -13,9 +13,26 @@
 #include <ucs/debug/assert.h>
 
 
-void ucs_rbtree_init(ucs_rbtree_t *tree)
+void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment)
 {
-    tree->root = NULL;
+    tree->root    = NULL;
+    tree->augment = augment;
+}
+
+/*
+ * Recompute derived data from 'node' up to the root.
+ */
+static void ucs_rbtree_propagate(const ucs_rbtree_t *tree,
+                                 ucs_rbtree_node_t *node)
+{
+    if (tree->augment == NULL) {
+        return;
+    }
+
+    while (node != NULL) {
+        tree->augment(node);
+        node = node->parent;
+    }
 }
 
 /*
@@ -41,6 +58,11 @@ static void ucs_rbtree_rotate_left(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 
     right->left  = node;
     node->parent = right;
+
+    if (tree->augment != NULL) {
+        tree->augment(node);
+        tree->augment(right);
+    }
 }
 
 /* Rotate right: 'node' becomes the right child of its left child. */
@@ -64,6 +86,11 @@ static void ucs_rbtree_rotate_right(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 
     left->right  = node;
     node->parent = left;
+
+    if (tree->augment != NULL) {
+        tree->augment(node);
+        tree->augment(left);
+    }
 }
 
 static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
@@ -135,6 +162,7 @@ void ucs_rbtree_insert_at(ucs_rbtree_t *tree, ucs_rbtree_node_t *parent,
     node->color  = UCS_RBTREE_RED;
     *link        = node;
 
+    ucs_rbtree_propagate(tree, node);
     ucs_rbtree_insert_fixup(tree, node);
 }
 
@@ -299,6 +327,11 @@ void ucs_rbtree_remove(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
         successor->left->parent = successor;
         successor->color        = node->color;
     }
+
+    /* 'child_parent' is at or below the deepest node whose subtree changed, so
+     * walking up from it refreshes every stale value, including the one at the
+     * successor's new position. */
+    ucs_rbtree_propagate(tree, child_parent);
 
     if (removed_color == UCS_RBTREE_BLACK) {
         ucs_rbtree_remove_fixup(tree, child, child_parent);

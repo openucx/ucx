@@ -25,7 +25,7 @@ protected:
     void init()
     {
         ucs::test::init();
-        ucs_rbtree_init(&m_tree);
+        ucs_rbtree_init(&m_tree, NULL);
         m_nodes.assign(NUM_NODES, node());
     }
 
