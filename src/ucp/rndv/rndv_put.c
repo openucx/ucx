@@ -577,6 +577,18 @@ static void ucp_proto_rndv_put_mtype_frag_completion(uct_completion_t *uct_comp)
     ucp_proto_rndv_ppln_send_frag_complete(req, 1);
 }
 
+static void
+ucp_proto_rndv_put_mtype_abort(ucp_request_t *req, ucs_status_t status)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        req->send.state.uct_comp.status = status;
+        ucp_proto_rndv_put_common_complete(req);
+        return;
+    }
+
+    ucp_proto_rndv_stub_abort(req, status);
+}
+
 static ucs_memory_type_t
 ucp_proto_rndv_put_mtype_frag_mem_type(uint64_t rndv_frag_mem_types,
                                        ucs_memory_type_t rkey_mem_type)
@@ -672,6 +684,6 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
-    .abort    = ucp_proto_rndv_stub_abort,
+    .abort    = ucp_proto_rndv_put_mtype_abort,
     .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
 };

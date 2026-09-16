@@ -18,9 +18,12 @@ extern "C" {
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_perf.h>
 #include <ucp/proto/proto_init.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
+
+extern ucp_proto_t ucp_rndv_put_mtype_proto;
 }
 
 class test_ucp_proto : public ucp_test {
@@ -59,6 +62,12 @@ ucp_md_map_t test_ucp_proto::get_md_map(ucs_memory_type_t mem_type)
     return context()->reg_md_map[mem_type] &
     /* ucp_datatype_iter_mem_reg() always goes directly to registration cache */
            context()->cache_md_map[mem_type];
+}
+
+UCS_TEST_P(test_ucp_proto, rndv_put_mtype_allocation_failure_abort)
+{
+    EXPECT_TRUE(ucp_rndv_put_mtype_proto.abort !=
+                ucp_proto_rndv_stub_abort);
 }
 
 void test_ucp_proto::do_mem_reg(ucp_datatype_iter_t *dt_iter,
