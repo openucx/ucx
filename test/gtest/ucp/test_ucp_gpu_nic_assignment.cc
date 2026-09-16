@@ -57,6 +57,11 @@ protected:
         {
             return num_gpus() * num_gpu_devices;
         }
+
+        size_t num_sys_devs() const noexcept
+        {
+            return first_nic_port_sys_dev() + (num_nics() * num_nic_ports);
+        }
     };
 
     static ucs_sys_device_t gpu_sys_dev(const topology_shape_t &config,
@@ -247,9 +252,8 @@ protected:
         ASSERT_LE(config.num_gpu_devices, UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT);
         ASSERT_LE(config.num_nic_ports, UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT);
 
-        ASSERT_LE(config.first_nic_port_sys_dev() +
-                          (config.num_nics() * config.num_nic_ports),
-                  UCS_SYS_DEVICE_ID_COUNT);
+        /* Leave (UCS_SYS_DEVICE_ID_UNKNOWN - 1) unmapped for the ungrouped lookup. */
+        ASSERT_LE(config.num_sys_devs(), UCS_SYS_DEVICE_ID_COUNT - 1);
 
         if (config.num_gpus() == 0) {
             ASSERT_TRUE(expected_owners.empty());
