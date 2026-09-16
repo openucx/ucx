@@ -57,9 +57,9 @@ ucp_gpu_nic_bitmap_add_nic(ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap,
     }
 }
 
-static ucp_gpu_nic_sys_dev_bitmap_t *
-ucp_gpu_nic_assignment_lookup_mut(const ucp_gpu_nic_assignment_t *assignment,
-                                  ucs_sys_device_t gpu_sys_dev)
+const ucp_gpu_nic_sys_dev_bitmap_t *
+ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
+                              ucs_sys_device_t gpu_sys_dev)
 {
     uint8_t nic_sys_dev_bitmap_idx;
 
@@ -80,13 +80,6 @@ ucp_gpu_nic_assignment_lookup_mut(const ucp_gpu_nic_assignment_t *assignment,
                 nic_sys_dev_bitmap_idx, assignment->num_bitmaps, gpu_sys_dev);
 
     return &assignment->nic_sys_dev_bitmaps[nic_sys_dev_bitmap_idx];
-}
-
-const ucp_gpu_nic_sys_dev_bitmap_t *
-ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
-                              ucs_sys_device_t gpu_sys_dev)
-{
-    return ucp_gpu_nic_assignment_lookup_mut(assignment, gpu_sys_dev);
 }
 
 /* Log the assignment for a group.
@@ -266,8 +259,9 @@ ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
         ucs_assert((gpu->num_sys_devs > 0) &&
                    (gpu->sys_devs[0] != UCS_SYS_DEVICE_ID_UNKNOWN));
 
-        nic_sys_dev_bitmap =
-                ucp_gpu_nic_assignment_lookup_mut(assignment, gpu->sys_devs[0]);
+        nic_sys_dev_bitmap = ucs_const_cast(
+                ucp_gpu_nic_sys_dev_bitmap_t*,
+                ucp_gpu_nic_assignment_lookup(assignment, gpu->sys_devs[0]));
         ucs_assert(nic_sys_dev_bitmap != NULL);
 
         ucp_gpu_nic_bitmap_add_nic(nic_sys_dev_bitmap, nic);
