@@ -20,7 +20,23 @@ typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI, /* Multi-chunk VMM memory */
 } uct_cuda_ipc_key_handle_t;
+
+
+#if HAVE_CUDA_FABRIC
+/**
+ * @brief Inline description of VMM multi-chunk metadata
+ */
+typedef struct {
+    uint8_t  version;
+    uint8_t  reserved;
+    uint16_t num_chunks;
+    uint16_t info_size;
+    uint16_t chunk_desc_size;
+    size_t   alloc_size;
+} uct_cuda_ipc_vmm_multi_info_t;
+#endif
 
 
 typedef struct uct_cuda_ipc_md_handle {
@@ -37,7 +53,10 @@ typedef struct uct_cuda_ipc_md_handle {
         } posix_fd;
     } handle;
 #if HAVE_CUDA_FABRIC
-    CUmemPoolPtrExportData    ptr;
+    union {
+        CUmemPoolPtrExportData        ptr;
+        uct_cuda_ipc_vmm_multi_info_t vmm_multi;
+    };
     CUmemoryPool              pool;
 #endif
     unsigned long long        buffer_id;
@@ -130,14 +149,44 @@ typedef struct {
 } uct_cuda_ipc_memh_t;
 
 
+#if HAVE_CUDA_FABRIC
 /**
- * @brief cudar ipc region registered for exposure
+ * @brief multi-chunk VMM registration metadata
+ */
+typedef struct {
+    ucs_list_link_t                 list;          /* Entry in metadata list */
+    CUdeviceptr                     d_bptr;        /* Base of all chunks */
+    size_t                          b_len;         /* Length of all chunks */
+    CUdeviceptr                     dev_ptr;       /* Metadata buffer VA */
+    size_t                          alloc_size;    /* Metadata alloc size */
+    CUmemFabricHandle               fabric_handle; /* Metadata fabric handle */
+    uct_cuda_ipc_vmm_multi_info_t   info;          /* Inline metadata layout */
+} uct_cuda_ipc_vmm_multi_meta_t;
+#endif
+
+
+#if HAVE_CUDA_FABRIC || HAVE_DECL_SYS_PIDFD_GETFD
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_init_access_desc(CUmemAccessDesc *access_desc, CUdevice cu_dev)
+{
+    access_desc->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    access_desc->flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    access_desc->location.id   = cu_dev;
+}
+#endif
+
+
+/**
+ * @brief cuda ipc region registered for exposure
  */
 typedef struct {
     uct_cuda_ipc_md_handle_t  ph;     /* Memory handle of GPU memory */
     CUdeviceptr               d_bptr; /* Allocation base address */
     size_t                    b_len;  /* Allocation size */
     ucs_list_link_t           link;
+#if HAVE_CUDA_FABRIC
+    ucs_list_link_t           vmm_multi_list; /* Published VMM metadata */
+#endif
 } uct_cuda_ipc_lkey_t;
 
 
@@ -162,9 +211,18 @@ typedef struct {
 } uct_cuda_ipc_extended_rkey_t;
 
 
+#if HAVE_CUDA_FABRIC
+struct uct_cuda_ipc_vmm_chunk_desc;
+#endif
+
+
 typedef struct {
-    uct_cuda_ipc_extended_rkey_t super;
-    int                          stream_id;
+    uct_cuda_ipc_extended_rkey_t        super;
+    int                                 stream_id;
+#if HAVE_CUDA_FABRIC
+    struct uct_cuda_ipc_vmm_chunk_desc *chunks;
+    uint16_t                            num_chunks;
+#endif
 } uct_cuda_ipc_unpacked_rkey_t;
 
 #endif
