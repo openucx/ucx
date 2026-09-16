@@ -430,13 +430,13 @@ protected:
     }
 
 private:
-    ucs::handle<ucp_context_h> m_ucph;
     std::vector<ucp_rkey_h>    m_rkeys;
     ucp_rkey_t                 m_dummy_rkey;
     ucp_dt_local_sgl_t         m_local;
     ucp_dt_remote_sgl_t        m_remote;
 
 protected:
+    ucs::handle<ucp_context_h> m_ucph;
     std::vector<void*>         m_buffers;
     std::vector<size_t>        m_lengths;
     std::vector<uint64_t>      m_remote_addrs;
@@ -451,6 +451,54 @@ protected:
     std::vector<uint64_t>      m_desc_remote_addrs;
     std::vector<size_t>        m_desc_elem_indices;
 };
+
+UCS_TEST_F(test_ucp_dt_sgl, mem_reg_provided_memh_missing_md) {
+    static constexpr size_t NUM_ELEMS = 2;
+    static constexpr size_t LENGTH    = UCS_KBYTE;
+    static constexpr unsigned FLAGS   = UCT_MD_MEM_ACCESS_RMA;
+
+    ucp_md_map_t cache_md_map = m_ucph->cache_md_map[UCS_MEMORY_TYPE_HOST];
+    if (ucs_popcount(cache_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 cacheable memory domains");
+    }
+
+    /* Restricting md_map requires ucp_memh_get(), so these aren't user memhs */
+    ucp_md_index_t md_index = ucs_ffs64(cache_md_map);
+    ucp_md_map_t reg_md_map = cache_md_map & ~UCS_BIT(md_index);
+    std::vector<std::vector<uint8_t>> data(NUM_ELEMS,
+                                           std::vector<uint8_t>(LENGTH));
+    std::vector<void*> buffers(NUM_ELEMS);
+    std::vector<size_t> lengths(NUM_ELEMS, LENGTH);
+    std::vector<ucp_mem_h> memhs(NUM_ELEMS);
+
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        buffers[i] = data[i].data();
+        ASSERT_UCS_OK(ucp_memh_get(m_ucph, buffers[i], LENGTH,
+                                   UCS_MEMORY_TYPE_HOST, reg_md_map, FLAGS,
+                                   "test_sgl_memh", &memhs[i]));
+        ASSERT_FALSE(memhs[i]->md_map & UCS_BIT(md_index));
+    }
+
+    ucp_datatype_iter_t dt_iter  = {};
+    dt_iter.dt_class             = UCP_DATATYPE_SGL;
+    dt_iter.length               = NUM_ELEMS;
+    dt_iter.offset               = 0;
+    dt_iter.type.sgl.buffers     = buffers.data();
+    dt_iter.type.sgl.lengths     = lengths.data();
+    dt_iter.type.sgl.memhs       = memhs.data();
+    dt_iter.type.sgl.frag_offset = 0;
+    ucp_memory_info_set_host(&dt_iter.mem_info);
+
+    EXPECT_UCS_OK(ucp_datatype_iter_mem_reg(m_ucph, &dt_iter,
+                                            UCS_BIT(md_index), FLAGS,
+                                            UCS_BIT(UCP_DATATYPE_SGL)));
+
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        EXPECT_TRUE(memhs[i]->md_map & UCS_BIT(md_index));
+        EXPECT_TRUE(memhs[i]->uct[md_index] != UCT_MEM_HANDLE_NULL);
+        ucp_memh_put(memhs[i]);
+    }
+}
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
     static constexpr size_t NUM_ELEMS    = 10;

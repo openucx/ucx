@@ -16,6 +16,18 @@
   * Use `ucs_container_of` and `ucs_derived_of` instead of open-coded pointer
     arithmetic.
   * Use `ucs_assert*` for internal invariants, not user-input validation.
+  * Unless external linkage is required, functions used only within one source
+    file must be declared `static`.
+
+
+## Comments
+  * Usually one line; use more only for a non-obvious or complex point, or
+    per the `## Doxygen` section below.
+  * Focus on "why" rather than "what"; no PR/issue references, no dev-process
+    narration.
+  * Document once, in the most relevant area.
+  * Explain locking, ownership, tradeoffs, or step-by-step processing when
+    non-obvious.
 
 
 ## Naming convention:

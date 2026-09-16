@@ -188,8 +188,11 @@ try_load_cuda_env() {
     # Check nvidia driver
     [ -f "/proc/driver/nvidia/version" ] || return 0
 
-    # Check peer mem driver
-    [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+    # Check peer mem driver. Required on Azure only; other clusters (dlcluster,
+    # funk) may provide GPUDirect RDMA through dmabuf without nvidia_peermem.
+    if [ "x$RUNNING_IN_AZURE" = "xyes" ]; then
+        [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+    fi
 
     # Check number of available GPUs
     nvidia-smi -a || true
@@ -206,10 +209,11 @@ try_load_cuda_env() {
         have_cuda=yes
     fi
 
-    # Check gdrcopy
-    if [ -w "/dev/gdrdrv" ]
+    # Check gdrcopy. Load it inside the if so a missing module does not
+    # fail this function under set -e.
+    if [ -w "/dev/gdrdrv" ] && az_module_load dev/gdrcopy2.5.1_cuda13.0.2
     then
-        az_module_load dev/gdrcopy2.5.1_cuda13.0.2 && have_gdrcopy=yes
+        have_gdrcopy=yes
     fi
 }
 

@@ -16,11 +16,6 @@
 #include <string.h>
 
 
-static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
-                                 void *qend, int max_sge, int dump_qp,
-                                 uct_log_data_dump_func_t packet_dump_cb,
-                                 char *buffer, size_t max, uct_ib_log_sge_t *log_sge);
-
 static void uct_ib_mlx5_resp_error_dump(const uct_ib_mlx5_srq_seg_t *seg,
                                         unsigned max_strides, char *buffer,
                                         size_t max);
@@ -281,10 +276,10 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
            UCT_IB_MLX5_AV_FULL_SIZE : UCT_IB_MLX5_AV_BASE_SIZE;
 }
 
-static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
-                                 void *qend, int max_sge, int dump_qp,
-                                 uct_log_data_dump_func_t packet_dump_cb,
-                                 char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
+void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
+                          void *qend, int max_sge, int dump_qp,
+                          uct_log_data_dump_func_t packet_dump_cb,
+                          char *buffer, size_t max, uct_ib_log_sge_t *log_sge)
 {
     static uct_ib_opcode_t opcodes[] = {
         [MLX5_OPCODE_NOP]              = { "NOP",        0 },
@@ -308,17 +303,25 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     uint8_t opcode                 = ctrl->opmod_idx_opcode >> 24;
     uint8_t opmod                  = ctrl->opmod_idx_opcode & 0xff;
     uint32_t qp_num                = ntohl(ctrl->qpn_ds) >> 8;
-    int ds                         = ctrl->qpn_ds >> 24;
-    uct_ib_opcode_t *op            = &opcodes[opcode];
+    int ds                         = ntohl(ctrl->qpn_ds) & UINT8_MAX;
     char *s                        = buffer;
     char *ends                     = buffer + max;
-    const char* sg_prefix_arr      = (op->flags & UCT_IB_OPCODE_FLAG_HAS_DMA) ?
-                                     "GS" : NULL;
+    uct_ib_opcode_t *op;
+    const char *sg_prefix_arr;
     struct ibv_sge sg_list[16];
     uint64_t inline_bitmap;
     int i, is_inline, is_eth;
     size_t dg_size;
     void *seg;
+
+    if ((opcode >= ucs_static_array_size(opcodes)) ||
+        (opcodes[opcode].name == NULL)) {
+        snprintf(buffer, max, "unknown opcode 0x%x", opcode);
+        return;
+    }
+
+    op            = &opcodes[opcode];
+    sg_prefix_arr = (op->flags & UCT_IB_OPCODE_FLAG_HAS_DMA) ? "GS" : NULL;
 
     /* QP and WQE index */
     if (dump_qp) {
@@ -387,8 +390,8 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
 
     /* Extended atomic segment */
     if (op->flags & UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC) {
-        uint64_t add, boundary, compare, swap, compare_mask, swap_mask;
         int size = 1 << ((opmod & 7) + 2);
+        uint64_t add, boundary, compare, swap, compare_mask, swap_mask;
 
         if (opcode == MLX5_OPCODE_ATOMIC_MASKED_FA) {
             add      = network_to_host(seg, size);

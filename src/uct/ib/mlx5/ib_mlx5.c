@@ -20,6 +20,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <stdio.h>
 #include <string.h>
 
 
@@ -858,6 +859,23 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
     return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
 }
 
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    uint8_t ds = ntohl(ctrl->qpn_ds) & UINT8_MAX;
+
+    ucs_assertv_always(
+            (ds > 0) &&
+            ((ds * UCT_IB_MLX5_WQE_SEG_SIZE) <=
+             UCT_IB_MLX5_MAX_SEND_WQE_SIZE),
+            "ds=%u", ds);
+    return ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+}
+
+uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size)
+{
+    return index + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+}
+
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {
@@ -873,8 +891,8 @@ uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(pi == txwq->hw_ci);
     do {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
-        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-        pi      += (wqe_size + MLX5_SEND_WQE_BB - 1) / MLX5_SEND_WQE_BB;
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        pi       = uct_ib_mlx5_txwq_next_wqe_index(pi, wqe_size);
         ++count;
     } while (pi != txwq->sw_pi);
 
@@ -1061,6 +1079,22 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length)
 {
     return ucs_roundup_pow2_or0(tx_qp_length * UCT_IB_MLX5_MAX_BB);
+}
+
+int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
+                                        unsigned min_release,
+                                        unsigned min_build)
+{
+    unsigned release, build;
+
+    ucs_assert(fw_ver != NULL);
+
+    if (sscanf(fw_ver, "%*u.%u.%u", &release, &build) != 2) {
+        return 0;
+    }
+
+    return (release > min_release) ||
+           ((release == min_release) && (build >= min_build));
 }
 
 /* Keep the function as a separate to test SL selection */
