@@ -393,6 +393,10 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
+    if (req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING) {
+        return UCS_OK;
+    }
+
     if (ep->flags & UCP_EP_FLAG_BLOCK_FLUSH) {
         ucp_ep_flush_request_resched(ep, req);
         return UCS_OK;

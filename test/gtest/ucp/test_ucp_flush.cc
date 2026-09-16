@@ -404,6 +404,8 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
             ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
             ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
             req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
+            ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+            EXPECT_EQ(initial_flush_count, test_flush_call_count);
         }
 
         sender().progress();
