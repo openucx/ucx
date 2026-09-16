@@ -2394,7 +2394,7 @@ private:
 
     static void check_pending_queues_empty(const entity &e)
     {
-        const ucp_worker_h worker = e.worker();
+        ucp_worker_h worker = e.worker();
 
         for (unsigned i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; i++) {
             EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i]))

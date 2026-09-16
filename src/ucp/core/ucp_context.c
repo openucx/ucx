@@ -405,14 +405,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"RNDV_FRAG_WORKER_MAX_MEM", "auto",
-   "Maximum amount of memory a worker may use for proto v2 rendezvous\n"
-   "staging fragments, or \"inf\" for no limit. This setting has no effect\n"
-   "when PROTO_ENABLE=n. The same limit is applied independently to each\n"
-   "fragment memory type, and per device when available. It is converted to\n"
-   "a fragment count using RNDV_FRAG_SIZE and RNDV_FRAG_ALLOC_COUNT. When\n"
-   "the limit is reached, further fragment requests are queued until\n"
-   "fragments are released",
-   ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem), UCS_CONFIG_TYPE_MEMUNITS},
+   "Maximum amount of memory a worker may use for rendezvous staging\n"
+   "fragments. Both \"auto\" and \"inf\" mean no limit. This setting has no\n"
+   "effect when PROTO_ENABLE=n. The same limit is applied independently to\n"
+   "each fragment memory type, and per device when available. It is\n"
+   "converted to a fragment count using RNDV_FRAG_SIZE and\n"
+   "RNDV_FRAG_ALLOC_COUNT. When the limit is reached, further fragment\n"
+   "requests are queued until fragments are released",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"

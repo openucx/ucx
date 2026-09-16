@@ -890,11 +890,10 @@ protected:
     {
         std::vector<ucp_mem_desc_t *> held;
         ucp_mem_desc_t *mdesc;
-        khiter_t iter;
 
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-        for (iter = kh_begin(&worker->mpool_hash);
+        for (khiter_t iter = kh_begin(&worker->mpool_hash);
              iter != kh_end(&worker->mpool_hash); ++iter) {
             if (!kh_exist(&worker->mpool_hash, iter) ||
                 (kh_key(&worker->mpool_hash, iter).mem_type !=
@@ -1000,7 +999,7 @@ protected:
 
     void rndv_fc_pending_abort_test(entity &fc_entity, unsigned fc_op)
     {
-        ucp_ep_config_t *sender_config = ucp_ep_config(sender().ep());
+        const ucp_ep_config_t *sender_config = ucp_ep_config(sender().ep());
         std::pair<ucs_status_t, ucs_status_t> result;
 
         if (sender_config->key.rma_bw_lanes[0] == UCP_NULL_LANE) {
