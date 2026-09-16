@@ -211,33 +211,48 @@ static ucs_status_t ucm_rocmmem_install(int events)
     static int installed_hooks           = 0;
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
     ucs_status_t status                  = UCS_OK;
+    ucs_status_t bistro_status, reloc_status;
 
     if (!(events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE))) {
+        goto out;
+    }
+
+    if (ucm_global_opts.rocm_hook_modes == 0) {
+        ucm_info("rocm memory hooks are disabled by configuration");
+        status = UCS_ERR_UNSUPPORTED;
         goto out;
     }
 
     pthread_mutex_lock(&install_mutex);
 
     /* Install bistro first: it patches the HSA function body, so it catches
-     * callers regardless of how they resolved the symbol (GOT or dlsym). Then
-     * install reloc as well: it is harmless (the wrapper calls the bistro
+     * callers regardless of how they resolved the symbol (GOT or dlsym). If
+     * bistro cannot patch (e.g. an unrelocatable prologue or W^X), fall back to
+     * reloc rather than aborting - reloc still provides GOT-based coverage. */
+    bistro_status = ucm_rocmmem_install_hooks(UCM_MMAP_HOOK_BISTRO,
+                                              &installed_hooks);
+    if (bistro_status != UCS_OK) {
+        ucm_debug("failed to install rocm bistro hooks, falling back to reloc");
+    }
+
+    /* Then install reloc as well: it is harmless (the wrapper calls the bistro
      * trampoline via ucm_orig_*, which bypasses the patch, so no double
-     * dispatch) and provides coverage where bistro cannot patch (e.g. W^X). */
-    status = ucm_rocmmem_install_hooks(UCM_MMAP_HOOK_BISTRO, &installed_hooks);
-    if (status != UCS_OK) {
-        ucm_debug("failed to install rocm bistro hooks");
-        goto out_unlock;
-    }
-
-    status = ucm_rocmmem_install_hooks(UCM_MMAP_HOOK_RELOC, &installed_hooks);
-    if (status != UCS_OK) {
+     * dispatch) and provides coverage where bistro is not installed. */
+    reloc_status = ucm_rocmmem_install_hooks(UCM_MMAP_HOOK_RELOC,
+                                             &installed_hooks);
+    if (reloc_status != UCS_OK) {
         ucm_debug("failed to install rocm reloc hooks");
-        goto out_unlock;
     }
 
-    ucm_info("rocm hooks are ready");
+    /* Success as long as at least one hooking mode was installed. */
+    if (installed_hooks & (UCS_BIT(UCM_MMAP_HOOK_BISTRO) |
+                           UCS_BIT(UCM_MMAP_HOOK_RELOC))) {
+        status = UCS_OK;
+        ucm_info("rocm hooks are ready");
+    } else {
+        status = (bistro_status != UCS_OK) ? bistro_status : reloc_status;
+    }
 
-out_unlock:
     pthread_mutex_unlock(&install_mutex);
 out:
     return status;
