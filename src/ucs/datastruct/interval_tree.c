@@ -70,6 +70,7 @@ static void ucs_interval_tree_cleanup_recursive(ucs_interval_tree_t *tree,
 void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
 {
     ucs_interval_tree_cleanup_recursive(tree, tree->rb.root);
+    ucs_rbtree_init(&tree->rb);
 }
 
 /**

@@ -174,17 +174,16 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree,
     while ((node != tree->root) && ucs_rbtree_is_black(node)) {
         if (node == parent->left) {
             sibling = parent->right;
-            if ((sibling != NULL) && (sibling->color == UCS_RBTREE_RED)) {
+            /* Removing a black node leaves the opposite subtree non-empty, so
+             * the sibling exists */
+            ucs_assert(sibling != NULL);
+
+            if (sibling->color == UCS_RBTREE_RED) {
                 sibling->color = UCS_RBTREE_BLACK;
                 parent->color  = UCS_RBTREE_RED;
                 ucs_rbtree_rotate_left(tree, parent);
                 sibling = parent->right;
-            }
-
-            if (ucs_unlikely(sibling == NULL)) {
-                node   = parent;
-                parent = node->parent;
-                continue;
+                ucs_assert(sibling != NULL);
             }
 
             if (ucs_rbtree_is_black(sibling->left) &&
@@ -204,10 +203,6 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree,
                 sibling = parent->right;
             }
 
-            if (ucs_unlikely(sibling == NULL)) {
-                break;
-            }
-
             sibling->color = parent->color;
             parent->color  = UCS_RBTREE_BLACK;
             if (sibling->right != NULL) {
@@ -216,17 +211,16 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree,
             ucs_rbtree_rotate_left(tree, parent);
         } else {
             sibling = parent->left;
-            if ((sibling != NULL) && (sibling->color == UCS_RBTREE_RED)) {
+            /* Removing a black node leaves the opposite subtree non-empty, so
+             * the sibling exists */
+            ucs_assert(sibling != NULL);
+
+            if (sibling->color == UCS_RBTREE_RED) {
                 sibling->color = UCS_RBTREE_BLACK;
                 parent->color  = UCS_RBTREE_RED;
                 ucs_rbtree_rotate_right(tree, parent);
                 sibling = parent->left;
-            }
-
-            if (ucs_unlikely(sibling == NULL)) {
-                node   = parent;
-                parent = node->parent;
-                continue;
+                ucs_assert(sibling != NULL);
             }
 
             if (ucs_rbtree_is_black(sibling->left) &&
@@ -244,10 +238,6 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree,
                 sibling->color = UCS_RBTREE_RED;
                 ucs_rbtree_rotate_left(tree, sibling);
                 sibling = parent->left;
-            }
-
-            if (ucs_unlikely(sibling == NULL)) {
-                break;
             }
 
             sibling->color = parent->color;
