@@ -97,6 +97,7 @@ noinst_HEADERS = \
 	arch/ppc64/cpu.h \
 	arch/rv64/cpu.h \
 	arch/x86_64/cpu.h \
+	arch/x86_64/cpu_nt_avx512.inl \
 	arch/x86_64/cpu_nt_avx2.inl \
 	arch/cpu.h \
 	config/ucm_opts.h \
