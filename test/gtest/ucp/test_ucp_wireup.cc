@@ -961,6 +961,49 @@ public:
     static void err_cb(void *, ucp_ep_h, ucs_status_t) {}
 };
 
+class test_ucp_wireup_errh_peer_self : public test_ucp_wireup_errh_peer
+{
+public:
+    void init() override {
+        test_ucp_wireup::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
+{
+    ucp_ep_params_t ep_params = get_ep_params();
+    ucp_address_t *address;
+    ucp_ep_h ep;
+    size_t address_length;
+    ucs_status_t status;
+
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "self",
+                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE));
+
+    status = ucp_worker_get_address(receiver().worker(), &address,
+                                    &address_length);
+    ASSERT_UCS_OK(status);
+
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(sender().worker(), &ep_params, &ep);
+    }
+
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_UCS_OK(status);
+
+    const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+    EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
+    EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
+    EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, key.am_lane)->tl_name);
+
+    disconnect(ep);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_errh_peer_self, self, "self")
+
 UCS_TEST_P(test_ucp_wireup_errh_peer, msg_after_ep_create) {
     receiver().connect(&sender(), get_ep_params());
 
