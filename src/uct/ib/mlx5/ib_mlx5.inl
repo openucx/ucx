@@ -323,6 +323,7 @@ uct_ib_mlx5_txwq_wrap_any_const(const uct_ib_mlx5_txwq_t *txwq, const void *seg)
         seg = UCS_PTR_BYTE_OFFSET(seg,
                                   -UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
     }
+
     return uct_ib_mlx5_txwq_wrap_none_const(txwq, seg);
 }
 

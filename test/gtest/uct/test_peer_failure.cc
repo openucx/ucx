@@ -349,8 +349,10 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_purge_outstanding : public uct_test {
 public:
-    static const uint64_t SEND_SEED = 0xa1a1a1a1a1a1a1a1ul;
-    static const uint64_t RECV_SEED = 0xb2b2b2b2b2b2b2b2ul;
+    static const uint64_t SEND_SEED       = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED       = 0xb2b2b2b2b2b2b2b2ul;
+    static const uint8_t AM_SHORT_ID      = 3;
+    static const uint64_t AM_SHORT_HEADER = 0x0123456789abcdefull;
 
     void init() override
     {
@@ -385,8 +387,6 @@ protected:
         uint32_t                   num_ops_posted_after_flush;
         uint32_t                   num_flush_purged;
         unsigned                   num_completions;
-        uint8_t                    am_short_id;
-        uint64_t                   am_short_header;
         std::vector<uint8_t>       am_short_payload;
         uint64_t                   remote_addr;
         uct_rkey_t                 rkey;
@@ -458,13 +458,16 @@ protected:
 
     void validate_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        ASSERT_EQ(ctx->operation, info->operation);
+
         switch (info->operation) {
         case UCT_EP_OP_AM_SHORT:
             validate_am_short(info, ctx);
             return;
         case UCT_EP_OP_PUT_SHORT:
         case UCT_EP_OP_PUT_BCOPY:
-            validate_put_short_bcopy(info, ctx);
+            validate_put(info, ctx);
             return;
         case UCT_EP_OP_FLUSH:
             validate_flush(info, ctx);
@@ -486,8 +489,8 @@ protected:
         ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
         ASSERT_TRUE(ucs_test_all_flags(info->am.field_mask, required_fields));
         EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
-        EXPECT_EQ(ctx->am_short_id, info->am.am_id);
-        EXPECT_EQ(ctx->am_short_header, info->am.header.value);
+        EXPECT_EQ(AM_SHORT_ID, info->am.am_id);
+        EXPECT_EQ(AM_SHORT_HEADER, info->am.header.value);
         ASSERT_EQ(ctx->am_short_payload.size(), info->am.payload.data.length);
         ASSERT_NE(nullptr, info->am.payload.data.buffer);
         EXPECT_EQ(0, memcmp(ctx->am_short_payload.data(),
@@ -496,8 +499,7 @@ protected:
         ++ctx->num_ops_purged;
     }
 
-    static void
-    validate_put_short_bcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_RMA;
         const uint16_t expected_rma_fields =
@@ -508,6 +510,7 @@ protected:
         ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
         ASSERT_TRUE(
                 ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+        /* No completion expected for PUT short and PUT bcopy */
         ASSERT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
 
         EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
@@ -549,8 +552,6 @@ protected:
         purge_ctx *ctx = static_cast<purge_ctx*>(arg);
 
         ASSERT_TRUE(info != NULL);
-        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-        ASSERT_EQ(ctx->operation, info->operation);
 
         ctx->self->validate_op(info, ctx);
     }
@@ -663,20 +664,25 @@ protected:
     unsigned m_err_count = 0;
 };
 
+const uint8_t test_uct_purge_outstanding::AM_SHORT_ID;
+const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
+
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}, 0, 0,
-                     0, 0, 0, 3, 0x0123456789abcdefull, {1, 2, 3, 4}};
+    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
 
-    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), ctx.am_short_id,
+    ctx.am_short_payload = {1, 2, 3, 4};
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
                                            am_handler, NULL, 0));
 
-    test_purge_outstanding([&ctx](uct_ep_h ep, uct_completion_t*) {
-        return uct_ep_am_short(ep, ctx.am_short_id, ctx.am_short_header,
+    send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
+        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER,
                                ctx.am_short_payload.data(),
                                ctx.am_short_payload.size());
-    }, ctx);
+    };
+    test_purge_outstanding(am_short, ctx);
 
     EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
     EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
