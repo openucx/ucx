@@ -197,8 +197,9 @@ static void ucp_gpu_nic_assignment_map_gpu(ucp_gpu_nic_assignment_t *assignment,
         ucs_assert(*gpu_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN);
         ucs_assertv(assignment->bitmap_idx_by_gpu_sys_dev[*gpu_sys_dev] ==
                             UCP_GPU_NIC_BITMAP_INDEX_INVALID,
-                    "gpu_sys_dev %u is already assigned to bitmap %zu",
-                    *gpu_sys_dev, nic_sys_dev_bitmap_idx);
+                    "gpu_sys_dev %u is already assigned to bitmap %u",
+                    *gpu_sys_dev,
+                    assignment->bitmap_idx_by_gpu_sys_dev[*gpu_sys_dev]);
 
         assignment->bitmap_idx_by_gpu_sys_dev[*gpu_sys_dev] = (uint8_t)
                 nic_sys_dev_bitmap_idx;
