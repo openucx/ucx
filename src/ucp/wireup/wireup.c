@@ -2215,6 +2215,7 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         /* Same-worker PEER EPs do not require peer-failure transports. */
         select_ep_init_flags &= ~UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     }
+
     status = ucp_wireup_select_lanes(ep, select_ep_init_flags, *tl_bitmap,
                                      remote_address, addr_indices, key, 1);
     if (status != UCS_OK) {

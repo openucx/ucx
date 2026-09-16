@@ -385,7 +385,8 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     ucp_lane_index_t i;
     ucp_md_map_t inv_map;
 
-    /* Same-worker PEER EPs do not require RMA invalidation. */
+    /* Same-worker PEER EPs have no independent remote worker to access the
+     * request buffer after an error, so RMA invalidation is not needed. */
     if ((key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) &&
         (key->err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
         return 0;
