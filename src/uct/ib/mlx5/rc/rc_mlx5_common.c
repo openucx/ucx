@@ -16,6 +16,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
 
+
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),

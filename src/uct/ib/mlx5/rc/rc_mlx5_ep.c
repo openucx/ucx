@@ -992,7 +992,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
 
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     if (wqe_size == header_size) {
-        /* A no-payload RDMA write has no data to report */
+        /* A no-payload RDMA write is not supported */
         return UCS_ERR_UNSUPPORTED;
     }
 
