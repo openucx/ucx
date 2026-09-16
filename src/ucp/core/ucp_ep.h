@@ -536,6 +536,8 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    uint32_t                      lane_generation; /* Incremented whenever a lane
+                                                       is updated */
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -771,6 +773,21 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name,
                                        unsigned uct_flags);
+
+/**
+ * @brief Flush a subset of endpoint lanes specified by @a lane_mask.
+ *
+ * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
+ * @a lane_mask are initially flushed. If the endpoint topology changes while
+ * the flush is active, current live lanes are added conservatively.
+ */
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask);
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);

@@ -7,6 +7,18 @@
 #include "ucp_test.h"
 #include <ucp/core/ucp_context.h>
 
+extern "C" {
+#include <ucp/core/ucp_ep.inl>
+}
+
+class test_ucp_ep_lane_storage : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
 class test_ucp_ep : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -92,4 +104,119 @@ UCS_TEST_P(test_ucp_ep, ucp_query_transport)
     }
 }
 
+UCS_TEST_P(test_ucp_ep_lane_storage, lane_generation_updates_on_pointer_change)
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_ep_h ep;
+    uct_ep_h lane = reinterpret_cast<uct_ep_h>(1);
+    uint32_t lane_generation;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
+                                     "lane-generation", "lane-generation", &ep));
+
+    lane_generation = ep->ext->lane_generation;
+    ucp_ep_set_lane(ep, 0, lane);
+    EXPECT_EQ(lane_generation + 1, ep->ext->lane_generation);
+
+    ucp_ep_set_lane(ep, 0, lane);
+    EXPECT_EQ(lane_generation + 1, ep->ext->lane_generation);
+
+    ucp_ep_set_lane(ep, 0, NULL);
+    EXPECT_EQ(lane_generation + 2, ep->ext->lane_generation);
+
+    ucp_ep_set_lane(ep, 0, lane);
+    EXPECT_EQ(lane_generation + 3, ep->ext->lane_generation);
+
+    ucp_ep_delete(ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+UCS_TEST_P(test_ucp_ep_lane_storage, recycled_ep_lane_storage_initialization)
+{
+    ucp_ep_h ep;
+    ucp_ep_h recycled_ep;
+    ucp_lane_index_t lane;
+
+    ucp_worker_h worker = sender().worker();
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
+                                     "lane-init", "lane-init", &ep));
+
+    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
+        ep->uct_eps[lane] = reinterpret_cast<uct_ep_h>(
+                static_cast<uintptr_t>(lane + 1));
+    }
+
+    ucp_ep_delete(ep);
+
+    ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
+                                     "lane-recycle", "lane-recycle",
+                                     &recycled_ep));
+
+    ASSERT_EQ(ep, recycled_ep);
+    EXPECT_EQ(0, recycled_ep->ext->lane_generation);
+    for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
+        EXPECT_EQ(NULL, recycled_ep->uct_eps[lane]);
+    }
+
+    ucp_ep_delete(recycled_ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+UCS_TEST_P(test_ucp_ep_lane_storage, slow_lane_storage_initialization)
+{
+    ucp_ep_h ep;
+    ucp_lane_index_t lane;
+
+    const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 2;
+    ucp_worker_h worker       = sender().worker();
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
+                                     "lane-init", "lane-init", &ep));
+    ASSERT_UCS_OK(ucp_ep_realloc_lanes(ep, num_lanes));
+
+    for (lane = UCP_MAX_FAST_PATH_LANES; lane < num_lanes; ++lane) {
+        ep->ext->uct_eps[lane - UCP_MAX_FAST_PATH_LANES] =
+                reinterpret_cast<uct_ep_h>(static_cast<uintptr_t>(lane + 1));
+    }
+
+    ep->ext->lane_generation = 0;
+    ASSERT_UCS_OK(ucp_ep_realloc_lanes(ep, num_lanes));
+
+    EXPECT_EQ(0, ep->ext->lane_generation);
+    for (lane = 0; lane < num_lanes; ++lane) {
+        EXPECT_EQ(NULL, ucp_ep_get_lane(ep, lane));
+    }
+
+    ucp_ep_delete(ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+UCS_TEST_P(test_ucp_ep_lane_storage,
+           fast_lane_storage_initialization_tracks_change)
+{
+    ucp_ep_h ep;
+
+    const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 1;
+    ucp_worker_h worker       = sender().worker();
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
+                                     "lane-init", "lane-init", &ep));
+
+    ep->uct_eps[0]           = reinterpret_cast<uct_ep_h>(1);
+    ep->ext->lane_generation = 0;
+    ASSERT_UCS_OK(ucp_ep_realloc_lanes(ep, num_lanes));
+
+    EXPECT_EQ(1, ep->ext->lane_generation);
+    EXPECT_EQ(NULL, ep->uct_eps[0]);
+
+    ucp_ep_delete(ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_ep);
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_lane_storage, self, "self")
