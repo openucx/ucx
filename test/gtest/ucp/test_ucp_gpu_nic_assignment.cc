@@ -10,9 +10,9 @@
 #include <cstring>
 #include <vector>
 
-class test_ucp_gpu_nic : public ucs::test {
+class test_ucp_gpu_nic_assignment : public ucs::test {
 public:
-    test_ucp_gpu_nic() :
+    test_ucp_gpu_nic_assignment() :
         m_groups(),
         m_assignment(),
         m_groups_initialized(false),
@@ -304,15 +304,15 @@ private:
     bool m_assignment_initialized;
 };
 
-UCS_TEST_F(test_ucp_gpu_nic, no_nics) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, no_nics) {
     check_clique_assignment(2, 3, 0, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, {});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, no_gpus) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, no_gpus) {
     check_clique_assignment(2, 0, 3, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, {});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_flip_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_flip_divisible) {
     /* Number of NICs is divisible by the number of GPUs. */
     check_clique_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
                             {0, 1, 1, 0, /**/
@@ -323,7 +323,7 @@ UCS_TEST_F(test_ucp_gpu_nic, clique_flip_divisible) {
                              3, 4, 5, 5, 4, 3});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_flip_not_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_flip_not_divisible) {
     check_clique_assignment(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
                             {0, 1, 1, 0, 0, /**/
                              2, 3, 3, 2, 2});
@@ -332,7 +332,7 @@ UCS_TEST_F(test_ucp_gpu_nic, clique_flip_not_divisible) {
                              3, 4});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_round_robin_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_round_robin_divisible) {
     check_clique_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
                             {0, 1, 0, 1, /**/
                              2, 3, 2, 3, /**/
@@ -342,7 +342,7 @@ UCS_TEST_F(test_ucp_gpu_nic, clique_round_robin_divisible) {
                              3, 4, 5, 3, 4, 5});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_round_robin_not_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_round_robin_not_divisible) {
     check_clique_assignment(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
                             {0, 1, 0, 1, 0, /**/
                              2, 3, 2, 3, 2});
