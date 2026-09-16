@@ -74,53 +74,6 @@ static int ucs_topo_groups_bus_id_equal(const ucs_sys_bus_id_t *bus_id1,
            (bus_id1->function == bus_id2->function);
 }
 
-/* This filter is required because currently CUDA gpus may have duplicates in
- * the devices array due to duplicate insertion by NVML and the CUDA driver. */
-static void
-ucs_topo_groups_gpu_aliases_filter(const ucs_topo_sys_device_info_t *devices,
-                                   ucs_topo_groups_sys_dev_array_t *gpus)
-{
-    ucs_sys_device_t sys_dev1, sys_dev2;
-    size_t src, dst, i;
-
-    if (ucs_array_length(gpus) < 2) {
-        return;
-    }
-
-    i = 0;
-    while (i < ucs_array_length(gpus) - 1) {
-        sys_dev1 = ucs_array_elem(gpus, i);
-        sys_dev2 = ucs_array_elem(gpus, i + 1);
-
-        if (ucs_topo_groups_bus_id_equal(&devices[sys_dev1].bus_id,
-                                         &devices[sys_dev2].bus_id) &&
-            (devices[sys_dev2].user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY)) {
-            /* Mark the device as unknown to be removed later. */
-            ucs_array_elem(gpus, i + 1) = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-            /* Promised by sorting. */
-            ucs_assert(devices[sys_dev1].user_value !=
-                       UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-
-            i += 2;
-        } else {
-            i++;
-        }
-    }
-
-    /* Compact the array by removing unknown devices. */
-    dst = 0;
-    for (src = 0; src < ucs_array_length(gpus); ++src) {
-        if (ucs_array_elem(gpus, src) == UCS_SYS_DEVICE_ID_UNKNOWN) {
-            continue;
-        }
-
-        ucs_array_elem(gpus, dst++) = ucs_array_elem(gpus, src);
-    }
-
-    ucs_array_set_length(gpus, dst);
-}
-
 static ucs_status_t
 ucs_topo_groups_read_ib_fw_ver(const ucs_sys_bus_id_t *bus_id, char *fw_ver,
                                size_t max)
@@ -372,9 +325,6 @@ ucs_topo_groups_inventory_build(const ucs_topo_sys_device_info_t *devices,
 
     ucs_topo_groups_sys_dev_sort(&acc_devices, devices);
     ucs_topo_groups_sys_dev_sort(&net_devices, devices);
-
-    /* TODO: Remove this filter when NVML duplicates issue is fixed. */
-    ucs_topo_groups_gpu_aliases_filter(devices, &acc_devices);
 
     if (is_vera_rubin) {
         ucs_topo_groups_nics_cx9_filter(devices, &net_devices);

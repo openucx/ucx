@@ -150,12 +150,6 @@ protected:
                                    numa.numa_node, nullptr, user_value));
             }
 
-            /* Add an alias with no user value, it should be filtered out */
-            add_device("numa" + std::to_string(numa_idx) + "_gpu" +
-                               std::to_string(gpu_idx) + ".alias",
-                       bus_id, UCS_TOPO_DEVICE_CLASS_ACC, numa.numa_node,
-                       nullptr, UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-
             numa.gpus.push_back(gpu_devices);
         }
     }
