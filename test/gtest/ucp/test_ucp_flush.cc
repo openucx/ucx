@@ -319,8 +319,10 @@ UCS_TEST_P(test_ucp_flush,
     ucs_status_ptr_t request  = NULL;
     uint32_t send_sn;
 
+    ASSERT_UCS_OK(ucp_ep_resolve_remote_id(sender().ep(), 0));
     flush_ep(sender());
     ep          = sender().ep();
+    ASSERT_TRUE(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     flush_state = ucp_ep_flush_state(ep);
     send_sn     = flush_state->send_sn;
     ++flush_state->send_sn;
@@ -497,8 +499,10 @@ UCS_TEST_P(test_ucp_flush_failover,
     ucs_status_ptr_t request  = NULL;
     uint32_t send_sn;
 
+    ASSERT_UCS_OK(ucp_ep_resolve_remote_id(sender().ep(), 0));
     flush_ep(sender());
     ep          = sender().ep();
+    ASSERT_TRUE(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     flush_state = ucp_ep_flush_state(ep);
     send_sn     = flush_state->send_sn;
     ++flush_state->send_sn;

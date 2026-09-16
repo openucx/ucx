@@ -155,6 +155,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage, recycled_ep_lane_storage_initialization)
                                      "lane-recycle", "lane-recycle",
                                      &recycled_ep));
 
+    ASSERT_EQ(ep, recycled_ep);
     EXPECT_EQ(0, recycled_ep->ext->lane_generation);
     for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
         EXPECT_EQ(NULL, recycled_ep->uct_eps[lane]);
