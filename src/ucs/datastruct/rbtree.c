@@ -83,12 +83,7 @@ static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
             if (node == parent->right) {
                 node = parent;
                 ucs_rbtree_rotate_left(tree, node);
-                parent = node->parent;
-                if (ucs_unlikely((parent == NULL) ||
-                                 (parent->parent == NULL))) {
-                    break;
-                }
-
+                parent      = node->parent;
                 grandparent = parent->parent;
             }
 
@@ -108,12 +103,7 @@ static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
             if (node == parent->left) {
                 node = parent;
                 ucs_rbtree_rotate_right(tree, node);
-                parent = node->parent;
-                if (ucs_unlikely((parent == NULL) ||
-                                 (parent->parent == NULL))) {
-                    break;
-                }
-
+                parent      = node->parent;
                 grandparent = parent->parent;
             }
 

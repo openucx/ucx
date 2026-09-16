@@ -103,21 +103,24 @@ protected:
         return out;
     }
 
-    /* Coalescing keeps the ranges disjoint, so consecutive nodes must be
-     * ordered and separated by a gap */
-    static void check_node(const ucs_rbtree_node_t *rb_node)
-    {
-        if (rb_node->left != NULL) {
-            EXPECT_LT(node_of(rb_node->left)->start, node_of(rb_node)->start);
-        }
-        if (rb_node->right != NULL) {
-            EXPECT_GT(node_of(rb_node->right)->start, node_of(rb_node)->start);
-        }
-    }
-
     bool check_rb_invariant() const
     {
-        return rbtree_check::validate(&m_tree.rb, m_tree.num_nodes, check_node);
+        if (!rbtree_check::validate(&m_tree.rb, m_tree.num_nodes)) {
+            return false;
+        }
+
+        const interval_vector_t ranges = collect_inorder();
+        for (size_t i = 1; i < ranges.size(); ++i) {
+            if (ranges[i - 1].second + 1 >= ranges[i].first) {
+                ADD_FAILURE() << "ranges [" << ranges[i - 1].first << ","
+                              << ranges[i - 1].second << "] and ["
+                              << ranges[i].first << "," << ranges[i].second
+                              << "] are not disjoint with a gap";
+                return false;
+            }
+        }
+
+        return true;
     }
 
     ucs_interval_tree_t m_tree;
@@ -220,6 +223,7 @@ UCS_TEST_F(test_interval_tree, merge_multiple_overlaps) {
 
     insert_intervals({{0, 50}});
     EXPECT_TRUE(is_fully_covered({0, 50}));
+    EXPECT_TRUE(check_rb_invariant()) << "RB violated after merging overlaps";
 }
 
 UCS_TEST_F(test_interval_tree, adjacent_discrete_integers) {

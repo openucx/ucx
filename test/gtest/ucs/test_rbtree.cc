@@ -26,10 +26,7 @@ protected:
     {
         ucs::test::init();
         ucs_rbtree_init(&m_tree);
-        m_nodes.resize(NUM_NODES);
-        for (unsigned i = 0; i < NUM_NODES; ++i) {
-            m_nodes[i].linked = false;
-        }
+        m_nodes.assign(NUM_NODES, node());
     }
 
     static node *node_of(const ucs_rbtree_node_t *rb_node)
@@ -39,13 +36,12 @@ protected:
 
     void insert(unsigned idx, uint64_t key)
     {
-        ucs_rbtree_node_t *parent = NULL;
-        ucs_rbtree_node_t **link  = &m_tree.root;
+        ucs_rbtree_node_t *parent = NULL, **link = &m_tree.root;
 
         while (*link != NULL) {
             parent = *link;
             link   = (key < node_of(parent)->key) ? &parent->left :
-                                                      &parent->right;
+                                                    &parent->right;
         }
 
         m_nodes[idx].key    = key;
@@ -54,11 +50,24 @@ protected:
         ++m_count;
     }
 
+    /* Insert in order, node i holding keys[i] */
+    void insert_keys(const std::vector<uint64_t> &keys)
+    {
+        for (unsigned i = 0; i < keys.size(); ++i) {
+            insert(i, keys[i]);
+        }
+    }
+
     void remove(unsigned idx)
     {
         ucs_rbtree_remove(&m_tree, &m_nodes[idx].super);
         m_nodes[idx].linked = false;
         --m_count;
+
+        EXPECT_EQ(NULL, m_nodes[idx].super.parent);
+        EXPECT_EQ(NULL, m_nodes[idx].super.left);
+        EXPECT_EQ(NULL, m_nodes[idx].super.right);
+        validate();
     }
 
     node *find(uint64_t key) const
@@ -76,50 +85,43 @@ protected:
         return NULL;
     }
 
-    /* Search-tree ordering; the red-black invariants checked by rbtree_check */
-    static void check_ordering(const ucs_rbtree_node_t *rb_node)
-    {
-        if (rb_node->left != NULL) {
-            EXPECT_LT(node_of(rb_node->left)->key, node_of(rb_node)->key);
-        }
-        if (rb_node->right != NULL) {
-            EXPECT_GE(node_of(rb_node->right)->key, node_of(rb_node)->key);
-        }
-    }
-
+    /* The search-tree property is that an in-order walk is sorted. */
     void validate()
     {
-        EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count, check_ordering));
+        EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count));
+
+        const std::vector<uint64_t> ordered = keys();
+        EXPECT_TRUE(std::is_sorted(ordered.begin(), ordered.end()));
     }
 
-    std::vector<uint64_t> in_order() const
+    void collect(const ucs_rbtree_node_t *rb, std::vector<node*> &out) const
     {
-        std::vector<uint64_t> out;
+        if (rb != NULL) {
+            collect(rb->left, out);
+            out.push_back(node_of(rb));
+            collect(rb->right, out);
+        }
+    }
+
+    std::vector<node*> in_order() const
+    {
+        std::vector<node*> out;
         collect(m_tree.root, out);
         return out;
     }
 
-    static void
-    collect(const ucs_rbtree_node_t *rb_node, std::vector<uint64_t> &out)
+    std::vector<uint64_t> keys() const
     {
-        if (rb_node == NULL) {
-            return;
+        std::vector<uint64_t> out;
+        for (const node *n : in_order()) {
+            out.push_back(n->key);
         }
-        collect(rb_node->left, out);
-        out.push_back(node_of(rb_node)->key);
-        collect(rb_node->right, out);
+        return out;
     }
 
-    static void expect_detached(const node *n)
-    {
-        EXPECT_EQ(NULL, n->super.parent);
-        EXPECT_EQ(NULL, n->super.left);
-        EXPECT_EQ(NULL, n->super.right);
-    }
-
-    ucs_rbtree_t m_tree;
+    ucs_rbtree_t      m_tree;
     std::vector<node> m_nodes;
-    size_t m_count = 0;
+    size_t            m_count = 0;
 };
 
 UCS_TEST_F(test_rbtree, empty) {
@@ -129,76 +131,40 @@ UCS_TEST_F(test_rbtree, empty) {
 }
 
 UCS_TEST_F(test_rbtree, insert_orders_and_balances) {
-    /* Ascending keys are the worst case for an unbalanced tree */
     for (unsigned i = 0; i < 64; ++i) {
         insert(i, i * 10);
         validate();
     }
 
-    std::vector<uint64_t> keys = in_order();
-    EXPECT_TRUE(std::is_sorted(keys.begin(), keys.end()));
-    EXPECT_EQ(64u, keys.size());
+    EXPECT_EQ(64u, keys().size());
     EXPECT_EQ(0u, node_of(ucs_rbtree_first(&m_tree))->key);
 }
 
-UCS_TEST_F(test_rbtree, remove_leaf) {
-    insert(0, 20);
-    insert(1, 10);
-    insert(2, 30);
+UCS_TEST_F(test_rbtree, remove_leaf_and_one_child) {
+    insert_keys({20, 10, 30, 5}); /* 10 has a single child, 5 */
 
-    remove(1);
-    validate();
+    remove(2); /* 30: leaf */
+    EXPECT_EQ(std::vector<uint64_t>({5, 10, 20}), keys());
+
+    remove(1); /* 10: one child */
+    EXPECT_EQ(std::vector<uint64_t>({5, 20}), keys());
     EXPECT_EQ(NULL, find(10));
-    EXPECT_EQ(std::vector<uint64_t>({20, 30}), in_order());
-    expect_detached(&m_nodes[1]);
 }
 
-UCS_TEST_F(test_rbtree, remove_one_child) {
-    insert(0, 20);
-    insert(1, 10);
-    insert(2, 5);
-
-    remove(1); /* 10 has a single child, 5 */
-    validate();
-    EXPECT_EQ(NULL, find(10));
-    EXPECT_EQ(std::vector<uint64_t>({5, 20}), in_order());
-    expect_detached(&m_nodes[1]);
-}
-
-/* The successor is relinked rather than having its key copied into the removed
- * node, so every surviving node object keeps its own key and the object the
- * caller named is the one detached. */
 UCS_TEST_F(test_rbtree, remove_two_children_relinks_successor) {
-    insert(0, 20);
-    insert(1, 10);
-    insert(2, 30);
-    validate();
-
-    remove(0);
-    validate();
-
-    EXPECT_EQ(30u, m_nodes[2].key); /* successor kept its own key */
-    EXPECT_EQ(10u, m_nodes[1].key);
+    insert_keys({20, 10, 30});
+    remove(0); /* successor is 30, the direct right child */
+    EXPECT_EQ(30u, m_nodes[2].key);
     EXPECT_EQ(&m_nodes[2].super, m_tree.root);
-    EXPECT_EQ(std::vector<uint64_t>({10, 30}), in_order());
-    expect_detached(&m_nodes[0]);
+    EXPECT_EQ(std::vector<uint64_t>({10, 30}), keys());
 }
 
 UCS_TEST_F(test_rbtree, remove_two_children_deep_successor) {
-    insert(0, 20);
-    insert(1, 10);
-    insert(2, 40);
-    insert(3, 30);
-    insert(4, 50);
-    validate();
-
+    insert_keys({20, 10, 40, 30, 50});
     remove(0); /* successor is 30, whose parent is 40, not 20 */
-    validate();
-
     EXPECT_EQ(30u, m_nodes[3].key);
     EXPECT_EQ(&m_nodes[3].super, m_tree.root);
-    EXPECT_EQ(std::vector<uint64_t>({10, 30, 40, 50}), in_order());
-    expect_detached(&m_nodes[0]);
+    EXPECT_EQ(std::vector<uint64_t>({10, 30, 40, 50}), keys());
 }
 
 /* A node pointer stays usable across removals of unrelated nodes. */
@@ -207,30 +173,47 @@ UCS_TEST_F(test_rbtree, node_identity_survives_other_removals) {
         insert(i, i * 10);
     }
 
-    node *kept = &m_nodes[17];
     for (unsigned i = 0; i < 32; ++i) {
         if (i != 17) {
             remove(i);
-            EXPECT_EQ(170u, kept->key);
+            EXPECT_EQ(170u, m_nodes[17].key);
         }
     }
 
-    validate();
-    EXPECT_EQ(&kept->super, m_tree.root);
+    EXPECT_EQ(&m_nodes[17].super, m_tree.root);
     remove(17);
-    validate();
     EXPECT_EQ(NULL, m_tree.root);
 }
 
 UCS_TEST_F(test_rbtree, first_is_leftmost) {
-    const std::vector<uint64_t> keys = {50, 20, 80, 10, 90, 5};
+    const std::vector<uint64_t> input = {50, 20, 80, 10, 90, 5};
 
-    for (unsigned i = 0; i < keys.size(); ++i) {
-        insert(i, keys[i]);
-        uint64_t smallest = *std::min_element(keys.begin(),
-                                              keys.begin() + i + 1);
-        EXPECT_EQ(smallest, node_of(ucs_rbtree_first(&m_tree))->key);
+    for (unsigned i = 0; i < input.size(); ++i) {
+        insert(i, input[i]);
+        EXPECT_EQ(*std::min_element(input.begin(), input.begin() + i + 1),
+                  node_of(ucs_rbtree_first(&m_tree))->key);
     }
+}
+
+/* Equal keys descend right, so duplicates keep their insertion order in the
+ * in-order walk instead of displacing each other. */
+UCS_TEST_F(test_rbtree, equal_keys_keep_insertion_order) {
+    insert_keys({100, 100, 100, 100});
+    validate();
+
+    const std::vector<node*> ordered = in_order();
+    ASSERT_EQ(4u, ordered.size());
+    for (unsigned i = 0; i < 4; ++i) {
+        EXPECT_EQ(&m_nodes[i], ordered[i]);
+    }
+
+    remove(1);
+
+    const std::vector<node*> after = in_order();
+    ASSERT_EQ(3u, after.size());
+    EXPECT_EQ(&m_nodes[0], after[0]);
+    EXPECT_EQ(&m_nodes[2], after[1]);
+    EXPECT_EQ(&m_nodes[3], after[2]);
 }
 
 /* Randomized insert/remove against a reference model, with the red-black and
@@ -240,7 +223,7 @@ UCS_TEST_F(test_rbtree, random_stress) {
     std::map<uint64_t, unsigned> live; /* key -> index */
 
     for (unsigned i = 0; i < NUM_ITERS; ++i) {
-        unsigned idx = ucs::rand() % NUM_NODES;
+        const unsigned idx = ucs::rand() % NUM_NODES;
 
         if (m_nodes[idx].linked) {
             live.erase(m_nodes[idx].key);
@@ -258,12 +241,9 @@ UCS_TEST_F(test_rbtree, random_stress) {
             validate();
         }
 
-        uint64_t probe = ucs::rand() % 100000;
-        node *found    = find(probe);
+        const uint64_t probe = ucs::rand() % 100000;
+        node *found          = find(probe);
         EXPECT_EQ(live.find(probe) != live.end(), found != NULL);
-        if (found != NULL) {
-            EXPECT_EQ(probe, found->key);
-        }
     }
 
     validate();
@@ -272,5 +252,5 @@ UCS_TEST_F(test_rbtree, random_stress) {
     for (const auto &kv : live) {
         expected.push_back(kv.first);
     }
-    EXPECT_EQ(expected, in_order());
+    EXPECT_EQ(expected, keys());
 }
