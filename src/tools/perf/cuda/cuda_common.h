@@ -7,8 +7,9 @@
 #ifndef CUDA_COMMON_H_
 #define CUDA_COMMON_H_
 
-#include <cuda.h>
 #include <ucs/debug/log_def.h>
+
+#include <cuda.h>
 
 BEGIN_C_DECLS
 
