@@ -1033,10 +1033,10 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
     }
 }
 
-UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
-           "PROTO_ENABLE=y", "RNDV_FRAG_SIZE=host:4K",
-           "RNDV_FRAG_ALLOC_COUNT=host:2",
-           "RNDV_FRAG_WORKER_MAX_MEM=8K")
+UCS_TEST_SKIP_COND_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
+                     (get_variant_value() == VARIANT_PROTO_DISABLE),
+                     "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
+                     "RNDV_FRAG_WORKER_MAX_MEM=8K")
 {
     ucp_mem_desc_t *mdesc1;
     ucp_mem_desc_t *mdesc2;
