@@ -117,8 +117,7 @@ protected:
 
     bool check_rb_invariant() const
     {
-        return rbtree_check::validate(&m_tree.rb, m_tree.num_nodes,
-                                      check_node);
+        return rbtree_check::validate(&m_tree.rb, m_tree.num_nodes, check_node);
     }
 
     ucs_interval_tree_t m_tree;

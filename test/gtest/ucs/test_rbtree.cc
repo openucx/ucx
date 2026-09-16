@@ -45,7 +45,7 @@ protected:
         while (*link != NULL) {
             parent = *link;
             link   = (key < node_of(parent)->key) ? &parent->left :
-                                                    &parent->right;
+                                                      &parent->right;
         }
 
         m_nodes[idx].key    = key;
@@ -99,8 +99,8 @@ protected:
         return out;
     }
 
-    static void collect(const ucs_rbtree_node_t *rb_node,
-                        std::vector<uint64_t> &out)
+    static void
+    collect(const ucs_rbtree_node_t *rb_node, std::vector<uint64_t> &out)
     {
         if (rb_node == NULL) {
             return;
@@ -117,20 +117,18 @@ protected:
         EXPECT_EQ(NULL, n->super.right);
     }
 
-    ucs_rbtree_t      m_tree;
+    ucs_rbtree_t m_tree;
     std::vector<node> m_nodes;
-    size_t            m_count = 0;
+    size_t m_count = 0;
 };
 
-UCS_TEST_F(test_rbtree, empty)
-{
+UCS_TEST_F(test_rbtree, empty) {
     EXPECT_EQ(NULL, ucs_rbtree_first(&m_tree));
     EXPECT_EQ(NULL, m_tree.root);
     validate();
 }
 
-UCS_TEST_F(test_rbtree, insert_orders_and_balances)
-{
+UCS_TEST_F(test_rbtree, insert_orders_and_balances) {
     /* Ascending keys are the worst case for an unbalanced tree */
     for (unsigned i = 0; i < 64; ++i) {
         insert(i, i * 10);
@@ -143,8 +141,7 @@ UCS_TEST_F(test_rbtree, insert_orders_and_balances)
     EXPECT_EQ(0u, node_of(ucs_rbtree_first(&m_tree))->key);
 }
 
-UCS_TEST_F(test_rbtree, remove_leaf)
-{
+UCS_TEST_F(test_rbtree, remove_leaf) {
     insert(0, 20);
     insert(1, 10);
     insert(2, 30);
@@ -156,8 +153,7 @@ UCS_TEST_F(test_rbtree, remove_leaf)
     expect_detached(&m_nodes[1]);
 }
 
-UCS_TEST_F(test_rbtree, remove_one_child)
-{
+UCS_TEST_F(test_rbtree, remove_one_child) {
     insert(0, 20);
     insert(1, 10);
     insert(2, 5);
@@ -172,8 +168,7 @@ UCS_TEST_F(test_rbtree, remove_one_child)
 /* The successor is relinked rather than having its key copied into the removed
  * node, so every surviving node object keeps its own key and the object the
  * caller named is the one detached. */
-UCS_TEST_F(test_rbtree, remove_two_children_relinks_successor)
-{
+UCS_TEST_F(test_rbtree, remove_two_children_relinks_successor) {
     insert(0, 20);
     insert(1, 10);
     insert(2, 30);
@@ -189,8 +184,7 @@ UCS_TEST_F(test_rbtree, remove_two_children_relinks_successor)
     expect_detached(&m_nodes[0]);
 }
 
-UCS_TEST_F(test_rbtree, remove_two_children_deep_successor)
-{
+UCS_TEST_F(test_rbtree, remove_two_children_deep_successor) {
     insert(0, 20);
     insert(1, 10);
     insert(2, 40);
@@ -208,8 +202,7 @@ UCS_TEST_F(test_rbtree, remove_two_children_deep_successor)
 }
 
 /* A node pointer stays usable across removals of unrelated nodes. */
-UCS_TEST_F(test_rbtree, node_identity_survives_other_removals)
-{
+UCS_TEST_F(test_rbtree, node_identity_survives_other_removals) {
     for (unsigned i = 0; i < 32; ++i) {
         insert(i, i * 10);
     }
@@ -229,8 +222,7 @@ UCS_TEST_F(test_rbtree, node_identity_survives_other_removals)
     EXPECT_EQ(NULL, m_tree.root);
 }
 
-UCS_TEST_F(test_rbtree, first_is_leftmost)
-{
+UCS_TEST_F(test_rbtree, first_is_leftmost) {
     const std::vector<uint64_t> keys = {50, 20, 80, 10, 90, 5};
 
     for (unsigned i = 0; i < keys.size(); ++i) {
@@ -243,8 +235,7 @@ UCS_TEST_F(test_rbtree, first_is_leftmost)
 
 /* Randomized insert/remove against a reference model, with the red-black and
  * ordering invariants re-checked as it goes. */
-UCS_TEST_F(test_rbtree, random_stress)
-{
+UCS_TEST_F(test_rbtree, random_stress) {
     static const unsigned NUM_ITERS = 20000;
     std::map<uint64_t, unsigned> live; /* key -> index */
 

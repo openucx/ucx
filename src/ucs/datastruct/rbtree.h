@@ -25,10 +25,10 @@ typedef enum {
 
 
 struct ucs_rbtree_node {
-    ucs_rbtree_node_t *parent; /**< Parent, NULL for the root */
-    ucs_rbtree_node_t *left;   /**< Left child  */
-    ucs_rbtree_node_t *right;  /**< Right child */
-    ucs_rbtree_color_t color;  /**< Node color */
+    ucs_rbtree_node_t  *parent; /**< Parent, NULL for the root */
+    ucs_rbtree_node_t  *left; /**< Left child  */
+    ucs_rbtree_node_t  *right; /**< Right child */
+    ucs_rbtree_color_t color; /**< Node color */
 };
 
 

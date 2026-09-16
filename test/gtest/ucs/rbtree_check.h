@@ -45,7 +45,8 @@ static inline size_t height(const ucs_rbtree_node_t *node)
     do { \
         if (!(_cond)) { \
             (_ok) = false; \
-            ADD_FAILURE() << "node " << (const void*)(_node) << ": " << #_cond; \
+            ADD_FAILURE() << "node " << (const void*)(_node) << ": " \
+                          << #_cond; \
         } \
     } while (0)
 
@@ -64,10 +65,14 @@ static inline size_t validate_node(const ucs_rbtree_node_t *node,
 
     /* A red node cannot have a red child */
     if (node->color == UCS_RBTREE_RED) {
-        UCS_RBTREE_CHECK(ok, (node->left == NULL) ||
-                             (node->left->color == UCS_RBTREE_BLACK), node);
-        UCS_RBTREE_CHECK(ok, (node->right == NULL) ||
-                             (node->right->color == UCS_RBTREE_BLACK), node);
+        UCS_RBTREE_CHECK(ok,
+                         (node->left == NULL) ||
+                                 (node->left->color == UCS_RBTREE_BLACK),
+                         node);
+        UCS_RBTREE_CHECK(ok,
+                         (node->right == NULL) ||
+                                 (node->right->color == UCS_RBTREE_BLACK),
+                         node);
     }
 
     if (node->left != NULL) {
@@ -108,8 +113,7 @@ static inline bool validate(const ucs_rbtree_t *tree, size_t expected_count,
     bool ok             = true;
 
     if (tree->root != NULL) {
-        UCS_RBTREE_CHECK(ok, tree->root->color == UCS_RBTREE_BLACK,
-                         tree->root);
+        UCS_RBTREE_CHECK(ok, tree->root->color == UCS_RBTREE_BLACK, tree->root);
         UCS_RBTREE_CHECK(ok, tree->root->parent == NULL, tree->root);
     }
 

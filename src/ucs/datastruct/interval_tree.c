@@ -117,8 +117,8 @@ static void ucs_interval_tree_remove_overlapping(ucs_interval_tree_t *tree,
 {
     ucs_interval_node_t *overlap;
 
-    while ((overlap = ucs_interval_tree_find_overlap(tree->rb.root,
-                                                     *range)) != NULL) {
+    while ((overlap = ucs_interval_tree_find_overlap(tree->rb.root, *range)) !=
+           NULL) {
         range->start = ucs_min(range->start, overlap->start);
         range->end   = ucs_max(range->end, overlap->end);
         ucs_rbtree_remove(&tree->rb, &overlap->super);
@@ -144,8 +144,8 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
     while (*link != NULL) {
         parent = *link;
         link   = (merged.start < ucs_interval_tree_node(parent)->start) ?
-                         &parent->left :
-                         &parent->right;
+                           &parent->left :
+                           &parent->right;
     }
 
     ucs_rbtree_insert_at(&tree->rb, parent, link, &new_node->super);

@@ -39,7 +39,7 @@ typedef struct ucs_interval_node {
 
 typedef struct {
     ucs_rbtree_t rb;         /**< Balanced tree ordered by 'start' */
-    ucs_mpool_t *mpool;      /**< Memory pool for node allocation */
+    ucs_mpool_t  *mpool;     /**< Memory pool for node allocation */
     size_t       num_nodes;  /**< Number of nodes in the tree */
     size_t       total_size; /**< Sum of (end - start) across all nodes */
 } ucs_interval_tree_t;

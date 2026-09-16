@@ -5,7 +5,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "rbtree.h"
@@ -61,8 +61,7 @@ static void ucs_rbtree_rotate_right(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
     node->parent = left;
 }
 
-static void
-ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
+static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 {
     ucs_rbtree_node_t *parent, *grandparent, *uncle;
 
@@ -82,10 +81,11 @@ ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
             }
 
             if (node == parent->right) {
-                node   = parent;
+                node = parent;
                 ucs_rbtree_rotate_left(tree, node);
                 parent = node->parent;
-                if (ucs_unlikely((parent == NULL) || (parent->parent == NULL))) {
+                if (ucs_unlikely((parent == NULL) ||
+                                 (parent->parent == NULL))) {
                     break;
                 }
 
@@ -106,10 +106,11 @@ ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
             }
 
             if (node == parent->left) {
-                node   = parent;
+                node = parent;
                 ucs_rbtree_rotate_right(tree, node);
                 parent = node->parent;
-                if (ucs_unlikely((parent == NULL) || (parent->parent == NULL))) {
+                if (ucs_unlikely((parent == NULL) ||
+                                 (parent->parent == NULL))) {
                     break;
                 }
 
@@ -157,7 +158,8 @@ static void ucs_rbtree_transplant(ucs_rbtree_t *tree,
     }
 }
 
-static UCS_F_ALWAYS_INLINE int ucs_rbtree_is_black(const ucs_rbtree_node_t *node)
+static UCS_F_ALWAYS_INLINE int
+ucs_rbtree_is_black(const ucs_rbtree_node_t *node)
 {
     return (node == NULL) || (node->color == UCS_RBTREE_BLACK);
 }
@@ -165,8 +167,7 @@ static UCS_F_ALWAYS_INLINE int ucs_rbtree_is_black(const ucs_rbtree_node_t *node
 /*
  * Restore the red-black invariants after removing a black node.
  */
-static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree,
-                                    ucs_rbtree_node_t *node,
+static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
                                     ucs_rbtree_node_t *parent)
 {
     ucs_rbtree_node_t *sibling;
