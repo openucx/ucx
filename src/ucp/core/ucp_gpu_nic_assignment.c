@@ -292,7 +292,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
 
     ucs_array_for_each_index(group, group_idx, groups) {
         if (ucs_array_is_empty(&group->gpus)) {
-            ucs_debug("group #%zu has 0 GPUs, skipping", group_idx);
+            ucs_debug("group #%zu has 0 gpus, skipping", group_idx);
             continue;
         }
 
@@ -319,5 +319,8 @@ int ucp_gpu_nic_bitmap_get(const ucp_gpu_nic_sys_dev_bitmap_t *bitmap,
 
 void ucp_gpu_nic_assignment_release(ucp_gpu_nic_assignment_t *assignment)
 {
+    ucs_assert(assignment != NULL);
     ucs_free(assignment->nic_sys_dev_bitmaps);
+    assignment->nic_sys_dev_bitmaps = NULL;
+    assignment->num_bitmaps         = 0;
 }
