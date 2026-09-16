@@ -49,7 +49,7 @@ static void ucs_interval_tree_node_free(ucs_interval_tree_t *tree,
 
 void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 {
-    ucs_rbtree_init(&tree->rb, NULL);
+    ucs_rbtree_init(&tree->rb);
     tree->mpool      = mpool;
     tree->num_nodes  = 0;
     tree->total_size = 0;
@@ -80,12 +80,13 @@ static ucs_interval_node_t *
 ucs_interval_tree_find_overlap(ucs_rbtree_node_t *rb_node,
                                ucs_interval_tree_range_t range)
 {
-    ucs_interval_node_t *node = ucs_interval_tree_node(rb_node);
-    ucs_interval_node_t *found;
+    ucs_interval_node_t *node, *found;
 
-    if (node == NULL) {
+    if (rb_node == NULL) {
         return NULL;
     }
+
+    node = ucs_interval_tree_node(rb_node);
 
     if ((range.start <= (node->end + 1)) && (node->start <= (range.end + 1))) {
         return node;
@@ -153,12 +154,14 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
 int ucs_interval_tree_pop_any(ucs_interval_tree_t *tree,
                               ucs_interval_tree_range_t *range)
 {
-    ucs_interval_node_t *node = ucs_interval_tree_node(
-            ucs_rbtree_first(&tree->rb));
+    ucs_rbtree_node_t *rb_node = ucs_rbtree_first(&tree->rb);
+    ucs_interval_node_t *node;
 
-    if (node == NULL) {
+    if (rb_node == NULL) {
         return 0;
     }
+
+    node = ucs_interval_tree_node(rb_node);
 
     range->start = node->start;
     range->end   = node->end;
