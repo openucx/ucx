@@ -68,6 +68,32 @@ void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
     }
 }
 
+void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
+                                        ucs_queue_head_t *replay_queue)
+{
+    ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
+    ucp_request_t *req;
+    ucs_status_t status;
+
+    /* The replay does not always restart (and reset) the request, so clear
+     * its flow-control state here. This may wake up another request of this
+     * ep, which is then extracted on a later iteration. */
+    while (!ucs_hlist_is_empty(fc_reqs)) {
+        req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                  send.rndv.fc.ep_list);
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+        ucp_trace_req(req, "mtype_fc: extract for replay");
+
+        status = req->send.proto_config->proto->reset(req);
+        ucs_assertv_always(status == UCS_OK, "req %p, failed to reset: %s",
+                           req, ucs_status_string(status));
+        ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
+                   (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                        send.rndv.fc.ep_list) != req));
+        ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+    }
+}
+
 static int
 ucp_proto_rndv_ctrl_skip_inter_node_md(
         const ucp_proto_common_init_params_t *params,

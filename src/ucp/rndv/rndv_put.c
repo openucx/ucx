@@ -687,6 +687,18 @@ ucp_proto_rndv_put_mtype_abort(ucp_request_t *req, ucs_status_t status)
     ucp_proto_rndv_stub_abort(req, status);
 }
 
+static ucs_status_t ucp_proto_rndv_put_mtype_reset(ucp_request_t *req)
+{
+    ucp_proto_rndv_mtype_fc_cancel(req, UCP_WORKER_RNDV_FC_OP_PUT);
+
+    /* Only a request which is still waiting for a fragment can be reset */
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_proto_reset_fatal_not_implemented(req);
+    }
+
+    return UCS_OK;
+}
+
 ucp_proto_t ucp_rndv_put_mtype_proto = {
     .name     = "rndv/put/mtype",
     .desc     = NULL,
@@ -702,5 +714,5 @@ ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
     .abort    = ucp_proto_rndv_put_mtype_abort,
-    .reset    = (ucp_request_reset_func_t)ucp_proto_reset_fatal_not_implemented
+    .reset    = ucp_proto_rndv_put_mtype_reset
 };

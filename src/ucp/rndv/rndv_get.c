@@ -383,7 +383,7 @@ static ucs_status_t ucp_proto_rndv_get_mtype_reset(ucp_request_t *req)
     }
 
     ucp_proto_rndv_mtype_mdesc_release(req);
-    req->flags          &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
     if ((req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_FETCH) &&
         (req->send.proto_stage != UCP_PROTO_RNDV_GET_STAGE_ATS)) {

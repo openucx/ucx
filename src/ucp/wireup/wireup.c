@@ -22,6 +22,7 @@
 #include <ucp/proto/proto_common.h>
 #include <ucs/sys/iovec.h>
 #include <ucp/tag/eager.h>
+#include <ucp/rndv/rndv.h>
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_am.inl>
@@ -2239,6 +2240,9 @@ ucp_wireup_gather_pending_requests(ucp_ep_h ep,
                            (ucs_queue_elem_t*)&req->send.uct.priv);
         }
     }
+
+    /* Requests throttled while waiting for a rndv mtype fragment */
+    ucp_proto_rndv_mtype_fc_ep_extract(ep, replay_pending_queue);
 
     if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         return;

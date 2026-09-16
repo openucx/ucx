@@ -1014,9 +1014,9 @@ protected:
                 hold_cuda_fragments(fc_entity.worker());
         ASSERT_FALSE(held_mdescs.empty());
 
-        m_fc_pending_entity    = &fc_entity;
-        m_fc_op                = fc_op;
-        m_close_fc_pending_ep  = true;
+        m_fc_pending_entity   = &fc_entity;
+        m_fc_op               = fc_op;
+        m_close_fc_pending_ep = true;
         setup_progress_mock(sender().worker(), m_progress_mock);
         setup_progress_mock(receiver().worker(), m_progress_mock);
 
