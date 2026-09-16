@@ -394,13 +394,16 @@ static ucs_status_t ucs_topo_groups_add_elements_by_numa_node(
         const ucs_topo_sys_device_info_t *devices,
         const ucs_topo_group_element_array_t *elements,
         ucs_topo_groups_numa_node_array_t *numa_nodes,
-        size_t group_elements_offset, ucs_topo_groups_t *groups)
+        ucs_topo_device_class_t device_class, ucs_topo_groups_t *groups)
 {
     ucs_topo_group_element_array_t *group_elements;
     const ucs_topo_group_element_t *element;
     ucs_topo_group_t *group;
     ucs_numa_node_t numa_node;
     ucs_status_t status;
+
+    ucs_assert((device_class == UCS_TOPO_DEVICE_CLASS_ACC) ||
+               (device_class == UCS_TOPO_DEVICE_CLASS_NET));
 
     ucs_array_for_each(element, elements) {
         numa_node = devices[element->sys_devs[0]].numa_node;
@@ -418,7 +421,9 @@ static ucs_status_t ucs_topo_groups_add_elements_by_numa_node(
             return status;
         }
 
-        group_elements = UCS_PTR_BYTE_OFFSET(group, group_elements_offset);
+        group_elements = (device_class == UCS_TOPO_DEVICE_CLASS_ACC) ?
+                                 &group->gpus :
+                                 &group->nics;
         *ucs_array_append(group_elements, return UCS_ERR_NO_MEMORY) = *element;
     }
 
@@ -435,14 +440,14 @@ ucs_topo_groups_build_groups(const ucs_topo_sys_device_info_t *devices,
 
     status = ucs_topo_groups_add_elements_by_numa_node(
             devices, &inventory->gpus, &numa_nodes,
-            ucs_offsetof(ucs_topo_group_t, gpus), groups);
+            UCS_TOPO_DEVICE_CLASS_ACC, groups);
     if (status != UCS_OK) {
         goto out_cleanup_numa_nodes;
     }
 
     status = ucs_topo_groups_add_elements_by_numa_node(
             devices, &inventory->nics, &numa_nodes,
-            ucs_offsetof(ucs_topo_group_t, nics), groups);
+            UCS_TOPO_DEVICE_CLASS_NET, groups);
 
 out_cleanup_numa_nodes:
     ucs_array_cleanup_dynamic(&numa_nodes);
