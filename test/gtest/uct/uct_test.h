@@ -267,6 +267,7 @@ protected:
         uct_mem_h memh() const;
         ucs_memory_type_t mem_type() const;
         void *reg_addr() const;
+        const uct_rkey_bundle_t *rkey_bundle() const;
         uct_rkey_t rkey() const;
         const uct_iov_t* iov() const;
 
