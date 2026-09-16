@@ -378,6 +378,7 @@ public:
 protected:
     struct purge_ctx {
         test_uct_purge_outstanding *self;
+        uct_ep_operation_t         operation;
         uct_completion_t           comp;
         uint32_t                   num_ops_purged;
         uint32_t                   num_ops_purged_at_completion;
@@ -387,7 +388,6 @@ protected:
         uint8_t                    am_short_id;
         uint64_t                   am_short_header;
         std::vector<uint8_t>       am_short_payload;
-        uct_ep_operation_t         expected_op;
         uint64_t                   remote_addr;
         uct_rkey_t                 rkey;
         const void                 *send_buf;
@@ -464,7 +464,7 @@ protected:
             return;
         case UCT_EP_OP_PUT_SHORT:
         case UCT_EP_OP_PUT_BCOPY:
-            validate_put_data(info, ctx);
+            validate_put_short_bcopy(info, ctx);
             return;
         case UCT_EP_OP_FLUSH:
             validate_flush(info, ctx);
@@ -496,7 +496,8 @@ protected:
         ++ctx->num_ops_purged;
     }
 
-    static void validate_put_data(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    static void
+    validate_put_short_bcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_RMA;
         const uint16_t expected_rma_fields =
@@ -509,7 +510,6 @@ protected:
                 ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
         ASSERT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
 
-        EXPECT_EQ(ctx->expected_op, info->operation);
         EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
         ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
@@ -550,7 +550,7 @@ protected:
 
         ASSERT_TRUE(info != NULL);
         ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-        ASSERT_LT(unsigned(info->operation), unsigned(UCT_EP_OP_LAST));
+        ASSERT_EQ(ctx->operation, info->operation);
 
         ctx->self->validate_op(info, ctx);
     }
@@ -666,8 +666,8 @@ protected:
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    purge_ctx ctx = {this, {completion_cb, 0, UCS_OK}, 0, 0, 0, 0, 0,
-                     3, 0x0123456789abcdefull, {1, 2, 3, 4}};
+    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}, 0, 0,
+                     0, 0, 0, 3, 0x0123456789abcdefull, {1, 2, 3, 4}};
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), ctx.am_short_id,
                                            am_handler, NULL, 0));
@@ -692,8 +692,7 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_short,
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
     mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
 
-    purge_ctx ctx = {this, {completion_cb, 0, UCS_OK}};
-    ctx.expected_op = UCT_EP_OP_PUT_SHORT;
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_SHORT, {completion_cb, 0, UCS_OK}};
     ctx.remote_addr = recvbuf.addr();
     ctx.rkey        = recvbuf.rkey();
     ctx.send_buf    = sendbuf.ptr();
@@ -715,8 +714,7 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_bcopy,
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
     mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
 
-    purge_ctx ctx = {this, {completion_cb, 0, UCS_OK}};
-    ctx.expected_op = UCT_EP_OP_PUT_BCOPY;
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
     ctx.remote_addr = recvbuf.addr();
     ctx.rkey        = recvbuf.rkey();
     ctx.send_buf    = sendbuf.ptr();
