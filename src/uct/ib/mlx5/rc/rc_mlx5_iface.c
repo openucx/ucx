@@ -1072,7 +1072,6 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return status;
 }
 
-
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
                                  uct_iface_attr_v2_t *iface_attr)
@@ -1172,6 +1171,10 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) {
             iface_attr->rx_token_length = sizeof(uct_rc_mlx5_rx_token_t);
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
         }
     } else {
         if (ucs_test_flags(iface_attr->field_mask,
