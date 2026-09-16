@@ -1548,3 +1548,155 @@ UCS_MT_TEST_F(malloc_hook_dlopen, dlopen_mt_with_memtype, 2) {
 
     event.unset();
 }
+
+#if defined(__x86_64__)
+/*
+ * Unit tests for the x86-64 single-instruction relocator used by bistro to
+ * build the trampoline that jumps back to the original (unpatched) function.
+ * These exercise machine-code emission directly, so they need no GPU/HSA and
+ * run in CI regardless of which specific opcodes appear in a given libc/HSA
+ * function prologue.
+ */
+class bistro_relocate : public ucs::test {
+protected:
+    /* Relocate a single instruction from 'src' into 'dst'. On success, reports
+     * how many bytes were consumed from the source and emitted to the
+     * destination. */
+    static ucs_status_t relocate_one(const void *src, size_t src_len, void *dst,
+                                     size_t dst_len, size_t *src_used,
+                                     size_t *dst_used)
+    {
+        ucm_bistro_relocate_context_t ctx;
+        ucs_status_t status;
+
+        ctx.src_p   = src;
+        ctx.src_end = UCS_PTR_BYTE_OFFSET(src, src_len);
+        ctx.dst_p   = dst;
+        ctx.dst_end = UCS_PTR_BYTE_OFFSET(dst, dst_len);
+
+        status = ucm_bistro_relocate_one(&ctx);
+        if (status == UCS_OK) {
+            *src_used = UCS_PTR_BYTE_DIFF(src, ctx.src_p);
+            *dst_used = UCS_PTR_BYTE_DIFF(dst, ctx.dst_p);
+        }
+        return status;
+    }
+};
+
+/* endbr64 (CET landing pad) is position independent and must be copied through
+ * verbatim. */
+UCS_TEST_F(bistro_relocate, endbr64) {
+    const uint8_t src[] = {0xF3, 0x0F, 0x1E, 0xFA};
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    ASSERT_UCS_OK(relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                               &dst_used));
+    EXPECT_EQ(sizeof(src), src_used);
+    EXPECT_EQ(sizeof(src), dst_used);
+    EXPECT_EQ(0, memcmp(dst, src, sizeof(src)));
+}
+
+/* "mov disp32(%rip), %rax" must be translated to an absolute-address load,
+ * since the relocated code may be out of 32-bit range of the target:
+ *   movabs $addr64, %rax   ; addr64 = next_ip + disp32
+ *   mov    (%rax), %rax
+ */
+UCS_TEST_F(bistro_relocate, mov_rip_relative) {
+    const int32_t disp32 = 0x11223344;
+    uint8_t src[7]       = {0x48, 0x8B, 0x05}; /* REX.W MOV Gv,Ev ; modrm=05 */
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+    uint64_t addr;
+
+    memcpy(&src[3], &disp32, sizeof(disp32));
+
+    ASSERT_UCS_OK(relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                               &dst_used));
+    EXPECT_EQ(sizeof(src), src_used);
+    EXPECT_EQ(13u, dst_used);
+
+    /* movabs $addr, %rax */
+    EXPECT_EQ(0x48, dst[0]);
+    EXPECT_EQ(0xB8, dst[1]); /* 0xB8 | %rax(0) */
+    memcpy(&addr, &dst[2], sizeof(addr));
+    EXPECT_EQ((uintptr_t)UCS_PTR_BYTE_OFFSET(src, sizeof(src)) + disp32, addr);
+
+    /* mov (%rax), %rax */
+    EXPECT_EQ(0x48, dst[10]);
+    EXPECT_EQ(0x8B, dst[11]);
+    EXPECT_EQ(0x00, dst[12]); /* mod=00, reg=%rax, r/m=%rax */
+}
+
+/* Same translation, but into a non-zero destination register (%rcx), to verify
+ * the register index is propagated into both the movabs and the load. */
+UCS_TEST_F(bistro_relocate, mov_rip_relative_reg) {
+    const int32_t disp32 = 0x100;
+    uint8_t src[7]       = {0x48, 0x8B, 0x0D}; /* modrm=0D -> %rcx */
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    memcpy(&src[3], &disp32, sizeof(disp32));
+
+    ASSERT_UCS_OK(relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                               &dst_used));
+    EXPECT_EQ(13u, dst_used);
+    EXPECT_EQ(0xB9, dst[1]);  /* 0xB8 | %rcx(1) */
+    EXPECT_EQ(0x09, dst[12]); /* mod=00, reg=%rcx, r/m=%rcx */
+}
+
+/* %rsp (reg=100) and %rbp (reg=101) can't encode "mov (%reg), %reg" directly
+ * and are never used to hold a loaded pointer, so the relocator rejects them. */
+UCS_TEST_F(bistro_relocate, mov_rip_relative_unsupported_reg) {
+    const uint8_t rsp[7] = {0x48, 0x8B, 0x25, 0, 0, 0, 0}; /* dest %rsp */
+    const uint8_t rbp[7] = {0x48, 0x8B, 0x2D, 0, 0, 0, 0}; /* dest %rbp */
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              relocate_one(rsp, sizeof(rsp), dst, sizeof(dst), &src_used,
+                           &dst_used));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              relocate_one(rbp, sizeof(rbp), dst, sizeof(dst), &src_used,
+                           &dst_used));
+}
+
+/* Indirect near jump "jmp *disp8(%reg)" heads ROCr HSA dispatch thunks. It is
+ * position independent, so it must be copied through verbatim. */
+UCS_TEST_F(bistro_relocate, jmp_indirect_mem) {
+    const uint8_t src[] = {0xFF, 0x60, 0x78}; /* jmp *0x78(%rax) */
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    ASSERT_UCS_OK(relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                               &dst_used));
+    EXPECT_EQ(sizeof(src), src_used);
+    EXPECT_EQ(sizeof(src), dst_used);
+    EXPECT_EQ(0, memcmp(dst, src, sizeof(src)));
+}
+
+/* Register-direct "jmp *%reg" is likewise position independent. */
+UCS_TEST_F(bistro_relocate, jmp_indirect_reg) {
+    const uint8_t src[] = {0xFF, 0xE0}; /* jmp *%rax */
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    ASSERT_UCS_OK(relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                               &dst_used));
+    EXPECT_EQ(sizeof(src), src_used);
+    EXPECT_EQ(sizeof(src), dst_used);
+    EXPECT_EQ(0, memcmp(dst, src, sizeof(src)));
+}
+
+/* The RIP-relative form "jmp *disp32(%rip)" is position dependent and must be
+ * rejected rather than copied to a different address. */
+UCS_TEST_F(bistro_relocate, jmp_indirect_rip) {
+    const uint8_t src[6] = {0xFF, 0x25, 0, 0, 0, 0}; /* jmp *0x0(%rip) */
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                           &dst_used));
+}
+#endif /* __x86_64__ */

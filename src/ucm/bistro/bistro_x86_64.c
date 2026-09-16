@@ -128,6 +128,7 @@ typedef struct {
 #define UCM_BISTRO_X86_MODRM_MOD_DISP32 2 /* 0b10 */
 #define UCM_BISTRO_X86_MODRM_MOD_REG    3 /* 0b11 */
 #define UCM_BISTRO_X86_MODRM_RM_SIB     4 /* 0b100 */
+#define UCM_BISTRO_X86_MODRM_RM_DISP32  5 /* 0b101 (%rbp / RIP-relative disp32) */
 
 /* ModR/M encoding for SUB RSP
  * mod=0b11, reg=0b101 (SUB as opcode extension), r/m=0b100
@@ -143,6 +144,10 @@ typedef struct {
 /* Jcc (conditional jump) opcodes range */
 #define UCM_BISTRO_X86_JCC_FIRST 0x70
 #define UCM_BISTRO_X86_JCC_LAST  0x7F
+
+/* Grp 5 (0xFF); only the indirect near jump extension (reg=/4) is handled */
+#define UCM_BISTRO_X86_GRP5     0xFF
+#define UCM_BISTRO_X86_GRP5_JMP 4 /* reg field /4: JMP r/m64 */
 
 
 ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
@@ -233,13 +238,14 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
          * Emitted e.g. by CET-built dispatch thunks that load an API table
          * pointer. Translate to an absolute-address load, because the relocated
          * code is not guaranteed to be within 32-bit range of the target. */
-        if ((modrm & 0xC7) == 0x05) {
+        if ((modrm & 0xC7) == UCM_BISTRO_X86_MODRM_RM_DISP32) {
             reg = (modrm >> UCM_BISTRO_X86_MODRM_REG_SHIFT) &
                   UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS);
             /* rm=100 (SIB) and rm=101 (disp8/RIP) can't encode "mov (%reg),
              * %reg" directly; %rsp/%rbp are never used to hold a loaded
              * pointer, so leave those unsupported. */
-            if ((reg != UCM_BISTRO_X86_MODRM_RM_SIB) && (reg != 0x05)) {
+            if ((reg != UCM_BISTRO_X86_MODRM_RM_SIB) &&
+                (reg != UCM_BISTRO_X86_MODRM_RM_DISP32)) {
                 disp32              = *ucs_serialize_next(&ctx->src_p,
                                                           const int32_t);
                 mov_rip.movabs_reg[0] = UCM_BISTRO_X86_REX_W;
@@ -305,6 +311,40 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
         /* Prevent patching past jump target */
         ctx->src_end   = ucs_min(ctx->src_end, (void*)jmpdest);
         goto out_copy;
+    } else if (((rex == 0) || (rex == UCM_BISTRO_X86_REX_B)) &&
+               (opcode == UCM_BISTRO_X86_GRP5)) {
+        /* Grp 5: handle only "jmp r/m64" (reg=/4), which heads ROCr HSA
+         * dispatch thunks (endbr64; mov tbl(%rip),%rax; jmp *off(%rax)). The
+         * register/memory addressing form is position independent, so it can
+         * be copied verbatim; only the RIP-relative form needs translation and
+         * is left unsupported. */
+        modrm = *ucs_serialize_next(&ctx->src_p, const uint8_t);
+        mod   = modrm >> UCM_BISTRO_X86_MODRM_MOD_SHIFT;
+        reg   = (modrm >> UCM_BISTRO_X86_MODRM_REG_SHIFT) &
+                UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS);
+        if (reg == UCM_BISTRO_X86_GRP5_JMP) {
+            if (mod != UCM_BISTRO_X86_MODRM_MOD_REG) {
+                switch (modrm & UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS)) {
+                case UCM_BISTRO_X86_MODRM_RM_DISP32:
+                    if (mod == 0) {
+                        /* "jmp *disp32(%rip)": position dependent */
+                        return UCS_ERR_UNSUPPORTED;
+                    }
+                    break;
+                case UCM_BISTRO_X86_MODRM_RM_SIB:
+                    ucs_serialize_next(&ctx->src_p, const uint8_t); /* SIB */
+                    break;
+                }
+                if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP8) {
+                    ucs_serialize_next(&ctx->src_p, const uint8_t);  /* disp8 */
+                } else if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP32) {
+                    ucs_serialize_next(&ctx->src_p, const uint32_t); /* disp32 */
+                }
+            }
+            /* Unconditional transfer - do not relocate past it */
+            ctx->src_end = ucs_min(ctx->src_end, ctx->src_p);
+            goto out_copy_src;
+        }
     }
 
     /* Could not recognize the instruction */
