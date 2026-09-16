@@ -1513,6 +1513,15 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             }
         } else if (hdr->am_id == UCT_TCP_EP_PUT_REQ_AM_ID) {
             ucs_assert(hdr->length == sizeof(uct_tcp_ep_put_req_hdr_t));
+            if (ucs_unlikely(ep->flags & UCT_TCP_EP_FLAG_CANCELED)) {
+                /* The operations of this EP were canceled and the target
+                 * memory may be reused, so the data must not be written and
+                 * the peer's PUT must not succeed. Close the connection, like
+                 * a QP which was moved to the error state */
+                uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
+                goto out;
+            }
+
             uct_tcp_ep_handle_put_req(ep, (uct_tcp_ep_put_req_hdr_t*)(hdr + 1),
                                       ep->rx.length - ep->rx.offset);
             handled++;
@@ -1583,6 +1592,13 @@ static unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
     uct_tcp_ep_put_req_hdr_t *put_req;
     size_t recv_length;
     ucs_status_t status;
+
+    if (ucs_unlikely(ep->flags & UCT_TCP_EP_FLAG_CANCELED)) {
+        /* The rest of a PUT which was already in progress must not be written
+         * either, see uct_tcp_ep_progress_am_rx() */
+        uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
+        return 0;
+    }
 
     put_req     = (uct_tcp_ep_put_req_hdr_t*)ep->rx.buf;
     recv_length = put_req->length;
@@ -2214,6 +2230,9 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status;
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        /* The user may reuse the memory which the peer is writing to, so stop
+         * writing PUT data, like a QP moved to the error state does */
+        ep->flags |= UCT_TCP_EP_FLAG_CANCELED;
         uct_tcp_ep_purge(ep, UCS_ERR_CANCELED);
         return UCS_OK;
     }
