@@ -89,6 +89,13 @@ public:
     {
         add_variant(variants, UCP_FEATURE_TAG);
     }
+
+    /// @override
+    virtual void init()
+    {
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
 };
 
 static void test_flush_err_handler(void*, ucp_ep_h, ucs_status_t)
@@ -117,7 +124,6 @@ UCS_TEST_P(test_ucp_flush, empty_lane_mask_skips_transport_flush)
     uct_iface_h iface;
     ucs_status_ptr_t request;
 
-    sender().connect(&receiver(), get_ep_params());
     ep    = sender().ep();
     iface = ucp_ep_get_lane(ep, 0)->iface;
 
@@ -136,8 +142,6 @@ UCS_TEST_P(test_ucp_flush, empty_lane_mask_skips_transport_flush)
     EXPECT_EQ(0, test_flush_call_count);
     EXPECT_EQ(NULL, request);
 
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush, replace_lane_during_selective_flush)
@@ -150,7 +154,6 @@ UCS_TEST_P(test_ucp_flush, replace_lane_during_selective_flush)
     unsigned i;
     unsigned num_lanes;
 
-    sender().connect(&receiver(), get_ep_params());
     ep                       = sender().ep();
     num_lanes                = ucp_ep_num_lanes(ep);
     original_lane            = ucp_ep_get_lane(ep, 0);
@@ -193,8 +196,6 @@ UCS_TEST_P(test_ucp_flush, replace_lane_during_selective_flush)
     EXPECT_UCS_OK(ucp_request_check_status(request));
     ucp_request_release(request);
 
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush, replace_other_lane_during_inprogress_flush)
@@ -209,11 +210,8 @@ UCS_TEST_P(test_ucp_flush, replace_other_lane_during_inprogress_flush)
     ucp_request_param_t param = {};
     uct_ep_t replacement_second_lane = {};
 
-    sender().connect(&receiver(), get_ep_params());
     ep = sender().ep();
     if (ucp_ep_num_lanes(ep) < 2) {
-        disconnect(sender());
-        disconnect(receiver());
         UCS_TEST_SKIP_R("requires two endpoint lanes");
     }
 
@@ -265,8 +263,6 @@ UCS_TEST_P(test_ucp_flush, replace_other_lane_during_inprogress_flush)
     EXPECT_UCS_OK(ucp_request_check_status(request));
     ucp_request_release(request);
 
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush, partial_mask_pending_reschedule, "MAX_EAGER_LANES=2")
@@ -277,11 +273,8 @@ UCS_TEST_P(test_ucp_flush, partial_mask_pending_reschedule, "MAX_EAGER_LANES=2")
     uct_iface_h iface;
     ucs_status_ptr_t request = NULL;
 
-    sender().connect(&receiver(), get_ep_params());
     ep = sender().ep();
     if (ucp_ep_num_lanes(ep) < 2) {
-        disconnect(sender());
-        disconnect(receiver());
         UCS_TEST_SKIP_R("requires two endpoint lanes");
     }
 
@@ -314,8 +307,6 @@ UCS_TEST_P(test_ucp_flush, partial_mask_pending_reschedule, "MAX_EAGER_LANES=2")
         ucp_request_release(request);
     }
 
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush,
@@ -328,7 +319,6 @@ UCS_TEST_P(test_ucp_flush,
     ucs_status_ptr_t request  = NULL;
     uint32_t send_sn;
 
-    sender().connect(&receiver(), get_ep_params());
     flush_ep(sender());
     ep          = sender().ep();
     flush_state = ucp_ep_flush_state(ep);
@@ -370,8 +360,6 @@ UCS_TEST_P(test_ucp_flush,
     ucp_request_release(request);
 
     flush_state->send_sn = send_sn;
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
@@ -384,11 +372,8 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
     ucp_request_t *req        = NULL;
     ucs_status_ptr_t request  = NULL;
 
-    sender().connect(&receiver(), get_ep_params());
     ep = sender().ep();
     if (ucp_ep_num_lanes(ep) < 2) {
-        disconnect(sender());
-        disconnect(receiver());
         UCS_TEST_SKIP_R("requires two endpoint lanes");
     }
 
@@ -435,8 +420,6 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
     EXPECT_EQ(UCS_ERR_CANCELED, ucp_request_check_status(request));
     ucp_request_release(request);
 
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
@@ -448,7 +431,6 @@ UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
     ucs_status_ptr_t request = NULL;
     unsigned i;
 
-    sender().connect(&receiver(), get_ep_params());
     flush_ep(sender());
     ep                    = sender().ep();
     iface                 = ucp_ep_get_lane(ep, 0)->iface;
@@ -503,8 +485,6 @@ UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
         ucp_request_release(request);
     }
 
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCS_TEST_P(test_ucp_flush_failover,
@@ -517,7 +497,6 @@ UCS_TEST_P(test_ucp_flush_failover,
     ucs_status_ptr_t request  = NULL;
     uint32_t send_sn;
 
-    sender().connect(&receiver(), get_ep_params());
     flush_ep(sender());
     ep          = sender().ep();
     flush_state = ucp_ep_flush_state(ep);
@@ -572,8 +551,6 @@ UCS_TEST_P(test_ucp_flush_failover,
     ucp_request_release(request);
 
     flush_state->send_sn = send_sn;
-    disconnect(sender());
-    disconnect(receiver());
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush, self, "self")

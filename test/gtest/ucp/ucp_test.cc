@@ -57,26 +57,10 @@ const ucp_datatype_t ucp_test::DATATYPE_IOV = ucp_dt_make_iov();
 void ucp_test::mock_ep_flush(ucp_ep_h ep, ucs::mock &mock,
                              uct_ep_flush_func_t flush_func)
 {
-    uct_iface_h ifaces[UCP_MAX_LANES];
-    uct_iface_h iface;
     ucp_lane_index_t lane;
-    unsigned i;
-    unsigned num_ifaces = 0;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        iface = ucp_ep_get_lane(ep, lane)->iface;
-        for (i = 0; i < num_ifaces; ++i) {
-            if (iface == ifaces[i]) {
-                break;
-            }
-        }
-
-        if (i != num_ifaces) {
-            continue;
-        }
-
-        ifaces[num_ifaces++] = iface;
-        mock.setup(&iface->ops.ep_flush, flush_func);
+        mock.setup(&ucp_ep_get_lane(ep, lane)->iface->ops.ep_flush, flush_func);
     }
 }
 
