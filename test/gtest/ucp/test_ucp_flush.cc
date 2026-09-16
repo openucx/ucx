@@ -83,6 +83,24 @@ private:
     ucp_worker_h m_worker;
 };
 
+class test_flush_send_sn_guard {
+public:
+    test_flush_send_sn_guard(ucp_ep_flush_state_t *flush_state,
+                             uint32_t send_sn) :
+            m_flush_state(flush_state), m_send_sn(send_sn)
+    {
+    }
+
+    ~test_flush_send_sn_guard()
+    {
+        m_flush_state->send_sn = m_send_sn;
+    }
+
+private:
+    ucp_ep_flush_state_t *m_flush_state;
+    uint32_t             m_send_sn;
+};
+
 class test_ucp_flush : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -326,6 +344,7 @@ UCS_TEST_P(test_ucp_flush,
     flush_state = ucp_ep_flush_state(ep);
     send_sn     = flush_state->send_sn;
     ++flush_state->send_sn;
+    test_flush_send_sn_guard send_sn_guard(flush_state, send_sn);
 
     test_flush_call_count = 0;
     test_flush_comp       = NULL;
@@ -361,7 +380,6 @@ UCS_TEST_P(test_ucp_flush,
     EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, ucp_request_check_status(request));
     ucp_request_release(request);
 
-    flush_state->send_sn = send_sn;
 }
 
 UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
@@ -405,6 +423,10 @@ UCS_TEST_P(test_ucp_flush_failover, restart_pending_skips_stale_resume,
             ep->flags &= ~UCP_EP_FLAG_BLOCK_FLUSH;
             req->send.flush.sw_state = UCP_FLUSH_SW_STATE_RESTART_PENDING;
             ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+            ucp_ep_err_pending_purge(&req->send.uct,
+                                     UCS_STATUS_PTR(UCS_ERR_CANCELED));
+            EXPECT_EQ(UCP_FLUSH_SW_STATE_RESTART_PENDING,
+                      req->send.flush.sw_state);
             EXPECT_EQ(initial_flush_count, test_flush_call_count);
         }
 
@@ -508,6 +530,7 @@ UCS_TEST_P(test_ucp_flush_failover,
     flush_state = ucp_ep_flush_state(ep);
     send_sn     = flush_state->send_sn;
     ++flush_state->send_sn;
+    test_flush_send_sn_guard send_sn_guard(flush_state, send_sn);
 
     test_flush_call_count = 0;
     test_flush_comp       = NULL;
@@ -556,7 +579,6 @@ UCS_TEST_P(test_ucp_flush_failover,
     EXPECT_EQ(UCS_ERR_CANCELED, ucp_request_check_status(request));
     ucp_request_release(request);
 
-    flush_state->send_sn = send_sn;
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush, self, "self")

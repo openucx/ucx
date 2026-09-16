@@ -159,7 +159,6 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(next_lanes);
-
         uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
@@ -457,8 +456,7 @@ static void ucp_ep_flush_request_reset(ucp_request_t *req)
     req->send.flush.uct_flags       = req->send.flush.uct_flags_orig;
     req->send.flush.sw_state        = UCP_FLUSH_SW_STATE_NOT_STARTED;
     req->send.flush.sw_done         = 0;
-    req->send.flush.lane_generation =
-            req->send.ep->ext->lane_generation;
+    req->send.flush.lane_generation = req->send.ep->ext->lane_generation;
 }
 
 static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg)
@@ -528,6 +526,11 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
 {
     ucp_lane_map_t ff_lanes;
     int num_comps;
+
+    if (req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING) {
+        ucp_trace_req(req, "skip stale fast-forward while restarting");
+        return;
+    }
 
     ff_lanes = req->send.flush.all_lanes &
                req->send.flush.lane_mask &
