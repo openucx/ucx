@@ -32,7 +32,9 @@ unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 
     ucs_assert((req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK) ==
                UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
-    ucp_proto_rndv_mtype_fc_leave(req);
+    /* Keep the request in RESCHED state, so that if it is aborted before
+     * ucp_proto_rndv_mtype_request_init() retries the allocation, the wakeup
+     * is passed to the next waiter rather than dropped. */
     ucp_request_send(req);
     return 1;
 }
