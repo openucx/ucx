@@ -555,7 +555,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         }
 
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : disabled to avoid memory type copies",
@@ -2888,8 +2888,17 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].path_index   = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);
 
-        ucs_trace("ep %p: construct lane %d to addr_index %d", ep, lane,
-                  select_ctx->lane_descs[lane].addr_index);
+        rsc_index = select_ctx->lane_descs[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            ucs_trace("ep %p: construct lane %d cm", ep, lane);
+        } else {
+            ucs_trace("ep %p: construct lane %d " UCT_TL_RESOURCE_DESC_FMT
+                      ".%d to addr_index %d", ep, lane,
+                      UCT_TL_RESOURCE_DESC_ARG(
+                              &context->tl_rscs[rsc_index].tl_rsc),
+                      key->lanes[lane].path_index,
+                      select_ctx->lane_descs[lane].addr_index);
+        }
 
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_CM)) {
             ucs_assert(key->cm_lane == UCP_NULL_LANE);

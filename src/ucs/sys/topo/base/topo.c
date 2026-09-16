@@ -268,6 +268,45 @@ ucs_topo_bus_value_key_make(const ucs_sys_bus_id_t *bus_id,
     return key;
 }
 
+int ucs_topo_sys_device_cmp_nolock(ucs_sys_device_t sys_dev1,
+                                   ucs_sys_device_t sys_dev2)
+{
+    const ucs_topo_sys_device_info_t *device1, *device2;
+    ucs_bus_id_bit_rep_t bus_id1, bus_id2;
+
+    ucs_assertv(sys_dev1 < ucs_topo_global_ctx.num_devices,
+                "invalid sys_dev1: %u", sys_dev1);
+    ucs_assertv(sys_dev2 < ucs_topo_global_ctx.num_devices,
+                "invalid sys_dev2: %u", sys_dev2);
+
+    device1 = &ucs_topo_global_ctx.devices[sys_dev1];
+    device2 = &ucs_topo_global_ctx.devices[sys_dev2];
+
+    /* Compare by bus id.*/
+    bus_id1 = ucs_topo_get_bus_id_bit_repr(&device1->bus_id);
+    bus_id2 = ucs_topo_get_bus_id_bit_repr(&device2->bus_id);
+
+    if (bus_id1 != bus_id2) {
+        return (bus_id1 > bus_id2) - (bus_id1 < bus_id2);
+    }
+
+    /* Compare by user value. */
+    return (device1->user_value > device2->user_value) -
+           (device1->user_value < device2->user_value);
+}
+
+int ucs_topo_sys_device_cmp(ucs_sys_device_t sys_dev1,
+                            ucs_sys_device_t sys_dev2)
+{
+    int result;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    result = ucs_topo_sys_device_cmp_nolock(sys_dev1, sys_dev2);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return result;
+}
+
 unsigned ucs_topo_num_devices()
 {
     unsigned num_devices;
@@ -283,17 +322,16 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
                                 char *str, size_t max)
 {
     if (abbreviate && (bus_id->domain == 0)) {
-        ucs_snprintf_safe(str, max, "%02x:%02x.%d", bus_id->bus, bus_id->slot,
-                          bus_id->function);
+        ucs_snprintf_safe(str, max, UCS_SYS_BUS_ID_ABBREVIATED_FMT,
+                          UCS_SYS_BUS_ID_ABBREVIATED_ARG(bus_id));
     } else {
-        ucs_snprintf_safe(str, max, "%04x:%02x:%02x.%d", bus_id->domain,
-                          bus_id->bus, bus_id->slot, bus_id->function);
+        ucs_snprintf_safe(str, max, UCS_SYS_BUS_ID_FMT,
+                          UCS_SYS_BUS_ID_ARG(bus_id));
     }
 }
 
-static ucs_status_t
-ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id, char *path,
-                              size_t max)
+ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
+                                           char *path, size_t max)
 {
     const size_t prefix_length = strlen(UCS_TOPO_SYSFS_PCI_PREFIX);
     ucs_status_t status;
@@ -344,6 +382,20 @@ ucs_topo_read_pci_id_value(const char *dev_name, const char *sysfs_path,
     return (uint16_t)value;
 }
 
+ucs_sys_pci_id_t
+ucs_topo_get_sysfs_pci_id(const char *dev_name, const char *sysfs_path)
+{
+    ucs_sys_pci_id_t pci_id;
+
+    if (sysfs_path == NULL) {
+        return UCS_SYS_PCI_ID_UNDEFINED;
+    }
+
+    pci_id.vendor = ucs_topo_read_pci_id_value(dev_name, sysfs_path, "vendor");
+    pci_id.device = ucs_topo_read_pci_id_value(dev_name, sysfs_path, "device");
+    return pci_id;
+}
+
 static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
                                             const char *dev_name,
                                             ucs_numa_node_t *numa_node_p,
@@ -366,9 +418,7 @@ static void ucs_topo_read_device_sysfs_info(const ucs_sys_bus_id_t *bus_id,
     }
 
     *numa_node_p = ucs_numa_node_of_device(path);
-
-    pci_id_p->vendor = ucs_topo_read_pci_id_value(dev_name, path, "vendor");
-    pci_id_p->device = ucs_topo_read_pci_id_value(dev_name, path, "device");
+    *pci_id_p    = ucs_topo_get_sysfs_pci_id(dev_name, path);
 
     ucs_trace("read sysfs info for %s: numa_node %d, vendor %04x, device %04x",
               dev_name, *numa_node_p, pci_id_p->vendor, pci_id_p->device);
@@ -1366,42 +1416,23 @@ static void ucs_topo_release_devices()
     }
 }
 
-static ucs_topo_groups_type_t ucs_topo_groups_type_detect()
-{
-    return (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_VERA) ?
-                   UCS_TOPO_GROUPS_TYPE_VERA_RUBIN :
-                   UCS_TOPO_GROUPS_TYPE_UNKNOWN;
-}
-
 ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
 
+    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        /* Currently only Vera Rubin architecture supports topology groups. */
+        ucs_debug("topology groups are not supported on this architecture");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
-                                         ucs_topo_groups_type_detect(),
                                          groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return status;
-}
-
-static void ucs_topo_release_group(ucs_topo_group_t *group)
-{
-    ucs_array_cleanup_dynamic(&group->nics);
-    ucs_array_cleanup_dynamic(&group->gpus);
-}
-
-void ucs_topo_release_groups(ucs_topo_groups_t *groups)
-{
-    size_t i;
-
-    for (i = 0; i < ucs_array_length(&groups->groups); ++i) {
-        ucs_topo_release_group(&ucs_array_elem(&groups->groups, i));
-    }
-
-    ucs_array_cleanup_dynamic(&groups->groups);
 }
 
 ucs_global_state_t *ucs_topo_extract_state(void)

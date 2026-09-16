@@ -1292,6 +1292,17 @@ ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);
 #endif
 
+/**
+ * Compare firmware AA.BB.CCCC against a minimum BB.CCCC, ignoring the
+ * device-family prefix AA.
+ *
+ * @return 1 if @a fw_ver parses and is at least
+ *         @a min_release.@a min_build, otherwise 0.
+ */
+int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
+                                        unsigned min_release,
+                                        unsigned min_build);
+
 ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                                    ucs_ternary_auto_value_t ar_enable,
                                    uint16_t hw_sl_mask, int have_sl_mask_cap,

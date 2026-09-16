@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -1656,12 +1656,11 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
             log_level = ucp_ep_config_err_handling_enabled(ucp_ep) ?
                     UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DIAG;
 
-            ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
             ucs_log(log_level,
-                    "ep %p: error '%s' on %s will not be handled"
+                    UCP_EP_LANE_FMT ": error '%s' will not be handled"
                     " since no error callback is installed",
-                    ucp_ep, ucs_status_string(status),
-                    ucs_string_buffer_cstr(&lane_info_strb));
+                    UCP_EP_LANE_ARG(ucp_ep, lane, &lane_info_strb),
+                    ucs_status_string(status));
             return UCS_ERR_UNSUPPORTED;
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
@@ -2274,8 +2273,15 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
     ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
               " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
 
-    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
-                                   failed_lanes, recovery_lanes);
+    /* A request answers no other message, so requested_lane_map is empty. */
+    if (++ep->ext->recovery_arg->request_id == 0) {
+        /* 0 is the no-trailer sentinel on the wire */
+        ep->ext->recovery_arg->request_id = 1;
+    }
+
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST, 0,
+                                   recovery_lanes,
+                                   ep->ext->recovery_arg->request_id);
     return 1;
 }
 
@@ -4333,24 +4339,25 @@ void ucp_ep_get_tl_bitmap(const ucp_ep_config_key_t *key,
     }
 }
 
-void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                              ucs_string_buffer_t *lane_info_strb)
+const char *ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_string_buffer_t *lane_info_strb)
 {
-    ucp_rsc_index_t rsc_index;
-    uct_tl_resource_desc_t *tl_rsc;
+    ucs_string_buffer_reset(lane_info_strb);
 
     if (lane == UCP_NULL_LANE) {
-        ucs_string_buffer_appendf(lane_info_strb, "NULL lane");
+        ucs_string_buffer_appendf(lane_info_strb, "no lane");
     } else if (lane == ucp_ep_get_cm_lane(ucp_ep)) {
-        ucs_string_buffer_appendf(lane_info_strb, "CM lane");
+        ucs_string_buffer_appendf(lane_info_strb, "lane[%d] cm", lane);
     } else {
-        rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
-        tl_rsc    = &ucp_ep->worker->context->tl_rscs[rsc_index].tl_rsc;
-
         ucs_string_buffer_appendf(lane_info_strb,
-                                  UCT_TL_RESOURCE_DESC_FMT,
-                                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+                                  "lane[%d] " UCT_TL_RESOURCE_DESC_FMT ".%d",
+                                  lane,
+                                  UCT_TL_RESOURCE_DESC_ARG(
+                                          ucp_ep_get_tl_rsc(ucp_ep, lane)),
+                                  ucp_ep_get_path_index(ucp_ep, lane));
     }
+
+    return ucs_string_buffer_cstr(lane_info_strb);
 }
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
