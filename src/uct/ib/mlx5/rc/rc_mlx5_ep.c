@@ -985,8 +985,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     ucs_assert(wqe_size >= header_size);
 
     if (wqe_size == header_size) {
-        /* A no-payload RDMA write is not supported */
-        return UCS_ERR_UNSUPPORTED;
+        ucs_fatal("no-payload rdma write is not supported");
     }
 
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
@@ -1003,8 +1002,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         return UCS_OK;
     }
 
-    /* put_zcopy is not supported yet */
-    return UCS_ERR_UNSUPPORTED;
+    ucs_fatal("put zcopy is not supported");
 }
 
 static ucs_status_t
@@ -1024,7 +1022,7 @@ uct_rc_mlx5_op_info_fill(const uct_ib_mlx5_txwq_t *txwq,
         return uct_rc_mlx5_op_info_fill_put(txwq, op, ctrl, wqe_size,
                                             callback_data, info);
     default:
-        return UCS_ERR_UNSUPPORTED;
+        ucs_fatal("unsupported opcode 0x%x", uct_ib_mlx5_wqe_opcode(ctrl));
     }
 }
 
@@ -1188,7 +1186,6 @@ uct_rc_mlx5_ep_purge_flushes(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
                            "ep %p qp 0x%x unexpected send op sn %u handler %s",
                            ep, ep->tx.wq.super.qp_num, op->sn,
                            ucs_debug_get_symbol_name(op->handler));
-
         op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
         uct_invoke_completion(op->user_comp, UCS_ERR_CANCELED);
         ucs_mpool_put(op);
@@ -1212,24 +1209,15 @@ uct_rc_mlx5_ep_outstanding_get_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
         return NULL;
     }
 
-    return op;
+    return ucs_queue_pull_elem_non_empty(&ep->super.txqp.outstanding,
+                                         uct_rc_iface_send_op_t, queue);
 }
 
 static void
 uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_mlx5_base_ep_t *ep,
                                            uct_rc_iface_send_op_t *op)
 {
-    if (op == NULL) {
-        return;
-    }
-
     ucs_assert(uct_rc_mlx5_send_op_is_put_bcopy(op));
-
-    /* uct_rc_mlx5_ep_outstanding_get_send_op() only returns the queue head */
-    ucs_assert(op == ucs_queue_head_elem_non_empty(&ep->super.txqp.outstanding,
-                                                   uct_rc_iface_send_op_t,
-                                                   queue));
-    ucs_queue_pull_non_empty(&ep->super.txqp.outstanding);
     op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
     ucs_mpool_put(op);
 }
@@ -1317,7 +1305,10 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             }
         }
 
-        uct_rc_mlx5_ep_outstanding_release_send_op(ep, op);
+        if (op != NULL) {
+            uct_rc_mlx5_ep_outstanding_release_send_op(ep, op);
+        }
+
         /* Complete flushes after their WQE, before later purge callbacks. */
         uct_rc_mlx5_ep_purge_flushes(ep, ci);
 
