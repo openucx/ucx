@@ -74,8 +74,7 @@ protected:
     /* Red-Black tree test helpers */
     static ucs_interval_node_t *node_of(const ucs_rbtree_node_t *rb_node)
     {
-        return ucs_derived_of(const_cast<ucs_rbtree_node_t*>(rb_node),
-                              ucs_interval_node_t);
+        return ucs_interval_tree_node(const_cast<ucs_rbtree_node_t*>(rb_node));
     }
 
     size_t tree_height() const

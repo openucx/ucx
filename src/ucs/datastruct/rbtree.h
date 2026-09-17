@@ -26,9 +26,9 @@ typedef enum {
 
 struct ucs_rbtree_node {
     ucs_rbtree_node_t  *parent; /**< Parent, NULL for the root */
-    ucs_rbtree_node_t  *left; /**< Left child */
-    ucs_rbtree_node_t  *right; /**< Right child */
-    ucs_rbtree_color_t color; /**< Node color */
+    ucs_rbtree_node_t  *left;   /**< Left child */
+    ucs_rbtree_node_t  *right;  /**< Right child */
+    ucs_rbtree_color_t color;   /**< Node color */
 };
 
 
@@ -47,6 +47,9 @@ void ucs_rbtree_init(ucs_rbtree_t *tree);
 
 /**
  * @brief Leftmost node, or NULL if the tree is empty
+ *
+ * @param [in]  tree  Tree to get the first node from.
+ * @return The leftmost node, or NULL if the tree is empty.
  */
 ucs_rbtree_node_t *ucs_rbtree_first(const ucs_rbtree_t *tree);
 
