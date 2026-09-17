@@ -474,15 +474,12 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
 
     first_device = &devices[element->sys_devs[0]];
 
-    /* With priority 0 the device name is its bdf, which is already printed */
-    if (first_device->name_priority > 0) {
-        ucs_string_buffer_appendf(&strb, " ");
-        for (i = 0; i < element->num_sys_devs; ++i) {
-            device = &devices[element->sys_devs[i]];
-            ucs_string_buffer_appendf(&strb, "%s/", device->name);
-        }
-        ucs_string_buffer_rtrim(&strb, "/");
+    ucs_string_buffer_appendf(&strb, " ");
+    for (i = 0; i < element->num_sys_devs; ++i) {
+        device = &devices[element->sys_devs[i]];
+        ucs_string_buffer_appendf(&strb, "%s/", device->name);
     }
+    ucs_string_buffer_rtrim(&strb, "/");
 
     ucs_string_buffer_appendf(&strb, " bdf " UCS_SYS_BUS_ID_FMT,
                               UCS_SYS_BUS_ID_ARG(&first_device->bus_id));
