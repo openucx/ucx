@@ -12,26 +12,14 @@
 
 class test_ucp_gpu_nic_assignment : public ucs::test {
 public:
-    test_ucp_gpu_nic_assignment() :
-        m_groups(),
-        m_assignment(),
-        m_groups_initialized(false),
-        m_assignment_initialized(false)
+    test_ucp_gpu_nic_assignment() : m_groups(), m_assignment()
     {
     }
 
     virtual void cleanup()
     {
-        if (m_assignment_initialized) {
-            ucp_gpu_nic_assignment_release(&m_assignment);
-            m_assignment_initialized = false;
-        }
-
-        if (m_groups_initialized) {
-            ucs_topo_release_groups(&m_groups);
-            m_groups_initialized = false;
-        }
-
+        ucp_gpu_nic_assignment_release(&m_assignment);
+        ucs_topo_release_groups(&m_groups);
         ucs::test::cleanup();
     }
 
@@ -87,13 +75,8 @@ protected:
         ucs_topo_group_element_t *gpu;
         ucs_topo_group_element_t *nic;
 
-        if (m_groups_initialized) {
-            ucs_topo_release_groups(&m_groups);
-            m_groups_initialized = false;
-        }
-
+        ucs_topo_release_groups(&m_groups);
         ucs_array_init_dynamic(&m_groups);
-        m_groups_initialized = true;
 
         for (size_t group_idx = 0; group_idx < config.num_groups; ++group_idx) {
             group = ucs_array_append(&m_groups,
@@ -139,14 +122,9 @@ protected:
     {
         ucs_status_t status;
 
-        if (m_assignment_initialized) {
-            ucp_gpu_nic_assignment_release(&m_assignment);
-            m_assignment_initialized = false;
-        }
-
+        ucp_gpu_nic_assignment_release(&m_assignment);
         status = ucp_gpu_nic_assignment_build(&m_groups, policy, &m_assignment);
         ASSERT_UCS_OK(status);
-        m_assignment_initialized = true;
 
         /* Unknown device lookup */
         EXPECT_EQ(nullptr,
@@ -304,8 +282,6 @@ protected:
 private:
     ucs_topo_groups_t m_groups;
     ucp_gpu_nic_assignment_t m_assignment;
-    bool m_groups_initialized;
-    bool m_assignment_initialized;
 };
 
 UCS_TEST_F(test_ucp_gpu_nic_assignment, no_nics) {

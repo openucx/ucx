@@ -299,6 +299,8 @@ ucp_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t *assignment,
     const ucs_topo_group_element_t *gpu;
     ucs_status_t status;
 
+    UCS_STATIC_ASSERT(UCP_GPU_NIC_BITMAP_INDEX_INVALID <= UINT8_MAX);
+
     assignment->nic_sys_dev_bitmaps = NULL;
     assignment->num_bitmaps         = 0;
     memset(assignment->bitmap_idx_by_gpu_sys_dev,
