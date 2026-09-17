@@ -22,7 +22,7 @@ void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
 
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK);
     ucs_hlist_del(&ep->ext->rndv_mtype_fc_reqs,
-                  &req->send.rndv.fc.ep_list);
+                  &req->send.state.rndv_fc_ep_list);
     req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK;
 }
 
@@ -60,11 +60,11 @@ void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
 
     while (!ucs_hlist_is_empty(fc_reqs)) {
         req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                  send.rndv.fc.ep_list);
+                                  send.state.rndv_fc_ep_list);
         ucp_proto_request_abort(req, status);
         ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
                    (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                        send.rndv.fc.ep_list) != req));
+                                        send.state.rndv_fc_ep_list) != req));
     }
 }
 
@@ -80,7 +80,7 @@ void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
      * ep, which is then extracted on a later iteration. */
     while (!ucs_hlist_is_empty(fc_reqs)) {
         req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                  send.rndv.fc.ep_list);
+                                  send.state.rndv_fc_ep_list);
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
         ucp_trace_req(req, "mtype_fc: extract for replay");
 
@@ -89,7 +89,7 @@ void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
                            req, ucs_status_string(status));
         ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
                    (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                        send.rndv.fc.ep_list) != req));
+                                        send.state.rndv_fc_ep_list) != req));
         ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
     }
 }

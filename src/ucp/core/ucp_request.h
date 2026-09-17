@@ -203,6 +203,11 @@ struct ucp_request {
                      * Used by rkey_ptr to track copied data size
                      */
                     ssize_t          completed_size;
+
+                    /* Element in per-EP list of rndv mtype requests throttled
+                     * while waiting for a fragment. Used only before
+                     * UCP_REQUEST_FLAG_PROTO_INITIALIZED is set. */
+                    ucs_hlist_link_t rndv_fc_ep_list;
                 };
             } state;
 
@@ -345,8 +350,6 @@ struct ucp_request {
                                 struct {
                                     /* Element in worker-level pending queue */
                                     ucs_queue_elem_t queue_elem;
-                                    /* Element in per-EP list */
-                                    ucs_hlist_link_t ep_list;
                                 } fc;
 
                                 /* Used by rndv/rkey_ptr */

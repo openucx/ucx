@@ -129,7 +129,7 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                    &req->send.rndv.fc.queue_elem);
     ucs_hlist_add_tail(&ep->ext->rndv_mtype_fc_reqs,
-                       &req->send.rndv.fc.ep_list);
+                       &req->send.state.rndv_fc_ep_list);
 
     return UCS_ERR_NO_RESOURCE;
 }
