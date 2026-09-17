@@ -507,11 +507,14 @@ protected:
                 UCT_EP_OP_INFO_RMA_FIELD_RKEY |
                 UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA;
 
+        ASSERT_TRUE((ctx->operation == UCT_EP_OP_PUT_SHORT) ||
+                    (ctx->operation == UCT_EP_OP_PUT_BCOPY))
+                << "Unsupported operation: " << ctx->operation;
         ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
         ASSERT_TRUE(
                 ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
-        /* No completion expected for PUT short and PUT bcopy */
-        ASSERT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        ASSERT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)
+                << "No completion expected for PUT short and PUT bcopy";
 
         EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));

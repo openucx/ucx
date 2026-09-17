@@ -1204,16 +1204,16 @@ uct_rc_mlx5_ep_outstanding_get_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
     return (op->sn == ci) ? op : NULL;
 }
 
-static int uct_rc_mlx5_send_op_is_bcopy(const uct_rc_iface_send_op_t *op)
+static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
 {
     return (void*)op->handler == (void*)ucs_mpool_put;
 }
 
 static void
-uct_rc_mlx5_ep_outstanding_complete_send_op(uct_rc_mlx5_base_ep_t *ep,
-                                            uct_rc_iface_send_op_t *op)
+uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_mlx5_base_ep_t *ep,
+                                           uct_rc_iface_send_op_t *op)
 {
-    if ((op == NULL) || !uct_rc_mlx5_send_op_is_bcopy(op)) {
+    if ((op == NULL) || !uct_rc_mlx5_send_op_is_put_bcopy(op)) {
         return;
     }
 
@@ -1290,15 +1290,12 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         }
 
         op = uct_rc_mlx5_ep_outstanding_get_send_op(ep, ci);
-        if (uct_ib_mlx5_wqe_is_delivered(wqe_first_psn, receiver_next_psn,
-                                         num_packets)) {
-            uct_rc_mlx5_ep_outstanding_complete_send_op(ep, op);
-        } else {
+        if (!uct_ib_mlx5_wqe_is_delivered(wqe_first_psn, receiver_next_psn,
+                                          num_packets)) {
             status = uct_rc_mlx5_op_info_fill(txwq, op, ctrl, wqe_size,
                                               &callback_data, &info);
             if (status == UCS_OK) {
                 params->cb(&info, callback_arg);
-                uct_rc_mlx5_ep_outstanding_complete_send_op(ep, op);
             } else if (status != UCS_ERR_NO_ELEM) {
                 ucs_fatal("rc mlx5: ep %p qp 0x%x failed to parse outstanding "
                           "WQE ci %u opcode 0x%x size %zu psn %u: %s",
@@ -1308,11 +1305,11 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             }
         }
 
-        wqe_first_psn = (wqe_first_psn + num_packets) &
-                        UCT_IB_MLX5_PSN_MASK;
-
+        uct_rc_mlx5_ep_outstanding_release_send_op(ep, op);
         /* Complete flushes after their WQE, before later purge callbacks. */
         uct_rc_mlx5_ep_purge_flushes(ep, ci);
+
+        wqe_first_psn = (wqe_first_psn + num_packets) & UCT_IB_MLX5_PSN_MASK;
     }
 
 out:
