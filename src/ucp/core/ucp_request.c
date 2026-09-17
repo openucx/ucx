@@ -44,6 +44,8 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RECV_TAG)]              = "rcv_tag",
     [ucs_ilog2(UCP_REQUEST_FLAG_RKEY_INUSE)]            = "rk_use",
     [ucs_ilog2(UCP_REQUEST_FLAG_USER_HEADER_COPIED)]    = "hdr_copy",
+    [ucs_ilog2(UCP_REQUEST_FLAG_FENCE_REQUIRED)]        = "fence",
+    [ucs_ilog2(UCP_REQUEST_FLAG_FENCE_BLOCKED)]         = "fence_blk",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_RECV_INTERNAL)]    = "rndv_rcv_int",
 
 #if UCS_ENABLE_ASSERT
@@ -55,6 +57,7 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_GET_REQ)]          = "rndv_get_req",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_FLUSH)]            = "rndv_flush",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_START_FLUSH)]      = "rndv_start_flush",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RMA_RNDV_TRACKED)]      = "rma_rndv_trk",
 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)

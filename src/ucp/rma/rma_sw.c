@@ -12,6 +12,7 @@
 
 #include "rma.h"
 #include "rma.inl"
+#include "rma_rndv.h"
 
 #include <ucs/profile/profile.h>
 #include <ucp/core/ucp_request.inl>
@@ -25,6 +26,7 @@ static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)
     ucp_request_t *req = arg;
 
     hdr->ep_id = ucp_send_request_get_ep_remote_id(req);
+    hdr->flags = req->send.msg_proto.am.flags;
     return sizeof(*hdr);
 }
 
@@ -48,7 +50,7 @@ static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
     return UCS_OK;
 }
 
-void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
+void ucp_rma_sw_send_cmpl(ucp_ep_h ep, uint8_t flags)
 {
     ucp_request_t *req;
 
@@ -63,6 +65,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
 
     req->flags         = 0;
     req->send.ep       = ep;
+    req->send.msg_proto.am.flags = flags;
     req->send.uct.func = ucp_progress_rma_cmpl;
     ucp_request_send(req);
 }
@@ -82,23 +85,32 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     ucp_dt_contig_unpack(worker, (void*)puth->address, puth + 1,
                          length - sizeof(*puth), puth->mem_type,
                          length - sizeof(*puth));
-    ucp_rma_sw_send_cmpl(ep);
+    ucp_rma_sw_send_cmpl(ep, 0);
     return UCS_OK;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    ucp_cmpl_hdr_t *putackh = data;
-    ucp_worker_h worker     = arg;
+    ucp_worker_h worker = arg;
+    uint64_t ep_id;
+    uint8_t flags;
     ucp_ep_h ep;
+
+    if (!ucp_rma_cmpl_hdr_unpack(data, length, &ep_id, &flags)) {
+        return UCS_OK;
+    }
 
     /* allow getting closed EP to be used for handling a completion to enable flush
      * on a peer
      */
-    UCP_WORKER_GET_EP_BY_ID(&ep, worker, putackh->ep_id, return UCS_OK,
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, ep_id, return UCS_OK,
                             "SW RMA completion");
-    ucp_ep_rma_remote_request_completed(ep);
+    if (flags & UCP_CMPL_FLAG_RMA_RNDV) {
+        ucp_rma_rndv_remote_request_completed(ep);
+    } else {
+        ucp_ep_rma_remote_request_completed(ep);
+    }
     return UCS_OK;
 }
 
@@ -218,9 +230,10 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
 {
     const ucp_get_req_hdr_t *geth;
     const ucp_rma_rep_hdr_t *reph;
-    const ucp_cmpl_hdr_t *cmplh;
     const ucp_put_hdr_t *puth;
     size_t header_len;
+    uint64_t ep_id;
+    uint8_t flags;
     char *p;
 
     switch (id) {
@@ -244,8 +257,12 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
         header_len = sizeof(*reph);
         break;
     case UCP_AM_ID_CMPL:
-        cmplh = data;
-        snprintf(buffer, max, "CMPL [ep_id 0x%"PRIx64"]", cmplh->ep_id);
+        if (!ucp_rma_cmpl_hdr_unpack(data, length, &ep_id, &flags)) {
+            return;
+        }
+
+        snprintf(buffer, max, "CMPL [ep_id 0x%"PRIx64" flags 0x%x]",
+                 ep_id, flags);
         return;
     default:
         return;

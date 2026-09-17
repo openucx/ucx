@@ -62,7 +62,7 @@ ucp_proto_reconfig_report_no_rma_emulation_no_proto(ucp_request_t *req,
     }
 
     local_mem_type  = req->send.proto_config->select_param.mem_type;
-    remote_mem_type = req->send.rma.rkey->mem_type;
+    remote_mem_type = req->send.fenced_req.rma.rkey->mem_type;
 
     ucs_error("No zero-copy protocol found for %s %s %s %s, %zu bytes. "
               "Please check for proper GPU and/or HCA support, or set "

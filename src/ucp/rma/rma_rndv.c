@@ -23,10 +23,76 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
 #define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
 #define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
+
+
+static void ucp_rma_rndv_visibility_complete(ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
+
+    ucs_assert(flush_state->rma_rndv_ops > 0);
+    --flush_state->rma_rndv_ops;
+}
+
+void ucp_rma_rndv_req_claim(ucp_request_t *req)
+{
+    if (req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED) {
+        return;
+    }
+
+    ++ucp_ep_flush_state(req->send.ep)->rma_rndv_ops;
+    req->flags |= UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+}
+
+void ucp_rma_rndv_req_release(ucp_request_t *req, ucp_ep_h ep)
+{
+    if (!(req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED)) {
+        return;
+    }
+
+    req->flags &= ~UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+    ucp_rma_rndv_visibility_complete(ep);
+}
+
+void ucp_rma_rndv_req_transfer(ucp_request_t *req, ucp_request_t *next_req)
+{
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED);
+    req->flags &= ~UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+
+    if (next_req != NULL) {
+        ucs_assert(!(next_req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED));
+        next_req->flags |= UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+    }
+}
+
+static void ucp_rma_rndv_req_reclaim(ucp_request_t *req)
+{
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RMA_RNDV_TRACKED));
+    req->flags |= UCP_REQUEST_FLAG_RMA_RNDV_TRACKED;
+}
+
+void ucp_rma_rndv_req_send_start(ucp_request_t *req, ucp_ep_h ep)
+{
+    ucp_rma_rndv_req_transfer(req, NULL);
+    ucp_ep_rma_remote_request_sent(ep);
+}
+
+void ucp_rma_rndv_req_send_cancel(ucp_request_t *req, ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
+
+    ucs_assert(flush_state->send_sn != flush_state->cmpl_sn);
+    --flush_state->send_sn;
+    ucp_rma_rndv_req_reclaim(req);
+}
+
+void ucp_rma_rndv_remote_request_completed(ucp_ep_h ep)
+{
+    ucp_rma_rndv_visibility_complete(ep);
+    ucp_ep_rma_remote_request_completed(ep);
+}
 
 
 static int
@@ -43,11 +109,18 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
         return 0;
     }
 
+    /* Completion accounting has no per-operation identity, so partial failover
+     * cannot distinguish surviving live-lane operations from discarded ones. */
+    if (!ucp_proto_rma_rndv_is_err_mode_supported(
+                init_params->ep_config_key->err_mode)) {
+        return 0;
+    }
+
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (init_params->ep_config_key->dst_version <
-         UCP_PROTO_RMA_RNDV_MIN_DST_VERSION) ||
+        !ucp_proto_rma_rndv_is_peer_supported(
+                init_params->ep_config_key->dst_version) ||
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }
@@ -89,13 +162,14 @@ static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
     ucp_rma_rndv_rts_hdr_t *rts = dest;
     ucp_rkey_config_t *rkey_config;
 
-    rkey_config = ucp_rkey_config(req->send.ep->worker, req->send.rma.rkey);
+    rkey_config = ucp_rkey_config(req->send.ep->worker,
+                                  req->send.fenced_req.rma.rkey);
 
     rts->super.hdr    = 0;
     rts->super.opcode = UCP_RNDV_RTS_RMA;
-    rts->address      = req->send.rma.remote_addr;
+    rts->address      = req->send.fenced_req.rma.remote_addr;
     rts->sys_dev      = rkey_config->key.sys_dev;
-    rts->mem_type     = req->send.rma.rkey->mem_type;
+    rts->mem_type     = req->send.fenced_req.rma.rkey->mem_type;
 
     return ucp_proto_rndv_rts_pack(req, &rts->super, sizeof(*rts));
 }
@@ -103,17 +177,23 @@ static size_t ucp_proto_put_rndv_rts_pack(void *dest, void *arg)
 static ucs_status_t ucp_proto_put_rndv_init(ucp_request_t *req)
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = req->send.proto_config->priv;
-    ucs_status_t status;
 
-    status = ucp_proto_rndv_rts_request_init(req);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Nested RNDV data protocols are not RMA protocols, so the wrapper handles
-     * RMA fence ordering before exposing the operation to the peer. */
-    return ucp_ep_rma_handle_fence(req->send.ep, req, UCS_BIT(rpriv->lane));
+    req->send.lane = rpriv->lane;
+    return ucp_proto_rndv_rts_request_init(req);
 }
+static void
+ucp_proto_put_rndv_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_rma_rndv_req_release(req, req->send.ep);
+    ucp_proto_rndv_rts_abort(req, status);
+}
+
+static ucs_status_t ucp_proto_put_rndv_reset(ucp_request_t *req)
+{
+    ucp_rma_rndv_req_release(req, req->send.ep);
+    return ucp_proto_rndv_rts_reset(req);
+}
+
 
 static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
 {
@@ -123,34 +203,49 @@ static ucs_status_t ucp_proto_put_rndv_progress(uct_pending_req_t *self)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_put_rndv_init(req);
-        if (status != UCS_OK) {
-            ucp_proto_request_abort(req, status);
-            return UCS_OK;
-        }
+    rpriv          = req->send.proto_config->priv;
+    req->send.lane = rpriv->lane;
+    if (!ucp_proto_rma_fence_progress(req, UCS_BIT(rpriv->lane), &status)) {
+        return status;
     }
 
+    status = ucp_proto_put_rndv_init(req);
+    if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
+    } else if (status != UCS_OK) {
+        return status;
+    }
+
+    /* ucp_ep_resolve_remote_id() may only start wireup. Retry through the
+     * wireup pending queue until the endpoint leaves the match context and its
+     * flush-state union becomes valid. */
+    if (ucs_unlikely(req->send.ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_rma_rndv_req_claim(req);
+
     ep           = req->send.ep;
-    rpriv        = req->send.proto_config->priv;
     max_rts_size = sizeof(ucp_rma_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
     /* Both the RNDV request and the remote completion must complete to unblock
      * flush, and they may complete in any order. */
     req->flags |= UCP_REQUEST_FLAG_RNDV_FLUSH;
     ucp_worker_flush_ops_count_add(ep->worker, +2);
+    ucp_rma_rndv_req_send_start(req, ep);
     status = ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_RTS,
                                             rpriv->lane,
                                             ucp_proto_put_rndv_rts_pack, req,
                                             max_rts_size, 0);
     if (status != UCS_OK) {
+        ucp_rma_rndv_req_send_cancel(req, ep);
         if (status == UCS_ERR_NO_RESOURCE) {
             req->send.lane = rpriv->lane;
         }
         goto err_flush_count;
     }
 
-    ucp_ep_rma_remote_request_sent(ep);
     return UCS_OK;
 
 err_flush_count:
@@ -390,6 +485,7 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
 static void
 ucp_proto_get_rndv_abort(ucp_request_t *req, ucs_status_t status)
 {
+    ucp_rma_rndv_req_release(req, req->send.ep);
     if (req->id != UCS_PTR_MAP_KEY_INVALID) {
         ucp_send_request_id_release(req);
     }
@@ -404,6 +500,7 @@ ucp_proto_get_rndv_abort(ucp_request_t *req, ucs_status_t status)
 
 static ucs_status_t ucp_proto_get_rndv_reset(ucp_request_t *req)
 {
+    ucp_rma_rndv_req_release(req, req->send.ep);
     if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         if (req->id != UCS_PTR_MAP_KEY_INVALID) {
             ucp_send_request_id_release(req);
@@ -439,6 +536,7 @@ ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
          * Claim before issuing it, since SELF can complete inline. */
         recv_req->flags &= ~UCP_REQUEST_FLAG_RNDV_START_FLUSH;
         ucp_worker_flush_ops_count_add(ep->worker, +1);
+        ucp_rma_rndv_req_send_start(recv_req, ep);
         return recv_req;
     }
 
@@ -448,14 +546,10 @@ ucp_request_t *ucp_rma_rndv_flush_open(ucp_request_t *rndv_req)
 void ucp_rma_rndv_flush_close(ucp_request_t *recv_req, ucp_ep_h ep,
                               ucs_status_t status)
 {
-    if (recv_req != NULL) {
-        if (!UCS_STATUS_IS_ERR(status)) {
-            /* recv_req may complete inline, so only touch ep on success. */
-            ucp_ep_rma_remote_request_sent(ep);
-        } else {
-            ucp_worker_flush_ops_count_add(ep->worker, -1);
-            recv_req->flags |= UCP_REQUEST_FLAG_RNDV_START_FLUSH;
-        }
+    if ((recv_req != NULL) && UCS_STATUS_IS_ERR(status)) {
+        ucp_worker_flush_ops_count_add(ep->worker, -1);
+        ucp_rma_rndv_req_send_cancel(recv_req, ep);
+        recv_req->flags |= UCP_REQUEST_FLAG_RNDV_START_FLUSH;
     }
 }
 
@@ -466,10 +560,12 @@ static void ucp_rma_rndv_get_recv_complete(ucp_request_t *recv_req)
     int start_flush;
 
     start_flush = recv_req->flags & UCP_REQUEST_FLAG_RNDV_START_FLUSH;
-    ucp_request_complete_send(get_req, recv_req->status);
-    if (!start_flush) {
-        ucp_ep_rma_remote_request_completed(ep);
+    if (start_flush) {
+        ucp_rma_rndv_req_release(recv_req, ep);
+    } else {
+        ucp_rma_rndv_remote_request_completed(ep);
     }
+    ucp_request_complete_send(get_req, recv_req->status);
     ucp_request_put(recv_req);
 }
 
@@ -481,17 +577,10 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     ucp_request_t *recv_req;
     ucp_request_t *rndv_req;
     uint8_t UCS_V_UNUSED sg_count;
-    ucs_status_t status;
     uint64_t address;
     size_t length;
 
-    status = ucp_ep_rma_handle_fence(get_req->send.ep, get_req,
-                                     UCS_BIT(rpriv->lane));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    address              = get_req->send.rma.remote_addr;
+    address              = get_req->send.fenced_req.rma.remote_addr;
     length               = get_req->send.state.dt_iter.length;
     get_req->send.buffer =
             get_req->send.state.dt_iter.type.contig.buffer;
@@ -517,6 +606,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     recv_req->recv.rndv.complete_cb = ucp_rma_rndv_get_recv_complete;
     recv_req->status                = UCS_OK;
     ucp_request_set_super(recv_req, get_req);
+    ucp_rma_rndv_req_transfer(get_req, recv_req);
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move, &recv_req->recv.dt_iter,
                           &get_req->send.state.dt_iter, length, &sg_count);
@@ -526,7 +616,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     ucp_request_set_super(rndv_req, recv_req);
     rndv_req->send.rndv.remote_req_id      = UCS_PTR_MAP_KEY_INVALID;
     rndv_req->send.rndv.remote_address     = address;
-    rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
+    rndv_req->send.rndv.rkey               = get_req->send.fenced_req.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move,
@@ -551,6 +641,11 @@ static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
 
     rpriv              = get_req->send.proto_config->priv;
     get_req->send.lane = rpriv->lane;
+    if (!ucp_proto_rma_fence_progress(
+                get_req, UCS_BIT(rpriv->lane), &status)) {
+        return status;
+    }
+
     status             = ucp_ep_resolve_remote_id(get_req->send.ep,
                                                   rpriv->lane);
     if (status == UCS_ERR_NO_RESOURCE) {
@@ -559,6 +654,14 @@ static ucs_status_t ucp_proto_get_rndv_progress(uct_pending_req_t *self)
         ucp_proto_request_abort(get_req, status);
         return UCS_OK;
     }
+
+    /* Do not access the flush-state union while wireup still owns it as the
+     * endpoint match context. */
+    if (ucs_unlikely(get_req->send.ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_rma_rndv_req_claim(get_req);
 
     status = ucp_proto_get_rndv_init(get_req, &rndv_req);
     if (status != UCS_OK) {
@@ -580,7 +683,7 @@ static void ucp_rma_rndv_put_recv_complete(ucp_request_t *recv_req)
         return;
     }, "RMA RNDV PUT completion");
 
-    ucp_rma_sw_send_cmpl(ep);
+    ucp_rma_sw_send_cmpl(ep, UCP_CMPL_FLAG_RMA_RNDV);
     if (recv_req->status != UCS_OK) {
         ucp_rma_rndv_send_ats_err(ep, recv_req->recv.remote_req_id,
                                   recv_req->status);
@@ -607,7 +710,7 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
         ucs_error("failed to allocate RMA RNDV PUT receive request");
         UCP_WORKER_GET_EP_BY_ID(&ep, worker, rts->super.sreq.ep_id,
                                 return UCS_OK, "RMA RNDV PUT error");
-        ucp_rma_sw_send_cmpl(ep);
+        ucp_rma_sw_send_cmpl(ep, UCP_CMPL_FLAG_RMA_RNDV);
         ucp_rma_rndv_send_ats_err(ep, rts->super.sreq.req_id,
                                   UCS_ERR_NO_MEMORY);
         return UCS_OK;
@@ -642,8 +745,8 @@ ucp_proto_t ucp_put_rndv_proto = {
     .probe    = ucp_proto_put_rndv_probe,
     .query    = ucp_proto_rma_rndv_query,
     .progress = {ucp_proto_put_rndv_progress},
-    .abort    = ucp_proto_rndv_rts_abort,
-    .reset    = ucp_proto_rndv_rts_reset
+    .abort    = ucp_proto_put_rndv_abort,
+    .reset    = ucp_proto_put_rndv_reset
 };
 
 ucp_proto_t ucp_get_rndv_proto = {
