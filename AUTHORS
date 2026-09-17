@@ -3,9 +3,9 @@ Adit Ranadive <aranadive@nvidia.com>
 Akshay Venkatesh <akvenkatesh@nvidia.com>
 Alastair McKinstry <mckinstry@debian.org>
 Aleksey Senin <alekseys@nvidia.com>
+Alexey Rivkin <arivkin@nvidia.com>
 Alex Margolin <alex.margolin@huawei.com>
 Alex Mikheev <alexm@mellanox.com>
-Alexey Rivkin <arivkin@nvidia.com>
 Alina Sklarevich <alinas@mellanox.com>
 Alma Mastbaum <amastbaum@nvidia.com>
 Anatoly Vildemanov <anatolyv@nvidia.com>
@@ -74,12 +74,14 @@ Konstantin Belousov <kib@freebsd.org>
 Leonid Genkin <lgenkin@nvidia.com>
 Lior Paz <liorpa@nvidia.com>
 Luis E. Pena <l31g@hotmail.com>
+lzhang2 <cherry.zhang@intel.com>
 Manjunath Gorentla Venkata <manjugv@gmail.com>
 Manu Shantharam <manu.shantharam@amd.com>
 Marek Schimara <Marek.Schimara@bull.net>
 Mark Allen <markalle@us.ibm.com>
 Matthew Baker <bakermb@ornl.gov>
 Michael Braverman <michaelbr@nvidia.com>
+michaelzli <michaelzli@tencent.com>
 Michal Shalev <mshalev@nvidia.com>
 Mike Dubman <miked@mellanox.com>
 Mikhail Brinskii <mikhailb@nvidia.com>
@@ -87,8 +89,8 @@ Min Fang <minf@nvidia.com>
 Nathan Bellalou <nbellalou@nvidia.com>
 Nathan Hjelm <hjelmn@lanl.gov>
 Netanel Yosephian <netanelyo@mellanox.com>
-Nicolas 'Pixel' Noble <nicolas@nobis-crew.org>
 Nicolas Morey <nmorey@suse.com>
+Nicolas 'Pixel' Noble <nicolas@nobis-crew.org>
 Nir Wolfer <nwolfer@nvidia.com>
 Noam Tsemah <ntsemah@nvidia.com>
 Ofir Farjon <ofarjon@nvidia.com>
@@ -100,8 +102,8 @@ Paul Taylor <pataylor@nvidia.com>
 Pavan Balaji <balaji@anl.gov>
 Pavel Shamis (Pasha) <pasharesearch@gmail.com>
 Peter Andreas Entschev <peter@entschev.com>
-Peter Rudenko <peterr@mellanox.com>
 Peter-Jan Gootzen <pgootzen@nvidia.com>
+Peter Rudenko <peterr@mellanox.com>
 Qiang Yu <Qiang.Yu@amd.com>
 Raul Akhmetshin <rakhmetshin@nvidia.com>
 Rikka Göring <rikka.goering@outlook.de>
@@ -122,6 +124,7 @@ Shuki Zanyovka <shuki.zanyovka@huawei.com>
 Sourav Chakraborty <souchakr@amd.com>
 Srinivasan Subramanian <srinivasan.subramanian@amd.com>
 Stephen Richmond <srichmond@dancer.icl.utk.edu>
+svc-ucx-bot <svc-ucx-bot@nvidia.com>
 Swen Boehm <boehms@ornl.gov>
 Thomas Vegas <tvegas@nvidia.com>
 Tomer Gilad <tgilad@nvidia.com>
@@ -133,6 +136,7 @@ William Gallagher <wgallagher@nvidia.com>
 Xin Zhao <xinz@mellanox.com>
 Xu Yifeng <yifeng.xyf@alibaba-inc.com>
 Yaser Afshar <yaser.afshar@intel.com>
+ybenabou <ybenabou@nvidia.com>
 Yihua Xu <yihua.xu@intel.com>
 Yiltan Hassan Temucin <yiltan.temucin@amd.com>
 Yossi Itigin <yosefe@nvidia.com>
@@ -141,9 +145,6 @@ Zhenlong Ma <zhenlongm@nvidia.com>
 Zhongkai Zhang <zhzhang@habana.ai>
 Zhu Yanjun <yanjunz@mellanox.com>
 Zihao Zhao <zizhao@nvidia.com>
-lzhang2 <cherry.zhang@intel.com>
-michaelzli <michaelzli@tencent.com>
-ybenabou <ybenabou@nvidia.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and
