@@ -125,6 +125,9 @@ void ucs_rbtree_insert_at(ucs_rbtree_t *tree, ucs_rbtree_node_t *parent,
                           ucs_rbtree_node_t **link, ucs_rbtree_node_t *node)
 {
     ucs_assert(*link == NULL);
+    ucs_assert((parent == NULL) ? (link == &tree->root) :
+                                  ((link == &parent->left) ||
+                                   (link == &parent->right)));
 
     node->parent = parent;
     node->left   = NULL;
