@@ -385,9 +385,7 @@ protected:
         uint32_t                   num_ops_purged;
         uint32_t                   num_ops_purged_at_completion;
         uint32_t                   num_ops_posted_after_flush;
-        uint32_t                   num_flush_purged;
         unsigned                   num_completions;
-        std::vector<uint8_t>       am_short_payload;
         uint64_t                   remote_addr;
         uct_rkey_t                 rkey;
         const void                 *send_buf;
@@ -469,9 +467,6 @@ protected:
         case UCT_EP_OP_PUT_BCOPY:
             validate_put(info, ctx);
             return;
-        case UCT_EP_OP_FLUSH:
-            validate_flush(info, ctx);
-            return;
         default:
             UCS_TEST_ABORT("unsupported operation " << info->operation
                                                      << " at index "
@@ -491,11 +486,10 @@ protected:
         EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
         EXPECT_EQ(AM_SHORT_ID, info->am.am_id);
         EXPECT_EQ(AM_SHORT_HEADER, info->am.header.value);
-        ASSERT_EQ(ctx->am_short_payload.size(), info->am.payload.data.length);
+        ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
         ASSERT_NE(nullptr, info->am.payload.data.buffer);
-        EXPECT_EQ(0, memcmp(ctx->am_short_payload.data(),
-                            info->am.payload.data.buffer,
-                            ctx->am_short_payload.size()));
+        EXPECT_EQ(0, memcmp(ctx->send_buf, info->am.payload.data.buffer,
+                            ctx->send_len));
         ++ctx->num_ops_purged;
     }
 
@@ -522,20 +516,6 @@ protected:
         EXPECT_EQ(0, memcmp(ctx->send_buf, info->rma.payload.data.buffer,
                             ctx->send_len));
         ++ctx->num_ops_purged;
-    }
-
-    static void validate_flush(const uct_ep_op_info_t *info, purge_ctx *ctx)
-    {
-        const uint64_t required_fields = UCT_EP_OP_INFO_FIELD_COMP |
-                                         UCT_EP_OP_INFO_FIELD_FLUSH;
-
-        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, required_fields));
-        ASSERT_TRUE(info->flush.field_mask &
-                    UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS);
-        EXPECT_EQ(0u, info->flush.flags);
-        EXPECT_EQ(&ctx->comp, info->comp);
-        ASSERT_EQ(0u, ctx->num_flush_purged);
-        ++ctx->num_flush_purged;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep,
@@ -643,7 +623,6 @@ protected:
 
         EXPECT_GT(ctx.num_ops_purged, 0u);
         EXPECT_LE(ctx.num_ops_purged, num_posted);
-        EXPECT_EQ(0u, ctx.num_flush_purged);
 
         wait_for_value(&ctx.comp.count, 0, true);
         if (num_outstanding != 0) {
@@ -674,16 +653,18 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
     purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+    /* Arbitrary payload, verified byte-by-byte in validate_am_short() */
+    const uint8_t payload[] = {1, 2, 3, 4};
 
-    ctx.am_short_payload = {1, 2, 3, 4};
+    ctx.send_buf = payload;
+    ctx.send_len = sizeof(payload);
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
                                            am_handler, NULL, 0));
 
     send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
-        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER,
-                               ctx.am_short_payload.data(),
-                               ctx.am_short_payload.size());
+        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER, ctx.send_buf,
+                               ctx.send_len);
     };
     test_purge_outstanding(am_short, ctx);
 
