@@ -103,7 +103,7 @@ protected:
         return out;
     }
 
-    bool check_rb_invariant() const
+    bool check_invariants() const
     {
         if (!rbtree_check::validate(&m_tree.rb, m_tree.num_nodes)) {
             return false;
@@ -223,7 +223,7 @@ UCS_TEST_F(test_interval_tree, merge_multiple_overlaps) {
 
     insert_intervals({{0, 50}});
     EXPECT_TRUE(is_fully_covered({0, 50}));
-    EXPECT_TRUE(check_rb_invariant()) << "RB violated after merging overlaps";
+    EXPECT_TRUE(check_invariants()) << "invariants violated after merging";
 }
 
 UCS_TEST_F(test_interval_tree, adjacent_discrete_integers) {
@@ -264,11 +264,11 @@ UCS_TEST_F(test_interval_tree, inorder_sorted) {
     }
 }
 
-/* Red-Black invariants: root black, no double red, same black height on all paths */
+/* Balance, plus the disjoint-with-a-gap property coalescing guarantees */
 UCS_TEST_F(test_interval_tree, red_black_invariant) {
     insert_intervals({{10, 20}, {30, 40}, {50, 60}, {0, 5}, {25, 28},
                       {70, 80}, {45, 55}, {100, 110}});
-    EXPECT_TRUE(check_rb_invariant()) << "RB invariant violated";
+    EXPECT_TRUE(check_invariants()) << "invariants violated";
 }
 
 /* Large ascending insert (degenerate without balancing), then check height and invariant */
@@ -279,7 +279,8 @@ UCS_TEST_F(test_interval_tree, degenerate_ascending_then_invariant) {
                 &m_tree, {i * 2, i * 2 + 1});
         ASSERT_UCS_OK(status);
     }
-    EXPECT_TRUE(check_rb_invariant()) << "RB invariant violated after ascending inserts";
+    EXPECT_TRUE(check_invariants())
+            << "invariants violated after ascending inserts";
     size_t h = tree_height();
     size_t max_h = 2 * (size_t)std::ceil(std::log2((double)(n + 1)));
     EXPECT_LE(h, max_h) << "height " << h << " > 2*ceil(log2(" << n << "+1)) = " << max_h;
@@ -496,7 +497,8 @@ UCS_TEST_F(test_interval_tree, pop_drains_all) {
         }
         prev_start = range.start;
         ++popped;
-        EXPECT_TRUE(check_rb_invariant()) << "RB violated after pop #" << popped;
+        EXPECT_TRUE(check_invariants()) << "invariants violated after pop #"
+                                        << popped;
     }
     EXPECT_EQ(n, popped);
     EXPECT_TRUE(ucs_interval_tree_is_empty(&m_tree));
