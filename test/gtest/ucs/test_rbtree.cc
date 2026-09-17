@@ -67,7 +67,6 @@ protected:
         EXPECT_EQ(NULL, m_nodes[idx].super.parent);
         EXPECT_EQ(NULL, m_nodes[idx].super.left);
         EXPECT_EQ(NULL, m_nodes[idx].super.right);
-        validate();
     }
 
     node *find(uint64_t key) const
@@ -144,9 +143,11 @@ UCS_TEST_F(test_rbtree, remove_leaf_and_one_child) {
     insert_keys({20, 10, 30, 5}); /* 10 has a single child, 5 */
 
     remove(2); /* 30: leaf */
+    validate();
     EXPECT_EQ(std::vector<uint64_t>({5, 10, 20}), keys());
 
     remove(1); /* 10: one child */
+    validate();
     EXPECT_EQ(std::vector<uint64_t>({5, 20}), keys());
     EXPECT_EQ(NULL, find(10));
 }
@@ -154,6 +155,7 @@ UCS_TEST_F(test_rbtree, remove_leaf_and_one_child) {
 UCS_TEST_F(test_rbtree, remove_two_children_relinks_successor) {
     insert_keys({20, 10, 30});
     remove(0); /* successor is 30, the direct right child */
+    validate();
     EXPECT_EQ(30u, m_nodes[2].key);
     EXPECT_EQ(&m_nodes[2].super, m_tree.root);
     EXPECT_EQ(std::vector<uint64_t>({10, 30}), keys());
@@ -162,6 +164,7 @@ UCS_TEST_F(test_rbtree, remove_two_children_relinks_successor) {
 UCS_TEST_F(test_rbtree, remove_two_children_deep_successor) {
     insert_keys({20, 10, 40, 30, 50});
     remove(0); /* successor is 30, whose parent is 40, not 20 */
+    validate();
     EXPECT_EQ(30u, m_nodes[3].key);
     EXPECT_EQ(&m_nodes[3].super, m_tree.root);
     EXPECT_EQ(std::vector<uint64_t>({10, 30, 40, 50}), keys());
@@ -208,6 +211,7 @@ UCS_TEST_F(test_rbtree, equal_keys_keep_insertion_order) {
     }
 
     remove(1);
+    validate();
 
     const std::vector<node*> after = in_order();
     ASSERT_EQ(3u, after.size());
