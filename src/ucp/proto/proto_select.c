@@ -75,9 +75,7 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     ucs_dynamic_bitmap_reset_all(proto_mask);
     ucs_dynamic_bitmap_init(&disabled_proto_mask);
 
-    for (proto_idx = 0; proto_idx < ucs_array_length(&proto_init->protocols);
-         ++proto_idx) {
-        proto = &ucs_array_elem(&proto_init->protocols, proto_idx);
+    ucs_array_for_each_index(proto, proto_idx, &proto_init->protocols) {
         range = ucp_proto_flat_perf_find_lb(proto->flat_perf, msg_length);
         if (range == NULL) {
             ucs_trace("skipping proto %s for msg_length %zu",
@@ -549,6 +547,11 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     ucs_status_t status;
     khiter_t khiter;
     int khret;
+
+    ucs_assert(!ucs_async_is_from_async(&worker->async));
+
+    /* Initialize short-circuit thresholds on the relevant endpoint config */
+    ucp_ep_config_proto_short_lazy_init(worker, ep_cfg_index);
 
     key.param = *select_param;
     khiter    = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);

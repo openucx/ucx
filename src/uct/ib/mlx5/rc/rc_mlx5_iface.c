@@ -778,10 +778,11 @@ uct_rc_mlx5_iface_need_strong_order(uct_rc_mlx5_iface_common_t *iface)
 static ucs_status_t
 uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
                                    uct_rc_iface_common_config_t *rc_config,
-                                   uct_ib_mlx5_md_t *md,
-                                   uct_ib_device_t *dev)
+                                   uct_ib_mlx5_md_t *md, uct_ib_device_t *dev,
+                                   int strong_order_required)
 {
-    int strong_order = uct_rc_mlx5_iface_need_strong_order(iface);
+    int strong_order = uct_rc_mlx5_iface_need_strong_order(iface) ||
+                       strong_order_required;
     int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
 
     iface->config.put_fence_flag =
@@ -792,7 +793,8 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
         break;
     case UCT_RC_FENCE_MODE_AUTO:
         if (strong_order || pci_atomics ||
-            uct_ib_md_is_relaxed_order(&md->super)) {
+            uct_ib_md_is_relaxed_order(&md->super) ||
+            md->super.relaxed_order_required) {
             break;
         }
 
@@ -901,7 +903,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
 
-    status = uct_rc_mlx5_iface_init_fence_flags(self, rc_config, md, dev);
+    status = uct_rc_mlx5_iface_init_fence_flags(
+            self, rc_config, md, dev,
+            (init_attr->qp_type == IBV_QPT_RC) &&
+                    md->super.relaxed_order_required);
     if (status != UCS_OK) {
         goto cleanup_dm;
     }
@@ -1159,6 +1164,10 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
     md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        }
+
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
             status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
             if (status != UCS_OK) {
@@ -1234,7 +1243,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
