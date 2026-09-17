@@ -194,7 +194,7 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
     static int num_nvlinks = -1;
     unsigned link;
     nvmlDevice_t device;
-    nvmlFieldValue_t value;
+    nvmlFieldValue_t value = {0};
     nvmlPciInfo_t pci;
     ucs_status_t status;
 
