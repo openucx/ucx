@@ -221,7 +221,6 @@ static ucs_status_t
 uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
                            unsigned num_visible_gpus)
 {
-    unsigned num_invisible_gpus = 0;
     unsigned nvml_dev_count, i;
     ucs_sys_device_t sys_dev;
     ucs_sys_bus_id_t bus_id;
@@ -265,12 +264,10 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
             goto out;
         }
 
-        ucs_snprintf_safe(device_name, sizeof(device_name), "UNKN%u",
-                          num_invisible_gpus);
+        ucs_snprintf_safe(device_name, sizeof(device_name), "UNKN%u", i);
         status = ucs_topo_sys_device_set_name(
                 sys_dev, device_name, UCT_CUDA_SYS_DEVICE_NAME_PRIORITY);
         ucs_assert_always(status == UCS_OK);
-        ++num_invisible_gpus;
     }
 
 out:
