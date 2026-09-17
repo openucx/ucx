@@ -462,7 +462,6 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
     const ucs_topo_sys_device_info_t *first_device, *device;
-    ucs_sys_device_t sys_dev;
     size_t i;
 
     ucs_assert((device_class == UCS_TOPO_DEVICE_CLASS_ACC) ||
@@ -479,8 +478,7 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
     if (first_device->name_priority > 0) {
         ucs_string_buffer_appendf(&strb, " ");
         for (i = 0; i < element->num_sys_devs; ++i) {
-            sys_dev = element->sys_devs[i];
-            device  = &devices[sys_dev];
+            device = &devices[element->sys_devs[i]];
             ucs_string_buffer_appendf(&strb, "%s/", device->name);
         }
         ucs_string_buffer_rtrim(&strb, "/");
@@ -497,10 +495,8 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
     }
 
     ucs_string_buffer_appendf(&strb, " sys_dev ");
-    for (i = 0; i < element->num_sys_devs; ++i) {
-        ucs_string_buffer_appendf(&strb, "%u/", (unsigned)element->sys_devs[i]);
-    }
-    ucs_string_buffer_rtrim(&strb, "/");
+    ucs_string_buffer_append_array(&strb, "/", "%hhu", element->sys_devs,
+                                   element->num_sys_devs);
 
 out:
     ucs_debug("topology group %zu element: %s%s", group_idx,
