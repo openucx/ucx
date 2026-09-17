@@ -896,6 +896,16 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am(
     return UCS_ERR_UNSUPPORTED;
 }
 
+static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
+{
+    return (void*)op->handler == (void*)ucs_mpool_put;
+}
+
+static int uct_rc_mlx5_send_op_is_flush(const uct_rc_iface_send_op_t *op)
+{
+    return (void*)op->handler == (void*)uct_rc_ep_flush_op_completion_handler;
+}
+
 static void uct_rc_mlx5_get_dptr_buffer(const struct mlx5_wqe_data_seg *dptr,
                                         size_t *length_p, void **buffer_p)
 {
@@ -994,7 +1004,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     }
 
     dptr = (const struct mlx5_wqe_data_seg*)inl;
-    if ((op != NULL) && ((void*)op->handler == (void*)ucs_mpool_put)) {
+    if ((op != NULL) && uct_rc_mlx5_send_op_is_put_bcopy(op)) {
         uct_rc_mlx5_op_info_fill_put_bcopy(op, dptr, raddr, info);
         return UCS_OK;
     }
@@ -1201,12 +1211,11 @@ uct_rc_mlx5_ep_outstanding_get_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
     op = ucs_queue_head_elem_non_empty(&ep->super.txqp.outstanding,
                                        uct_rc_iface_send_op_t, queue);
     ucs_assert(UCS_CIRCULAR_COMPARE16(op->sn, >=, ci));
-    return (op->sn == ci) ? op : NULL;
-}
 
-static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
-{
-    return (void*)op->handler == (void*)ucs_mpool_put;
+    if ((op->sn != ci) || uct_rc_mlx5_send_op_is_flush(op)) {
+        return NULL;
+    }
+    return op;
 }
 
 static void

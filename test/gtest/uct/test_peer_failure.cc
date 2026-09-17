@@ -513,6 +513,7 @@ protected:
         EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
         ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
+        ASSERT_NE(nullptr, info->rma.payload.data.buffer);
         EXPECT_EQ(0, memcmp(ctx->send_buf, info->rma.payload.data.buffer,
                             ctx->send_len));
         ++ctx->num_ops_purged;
