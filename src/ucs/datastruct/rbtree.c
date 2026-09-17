@@ -191,19 +191,20 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
             }
 
             if (ucs_rbtree_is_black(sibling->right)) {
-                if (sibling->left != NULL) {
-                    sibling->left->color = UCS_RBTREE_BLACK;
-                }
-                sibling->color = UCS_RBTREE_RED;
+                /* Not both children are black, so the left one is red */
+                ucs_assert(sibling->left != NULL);
+                sibling->left->color = UCS_RBTREE_BLACK;
+                sibling->color       = UCS_RBTREE_RED;
                 ucs_rbtree_rotate_right(tree, sibling);
                 sibling = parent->right;
             }
 
             sibling->color = parent->color;
             parent->color  = UCS_RBTREE_BLACK;
-            if (sibling->right != NULL) {
-                sibling->right->color = UCS_RBTREE_BLACK;
-            }
+            /* Either the right child was red, or the rotation above moved the
+             * old sibling into that slot */
+            ucs_assert(sibling->right != NULL);
+            sibling->right->color = UCS_RBTREE_BLACK;
             ucs_rbtree_rotate_left(tree, parent);
         } else {
             sibling = parent->left;
@@ -228,19 +229,20 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
             }
 
             if (ucs_rbtree_is_black(sibling->left)) {
-                if (sibling->right != NULL) {
-                    sibling->right->color = UCS_RBTREE_BLACK;
-                }
-                sibling->color = UCS_RBTREE_RED;
+                /* Not both children are black, so the right one is red */
+                ucs_assert(sibling->right != NULL);
+                sibling->right->color = UCS_RBTREE_BLACK;
+                sibling->color        = UCS_RBTREE_RED;
                 ucs_rbtree_rotate_left(tree, sibling);
                 sibling = parent->left;
             }
 
             sibling->color = parent->color;
             parent->color  = UCS_RBTREE_BLACK;
-            if (sibling->left != NULL) {
-                sibling->left->color = UCS_RBTREE_BLACK;
-            }
+            /* Either the left child was red, or the rotation above moved the
+             * old sibling into that slot */
+            ucs_assert(sibling->left != NULL);
+            sibling->left->color = UCS_RBTREE_BLACK;
             ucs_rbtree_rotate_right(tree, parent);
         }
 

@@ -56,7 +56,7 @@ ucs_interval_tree_node(ucs_rbtree_node_t *rb_node)
 
 
 /**
- * Return the tree's root node
+ * Return the tree's root node, or NULL if the tree is empty.
  */
 static UCS_F_ALWAYS_INLINE ucs_interval_node_t *
 ucs_interval_tree_root(const ucs_interval_tree_t *tree)
