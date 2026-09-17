@@ -324,8 +324,7 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
         total       += lengths[i];
-        num_packets += uct_rc_mlx5_rma_num_packets(txwq, IBV_QPT_RC,
-                                                   lengths[i]);
+        num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
@@ -1130,7 +1129,7 @@ static uint32_t uct_ib_mlx5_wqe_num_packets(
         return 0;
     case MLX5_OPCODE_RDMA_WRITE:
         length = uct_rc_mlx5_wqe_put_length(txwq, ctrl, wqe_size);
-        return uct_rc_mlx5_rma_num_packets(txwq, IBV_QPT_RC, length);
+        return uct_rc_mlx5_rma_num_packets(txwq, length);
     case MLX5_OPCODE_SEND:
         inl = uct_rc_mlx5_wqe_get_inline_seg(txwq, ctrl, wqe_size,
                                              &inline_length);
