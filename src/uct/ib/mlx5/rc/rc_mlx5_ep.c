@@ -324,7 +324,8 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
         total       += lengths[i];
-        num_packets += uct_rc_mlx5_rma_num_packets(txwq, lengths[i]);
+        num_packets += uct_rc_mlx5_rma_num_packets(txwq, IBV_QPT_RC,
+                                                   lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
@@ -909,12 +910,12 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am(
 
 static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
 {
-    return (void*)op->handler == (void*)ucs_mpool_put;
+    return op->handler == (uct_rc_send_handler_t)ucs_mpool_put;
 }
 
 static int uct_rc_mlx5_send_op_is_flush(const uct_rc_iface_send_op_t *op)
 {
-    return (void*)op->handler == (void*)uct_rc_ep_flush_op_completion_handler;
+    return op->handler == uct_rc_ep_flush_op_completion_handler;
 }
 
 static void uct_rc_mlx5_get_dptr_buffer(const struct mlx5_wqe_data_seg *dptr,
@@ -1129,7 +1130,7 @@ static uint32_t uct_ib_mlx5_wqe_num_packets(
         return 0;
     case MLX5_OPCODE_RDMA_WRITE:
         length = uct_rc_mlx5_wqe_put_length(txwq, ctrl, wqe_size);
-        return uct_rc_mlx5_rma_num_packets(txwq, length);
+        return uct_rc_mlx5_rma_num_packets(txwq, IBV_QPT_RC, length);
     case MLX5_OPCODE_SEND:
         inl = uct_rc_mlx5_wqe_get_inline_seg(txwq, ctrl, wqe_size,
                                              &inline_length);
