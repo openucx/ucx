@@ -91,12 +91,12 @@ void test_ucp_device::get_base_variants(std::vector<ucp_test_variant> &variants)
 void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 {
     add_variant_memtypes(variants, get_base_variants,
-                         UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                         UCS_BIT(UCS_MEMORY_TYPE_HOST));
+                         UCS_BIT(UCS_MEMORY_TYPE_CUDA));
 }
 
 void test_ucp_device::init()
 {
+    m_env.push_back(new ucs::scoped_setenv("UCX_CUDA_IPC_ENABLE_SAME_PROCESS", "y"));
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_GDA_MAX_SYS_LATENCY", "1us"));
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
@@ -792,3 +792,5 @@ UCS_TEST_P(test_ucp_device_xfer, counter)
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, rc_gda,
                                         "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, cuda_ipc,
+                                        "sm,cuda_ipc")
