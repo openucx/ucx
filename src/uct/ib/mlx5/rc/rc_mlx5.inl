@@ -461,15 +461,6 @@ uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
     return (message_length + txwq->path_mtu_mask) >> txwq->path_mtu_shift;
 }
 
-static UCS_F_ALWAYS_INLINE uint32_t uct_rc_mlx5_rma_num_packets(
-        const uct_ib_mlx5_txwq_t *txwq, size_t message_length)
-{
-    /* A zero-length RDMA read or write still consumes one packet/PSN */
-    return (message_length == 0) ?
-                   1 :
-                   uct_rc_mlx5_num_packets(txwq, message_length);
-}
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_add_psn(uct_ib_mlx5_txwq_t *txwq, int qp_type,
                          uint32_t num_packets)

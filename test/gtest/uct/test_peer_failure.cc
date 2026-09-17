@@ -488,8 +488,8 @@ protected:
         EXPECT_EQ(AM_SHORT_HEADER, info->am.header.value);
         ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
         ASSERT_NE(nullptr, info->am.payload.data.buffer);
-        EXPECT_EQ(0, memcmp(ctx->send_buf, info->am.payload.data.buffer,
-                            ctx->send_len));
+        mem_buffer::pattern_check(info->am.payload.data.buffer,
+                                  info->am.payload.data.length, SEND_SEED);
         ++ctx->num_ops_purged;
     }
 
@@ -514,8 +514,8 @@ protected:
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
         ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
         ASSERT_NE(nullptr, info->rma.payload.data.buffer);
-        EXPECT_EQ(0, memcmp(ctx->send_buf, info->rma.payload.data.buffer,
-                            ctx->send_len));
+        mem_buffer::pattern_check(info->rma.payload.data.buffer,
+                                  info->rma.payload.data.length, SEND_SEED);
         ++ctx->num_ops_purged;
     }
 
@@ -653,12 +653,14 @@ const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
-    /* Arbitrary payload, verified byte-by-byte in validate_am_short() */
-    const uint8_t payload[] = {1, 2, 3, 4};
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size            = ucs_min((size_t)64, attr.cap.am.max_short);
+    std::vector<uint8_t> payload(size);
+    mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
 
-    ctx.send_buf = payload;
-    ctx.send_len = sizeof(payload);
+    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+    ctx.send_buf  = payload.data();
+    ctx.send_len  = payload.size();
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
                                            am_handler, NULL, 0));

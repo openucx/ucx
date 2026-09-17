@@ -821,18 +821,18 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                        IBV_QPS_ERR);
 }
 
-static int
+static ucs_status_t
 uct_rc_mlx5_wqe_inline_seg_length(const struct mlx5_wqe_inl_data_seg *inl,
                                   size_t *inline_length_p)
 {
     uint32_t byte_count = ntohl(inl->byte_count);
 
     if (!(byte_count & MLX5_INLINE_SEG)) {
-        return 0;
+        return UCS_ERR_NO_ELEM;
     }
 
     *inline_length_p = byte_count & ~MLX5_INLINE_SEG;
-    return 1;
+    return UCS_OK;
 }
 
 static const struct mlx5_wqe_inl_data_seg *
@@ -847,7 +847,7 @@ uct_rc_mlx5_wqe_get_inline_seg(
                        "wqe_size=%zu", wqe_size);
 
     inl = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
-    if (!uct_rc_mlx5_wqe_inline_seg_length(inl, inline_length_p)) {
+    if (uct_rc_mlx5_wqe_inline_seg_length(inl, inline_length_p) != UCS_OK) {
         return NULL;
     }
 
@@ -1000,14 +1000,14 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
 
     ucs_assert(wqe_size >= header_size);
 
-    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     if (wqe_size == header_size) {
         /* A no-payload RDMA write is not supported */
         return UCS_ERR_UNSUPPORTED;
     }
 
-    inl = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-    if (uct_rc_mlx5_wqe_inline_seg_length(inl, &inline_length)) {
+    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
+    inl   = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
+    if (uct_rc_mlx5_wqe_inline_seg_length(inl, &inline_length) == UCS_OK) {
         uct_rc_mlx5_op_info_fill_put_short(txwq, raddr, inl, inline_length,
                                            callback_data, info);
         return UCS_OK;
@@ -1098,7 +1098,7 @@ static size_t uct_rc_mlx5_wqe_put_length(const uct_ib_mlx5_txwq_t *txwq,
 
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     inl   = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-    if (uct_rc_mlx5_wqe_inline_seg_length(inl, &length)) {
+    if (uct_rc_mlx5_wqe_inline_seg_length(inl, &length) == UCS_OK) {
         ucs_assertv_always(length <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE,
                            "inline_length=%zu", length);
         return length;
@@ -1129,7 +1129,8 @@ static uint32_t uct_ib_mlx5_wqe_num_packets(
         return 0;
     case MLX5_OPCODE_RDMA_WRITE:
         length = uct_rc_mlx5_wqe_put_length(txwq, ctrl, wqe_size);
-        return uct_rc_mlx5_rma_num_packets(txwq, length);
+        /* A zero-length RDMA read or write still consumes one packet/PSN */
+        return (length == 0) ? 1 : uct_rc_mlx5_num_packets(txwq, length);
     case MLX5_OPCODE_SEND:
         inl = uct_rc_mlx5_wqe_get_inline_seg(txwq, ctrl, wqe_size,
                                              &inline_length);
@@ -1200,8 +1201,12 @@ uct_rc_mlx5_ep_purge_flushes(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
     uct_rc_iface_send_op_t *op;
 
     ucs_queue_for_each_extract(op, &ep->super.txqp.outstanding, queue,
-                               uct_rc_mlx5_send_op_is_flush(op) &&
-                                       UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
+        ucs_assertv_always(uct_rc_mlx5_send_op_is_flush(op),
+                           "ep %p qp 0x%x unexpected send op sn %u handler %s",
+                           ep, ep->tx.wq.super.qp_num, op->sn,
+                           ucs_debug_get_symbol_name(op->handler));
+
         op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
         uct_invoke_completion(op->user_comp, UCS_ERR_CANCELED);
         ucs_mpool_put(op);
@@ -1224,6 +1229,7 @@ uct_rc_mlx5_ep_outstanding_get_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t ci)
     if ((op->sn != ci) || uct_rc_mlx5_send_op_is_flush(op)) {
         return NULL;
     }
+
     return op;
 }
 
@@ -1231,9 +1237,11 @@ static void
 uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_mlx5_base_ep_t *ep,
                                            uct_rc_iface_send_op_t *op)
 {
-    if ((op == NULL) || !uct_rc_mlx5_send_op_is_put_bcopy(op)) {
+    if (op == NULL) {
         return;
     }
+
+    ucs_assert(uct_rc_mlx5_send_op_is_put_bcopy(op));
 
     /* uct_rc_mlx5_ep_outstanding_get_send_op() only returns the queue head */
     ucs_assert(op == ucs_queue_head_elem_non_empty(&ep->super.txqp.outstanding,
