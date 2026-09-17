@@ -9,6 +9,8 @@
 
 #include "rndv.h"
 
+#include <ucs/datastruct/queue_types.h>
+
 #include <ucp/proto/proto_multi.h>
 
 
@@ -197,6 +199,25 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
  * UINT_MAX if unlimited. */
 unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
                                        ucs_memory_type_t frag_mem_type);
+
+unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg);
+
+int ucp_proto_rndv_mtype_fc_reschedule_filter(
+        const ucs_callbackq_elem_t *elem, void *arg);
+
+void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req);
+
+/* Abort every request of an endpoint that is waiting for a rndv mtype
+ * fragment */
+void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status);
+
+/**
+ * Move every request of an endpoint that is waiting for a rndv mtype
+ * fragment to @a replay_queue, so it is replayed after the endpoint is
+ * reconfigured.
+ */
+void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
+                                        ucs_queue_head_t *replay_queue);
 
 
 ucs_status_t

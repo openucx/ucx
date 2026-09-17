@@ -93,7 +93,8 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     ucp_worker_h worker = ep->worker;
     /* A rescheduled request owns the wakeup of a fragment which was released
      * back to the mpool, and must pass it on if it does not consume one. */
-    int owns_wakeup     = req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
+    int owns_wakeup     = !!(req->flags &
+                             UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
     ucs_status_t status;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED));

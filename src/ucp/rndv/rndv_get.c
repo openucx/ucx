@@ -416,6 +416,9 @@ ucp_proto_rndv_get_mtype_abort(ucp_request_t *req, ucs_status_t status)
         if (req->send.rndv.rkey != NULL) {
             ucp_proto_rndv_rkey_destroy(req);
         }
+
+        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 1,
+                                  UCP_DT_MASK_ALL);
         ucp_proto_rndv_recv_complete_status(req, status);
     }
 }

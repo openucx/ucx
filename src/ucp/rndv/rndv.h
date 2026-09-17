@@ -10,7 +10,6 @@
 #include <ucp/core/ucp_types.h>
 #include <ucp/proto/proto_am.h>
 #include <ucs/datastruct/ptr_map.h>
-#include <ucs/datastruct/queue_types.h>
 
 
 typedef enum {
@@ -118,25 +117,6 @@ ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param);
 ucs_status_t
 ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
                    ucs_sys_device_t sys_dev, ucp_mem_desc_t **mdesc_p);
-
-unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg);
-
-int ucp_proto_rndv_mtype_fc_reschedule_filter(
-        const ucs_callbackq_elem_t *elem, void *arg);
-
-void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req);
-
-/* Abort every request of an endpoint that is waiting for a rndv mtype
- * fragment */
-void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status);
-
-/**
- * Move every request of an endpoint that is waiting for a rndv mtype
- * fragment to @a replay_queue, so it is replayed after the endpoint is
- * reconfigured.
- */
-void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
-                                        ucs_queue_head_t *replay_queue);
 
 void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,

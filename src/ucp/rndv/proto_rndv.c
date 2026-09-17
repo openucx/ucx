@@ -805,8 +805,8 @@ unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
     max_frags = max_mem / frag_size;
     if (max_frags < frags_in_chunk) {
         /* mpool requires max_elems >= elems_per_chunk */
-        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM (%zu) is too low for %s "
-                 "(frag_size=%zu, frags_per_alloc=%zu), using minimum %zu "
+        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM %zu is too low for %s "
+                 "(frag size %zu, frags per alloc %zu), using minimum %zu "
                  "frags",
                  max_mem, ucs_memory_type_names[frag_mem_type], frag_size,
                  frags_in_chunk, frags_in_chunk);

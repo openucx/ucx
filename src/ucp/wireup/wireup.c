@@ -22,7 +22,7 @@
 #include <ucp/proto/proto_common.h>
 #include <ucs/sys/iovec.h>
 #include <ucp/tag/eager.h>
-#include <ucp/rndv/rndv.h>
+#include <ucp/rndv/proto_rndv.h>
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_am.inl>

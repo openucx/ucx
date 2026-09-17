@@ -2272,6 +2272,28 @@ protected:
         m_mem_type = mem_type;
     }
 
+    static uint64_t get_stats(const entity &e, uint64_t cntr)
+    {
+        return UCS_STATS_GET_COUNTER(e.worker()->stats, cntr);
+    }
+
+    static const char *stats_name(const entity &e, uint64_t cntr)
+    {
+        return e.worker()->stats->cls->counter_names[cntr];
+    }
+
+    void check_stats(const entity &e, uint64_t cntr, uint64_t exp_value)
+    {
+        EXPECT_EQ(exp_value, get_stats(e, cntr))
+                << "counter is " << stats_name(e, cntr);
+    }
+
+    void check_stats_ge(const entity &e, uint64_t cntr, uint64_t min_value)
+    {
+        EXPECT_GE(get_stats(e, cntr), min_value)
+                << "counter is " << stats_name(e, cntr);
+    }
+
 private:
     ucs_memory_type_t tx_memtype() const override
     {
@@ -2281,15 +2303,6 @@ private:
     ucs_memory_type_t rx_memtype() const override
     {
         return m_mem_type;
-    }
-
-    void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
-    {
-        auto stats_node = e.worker()->stats;
-        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
-
-        EXPECT_EQ(exp_value, value) << "counter is "
-                                    << stats_node->cls->counter_names[cntr];
     }
 
     ucp_err_handling_mode_t get_err_mode() const
@@ -2372,26 +2385,13 @@ protected:
         check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
         check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
 
-        fc.sender_throttled =
-                UCS_STATS_GET_COUNTER(sender().worker()->stats,
-                                      UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
-        fc.receiver_throttled =
-                UCS_STATS_GET_COUNTER(receiver().worker()->stats,
-                                      UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED);
+        const uint64_t cntr   = UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED;
+
+        fc.sender_throttled   = get_stats(sender(), cntr);
+        fc.receiver_throttled = get_stats(receiver(), cntr);
     }
 
 private:
-    static void check_stats_ge(const entity &e, uint64_t cntr,
-                               uint64_t min_value)
-    {
-        const auto stats_node = e.worker()->stats;
-        const auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
-
-        EXPECT_GE(value, min_value)
-                << "counter " << stats_node->cls->counter_names[cntr]
-                << " expected >= " << min_value << " but got " << value;
-    }
-
     static void check_pending_queues_empty(const entity &e)
     {
         ucp_worker_h worker = e.worker();
@@ -2410,14 +2410,16 @@ private:
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
-           "RNDV_FRAG_WORKER_MAX_MEM=600mb", "RNDV_FRAG_MEM_TYPE=cuda")
+           "RNDV_FRAG_SIZE=cuda:256K", "RNDV_FRAG_ALLOC_COUNT=cuda:4",
+           "RNDV_FRAG_WORKER_MAX_MEM=1M", "RNDV_FRAG_MEM_TYPE=cuda")
 {
     fc_counters fc;
 
-    run_fc_test(200, fc);
+    /* 16 fragments against a 4-fragment quota */
+    run_fc_test(16, fc);
 
     EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
-            << "throttling should have occurred with MAX_MEM=600mb";
+            << "throttling should have occurred with MAX_MEM=1M";
 
     verify_clean_fc_state();
 }

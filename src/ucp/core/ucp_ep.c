@@ -25,6 +25,7 @@
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucp/rma/rma.inl>
