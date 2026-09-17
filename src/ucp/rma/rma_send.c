@@ -183,6 +183,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
                                                    rkey_config->put_short.lane),
                               buffer, length, remote_addr, tl_rkey);
     if (status == UCS_OK) {
+        ucp_ep_fence_normalize_lanes(ep);
         ep->ext->unflushed_lanes |= UCS_BIT(rkey_config->put_short.lane);
     }
 
