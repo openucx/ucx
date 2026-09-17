@@ -1277,17 +1277,18 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
          ci = uct_ib_mlx5_txwq_next_wqe_index(ci, wqe_size)) {
         ctrl        = uct_ib_mlx5_txwq_get_wqe(txwq, ci);
         wqe_size    = uct_ib_mlx5_wqe_size(ctrl);
-        num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
-                                                  ctrl, wqe_size);
+
         if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_NOP) {
-            ucs_assertv_always(
-                    num_packets == 0,
-                    "ep %p qp 0x%x unexpected wqe opcode 0x%x num_packets %u",
-                    ep, txwq->super.qp_num, uct_ib_mlx5_wqe_opcode(ctrl),
-                    num_packets);
             uct_rc_mlx5_ep_purge_flushes(ep, ci);
             continue;
         }
+
+        num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
+                                                  ctrl, wqe_size);
+        ucs_assertv_always(num_packets != 0,
+                           "ep %p qp 0x%x unexpected 0-packet WQE opcode 0x%x ",
+                           ep, txwq->super.qp_num,
+                           uct_ib_mlx5_wqe_opcode(ctrl));
 
         op = uct_rc_mlx5_ep_outstanding_get_send_op(ep, ci);
         if (!uct_ib_mlx5_wqe_is_delivered(wqe_first_psn, receiver_next_psn,
