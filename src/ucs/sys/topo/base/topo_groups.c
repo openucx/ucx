@@ -13,10 +13,10 @@
 
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/datastruct/array.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/debug/table.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 
@@ -455,113 +455,81 @@ out_cleanup_numa_nodes:
 }
 
 static void
-ucs_topo_groups_append_device_names(const ucs_topo_sys_device_info_t *devices,
-                                    const ucs_sys_device_t *sys_devs,
-                                    size_t num_devices,
-                                    ucs_string_buffer_t *strb)
+ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
+                            const ucs_topo_group_element_t *element,
+                            size_t group_idx,
+                            ucs_topo_device_class_t device_class)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    const ucs_topo_sys_device_info_t *device;
+    ucs_sys_device_t sys_dev;
     size_t i;
 
-    if (num_devices > 1) {
-        ucs_string_buffer_appendf(strb, "[");
+    ucs_assert((device_class == UCS_TOPO_DEVICE_CLASS_ACC) ||
+               (device_class == UCS_TOPO_DEVICE_CLASS_NET));
+
+    ucs_string_buffer_reset(&strb);
+
+    if (element->num_sys_devs == 0) {
+        ucs_string_buffer_appendf(&strb, "<empty>");
+        goto out;
     }
 
-    for (i = 0; i < num_devices; ++i) {
-        ucs_string_buffer_appendf(strb, "%s%s", (i == 0) ? "" : ";",
-                                  devices[sys_devs[i]].name);
+    for (i = 0; i < element->num_sys_devs; ++i) {
+        sys_dev = element->sys_devs[i];
+        ucs_string_buffer_appendf(&strb, "%s/", devices[sys_dev].name);
     }
+    ucs_string_buffer_rtrim(&strb, "/");
 
-    if (num_devices > 1) {
-        ucs_string_buffer_appendf(strb, "]");
-    }
-}
-
-static void
-ucs_topo_groups_format_elements(const ucs_topo_sys_device_info_t *devices,
-                                const ucs_topo_group_element_array_t *elements,
-                                ucs_string_buffer_t *strb)
-{
-    const ucs_topo_group_element_t *element;
-    size_t i = 0;
-
-    ucs_array_for_each(element, elements) {
-        if (i++ > 0) {
-            ucs_string_buffer_appendf(strb, " ");
+    device = &devices[element->sys_devs[0]];
+    ucs_string_buffer_appendf(&strb, " bdf " UCS_SYS_BUS_ID_FMT,
+                              UCS_SYS_BUS_ID_ARG(&device->bus_id));
+    if (device_class == UCS_TOPO_DEVICE_CLASS_NET) {
+        for (i = 1; i < element->num_sys_devs; ++i) {
+            device = &devices[element->sys_devs[i]];
+            ucs_string_buffer_appendf(&strb, "/%u",
+                                      (unsigned)device->bus_id.function);
         }
-
-        ucs_topo_groups_append_device_names(devices, element->sys_devs,
-                                            element->num_sys_devs, strb);
-    }
-}
-
-ucs_status_t ucs_topo_groups_render(const ucs_topo_sys_device_info_t *devices,
-                                    const ucs_topo_groups_t *groups,
-                                    ucs_string_buffer_t *strb)
-{
-    const ucs_table_config_t table_config = {
-        .n_cols = 3
-    };
-    ucs_string_buffer_t gpus_strb         = UCS_STRING_BUFFER_INITIALIZER;
-    ucs_string_buffer_t nics_strb         = UCS_STRING_BUFFER_INITIALIZER;
-    const ucs_topo_group_t *group;
-    ucs_table_row_h row;
-    ucs_status_t status;
-    ucs_table_t table;
-    size_t group_idx;
-
-    ucs_table_init(&table, &table_config);
-
-    ucs_table_add_row(&table, &row);
-    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "Group #");
-    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "GPUs");
-    ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "NICs");
-    ucs_table_add_separator(&table);
-
-    if (ucs_array_is_empty(groups)) {
-        ucs_table_add_row(&table, &row);
-        ucs_table_row_add_cell_fmt(&table, row, table_config.n_cols,
-                                   UCS_TABLE_ALIGN_LEFT, "<empty>");
     }
 
-    group_idx = 0;
-    ucs_array_for_each(group, groups) {
-        ucs_string_buffer_reset(&gpus_strb);
-        ucs_string_buffer_reset(&nics_strb);
-        ucs_topo_groups_format_elements(devices, &group->gpus, &gpus_strb);
-        ucs_topo_groups_format_elements(devices, &group->nics, &nics_strb);
-
-        ucs_table_add_row(&table, &row);
-        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_RIGHT, "%zu",
-                                   group_idx++);
-        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                                   ucs_string_buffer_cstr(&gpus_strb));
-        ucs_table_row_add_cell_fmt(&table, row, 1, UCS_TABLE_ALIGN_LEFT, "%s",
-                                   ucs_string_buffer_cstr(&nics_strb));
+    ucs_string_buffer_appendf(&strb, " sys_dev ");
+    for (i = 0; i < element->num_sys_devs; ++i) {
+        ucs_string_buffer_appendf(&strb, "%u/", (unsigned)element->sys_devs[i]);
     }
+    ucs_string_buffer_rtrim(&strb, "/");
 
-    ucs_table_render(&table, strb);
-    status = ucs_table_get_status(&table);
-
-    ucs_table_cleanup(&table);
-    ucs_string_buffer_cleanup(&nics_strb);
-    ucs_string_buffer_cleanup(&gpus_strb);
-    return status;
+out:
+    ucs_debug("topology group %zu element: %s %s", group_idx,
+              (device_class == UCS_TOPO_DEVICE_CLASS_ACC) ? "gpu" : "nic",
+              ucs_string_buffer_cstr(&strb));
 }
 
 static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
                                 const ucs_topo_groups_t *groups)
 {
-    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-    ucs_status_t status;
+    const ucs_topo_group_element_t *element;
+    const ucs_topo_group_t *group;
+    size_t group_idx;
 
-    status = ucs_topo_groups_render(devices, groups, &strb);
-    if (status != UCS_OK) {
-        ucs_warn("topology groups table render incomplete: %s",
-                 ucs_status_string(status));
+    ucs_array_for_each_index(group, group_idx, groups) {
+        ucs_debug("topology group %zu: %zu gpus, %zu nics", group_idx,
+                  ucs_array_length(&group->gpus),
+                  ucs_array_length(&group->nics));
+
+        ucs_log_indent(1);
+
+        ucs_array_for_each(element, &group->gpus) {
+            ucs_topo_groups_log_element(devices, element, group_idx,
+                                        UCS_TOPO_DEVICE_CLASS_ACC);
+        }
+
+        ucs_array_for_each(element, &group->nics) {
+            ucs_topo_groups_log_element(devices, element, group_idx,
+                                        UCS_TOPO_DEVICE_CLASS_NET);
+        }
+
+        ucs_log_indent(-1);
     }
-
-    ucs_log_print_compact(ucs_string_buffer_cstr(&strb));
-    ucs_string_buffer_cleanup(&strb);
 }
 
 ucs_status_t

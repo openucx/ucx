@@ -213,19 +213,6 @@ protected:
                                            &m_groups);
     }
 
-    std::string render()
-    {
-        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
-        ucs_status_t status;
-
-        status = ucs_topo_groups_render(m_devices.data(), &m_groups, &strb);
-        EXPECT_EQ(UCS_OK, status);
-
-        std::string out(ucs_string_buffer_cstr(&strb));
-        ucs_string_buffer_cleanup(&strb);
-        return out;
-    }
-
     void expect_group(const ucs_topo_group_t &group,
                       const std::vector<physical_device> &expected_gpus,
                       const std::vector<physical_device> &expected_nics)
@@ -322,78 +309,4 @@ UCS_TEST_F(test_topo_groups, nic_only_group) {
     ASSERT_UCS_OK(build());
     ASSERT_EQ(1, ucs_array_length(&m_groups));
     expect_group(ucs_array_elem(&m_groups, 0), {}, {{port0, port1}});
-}
-
-UCS_TEST_F(test_topo_groups, table) {
-    const ucs_sys_bus_id_t gpu0_bus_id    = {0, 1, 0, 0};
-    const ucs_sys_bus_id_t gpu1_bus_id    = {0, 2, 0, 0};
-    const ucs_sys_bus_id_t nic0_port0_bdf = {0, 3, 0, 0};
-    const ucs_sys_bus_id_t nic0_port1_bdf = {0, 3, 0, 1};
-    const ucs_sys_bus_id_t nic1_bus_id    = {0, 4, 0, 0};
-    const ucs_sys_bus_id_t gpu2_bus_id    = {0, 5, 0, 0};
-    const ucs_sys_bus_id_t nic2_bus_id    = {0, 6, 0, 0};
-
-    add_device("gpu0.1", gpu0_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 1);
-    add_device("gpu0.0", gpu0_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 0);
-    add_device("gpu1", gpu1_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 0);
-    add_device("gpu2", gpu2_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 1, nullptr, 0);
-    add_device("nic0.1", nic0_port1_bdf, UCS_TOPO_DEVICE_CLASS_NET, 0,
-               &pci_id_cx9, UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-    add_device("nic0.0", nic0_port0_bdf, UCS_TOPO_DEVICE_CLASS_NET, 0,
-               &pci_id_cx9, UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-    add_device("nic1", nic1_bus_id, UCS_TOPO_DEVICE_CLASS_NET, 0, &pci_id_cx9,
-               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-    add_device("nic2", nic2_bus_id, UCS_TOPO_DEVICE_CLASS_NET, 1, &pci_id_cx9,
-               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-
-    {
-        /* Exercise the debug-log integration in addition to the renderer. */
-        ucs::scoped_log_level log_level(UCS_LOG_LEVEL_DEBUG);
-        ASSERT_UCS_OK(build());
-    }
-
-    /* clang-format off */
-    EXPECT_EQ("+---------+----------------------+----------------------+\n"
-              "| Group # | GPUs                 | NICs                 |\n"
-              "+---------+----------------------+----------------------+\n"
-              "|       0 | [gpu0.0;gpu0.1] gpu1 | [nic0.0;nic0.1] nic1 |\n"
-              "|       1 | gpu2                 | nic2                 |\n"
-              "+---------+----------------------+----------------------+",
-              render());
-    /* clang-format on */
-}
-
-UCS_TEST_F(test_topo_groups, table_empty_columns) {
-    const ucs_sys_bus_id_t gpu_bus_id = {0, 1, 0, 0};
-    const ucs_sys_bus_id_t nic_bus_id = {0, 2, 0, 0};
-    ucs_topo_group_t *empty_group;
-
-    add_device("gpu", gpu_bus_id, UCS_TOPO_DEVICE_CLASS_ACC, 0, nullptr, 0);
-    add_device("nic", nic_bus_id, UCS_TOPO_DEVICE_CLASS_NET, 1, &pci_id_cx9,
-               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-
-    ASSERT_UCS_OK(build());
-
-    empty_group = ucs_array_append(&m_groups, FAIL());
-    ucs_topo_init_group(empty_group);
-
-    EXPECT_EQ("+---------+------+------+\n"
-              "| Group # | GPUs | NICs |\n"
-              "+---------+------+------+\n"
-              "|       0 | gpu  |      |\n"
-              "|       1 |      | nic  |\n"
-              "|       2 |      |      |\n"
-              "+---------+------+------+",
-              render());
-}
-
-UCS_TEST_F(test_topo_groups, table_empty) {
-    ASSERT_UCS_OK(build());
-
-    EXPECT_EQ("+---------+------+------+\n"
-              "| Group # | GPUs | NICs |\n"
-              "+---------+------+------+\n"
-              "| <empty>               |\n"
-              "+---------+------+------+",
-              render());
 }
