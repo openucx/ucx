@@ -114,6 +114,9 @@ ucs_config_field_t ucs_config_rcache_table[] = {
      "Purge registration cache upon fork",
      ucs_offsetof(ucs_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
 
+    {"RCACHE_MERGE_ADJACENT", "n", "Merge adjacent registration cache regions",
+     ucs_offsetof(ucs_rcache_config_t, merge_adjacent), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -191,8 +194,14 @@ void ucs_rcache_set_params(ucs_rcache_params_t *rcache_params,
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
     rcache_params->max_unreleased     = rcache_config->max_unreleased;
-    rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
-                                        UCS_RCACHE_FLAG_PURGE_ON_FORK;
+
+    if (rcache_config->purge_on_fork) {
+        rcache_params->flags |= UCS_RCACHE_FLAG_PURGE_ON_FORK;
+    }
+
+    if (rcache_config->merge_adjacent) {
+        rcache_params->flags |= UCS_RCACHE_FLAG_MERGE_ADJACENT;
+    }
 }
 
 static size_t ucs_rcache_stat_max_pow2()
@@ -817,11 +826,48 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     return UCS_OK;
 }
 
+static int ucs_rcache_check_adj_size(ucs_pgt_addr_t start, ucs_pgt_addr_t end,
+                                     const ucs_rcache_region_t *adj_region)
+{
+    return (end - start) >= (adj_region->super.end - adj_region->super.start);
+}
+
+static void ucs_rcache_check_adj_regions(ucs_rcache_t *rcache,
+                                         ucs_pgt_addr_t start,
+                                         ucs_pgt_addr_t end, size_t alignment,
+                                         ucs_list_link_t *list)
+{
+    ucs_pgt_region_t *pgt_left, *pgt_right;
+    ucs_rcache_region_t *region_left, *region_right;
+
+    pgt_left  = ucs_pgtable_lookup(&rcache->pgtable, start - 1);
+    pgt_right = ucs_pgtable_lookup(&rcache->pgtable, end);
+
+    if (pgt_left != NULL && pgt_right == NULL) {
+        region_left = ucs_derived_of(pgt_left, ucs_rcache_region_t);
+        if (ucs_rcache_check_adj_size(start, end, region_left)) {
+            ucs_list_add_tail(list, &region_left->tmp_list);
+        }
+    } else if (pgt_left == NULL && pgt_right != NULL) {
+        region_right = ucs_derived_of(pgt_right, ucs_rcache_region_t);
+        if (ucs_rcache_check_adj_size(start, end, region_right)) {
+            ucs_list_add_tail(list, &region_right->tmp_list);
+        }
+    } else if (pgt_left != NULL && pgt_right != NULL) {
+        /* Fill in a gap between two existing registrations */
+        region_left  = ucs_derived_of(pgt_left, ucs_rcache_region_t);
+        region_right = ucs_derived_of(pgt_right, ucs_rcache_region_t);
+        ucs_list_add_tail(list, &region_left->tmp_list);
+        ucs_list_add_tail(list, &region_right->tmp_list);
+    }
+}
+
 /* Lock must be held */
 static ucs_status_t
-ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
-                         ucs_pgt_addr_t *end, size_t *alignment, int *prot,
-                         int *merged, ucs_rcache_region_t **region_p)
+ucs_rcache_check_neighbors(ucs_rcache_t *rcache, void *arg,
+                           ucs_pgt_addr_t *start, ucs_pgt_addr_t *end,
+                           size_t *alignment, int *prot, int *merged,
+                           ucs_rcache_region_t **region_p)
 {
     ucs_rcache_region_t *region, *tmp;
     ucs_pgt_addr_t old_start, old_end;
@@ -874,6 +920,13 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, void *arg, ucs_pgt_addr_t *start,
         ucs_list_head_init(&region_list);
         ucs_rcache_find_regions(rcache, *start, old_start - 1, &region_list);
         ucs_rcache_find_regions(rcache, old_end, *end - 1, &region_list);
+
+        if (rcache->params.flags & UCS_RCACHE_FLAG_MERGE_ADJACENT) {
+            if (ucs_list_is_empty(&region_list)) {
+                ucs_rcache_check_adj_regions(rcache, *start, *end, *alignment,
+                                             &region_list);
+            }
+        }
     } while (!ucs_list_is_empty(&region_list));
 
     return UCS_OK;
@@ -937,7 +990,7 @@ retry:
     /* Check overlap with existing regions */
     /* coverity[double_unlock] */
     /* coverity[double_lock] */
-    status = UCS_PROFILE_CALL(ucs_rcache_check_overlap, rcache, arg, &start,
+    status = UCS_PROFILE_CALL(ucs_rcache_check_neighbors, rcache, arg, &start,
                               &end, &alignment, &prot, &merged, &region);
     if (status == UCS_ERR_ALREADY_EXISTS) {
         /* Found a matching region (it could have been added after we released

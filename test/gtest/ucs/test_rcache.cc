@@ -24,7 +24,8 @@ get_default_rcache_params(void *context, const ucs_rcache_ops_t *ops)
                                   1000,
                                   ops,
                                   context,
-                                  0,
+                                  /* Temp for testing merge code. */
+                                  UCS_RCACHE_FLAG_MERGE_ADJACENT,
                                   ULONG_MAX,
                                   SIZE_MAX};
 
@@ -405,6 +406,100 @@ UCS_MT_TEST_F(test_rcache, merge, 6) {
     put(region3);
 
     munmap(mem, size1 + pad + size2);
+}
+
+UCS_TEST_F(test_rcache, merge_adjacent) {
+    /*
+     * 0          1          2              256 pages
+     * +----------+----------+-------------+-----------+
+     * | region0  | region1  |     ...     | region255 |
+     * +----------+----------+-------------+-----------+
+     *
+     * Add 256 regions in ascending order and verify that they are merged into a single region. 
+     */
+    static const size_t region_count = 256;
+    static const size_t size         = ucs_get_page_size();
+    static const size_t total_size   = region_count * size;
+    void *mem                        = NULL;
+
+    void *ptrs[region_count];
+    region *regions[region_count];
+    region *regions_2[region_count];
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    for (size_t i = 0; i < region_count; ++i) {
+        ptrs[i]    = (char*)mem + i * size;
+        regions[i] = get(ptrs[i], size);
+    }
+
+    region *last = regions[region_count - 1];
+
+    EXPECT_EQ(last->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(last->super.super.end, (uintptr_t)mem + total_size);
+
+    for (size_t i = 0; i < region_count - 1; ++i) {
+        regions_2[i] = get(ptrs[i], size);
+        EXPECT_NE(regions_2[i], regions[i]);
+        EXPECT_EQ(regions_2[i], last);
+    }
+
+    for (size_t i = 0; i < region_count - 1; ++i) {
+        put(regions[i]);
+        put(regions_2[i]);
+    }
+    put(last);
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache, merge_adjacent_high_to_low) {
+    /*
+     * 0          1          2              256 pages
+     * +----------+----------+-------------+-----------+
+     * | region0  | region1  |     ...     | region255 |
+     * +----------+----------+-------------+-----------+
+     *
+     * Add 256 regions in descending order and verify that they are merged
+     * into a single region.
+     */
+    static const size_t region_count = 256;
+    static const size_t size         = ucs_get_page_size();
+    static const size_t total_size   = region_count * size;
+    void *mem                        = NULL;
+
+    void *ptrs[region_count];
+    region *regions[region_count];
+    region *regions_2[region_count];
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    for (size_t i = region_count; i > 0; --i) {
+        size_t idx   = i - 1;
+        ptrs[idx]    = (char*)mem + idx * size;
+        regions[idx] = get(ptrs[idx], size);
+    }
+
+    region *last = regions[0];
+
+    EXPECT_EQ(last->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(last->super.super.end, (uintptr_t)mem + total_size);
+
+    for (size_t i = 1; i < region_count; ++i) {
+        regions_2[i] = get(ptrs[i], size);
+        EXPECT_NE(regions_2[i], regions[i]);
+        EXPECT_EQ(regions_2[i], last);
+    }
+
+    for (size_t i = 1; i < region_count; ++i) {
+        put(regions[i]);
+        put(regions_2[i]);
+    }
+    put(last);
+
+    free(mem);
 }
 
 UCS_TEST_F(test_rcache, merge_aligned)
