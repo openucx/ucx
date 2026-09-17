@@ -491,11 +491,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_update_psn(uct_ib_mlx5_txwq_t *txwq, int qp_type,
                             size_t message_length)
 {
-    if (qp_type == IBV_QPT_RC) {
-        uct_rc_mlx5_txwq_add_psn(txwq, qp_type,
-                                 uct_rc_mlx5_num_packets(txwq, qp_type,
-                                                         message_length));
-    }
+    uct_rc_mlx5_txwq_add_psn(txwq, qp_type,
+                             uct_rc_mlx5_num_packets(txwq, qp_type,
+                                                     message_length));
 }
 
 static UCS_F_ALWAYS_INLINE void
