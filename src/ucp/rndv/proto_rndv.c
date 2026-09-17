@@ -46,8 +46,6 @@ int ucp_proto_rndv_mtype_fc_reschedule_filter(
         return 0;
     }
 
-    ucs_assertv(0, "ep %p still has mtype FC reschedule callback for req %p",
-                arg, elem->arg);
     ucs_error("ep %p still has mtype FC reschedule callback for req %p", arg,
               elem->arg);
     return 1;

@@ -1183,10 +1183,6 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     status = ucs_mpool_init(&mp_params, mpool);
     if (status != UCS_OK) {
         kh_del(ucp_worker_mpool_hash, &worker->mpool_hash, khiter);
-        if (status == UCS_ERR_NO_RESOURCE) {
-            status = UCS_ERR_NO_MEMORY;
-        }
-
         goto err;
     }
 
