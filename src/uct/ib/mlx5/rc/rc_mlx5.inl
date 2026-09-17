@@ -461,6 +461,15 @@ uct_rc_mlx5_num_packets(const uct_ib_mlx5_txwq_t *txwq,
     return (message_length + txwq->path_mtu_mask) >> txwq->path_mtu_shift;
 }
 
+static UCS_F_ALWAYS_INLINE uint32_t uct_rc_mlx5_rma_num_packets(
+        const uct_ib_mlx5_txwq_t *txwq, size_t message_length)
+{
+    /* A zero-length RDMA read or write still consumes one packet/PSN */
+    return (message_length == 0) ?
+                   1 :
+                   uct_rc_mlx5_num_packets(txwq, message_length);
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_txwq_add_psn(uct_ib_mlx5_txwq_t *txwq, int qp_type,
                          uint32_t num_packets)
@@ -868,7 +877,8 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     struct mlx5_wqe_inl_data_seg *inl;
     uct_rc_mlx5_hdr_t            *rch;
     unsigned                     wqe_size, inl_seg_size, ctrl_av_size;
-    size_t                       iov_length, message_length;
+    size_t                       num_packets;
+    size_t                       iov_length;
     void                         *next_seg;
     uint8_t                      opmod;
 #if HAVE_MLX5_MMO
@@ -905,25 +915,30 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                            uct_ib_mlx5_set_data_seg_iov(
                                    txwq, dptr, iov, iovcnt, &iov_length);
         opmod            = 0;
-        message_length   = iov_length + sizeof(*rch) + am_hdr_len;
 
-        ucs_assert(message_length <= iface->super.super.config.seg_size);
+        ucs_assert((iov_length + sizeof(*rch) + am_hdr_len) <=
+                   iface->super.super.config.seg_size);
         ucs_assert(wqe_size <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE);
+
+        num_packets = uct_rc_mlx5_num_packets(txwq, iov_length + sizeof(*rch) +
+                                                            am_hdr_len);
         break;
 
 #if IBV_HW_TM
     case MLX5_OPCODE_SEND|UCT_RC_MLX5_OPCODE_FLAG_TM:
     case MLX5_OPCODE_SEND_IMM|UCT_RC_MLX5_OPCODE_FLAG_TM:
-        inl_seg_size     = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_tmh),
-                                             UCT_IB_MLX5_WQE_SEG_SIZE);
-        inl              = next_seg;
-        inl->byte_count  = htonl(sizeof(struct ibv_tmh) | MLX5_INLINE_SEG);
-        dptr             = uct_ib_mlx5_txwq_wrap_exact(txwq, (char *)inl + inl_seg_size);
-        wqe_size         = ctrl_av_size + inl_seg_size +
-                           uct_ib_mlx5_set_data_seg_iov(
-                                   txwq, dptr, iov, iovcnt, &iov_length);
-        opmod            = 0;
-        message_length   = iov_length + sizeof(struct ibv_tmh);
+        inl_seg_size = ucs_align_up_pow2(sizeof(*inl) + sizeof(struct ibv_tmh),
+                                         UCT_IB_MLX5_WQE_SEG_SIZE);
+        inl          = next_seg;
+        inl->byte_count = htonl(sizeof(struct ibv_tmh) | MLX5_INLINE_SEG);
+        dptr = uct_ib_mlx5_txwq_wrap_exact(txwq, (char*)inl + inl_seg_size);
+        wqe_size    = ctrl_av_size + inl_seg_size +
+                      uct_ib_mlx5_set_data_seg_iov(txwq, dptr, iov, iovcnt,
+                                                   &iov_length);
+        opmod       = 0;
+        num_packets = uct_rc_mlx5_num_packets(txwq,
+                                              iov_length +
+                                                      sizeof(struct ibv_tmh));
 
         uct_rc_mlx5_fill_tmh((struct ibv_tmh*)(inl + 1), tag, app_ctx,
                              IBV_TMH_EAGER);
@@ -941,11 +956,11 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 
         /* Data segment */
         wqe_size = ctrl_av_size + sizeof(*raddr) +
-                   uct_ib_mlx5_set_data_seg_iov(
-                           txwq, (void*)(raddr + 1), iov, iovcnt,
-                           &message_length);
-        opmod    = 0;
-        ucs_assert(message_length <= UCT_IB_MAX_MESSAGE_SIZE);
+                   uct_ib_mlx5_set_data_seg_iov(txwq, (void*)(raddr + 1), iov,
+                                                iovcnt, &iov_length);
+        ucs_assert(iov_length <= UCT_IB_MAX_MESSAGE_SIZE);
+        opmod       = 0;
+        num_packets = uct_rc_mlx5_rma_num_packets(txwq, iov_length);
         break;
 
 #if HAVE_MLX5_MMO
@@ -982,7 +997,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         wqe_size       = sizeof(*ctrl) + sizeof(*dma_seg) +
                          (2 * sizeof(*dptr));
         opmod          = UCT_IB_MLX5_OPMOD_MMO_DMA;
-        message_length = 0;
+        num_packets    = 0;
         break;
 #endif
     default:
@@ -999,12 +1014,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
     }
 #endif
 
-    uct_rc_mlx5_txwq_update_psn(txwq, qp_type, message_length);
-    if (opcode_flags == MLX5_OPCODE_RDMA_WRITE) {
-        /* opcode_flags is constant after inlining, so only zero-length
-         * PUT_ZCOPY gets the branchless one-PSN adjustment. */
-        uct_rc_mlx5_txwq_add_psn(txwq, qp_type, !message_length);
-    }
+    uct_rc_mlx5_txwq_add_psn(txwq, qp_type, num_packets);
 }
 
 /*
