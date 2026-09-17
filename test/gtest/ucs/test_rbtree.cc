@@ -248,6 +248,8 @@ UCS_TEST_F(test_rbtree, random_stress) {
         const uint64_t probe = ucs::rand() % 100000;
         node *found          = find(probe);
         EXPECT_EQ(live.find(probe) != live.end(), found != NULL);
+
+        ASSERT_FALSE(HasFailure());
     }
 
     validate();

@@ -13,7 +13,7 @@
 BEGIN_C_DECLS
 
 /**
- * Intrusive red-black tree.
+ * Node of an intrusive red-black tree, embedded in the container structure.
  */
 typedef struct ucs_rbtree_node ucs_rbtree_node_t;
 
@@ -32,6 +32,9 @@ struct ucs_rbtree_node {
 };
 
 
+/**
+ * Intrusive red-black tree.
+ */
 typedef struct {
     ucs_rbtree_node_t *root; /**< Root node, NULL when empty */
 } ucs_rbtree_t;
