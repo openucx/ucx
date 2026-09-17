@@ -578,8 +578,15 @@ typedef struct ucp_ep_ext {
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
                                                       unflushed operations */
+    uint64_t                      lane_generation; /* Incremented whenever a lane
+                                                      is updated */
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
+
+    ucs_queue_head_t              fence_pending_q; /* Fence-blocked requests */
+    ucp_request_t                 *fence_inflight_req; /* Active fence flush */
+    ucs_status_t                  fence_status; /* Current/last flush status */
+    uint8_t                       fence_pending_scheduled; /* Progress armed */
 
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
@@ -772,6 +779,21 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags);
 
+/**
+ * @brief Flush a subset of endpoint lanes specified by @a lane_mask.
+ *
+ * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
+ * @a lane_mask are initially flushed. If the endpoint topology changes while
+ * the flush is active, current live lanes are added conservatively.
+ */
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask);
+
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
@@ -953,6 +975,9 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
  */
 void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
+void ucp_ep_fence_pending_add(ucp_ep_h ep, uct_pending_req_t *req);
+void ucp_ep_fence_pending_purge(ucp_ep_h ep, ucs_status_t status);
+void ucp_ep_fence_pending_resume(ucp_ep_h ep);
 
 /**
  * @brief Query local and/or remote socket address of endpoint @a ucp_ep.
