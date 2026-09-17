@@ -426,6 +426,8 @@ void ucs_table_render(ucs_table_t *table, ucs_string_buffer_t *strb)
         (ucs_array_last(&table->entries)->kind != UCS_TABLE_ENTRY_SEPARATOR)) {
         ucs_table_render_separator(table, widths, 0, strb);
     }
+
+    ucs_string_buffer_rtrim(strb, "\n");
 }
 
 void ucs_table_print(ucs_table_t *table)
@@ -435,6 +437,6 @@ void ucs_table_print(ucs_table_t *table)
     CHECK_STATUS(table);
 
     ucs_table_render(table, &strb);
-    printf("%s", ucs_string_buffer_cstr(&strb));
+    printf("%s\n", ucs_string_buffer_cstr(&strb));
     ucs_string_buffer_cleanup(&strb);
 }

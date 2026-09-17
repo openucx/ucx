@@ -24,6 +24,7 @@ Changcheng Liu <jerrliu@nvidia.com>
 Colin Hirsch <chirsch@nvidia.com>
 Corey J. Nolet <cjnolet@gmail.com>
 Daniel Pressler <danielpr@nvidia.com>
+David DeBonis <ddebonis@amd.com>
 David Wootton <dwootton@us.ibm.com>
 Devendar Bureddy <devendar@mellanox.com>
 Devesh Sharma <devesh.sharma@broadcom.com>
@@ -43,6 +44,7 @@ Gonzalo Brito Gadeschi <gonzalob@nvidia.com>
 Graham Lopez <lopezmg@ornl.gov>
 Guy Ealey Morag <gealeymorag@nvidia.com>
 Guy Shattah <sguy@mellanox.com>
+Hannes Hansen <mail@hannesh.de>
 Hessam Mirsadeghi <hmirsadeghi@nvidia.com>
 Hiroyuki Sato <hiroysato@gmail.com>
 Hod Badihi <hbadihi@nvidia.com>
@@ -58,6 +60,7 @@ Ivan Kochin <ikochin@nvidia.com>
 Jakir Kham <jakirkham@gmail.com>
 Jason Gunthorpe <jgg@mellanox.com>
 Jeff Daily <jeff.daily@amd.com>
+Jeffrey Mahou <jmahou@nvidia.com>
 Jianxin Xiong <jianxin.xiong@intel.com>
 John Snyder <jms285@duke.edu>
 Jonas Zhou <JonasZhou@zhaoxin.com>
@@ -84,8 +87,10 @@ Min Fang <minf@nvidia.com>
 Nathan Bellalou <nbellalou@nvidia.com>
 Nathan Hjelm <hjelmn@lanl.gov>
 Netanel Yosephian <netanelyo@mellanox.com>
+Nicolas 'Pixel' Noble <nicolas@nobis-crew.org>
 Nicolas Morey <nmorey@suse.com>
 Nir Wolfer <nwolfer@nvidia.com>
+Noam Tsemah <ntsemah@nvidia.com>
 Ofir Farjon <ofarjon@nvidia.com>
 Olly Perks <olly.perks@arm.com>
 Or Balayla <obalayla@nvidia.com>
@@ -139,6 +144,7 @@ Zihao Zhao <zizhao@nvidia.com>
 lzhang2 <cherry.zhang@intel.com>
 michaelzli <michaelzli@tencent.com>
 svc-ucx-bot <svc-ucx-bot@nvidia.com>
+ybenabou <ybenabou@nvidia.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and

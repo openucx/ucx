@@ -58,17 +58,6 @@ public:
         }
     }
 
-    void wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_idx)
-    {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(60) * ucs::test_time_multiplier();
-        void *ud_ep_tmp GTEST_ATTRIBUTE_UNUSED_;
-
-        while ((ucs_get_time() < deadline) &&
-               ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp)) {
-            usleep(1000);
-        }
-    }
 };
 
 int test_ud_timer::rx_limit = 10;
@@ -108,7 +97,7 @@ UCS_TEST_P(test_ud_timer, ep_destroy, "UD_LINGER_TIMEOUT=1s") {
     uct_ud_ep_t    *ud_ep = ep(m_e1);
     uct_ud_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                            uct_ud_iface_t);
-    uint32_t       ep_idx = ud_ep->ep_id;
+    uint32_t       ep_idx = uct_ud_ep_id_to_index(ud_ep->ep_id);
     EXPECT_TRUE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 
     m_e1->destroy_eps();

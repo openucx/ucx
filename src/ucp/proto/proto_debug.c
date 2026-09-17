@@ -271,9 +271,6 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
 
     ucs_table_render(&table, strb);
 
-    /* remove trailing newline */
-    ucs_string_buffer_rtrim(strb, "\n");
-
     ucs_table_cleanup(&table);
 }
 
@@ -368,7 +365,9 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         [ucs_ilog2(UCP_OP_ATTR_FLAG_MULTI_SEND)] = "multi",
     };
     static const char *rndv_flag_names[] = {
-        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag"
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)] = "frag",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV)]  = "tag-rndv",
+        [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)]   = "am-rndv"
     };
     static const char *am_flag_names[]   = {
         [ucs_ilog2(UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)] = "egr",

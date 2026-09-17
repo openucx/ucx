@@ -52,7 +52,11 @@ typedef struct uct_rc_mlx5_base_ep {
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
+    uint8_t                  err_handler_inprogress;
 } uct_rc_mlx5_base_ep_t;
+
+typedef __be32 uct_rc_mlx5_tx_token_t;
+typedef __be32 uct_rc_mlx5_rx_token_t;
 
 
 /**
@@ -205,6 +209,9 @@ ucs_status_t
 uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                const uct_ep_invalidate_params_t *params);
 
+ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
+        uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params);
+
 ucs_status_t uct_rc_mlx5_base_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                          uct_rc_pending_req_t *req);
 
@@ -212,6 +219,9 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_txwq_t *txwq,
                                          uct_ib_mlx5_qp_attr_t *attr);
+
+void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,
+                                   enum ibv_mtu path_mtu);
 
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
@@ -255,6 +265,8 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                              unsigned flags);
 
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
+
+ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr);
 
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 

@@ -204,6 +204,9 @@ UCS_TEST_P(test_mem, md_fixed) {
                     memset(uct_mem.address, 'c', uct_mem.length);
                     EXPECT_EQ(*(char*)curr_addr, 'c');
                     status = uct_mem_free(&uct_mem);
+                    if (status == UCS_OK) {
+                        p_addr.mark_unmapped(uct_mem.address, uct_mem.length);
+                    }
                 } else {
                     EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
                 }
@@ -262,6 +265,8 @@ UCS_TEST_P(test_mem, mmap_fixed) {
             if (status != UCS_OK) {
                 UCS_TEST_ABORT("uct_mem_free failed to release memory region");
             }
+
+            p_addr.mark_unmapped(uct_mem.address, uct_mem.length);
         } else {
             EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
         }

@@ -26,6 +26,12 @@
 #define UCP_MAX_IOV                16UL
 
 
+/* Print an ep lane, using a caller-provided string buffer as scratch space */
+#define UCP_EP_LANE_FMT "ep %p: %s"
+#define UCP_EP_LANE_ARG(_ep, _lane, _strb) \
+    (_ep), ucp_ep_get_lane_info_str(_ep, _lane, _strb)
+
+
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;
@@ -169,6 +175,7 @@ enum {
                                                            transports for AM lane */
     UCP_EP_INIT_ERR_MODE_FAILOVER      = UCS_BIT(11), /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_FAILOVER */
+    UCP_EP_INIT_RECOVERY               = UCS_BIT(12),
 
     /**
      * For consistency with @ref UCP_SA_DATA_MASK_ERR_MODE_FAILOVER
@@ -366,8 +373,8 @@ KHASH_DECLARE(ucp_ep_peer_mem_hash, uint64_t, ucp_ep_peer_mem_data_t);
 
 
 typedef enum {
-    /* Protocol initialization was done */
-    UCP_EP_PROTO_INITIALIZED = UCS_BIT(0),
+    /* Protocol short-circuit path initialization was done */
+    UCP_EP_PROTO_SHORT_INITIALIZED = UCS_BIT(0),
 } ucp_ep_init_flags_t;
 
 
@@ -492,10 +499,32 @@ typedef struct {
 } ucp_ep_flush_state_t;
 
 
+typedef struct ucp_ep_recovery_probe {
+    uct_completion_t  comp;
+    ucp_ep_h          ep;
+    ucp_lane_index_t  lane;
+} ucp_ep_recovery_probe_t;
+
+
+enum {
+    UCP_EP_RECOVERY_STATE_IDLE,
+    UCP_EP_RECOVERY_STATE_WAIT_REPLY,
+    UCP_EP_RECOVERY_STATE_PROBING,
+    UCP_EP_RECOVERY_STATE_PROBE_OK
+};
+
+
 /* Per-EP recovery retry state. */
 typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
-    unsigned    retries_left;
+    unsigned                retries_left;
+    uint8_t                 state;
+    /* Generation of the LANES_ADDR exchange, pre-incremented by every request
+     * and echoed by the peer in its answers. Only carried on the wire for now,
+     * the follow-up patch matches it against the tokens of an answer to tell
+     * apart the round they belong to */
+    uint32_t                request_id;
+    ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
 
@@ -598,6 +627,8 @@ typedef struct ucp_ep {
         /* How many UCT EP discarding operations are in-progress scheduled for
          * the EP */
         unsigned                      discard;
+        /* How many recovery aux probes are in-progress on the EP */
+        unsigned                      probe;
     } refcounts;
 #endif
 
@@ -769,6 +800,9 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key);
 
+void ucp_ep_config_proto_short_lazy_init(ucp_worker_h worker,
+                                         ucp_worker_cfg_index_t cfg_index);
+
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
 int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
@@ -840,8 +874,8 @@ size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
 
-void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                              ucs_string_buffer_t *lane_info_strb);
+const char *ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_string_buffer_t *lane_info_strb);
 
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
@@ -1003,6 +1037,12 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Notify recovery progress that a lanes-address reply was received.
+ */
+void ucp_ep_recovery_on_reply_received(ucp_ep_h ep);
 
 
 /**

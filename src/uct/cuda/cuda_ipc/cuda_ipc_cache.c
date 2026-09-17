@@ -250,7 +250,8 @@ static void uct_cuda_ipc_cache_evict_lru(uct_cuda_ipc_cache_t *cache)
     }
 }
 
-static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
+static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache,
+                                     int close_handles)
 {
     uct_cuda_ipc_cache_region_t *region, *tmp;
     ucs_list_link_t region_list;
@@ -259,7 +260,10 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        uct_cuda_ipc_close_memhandle(region);
+        if (close_handles) {
+            uct_cuda_ipc_close_memhandle(region);
+        }
+
         ucs_free(region);
     }
 
@@ -743,7 +747,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
             if (ucs_unlikely(status != UCS_OK)) {
                 if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
                     /* unmap all cache entries and retry */
-                    uct_cuda_ipc_cache_purge(cache);
+                    uct_cuda_ipc_cache_purge(cache, 1);
                     status = uct_cuda_ipc_open_memhandle(
                             ext_key, cu_dev, (CUdeviceptr*)mapped_addr,
                             log_level);
@@ -909,9 +913,9 @@ err:
     return status;
 }
 
-void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache)
+void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache, int close_handles)
 {
-    uct_cuda_ipc_cache_purge(cache);
+    uct_cuda_ipc_cache_purge(cache, close_handles);
     ucs_pgtable_cleanup(&cache->pgtable);
     pthread_rwlock_destroy(&cache->lock);
     free(cache->name);
@@ -925,50 +929,6 @@ void uct_cuda_ipc_cache_set_global_limits(unsigned long max_regions,
                                                     max_regions);
     uct_cuda_ipc_remote_cache.max_size    = ucs_min(uct_cuda_ipc_remote_cache.max_size,
                                                     max_size);
-}
-
-void uct_cuda_ipc_destroy_cache_by_iface_address(
-        const uct_cuda_ipc_iface_address_t *iface_address)
-{
-    uct_cuda_ipc_cache_hash_key_t cache_hash_key;
-    int num_devices;
-    ucs_status_t status;
-    int device_index;
-    CUdevice cuda_device;
-    khint_t khiter;
-    uct_cuda_ipc_cache_t *cache;
-
-    cache_hash_key.pid    = iface_address->pid;
-    cache_hash_key.pid_ns = iface_address->pid_ns;
-
-    status = UCT_CUDADRV_FUNC_LOG_WARN(cuDeviceGetCount(&num_devices));
-    if (status != UCS_OK) {
-        return;
-    }
-
-    ucs_rw_spinlock_write_lock(&uct_cuda_ipc_remote_cache.lock);
-
-    for (device_index = 0; device_index < num_devices; ++device_index) {
-        status = UCT_CUDADRV_FUNC_LOG_WARN(
-                cuDeviceGet(&cuda_device, device_index));
-        if (status != UCS_OK) {
-            continue;
-        }
-
-        cache_hash_key.cu_device = cuda_device;
-
-        khiter = kh_get(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash,
-                        cache_hash_key);
-        if (khiter == kh_end(&uct_cuda_ipc_remote_cache.hash)) {
-            continue;
-        }
-
-        cache = kh_val(&uct_cuda_ipc_remote_cache.hash, khiter);
-        uct_cuda_ipc_destroy_cache(cache);
-        kh_del(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash, khiter);
-    }
-
-    ucs_rw_spinlock_write_unlock(&uct_cuda_ipc_remote_cache.lock);
 }
 
 UCS_STATIC_INIT {
@@ -989,6 +949,7 @@ UCS_STATIC_INIT {
 
 UCS_STATIC_CLEANUP {
     uct_cuda_ipc_cache_t *rem_cache;
+    int num_devices, close_handles;
 
 #if HAVE_CUDA_FABRIC
     CUmemoryPool mpool;
@@ -1001,8 +962,14 @@ UCS_STATIC_CLEANUP {
     pthread_rwlock_destroy(&uct_cuda_ipc_rem_mpool_cache.lock);
 #endif
 
+    /* There is no guarantee that this cleanup happens before the CUDA driver
+     * shutdown. If the driver is already deinitialized, the memory handles
+     * cannot be closed, and there is no need to do it, because the driver
+     * releases all the mappings anyway. */
+    close_handles = (cuDeviceGetCount(&num_devices) != CUDA_ERROR_DEINITIALIZED);
+
     kh_foreach_value(&uct_cuda_ipc_remote_cache.hash, rem_cache, {
-        uct_cuda_ipc_destroy_cache(rem_cache);
+        uct_cuda_ipc_destroy_cache(rem_cache, close_handles);
     })
     kh_destroy_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
     ucs_rw_spinlock_cleanup(&uct_cuda_ipc_remote_cache.lock);

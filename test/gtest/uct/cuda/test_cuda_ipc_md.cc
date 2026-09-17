@@ -4,8 +4,13 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_vmm_mem_buffer.h"
 
+#include <cuda_runtime.h>
 #include <thread>
 #include <vector>
 
@@ -406,7 +411,7 @@ protected:
     virtual void cleanup() {
         if (m_cache != NULL) {
             drain_cache();
-            uct_cuda_ipc_destroy_cache(m_cache);
+            uct_cuda_ipc_destroy_cache(m_cache, 1);
         }
         uct_cuda_ipc_cache_set_global_limits(ULONG_MAX, SIZE_MAX);
         ucs::test::cleanup();
@@ -710,3 +715,71 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
+
+
+class test_cuda_copy_md : public test_md {
+};
+
+UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
+    /* A single byte per chunk is rounded up to the allocation granularity, so
+     * the buffer is backed by 3 distinct physical handles */
+    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 3);
+    uct_md_mem_attr_t mem_attr;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+
+    /* Query the full multi-handle range; the guard preserves the caller's
+     * requested extent instead of shrinking to the single chunk that
+     * contains the base pointer. */
+    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                   &mem_attr));
+
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_GE(mem_attr.alloc_length, buffer.size());
+}
+
+UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+    ASSERT_EQ(cudaSuccess, cudaSetDevice(0));
+
+    auto check_domain = [this](unsigned char domain_id,
+                               ucs_sys_device_t &sys_dev) {
+        cuda_vmm_mem_buffer buffer;
+        CUresult ret = buffer.alloc(64, 0,
+                                    CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN,
+                                    1, domain_id);
+        if (ret != CUDA_SUCCESS) {
+            return false;
+        }
+
+        uct_md_mem_attr_t mem_attr;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+
+        ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                       &mem_attr));
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+        sys_dev = mem_attr.sys_dev;
+        return true;
+    };
+
+    ucs_sys_device_t sys_dev0, sys_dev1;
+    if (!check_domain(0, sys_dev0)) {
+        UCS_TEST_SKIP_R("failed to allocate locality-domain 0 VMM memory");
+    }
+
+    if (!check_domain(1, sys_dev1)) {
+        ADD_FAILURE() << "locality domain 1 allocation failed even though "
+                         "domain 0 succeeded";
+        return;
+    }
+
+    EXPECT_EQ(sys_dev0, sys_dev1);
+#else
+    UCS_TEST_SKIP_R("built without locality-domain support");
+#endif
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);

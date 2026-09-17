@@ -36,8 +36,11 @@
 /**
  * Maximum bandwidth of NDR single path with PCIe Gen5 and RDMA_READ operation.
  */
-#define UCT_IB_NDR_READ_PATH_BANDWIDTH 38e9
-#define UCT_IB_XDR_READ_PATH_BANDWIDTH 35e9
+#define UCT_IB_NDR_READ_PATH_BANDWIDTH            38e9
+#define UCT_IB_XDR_READ_PATH_BANDWIDTH            35e9
+#define UCT_IB_HIGH_SPEED_NUM_PATHS               2
+#define UCT_IB_PORT_SPEED_UNIT_GBPS               0.1
+#define UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS      800.0
 
 /**
  * Minimal NDR single path ratio.
@@ -715,8 +718,8 @@ uct_ib_iface_roce_is_routable(uct_ib_iface_t *iface, uint8_t gid_index,
         return 0;
     }
 
-    if (ucs_netlink_is_best_route(ndev_index, sa_remote)) {
-        /* This interface has the best route */
+    if (ucs_netlink_route_matches(ndev_index, sa_remote,
+                                  UCS_NETLINK_ROUTE_CHECK_RELAXED)) {
         return 1;
     }
 
@@ -1024,9 +1027,31 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     const char *usage, struct ibv_ah **ah_p)
 {
-    return uct_ib_device_create_ah_cached(uct_ib_iface_device(iface), ah_attr,
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    if (dev->ah_cache_ttl == 0) {
+        return uct_ib_device_create_ah(dev, ah_attr, uct_ib_iface_md(iface)->pd,
+                                       usage, ah_p);
+    }
+
+    return uct_ib_device_create_ah_cached(dev, ah_attr,
                                           uct_ib_iface_md(iface)->pd, usage,
                                           ah_p);
+}
+
+void uct_ib_iface_release_ah(uct_ib_iface_t *iface, struct ibv_ah *ah)
+{
+    int ret;
+
+    if (uct_ib_iface_device(iface)->ah_cache_ttl != 0) {
+        return;
+    }
+
+    ret = ibv_destroy_ah(ah);
+    if (ret != 0) {
+        ucs_warn("%s: ibv_destroy_ah() failed with error %d: %m",
+                 uct_ib_device_name(uct_ib_iface_device(iface)), ret);
+    }
 }
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
@@ -1397,6 +1422,42 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
                                             iface->gid_info.gid_index);
 }
 
+static double
+uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
+{
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    ucs_log_level_t log_level;
+    uint64_t port_speed;
+    int ret;
+
+    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
+                               &port_speed);
+    if (ret != 0) {
+        log_level = ((errno == EOPNOTSUPP) ||
+                     (errno == EPROTONOSUPPORT) ||
+                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
+                                          UCS_LOG_LEVEL_DIAG;
+        ucs_log(log_level, "ibv_query_port_speed(%s:%d) failed: %m",
+                uct_ib_device_name(dev), iface->config.port_num);
+        return 0.0;
+    }
+
+    return port_speed * UCT_IB_PORT_SPEED_UNIT_GBPS;
+#else
+    return 0.0;
+#endif
+}
+
+int uct_ib_iface_is_multiplane_xdr_bw(uct_ib_iface_t *iface)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    return (dev->flags & UCT_IB_DEVICE_FLAG_MULTIPLANE) &&
+           (ucs_fp_compare(uct_ib_iface_query_port_speed_gbps(iface),
+                           UCT_IB_MULTIPLANE_XDR_BANDWIDTH_GBPS) == 0);
+}
+
 static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
                                        const uct_ib_iface_config_t *config)
 {
@@ -1404,6 +1465,9 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths = uct_ib_iface_roce_lag_level(iface);
+            if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
+                iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
+            }
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);
@@ -1412,7 +1476,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
         if ((iface->num_paths == 1) &&
             (uct_ib_iface_port_active_speed(iface) >= UCT_IB_SPEED_NDR)) {
-            iface->num_paths = 2;
+            iface->num_paths = UCT_IB_HIGH_SPEED_NUM_PATHS;
         }
     } else {
         iface->num_paths = config->num_paths;
@@ -1841,14 +1905,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     uct_iface_set_async_event_params(params, &self->async_ctx.cb,
                                      &self->async_ctx.arg);
     if (self->async_ctx.cb != NULL) {
         self->async_ctx.super.cbq = &self->super.worker->super.progress_q;
         self->async_ctx.super.cb  = uct_ib_iface_port_speed_change_progress;
-        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_PORT_SPEED_CHANGE,
-                                                self->config.port_num,
+        status = uct_ib_device_async_event_wait(dev, IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                                0,
                                                 &self->async_ctx.super);
         if (status != UCS_OK) {
             goto err_destroy_send_cq;
@@ -1888,11 +1952,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
     }
 
-#if HAVE_DECL_IBV_EVENT_PORT_SPEED_CHANGE
+#if HAVE_DECL_IBV_EVENT_DEVICE_SPEED_CHANGE
     if (self->async_ctx.cb != NULL) {
         uct_ib_device_async_event_cancel(uct_ib_iface_device(self),
-                                         IBV_EVENT_PORT_SPEED_CHANGE,
-                                         self->config.port_num,
+                                         IBV_EVENT_DEVICE_SPEED_CHANGE,
+                                         0,
                                          &self->async_ctx.super);
     }
 #endif
@@ -2069,15 +2133,22 @@ uct_ib_iface_estimate_path_bw(uct_ib_iface_t *iface,
     double path_ratio         = 1.0;
     uct_ep_operation_t op     = UCT_ATTR_VALUE(PERF, perf_attr, operation,
                                                OPERATION, UCT_EP_OP_LAST);
+    const int roce_lag        = uct_ib_iface_is_roce(iface) &&
+                                (uct_ib_iface_roce_lag_level(iface) > 1);
 
-    if (uct_ib_iface_is_roce(iface) &&
-        (uct_ib_iface_roce_lag_level(iface) > 1)) {
+    if (roce_lag) {
         path_ratio = 1.0 / iface_attr->dev_num_paths;
-    } else if (uct_ep_op_is_get(op)) {
-        if (uct_ib_iface_port_is_ndr(iface)) {
+    }
+
+    if (uct_ep_op_is_get(op)) {
+        if (roce_lag && uct_ib_iface_is_multiplane_xdr_bw(iface)) {
+            max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
+            path_ratio         = ucs_min(path_ratio,
+                                         UCT_IB_XDR_READ_PATH_RATIO);
+        } else if (!roce_lag && uct_ib_iface_port_is_ndr(iface)) {
             max_path_bandwidth = UCT_IB_NDR_READ_PATH_BANDWIDTH;
             path_ratio         = UCT_IB_NDR_READ_PATH_RATIO;
-        } else if (uct_ib_iface_port_is_xdr(iface)) {
+        } else if (!roce_lag && uct_ib_iface_port_is_xdr(iface)) {
             max_path_bandwidth = UCT_IB_XDR_READ_PATH_BANDWIDTH;
             path_ratio         = UCT_IB_XDR_READ_PATH_RATIO;
         }
@@ -2090,32 +2161,15 @@ static uct_ppn_bandwidth_t
 uct_ib_iface_estimate_bandwidth(uct_ib_iface_t *iface,
                                 const uct_iface_attr_t *iface_attr)
 {
-#if HAVE_DECL_IBV_QUERY_PORT_SPEED
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    ucs_log_level_t log_level;
-    uint64_t port_speed;
-    double wire_speed;
-    int ret;
+    const double port_speed_gbps =
+            uct_ib_iface_query_port_speed_gbps(iface);
 
-    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
-                               &port_speed);
-    if (ret != 0) {
-        log_level = ((errno == EOPNOTSUPP) ||
-                     (errno == EPROTONOSUPPORT) ||
-                     (errno == ENOSYS)) ? UCS_LOG_LEVEL_DEBUG :
-                                          UCS_LOG_LEVEL_DIAG;
-        ucs_log(log_level,
-                "ibv_query_port_speed("UCT_IB_IFACE_FMT", port_num=%d) failed:"
-                " %m", UCT_IB_IFACE_ARG(iface), iface->config.port_num);
+    if (port_speed_gbps == 0.0) {
         return iface_attr->bandwidth;
     }
 
-    /* Convert port speed (in 100 Mb/s granularity) to bandwidth in bytes/s. */
-    wire_speed = (double)port_speed * 1e8 / 8.0;
-    return uct_ib_iface_get_bandwidth(iface, wire_speed);
-#else
-    return iface_attr->bandwidth;
-#endif
+    return uct_ib_iface_get_bandwidth(iface,
+                                      port_speed_gbps * 1e9 / 8.0);
 }
 
 ucs_status_t
@@ -2156,7 +2210,9 @@ uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth = uct_ib_iface_estimate_bandwidth(ib_iface,
                                                                &iface_attr);
-        if (uct_ep_op_is_get(op) && uct_ib_iface_port_is_xdr(ib_iface)) {
+        if (uct_ep_op_is_get(op) &&
+            (uct_ib_iface_port_is_xdr(ib_iface) ||
+             uct_ib_iface_is_multiplane_xdr_bw(ib_iface))) {
             max_bandwidth = perf_attr->bandwidth.shared *
                             iface_attr.dev_num_paths * UCT_IB_XDR_READ_PATH_RATIO;
             perf_attr->bandwidth.shared = ucs_min(perf_attr->bandwidth.shared,

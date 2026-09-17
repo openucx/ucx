@@ -124,7 +124,7 @@ public:
     /* Allocation mode. */
     enum class alloc_mode {
         DEFAULT, /* Default allocation mode, using cudaMalloc */
-        ASYNC    /* Asynchronous allocation mode, using cudaMallocAsync */
+        ASYNC    /* Asynchronous CUDA allocation mode */
     };
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
@@ -148,6 +148,8 @@ private:
     static bool is_cuda_supported();
 
     static bool is_rocm_supported();
+
+    static bool is_ze_supported();
 
     static inline uint64_t pat(uint64_t prev)
     {

@@ -319,6 +319,14 @@ typedef ucs_status_t (*uct_ep_put_sgl_zcopy_func_t)(
         size_t count, uct_completion_t *comp);
 
 
+/* Scatter-gather list (SGL) zcopy get from multiple remote addr/rkey pairs. */
+typedef ucs_status_t (*uct_ep_get_sgl_zcopy_func_t)(
+        uct_ep_h ep, void * const *buffers, const size_t *lengths,
+        uct_mem_h const *memhs, const uint64_t *remote_addrs,
+        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
+        size_t count, uct_completion_t *comp);
+
+
 /* Purge outstanding operations from an endpoint */
 typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
@@ -336,6 +344,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_is_connected_func_t       ep_is_connected;
     uct_ep_get_device_ep_func_t      ep_get_device_ep;
     uct_ep_put_sgl_zcopy_func_t      ep_put_sgl_zcopy;
+    uct_ep_get_sgl_zcopy_func_t      ep_get_sgl_zcopy;
     uct_ep_outstanding_purge_func_t  ep_outstanding_purge;
 } uct_iface_internal_ops_t;
 
@@ -913,6 +922,9 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
                                        ucs_callback_t cb, unsigned flags);
 
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_iface_query_v2_init(uct_iface_h iface,
+                             uct_iface_attr_v2_t *iface_attr);
 
 ucs_status_t
 uct_iface_base_query_v2(uct_iface_h iface, uct_iface_attr_v2_t *iface_attr);

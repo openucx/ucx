@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <set>
 
 class test_sys : public ucs::test {
@@ -36,6 +37,49 @@ protected:
         EXPECT_EQ(std::string(expected), buf);
     }
 
+    void test_read_file_number(const char *contents,
+                               ucs_status_t expected_status,
+                               long expected_value = 0)
+    {
+        char filename[PATH_MAX];
+        long value = LONG_MIN;
+        mode_t orig_umask;
+        size_t length;
+        ssize_t nwritten;
+        ucs_status_t status;
+        int fd;
+
+        /* Create a temporary file to write the contents to */
+        snprintf(filename, sizeof(filename), "%s/ucx_read_number_XXXXXX",
+                 ucs_get_tmpdir());
+        orig_umask = umask(S_IRWXG | S_IRWXO);
+        fd         = mkstemp(filename);
+        umask(orig_umask);
+        if (fd < 0) {
+            FAIL() << "failed to create temporary file";
+            return;
+        }
+
+        length   = strlen(contents);
+        nwritten = write(fd, contents, length);
+        close(fd);
+        if ((nwritten < 0) || ((size_t)nwritten != length)) {
+            unlink(filename);
+            FAIL() << "failed to write test file";
+        }
+
+        /* Read the contents of the file */
+        status = ucs_read_file_number(&value, 1, "%s", filename);
+        unlink(filename);
+
+        EXPECT_EQ(expected_status, status);
+        if (expected_status == UCS_OK) {
+            EXPECT_EQ(expected_value, value);
+        } else {
+            EXPECT_EQ(LONG_MIN, value);
+        }
+    }
+
     static void check_cache_type(ucs_cpu_cache_type_t type, const char *name)
     {
         size_t cache;
@@ -47,6 +91,25 @@ protected:
         UCS_TEST_MESSAGE << name << " cache: " << memunits;
     }
 };
+
+UCS_TEST_F(test_sys, read_file_number) {
+    test_read_file_number("-1", UCS_OK, -1);
+    test_read_file_number("0", UCS_OK, 0);
+    test_read_file_number("-1\n", UCS_OK, -1);
+    test_read_file_number("0\n", UCS_OK, 0);
+    test_read_file_number("42", UCS_OK, 42);
+    test_read_file_number("42\n", UCS_OK, 42);
+    test_read_file_number("  0x2a \t\n", UCS_OK, 42);
+    test_read_file_number("", UCS_ERR_INVALID_PARAM);
+    test_read_file_number(" \t\n", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("not-a-number\n", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("42 trailing\n", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("42trailing\n", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("leading42\n", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("leading 42\n", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("42\n43", UCS_ERR_INVALID_PARAM);
+    test_read_file_number("42\n43\n", UCS_ERR_INVALID_PARAM);
+}
 
 UCS_TEST_F(test_sys, uuid) {
     std::set<uint64_t> uuids;

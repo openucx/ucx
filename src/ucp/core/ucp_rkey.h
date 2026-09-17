@@ -48,8 +48,11 @@ enum {
  * Rkey config flags
  */
 enum {
-    UCP_RKEY_CONFIG_FLAG_FLUSH    = UCS_BIT(0)  /* Put and atomic operations on this rkey
-                                                   require remote flush */
+    /* Put and atomic operations on this rkey require remote flush */
+    UCP_RKEY_CONFIG_FLAG_FLUSH            = UCS_BIT(0),
+
+    /* Synthetic key used only for protocol performance estimation */
+    UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION = UCS_BIT(1)
 };
 
 

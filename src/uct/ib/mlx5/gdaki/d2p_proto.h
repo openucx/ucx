@@ -17,6 +17,7 @@ enum {
 
 enum {
     UCT_IB_D2P_FLAG_CQ_UPDATE = UCS_BIT(0),
+    UCT_IB_D2P_FLAG_RING_DB   = UCS_BIT(1),
 };
 
 
@@ -25,7 +26,7 @@ typedef struct {
     uint8_t  opcode;
     uint16_t flags;
     uint32_t length;
-    uint64_t qp_idx;
+    uint64_t ep_idx;
     uint32_t lkey;
     uint32_t rkey;
     uint64_t laddr;

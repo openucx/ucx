@@ -231,7 +231,7 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
                                UCS_BIT(UCP_RNDV_MODE_PUT_ZCOPY) |
                                UCS_BIT(UCP_RNDV_MODE_AM)),
         .super.cfg_priority  = 80,
@@ -248,6 +248,12 @@ static void ucp_proto_rndv_rtr_probe(const ucp_proto_init_params_t *init_params)
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
+        .remote_op_flags     = ucp_proto_rndv_shm_pipeline_force_enabled(
+                                       context) ?
+                               (ucp_proto_select_op_flags(
+                                        init_params->select_param) &
+                                UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV) : 0,
+        .flags               = 0,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
@@ -449,7 +455,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = context->config.ext.proto_overhead_rndv_rtr,
-        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(init_params,
                                UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE)),
         .super.cfg_priority  = 80,
         .super.min_length    = 1,
@@ -463,6 +469,12 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_KEEP_MD_MAP,
         .super.exclude_map   = 0,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
+        .remote_op_flags     = ucp_proto_rndv_shm_pipeline_force_enabled(
+                                       context) ?
+                               (ucp_proto_select_op_flags(
+                                        init_params->select_param) &
+                                UCP_PROTO_SELECT_OP_FLAG_TAG_RNDV) : 0,
+        .flags               = 0,
         .lane                = ucp_proto_rndv_find_ctrl_lane(init_params),
         .perf_bias           = 0.0,
         .ctrl_msg_name       = UCP_PROTO_RNDV_RTR_NAME,
@@ -518,6 +530,7 @@ ucp_proto_rndv_rtr_mtype_probe(const ucp_proto_init_params_t *init_params)
         rpriv.super.data_received = ucp_proto_rndv_rtr_mtype_data_received;
         rpriv.frag_mem_type       = frag_mem_type;
         rpriv.frag_sys_dev        = params.super.reg_mem_info.sys_dev;
+        params.flags              = ucp_proto_rndv_ctrl_init_flags(&params);
 
         ucp_proto_rndv_ctrl_probe(&params, &rpriv, sizeof(rpriv));
 out_unpack_perf_destroy:
