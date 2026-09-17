@@ -42,10 +42,7 @@ typedef struct {
  *
  * @param [in]  tree  Tree to initialize.
  */
-static UCS_F_ALWAYS_INLINE void ucs_rbtree_init(ucs_rbtree_t *tree)
-{
-    tree->root = NULL;
-}
+void ucs_rbtree_init(ucs_rbtree_t *tree);
 
 
 /**

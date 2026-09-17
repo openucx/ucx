@@ -13,6 +13,11 @@
 #include <ucs/debug/assert.h>
 
 
+void ucs_rbtree_init(ucs_rbtree_t *tree)
+{
+    tree->root = NULL;
+}
+
 /*
  * Rotate left: 'node' becomes the left child of its right child.
  */
