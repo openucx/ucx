@@ -13,12 +13,6 @@
 #include <ucs/sys/math.h>
 
 
-static UCS_F_ALWAYS_INLINE ucs_interval_node_t *
-ucs_interval_tree_node(ucs_rbtree_node_t *rb_node)
-{
-    return ucs_derived_of(rb_node, ucs_interval_node_t);
-}
-
 static ucs_interval_node_t *
 ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
                               uint64_t end)

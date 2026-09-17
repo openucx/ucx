@@ -46,12 +46,22 @@ typedef struct {
 
 
 /**
+ * Return the interval node embedding a balancing node
+ */
+static UCS_F_ALWAYS_INLINE ucs_interval_node_t *
+ucs_interval_tree_node(ucs_rbtree_node_t *rb_node)
+{
+    return ucs_derived_of(rb_node, ucs_interval_node_t);
+}
+
+
+/**
  * Return the tree's root node
  */
 static UCS_F_ALWAYS_INLINE ucs_interval_node_t *
 ucs_interval_tree_root(const ucs_interval_tree_t *tree)
 {
-    return ucs_derived_of(tree->rb.root, ucs_interval_node_t);
+    return ucs_interval_tree_node(tree->rb.root);
 }
 
 
