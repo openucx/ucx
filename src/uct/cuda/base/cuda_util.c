@@ -266,12 +266,11 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
         }
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "UNKN%u",
-                          num_invisible_gpus++);
+                          num_invisible_gpus);
         status = ucs_topo_sys_device_set_name(
                 sys_dev, device_name, UCT_CUDA_SYS_DEVICE_NAME_PRIORITY);
-        if (status != UCS_OK) {
-            goto out;
-        }
+        ucs_assert_always(status == UCS_OK);
+        ++num_invisible_gpus;
     }
 
 out:
