@@ -390,6 +390,8 @@ protected:
         uct_rkey_t                 rkey;
         const void                 *send_buf;
         size_t                     send_len;
+        const uct_iov_t            *iov;
+        size_t                     iovcnt;
     };
 
     using send_func_t =
@@ -465,6 +467,7 @@ protected:
             return;
         case UCT_EP_OP_PUT_SHORT:
         case UCT_EP_OP_PUT_BCOPY:
+        case UCT_EP_OP_PUT_ZCOPY:
             validate_put(info, ctx);
             return;
         default:
@@ -498,24 +501,39 @@ protected:
         const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_RMA;
         const uint16_t expected_rma_fields =
                 UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
-                UCT_EP_OP_INFO_RMA_FIELD_RKEY |
-                UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA;
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY;
 
-        ASSERT_TRUE((ctx->operation == UCT_EP_OP_PUT_SHORT) ||
-                    (ctx->operation == UCT_EP_OP_PUT_BCOPY))
-                << "Unsupported operation: " << ctx->operation;
         ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
         ASSERT_TRUE(
                 ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
-        ASSERT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)
-                << "No completion expected for PUT short and PUT bcopy";
-
         EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
-        ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
-        ASSERT_NE(nullptr, info->rma.payload.data.buffer);
-        mem_buffer::pattern_check(info->rma.payload.data.buffer,
-                                  info->rma.payload.data.length, SEND_SEED);
+
+        if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(&ctx->comp, info->comp);
+            uct_invoke_completion(info->comp, UCS_OK);
+
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+            ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+            for (size_t i = 0; i < ctx->iovcnt; ++i) {
+                EXPECT_EQ(ctx->iov[i].buffer,
+                          info->rma.payload.zcopy.iov[i].buffer);
+                EXPECT_EQ(ctx->iov[i].length,
+                          info->rma.payload.zcopy.iov[i].length);
+            }
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA);
+            ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
+            ASSERT_NE(nullptr, info->rma.payload.data.buffer);
+            mem_buffer::pattern_check(info->rma.payload.data.buffer,
+                                      info->rma.payload.data.length, SEND_SEED);
+        }
+
         ++ctx->num_ops_purged;
     }
 
@@ -714,6 +732,33 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_bcopy,
     };
 
     test_purge_outstanding(put_bcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size            = ucs_max(attr.cap.put.min_zcopy,
+                                           ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_ZCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t put_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(put_zcopy, ctx);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
