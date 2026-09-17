@@ -97,17 +97,28 @@ ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
     return &assignment->nic_sys_dev_bitmaps[nic_sys_dev_bitmap_idx];
 }
 
+static void ucp_gpu_nic_assignment_append_device_names(
+        const ucs_topo_group_element_t *element, ucs_string_buffer_t *strb)
+{
+    size_t i;
+
+    ucs_assertv((element->num_sys_devs > 0) &&
+                        (element->num_sys_devs <=
+                         UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT),
+                "invalid num_sys_devs: %zu", element->num_sys_devs);
+
+    for (i = 0; i < element->num_sys_devs; ++i) {
+        ucs_string_buffer_appendf(strb, "%s/",
+                                  ucs_topo_sys_device_get_name(
+                                          element->sys_devs[i]));
+    }
+    ucs_string_buffer_rtrim(strb, "/");
+}
+
 static void
 ucp_gpu_nic_assignment_append_nic(const ucs_topo_group_element_t *nic,
                                   ucp_nics_string_buffers_t *strbs)
 {
-    ucs_sys_device_t sys_dev;
-    size_t i;
-
-    ucs_assertv((nic->num_sys_devs > 0) && (nic->num_sys_devs <=
-                                            UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT),
-                "invalid num_sys_devs: %zu", nic->num_sys_devs);
-
     if (strbs->count > 0) {
         ucs_string_buffer_appendf(strbs->names, " ");
         ucs_string_buffer_appendf(strbs->sys_devs, " ");
@@ -115,17 +126,10 @@ ucp_gpu_nic_assignment_append_nic(const ucs_topo_group_element_t *nic,
 
     ++strbs->count;
 
-    for (i = 0; i < nic->num_sys_devs; ++i) {
-        sys_dev = nic->sys_devs[i];
-        ucs_string_buffer_appendf(strbs->names, "%s/",
-                                  ucs_topo_sys_device_get_name(sys_dev));
-    }
-    ucs_string_buffer_rtrim(strbs->names, "/");
-
+    ucp_gpu_nic_assignment_append_device_names(nic, strbs->names);
     ucs_string_buffer_append_array(strbs->sys_devs, "/", "%hhu", nic->sys_devs,
                                    nic->num_sys_devs);
 }
-
 
 static void
 ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
@@ -134,12 +138,10 @@ ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
                                ucp_gpu_nic_sys_dev_bitmap_t *assigned_nics)
 {
     UCS_STRING_BUFFER_ONSTACK(gpu_strb, 128);
-    UCP_GPU_NIC_STRING_BUFFERS_ONSTACK(nic_strbs, 128);
+    UCP_GPU_NIC_STRING_BUFFERS_ONSTACK(nic_strbs, 256);
     char bdf_name[UCS_SYS_BDF_NAME_MAX];
     const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap;
     const ucs_topo_group_element_t *nic;
-    size_t i;
-    ucs_sys_device_t sys_dev;
 
     ucs_assert((gpu->num_sys_devs > 0) &&
                (gpu->sys_devs[0] != UCS_SYS_DEVICE_ID_UNKNOWN));
@@ -149,12 +151,7 @@ ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
     ucs_assert(nic_sys_dev_bitmap != NULL);
     UCS_STATIC_BITMAP_OR_INPLACE(assigned_nics, *nic_sys_dev_bitmap);
 
-    for (i = 0; i < gpu->num_sys_devs; ++i) {
-        sys_dev = gpu->sys_devs[i];
-        ucs_string_buffer_appendf(&gpu_strb, "%s/",
-                                  ucs_topo_sys_device_get_name(sys_dev));
-    }
-    ucs_string_buffer_rtrim(&gpu_strb, "/");
+    ucp_gpu_nic_assignment_append_device_names(gpu, &gpu_strb);
 
     ucs_string_buffer_appendf(&gpu_strb, " (bdf %s sys_dev ",
                               ucs_topo_sys_device_bdf_name(gpu->sys_devs[0],
@@ -183,12 +180,11 @@ ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
     }
 }
 
-
 static void ucp_gpu_nic_assignment_log_unassigned_nics(
         const ucs_topo_groups_t *groups,
         const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nics)
 {
-    UCP_GPU_NIC_STRING_BUFFERS_ONSTACK(nic_strbs, 128);
+    UCP_GPU_NIC_STRING_BUFFERS_ONSTACK(nic_strbs, 256);
     const ucs_topo_group_element_t *nic;
     const ucs_topo_group_t *nic_group;
 
@@ -210,7 +206,6 @@ static void ucp_gpu_nic_assignment_log_unassigned_nics(
                   ucs_string_buffer_cstr(nic_strbs.sys_devs));
     }
 }
-
 
 static void
 ucp_gpu_nic_assignment_log(const ucp_gpu_nic_assignment_t *assignment,
