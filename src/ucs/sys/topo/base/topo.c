@@ -1542,6 +1542,7 @@ void ucs_topo_init()
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices                  = 0;
+    /* coverity[missing_lock] */
     ucs_topo_global_ctx.device_class_incomplete_mask = 0;
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
                       &ucs_sys_topo_provider_default.list);
