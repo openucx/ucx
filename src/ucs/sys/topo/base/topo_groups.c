@@ -468,8 +468,6 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
     ucs_assert((device_class == UCS_TOPO_DEVICE_CLASS_ACC) ||
                (device_class == UCS_TOPO_DEVICE_CLASS_NET));
 
-    ucs_string_buffer_reset(&strb);
-
     if (element->num_sys_devs == 0) {
         ucs_string_buffer_appendf(&strb, "<empty>");
         goto out;
