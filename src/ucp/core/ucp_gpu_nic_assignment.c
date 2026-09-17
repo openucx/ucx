@@ -120,8 +120,8 @@ ucp_gpu_nic_assignment_append_nic(const ucs_topo_group_element_t *nic,
                                   ucp_nics_string_buffers_t *strbs)
 {
     if (strbs->count > 0) {
-        ucs_string_buffer_appendf(strbs->names, " ");
-        ucs_string_buffer_appendf(strbs->sys_devs, " ");
+        ucs_string_buffer_appendf(strbs->names, ", ");
+        ucs_string_buffer_appendf(strbs->sys_devs, ", ");
     }
 
     ++strbs->count;
