@@ -511,6 +511,10 @@ static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
     const ucs_topo_group_t *group;
     size_t group_idx;
 
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        return;
+    }
+
     ucs_array_for_each_index(group, group_idx, groups) {
         ucs_debug("topology group %zu: %zu gpus, %zu nics", group_idx,
                   ucs_array_length(&group->gpus),
@@ -553,11 +557,9 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
         goto err_cleanup;
     }
 
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
-        ucs_topo_groups_log(devices, &groups);
-    }
-
     ucs_topo_release_group(&inventory);
+
+    ucs_topo_groups_log(devices, &groups);
 
     ucs_debug("initialized topo groups with %zu groups",
               ucs_array_length(&groups));
