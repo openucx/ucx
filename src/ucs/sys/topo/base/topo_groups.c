@@ -461,7 +461,7 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
                             ucs_topo_device_class_t device_class)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
-    const ucs_topo_sys_device_info_t *device;
+    const ucs_topo_sys_device_info_t *first_device, *device;
     ucs_sys_device_t sys_dev;
     size_t i;
 
@@ -469,19 +469,23 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
                (device_class == UCS_TOPO_DEVICE_CLASS_NET));
 
     if (element->num_sys_devs == 0) {
-        ucs_string_buffer_appendf(&strb, "<empty>");
+        ucs_string_buffer_appendf(&strb, " <empty>");
         goto out;
     }
 
-    for (i = 0; i < element->num_sys_devs; ++i) {
-        sys_dev = element->sys_devs[i];
-        ucs_string_buffer_appendf(&strb, "%s/", devices[sys_dev].name);
+    first_device = &devices[element->sys_devs[0]];
+    if (first_device->name_priority > 0) {
+        ucs_string_buffer_appendf(&strb, " ");
+        for (i = 0; i < element->num_sys_devs; ++i) {
+            sys_dev = element->sys_devs[i];
+            device  = &devices[sys_dev];
+            ucs_string_buffer_appendf(&strb, "%s/", device->name);
+        }
+        ucs_string_buffer_rtrim(&strb, "/");
     }
-    ucs_string_buffer_rtrim(&strb, "/");
 
-    device = &devices[element->sys_devs[0]];
     ucs_string_buffer_appendf(&strb, " bdf " UCS_SYS_BUS_ID_FMT,
-                              UCS_SYS_BUS_ID_ARG(&device->bus_id));
+                              UCS_SYS_BUS_ID_ARG(&first_device->bus_id));
     if (device_class == UCS_TOPO_DEVICE_CLASS_NET) {
         for (i = 1; i < element->num_sys_devs; ++i) {
             device = &devices[element->sys_devs[i]];
@@ -497,7 +501,7 @@ ucs_topo_groups_log_element(const ucs_topo_sys_device_info_t *devices,
     ucs_string_buffer_rtrim(&strb, "/");
 
 out:
-    ucs_debug("topology group %zu element: %s %s", group_idx,
+    ucs_debug("topology group %zu element: %s%s", group_idx,
               (device_class == UCS_TOPO_DEVICE_CLASS_ACC) ? "gpu" : "nic",
               ucs_string_buffer_cstr(&strb));
 }
