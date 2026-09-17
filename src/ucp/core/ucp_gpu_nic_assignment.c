@@ -323,4 +323,7 @@ void ucp_gpu_nic_assignment_release(ucp_gpu_nic_assignment_t *assignment)
     ucs_free(assignment->nic_sys_dev_bitmaps);
     assignment->nic_sys_dev_bitmaps = NULL;
     assignment->num_bitmaps         = 0;
+    memset(assignment->bitmap_idx_by_gpu_sys_dev,
+           UCP_GPU_NIC_BITMAP_INDEX_INVALID,
+           sizeof(assignment->bitmap_idx_by_gpu_sys_dev));
 }
