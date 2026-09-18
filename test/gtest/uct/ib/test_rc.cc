@@ -312,6 +312,482 @@ UCS_TEST_SKIP_COND_P(test_rc_max_wr, send_limit,
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
 
 
+/* Force rc_verbs to create QPs without an SRQ. */
+class test_rc_no_srq : public test_rc {
+protected:
+    static const int NUM_EPS = 2;
+
+    virtual void init() {
+        if (uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "n") !=
+            UCS_OK) {
+            UCS_TEST_ABORT("Error: cannot disable SRQ");
+        }
+
+        test_rc::init();
+
+        /* Fail instead of silently exercising the SRQ path. */
+        if (!rc_iface(m_e1)->config.srq_disable ||
+            (verbs_iface(m_e1)->srq != NULL)) {
+            UCS_TEST_ABORT("SRQ is not disabled as requested");
+        }
+    }
+
+    /* Use two QPs to exercise receive posting across multiple endpoints. */
+    virtual void connect() {
+        for (int i = 0; i < NUM_EPS; i++) {
+            m_e1->connect(i, *m_e2, i);
+            m_e2->connect(i, *m_e1, i);
+        }
+
+        uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler, NULL, 0);
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
+    }
+
+    uct_rc_verbs_iface_t *verbs_iface(entity *e) {
+        return ucs_derived_of(rc_iface(e), uct_rc_verbs_iface_t);
+    }
+
+    uint16_t rx_max_wr(entity *e) {
+        return verbs_iface(e)->config.rx_max_wr;
+    }
+
+    uint16_t rx_available(entity *e, int ep_idx) {
+        return ucs_derived_of(rc_ep(e, ep_idx),
+                              uct_rc_verbs_ep_t)->rx_available;
+    }
+
+    int max_qp_wr() {
+        return IBV_DEV_ATTR(&ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev,
+                            max_qp_wr);
+    }
+
+    /* Open an interface with the given count of receive WRs per QP, to check
+     * if the interface accepts it. */
+    ucs_status_t try_rx_max_wr(const char *wr_count) {
+        uct_iface_h iface;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_MAX_WR",
+                                        wr_count));
+        status = uct_iface_open(m_e1->md(), m_e1->worker(),
+                                &m_e1->iface_params(), m_iface_config, &iface);
+        if (status == UCS_OK) {
+            uct_iface_close(iface);
+        }
+
+        return status;
+    }
+
+    static ucs_status_t am_keep_desc(void *arg, void *data, size_t length,
+                                     unsigned flags)
+    {
+        std::vector<void*> *descs = (std::vector<void*>*)arg;
+
+        if (!(flags & UCT_CB_PARAM_FLAG_DESC)) {
+            return UCS_OK;
+        }
+
+        descs->push_back(data);
+        return UCS_INPROGRESS;
+    }
+
+    static ucs_log_func_rc_t
+    no_rx_bufs_log_handler(const char *file, unsigned line,
+                           const char *function, ucs_log_level_t level,
+                           const ucs_log_component_config_t *comp_conf,
+                           const char *message, va_list ap)
+    {
+        /* These tests intentionally exhaust the receive buffer pool and may
+         * attempt to create a QP while no receive descriptor is available. */
+        if (((level == UCS_LOG_LEVEL_WARN) &&
+             !strcmp(function, UCS_PP_QUOTE(uct_iface_mpool_empty_warn))) ||
+            ((level == UCS_LOG_LEVEL_ERROR) &&
+             !strcmp(function,
+                     UCS_PP_QUOTE(uct_rc_verbs_ep_prepost_recvs)))) {
+            UCS_TEST_MESSAGE << file << ":" << line << ": "
+                             << format_message(message, ap);
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
+    rx_cq_warn_log_handler(const char *file, unsigned line,
+                           const char *function, ucs_log_level_t level,
+                           const ucs_log_component_config_t *comp_conf,
+                           const char *message, va_list ap)
+    {
+        /* Match the format string instead of the formatted message, to leave
+         * the variadic arguments untouched for the next handler */
+        if ((level == UCS_LOG_LEVEL_WARN) &&
+            (strstr(message, "overflow the RX CQ") != NULL)) {
+            m_rx_cq_warn_count++;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    /* Hold received descriptors until a receive-posting attempt cannot obtain
+     * a full batch and requests a retry from progress. */
+    void exhaust_rx_bufs(std::vector<void*> &descs) {
+        ucs_time_t deadline = ucs::get_deadline(10.0);
+
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_keep_desc, &descs, 0);
+
+        while (!verbs_iface(m_e2)->rx_post_recv_pending &&
+               (ucs_get_time() < deadline)) {
+            for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+                send_am_message(m_e1, 0, ep_idx);
+            }
+
+            progress();
+        }
+
+        if (!verbs_iface(m_e2)->rx_post_recv_pending) {
+            UCS_TEST_SKIP_R("could not exhaust the receive buffer pool");
+        }
+    }
+
+    /* Return receive descriptors to the pool, so that progress can post
+     * receives again. */
+    void release_rx_bufs(std::vector<void*> &descs, size_t first, size_t last) {
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
+
+        for (size_t i = first; i < last; i++) {
+            uct_iface_release_desc(descs[i]);
+        }
+    }
+
+    bool qp_gc_list_empty() {
+        return ucs_list_is_empty(&rc_iface(m_e1)->qp_gc_list) &&
+               ucs_list_is_empty(&rc_iface(m_e2)->qp_gc_list);
+    }
+
+    /* Poll flush completions for QPs pending destruction. Use a short timeout
+     * so a broken drain fails before the test watchdog expires. */
+    void wait_qp_gc_list_empty() {
+        ucs_time_t deadline = ucs::get_deadline(5.0);
+
+        while (!qp_gc_list_empty() && (ucs_get_time() < deadline)) {
+            progress();
+        }
+
+        EXPECT_TRUE(qp_gc_list_empty());
+    }
+
+    /* The fallback receive posting must skip an endpoint which is marked as
+     * being removed, since its QP is in the error state then and posting to it
+     * would fail. Verify this for one of the marks used for that. */
+    void expect_no_repost_on_marked_ep(uint8_t ep_mark) {
+        scoped_log_handler slh(no_rx_bufs_log_handler);
+        std::vector<void*> descs;
+        uint16_t prev_available[NUM_EPS];
+        unsigned batch;
+        int ep_idx;
+
+        exhaust_rx_bufs(descs);
+
+        /* Drain in-flight messages so the completion path cannot change the
+         * receive WR count after the endpoint is marked below. */
+        flush();
+
+        /* Each QP needs room for a full batch, so the fallback scan can either
+         * skip it or post one batch. */
+        batch = verbs_iface(m_e2)->super.super.config.rx_max_batch;
+        for (ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            if (rx_available(m_e2, ep_idx) < batch) {
+                UCS_TEST_SKIP_R("receive queues are not short of buffers");
+            }
+
+            prev_available[ep_idx] = rx_available(m_e2, ep_idx);
+        }
+
+        rc_ep(m_e2, 0)->flags |= ep_mark;
+
+        /* Return enough descriptors for the fallback scan to post receives. */
+        release_rx_bufs(descs, 0, descs.size());
+
+        progress_loop();
+
+        /* The marked QP is unchanged, while the other QP receives one batch. */
+        EXPECT_EQ(prev_available[0], rx_available(m_e2, 0));
+        EXPECT_LE(rx_available(m_e2, 1), prev_available[1] - batch);
+
+        /* A marked endpoint ignores flow control requests and must not have
+         * anything scheduled on it later, so do not leave it in this state. */
+        rc_ep(m_e2, 0)->flags &= ~ep_mark;
+    }
+
+    static unsigned m_rx_cq_warn_count;
+};
+
+unsigned test_rc_no_srq::m_rx_cq_warn_count = 0;
+
+/* Send one receive queue worth of messages per QP to exercise receive
+ * reposting. Verify that QP destruction waits for receive WR completions. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, am_and_qp_drain,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    uint16_t wnd = rx_max_wr(m_e2);
+    uint16_t chunk;
+
+    ASSERT_GT(wnd, 0);
+
+    /* Keep each chunk within the flow control window, while sending enough
+     * messages in total to require receive reposting. */
+    chunk = ucs_max(ucs_min(wnd, rc_iface(m_e2)->config.fc_wnd_size) / 4, 1);
+    for (unsigned sent = 0; sent < wnd; sent += chunk) {
+        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            send_am_messages(m_e1, chunk, UCS_OK, 0, ep_idx);
+        }
+
+        flush();
+    }
+
+    m_e1->destroy_eps();
+    m_e2->destroy_eps();
+
+    /* Posted receive WRs remain, so QP destruction must stay pending. */
+    EXPECT_FALSE(qp_gc_list_empty());
+
+    wait_qp_gc_list_empty();
+}
+
+/* The flow control window must not exceed the number of receive WRs posted to
+ * one QP, and must leave one receive batch of them unused. Otherwise, the peer
+ * can send more messages than that QP can receive. */
+UCS_TEST_P(test_rc_no_srq, fc_wnd_size)
+{
+    if (!rc_iface(m_e1)->config.fc_enabled) {
+        UCS_TEST_SKIP_R("flow control is disabled");
+    }
+
+    /* Either peer can receive, so verify the bound on both interfaces. */
+    EXPECT_GT(rc_iface(m_e1)->config.fc_wnd_size, 0);
+    EXPECT_LE(rc_iface(m_e1)->config.fc_wnd_size +
+              rc_iface(m_e1)->super.config.rx_max_batch, rx_max_wr(m_e1));
+    EXPECT_GT(rc_iface(m_e2)->config.fc_wnd_size, 0);
+    EXPECT_LE(rc_iface(m_e2)->config.fc_wnd_size +
+              rc_iface(m_e2)->super.config.rx_max_batch, rx_max_wr(m_e2));
+}
+
+/* Verify that receive WR flush completions are accounted when a cancelled EP
+ * flush moves the QP to the error state. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, flush_cancel,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    /* Endpoint destruction may report the sends cancelled by this test. */
+    scoped_log_handler slh(hide_warns_logger);
+    ucs_status_t status;
+
+    /* Leave the sends outstanding, since uct_rc_ep_flush() returns UCS_OK
+     * without cancelling anything when the transmit queue is already empty */
+    for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+        send_am_messages(m_e1, 8, UCS_OK, 0, ep_idx);
+    }
+
+    status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    EXPECT_TRUE(rc_ep(m_e1, 0)->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL);
+
+    progress_loop();
+
+    m_e1->destroy_eps();
+    m_e2->destroy_eps();
+
+    /* Posted receive WRs remain, so QP destruction must stay pending. */
+    EXPECT_FALSE(qp_gc_list_empty());
+
+    wait_qp_gc_list_empty();
+}
+
+/* Two 384-entry receive queues consume 768 descriptors. Limit the pool to
+ * 1024 descriptors, so holding the remainder exhausts it and prevents receive
+ * reposting from the completion path. */
+#define UCT_TEST_NO_RX_BUFS_CONFIG \
+    "IB_RX_MAX_BUFS~=1024", "RC_VERBS_RX_MAX_WR~=384"
+
+/* Verify that progress retries receive posting after the shared receive buffer
+ * pool is exhausted and descriptors are returned. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    std::vector<void*> descs;
+    unsigned prev_total = 0;
+    unsigned total      = 0;
+    ucs_time_t deadline;
+    int ep_idx;
+
+    exhaust_rx_bufs(descs);
+
+    for (ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+        prev_total += rx_available(m_e2, ep_idx);
+    }
+
+    /* Returning the descriptors must allow progress to repost receives. */
+    release_rx_bufs(descs, 0, descs.size());
+
+    deadline = ucs::get_deadline(5.0);
+    while (verbs_iface(m_e2)->rx_post_recv_pending &&
+           (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    EXPECT_EQ(0, verbs_iface(m_e2)->rx_post_recv_pending);
+
+    /* One scan posts at most one batch per eligible QP. Verify that it reduced
+     * the total number of free receive WR slots. */
+    for (ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+        total += rx_available(m_e2, ep_idx);
+    }
+
+    EXPECT_LT(total, prev_total);
+
+    send_am_messages(m_e1, 1, UCS_OK, 0, 0);
+    flush();
+}
+
+/* Verify that fallback receive posting skips an endpoint marked for flush
+ * cancellation after the receive buffer pool is exhausted. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_flush_cancel_ep,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    expect_no_repost_on_marked_ep(UCT_RC_EP_FLAG_FLUSH_CANCEL);
+}
+
+/* Verify that fallback receive posting skips an endpoint which the error
+ * handler marked, as its QP is in the error state then. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_failed_ep,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    expect_no_repost_on_marked_ep(UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED);
+}
+
+/* Verify that endpoint creation fails when no receive WR can be posted, but
+ * succeeds when the pool can supply only part of RC_VERBS_RX_MAX_WR. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_ep_create,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    const unsigned num_spare = 4;
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    std::vector<void*> descs;
+    ucs::handle<uct_ep_h> ep;
+    uct_ep_params_t ep_params;
+    uct_ep_h failed_ep;
+    ucs_status_t status;
+
+    exhaust_rx_bufs(descs);
+    ASSERT_GT(descs.size(), num_spare);
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e2->iface();
+
+    /* No receive descriptor is available, so endpoint creation must fail. */
+    status = uct_ep_create(&ep_params, &failed_ep);
+    if (status == UCS_OK) {
+        /* Destroy an unexpected endpoint, since the interface would report it
+         * as not destroyed at cleanup, and that warning would hide this
+         * failure behind an extra one. */
+        uct_ep_destroy(failed_ep);
+    }
+    ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+
+    /* Return descriptors without progressing the existing QPs, so the new QP
+     * can post only these receive WRs. */
+    release_rx_bufs(descs, 0, num_spare);
+
+    UCS_TEST_CREATE_HANDLE(uct_ep_h, ep, uct_ep_destroy, uct_ep_create,
+                           &ep_params);
+    EXPECT_EQ(rx_max_wr(m_e2) - num_spare,
+              ucs_derived_of(ep.get(), uct_rc_verbs_ep_t)->rx_available);
+
+    /* The posted receive WRs must also be drained when the QP is destroyed. */
+    ep.reset();
+    release_rx_bufs(descs, num_spare, descs.size());
+
+    wait_qp_gc_list_empty();
+}
+
+/* Set the software RX CQ quota near zero to test the warning threshold without
+ * allocating enough receive descriptors to exhaust the real CQ capacity. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_cq_overflow_warn,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    scoped_log_handler slh(rx_cq_warn_log_handler);
+    ucs::handle<uct_ep_h> ep1, ep2;
+    uct_ep_params_t ep_params;
+
+    m_rx_cq_warn_count                 = 0;
+    verbs_iface(m_e2)->rx_cq_available = rx_max_wr(m_e2) - 1;
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e2->iface();
+
+    /* Crossing the quota from nonnegative to negative reports one warning. */
+    UCS_TEST_CREATE_HANDLE(uct_ep_h, ep1, uct_ep_destroy, uct_ep_create,
+                           &ep_params);
+    EXPECT_EQ(1u, m_rx_cq_warn_count);
+
+    /* A further endpoint keeps the quota negative and must not warn again. */
+    UCS_TEST_CREATE_HANDLE(uct_ep_h, ep2, uct_ep_destroy, uct_ep_create,
+                           &ep_params);
+    EXPECT_EQ(1u, m_rx_cq_warn_count);
+
+    ep2.reset();
+    ep1.reset();
+
+    wait_qp_gc_list_empty();
+}
+
+/* The count of receive WRs per QP must fit the receive queue of a QP: it may
+ * not be zero, since a QP without an SRQ cannot receive anything then, and may
+ * not exceed what the device allows or the 16 bits it is stored in. Note that
+ * "inf" and a negative value both reach the validation as UINT_MAX, since the
+ * numeric parser has no range check. */
+UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid)
+{
+    static const char *const invalid_values[] = {"0", "65536", "inf", "-1"};
+    const int max_qp_wr_limit                 = max_qp_wr();
+    char str[32];
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+
+        for (size_t i = 0; i < ucs_static_array_size(invalid_values); i++) {
+            EXPECT_EQ(UCS_ERR_INVALID_PARAM, try_rx_max_wr(invalid_values[i]))
+                    << " value: " << invalid_values[i];
+        }
+
+        /* A count which the device cannot hold must be rejected too. */
+        snprintf(str, sizeof(str), "%d", max_qp_wr_limit + 1);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, try_rx_max_wr(str));
+    }
+
+    /* The boundaries of the supported range must be accepted. Checking the
+     * upper one is safe, because the receive WRs are posted when progress is
+     * enabled, which is not done by opening an interface. */
+    EXPECT_EQ(UCS_OK, try_rx_max_wr("1"));
+
+    snprintf(str, sizeof(str), "%d",
+             ucs_min(max_qp_wr_limit, (int)UINT16_MAX));
+    EXPECT_EQ(UCS_OK, try_rx_max_wr(str));
+}
+
+/* This fixture accesses rc_verbs-specific state. */
+_UCT_INSTANTIATE_TEST_CASE(test_rc_no_srq, rc_verbs)
+
+
 class test_rc_iface_flush_remote : public uct_test {
 protected:
     entity *m_e1;
