@@ -313,14 +313,20 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         uct_ib_mlx5_ep_set_rdma_seg(raddr, addr, rkey);
 
         dptr = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
-        uct_ib_mlx5_set_data_seg(dptr, buffers[i], lengths[i],
-                                 uct_ib_memh_get_lkey(memhs[i]));
+        if (ucs_likely(lengths[i] != 0)) {
+            uct_ib_mlx5_set_data_seg(dptr, buffers[i], lengths[i],
+                                     uct_ib_memh_get_lkey(memhs[i]));
+            num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
+        } else {
+            /* A zero-length RDMA write still consumes one packet/PSN */
+            uct_ib_mlx5_set_data_seg(dptr, NULL, 0, 0);
+            num_packets += 1;
+        }
 
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
         total       += lengths[i];
-        num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
