@@ -21,6 +21,50 @@
 BEGIN_C_DECLS
 
 /**
+ * @brief Iface query parameters.
+ */
+typedef struct uct_ib_mlx5_ext_iface_query_attr {
+    /**
+     * Mask of valid fields in this structure.
+     */
+    uint64_t field_mask;
+} uct_ib_mlx5_ext_iface_query_attr_t;
+
+/**
+ * @brief EP query parameters.
+ */
+typedef struct uct_ib_mlx5_ext_ep_query_attr {
+    /**
+     * Mask of valid fields in this structure.
+     */
+    uint64_t field_mask;
+} uct_ib_mlx5_ext_ep_query_attr_t;
+
+/**
+ * @brief External plugin iface query callback.
+ *
+ * @param [in]     iface Interface to query.
+ * @param [in,out] attr  Query parameters. Only fields selected by
+ *                       @a attr->field_mask should be accessed.
+ *
+ * @return UCS_OK on success, or an error if the operation failed.
+ */
+typedef ucs_status_t (*uct_ib_mlx5_ext_iface_query_func_t)(
+        uct_iface_h iface, uct_ib_mlx5_ext_iface_query_attr_t *attr);
+
+/**
+ * @brief External plugin EP query callback.
+ *
+ * @param [in]     ep    Endpoint to query.
+ * @param [in,out] attr  Query parameters. Only fields selected by
+ *                       @a attr->field_mask should be accessed.
+ *
+ * @return UCS_OK on success, or an error if the operation failed.
+ */
+typedef ucs_status_t (*uct_ib_mlx5_ext_ep_query_func_t)(
+        uct_ep_h ep, uct_ib_mlx5_ext_ep_query_attr_t *attr);
+
+/**
  * @brief External plugin maximum PUT SGL zero-copy entry count callback.
  *
  * @return Maximum number of SGL entries supported by the plugin's
@@ -34,6 +78,8 @@ typedef size_t (*uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t)(void);
  */
 typedef struct uct_ib_mlx5_ext_ops {
     char                                           name[UCT_COMPONENT_NAME_MAX]; /**< Plugin name */
+    uct_ib_mlx5_ext_iface_query_func_t             iface_query;                  /**< Iface query callback */
+    uct_ib_mlx5_ext_ep_query_func_t                ep_query;                     /**< EP query callback */
     uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t max_put_sgl_zcopy_count;      /**< Maximum PUT SGL zero-copy entry count callback */
     uct_ep_put_sgl_zcopy_func_t                    ep_put_sgl_zcopy;             /**< PUT SGL zero-copy callback */
 } uct_ib_mlx5_ext_ops_t;
