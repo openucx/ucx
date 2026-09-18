@@ -72,6 +72,10 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
      "Estimated CPU overhead for transferring GPU memory",
      ucs_offsetof(uct_cuda_ipc_iface_config_t, params.overhead), UCS_CONFIG_TYPE_TIME},
 
+    {"ENABLE_SAME_PROCESS", "n",
+     "Enable same process same device communication for cuda_ipc",
+     ucs_offsetof(uct_cuda_ipc_iface_config_t, params.enable_same_process), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -164,7 +168,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                      sizeof(pid_t));
     ipc_addr       = uct_cuda_ipc_iface_address_unpack(params->iface_addr,
                                                        iface_addr_len);
-    if (same_uuid &&
+    if (same_uuid && !iface->config.enable_same_process &&
         uct_cuda_ipc_is_rkey_local(ipc_addr.pid, ipc_addr.pid_ns)) {
         uct_iface_fill_info_str_buf(params, "same process");
         return 0;
