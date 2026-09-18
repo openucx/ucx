@@ -8,7 +8,6 @@
 #define UCS_INTERVAL_MAP_H_
 
 #include <ucs/datastruct/rbtree.h>
-#include <ucs/debug/assert.h>
 #include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 #include <stddef.h>

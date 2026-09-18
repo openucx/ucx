@@ -10,6 +10,7 @@
 
 #include "interval_map.h"
 
+#include <ucs/debug/assert.h>
 #include <ucs/sys/math.h>
 
 #include <inttypes.h>

@@ -34,6 +34,11 @@ struct ucs_rbtree_node {
 
 /**
  * Invoked bottom-up on every node whose subtree changed.
+ *
+ * The value must be a function of the subtree's node set - a maximum, sum or
+ * count - and not of its shape. A rotation re-augments only the two rotated
+ * nodes, so a shape-dependent value such as height would go stale in every
+ * ancestor.
  */
 typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
 

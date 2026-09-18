@@ -55,11 +55,6 @@ protected:
         return (node == NULL) ? NULL : ucs_container_of(node, entry, node);
     }
 
-    bool found(uint64_t start, uint64_t end)
-    {
-        return ucs_interval_map_find_containing(&m_map, start, end) != NULL;
-    }
-
     /* Brute-force reference: is any live interval a superset of the range? */
     bool ref_contains(uint64_t start, uint64_t end)
     {
@@ -148,18 +143,19 @@ protected:
 UCS_TEST_F(test_interval_map, containment) {
     insert(0, 1000, 7000);
 
-    EXPECT_EQ(&m_entries[0], find(1000, 7000)); /* exact                  */
-    EXPECT_EQ(&m_entries[0], find(1000, 4000)); /* shares the start       */
-    EXPECT_EQ(&m_entries[0], find(2500, 4000)); /* strictly inside        */
-    EXPECT_EQ(&m_entries[0], find(6999, 7000)); /* last byte              */
-    EXPECT_FALSE(found(1000, 9000));            /* extends past the end   */
-    EXPECT_FALSE(found(500, 4000));             /* starts before          */
-    EXPECT_FALSE(found(8000, 9000));            /* disjoint               */
+    EXPECT_EQ(&m_entries[0], find(1000, 7000)); /* exact                */
+    EXPECT_EQ(&m_entries[0], find(1000, 4000)); /* shares the start     */
+    EXPECT_EQ(&m_entries[0], find(2500, 4000)); /* strictly inside      */
+    EXPECT_EQ(&m_entries[0], find(6999, 7000)); /* last byte            */
+    EXPECT_EQ(NULL, find(1000, 9000));          /* extends past the end */
+    EXPECT_EQ(NULL, find(500, 4000));           /* starts before        */
+    EXPECT_EQ(NULL, find(8000, 9000));          /* disjoint             */
+    validate(1);
 }
 
 UCS_TEST_F(test_interval_map, empty_map) {
     EXPECT_EQ(0u, ucs_interval_map_count(&m_map));
-    EXPECT_FALSE(found(0, 1));
+    EXPECT_EQ(NULL, find(0, 1));
     validate(0);
 }
 
@@ -172,7 +168,7 @@ UCS_TEST_F(test_interval_map, overlapping_coexist) {
     EXPECT_EQ(&m_entries[0], find(1000, 4000));
     EXPECT_EQ(&m_entries[1], find(3000, 6000));
     /* Spans both but is contained by neither */
-    EXPECT_FALSE(found(1000, 6000));
+    EXPECT_EQ(NULL, find(1000, 6000));
 
     /* The shared region is covered by both; either answer is correct */
     entry *e = find(3000, 4000);
@@ -187,7 +183,7 @@ UCS_TEST_F(test_interval_map, remove_keeps_overlapping) {
     remove(0);
     validate(1);
     EXPECT_EQ(&m_entries[1], find(3000, 6000));
-    EXPECT_FALSE(found(1000, 2000));
+    EXPECT_EQ(NULL, find(1000, 2000));
 
     /* The surviving node was never relocated */
     EXPECT_EQ(3000u, m_entries[1].node.start);
@@ -200,7 +196,7 @@ UCS_TEST_F(test_interval_map, nested) {
     insert(1, 2000, 3000);
     validate(2);
 
-    EXPECT_TRUE(found(2000, 3000));
+    EXPECT_TRUE(find(2000, 3000) != NULL);
     EXPECT_EQ(&m_entries[0], find(1000, 8000));
 
     remove(1);
@@ -215,12 +211,12 @@ UCS_TEST_F(test_interval_map, duplicates) {
 
     remove(1);
     validate(2);
-    EXPECT_TRUE(found(100, 200));
+    EXPECT_TRUE(find(100, 200) != NULL);
 
     remove(0);
     remove(2);
     validate(0);
-    EXPECT_FALSE(found(100, 200));
+    EXPECT_EQ(NULL, find(100, 200));
 }
 
 UCS_TEST_F(test_interval_map, foreach_overlapping) {
@@ -234,6 +230,7 @@ UCS_TEST_F(test_interval_map, foreach_overlapping) {
     EXPECT_EQ(std::vector<unsigned>({0, 1, 3}), overlapping(100, 160));
     EXPECT_EQ(std::vector<unsigned>({3}), overlapping(50, 60));
     EXPECT_TRUE(overlapping(1000, 2000).empty());
+    validate(4);
 }
 
 /* Randomized insert/remove, cross-checked against a brute-force reference and
