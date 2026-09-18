@@ -86,6 +86,8 @@ ucs_interval_map_find_containing(const ucs_interval_map_t *map, uint64_t start,
     ucs_rbtree_node_t *rb_node = map->rb.root;
     ucs_interval_map_node_t *node;
 
+    ucs_assertv(start < end, "start=%" PRIu64 " end=%" PRIu64, start, end);
+
     while (rb_node != NULL) {
         node = ucs_interval_map_node(rb_node);
 

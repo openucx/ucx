@@ -25,7 +25,7 @@ extern "C" {
 namespace rbtree_check {
 
 /** Called for every node, to check whatever the embedding structure adds */
-typedef void (*visitor_t)(const ucs_rbtree_node_t*);
+using visitor_t = void (*)(const ucs_rbtree_node_t*);
 
 
 static inline size_t height(const ucs_rbtree_node_t *node)
