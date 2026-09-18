@@ -1317,6 +1317,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     }
 
 out:
+    uct_rc_mlx5_ep_purge_flushes(ep, txwq->prev_sw_pi);
     uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;
