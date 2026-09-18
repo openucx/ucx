@@ -17,6 +17,7 @@ protected:
     struct node {
         ucs_rbtree_node_t super;
         uint64_t          key;
+        uint64_t          subtree_max; /* maintained by the augmented path */
         bool              linked;
     };
 
@@ -34,7 +35,9 @@ protected:
         return ucs_derived_of(const_cast<ucs_rbtree_node_t*>(rb_node), node);
     }
 
-    void insert(unsigned idx, uint64_t key)
+    /* The caller-driven descent the API expects */
+    ucs_rbtree_node_t **descend(unsigned idx, uint64_t key,
+                                ucs_rbtree_node_t **parent_p)
     {
         ucs_rbtree_node_t *parent = NULL, **link = &m_tree.root;
 
@@ -46,8 +49,26 @@ protected:
 
         m_nodes[idx].key    = key;
         m_nodes[idx].linked = true;
-        ucs_rbtree_insert_at(&m_tree, parent, link, &m_nodes[idx].super);
         ++m_count;
+        *parent_p = parent;
+        return link;
+    }
+
+    void insert(unsigned idx, uint64_t key)
+    {
+        ucs_rbtree_node_t *parent;
+        ucs_rbtree_node_t **link = descend(idx, key, &parent);
+
+        ucs_rbtree_insert_at(&m_tree, parent, link, &m_nodes[idx].super);
+    }
+
+    void insert_augmented(unsigned idx, uint64_t key)
+    {
+        ucs_rbtree_node_t *parent;
+        ucs_rbtree_node_t **link = descend(idx, key, &parent);
+
+        ucs_rbtree_insert_at_augmented(&m_tree, parent, link,
+                                       &m_nodes[idx].super, augment);
     }
 
     /* Insert in order, node i holding keys[i] */
@@ -58,15 +79,26 @@ protected:
         }
     }
 
-    void remove(unsigned idx)
+    void detached(unsigned idx)
     {
-        ucs_rbtree_remove(&m_tree, &m_nodes[idx].super);
         m_nodes[idx].linked = false;
         --m_count;
 
         EXPECT_EQ(NULL, m_nodes[idx].super.parent);
         EXPECT_EQ(NULL, m_nodes[idx].super.left);
         EXPECT_EQ(NULL, m_nodes[idx].super.right);
+    }
+
+    void remove(unsigned idx)
+    {
+        ucs_rbtree_remove(&m_tree, &m_nodes[idx].super);
+        detached(idx);
+    }
+
+    void remove_augmented(unsigned idx)
+    {
+        ucs_rbtree_remove_augmented(&m_tree, &m_nodes[idx].super, augment);
+        detached(idx);
     }
 
     node *find(uint64_t key) const
@@ -84,10 +116,44 @@ protected:
         return NULL;
     }
 
-    /* The search-tree property is that an in-order walk is sorted. */
-    void validate()
+    static uint64_t subtree_max_of(const ucs_rbtree_node_t *rb_node)
     {
-        EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count));
+        return (rb_node == NULL) ? 0 : node_of(rb_node)->subtree_max;
+    }
+
+    /* A function of the subtree's node set, as the callback requires */
+    static void augment(ucs_rbtree_node_t *rb_node)
+    {
+        node *n = node_of(rb_node);
+
+        n->subtree_max = std::max(n->key,
+                                  std::max(subtree_max_of(rb_node->left),
+                                           subtree_max_of(rb_node->right)));
+    }
+
+    /* Recomputed by walking the subtree, independently of the augmentation */
+    static uint64_t expected_max(const ucs_rbtree_node_t *rb_node)
+    {
+        uint64_t max = node_of(rb_node)->key;
+
+        if (rb_node->left != NULL) {
+            max = std::max(max, expected_max(rb_node->left));
+        }
+        if (rb_node->right != NULL) {
+            max = std::max(max, expected_max(rb_node->right));
+        }
+        return max;
+    }
+
+    static void check_subtree_max(const ucs_rbtree_node_t *rb_node)
+    {
+        EXPECT_EQ(expected_max(rb_node), node_of(rb_node)->subtree_max);
+    }
+
+    /* The search-tree property is that an in-order walk is sorted. */
+    void validate(rbtree_check::visitor_t visit = NULL)
+    {
+        EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count, visit));
 
         const std::vector<uint64_t> ordered = keys();
         EXPECT_TRUE(std::is_sorted(ordered.begin(), ordered.end()));
@@ -261,113 +327,13 @@ UCS_TEST_F(test_rbtree, random_stress) {
     EXPECT_EQ(expected, keys());
 }
 
-/* The augmented entry points, exercised with a set-dependent value: the
- * maximum key in each subtree. */
-class test_rbtree_augmented : public ucs::test {
-protected:
-    struct node {
-        ucs_rbtree_node_t super;
-        uint64_t          key;
-        uint64_t          subtree_max;
-        bool              linked;
-    };
-
-    static const unsigned NUM_NODES = 128;
-
-    void init()
-    {
-        ucs::test::init();
-        ucs_rbtree_init(&m_tree);
-        m_nodes.assign(NUM_NODES, node());
-    }
-
-    static node *node_of(const ucs_rbtree_node_t *rb_node)
-    {
-        return ucs_derived_of(const_cast<ucs_rbtree_node_t*>(rb_node), node);
-    }
-
-    static uint64_t subtree_max_of(const ucs_rbtree_node_t *rb_node)
-    {
-        return (rb_node == NULL) ? 0 : node_of(rb_node)->subtree_max;
-    }
-
-    static void augment(ucs_rbtree_node_t *rb_node)
-    {
-        node *n = node_of(rb_node);
-
-        n->subtree_max = std::max(n->key,
-                                  std::max(subtree_max_of(rb_node->left),
-                                           subtree_max_of(rb_node->right)));
-    }
-
-    void insert(unsigned idx, uint64_t key)
-    {
-        ucs_rbtree_node_t *parent = NULL, **link = &m_tree.root;
-
-        while (*link != NULL) {
-            parent = *link;
-            link   = (key < node_of(parent)->key) ? &parent->left :
-                                                    &parent->right;
-        }
-
-        m_nodes[idx].key    = key;
-        m_nodes[idx].linked = true;
-        ucs_rbtree_insert_at_augmented(&m_tree, parent, link,
-                                       &m_nodes[idx].super, augment);
-        ++m_count;
-    }
-
-    /* 16 keys, deliberately out of order */
-    void insert_keys()
-    {
-        for (unsigned i = 0; i < 16; ++i) {
-            insert(i, (i * 7) % 16);
-        }
-    }
-
-    void remove(unsigned idx)
-    {
-        ucs_rbtree_remove_augmented(&m_tree, &m_nodes[idx].super, augment);
-        m_nodes[idx].linked = false;
-        --m_count;
-    }
-
-    /* Recomputed by walking the subtree, independently of the augmentation */
-    static uint64_t expected_max(const ucs_rbtree_node_t *rb_node)
-    {
-        uint64_t max = node_of(rb_node)->key;
-
-        if (rb_node->left != NULL) {
-            max = std::max(max, expected_max(rb_node->left));
-        }
-        if (rb_node->right != NULL) {
-            max = std::max(max, expected_max(rb_node->right));
-        }
-        return max;
-    }
-
-    static void check_subtree_max(const ucs_rbtree_node_t *rb_node)
-    {
-        EXPECT_EQ(expected_max(rb_node), node_of(rb_node)->subtree_max);
-    }
-
-    void validate()
-    {
-        EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count,
-                                           check_subtree_max));
-    }
-
-    ucs_rbtree_t      m_tree;
-    std::vector<node> m_nodes;
-    size_t            m_count = 0;
-};
 
 /* Ascending keys rotate on nearly every insert, so the hook has to run for
  * each one to keep the root's value exact. */
-UCS_TEST_F(test_rbtree_augmented, insert_maintains_subtree_max) {
+UCS_TEST_F(test_rbtree, augmented_insert_maintains_subtree_max) {
     for (unsigned i = 0; i < 64; ++i) {
-        insert(i, (i * 37) % 64);
-        validate();
+        insert_augmented(i, (i * 37) % 64);
+        validate(check_subtree_max);
     }
 
     EXPECT_EQ(63u, node_of(m_tree.root)->subtree_max);
@@ -375,36 +341,16 @@ UCS_TEST_F(test_rbtree_augmented, insert_maintains_subtree_max) {
 
 /* Draining the tree covers all three removal shapes, including the two-child
  * one, where the relinked successor must be re-augmented in its new place. */
-UCS_TEST_F(test_rbtree_augmented, remove_maintains_subtree_max) {
-    insert_keys();
-    validate();
+UCS_TEST_F(test_rbtree, augmented_remove_maintains_subtree_max) {
+    for (unsigned i = 0; i < 16; ++i) {
+        insert_augmented(i, (i * 7) % 16);
+    }
+    validate(check_subtree_max);
 
     for (unsigned i = 0; i < 16; ++i) {
-        remove(i);
-        validate();
+        remove_augmented(i);
+        validate(check_subtree_max);
     }
 
     EXPECT_EQ(NULL, m_tree.root);
-}
-
-UCS_TEST_F(test_rbtree_augmented, random_stress) {
-    static const unsigned NUM_ITERS = 20000;
-
-    for (unsigned i = 0; i < NUM_ITERS; ++i) {
-        const unsigned idx = ucs::rand() % NUM_NODES;
-
-        if (m_nodes[idx].linked) {
-            remove(idx);
-        } else {
-            insert(idx, ucs::rand() % 100000);
-        }
-
-        if ((i & 15) == 0) {
-            validate();
-        }
-
-        ASSERT_FALSE(HasFailure());
-    }
-
-    validate();
 }
