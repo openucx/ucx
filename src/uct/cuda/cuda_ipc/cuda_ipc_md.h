@@ -68,6 +68,10 @@ typedef struct {
 } uct_cuda_ipc_dev_cache_t;
 
 
+int uct_cuda_ipc_nvml_peer_accessible(CUdevice cu_dev,
+                                       const CUuuid *remote_uuid);
+
+
 static UCS_F_ALWAYS_INLINE int
 uct_cuda_ipc_uuid_equals(uct_cuda_ipc_uuid_hash_key_t key1,
                          uct_cuda_ipc_uuid_hash_key_t key2)
