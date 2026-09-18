@@ -15,6 +15,9 @@
 #include <ucs/type/init_once.h>
 
 
+#define UCT_CUDA_SYS_DEVICE_NAME_PRIORITY 10
+
+
 const char *uct_cuda_cu_get_error_string(CUresult result)
 {
     static __thread char buf[64];
@@ -174,8 +177,7 @@ uct_cuda_gpu_bus_id_is_visible(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
 
 static unsigned uct_cuda_init_devices_cu(ucs_sys_bus_id_t *visible_gpu_bus_ids)
 {
-    const unsigned sys_device_priority = 10;
-    unsigned num_visible_gpus          = 0;
+    unsigned num_visible_gpus = 0;
     ucs_sys_device_t sys_dev;
     char device_name[10];
     ucs_status_t status;
@@ -206,8 +208,8 @@ static unsigned uct_cuda_init_devices_cu(ucs_sys_bus_id_t *visible_gpu_bus_ids)
         }
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d", cuda_dev);
-        status = ucs_topo_sys_device_set_name(sys_dev, device_name,
-                                              sys_device_priority);
+        status = ucs_topo_sys_device_set_name(
+                sys_dev, device_name, UCT_CUDA_SYS_DEVICE_NAME_PRIORITY);
         ucs_assert_always(status == UCS_OK);
         ++num_visible_gpus;
     }
@@ -224,6 +226,7 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
     ucs_sys_bus_id_t bus_id;
     nvmlPciInfo_t nvml_pci;
     nvmlDevice_t nvml_dev;
+    char device_name[10];
     ucs_status_t status;
 
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
@@ -260,6 +263,11 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
         if (status != UCS_OK) {
             goto out;
         }
+
+        ucs_snprintf_safe(device_name, sizeof(device_name), "UNKN%u", i);
+        status = ucs_topo_sys_device_set_name(
+                sys_dev, device_name, UCT_CUDA_SYS_DEVICE_NAME_PRIORITY);
+        ucs_assert_always(status == UCS_OK);
     }
 
 out:
