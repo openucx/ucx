@@ -1,6 +1,6 @@
 parameters:
   demands: []
-  container: rhel76
+  container: coverity_rh7
   modes: ["release", "devel"]
 
 jobs:
