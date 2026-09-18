@@ -76,6 +76,7 @@ void ucs_interval_map_insert(ucs_interval_map_t *map,
 void ucs_interval_map_remove(ucs_interval_map_t *map,
                              ucs_interval_map_node_t *node)
 {
+    ucs_assertv(map->num_nodes > 0, "map=%p node=%p", map, node);
     ucs_rbtree_remove_augmented(&map->rb, &node->super,
                                 ucs_interval_map_augment);
     map->num_nodes--;
@@ -145,5 +146,7 @@ void ucs_interval_map_foreach_overlapping(const ucs_interval_map_t *map,
                                           uint64_t start, uint64_t end,
                                           ucs_interval_map_cb_t cb, void *arg)
 {
+    ucs_assertv(start < end, "start=%" PRIu64 " end=%" PRIu64, start, end);
+
     ucs_interval_map_foreach_node(map->rb.root, start, end, cb, arg);
 }

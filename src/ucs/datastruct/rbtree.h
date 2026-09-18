@@ -34,9 +34,6 @@ struct ucs_rbtree_node {
 
 /**
  * Invoked bottom-up on every node whose subtree changed.
- *
- * Passed per operation rather than held on the tree, so a container that keeps
- * no derived data uses the plain entry points and pays nothing for it.
  */
 typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
 

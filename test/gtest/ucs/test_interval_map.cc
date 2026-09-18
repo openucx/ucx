@@ -277,5 +277,7 @@ UCS_TEST_F(test_interval_map, random_stress) {
             }
         }
         EXPECT_EQ(expected, overlapping(start, end));
+
+        ASSERT_FALSE(HasFailure());
     }
 }

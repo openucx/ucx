@@ -21,15 +21,15 @@ BEGIN_C_DECLS
  * Does not merge overlapping and touching intervals into one node.
  */
 typedef struct {
-    ucs_rbtree_node_t super; /**< Balancing links, must be first */
-    uint64_t          start; /**< Interval start, inclusive */
-    uint64_t          end; /**< Interval end, exclusive */
+    ucs_rbtree_node_t super;   /**< Balancing links, must be first */
+    uint64_t          start;   /**< Interval start, inclusive */
+    uint64_t          end;     /**< Interval end, exclusive */
     uint64_t          max_end; /**< Maximum 'end' in this subtree */
 } ucs_interval_map_node_t;
 
 
 typedef struct {
-    ucs_rbtree_t rb; /**< Balanced tree ordered by 'start' */
+    ucs_rbtree_t rb;        /**< Balanced tree ordered by 'start' */
     size_t       num_nodes; /**< Number of intervals */
 } ucs_interval_map_t;
 
