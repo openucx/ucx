@@ -54,7 +54,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ucs_offsetof(ucm_global_config_t, enable_malloc_hooks),
    UCS_CONFIG_TYPE_BOOL},
 
-  {"MALLOC_RELOC", "yes",
+  {"MALLOC_RELOC", "no",
    "Enable installing malloc symbols in the relocation table.\n"
    "This is unsafe and off by default, because sometimes glibc\n"
    "calls malloc/free without going through the relocation table,\n"
