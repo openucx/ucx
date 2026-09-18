@@ -1097,6 +1097,23 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get, "IB_NUM_PATHS?=1")
     });
 }
 
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get_no_zcopy_proto,
+           "IB_NUM_PATHS?=1", "PROTOS=^get/zcopy", "RNDV_SCHEME=put_zcopy")
+{
+    require_cuda_net_md();
+
+    /* Same mock configuration as above, only get/zcopy is excluded: get/rndv
+     * is then selected, which shows it was a candidate dropped by the fallback
+     * rule. The rendezvous scheme is forced, so that the message size on which
+     * the remote side switches from am/zcopy to put/zcopy, which depends on
+     * the device attributes of the host, does not change the expected ranges.
+     */
+    test_cuda_rma(UCP_OP_ID_GET, {
+        {1, INF, "rndv using zero-copy fenced write to remote",
+         "rc_mlx5/mock"},
+    });
+}
+
 UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get_zcopy_thresh,
            "IB_NUM_PATHS?=1", "ZCOPY_THRESH=4k",
            "PROTO_EMULATION_ENABLE=n")
