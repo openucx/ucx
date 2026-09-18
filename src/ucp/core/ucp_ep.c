@@ -3547,6 +3547,16 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         goto err;
     }
 
+    /* The wireup ACK is sent on the AM lane before any protocol selects that
+     * lane, so its iface has to be progressed already during wireup. Account
+     * for it like a lane selected by the protocols, so that it is activated
+     * while at least one endpoint uses this configuration. */
+    lane = config->key.am_lane;
+    if (context->config.ext.proto_enable && (lane != UCP_NULL_LANE) &&
+        (config->key.lanes[lane].rsc_index != UCP_NULL_RESOURCE)) {
+        config->proto_lane_map = UCS_BIT(lane);
+    }
+
     if (config->key.flags & UCP_EP_CONFIG_KEY_FLAG_INTERMEDIATE) {
         short_am_cap_flag  = 0;
         short_tag_cap_flag = 0;
