@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -17,10 +17,9 @@
 typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
-#if HAVE_CUDA_FABRIC
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL /* cudaMallocAsync memory */
-#endif
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -31,6 +30,11 @@ typedef struct uct_cuda_ipc_md_handle {
 #if HAVE_CUDA_FABRIC
         CUmemFabricHandle     fabric_handle; /* VMM/Mallocasync export handle */
 #endif
+        struct {
+            int               fd;            /* POSIX file descriptor */
+            uint64_t          system_id;     /* Machine identifier for
+                                                same-machine verification */
+        } posix_fd;
     } handle;
 #if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;
@@ -45,6 +49,7 @@ typedef struct uct_cuda_ipc_md_handle {
 typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
+    int                      fabric_supported;  /**< CUDA fabric support status */
 } uct_cuda_ipc_md_t;
 
 
@@ -95,6 +100,8 @@ typedef struct {
     uct_component_t             super;
     khash_t(cuda_ipc_uuid_hash) uuid_hash;
     pthread_mutex_t             lock;
+    /** Enable remote IPC memory handle mapping cache */
+    int                         enable_remote_cache;
 } uct_cuda_ipc_component_t;
 
 extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
@@ -107,6 +114,8 @@ typedef struct uct_cuda_ipc_md_config {
     ucs_ternary_auto_value_t enable_mnnvl;
     unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
+    /** Enable remote IPC memory handle mapping cache */
+    int                      enable_remote_cache;
 } uct_cuda_ipc_md_config_t;
 
 

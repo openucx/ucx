@@ -415,6 +415,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
                     const uct_ud_iface_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
+    ucs_time_t keepalive_interval;
     ucs_status_t status;
     size_t data_size;
     int mtu;
@@ -493,6 +494,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         self->tx.tick = ucs_time_from_sec(config->timer_tick);
     }
 
+    /* A private endpoint is not owned by the upper layer, so it has to check
+     * its peer by itself, reusing the keepalive interval of the upper layer */
+    keepalive_interval = (params->field_mask &
+                          UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL) ?
+                         params->keepalive_interval :
+                         UCT_UD_SLOW_TIMER_MAX_TICK(self);
+    self->config.keepalive_interval = ucs_max(keepalive_interval,
+                                              self->tx.tick);
+
     if (config->timer_backoff < UCT_UD_MIN_TIMER_TIMER_BACKOFF) {
         ucs_error("The timer back off must be >= %lf (%lf)",
                   UCT_UD_MIN_TIMER_TIMER_BACKOFF, config->timer_backoff);
@@ -525,6 +535,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     UCT_UD_IFACE_HOOK_INIT(self);
 
     ucs_ptr_array_init(&self->eps, "ud_eps");
+    ucs_array_init_dynamic(&self->ep_gen);
 
     status = uct_ud_iface_create_qp(self, config);
     if (status != UCS_OK) {
@@ -594,6 +605,7 @@ err_rx_mpool:
 err_qp:
     uct_ud_iface_destroy_qp(self);
 err_eps_array:
+    ucs_array_cleanup_dynamic(&self->ep_gen);
     ucs_ptr_array_cleanup(&self->eps, 1);
     return status;
 }
@@ -635,6 +647,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->rx.mp, 0);
 
     ucs_debug("iface(%p): ptr_array cleanup", self);
+    ucs_array_cleanup_dynamic(&self->ep_gen);
     ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     UCS_STATS_NODE_FREE(self->stats);
@@ -820,16 +833,41 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+ucs_status_t uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep);
+    unsigned max_index = iface->eps.size;
+    unsigned ep_index;
+    uint32_t ep_gen;
+
+    if (max_index > UCT_UD_EP_INDEX_MAX) {
+        ucs_error("iface %p: reached the maximal number of endpoints (%lu)",
+                  iface, UCT_UD_EP_INDEX_MAX + 1);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    if (max_index >= ucs_array_length(&iface->ep_gen)) {
+        ucs_array_resize(&iface->ep_gen, max_index + 1, 0,
+                         return UCS_ERR_NO_MEMORY);
+    }
+
+    ep_index  = ucs_ptr_array_insert(&iface->eps, ep);
+    ep_gen    = ucs_array_elem(&iface->ep_gen, ep_index);
+    ep->ep_id = (ep_gen << UCT_UD_EP_INDEX_BITS) | ep_index;
+    return UCS_OK;
 }
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
+    unsigned ep_index;
+    uint8_t *gen;
+
     if (ep->ep_id != UCT_UD_EP_NULL_ID) {
-        ucs_trace("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
-        ucs_ptr_array_remove(&iface->eps, ep->ep_id);
+        ep_index = uct_ud_ep_id_to_index(ep->ep_id);
+        ucs_trace("iface(%p) remove " UCT_UD_EP_FMT, iface, UCT_UD_EP_ARG(ep));
+        /* Increment generation for the next iteration. */
+        gen  = &ucs_array_elem(&iface->ep_gen, ep_index);
+        *gen = (*gen + 1) & UCT_UD_EP_GEN_MASK;
+        ucs_ptr_array_remove(&iface->eps, ep_index);
     }
 }
 

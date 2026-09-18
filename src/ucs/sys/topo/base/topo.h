@@ -18,15 +18,47 @@
 BEGIN_C_DECLS
 
 
-/* Upper limit on system device id */
-#define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
+/* Maximal valid system device id and number of valid ids */
+#define UCS_SYS_DEVICE_ID_MAX   (UINT8_MAX - 1)
+#define UCS_SYS_DEVICE_ID_COUNT (UCS_SYS_DEVICE_ID_MAX + 1)
 
 /* Indicate that the ucs_sys_device_t for the device has no real bus_id
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
+/* Indicate that the ordinal of a given system device is invalid */
+#define UCS_SYS_DEVICE_ORDINAL_INVALID UINT_MAX
+
+/* User-defined system device value is not set */
+#define UCS_SYS_DEVICE_USER_VALUE_EMPTY UINTPTR_MAX
+
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
+
+/* Bus ID string formatting */
+#define UCS_SYS_BUS_ID_FMT "%04x:%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ARG(_bus_id) \
+    (unsigned)(_bus_id)->domain, (unsigned)(_bus_id)->bus, \
+            (unsigned)(_bus_id)->slot, (unsigned)(_bus_id)->function
+
+/* Bus ID string formatting without the domain */
+#define UCS_SYS_BUS_ID_ABBREVIATED_FMT "%02x:%02x.%u"
+#define UCS_SYS_BUS_ID_ABBREVIATED_ARG(_bus_id) \
+    (unsigned)(_bus_id)->bus, (unsigned)(_bus_id)->slot, \
+            (unsigned)(_bus_id)->function
+
+/* Special values for undefined PCI identifiers */
+#define UCS_SYS_PCI_ID_VALUE_UNDEFINED 0x0000
+#define UCS_SYS_PCI_ID_UNDEFINED \
+    (ucs_sys_pci_id_t) \
+    { \
+        .vendor = UCS_SYS_PCI_ID_VALUE_UNDEFINED, \
+        .device = UCS_SYS_PCI_ID_VALUE_UNDEFINED \
+    }
+
+/* String formatting for PCI identifiers */
+#define UCS_SYS_PCI_ID_FMT         "[%04x:%04x]"
+#define UCS_SYS_PCI_ID_ARG(_pci_id) ((_pci_id)->vendor), ((_pci_id)->device)
 
 
 typedef struct ucs_sys_bus_id {
@@ -35,6 +67,15 @@ typedef struct ucs_sys_bus_id {
     uint8_t  slot;     /* range: 0 to 1f */
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
+
+
+/**
+ * PCI identifier of a system device.
+ */
+typedef struct ucs_sys_pci_id {
+    uint16_t vendor;
+    uint16_t device;
+} ucs_sys_pci_id_t;
 
 
 /* Packed bit representation of a PCI bus id */
@@ -48,6 +89,20 @@ typedef int64_t ucs_bus_id_bit_rep_t;
  * Refer ucs_topo_find_device_by_bus_id()
  */
 typedef uint8_t ucs_sys_device_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Classification of a system device, used to group devices of the same kind
+ * (for example when computing a per-class device ordinal). The class is set by
+ * the owning transport, which maps its UCT device type onto one of these
+ * values.
+ */
+typedef enum {
+    UCS_TOPO_DEVICE_CLASS_UNKNOWN = 0, /**< Unclassified device */
+    UCS_TOPO_DEVICE_CLASS_NET, /**< Network device */
+    UCS_TOPO_DEVICE_CLASS_ACC /**< Acceleration device (e.g. GPU) */
+} ucs_topo_device_class_t;
 
 
 /**
@@ -165,6 +220,27 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
+ * Find system device by pci bus id and user-defined value.
+ *
+ * This is used for logical devices which share the same PCI bus id but still
+ * need different system device indexes. The lookup key is a combination of the
+ * bus id and the user value. BDF-only lookup uses an implicit empty user value.
+ * If an existing system device with the same bus id and user value exists, it is
+ * returned. Otherwise, a system device for this key is registered and returned.
+ *
+ * @param [in]  bus_id      pointer to bus id of the device of interest.
+ * @param [in]  user_value  user-defined value identifying the logical device.
+ * @param [out] sys_dev_p   system device index associated with the value.
+ *
+ * @return UCS_OK or error in case device cannot be found.
+ */
+ucs_status_t
+ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
+                                              uintptr_t user_value,
+                                              ucs_sys_device_t *sys_dev_p);
+
+
+/**
  * Find pci bus id of the given system device.
  *
  * @param [in]  sys_dev system device index.
@@ -177,6 +253,18 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 
 
 /**
+ * Compare two PCI identifiers.
+ *
+ * @param [in] pci_id1  First PCI identifier.
+ * @param [in] pci_id2  Second PCI identifier.
+ *
+ * @return Nonzero if the PCI identifiers are equal, zero otherwise.
+ */
+int ucs_topo_pci_id_equal(const ucs_sys_pci_id_t *pci_id1,
+                          const ucs_sys_pci_id_t *pci_id2);
+
+
+/**
  * Pack a PCI bus id into its bit representation.
  *
  * @param [in] bus_id  Bus id to pack.
@@ -185,6 +273,22 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
  */
 ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id);
+
+
+/**
+ * Compare two system devices by their topology identity.
+ *
+ * Registered devices are ordered by PCI bus id, then by user-defined value.
+ * Device identifiers must be valid and registered (not UNKNOWN).
+ *
+ * @param [in] sys_dev1  First system device.
+ * @param [in] sys_dev2  Second system device.
+ *
+ * @return A negative value if @a sys_dev1 precedes @a sys_dev2, a positive
+ *         value if @a sys_dev2 precedes @a sys_dev1, or zero if equal.
+ */
+int ucs_topo_sys_device_cmp(ucs_sys_device_t sys_dev1,
+                            ucs_sys_device_t sys_dev2);
 
 
 /**
@@ -270,6 +374,18 @@ ucs_sys_device_t ucs_topo_get_sysfs_dev(const char *dev_name,
                                         unsigned name_priority);
 
 /**
+ * Read the PCI identifier of a device from sysfs, without adding it as a system
+ * device.
+ *
+ * @param [in]  dev_name    Device name, used for logging.
+ * @param [in]  sysfs_path  sysfs path for the required device, or NULL.
+ *
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if it could not be read.
+ */
+ucs_sys_pci_id_t ucs_topo_get_sysfs_pci_id(const char *dev_name,
+                                           const char *sysfs_path);
+
+/**
  * Return system device name in BDF format: "<domain>:<bus>:<device>.<function>".
  *
  * @param [in]  sys_dev  System device id, as returned from
@@ -345,6 +461,35 @@ ucs_topo_resolve_sysfs_path(const char *dev_path, char *path_buffer);
 const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 
 /**
+ * Set the device class of a given system device.
+ *
+ * @param [in]  sys_dev       System device index.
+ * @param [in]  device_class  Class to assign to the device.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t
+ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
+                              ucs_topo_device_class_t device_class);
+
+/**
+ * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
+ * among all unique BDFs of the same class.
+ *
+ * For example, with GPUs (class @ref UCS_TOPO_DEVICE_CLASS_ACC) registered, the
+ * device with the smallest BDF returns 0, the next returns 1, and so on. The
+ * ordering depends only on the bus id, not on the device name or discovery
+ * order. Multiple system device records of the same class that share a BDF
+ * also share the same ordinal.
+ *
+ * @param [in]  sys_dev System device to query.
+ *
+ * @return The ordinal of the system device, or UCS_SYS_DEVICE_ORDINAL_INVALID
+ *         if the system device is unknown/invalid or has no assigned class.
+ */
+unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev);
+
+/**
  * Get the closest NUMA node for a given system device.
  *
  * @param [in] sys_dev input system device.
@@ -352,6 +497,17 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
  * @return The number of NUMA node closest to given device.
  */
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev);
+
+
+/**
+ * Get the PCI identifier of a given system device.
+ *
+ * @param [in] sys_dev System device index.
+ *
+ * @return PCI identifier, or UCS_SYS_PCI_ID_UNDEFINED if the system device is
+ *         invalid or its PCI identifier is unavailable.
+ */
+ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev);
 
 
 /**
@@ -367,24 +523,12 @@ ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
 
 
 /**
- * Set a user-defined value for a given system device.
- *
- * @param [in] sys_dev System device index.
- * @param [in] value   User-defined value to set.
- *
- * @return UCS_OK on success, error otherwise.
- */
-ucs_status_t
-ucs_topo_sys_device_set_user_value(ucs_sys_device_t sys_dev, uintptr_t value);
-
-
-/**
  * Retrieve the user-defined value of a system device.
  *
  * @param [in] sys_dev System device index.
  *
- * @return User-defined value, or UINTPTR_MAX if no value is set or the device
- *         does not exist.
+ * @return User-defined value, or UCS_SYS_DEVICE_USER_VALUE_EMPTY if no value is
+ *         set or the device does not exist.
  */
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev);
 

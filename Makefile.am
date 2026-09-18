@@ -32,6 +32,7 @@ dist_perftest__DATA = \
 	contrib/ucx_perftest_config/test_types_uct \
 	contrib/ucx_perftest_config/test_types_ucp \
 	contrib/ucx_perftest_config/test_types_ucp_rma \
+	contrib/ucx_perftest_config/test_types_ucp_rma_iov \
 	contrib/ucx_perftest_config/test_types_ucp_amo \
 	contrib/ucx_perftest_config/test_types_ucp_daemon \
 	contrib/ucx_perftest_config/test_types_ucp_device_cuda \
@@ -114,6 +115,31 @@ include $(srcdir)/docs/doxygen/doxygen.am
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ucx.pc
+
+install-exec-hook:
+	@if test -n "$(UCX_LIBRARY_FILE_SUFFIX)"; then \
+		for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(moduledir)"; do \
+			if test -d "$$dir"; then \
+				for lib in "$$dir"/*$(UCX_LIBRARY_FILE_SUFFIX).so.*; do \
+					test -e "$$lib" || continue; \
+					link=`echo "$$lib" | sed 's/\.so\..*/.so/'`; \
+					$(LN_S) -f "`basename "$$lib"`" "$$link"; \
+				done; \
+			fi; \
+		done; \
+	fi
+
+uninstall-hook:
+	@if test -n "$(UCX_LIBRARY_FILE_SUFFIX)"; then \
+		for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(moduledir)"; do \
+			if test -d "$$dir"; then \
+				for link in "$$dir"/*$(UCX_LIBRARY_FILE_SUFFIX).so; do \
+					test -L "$$link" || continue; \
+					$(RM) "$$link"; \
+				done; \
+			fi; \
+		done; \
+	fi
 
 DOCLIST = docs/doxygen/doxygen-doc/ucx.tag
 

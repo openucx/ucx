@@ -10,6 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
+#include <ucp/wireup/address.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 
@@ -50,8 +51,19 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_REPLY_RECONFIG,
+    UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
+    UCP_WIREUP_MSG_LANES_ADDR_REPLY,
+    UCP_WIREUP_MSG_LANES_ADDR_ACK,
+
     UCP_WIREUP_MSG_LAST
 };
+
+
+/*
+ * Minimal peer release version which understands the token trailer of the
+ * LANES_ADDR messages. Older peers get the messages without any token.
+ */
+#define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
 /**
@@ -119,6 +131,10 @@ typedef struct {
     /* Custom argument of @a calc_tiebreak function */
     void                         *tiebreak_arg;
 
+    /* Maximum relative primary-score difference for tiebreak candidates.
+     * Zero allows only scores equal according to ucs_fp_compare(). */
+    double                       score_tolerance;
+
     /* Flags that describe TL specifics */
     uint8_t                      tl_rsc_flags;
 
@@ -140,8 +156,39 @@ typedef struct ucp_wireup_msg {
     uint64_t               src_ep_id; /* Endpoint ID of source */
     uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
                                          UCS_PTR_MAP_KEY_INVALID */
-    /* packed addresses follow */
+    /* packed addresses or @ref ucp_wireup_msg_lanes_addrs_t follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
+
+
+typedef struct ucp_wireup_msg_lanes_info_t {
+    /* Lanes the sender asked about. Empty in a REQUEST, which answers nothing.
+     * When the token trailer is present, these are also the RX-token lanes. */
+    ucp_lane_map_t         requested_lane_map;
+    /* Lanes whose addresses are carried here. When the token trailer is
+     * present, these are also the TX-token lanes. */
+    ucp_lane_map_t         provided_lane_map;
+    /* @ref ucp_wireup_msg_tokens_info_t (only towards peers of release version
+     * UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION and above), then packed addresses
+     * follow */
+} UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
+
+
+/*
+ * Token trailer of a LANES_ADDR message. Both peers decide whether it is part
+ * of the message by the release version of the remote peer, kept in
+ * ucp_ep_config_key_t::dst_version, so no flag is needed on the wire.
+ */
+typedef struct ucp_wireup_msg_tokens_info_t {
+    /* Exchange generation, echoed by the peer in its answers, to be matched
+     * against the tokens once they are carried. Starts from 1, so that 0 tells
+     * the receiver the message came without a trailer at all. */
+    uint32_t request_id;
+    /* uint8_t tx_lengths[popcount(provided_lane_map)] followed by the TX
+     * tokens, then uint8_t rx_lengths[popcount(requested_lane_map)] followed by
+     * the RX tokens, then the packed addresses. A zero length means the
+     * respective lane carries no token, which is the case for every lane until
+     * the tokens themselves are exchanged. */
+} UCS_S_PACKED ucp_wireup_msg_tokens_info_t;
 
 
 typedef struct {
@@ -164,6 +211,8 @@ ucs_status_t
 ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 ucp_tl_bitmap_t tl_bitmap,
                                 const ucp_unpacked_address_t *remote_address,
+                                uint64_t local_dev_bitmap,
+                                uint64_t remote_dev_bitmap,
                                 ucp_wireup_select_info_t *select_info);
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
@@ -182,6 +231,8 @@ ucs_status_t
 ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        const ucp_tl_bitmap_t *tl_bitmap,
                        const ucp_lane_index_t *lanes2remote,
+                       ucp_lane_map_t requested_lane_map,
+                       ucp_lane_map_t provided_lane_map,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p);
 
@@ -209,7 +260,8 @@ void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue);
 
 /* add flags to all wireup_ep->flags */
-void ucp_wireup_update_flags(ucp_ep_h ep, uint32_t new_flags);
+void ucp_wireup_update_flags(ucp_ep_h ep, ucp_lane_map_t lanes,
+                             uint32_t new_flags);
 
 void ucp_wireup_remote_connected(ucp_ep_h ep);
 
@@ -238,6 +290,43 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
 unsigned ucp_wireup_eps_progress(void *arg);
+
+
+/**
+ * Send a LANES_ADDR_REQUEST/REPLY/ACK wireup message over the AM lane, packing
+ * addresses for the lanes in @a provided_lane_map. @a request_id identifies the
+ * exchange, and is echoed by the peer in its answer.
+ */
+void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
+                                    ucp_lane_map_t requested_lane_map,
+                                    ucp_lane_map_t provided_lane_map,
+                                    uint32_t request_id);
+
+
+/* Size of one token section (gtest feeds it crafted buffers). */
+ucs_status_t
+ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
+                              size_t avail, size_t *consumed_p);
+
+
+/**
+ * Find the remote p2p address entry for @a remote_lane (used by lane recovery).
+ */
+ucs_status_t
+ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
+                                const ucp_unpacked_address_t *remote_address,
+                                const ucp_address_entry_t **address_entry_p,
+                                const ucp_address_entry_ep_addr_t **ep_entry_p);
+
+
+/**
+ * Create a fully-connected CONNECT_TO_IFACE UCT endpoint from @a address.
+ */
+ucs_status_t ucp_wireup_iface_ep_create(ucp_worker_iface_t *wiface,
+                                        const ucp_address_entry_t *address,
+                                        unsigned path_index,
+                                        uct_ep_h *uct_ep_p);
+
 
 double ucp_wireup_iface_lat_distance_v1(const ucp_worker_iface_t *wiface);
 

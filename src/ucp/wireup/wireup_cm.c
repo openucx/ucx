@@ -725,7 +725,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     if (context->config.ext.cm_use_all_devices) {
         ucp_ep->flags |= UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ;
-        ucp_wireup_update_flags(ucp_ep, UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
+        ucp_wireup_update_flags(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)),
+                                UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
     } else {
         ucp_wireup_remote_connected(ucp_ep);
     }
@@ -1369,7 +1370,8 @@ static unsigned ucp_cm_server_conn_notify_progress(void *arg)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
     if (ucp_ep->worker->context->config.ext.cm_use_all_devices) {
-        ucp_wireup_update_flags(ucp_ep, UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
+        ucp_wireup_update_flags(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)),
+                                UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED);
         ucp_wireup_send_pre_request(ucp_ep);
     } else {
         ucp_wireup_remote_connected(ucp_ep);

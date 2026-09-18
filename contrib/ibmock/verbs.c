@@ -20,6 +20,7 @@
 #define DUMMY_PKEY 65535 /* Dummy pkey with full membership for now */
 
 static pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
+static bool fork_initialized       = false;
 
 void lock(void)
 {
@@ -110,7 +111,13 @@ const char *ibv_get_device_name(struct ibv_device *device)
 
 int ibv_fork_init(void)
 {
+    fork_initialized = true;
     return 0;
+}
+
+enum ibv_fork_status ibv_is_fork_initialized(void)
+{
+    return fork_initialized ? IBV_FORK_ENABLED : IBV_FORK_DISABLED;
 }
 
 static int vctx_query_port(struct ibv_context *context, uint8_t port_num,

@@ -201,7 +201,10 @@ struct ucp_request {
             } state;
 
             union {
-                ucp_wireup_msg_t  wireup;
+                struct {
+                    ucp_wireup_msg_t            msg_hdr;
+                    ucp_wireup_msg_lanes_info_t lanes_info;
+                } UCS_S_PACKED wireup;
 
                 struct {
                     /* Used to identify matching parts of a large message */
@@ -241,6 +244,11 @@ struct ucp_request {
                 struct {
                     uint64_t   remote_addr; /* Remote address */
                     ucp_rkey_h rkey; /* Remote memory key */
+
+                    struct {
+                        const uint64_t   *remote_addrs;
+                        ucp_rkey_h const *rkeys;
+                    } sgl;
                 } rma;
 
                 struct {

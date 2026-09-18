@@ -12,7 +12,9 @@
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/module.h>
+#include <ucs/sys/sock.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/type/init_once.h>
 #include <sys/utsname.h>
 #include <pthread.h>
 
@@ -115,6 +117,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
                               uct_rocm_base_agents.num_gpu);
             ucs_topo_sys_device_set_name(sys_dev, device_name,
                                          sys_device_priority);
+            ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
         }
         ucs_trace("found gpu agent %lu", agent.handle);
         uct_rocm_base_agents.num_gpu++;
@@ -297,49 +300,112 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     return UCS_OK;
 }
 
-int uct_rocm_base_is_dmabuf_supported()
+FILE* uct_rocm_base_load_kernel_config_file()
 {
-    int dmabuf_supported = 0;
-
-#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-    const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
-    const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
-    int found_opt1           = 0;
-    int found_opt2           = 0;
-    FILE *fp;
-    struct utsname utsname;
+    const char *fmts[] = {
+        "/boot/config-%s",
+        "/usr/src/linux-%s/.config",
+        "/usr/lib/modules/%s/config",
+        "/usr/lib/kernel/config-%s",
+        "/usr/src/linux-headers-%s/.config",
+        "/lib/modules/%s/build/.config",
+        "/usr/lib/ostree-boot/config-%s"
+    };
+    FILE* fp = NULL;
     char kernel_conf_file[128];
-    char buf[256];
-
+    struct utsname utsname;
+    
     if (uname(&utsname) == -1) {
         ucs_trace("could not get kernel name");
-        goto out;
+        return NULL;
     }
 
-    ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file),
-                      "/boot/config-%s", utsname.release);
-    fp = fopen(kernel_conf_file, "r");
-    if (fp == NULL) {
-        ucs_trace("could not open kernel conf file %s error: %m",
-                  kernel_conf_file);
-        goto out;
+    for (size_t i = 0; i < sizeof(fmts) / sizeof(fmts[0]); ++i) {
+        const char *path = fmts[i];
+        ucs_snprintf_safe(kernel_conf_file, sizeof(kernel_conf_file), path, utsname.release);
+        fp = fopen(kernel_conf_file, "r");
+        if (fp != NULL) {
+            ucs_trace("reading kernel config from %s", kernel_conf_file);
+            return fp;
+        }
+        ucs_trace("could not open kernel conf file %s error: %m", kernel_conf_file);
     }
+    return fp;
+}
+
+int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[], const char kernel_opt2[])
+{
+    int found_opt1 = 0;
+    int found_opt2 = 0;
+    char buf[256];
 
     while (fgets(buf, sizeof(buf), fp) != NULL) {
-        if (strstr(buf, kernel_opt1) != NULL) {
+        if (!found_opt1 && (strstr(buf, kernel_opt1) != NULL)) {
             found_opt1 = 1;
         }
-        if (strstr(buf, kernel_opt2) != NULL) {
+        if (!found_opt2 && (strstr(buf, kernel_opt2) != NULL)) {
             found_opt2 = 1;
         }
         if (found_opt1 && found_opt2) {
-            dmabuf_supported = 1;
-            break;
+            return 1;
         }
     }
+    return 0;
+}
+
+int uct_rocm_base_kernel_config_supports_dmabuf()
+{
+    int dmabuf_supported = 0;
+    FILE* fp = NULL;
+    const char kernel_opt1[] = "CONFIG_DMABUF_MOVE_NOTIFY=y";
+    const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
+
+    fp = uct_rocm_base_load_kernel_config_file();
+    if (fp == NULL) {
+        ucs_trace("no kernel conf file found");
+        return 0;
+    }
+    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_opt1, kernel_opt2);
     fclose(fp);
+    return dmabuf_supported;
+} 
+
+int uct_rocm_base_kernel_symbols_supports_dmabuf()
+{
+    int dmabuf_supported = 0;
+    FILE* fp = NULL;
+    const char kernel_sym1[] = "dma_buf_move_notify";
+    const char kernel_sym2[] = "pci_p2pdma";
+
+    fp = fopen("/proc/kallsyms", "r");
+    if (fp == NULL) {
+        ucs_trace("no /proc/kallsyms file found");
+        return dmabuf_supported;
+    }
+    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_sym1, kernel_sym2);
+    fclose(fp);
+    return dmabuf_supported;
+}
+
+int uct_rocm_base_is_dmabuf_supported()
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static int dmabuf_supported      = 0;
+
+    UCS_INIT_ONCE(&init_once) {
+#if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
+        if (uct_rocm_base_kernel_config_supports_dmabuf()) {
+            dmabuf_supported = 1;
+        } else {
+            ucs_trace("no kernel conf file found or no support for dmabuf "
+                      "found, trying /proc/kallsyms fallback");
+            dmabuf_supported = uct_rocm_base_kernel_symbols_supports_dmabuf();
+        }
 #endif
-out:
+        ucs_debug("dmabuf is%s supported on ROCm",
+                  dmabuf_supported ? "" : " not");
+    }
+
     return dmabuf_supported;
 }
 
@@ -357,8 +423,8 @@ static void uct_rocm_base_dmabuf_export(const void *addr, const size_t length,
         if (status != HSA_STATUS_SUCCESS) {
             fd     = UCT_DMABUF_FD_INVALID;
             offset = 0;
-            ucs_warn("failed to export dmabuf handle for addr %p / %zu", addr,
-                     length);
+            ucs_debug("failed to export dmabuf handle for addr %p / %zu: 0x%x",
+                      addr, length, status);
         }
 
         ucs_trace("dmabuf export addr %p %lu to dmabuf fd %d offset %zu\n",
@@ -370,14 +436,13 @@ static void uct_rocm_base_dmabuf_export(const void *addr, const size_t length,
 }
 
 ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
-                                     const size_t length,
-                                     uct_md_mem_attr_t *mem_attr_p)
+                                     size_t length, int have_dmabuf,
+                                     uct_md_mem_attr_v2_t *mem_attr_p)
 {
     size_t dmabuf_offset       = 0;
-    int is_exported            = 0;
     ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST;
     ucs_sys_device_t sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    int dmabuf_fd;
+    int dmabuf_fd              = UCT_DMABUF_FD_INVALID;
     hsa_status_t status;
     hsa_device_type_t dev_type;
     hsa_amd_pointer_type_t hsa_mem_type;
@@ -390,7 +455,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                         &base_size, &hsa_mem_type, &agent,
                                         &dev_type);
     if (status != HSA_STATUS_SUCCESS) {
-        return status;
+        return UCS_ERR_INVALID_ADDR;
     }
 
     if ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA) &&
@@ -401,41 +466,54 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         if (ucs_status != UCS_OK) {
             sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         }
+    } else {
+        base_addr = (void*)addr;
+        base_size = length;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
         mem_attr_p->sys_dev = sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
-        mem_attr_p->base_address = (void*) addr;
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
+        mem_attr_p->base_address = base_addr;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
-        mem_attr_p->alloc_length = length;
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
+        mem_attr_p->alloc_length = base_size;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
-        uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
-                                    &dmabuf_offset);
-        mem_attr_p->dmabuf_fd = dmabuf_fd;
-        is_exported           = 1;
-    }
-
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET) {
-        if (!is_exported) {
-            uct_rocm_base_dmabuf_export(addr, length, mem_type, &dmabuf_fd,
-                                        &dmabuf_offset);
+    if ((mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
+        (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
+        if (have_dmabuf) {
+            uct_rocm_base_dmabuf_export(base_addr, base_size, mem_type,
+                                        &dmabuf_fd, &dmabuf_offset);
         }
-        mem_attr_p->dmabuf_offset = dmabuf_offset;
+
+        /* Offset is defined only relative to a valid dmabuf_fd. Check the fd
+         * before close, which sets it to -1 on the offset-only query path. */
+        if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
+            mem_attr_p->dmabuf_offset = 0;
+            if (dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+                mem_attr_p->dmabuf_offset = dmabuf_offset +
+                                            UCS_PTR_BYTE_DIFF(base_addr, addr);
+            }
+        }
+
+        if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
+            mem_attr_p->dmabuf_fd = dmabuf_fd;
+        } else {
+            ucs_close_fd(&dmabuf_fd);
+        }
     }
 
     if (mem_type == UCS_MEMORY_TYPE_ROCM) {
-        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev);
+        ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev,
+                                 UCS_MEM_FLAG_REGISTRABLE);
     }
 
     return UCS_OK;

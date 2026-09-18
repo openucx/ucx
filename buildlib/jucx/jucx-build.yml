@@ -96,7 +96,8 @@ jobs:
               ARGS="--settings $(temp_cfg)" \
               JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
         displayName: Publish-Maven
-        condition: eq(variables['Build.Reason'], 'IndividualCI')
+        # rc tags carry the final maven version - skip to keep it for GA
+        condition: and(eq(variables['Build.Reason'], 'IndividualCI'), not(contains(variables['Build.SourceBranch'], '-rc')))
         env:
           GPG_PASSPHRASE: $(GPG_PASSPHRASE)
           SONATYPE_PASSWORD: $(SONATYPE_PASSWORD)

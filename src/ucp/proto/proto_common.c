@@ -67,8 +67,9 @@ ucp_memory_info_t ucp_proto_common_select_param_mem_info(
                                    const ucp_proto_select_param_t *select_param)
 {
     ucp_memory_info_t mem_info = {
-        .type = select_param->mem_type,
-        .sys_dev = select_param->sys_dev
+        .type    = select_param->mem_type,
+        .sys_dev = select_param->sys_dev,
+        .flags   = select_param->op.mem_flags
     };
 
     return mem_info;
@@ -495,6 +496,7 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
     ucp_md_index_t md_index         = context->tl_rscs[rsc_index].md_index;
     const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
     const uct_iface_attr_t *iface_attr;
+    ucs_sys_device_t lane_sys_dev;
     size_t max_iov, tl_min_frag, tl_max_frag;
 
     /* Check memory registration capabilities for zero-copy case */
@@ -514,11 +516,34 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                           ucs_memory_type_names[reg_mem_type]);
                 return 0;
             }
+
+            if (!ucs_test_all_flags(common_params->reg_mem_info.flags,
+                                    md_attr->required_mem_flags)) {
+                ucs_trace("%s: md %s missing required_mem_flags=0x%x for "
+                          "mem_flags=0x%x",
+                          lane_desc, context->tl_mds[md_index].rsc.md_name,
+                          md_attr->required_mem_flags,
+                          common_params->reg_mem_info.flags);
+                return 0;
+            }
         } else if (!(md_attr->access_mem_types & UCS_BIT(reg_mem_type))) {
             /* Memory domain which does not require a registration for zero
              * copy operation must be able to access the relevant memory type */
             ucs_trace("%s: no access to mem type %s", lane_desc,
                       ucs_memory_type_names[reg_mem_type]);
+            return 0;
+        }
+
+        /* The lane's device and the memory that will actually be registered
+         * on it (which may differ from select_param's buffer, e.g. a staging
+         * fragment for mtype protocols) must be topologically reachable. */
+        lane_sys_dev = ucp_proto_common_get_sys_dev(params, lane);
+        if (!ucs_topo_is_reachable(lane_sys_dev,
+                                   common_params->reg_mem_info.sys_dev)) {
+            ucs_trace("%s: no reachability between lane_sys_dev=%u and "
+                      "reg_mem_sys_dev=%u",
+                      lane_desc, lane_sys_dev,
+                      common_params->reg_mem_info.sys_dev);
             return 0;
         }
     }
@@ -582,7 +607,6 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
     ucp_md_index_t md_index;
     ucp_lane_map_t lane_map;
     char lane_desc[64];
-    ucs_sys_device_t lane_sys_dev;
     ucs_status_t status;
 
     if (max_lanes == 0) {
@@ -705,15 +729,6 @@ ucp_proto_common_find_lanes(const ucp_proto_init_params_t *params,
             }
         }
 
-        /* The two devices must also have internal reachability */
-        lane_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
-        if (!ucs_topo_is_reachable(lane_sys_dev, select_param->sys_dev)) {
-            ucs_trace("%s: no reachability between lane_sys_dev=%u and "
-                      "sys_dev=%u",
-                      lane_desc, lane_sys_dev, select_param->sys_dev);
-            continue;
-        }
-
         ucs_trace("%s: added as lane %d", lane_desc, lane);
         lanes[num_lanes++] = lane;
     }
@@ -749,7 +764,9 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
            memory type, and needs a local memory handle for zero-copy
            communication */
         if ((md_attr->flags & UCT_MD_FLAG_NEED_MEMH) &&
-            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index))) {
+            (context->reg_md_map[select_param->mem_type] & UCS_BIT(md_index)) &&
+            ucs_test_all_flags(select_param->op.mem_flags,
+                               md_attr->required_mem_flags)) {
             reg_md_map |= UCS_BIT(md_index);
         }
     }

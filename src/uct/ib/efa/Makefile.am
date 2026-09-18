@@ -12,7 +12,8 @@ libuct_ib_efa_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                             $(top_builddir)/src/uct/libuct.la \
                             $(top_builddir)/src/uct/ib/libuct_ib.la
 libuct_ib_efa_la_LDFLAGS  = $(EFA_LIB) $(IBVERBS_LDFLAGS) \
-                            -version-info $(SOVERSION)
+                            -version-info $(SOVERSION) \
+                            $(UCX_LT_RELEASE)
 
 libuct_ib_efa_la_SOURCES  = base/ib_efa_md.c \
                             srd/srd_iface.c \

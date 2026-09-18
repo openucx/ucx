@@ -19,7 +19,9 @@ if HAVE_DEVX
 libuct_rdmacm_la_LIBADD  += $(LIB_MLX5)
 endif
 
-libuct_rdmacm_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(RDMACM_LDFLAGS) -version-info $(SOVERSION)
+libuct_rdmacm_la_LDFLAGS  = $(IBVERBS_LDFLAGS) $(RDMACM_LDFLAGS) \
+                            -version-info $(SOVERSION) \
+                            $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
 	rdmacm_cm.h \

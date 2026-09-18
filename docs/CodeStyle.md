@@ -8,13 +8,26 @@
   * Indent function arguments on column
   * Indent structure fields on column
   * Scope: open on same line, except function body, which is on a new line.
-  * Indent multiple consecutive assignments on the column
+  * Indent multiple consecutive assignments on the column; the longest
+    left-hand side gets one space before `=`, others align to it.
   * 2 space lines between types and prototypes (header files)
   * 1 space line between functions (source files) 
   * Prefer `sizeof(*ptr)` or `sizeof(variable)` over `sizeof(type)`.
   * Use `ucs_container_of` and `ucs_derived_of` instead of open-coded pointer
     arithmetic.
   * Use `ucs_assert*` for internal invariants, not user-input validation.
+  * Unless external linkage is required, functions used only within one source
+    file must be declared `static`.
+
+
+## Comments
+  * Usually one line; use more only for a non-obvious or complex point, or
+    per the `## Doxygen` section below.
+  * Focus on "why" rather than "what"; no PR/issue references, no dev-process
+    narration.
+  * Document once, in the most relevant area.
+  * Explain locking, ownership, tradeoffs, or step-by-step processing when
+    non-obvious.
 
 
 ## Naming convention:

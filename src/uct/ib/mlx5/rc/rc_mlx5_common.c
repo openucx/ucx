@@ -1046,6 +1046,10 @@ uct_rc_mlx5_iface_common_dm_init(uct_rc_mlx5_iface_common_t *iface,
         goto fallback;
     }
 
+    if (uct_ib_iface_md(&rc_iface->super)->relaxed_order_required) {
+        goto fallback;
+    }
+
     if (!(uct_ib_mlx5_iface_md(&rc_iface->super)->flags &
           UCT_IB_MLX5_MD_FLAG_UAR_USE_WC)) {
         goto fallback;

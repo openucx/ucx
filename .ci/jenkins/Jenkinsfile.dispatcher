@@ -1,0 +1,70 @@
+#!/usr/bin/groovy
+
+/**
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
+@Library('blossom-github-lib@master')
+import ipp.blossom.*
+
+def githubHelper = null
+withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+  githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", VARIABLE_FROM_POST)
+}
+
+// Abort previous dispatcher runs for the same PR
+def currentPrNumber = githubHelper.getPRNumber()?.toString()
+if (currentPrNumber) {
+  def slurper = new groovy.json.JsonSlurper()
+  try {
+    Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
+      it.isBuilding() && it.number < currentBuild.number
+    }.each { b ->
+      def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'VARIABLE_FROM_POST' }?.value
+      def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
+      if (otherPr == currentPrNumber) {
+        echo "Aborting dispatcher #${b.number} for same PR #${currentPrNumber}"
+        b.doStop()
+      }
+    }
+  } catch(Exception e) {
+    echo "Could not abort previous dispatchers: ${e.message}"
+  }
+}
+
+def sha = githubHelper.getMergedSHA()
+def pipelineOverviewUrl = "${env.BUILD_URL}pipeline-overview/"
+
+githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHubCommitState.PENDING)
+currentBuild.description = githubHelper.getBuildDescription()
+
+def jobs = [
+  'ucx-codestyle-oss',
+  'ucx-static-checks-oss',
+  'ucx-coverity-oss',
+  'ucx-build-oss',
+  'ucx-build-static-oss',
+  'ucx-test-oss',
+  'ucx-test-gpu-oss',
+  'ucx-test-dl-gpu-oss',
+]
+
+try {
+  def fanout = [:]
+  for (def j in jobs) {
+    def jobName = "UCX-OSS/${j}"
+    fanout[jobName] = {
+      build job: jobName, parameters: [
+        string(name: 'sha1', value: sha),
+        string(name: 'githubData', value: VARIABLE_FROM_POST),
+      ], propagate: false, wait: true
+    }
+  }
+  parallel fanout
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI passed", GitHubCommitState.SUCCESS)
+} catch(Exception ex) {
+  println ex
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI failed", GitHubCommitState.FAILURE)
+  throw ex
+}

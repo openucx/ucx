@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -278,8 +278,8 @@ protected:
             return;
         }
 
-        ucs_memtype_cache_update(ptr, size, mem_type,
-                                 UCS_SYS_DEVICE_ID_UNKNOWN);
+        ucs_memtype_cache_update(ptr, size, mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                                 0);
     }
 
     void memtype_cache_update(const mem_buffer &b) {
@@ -378,6 +378,55 @@ UCS_TEST_P(test_memtype_cache, update_adjacent_regions_and_remove_subintervals) 
                                                0, remove_regions);
 }
 
+UCS_TEST_P(test_memtype_cache, merge_regions_by_mem_flags) {
+    const size_t region_size = UCS_PGT_ADDR_ALIGN;
+    const size_t total_size  = 3 * region_size;
+    void *base               = reinterpret_cast<void*>(0x7f6ef0000000);
+    void *overlap            = UCS_PTR_BYTE_OFFSET(base, region_size);
+    ucs_memory_type_t mem_type;
+    ucs_memory_info_t mem_info;
+
+    if (GetParam() == UCS_MEMORY_TYPE_HOST) {
+        UCS_TEST_SKIP_R("memtype cache does not store host memory");
+    }
+
+    mem_type = GetParam();
+
+    ucs_memtype_cache_remove(base, total_size);
+    ucs_memtype_cache_update(base, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+    ucs_memtype_cache_update(overlap, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, total_size, &mem_info));
+    EXPECT_EQ(mem_type, mem_info.type);
+    EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE, mem_info.mem_flags);
+
+    ucs_memtype_cache_remove(base, total_size);
+    ucs_memtype_cache_update(base, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN, 0);
+    ucs_memtype_cache_update(overlap, 2 * region_size, mem_type,
+                             UCS_SYS_DEVICE_ID_UNKNOWN,
+                             UCS_MEM_FLAG_REGISTRABLE);
+
+    /* Check that the flags are still set correctly */
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, region_size, &mem_info));
+    EXPECT_EQ(mem_type, mem_info.type);
+    EXPECT_EQ(0, mem_info.mem_flags);
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(overlap, 2 * region_size,
+                                           &mem_info));
+    EXPECT_EQ(mem_type, mem_info.type);
+    EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE, mem_info.mem_flags);
+
+    /* The regions should not be merged because of different mem flags */
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, total_size, &mem_info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, mem_info.type);
+
+    ucs_memtype_cache_remove(base, total_size);
+}
+
 UCS_TEST_P(test_memtype_cache, shared_page_regions) {
     const size_t size = 1000000;
 
@@ -428,6 +477,30 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs) {
 
 UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
     test_memtype_cache_alloc_diff_mem_types(true, false);
+}
+
+UCS_TEST_P(test_memtype_cache, event_attributes) {
+    const size_t size          = ucs_get_page_size();
+    void *address              = reinterpret_cast<void*>(0xdead0000ul);
+    const ucs_sys_device_t dev = 0;
+    ucm_event_t event;
+    ucs_memory_info_t mem_info;
+
+    event.mem_type.address   = address;
+    event.mem_type.size      = size;
+    event.mem_type.mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED;
+    event.mem_type.sys_dev   = dev;
+    event.mem_type.mem_flags = 0;
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(address, size, &mem_info));
+    EXPECT_EQ(event.mem_type.mem_type, mem_info.type);
+    EXPECT_EQ(dev, mem_info.sys_dev);
+    EXPECT_EQ(0, mem_info.mem_flags);
+
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_memtype_cache_lookup(address, size, &mem_info));
 }
 
 INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
