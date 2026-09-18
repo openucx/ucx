@@ -760,6 +760,33 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
     }
 }
 
+/* The wireup ACK is sent on the AM lane before any protocol selects it, so its
+ * iface has to be progressed already during wireup, without waiting for a data
+ * operation to be issued. */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
+                     !is_proto_enabled())
+{
+    sender().connect(&receiver(), get_ep_params());
+
+    ucp_ep_h ep           = sender().ep();
+    ucp_lane_index_t lane = ucp_ep_get_am_lane(ep);
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("endpoint has no AM lane");
+    }
+
+    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(),
+                                                 ucp_ep_get_rsc_index(ep,
+                                                                      lane));
+    if (wiface == NULL) {
+        UCS_TEST_SKIP_R("AM lane has no iface");
+    }
+
+    ASSERT_TRUE(ucp_worker_iface_is_activated(wiface));
+
+    flush_worker(sender());
+    disconnect(sender());
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
 
 class test_ucp_wireup_2sided : public test_ucp_wireup {
