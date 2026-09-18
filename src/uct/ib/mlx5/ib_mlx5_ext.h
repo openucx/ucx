@@ -73,7 +73,7 @@ typedef struct uct_ib_mlx5_ext_ep_query_attr {
     /**
      * Pointer to a caller-allocated buffer for TX token data. The buffer size
      * must be at least the TX token length returned by
-     * @ref uct_ib_mlx5_ext_iface_query.
+     * @ref uct_ib_mlx5_ext_ops_t::iface_query.
      */
     void     *tx_token;
 } uct_ib_mlx5_ext_ep_query_attr_t;
