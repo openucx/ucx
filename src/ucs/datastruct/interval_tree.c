@@ -43,7 +43,7 @@ static void ucs_interval_tree_node_free(ucs_interval_tree_t *tree,
 
 void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 {
-    ucs_rbtree_init(&tree->rb, NULL);
+    ucs_rbtree_init(&tree->rb);
     tree->mpool      = mpool;
     tree->num_nodes  = 0;
     tree->total_size = 0;
@@ -64,7 +64,7 @@ static void ucs_interval_tree_cleanup_recursive(ucs_interval_tree_t *tree,
 void ucs_interval_tree_cleanup(ucs_interval_tree_t *tree)
 {
     ucs_interval_tree_cleanup_recursive(tree, tree->rb.root);
-    ucs_rbtree_init(&tree->rb, NULL);
+    ucs_rbtree_init(&tree->rb);
 }
 
 /**
