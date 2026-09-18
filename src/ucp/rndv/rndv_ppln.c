@@ -99,8 +99,7 @@ ucp_proto_rndv_ppln_probe(const ucp_proto_init_params_t *init_params)
 
     select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
                                                init_params->ep_cfg_index,
-                                               init_params->rkey_cfg_index,
-                                               &sel_param);
+                                               rkey_cfg_index, &sel_param);
     if (select_elem == NULL) {
         return;
     }
