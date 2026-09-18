@@ -1072,15 +1072,6 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return status;
 }
 
-static void uct_rc_mlx5_iface_fill_ext_query_attr(
-        uct_iface_attr_v2_t *iface_attr,
-        uct_ib_mlx5_ext_iface_query_attr_t *ext_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        ext_attr->field_mask |= UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
-    }
-}
-
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
                                  uct_iface_attr_v2_t *iface_attr)
@@ -1143,7 +1134,6 @@ static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                            uct_iface_attr_v2_t *iface_attr)
 {
-    uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {0};
     uct_rc_mlx5_iface_common_t *mlx5_iface;
     uct_ib_mlx5_md_t *md;
     size_t max_sgl;
@@ -1210,21 +1200,6 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
             UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
             iface_attr->max_put_sgl_zcopy_count = max_sgl;
         }
-    }
-
-    uct_rc_mlx5_iface_fill_ext_query_attr(iface_attr, &ext_attr);
-
-    if (ext_attr.field_mask == 0) {
-        return UCS_OK;
-    }
-
-    status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        iface_attr->cap.flags |= ext_attr.cap.flags;
     }
 
     return UCS_OK;
