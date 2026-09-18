@@ -791,7 +791,7 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
     }
 
     if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
-        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+        if (!uct_ib_device_has_srq(dev)) {
             ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
                       port_num);
             return UCS_ERR_UNSUPPORTED;

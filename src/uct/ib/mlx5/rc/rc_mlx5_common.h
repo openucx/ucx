@@ -441,7 +441,7 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
                   uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, uct_rc_iface_common_config_t*,
                   uct_rc_mlx5_iface_common_config_t*,
-                  uct_ib_iface_init_attr_t*);
+                  uct_rc_iface_init_attr_t*);
 
 
 #define UCT_RC_MLX5_TM_STAT(_iface, _op) \
