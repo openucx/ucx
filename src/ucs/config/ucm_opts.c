@@ -87,7 +87,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
 
   {"ROCM_HOOK_MODE",
 #if UCM_BISTRO_HOOKS
-   UCM_MMAP_HOOK_BISTRO_STR,
+   UCM_MMAP_HOOK_BISTRO_STR "," UCM_MMAP_HOOK_RELOC_STR,
 #else
    UCM_MMAP_HOOK_RELOC_STR,
 #endif

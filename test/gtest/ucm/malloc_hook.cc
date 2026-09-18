@@ -1699,4 +1699,17 @@ UCS_TEST_F(bistro_relocate, jmp_indirect_rip) {
               relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
                            &dst_used));
 }
+
+/* A SIB byte with mod=00 and base=101 carries a trailing disp32; copying only
+ * the SIB would truncate the instruction, so this form is rejected. */
+UCS_TEST_F(bistro_relocate, jmp_indirect_sib_disp32) {
+    /* jmp *0x0(,%rax,8): FF /4, modrm=24 (SIB), sib=C5 (base=101), disp32 */
+    const uint8_t src[7] = {0xFF, 0x24, 0xC5, 0, 0, 0, 0};
+    uint8_t dst[64];
+    size_t src_used, dst_used;
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
+                           &dst_used));
+}
 #endif /* __x86_64__ */

@@ -238,7 +238,9 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
          * Emitted e.g. by CET-built dispatch thunks that load an API table
          * pointer. Translate to an absolute-address load, because the relocated
          * code is not guaranteed to be within 32-bit range of the target. */
-        if ((modrm & 0xC7) == UCM_BISTRO_X86_MODRM_RM_DISP32) {
+        mod = modrm >> UCM_BISTRO_X86_MODRM_MOD_SHIFT;
+        if ((mod == 0) && ((modrm & UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS)) ==
+                           UCM_BISTRO_X86_MODRM_RM_DISP32)) {
             reg = (modrm >> UCM_BISTRO_X86_MODRM_REG_SHIFT) &
                   UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS);
             /* rm=100 (SIB) and rm=101 (disp8/RIP) can't encode "mov (%reg),
@@ -332,6 +334,10 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
                     }
                     break;
                 case UCM_BISTRO_X86_MODRM_RM_SIB:
+                    if (mod == 0) {
+                        /* SIB with base=101 is followed by a disp32 */
+                        return UCS_ERR_UNSUPPORTED;
+                    }
                     ucs_serialize_next(&ctx->src_p, const uint8_t); /* SIB */
                     break;
                 }
