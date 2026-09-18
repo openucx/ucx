@@ -43,7 +43,9 @@ typedef struct {
     ucs_topo_group_element_array_t nics;
 } ucs_topo_group_t;
 
+
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_group_array_t, size_t, ucs_topo_group_t);
+
 
 /**
  * @ingroup UCS_RESOURCE
