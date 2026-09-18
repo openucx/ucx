@@ -193,6 +193,7 @@ gtest_SOURCES = \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
 	ucs/test_interval_tree.cc \
+	ucs/test_rbtree.cc \
     ucs/test_lru.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
@@ -348,6 +349,8 @@ noinst_HEADERS = \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
+	\
+	ucs/rbtree_check.h \
 	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \
