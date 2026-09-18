@@ -21,23 +21,61 @@
 BEGIN_C_DECLS
 
 /**
+ * @brief Iface query attributes field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_ib_mlx5_ext_iface_query_attr_t are present.
+ */
+enum uct_ib_mlx5_ext_iface_query_attr_field {
+    /** Enables @ref uct_ib_mlx5_ext_iface_query_attr_t::cap */
+    UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS = UCS_BIT(0)
+};
+
+/**
  * @brief Iface query parameters.
  */
 typedef struct uct_ib_mlx5_ext_iface_query_attr {
     /**
-     * Mask of valid fields in this structure.
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ib_mlx5_ext_iface_query_attr_field. Fields not specified in
+     * this mask will be ignored.
      */
     uint64_t field_mask;
+
+    /** Interface capabilities (v2 flags) */
+    struct {
+        uint64_t flags; /**< Flags from @ref UCT_RESOURCE_IFACE_CAP_V2 */
+    } cap;
 } uct_ib_mlx5_ext_iface_query_attr_t;
+
+/**
+ * @brief EP query attributes field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_ib_mlx5_ext_ep_query_attr_t are present.
+ */
+enum uct_ib_mlx5_ext_ep_query_attr_field {
+    /** Enables @ref uct_ib_mlx5_ext_ep_query_attr_t::tx_token */
+    UCT_IB_MLX5_EXT_EP_QUERY_ATTR_FIELD_TX_TOKEN = UCS_BIT(0)
+};
 
 /**
  * @brief EP query parameters.
  */
 typedef struct uct_ib_mlx5_ext_ep_query_attr {
     /**
-     * Mask of valid fields in this structure.
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ib_mlx5_ext_ep_query_attr_field. Fields not specified in this
+     * mask will be ignored.
      */
     uint64_t field_mask;
+
+    /**
+     * Pointer to a caller-allocated buffer for TX token data. The buffer size
+     * must be at least the TX token length returned by
+     * @ref uct_ib_mlx5_ext_iface_query.
+     */
+    void     *tx_token;
 } uct_ib_mlx5_ext_ep_query_attr_t;
 
 /**
