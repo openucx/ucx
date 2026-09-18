@@ -1255,9 +1255,9 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
 
-    if (start_pi == end_pi) {
-        goto out;
-    }
+    ucs_assertv_always(start_pi != end_pi,
+                       "ep %p qp 0x%x unexpected empty outstanding queue", ep,
+                       txwq->super.qp_num);
 
     num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
             &iface->super.super, txwq, start_pi, end_pi);
@@ -1316,8 +1316,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         wqe_first_psn = (wqe_first_psn + num_packets) & UCT_IB_MLX5_PSN_MASK;
     }
 
-out:
-    uct_rc_mlx5_ep_purge_flushes(ep, txwq->prev_sw_pi);
     uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;
