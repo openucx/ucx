@@ -999,7 +999,7 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
 }
 
-/* Remove the GET zcopy protocol, which supersedes GET/RNDV on registrable
+/* Remove the GET zcopy protocol, which replaces GET/RNDV on registrable
  * memory, so that GET/RNDV is always selected */
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
            cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",

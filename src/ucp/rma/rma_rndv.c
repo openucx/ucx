@@ -248,7 +248,7 @@ static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
 {
     double overhead = context->config.ext.proto_overhead_rndv_rtr;
 
-    /* Avoid RNDV for a zero-length GET when no zcopy protocol supersedes it */
+    /* Avoid RNDV for a zero-length GET when no zcopy protocol replaces it */
     if (ucp_proto_get_rndv_zero_length_variant(proto)) {
         overhead += UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY;
     }
@@ -617,27 +617,27 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
 }
 
 ucp_proto_t ucp_put_rndv_proto = {
-    .name          = "put/rndv",
-    .desc          = UCP_PROTO_RNDV_DESC,
-    .flags         = 0,
-    .superseded_by = UCP_PROTO_CLASS_RMA_ZCOPY,
-    .dt_mask       = UCS_BIT(UCP_DATATYPE_CONTIG),
-    .probe         = ucp_proto_put_rndv_probe,
-    .query         = ucp_proto_rma_rndv_query,
-    .progress      = {ucp_proto_put_rndv_progress},
-    .abort         = ucp_proto_rndv_rts_abort,
-    .reset         = ucp_proto_rndv_rts_reset
+    .name        = "put/rndv",
+    .desc        = UCP_PROTO_RNDV_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe       = ucp_proto_put_rndv_probe,
+    .query       = ucp_proto_rma_rndv_query,
+    .progress    = {ucp_proto_put_rndv_progress},
+    .abort       = ucp_proto_rndv_rts_abort,
+    .reset       = ucp_proto_rndv_rts_reset
 };
 
 ucp_proto_t ucp_get_rndv_proto = {
-    .name          = "get/rndv",
-    .desc          = UCP_PROTO_RNDV_DESC,
-    .flags         = 0,
-    .superseded_by = UCP_PROTO_CLASS_RMA_ZCOPY,
-    .dt_mask       = UCS_BIT(UCP_DATATYPE_CONTIG),
-    .probe         = ucp_proto_get_rndv_probe,
-    .query         = ucp_proto_rma_rndv_query,
-    .progress      = {ucp_proto_get_rndv_progress},
-    .abort         = ucp_proto_get_rndv_abort,
-    .reset         = ucp_proto_get_rndv_reset
+    .name        = "get/rndv",
+    .desc        = UCP_PROTO_RNDV_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe       = ucp_proto_get_rndv_probe,
+    .query       = ucp_proto_rma_rndv_query,
+    .progress    = {ucp_proto_get_rndv_progress},
+    .abort       = ucp_proto_get_rndv_abort,
+    .reset       = ucp_proto_get_rndv_reset
 };

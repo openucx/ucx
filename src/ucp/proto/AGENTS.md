@@ -62,12 +62,12 @@ should plug in here rather than going through the legacy direct paths.
 - When two protos tie, the earlier-listed (lower index in
   `ucp_protocols[]`, i.e. earlier in the `UCP_PROTO_FOR_EACH` list) wins;
   rely on this for deterministic test output.
-- `proto_class`/`superseded_by` (`ucp_proto_t`) override the cost model: a
-  proto is dropped from any range where a class it lists is available, even
-  if cheaper. Keep the relation acyclic; to select a superseded proto in a
-  test, exclude the superseding proto with `UCX_PROTOS`. If configuration
-  disables every proto in a range, the supersede rule still applies after
-  they are re-enabled as a fallback.
+- `proto_class`/`fallback_class` (`ucp_proto_t`) override the cost model: a
+  proto is dropped from any range where a proto listing its class as a
+  fallback is available, even if cheaper. Keep the relation acyclic; to select
+  a fallback proto in a test, exclude the preferred proto with `UCX_PROTOS`. If
+  configuration disables every proto in a range, the fallback rule still
+  applies after they are re-enabled.
 - Stage callbacks must drain all pending `UCS_INPROGRESS` on completion
   before transitioning. The framework will call `progress[stage]` again
   on `UCS_ERR_NO_RESOURCE`.

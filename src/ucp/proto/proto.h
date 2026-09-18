@@ -87,12 +87,14 @@ enum {
 
 /**
  * Protocol classes, used to prioritize protocols which implement the same
- * operation by a different data path. A class must not be superseded, directly
- * or indirectly, by a class it supersedes.
+ * operation by a different data path. A class must not be a fallback, directly
+ * or indirectly, of a protocol which belongs to it. Classes are matched within
+ * a single selection key, which has one operation, so protocols of different
+ * operations can share the same class.
  */
 enum {
-    /* RMA by a direct uct_ep_put_zcopy()/uct_ep_get_zcopy() data path */
-    UCP_PROTO_CLASS_RMA_ZCOPY = UCS_BIT(0)
+    /* RMA by a rendezvous protocol rather than a direct data path */
+    UCP_PROTO_CLASS_RMA_RNDV = UCS_BIT(0)
 };
 
 
@@ -216,11 +218,11 @@ struct ucp_proto {
     /* Bitmap of UCP_PROTO_CLASS_xxx classes this protocol belongs to */
     unsigned                 proto_class;
 
-    /* Bitmap of UCP_PROTO_CLASS_xxx classes which supersede this protocol. It
-     * is not selected on message sizes where a protocol of any of these
-     * classes is available.
+    /* Bitmap of UCP_PROTO_CLASS_xxx classes which are a fallback for this
+     * protocol. Protocols of these classes are not selected on message sizes
+     * where this protocol is available.
      */
-    unsigned                 superseded_by;
+    unsigned                 fallback_class;
 
     /* Bitmap of UCS_BIT(UCP_DATATYPE_xxx) classes this protocol supports.
      * Probe is skipped for any other dt_class. Must be non-zero.

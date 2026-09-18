@@ -1090,7 +1090,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get, "IB_NUM_PATHS?=1")
 
     /* On message sizes larger than about 1KB, get/rndv is cheaper than
      * get/zcopy, since it makes the remote side write the data by the fast data
-     * path. It is not selected on any message size, because it is superseded by
+     * path. It is not selected on any message size, because it is a fallback of
      * get/zcopy. */
     test_cuda_rma(UCP_OP_ID_GET, {
         {1, INF, "zero-copy", "rc_mlx5/mock"},
@@ -1105,8 +1105,8 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_get, get_zcopy_thresh,
 
     /* With software emulation disabled, get/zcopy and get/rndv are the only
      * candidates. Below ZCOPY_THRESH both are disabled by configuration and
-     * re-enabled as a fallback; get/rndv must still be superseded, leaving
-     * only get/zcopy. */
+     * re-enabled; get/rndv must still be dropped as a fallback of get/zcopy,
+     * leaving only get/zcopy. */
     test_cuda_rma(UCP_OP_ID_GET, {
         {1, INF, "zero-copy", "rc_mlx5/mock"},
     });
@@ -1133,8 +1133,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_no_get_zcopy, get, "IB_NUM_PATHS?=1",
 {
     require_cuda_net_md();
 
-    /* No get/zcopy protocol is available, so no protocol supersedes get/rndv
-     * and it is selected, without having to exclude get/zcopy by UCX_PROTOS.
+    /* No get/zcopy protocol is available, so get/rndv is not dropped as its
+     * fallback and is selected, without having to exclude get/zcopy by
+     * UCX_PROTOS.
      * The rendezvous scheme is forced, so that the message size on which the
      * remote side switches from am/zcopy to put/zcopy, which depends on the
      * device attributes of the host, does not change the expected ranges. */
@@ -1361,75 +1362,75 @@ UCS_TEST_P(test_ucp_proto_mock_cma, am_send_1_lane)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_cma, mm_cma, "posix,cma")
 
 /*
- * Test the protocol supersede rule, which is used to keep put/rndv and
+ * Test the protocol fallback rule, which is used to keep put/rndv and
  * get/rndv out of protocol selection wherever a zcopy protocol is available.
  * Those protocols require non-host memory, so the rule is tested here on the
  * eager protocols selected by test_ucp_proto_mock_cma.am_send_1_lane, which
  * uses the same mock configuration.
  */
-class test_ucp_proto_mock_supersede : public test_ucp_proto_mock_cma {
+class test_ucp_proto_mock_fallback : public test_ucp_proto_mock_cma {
 public:
     /* Protocol selection is done when the endpoint is connected, so the rule
      * must be added before that */
     virtual void post_ucp_init() override
     {
-        ucp_proto_t *superseded = find_proto("am/egr/short");
-        ucp_proto_t *superseder = find_proto("am/egr/single/bcopy");
-        ASSERT_NE(nullptr, superseded);
-        ASSERT_NE(nullptr, superseder);
+        ucp_proto_t *fallback  = find_proto("am/egr/short");
+        ucp_proto_t *preferred = find_proto("am/egr/single/bcopy");
+        ASSERT_NE(nullptr, fallback);
+        ASSERT_NE(nullptr, preferred);
 
-        m_supersede.reset(
-                new scoped_supersede(superseded, superseder, TEST_PROTO_CLASS));
+        m_fallback.reset(
+                new scoped_fallback(fallback, preferred, TEST_PROTO_CLASS));
 
         test_ucp_proto_mock_cma::post_ucp_init();
     }
 
 private:
-    /* Declares a supersede rule between two protocols, and restores the global
+    /* Declares a fallback rule between two protocols, and restores the global
      * 'ucp_protocols[]' entries when destroyed. The rule is scoped to the test
      * object rather than to cleanup(), which is not called when init() fails
      * after the rule was added.
      */
-    class scoped_supersede {
+    class scoped_fallback {
     public:
-        scoped_supersede(ucp_proto_t *superseded, ucp_proto_t *superseder,
-                         unsigned proto_class) :
-            m_superseded(superseded),
-            m_superseder(superseder),
-            m_superseded_by(superseded->superseded_by),
-            m_proto_class(superseder->proto_class)
+        scoped_fallback(ucp_proto_t *fallback, ucp_proto_t *preferred,
+                        unsigned proto_class) :
+            m_fallback(fallback),
+            m_preferred(preferred),
+            m_proto_class(fallback->proto_class),
+            m_fallback_class(preferred->fallback_class)
         {
-            m_superseded->superseded_by = proto_class;
-            m_superseder->proto_class   = proto_class;
+            m_fallback->proto_class     = proto_class;
+            m_preferred->fallback_class = proto_class;
         }
 
-        ~scoped_supersede()
+        ~scoped_fallback()
         {
-            m_superseded->superseded_by = m_superseded_by;
-            m_superseder->proto_class   = m_proto_class;
+            m_fallback->proto_class     = m_proto_class;
+            m_preferred->fallback_class = m_fallback_class;
         }
 
     private:
-        ucp_proto_t *m_superseded;
-        ucp_proto_t *m_superseder;
-        unsigned    m_superseded_by;
+        ucp_proto_t *m_fallback;
+        ucp_proto_t *m_preferred;
         unsigned    m_proto_class;
+        unsigned    m_fallback_class;
     };
 
     /* Protocol class which is not used by any protocol, so that the test does
      * not depend on the classes declared by the RMA protocols */
     static const unsigned TEST_PROTO_CLASS = UCS_BIT(31);
 
-    std::unique_ptr<scoped_supersede> m_supersede;
+    std::unique_ptr<scoped_fallback> m_fallback;
 };
 
-UCS_TEST_P(test_ucp_proto_mock_supersede, am_send_1_lane)
+UCS_TEST_P(test_ucp_proto_mock_fallback, am_send_1_lane)
 {
     ucp_proto_select_key_t key = any_key();
     key.param.op_id_flags      = UCP_OP_ID_AM_SEND;
     key.param.op_attr          = 0;
 
-    /* The short protocol is superseded by the copy-in protocol, so it is not
+    /* The short protocol is a fallback of the copy-in protocol, so it is not
      * selected anymore, even though it is faster on small message sizes. The
      * ranges which the copy-in protocol does not cover are not affected. */
     check_ep_config(sender(), {
@@ -1438,7 +1439,7 @@ UCS_TEST_P(test_ucp_proto_mock_supersede, am_send_1_lane)
     }, key);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_supersede, mm_cma,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_fallback, mm_cma,
                               "posix,cma")
 
 class test_ucp_proto_mock_tcp : public test_ucp_proto_mock {

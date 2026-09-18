@@ -442,7 +442,7 @@ public:
 
     test_ucp_rma_rndv()
     {
-        /* The RMA rendezvous put/get protocols are superseded by the direct
+        /* The RMA rendezvous put/get protocols are a fallback of the direct
          * zcopy protocols; keep only the rendezvous ones so they are always
          * selected. */
         modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
