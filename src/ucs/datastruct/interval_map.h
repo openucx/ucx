@@ -15,9 +15,7 @@
 BEGIN_C_DECLS
 
 /**
- * A map of half-open intervals [start, end) to caller-owned objects.
- *
- * Does not merge overlapping and touching intervals into one node.
+ * Node of a @ref ucs_interval_map_t, embedded in the caller's object.
  */
 typedef struct {
     ucs_rbtree_node_t super;   /**< Balancing links, must be first */
@@ -27,6 +25,11 @@ typedef struct {
 } ucs_interval_map_node_t;
 
 
+/**
+ * A map of half-open intervals [start, end) to caller-owned objects.
+ *
+ * Does not merge overlapping and touching intervals into one node.
+ */
 typedef struct {
     ucs_rbtree_t rb;        /**< Balanced tree ordered by 'start' */
     size_t       num_nodes; /**< Number of intervals */
