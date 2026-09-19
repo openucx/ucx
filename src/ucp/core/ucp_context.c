@@ -330,8 +330,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"TM_MAX_BB_SIZE", "1024", /* TODO: calculate automatically */
    "Maximal size for posting \"bounce buffer\" (UCX internal preregistered memory) for\n"
    "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
-   "to eager protocol). The size values has to be equal or less than segment size.\n"
-   "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
+   "to eager protocol). The size value has to be equal to or less than the segment size.\n"
+   "Also, the value has to be bigger than UCX_TM_THRESH to take effect." ,
    ucs_offsetof(ucp_context_config_t, tm_max_bb_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TM_FORCE_THRESH", "8192", /* TODO: calculate automatically */
@@ -557,7 +557,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Prefer transports capable of remote memory access for RMA and AMO operations.\n"
    "The value is interpreted as follows:\n"
    " 'y' : Prefer transports with native RMA/AMO support (if available)\n"
-   " 'n' : Select RMA/AMO lanes according to performance charasteristics",
+   " 'n' : Select RMA/AMO lanes according to performance characteristics",
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
