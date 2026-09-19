@@ -58,10 +58,11 @@ enum {
  * Rcache flags.
  */
 enum {
-    UCS_RCACHE_FLAG_NO_PFN_CHECK  = UCS_BIT(0), /**< PFN check not supported for this rcache */
-    UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
-    UCS_RCACHE_FLAG_SYNC_EVENTS   = UCS_BIT(2), /**< Synchronize memory events handling */
-    UCS_RCACHE_FLAG_NEED_LRU_LOCK = UCS_BIT(3), /**< rcache not protected by other lock */
+    UCS_RCACHE_FLAG_NO_PFN_CHECK   = UCS_BIT(0), /**< PFN check not supported for this rcache */
+    UCS_RCACHE_FLAG_PURGE_ON_FORK  = UCS_BIT(1), /**< purge rcache on fork */
+    UCS_RCACHE_FLAG_SYNC_EVENTS    = UCS_BIT(2), /**< Synchronize memory events handling */
+    UCS_RCACHE_FLAG_NEED_LRU_LOCK  = UCS_BIT(3), /**< rcache not protected by other lock */
+    UCS_RCACHE_FLAG_MERGE_ADJACENT = UCS_BIT(4)  /**< Merge adjacent rcache regions */
 };
 
 /*
@@ -168,6 +169,7 @@ struct ucs_rcache_config {
     size_t        max_size;       /**< Maximal size of mapped memory */
     size_t        max_unreleased; /**< Threshold for triggering a cleanup */
     int           purge_on_fork;  /**< Enable/disable rcache purge on fork */
+    int           merge_adjacent; /**< Enable/disable rcache adjacent region merge */
 };
 
 
