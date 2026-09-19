@@ -827,15 +827,14 @@ ucs_rcache_check_overlap_one(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
 }
 
 static int ucs_rcache_check_adj_size(ucs_pgt_addr_t start, ucs_pgt_addr_t end,
-                                     const ucs_rcache_region_t *adj_region)
+                                     const ucs_rcache_region_t *region_adj)
 {
-    return (end - start) >= (adj_region->super.end - adj_region->super.start);
+    return (end - start) >= (region_adj->super.end - region_adj->super.start);
 }
 
-static void ucs_rcache_check_adj_regions(ucs_rcache_t *rcache,
-                                         ucs_pgt_addr_t start,
-                                         ucs_pgt_addr_t end, size_t alignment,
-                                         ucs_list_link_t *list)
+static void
+ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, ucs_pgt_addr_t start,
+                             ucs_pgt_addr_t end, ucs_list_link_t *list)
 {
     ucs_pgt_region_t *pgt_left, *pgt_right;
     ucs_rcache_region_t *region_left, *region_right;
@@ -921,11 +920,9 @@ ucs_rcache_check_neighbors(ucs_rcache_t *rcache, void *arg,
         ucs_rcache_find_regions(rcache, *start, old_start - 1, &region_list);
         ucs_rcache_find_regions(rcache, old_end, *end - 1, &region_list);
 
-        if (rcache->params.flags & UCS_RCACHE_FLAG_MERGE_ADJACENT) {
-            if (ucs_list_is_empty(&region_list)) {
-                ucs_rcache_check_adj_regions(rcache, *start, *end, *alignment,
-                                             &region_list);
-            }
+        if ((rcache->params.flags & UCS_RCACHE_FLAG_MERGE_ADJACENT) &&
+            (ucs_list_is_empty(&region_list))) {
+            ucs_rcache_check_adj_regions(rcache, *start, *end, &region_list);
         }
     } while (!ucs_list_is_empty(&region_list));
 
