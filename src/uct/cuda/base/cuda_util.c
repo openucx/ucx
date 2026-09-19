@@ -231,22 +231,20 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
 
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
     if (status != UCS_OK) {
-        ucs_debug("nvml unavailable: gpus hidden from the cuda library are not "
-                  "added to the topology");
-        return UCS_OK;
+        return status;
     }
 
     for (i = 0; i < nvml_dev_count; ++i) {
         status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, i,
                                          &nvml_dev);
         if (status != UCS_OK) {
-            goto out;
+            return status;
         }
 
         status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetPciInfo_v3, nvml_dev,
                                          &nvml_pci);
         if (status != UCS_OK) {
-            goto out;
+            return status;
         }
 
         bus_id.domain   = nvml_pci.domain;
@@ -261,7 +259,7 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
 
         status = uct_cuda_find_device_by_bus_id(&bus_id, &sys_dev);
         if (status != UCS_OK) {
-            goto out;
+            return status;
         }
 
         ucs_snprintf_safe(device_name, sizeof(device_name), "UNKN%u", i);
@@ -270,24 +268,29 @@ uct_cuda_init_devices_nvml(const ucs_sys_bus_id_t *visible_gpu_bus_ids,
         ucs_assert_always(status == UCS_OK);
     }
 
-out:
-    return status;
+    return UCS_OK;
 }
 
 static unsigned uct_cuda_init_devices_internal(void)
 {
     ucs_sys_bus_id_t visible_gpu_bus_ids[UCT_CUDA_MAX_DEVICES];
+    ucs_status_t nvml_status, topo_status;
     unsigned num_visible_gpus;
-    ucs_status_t status;
 
     /* Init visible devices first using the CUDA driver */
     num_visible_gpus = uct_cuda_init_devices_cu(visible_gpu_bus_ids);
 
     /* Init the remaining non-visible devices using NVML */
-    status = uct_cuda_init_devices_nvml(visible_gpu_bus_ids, num_visible_gpus);
-    if (status != UCS_OK) {
-        ucs_diag("failed to initialize nvml devices: %s",
-                 ucs_status_string(status));
+    nvml_status = uct_cuda_init_devices_nvml(visible_gpu_bus_ids,
+                                             num_visible_gpus);
+    if (nvml_status != UCS_OK) {
+        topo_status = ucs_topo_device_class_mark_incomplete(
+                UCS_TOPO_DEVICE_CLASS_ACC);
+        ucs_assert_always(topo_status == UCS_OK);
+
+        ucs_diag("failed to initialize nvml devices: %s; gpus hidden from the "
+                 "cuda library are not considered in the topology",
+                 ucs_status_string(nvml_status));
     }
 
     return num_visible_gpus;
