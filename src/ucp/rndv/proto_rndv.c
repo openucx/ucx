@@ -16,6 +16,82 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK);
+    ucs_hlist_del(&ep->ext->rndv_mtype_fc_reqs,
+                  &req->send.state.rndv_fc_ep_list);
+    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK;
+}
+
+unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert((req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK) ==
+               UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
+    /* Keep the request in RESCHED state, so that if it is aborted before
+     * ucp_proto_rndv_mtype_request_init() retries the allocation, the wakeup
+     * is passed to the next waiter rather than dropped. */
+    ucp_request_send(req);
+    return 1;
+}
+
+int ucp_proto_rndv_mtype_fc_reschedule_filter(
+        const ucs_callbackq_elem_t *elem, void *arg)
+{
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    ucs_error("ep %p still has mtype FC reschedule callback for req %p", arg,
+              elem->arg);
+    return 1;
+}
+
+void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
+{
+    ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
+    ucp_request_t *req;
+
+    while (!ucs_hlist_is_empty(fc_reqs)) {
+        req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                  send.state.rndv_fc_ep_list);
+        ucp_proto_request_abort(req, status);
+        ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
+                   (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                        send.state.rndv_fc_ep_list) != req));
+    }
+}
+
+void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
+                                        ucs_queue_head_t *replay_queue)
+{
+    ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
+    ucp_request_t *req;
+    ucs_status_t status;
+
+    /* The replay does not always restart (and reset) the request, so clear
+     * its flow-control state here. This may wake up another request of this
+     * ep, which is then extracted on a later iteration. */
+    while (!ucs_hlist_is_empty(fc_reqs)) {
+        req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                  send.state.rndv_fc_ep_list);
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+        ucp_trace_req(req, "mtype_fc: extract for replay");
+
+        status = req->send.proto_config->proto->reset(req);
+        ucs_assertv_always(status == UCS_OK, "req %p, failed to reset: %s",
+                           req, ucs_status_string(status));
+        ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
+                   (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
+                                        send.state.rndv_fc_ep_list) != req));
+        ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+    }
+}
+
 static int
 ucp_proto_rndv_ctrl_skip_inter_node_md(
         const ucp_proto_common_init_params_t *params,
@@ -706,6 +782,36 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
+}
+
+unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
+                                       ucs_memory_type_t frag_mem_type)
+{
+    const size_t max_mem = context->config.ext.rndv_frag_worker_max_mem;
+    size_t frag_size;
+    size_t frags_in_chunk;
+    size_t max_frags;
+
+    if ((max_mem == UCS_MEMUNITS_INF) || (max_mem == UCS_MEMUNITS_AUTO)) {
+        return UINT_MAX;
+    }
+
+    frag_size      = context->config.ext.rndv_frag_size[frag_mem_type];
+    frags_in_chunk = context->config.ext.rndv_num_frags[frag_mem_type];
+    ucs_assert_always(frag_size > 0);
+
+    max_frags = max_mem / frag_size;
+    if (max_frags < frags_in_chunk) {
+        /* mpool requires max_elems >= elems_per_chunk */
+        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM %zu is too low for %s "
+                 "(frag size %zu, frags per alloc %zu), using minimum %zu "
+                 "frags",
+                 max_mem, ucs_memory_type_names[frag_mem_type], frag_size,
+                 frags_in_chunk, frags_in_chunk);
+        return frags_in_chunk;
+    }
+
+    return ucs_min(max_frags, UINT_MAX);
 }
 
 ucs_status_t

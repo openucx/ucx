@@ -550,6 +550,8 @@ typedef struct ucp_ep_ext {
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
     ucs_hlist_head_t              proto_reqs;
+    /* List of rendezvous mtype requests waiting for a fragment */
+    ucs_hlist_head_t              rndv_mtype_fc_reqs;
 #if UCS_ENABLE_ASSERT
     ucs_time_t                    ka_last_round; /* Time of last KA round done */
 #endif
