@@ -19,9 +19,14 @@ extern "C" {
  * Structural validation of a ucs_rbtree_t, shared by every test of a structure
  * built on it. Checks only what the core owns - colors, parent links, black
  * height and node count. Ordering and any derived subtree data belong to the
- * embedding structure and are checked there.
+ * embedding structure; per-node data it derives can be checked through the
+ * optional visitor.
  */
 namespace rbtree_check {
+
+/** Called for every node, to check whatever the embedding structure adds */
+using visitor_t = void (*)(const ucs_rbtree_node_t*);
+
 
 static inline size_t height(const ucs_rbtree_node_t *node)
 {
@@ -48,7 +53,8 @@ static inline size_t height(const ucs_rbtree_node_t *node)
 
 /* Returns the node count and sets @a black_height */
 static inline size_t validate_node(const ucs_rbtree_node_t *node,
-                                   size_t &black_height, bool &ok)
+                                   size_t &black_height, bool &ok,
+                                   visitor_t visit)
 {
     size_t left_height = 0, right_height = 0, count;
 
@@ -77,8 +83,12 @@ static inline size_t validate_node(const ucs_rbtree_node_t *node,
         UCS_RBTREE_CHECK(ok, node->right->parent == node, node);
     }
 
-    count = 1 + validate_node(node->left, left_height, ok) +
-            validate_node(node->right, right_height, ok);
+    if (visit != NULL) {
+        visit(node);
+    }
+
+    count = 1 + validate_node(node->left, left_height, ok, visit) +
+            validate_node(node->right, right_height, ok, visit);
 
     /* Every path to a leaf must cross the same number of black nodes */
     UCS_RBTREE_CHECK(ok, left_height == right_height, node);
@@ -91,10 +101,13 @@ static inline size_t validate_node(const ucs_rbtree_node_t *node,
  *
  * @param [in]  tree            Tree to validate.
  * @param [in]  expected_count  Number of nodes the tree should hold.
+ * @param [in]  visit           Optional per-node check for data the embedding
+ *                              structure derives, such as an augmentation.
  *
  * @return Whether every structural invariant held.
  */
-static inline bool validate(const ucs_rbtree_t *tree, size_t expected_count)
+static inline bool validate(const ucs_rbtree_t *tree, size_t expected_count,
+                            visitor_t visit = NULL)
 {
     size_t black_height = 0;
     bool ok             = true;
@@ -105,7 +118,7 @@ static inline bool validate(const ucs_rbtree_t *tree, size_t expected_count)
     }
 
     UCS_RBTREE_CHECK(ok,
-                     validate_node(tree->root, black_height, ok) ==
+                     validate_node(tree->root, black_height, ok, visit) ==
                              expected_count,
                      tree->root);
     return ok;

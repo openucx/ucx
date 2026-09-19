@@ -260,3 +260,151 @@ UCS_TEST_F(test_rbtree, random_stress) {
     }
     EXPECT_EQ(expected, keys());
 }
+
+/* The augmented entry points, exercised with a set-dependent value: the
+ * maximum key in each subtree. */
+class test_rbtree_augmented : public ucs::test {
+protected:
+    struct node {
+        ucs_rbtree_node_t super;
+        uint64_t          key;
+        uint64_t          subtree_max;
+        bool              linked;
+    };
+
+    static const unsigned NUM_NODES = 128;
+
+    void init()
+    {
+        ucs::test::init();
+        ucs_rbtree_init(&m_tree);
+        m_nodes.assign(NUM_NODES, node());
+    }
+
+    static node *node_of(const ucs_rbtree_node_t *rb_node)
+    {
+        return ucs_derived_of(const_cast<ucs_rbtree_node_t*>(rb_node), node);
+    }
+
+    static uint64_t subtree_max_of(const ucs_rbtree_node_t *rb_node)
+    {
+        return (rb_node == NULL) ? 0 : node_of(rb_node)->subtree_max;
+    }
+
+    static void augment(ucs_rbtree_node_t *rb_node)
+    {
+        node *n = node_of(rb_node);
+
+        n->subtree_max = std::max(n->key,
+                                  std::max(subtree_max_of(rb_node->left),
+                                           subtree_max_of(rb_node->right)));
+    }
+
+    void insert(unsigned idx, uint64_t key)
+    {
+        ucs_rbtree_node_t *parent = NULL, **link = &m_tree.root;
+
+        while (*link != NULL) {
+            parent = *link;
+            link   = (key < node_of(parent)->key) ? &parent->left :
+                                                    &parent->right;
+        }
+
+        m_nodes[idx].key    = key;
+        m_nodes[idx].linked = true;
+        ucs_rbtree_insert_at_augmented(&m_tree, parent, link,
+                                       &m_nodes[idx].super, augment);
+        ++m_count;
+    }
+
+    /* 16 keys, deliberately out of order */
+    void insert_keys()
+    {
+        for (unsigned i = 0; i < 16; ++i) {
+            insert(i, (i * 7) % 16);
+        }
+    }
+
+    void remove(unsigned idx)
+    {
+        ucs_rbtree_remove_augmented(&m_tree, &m_nodes[idx].super, augment);
+        m_nodes[idx].linked = false;
+        --m_count;
+    }
+
+    /* Recomputed by walking the subtree, independently of the augmentation */
+    static uint64_t expected_max(const ucs_rbtree_node_t *rb_node)
+    {
+        uint64_t max = node_of(rb_node)->key;
+
+        if (rb_node->left != NULL) {
+            max = std::max(max, expected_max(rb_node->left));
+        }
+        if (rb_node->right != NULL) {
+            max = std::max(max, expected_max(rb_node->right));
+        }
+        return max;
+    }
+
+    static void check_subtree_max(const ucs_rbtree_node_t *rb_node)
+    {
+        EXPECT_EQ(expected_max(rb_node), node_of(rb_node)->subtree_max);
+    }
+
+    void validate()
+    {
+        EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count,
+                                           check_subtree_max));
+    }
+
+    ucs_rbtree_t      m_tree;
+    std::vector<node> m_nodes;
+    size_t            m_count = 0;
+};
+
+/* Ascending keys rotate on nearly every insert, so the hook has to run for
+ * each one to keep the root's value exact. */
+UCS_TEST_F(test_rbtree_augmented, insert_maintains_subtree_max) {
+    for (unsigned i = 0; i < 64; ++i) {
+        insert(i, (i * 37) % 64);
+        validate();
+    }
+
+    EXPECT_EQ(63u, node_of(m_tree.root)->subtree_max);
+}
+
+/* Draining the tree covers all three removal shapes, including the two-child
+ * one, where the relinked successor must be re-augmented in its new place. */
+UCS_TEST_F(test_rbtree_augmented, remove_maintains_subtree_max) {
+    insert_keys();
+    validate();
+
+    for (unsigned i = 0; i < 16; ++i) {
+        remove(i);
+        validate();
+    }
+
+    EXPECT_EQ(NULL, m_tree.root);
+}
+
+UCS_TEST_F(test_rbtree_augmented, random_stress) {
+    static const unsigned NUM_ITERS = 20000;
+
+    for (unsigned i = 0; i < NUM_ITERS; ++i) {
+        const unsigned idx = ucs::rand() % NUM_NODES;
+
+        if (m_nodes[idx].linked) {
+            remove(idx);
+        } else {
+            insert(idx, ucs::rand() % 100000);
+        }
+
+        if ((i & 15) == 0) {
+            validate();
+        }
+
+        ASSERT_FALSE(HasFailure());
+    }
+
+    validate();
+}

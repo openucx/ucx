@@ -193,6 +193,7 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
+	ucs/test_interval_map.cc \
 	ucs/test_interval_tree.cc \
 	ucs/test_rbtree.cc \
     ucs/test_lru.cc \
