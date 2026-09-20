@@ -771,15 +771,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
     ucp_ep_h ep           = sender().ep();
     ucp_lane_index_t lane = ucp_ep_get_am_lane(ep);
     if (lane == UCP_NULL_LANE) {
+        /* RMA variants over transports which need no AM emulation */
         UCS_TEST_SKIP_R("endpoint has no AM lane");
     }
 
-    ucp_rsc_index_t rsc_index  = ucp_ep_get_rsc_index(ep, lane);
-    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
-    if (wiface == NULL) {
-        UCS_TEST_SKIP_R("AM lane has no iface");
-    }
+    /* Only the AM lane aliasing the CM lane has no resource, which cannot
+     * happen when connecting by worker address */
+    ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    ASSERT_NE(UCP_NULL_RESOURCE, rsc_index);
 
+    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
     ASSERT_TRUE(ucp_worker_iface_is_activated(wiface));
 
     flush_worker(sender());
