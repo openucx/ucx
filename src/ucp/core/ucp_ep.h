@@ -478,7 +478,7 @@ struct ucp_ep_config {
 
     /* Bitmap of lanes whose iface is activated while this configuration is
      * used: the lanes selected by the protocols, and the AM lane */
-    ucp_lane_map_t                proto_lane_map;
+    ucp_lane_map_t                active_lane_map;
 
     /* EP initialization flags from @ref ucp_ep_init_flags_t */
     unsigned                      proto_init_flags;

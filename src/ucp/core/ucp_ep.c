@@ -1448,7 +1448,7 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
               cfg_index, ep_config->ep_count);
     if (ep_config->ep_count++ == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
-                                         ep_config->proto_lane_map,
+                                         ep_config->active_lane_map,
                                          ucp_worker_iface_progress_ep);
     }
 }
@@ -1471,7 +1471,7 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
 
     if (--ep_config->ep_count == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
-                                         ep_config->proto_lane_map,
+                                         ep_config->active_lane_map,
                                          ucp_worker_iface_unprogress_ep);
     }
 }
@@ -3793,7 +3793,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
              * that it is activated while at least one endpoint uses this
              * configuration. */
             if (context->config.ext.proto_enable) {
-                config->proto_lane_map |= UCS_BIT(lane);
+                config->active_lane_map |= UCS_BIT(lane);
             }
 
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
