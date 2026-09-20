@@ -431,10 +431,12 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
         ucp_ep_flush_request_update_uct_comp(req, 0, UCS_BIT(lane));
     } else if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {
         ucp_ep_flush_error(req, lane, status);
+        /* UCT removes the pending request after a hard error. */
+        req->send.lane = UCP_NULL_LANE;
     }
 
-    /* since req->flush.pend.lane is still non-NULL, this function will not
-     * put anything on pending.
+    /* A pending callback owns its lane until it returns. The marker may be
+     * cleared above when the callback was removed.
      */
     ucp_ep_flush_progress(req);
     completed = ucp_flush_check_completion(req);

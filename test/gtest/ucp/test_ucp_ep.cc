@@ -171,7 +171,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage, slow_lane_storage_initialization)
     ucp_lane_index_t lane;
 
     const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 2;
-    ucp_worker_h worker       = sender().worker();
+    ucp_worker_h worker      = sender().worker();
 
     UCS_ASYNC_BLOCK(&worker->async);
     ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
@@ -201,7 +201,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage,
     ucp_ep_h ep;
 
     const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 1;
-    ucp_worker_h worker       = sender().worker();
+    ucp_worker_h worker      = sender().worker();
 
     UCS_ASYNC_BLOCK(&worker->async);
     ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
