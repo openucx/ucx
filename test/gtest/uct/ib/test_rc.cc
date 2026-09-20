@@ -13,7 +13,6 @@
 extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
-#include <uct/api/v2/uct_v2.h>
 }
 #endif
 
@@ -1463,9 +1462,9 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 class test_rc_mlx5_token_query : public test_rc {
 protected:
-    static constexpr uint32_t NUM_MESSAGES     = 10;
-    static constexpr size_t   NUM_SGL_ELEMENTS = 4;
-    static constexpr size_t   SGL_BASE_LENGTH  = 1024;
+    static constexpr uint32_t NUM_MESSAGES      = 10;
+    static constexpr size_t   NUM_SGL_ELEMENTS  = 4;
+    static constexpr size_t   SGL_BUFFER_LENGTH = 1024;
 
     static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
     {
@@ -1495,15 +1494,6 @@ protected:
         attr.tx_token   = tx_token;
         attr.rx_token   = rx_token;
         ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
-    }
-
-    bool check_caps_v2(uint64_t flags)
-    {
-        uct_iface_attr_v2_t attr = {};
-
-        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-        ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
-        return ucs_test_all_flags(attr.cap.flags, flags);
     }
 
     size_t max_put_sgl_zcopy_count()
@@ -1555,13 +1545,17 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_sgl_zcopy,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY) ||
-                     !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
-                     (max_put_sgl_zcopy_count() < NUM_SGL_ELEMENTS))
+                     !check_caps_v2(UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
+                                    UCT_IFACE_FLAG_V2_QUERY_TOKEN))
 {
+    if (max_put_sgl_zcopy_count() < NUM_SGL_ELEMENTS) {
+        UCS_TEST_SKIP_R("max_put_sgl_zcopy_count is too small");
+    }
+
     uct_rc_mlx5_base_ep_t *ep  = ucs_derived_of(m_e1->ep(0),
                                                 uct_rc_mlx5_base_ep_t);
     const uct_iface_attr &attr = m_e1->iface_attr();
-    size_t length = ucs_min(ucs_max(SGL_BASE_LENGTH, attr.cap.put.min_zcopy),
+    size_t length = ucs_min(ucs_max(SGL_BUFFER_LENGTH, attr.cap.put.min_zcopy),
                             attr.cap.put.max_zcopy);
     mapped_buffer sendbuf(length, 0ul, *m_e1);
     mapped_buffer recvbuf(length, 0ul, *m_e2);
@@ -1582,12 +1576,12 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_sgl_zcopy,
     comp.count  = NUM_MESSAGES;
     comp.status = UCS_OK;
 
-    /* Multiple rounds to check cumulative PSN accounting */
     for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
-        status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
-                                      addrs, rkeys, NULL, NULL,
-                                      NUM_SGL_ELEMENTS, &comp);
-        /* UCS_INPROGRESS is the only documented success status */
+        UCT_TEST_CALL_AND_TRY_AGAIN(
+                uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                     addrs, rkeys, NULL, NULL,
+                                     NUM_SGL_ELEMENTS, &comp),
+                status);
         ASSERT_EQ(UCS_INPROGRESS, status);
     }
 

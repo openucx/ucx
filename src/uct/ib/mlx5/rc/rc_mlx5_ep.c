@@ -244,6 +244,10 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     size_t total                   = 0;
     struct mlx5_wqe_ctrl_seg *ctrl = NULL;
     uint32_t num_packets           = 0;
+    const size_t non_data_wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
+                                     sizeof(struct mlx5_wqe_raddr_seg);
+    const size_t data_wqe_size     = non_data_wqe_size +
+                                     sizeof(struct mlx5_wqe_data_seg);
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
     size_t wqe_size, i;
@@ -282,12 +286,10 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
                                 UCS_ERR_NO_RESOURCE, count - 1);
 
-    wqe_size = sizeof(*ctrl) + sizeof(*raddr) + sizeof(*dptr);
-    pi       = txwq->sw_pi;
-
     ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
-    ucs_assert(ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB) == 1);
+    ucs_assert(ucs_div_round_up(data_wqe_size, MLX5_SEND_WQE_BB) == 1);
 
+    pi   = txwq->sw_pi;
     curr = txwq->curr;
 
     fence      = uct_rc_ep_fm(&iface->super, &txwq->fi, 1);
@@ -297,9 +299,6 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         fm_ce_se = ((i == 0) ? fence_flag : 0) |
                    ((i == count - 1) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
         ctrl     = curr;
-
-        uct_ib_mlx5_set_ctrl_seg(ctrl, pi, MLX5_OPCODE_RDMA_WRITE, 0,
-                                 txwq->super.qp_num, fm_ce_se, 0, wqe_size);
 
         addr = remote_addrs[i];
         if (fence) {
@@ -312,21 +311,24 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
         raddr = uct_ib_mlx5_txwq_wrap_none(txwq, ctrl + 1);
         uct_ib_mlx5_ep_set_rdma_seg(raddr, addr, rkey);
 
-        dptr = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
-        if (ucs_likely(lengths[i] != 0)) {
+        if (ucs_unlikely(lengths[i] == 0)) {
+            wqe_size     = non_data_wqe_size;
+            num_packets += 1;
+        } else {
+            dptr         = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
             uct_ib_mlx5_set_data_seg(dptr, buffers[i], lengths[i],
                                      uct_ib_memh_get_lkey(memhs[i]));
+            wqe_size     = data_wqe_size;
             num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
-        } else {
-            /* A zero-length RDMA write still consumes one packet/PSN */
-            uct_ib_mlx5_set_data_seg(dptr, NULL, 0, 0);
-            num_packets += 1;
         }
+
+        uct_ib_mlx5_set_ctrl_seg(ctrl, pi, MLX5_OPCODE_RDMA_WRITE, 0,
+                                 txwq->super.qp_num, fm_ce_se, 0, wqe_size);
 
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
-        total       += lengths[i];
+        total += lengths[i];
     }
 
     res_count         = pi - 1 - txwq->prev_sw_pi;
