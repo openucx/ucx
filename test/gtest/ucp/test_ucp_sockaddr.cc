@@ -3360,7 +3360,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_iface_activate, iface_activate_count,
     client_connect_disconnect(true);
 
     /* Interfaces are released together with the last endpoint using them, even
-     * if they were used to receive messages */
+     * if they were used to receive messages. Relies on tcp built-in keepalive:
+     * a keepalive lane would keep its interface activated. */
     EXPECT_FALSE(is_any_interface_activated(receiver()));
 }
 
