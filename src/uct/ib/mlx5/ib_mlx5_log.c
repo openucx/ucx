@@ -492,9 +492,10 @@ void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           void *qend, int max_sge, uct_ib_log_sge_t *log_sge,
                           uct_log_data_dump_func_t packet_dump_cb)
 {
-    char buf[256] = {0};
+    char buf[UCT_IB_LOG_LINE_LEN] = {0};
     uct_ib_mlx5_wqe_dump(iface, wqe, qstart, qend, max_sge, 1, packet_dump_cb,
                          buf, sizeof(buf) - 1, log_sge);
+    uct_ib_log_mark_line_cut(buf, sizeof(buf));
     uct_log_data(file, line, function, buf);
 }
 
@@ -562,7 +563,7 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                           uct_ib_iface_t *iface, struct mlx5_cqe64 *cqe,
                           void *data, uct_log_data_dump_func_t packet_dump_cb)
 {
-    char buf[256] = {0};
+    char buf[UCT_IB_LOG_LINE_LEN] = {0};
     size_t length;
 
     length = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
@@ -576,5 +577,6 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
                                     ntohs(cqe->slid),
                                     data, length,
                                     packet_dump_cb, buf, sizeof(buf) - 1);
+    uct_ib_log_mark_line_cut(buf, sizeof(buf));
     uct_log_data(file, line, function, buf);
 }

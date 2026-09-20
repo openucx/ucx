@@ -45,13 +45,10 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                              uct_log_data_dump_func_t data_dump,
                              int data_dump_sge, char *buf, size_t max)
 {
-    char data[256];
-    size_t total_len       = 0;
-    size_t total_valid_len = 0;
-    char *s    = buf;
-    char *ends = buf + max;
-    void *md   = data;
-    size_t len;
+    size_t total_len = 0;
+    char *s          = buf;
+    char *ends       = buf + max;
+    void *data, *md;
     int i;
 
     for (i = 0; i < num_sge; ++i) {
@@ -63,22 +60,43 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                      sg_list[i].addr, sg_list[i].length, sg_list[i].lkey);
         }
 
-        s               += strlen(s);
+        s += strlen(s);
 
-        if ((i < data_dump_sge) && data_dump) {
-            len = ucs_min(sg_list[i].length,
-                          UCS_PTR_BYTE_DIFF(md, data) + sizeof(data));
-            memcpy(md, (void*)sg_list[i].addr, len);
-
-            md               = UCS_PTR_BYTE_OFFSET(md, len);
-            total_len       += len;
-            total_valid_len += sg_list[i].length;
+        if (i < data_dump_sge) {
+            total_len += sg_list[i].length;
         }
     }
 
-    if (data_dump) {
-        data_dump(&iface->super, type, data, total_len, total_valid_len, s, ends - s);
+    /* Every dump callback starts by reading a header out of the data, so
+     * there is nothing it can print when no data was collected */
+    if ((data_dump == NULL) || (total_len == 0)) {
+        return;
     }
+
+    /* A dump callback parses the message by its own headers, so it has to be
+     * given all of it. Gather the scattered data, which is done only while a
+     * packet is being logged. */
+    data = ucs_alloc_on_stack(total_len, "ib_log_data");
+    if (data == NULL) {
+        return;
+    }
+
+    md = data;
+    for (i = 0; (i < num_sge) && (i < data_dump_sge); ++i) {
+        memcpy(md, (void*)sg_list[i].addr, sg_list[i].length);
+        md = UCS_PTR_BYTE_OFFSET(md, sg_list[i].length);
+    }
+
+    data_dump(&iface->super, type, data, total_len, total_len, s, ends - s);
+    ucs_free_on_stack(data, total_len);
+}
+
+void uct_ib_log_mark_line_cut(char *buf, size_t max)
+{
+    static const char ellipsis[] = "...";
+
+    ucs_assertv(max >= sizeof(ellipsis), "max=%zu", max);
+    strcpy(buf + max - sizeof(ellipsis), ellipsis);
 }
 
 void uct_ib_log_dump_remote_addr(uint64_t remote_addr, uint32_t rkey,
@@ -260,10 +278,11 @@ void __uct_ib_log_post_send_one(const char *file, int line,
                                 int max_sge,
                                 uct_log_data_dump_func_t data_dump_cb)
 {
-    char buf[256] = {0};
+    char buf[UCT_IB_LOG_LINE_LEN] = {0};
 
     uct_ib_dump_send_wr(iface, qp, wr, max_sge, data_dump_cb, ah, remote_qpn,
                         buf, sizeof(buf) - 1);
+    uct_ib_log_mark_line_cut(buf, sizeof(buf));
     uct_log_data(file, line, function, buf);
 }
 
@@ -295,7 +314,7 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
                                   size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb)
 {
-    char buf[256] = {0};
+    char buf[UCT_IB_LOG_LINE_LEN] = {0};
     size_t len;
 
     len = length;
@@ -305,5 +324,6 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
     }
     uct_ib_log_dump_recv_completion(iface, l_qp, r_qp, slid, data, len,
                                     packet_dump_cb, buf, sizeof(buf) - 1);
+    uct_ib_log_mark_line_cut(buf, sizeof(buf));
     uct_log_data(file, line, function, buf);
 }
