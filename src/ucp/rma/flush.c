@@ -15,6 +15,7 @@
 #include "rma.inl"
 
 static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg);
+static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg);
 
 static void
 ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
@@ -154,11 +155,19 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                   ep, ep->flags, req->send.flush.started_lanes,
                   req->send.state.uct_comp.count);
 
-    while ((next_lanes = ep_live_lanes & req->send.flush.lane_mask &
-                         ~req->send.flush.started_lanes) != 0) {
+    next_lanes = ep_live_lanes & req->send.flush.lane_mask &
+                 ~req->send.flush.started_lanes;
+
+    if (req->send.lane != UCP_NULL_LANE) {
+        /* The pending callback exclusively owns this lane until it runs. */
+        next_lanes &= ~UCS_BIT(req->send.lane);
+    }
+
+    while (next_lanes != 0) {
 
         /* Search for next lane to start flush */
         lane   = ucs_ffs64(next_lanes);
+        next_lanes &= ~UCS_BIT(lane);
         uct_ep = ucp_ep_get_lane(ep, lane);
         if (uct_ep == NULL) {
             ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
@@ -243,6 +252,14 @@ ucp_ep_flush_slow_path_remove_filter(const ucs_callbackq_elem_t *elem,
                                      void *arg)
 {
     return (elem->cb == ucp_ep_flush_resume_slow_path_callback) &&
+           (elem->arg == arg);
+}
+
+static int
+ucp_ep_flush_restart_remove_filter(const ucs_callbackq_elem_t *elem,
+                                   void *arg)
+{
+    return (elem->cb == ucp_ep_flush_failover_oneshot_cb) &&
            (elem->arg == arg);
 }
 
@@ -524,12 +541,21 @@ void ucp_ep_flush_completion(uct_completion_t *self)
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
 {
+    ucp_ep_h ep = req->send.ep;
     ucp_lane_map_t ff_lanes;
     int num_comps;
 
     if (req->send.flush.sw_state == UCP_FLUSH_SW_STATE_RESTART_PENDING) {
-        ucp_trace_req(req, "skip stale fast-forward while restarting");
-        return;
+        if (!(ep->flags & UCP_EP_FLAG_CLOSED) &&
+            (ucp_ep_get_live_lanes(ep) != 0)) {
+            ucp_trace_req(req, "skip stale fast-forward while restarting");
+            return;
+        }
+
+        /* A terminal endpoint cannot use the queued restart. */
+        ucs_callbackq_remove_oneshot(&ep->worker->uct->progress_q, req,
+                                     ucp_ep_flush_restart_remove_filter, req);
+        req->send.flush.sw_state = UCP_FLUSH_SW_STATE_NOT_STARTED;
     }
 
     ff_lanes = req->send.flush.all_lanes &

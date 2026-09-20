@@ -883,6 +883,23 @@ protected:
 
     static uct_completion_t *m_held_probe_comp;
 
+private:
+    size_t m_initiator_err_count = 0;
+    size_t m_total_err_count     = 0;
+    ucs_status_t m_err_status    = UCS_OK;
+};
+
+uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+
+class test_ucp_flush_lane_recovery : public test_ucp_fault_tolerance {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_OP_AM, "am");
+    }
+
     static ucs::mock *m_flush_mock;
     static uct_completion_t *m_held_flush_comp;
     static unsigned m_held_flush_count;
@@ -920,11 +937,7 @@ protected:
     {
         unsigned i;
 
-        if (req == NULL) {
-            return;
-        }
-
-        if (m_held_flush_comp == NULL) {
+        if ((req == NULL) || (m_held_flush_comp == NULL)) {
             return;
         }
 
@@ -938,8 +951,9 @@ protected:
 
     class held_flush_request_guard {
     public:
-        held_flush_request_guard(test_ucp_fault_tolerance &test, ucp_ep_h ep,
-                                 ucs_status_ptr_t &request, ucp_request_t *&req)
+        held_flush_request_guard(test_ucp_flush_lane_recovery &test,
+                                 ucp_ep_h ep, ucs_status_ptr_t &request,
+                                 ucp_request_t *&req)
             : m_test(test), m_ep(ep), m_request(request), m_req(req)
         {
         }
@@ -967,41 +981,25 @@ protected:
         }
 
     private:
-
         void cleanup_flush()
         {
             m_flush_mock = NULL;
             drain_held_flush(m_ep, m_req);
         }
 
-        test_ucp_fault_tolerance &m_test;
+        test_ucp_flush_lane_recovery &m_test;
         ucp_ep_h m_ep;
         ucs_status_ptr_t &m_request;
         ucp_request_t *&m_req;
     };
 
-private:
-    size_t m_initiator_err_count = 0;
-    size_t m_total_err_count     = 0;
-    ucs_status_t m_err_status    = UCS_OK;
 };
 
-uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
-ucs::mock *test_ucp_fault_tolerance::m_flush_mock             = NULL;
-uct_completion_t *test_ucp_fault_tolerance::m_held_flush_comp = NULL;
-unsigned test_ucp_fault_tolerance::m_held_flush_count         = 0;
-uct_ep_h test_ucp_fault_tolerance::m_replacement_uct_ep       = NULL;
-unsigned test_ucp_fault_tolerance::m_replacement_flush_count  = 0;
-
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
-
-class test_ucp_flush_lane_recovery : public test_ucp_fault_tolerance {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_OP_AM, "am");
-    }
-};
+ucs::mock *test_ucp_flush_lane_recovery::m_flush_mock             = NULL;
+uct_completion_t *test_ucp_flush_lane_recovery::m_held_flush_comp = NULL;
+unsigned test_ucp_flush_lane_recovery::m_held_flush_count         = 0;
+uct_ep_h test_ucp_flush_lane_recovery::m_replacement_uct_ep       = NULL;
+unsigned test_ucp_flush_lane_recovery::m_replacement_flush_count  = 0;
 
 UCS_TEST_P(test_ucp_flush_lane_recovery, lane_replaced_during_inprogress_flush,
            "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=100")

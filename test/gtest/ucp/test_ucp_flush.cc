@@ -56,6 +56,30 @@ test_flush_no_resource(uct_ep_h, unsigned, uct_completion_t *)
     return UCS_ERR_NO_RESOURCE;
 }
 
+static ucp_request_t *test_flush_lane_generation_req;
+static unsigned test_flush_lane_generation_count;
+static bool test_flush_pending_lane_started_twice;
+static uct_ep_h test_flush_lane_generation_ep;
+
+static ucs_status_t
+test_flush_inprogress_change_lane_generation(uct_ep_h ep, unsigned,
+                                              uct_completion_t *comp)
+{
+    if (ep != test_flush_lane_generation_ep) {
+        return UCS_OK;
+    }
+
+    ++test_flush_lane_generation_count;
+    test_flush_comp = comp;
+    if (test_flush_lane_generation_count == 1) {
+        ++test_flush_lane_generation_req->send.ep->ext->lane_generation;
+    } else if (test_flush_lane_generation_req->send.lane != UCP_NULL_LANE) {
+        test_flush_pending_lane_started_twice = true;
+    }
+
+    return UCS_INPROGRESS;
+}
+
 static ucs_status_t
 test_flush_pending_add(uct_ep_h, uct_pending_req_t *, unsigned)
 {
@@ -283,6 +307,81 @@ UCS_TEST_P(test_ucp_flush, replace_other_lane_during_inprogress_flush)
 
 }
 
+UCS_TEST_P(test_ucp_flush, lane_replacement_skips_pending_lane)
+{
+    ucp_request_param_t param = {};
+    ucp_request_t *req        = NULL;
+    ucp_ep_h ep;
+    uct_ep_h lane_ep;
+    ucs_status_ptr_t request  = NULL;
+    ucp_lane_map_t live_lanes;
+    ucp_lane_index_t lane;
+    uint32_t lane_generation;
+    unsigned i;
+
+    ep         = sender().ep();
+    live_lanes = ucp_ep_get_live_lanes(ep);
+    if (live_lanes == 0) {
+        UCS_TEST_SKIP_R("requires a live transport lane");
+    }
+
+    lane                               = ucs_ffs64(live_lanes);
+    lane_ep                            = ucp_ep_get_lane(ep, lane);
+    test_flush_call_count              = 0;
+    test_flush_comp                    = NULL;
+    test_flush_lane_generation_req     = NULL;
+    test_flush_lane_generation_count   = 0;
+    test_flush_pending_lane_started_twice = false;
+    {
+        ucs::mock mock;
+        mock_ep_flush(ep, mock, test_flush_no_resource);
+        mock.setup(&lane_ep->iface->ops.ep_pending_add, test_flush_pending_add);
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+
+            request = ucp_ep_flush_lanes_internal(
+                    ep, 0, &param, NULL, test_flush_completion,
+                    "lane_replacement_skips_pending_lane", UCT_FLUSH_FLAG_LOCAL,
+                    UCS_BIT(lane));
+            ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+            req = static_cast<ucp_request_t*>(request) - 1;
+            EXPECT_EQ(lane, req->send.lane);
+            lane_generation                  = ep->ext->lane_generation;
+            test_flush_lane_generation_req   = req;
+            test_flush_lane_generation_ep = lane_ep;
+            mock_ep_flush(ep, mock, test_flush_inprogress_change_lane_generation);
+            ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+            EXPECT_EQ(1u, test_flush_lane_generation_count);
+            EXPECT_FALSE(test_flush_pending_lane_started_twice);
+        }
+
+        sender().progress();
+
+        {
+            test_flush_worker_cs_guard cs_guard(ep->worker);
+
+            EXPECT_EQ(2u, test_flush_lane_generation_count);
+            EXPECT_FALSE(test_flush_pending_lane_started_twice);
+            ASSERT_TRUE(test_flush_comp != NULL);
+            for (i = 0; (i < 2) &&
+                        (req->send.state.uct_comp.count > 0); ++i) {
+                uct_invoke_completion(test_flush_comp, UCS_OK);
+            }
+            ucp_ep_flush_remote_completed(req);
+            EXPECT_EQ(0, req->send.state.uct_comp.count);
+            ep->ext->lane_generation = lane_generation;
+            EXPECT_TRUE(req->send.flush.sw_done);
+        }
+    }
+
+    test_flush_lane_generation_req = NULL;
+    test_flush_lane_generation_ep  = NULL;
+    EXPECT_UCS_OK(ucp_request_check_status(request));
+    ucp_request_release(request);
+}
+
+
 UCS_TEST_P(test_ucp_flush, partial_mask_pending_reschedule, "MAX_EAGER_LANES=2")
 {
     ucp_request_param_t param = {};
@@ -453,18 +552,16 @@ UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
     ucp_request_param_t param = {};
     ucp_request_t *req = NULL;
     ucp_ep_h ep;
-    uct_iface_h iface;
     ucs_status_ptr_t request = NULL;
     unsigned i;
 
     flush_ep(sender());
     ep                    = sender().ep();
-    iface                 = ucp_ep_get_lane(ep, 0)->iface;
     test_flush_call_count = 0;
     test_flush_comp       = NULL;
     {
         ucs::mock mock;
-        mock.setup(&iface->ops.ep_flush, test_flush_inprogress);
+        mock_ep_flush(ep, mock, test_flush_inprogress);
 
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
         request = ucp_ep_flush_lanes_internal(
@@ -511,6 +608,69 @@ UCS_TEST_P(test_ucp_flush_failover, completion_error_restarts_flush)
         ucp_request_release(request);
     }
 
+}
+
+UCS_TEST_P(test_ucp_flush_failover, restart_pending_cancels_on_ep_close)
+{
+    ucp_request_param_t param = {};
+    ucp_request_t *req        = NULL;
+    ucp_ep_h ep;
+    ucs_status_ptr_t request  = NULL;
+    unsigned initial_flush_count = 0;
+    unsigned i;
+
+    flush_ep(sender());
+    ep                    = sender().ep();
+    test_flush_call_count = 0;
+    test_flush_comp       = NULL;
+    {
+        ucs::mock mock;
+        mock_ep_flush(ep, mock, test_flush_inprogress);
+
+        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+        request = ucp_ep_flush_lanes_internal(
+                ep, 0, &param, NULL, test_flush_completion,
+                "restart_pending_cancels_on_ep_close", UCT_FLUSH_FLAG_LOCAL,
+                UCS_BIT(0));
+        EXPECT_TRUE(UCS_PTR_IS_PTR(request));
+        if (UCS_PTR_IS_PTR(request)) {
+            req = static_cast<ucp_request_t*>(request) - 1;
+            EXPECT_TRUE(test_flush_comp != NULL);
+            if (test_flush_comp != NULL) {
+                uct_invoke_completion(test_flush_comp,
+                                      UCS_ERR_ENDPOINT_TIMEOUT);
+                EXPECT_EQ(UCP_FLUSH_SW_STATE_RESTART_PENDING,
+                          req->send.flush.sw_state);
+                initial_flush_count = test_flush_call_count;
+
+                ep->flags |= UCP_EP_FLAG_CLOSED;
+                ucp_ep_flush_request_ff(req, UCS_ERR_CANCELED);
+                EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT,
+                          ucp_request_check_status(request));
+                ep->flags &= ~UCP_EP_FLAG_CLOSED;
+            }
+        }
+        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+
+        sender().progress();
+        EXPECT_EQ(initial_flush_count, test_flush_call_count);
+        if (UCS_PTR_IS_PTR(request) &&
+            (ucp_request_check_status(request) == UCS_INPROGRESS)) {
+            UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+            EXPECT_TRUE(test_flush_comp != NULL);
+            if (test_flush_comp != NULL) {
+                for (i = 0; (i < 100) &&
+                            (req->send.state.uct_comp.count > 0); ++i) {
+                    uct_invoke_completion(test_flush_comp, UCS_OK);
+                }
+                ucp_ep_flush_remote_completed(req);
+            }
+            UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+        }
+    }
+    if (UCS_PTR_IS_PTR(request)) {
+        ucp_request_release(request);
+    }
 }
 
 UCS_TEST_P(test_ucp_flush_failover,
