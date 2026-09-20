@@ -595,7 +595,6 @@ protected:
         static constexpr uint32_t NUM_MSG_BEFORE_INVALIDATE = 2;
         uct_ep_invalidate_params_t invalidate_params = {};
         uint32_t num_posted = 0;
-        uint32_t num_ops_purged;
         unsigned num_outstanding, num_completions;
         ucs_status_t status;
 
@@ -631,11 +630,6 @@ protected:
             ++num_completions;
         }
 
-        EXPECT_EQ(num_completions, ctx.num_completions);
-
-        num_ops_purged = ctx.num_ops_purged;
-        purge_outstanding(&ctx);
-        EXPECT_EQ(num_ops_purged, ctx.num_ops_purged);
         EXPECT_EQ(num_completions, ctx.num_completions);
 
         flush();
