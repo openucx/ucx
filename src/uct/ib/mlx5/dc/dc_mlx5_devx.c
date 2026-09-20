@@ -108,8 +108,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     ucs_status_t status;
     void *qpc;
 
-    status = uct_ib_mlx5_devx_qp_rst2init(&rc_iface->super, qp,
-                                          UCT_IB_QPT_DCI);
+    status = uct_ib_mlx5_devx_qp_rst2init(&rc_iface->super, qp, UCT_IB_QPT_DCI);
     if (status != UCS_OK) {
         return status;
     }

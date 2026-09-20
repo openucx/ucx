@@ -1022,9 +1022,8 @@ ucs_status_t uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in,
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
-ucs_status_t
-uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
-                             int qp_type);
+ucs_status_t uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface,
+                                          uct_ib_mlx5_qp_t *qp, int qp_type);
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
@@ -1221,9 +1220,9 @@ uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
     return UCS_ERR_UNSUPPORTED;
 }
 
-static inline ucs_status_t
-uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
-                             int qp_type)
+static inline ucs_status_t uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface,
+                                                        uct_ib_mlx5_qp_t *qp,
+                                                        int qp_type)
 {
     return UCS_ERR_UNSUPPORTED;
 }

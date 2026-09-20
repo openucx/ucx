@@ -494,8 +494,8 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
 static ucs_status_t
 uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                 uct_rc_gdaki_channel_block_mem_t *mem,
-                                size_t dev_ep_size, ucs_mpool_t *mp, void *elems,
-                                unsigned num_elems)
+                                size_t dev_ep_size, ucs_mpool_t *mp,
+                                void *elems, unsigned num_elems)
 {
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
