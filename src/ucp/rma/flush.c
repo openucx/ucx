@@ -16,6 +16,7 @@
 
 static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg);
 static unsigned ucp_ep_flush_failover_oneshot_cb(void *arg);
+static void ucp_ep_flush_request_resched(ucp_ep_h ep, ucp_request_t *req);
 
 static void
 ucp_ep_flush_request_update_uct_comp(ucp_request_t *req, int diff,
@@ -202,7 +203,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                           ep, lane, ucs_status_string(status));
             if (status == UCS_OK) {
                 req->send.lane = lane;
-            } else if (status != UCS_ERR_BUSY) {
+            } else if (status == UCS_ERR_BUSY) {
+                ucp_ep_flush_request_resched(ep, req);
+                return;
+            } else {
                 ucp_ep_flush_error(req, lane, status);
                 break;
             }
