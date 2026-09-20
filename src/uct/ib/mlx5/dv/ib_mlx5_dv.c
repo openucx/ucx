@@ -235,7 +235,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     qp->type   = UCT_IB_MLX5_OBJ_TYPE_DEVX;
 
     if (attr->super.qp_type == IBV_QPT_RC) {
-        status = uct_ib_mlx5_devx_qp_rst2init(iface, qp);
+        status = uct_ib_mlx5_devx_qp_rst2init(iface, qp, attr->super.qp_type);
         if (status != UCS_OK) {
             goto err_free;
         }
@@ -402,7 +402,8 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
 }
 
 ucs_status_t
-uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp)
+uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+                             int qp_type)
 {
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
@@ -422,7 +423,7 @@ uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp)
     }
     UCT_IB_MLX5DV_SET(qpc, qpc, counter_set_id,
                       uct_ib_mlx5_iface_get_counter_set_id(iface));
-    if (iface->config.qp_type == IBV_QPT_RC) {
+    if (qp_type == IBV_QPT_RC) {
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
     }
 

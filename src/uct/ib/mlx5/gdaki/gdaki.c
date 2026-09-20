@@ -455,22 +455,14 @@ uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
         channel = &block->channels[i];
 
         status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
-                                             IBV_QPS_ERR);
-        if (status != UCS_OK) {
-            ucs_fatal("failed to set gdaki qp 0x%x to err: %s",
-                      channel->qp.super.qp_num, ucs_status_string(status));
-        }
-
-        status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
                                              IBV_QPS_RESET);
         if (status != UCS_OK) {
             ucs_fatal("failed to reset gdaki qp 0x%x: %s",
                       channel->qp.super.qp_num, ucs_status_string(status));
         }
 
-        uct_ib_mlx5_txwq_reset(&channel->qp);
-
-        status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super);
+        status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super,
+                                              IBV_QPT_RC);
         if (status != UCS_OK) {
             ucs_fatal("failed to move gdaki qp 0x%x to init: %s",
                       channel->qp.super.qp_num, ucs_status_string(status));
