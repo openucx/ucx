@@ -774,9 +774,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
         UCS_TEST_SKIP_R("endpoint has no AM lane");
     }
 
-    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(),
-                                                 ucp_ep_get_rsc_index(ep,
-                                                                      lane));
+    ucp_rsc_index_t rsc_index  = ucp_ep_get_rsc_index(ep, lane);
+    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
     if (wiface == NULL) {
         UCS_TEST_SKIP_R("AM lane has no iface");
     }
