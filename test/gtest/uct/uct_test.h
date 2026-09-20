@@ -400,6 +400,8 @@ protected:
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
+    bool is_ep_connected(const entity &remote, unsigned remote_ep_index,
+                         uct_ep_h ep, uint64_t field_mask) const;
     const entity& ent(unsigned index) const;
     unsigned progress() const;
     unsigned progress_mt() const;

@@ -530,6 +530,41 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
     return true;
 }
 
+bool uct_test::is_ep_connected(const entity &remote, unsigned remote_ep_index,
+                               uct_ep_h ep, uint64_t field_mask) const
+{
+    uct_ep_is_connected_params_t params = {};
+    uct_iface_attr_t iface_attr;
+    std::vector<uint8_t> iface_addr, dev_addr, ep_addr;
+
+    ASSERT_UCS_OK(uct_iface_query(remote.iface(), &iface_attr));
+
+    if (field_mask & UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR) {
+        iface_addr.resize(iface_attr.iface_addr_len);
+        ASSERT_UCS_OK(
+                uct_iface_get_address(remote.iface(),
+                                      (uct_iface_addr_t*)iface_addr.data()));
+        params.iface_addr = (uct_iface_addr_t*)iface_addr.data();
+    }
+
+    if (field_mask & UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR) {
+        dev_addr.resize(iface_attr.device_addr_len);
+        ASSERT_UCS_OK(uct_iface_get_device_address(
+                remote.iface(), (uct_device_addr_t*)dev_addr.data()));
+        params.device_addr = (uct_device_addr_t*)dev_addr.data();
+    }
+
+    if (field_mask & UCT_EP_IS_CONNECTED_FIELD_EP_ADDR) {
+        ep_addr.resize(iface_attr.ep_addr_len);
+        ASSERT_UCS_OK(uct_ep_get_address(remote.ep(remote_ep_index),
+                                         (uct_ep_addr_t*)ep_addr.data()));
+        params.ep_addr = (uct_ep_addr_t*)ep_addr.data();
+    }
+
+    params.field_mask = field_mask;
+    return uct_ep_is_connected(ep, &params);
+}
+
 /* modify the config of all the matching environment parameters */
 void uct_test::modify_config(const std::string& name, const std::string& value,
                              modify_config_mode_t mode) {
@@ -1698,4 +1733,3 @@ void test_uct_iface_attrs::basic_iov_test()
         EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
     }
 }
-

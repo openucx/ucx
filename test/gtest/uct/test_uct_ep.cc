@@ -108,34 +108,14 @@ protected:
 
 bool test_uct_ep::is_connected_to_sender(const entity &e) const
 {
-    uct_ep_is_connected_params_t params;
-    uct_iface_attr_t iface_attr;
-    std::string dev_addr, ep_addr, iface_addr;
+    uint64_t field_mask = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                          UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
 
-    ASSERT_UCS_OK(uct_iface_query(e.iface(), &iface_attr));
-    dev_addr.resize(iface_attr.device_addr_len);
-    iface_addr.resize(iface_attr.iface_addr_len);
-
-    ASSERT_UCS_OK(uct_iface_get_address(e.iface(),
-                                        (uct_iface_addr_t*)iface_addr.data()));
-    ASSERT_UCS_OK(
-            uct_iface_get_device_address(e.iface(),
-                                         (uct_device_addr_t*)dev_addr.data()));
-
-    params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
-    params.device_addr = (uct_device_addr_t*)dev_addr.data();
-    params.field_mask  = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
-                         UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
-
-    if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-        ep_addr.resize(iface_attr.ep_addr_len);
-        auto addr_buf = (uct_ep_addr_t*)ep_addr.data();
-        ASSERT_UCS_OK(uct_ep_get_address(e.ep(0), addr_buf));
-        params.ep_addr     = (uct_ep_addr_t*)ep_addr.data();
-        params.field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
+    if (e.iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
+        field_mask |= UCT_EP_IS_CONNECTED_FIELD_EP_ADDR;
     }
 
-    return uct_ep_is_connected(m_sender->ep(0), &params);
+    return is_ep_connected(e, 0, m_sender->ep(0), field_mask);
 }
 
 void test_uct_ep::modify_remote_id(entity &e) const
