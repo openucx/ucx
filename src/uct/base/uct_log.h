@@ -26,7 +26,7 @@
  */
 typedef void (*uct_log_data_dump_func_t)(uct_base_iface_t *iface,
                                          uct_am_trace_type_t type, void *data,
-                                         size_t length, size_t valid_length,
-                                         char *buffer, size_t max);
+                                         size_t length, char *buffer,
+                                         size_t max);
 
 #endif

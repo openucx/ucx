@@ -46,9 +46,11 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                              int data_dump_sge, char *buf, size_t max)
 {
     size_t total_len = 0;
+    size_t offset    = 0;
     char *s          = buf;
     char *ends       = buf + max;
-    void *data, *md;
+    size_t dump_len, len;
+    void *data;
     int i;
 
     for (i = 0; i < num_sge; ++i) {
@@ -73,22 +75,24 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
         return;
     }
 
-    /* A dump callback parses the message by its own headers, so it has to be
-     * given all of it. Gather the scattered data, which is done only while a
-     * packet is being logged. */
-    data = ucs_alloc_on_stack(total_len, "ib_log_data");
+    /* A dump callback parses the message by its own headers, so gather the
+     * scattered data for it. A segment holds every header the transport can
+     * send, and the payload past it is not parsed, so stop at that much. */
+    dump_len = ucs_min(total_len, iface->config.seg_size);
+    data     = ucs_alloc_on_stack(dump_len, "ib_log_data");
     if (data == NULL) {
         return;
     }
 
-    md = data;
-    for (i = 0; (i < num_sge) && (i < data_dump_sge); ++i) {
-        memcpy(md, (void*)sg_list[i].addr, sg_list[i].length);
-        md = UCS_PTR_BYTE_OFFSET(md, sg_list[i].length);
+    for (i = 0; (i < num_sge) && (i < data_dump_sge) && (offset < dump_len);
+         ++i) {
+        len = ucs_min(sg_list[i].length, dump_len - offset);
+        memcpy(UCS_PTR_BYTE_OFFSET(data, offset), (void*)sg_list[i].addr, len);
+        offset += len;
     }
 
-    data_dump(&iface->super, type, data, total_len, total_len, s, ends - s);
-    ucs_free_on_stack(data, total_len);
+    data_dump(&iface->super, type, data, dump_len, s, ends - s);
+    ucs_free_on_stack(data, dump_len);
 }
 
 void uct_ib_log_mark_line_cut(char *buf, size_t max)
@@ -166,8 +170,8 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
     s += strlen(s);
 
     if (data_dump != NULL) {
-        data_dump(&iface->super, UCT_AM_TRACE_TYPE_RECV, data, length, length,
-                  s, ends - s);
+        data_dump(&iface->super, UCT_AM_TRACE_TYPE_RECV, data, length, s,
+                  ends - s);
     }
 }
 

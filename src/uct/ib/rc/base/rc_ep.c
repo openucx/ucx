@@ -195,8 +195,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                           void *data, size_t length, size_t valid_length,
-                           char *buffer, size_t max)
+                           void *data, size_t length, char *buffer, size_t max)
 {
     uct_rc_hdr_t *rch = data;
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(rch->am_id);

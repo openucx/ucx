@@ -6,6 +6,9 @@
 
 #include <uct/ib/test_ib.h>
 #include <uct/api/v2/uct_v2.h>
+extern "C" {
+#include <uct/ib/base/ib_log.h>
+}
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
@@ -1235,6 +1238,118 @@ UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, non_equal_mtu,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);
+
+
+/* Exercise the packet dump path, which is normally only reachable with
+ * trace-data logging enabled */
+class test_uct_ib_log_data : public test_uct_ib {
+public:
+    /* Print the whole payload, like the UCP tracer does, so that a gather
+     * buffer shorter than the reported length is caught */
+    static void am_tracer(void *arg, uct_am_trace_type_t type, uint8_t id,
+                          const void *data, size_t length, char *buffer,
+                          size_t max)
+    {
+        const uint8_t *payload = (const uint8_t*)data;
+        char *p                = buffer;
+        char *endp             = buffer + max;
+        size_t i;
+
+        for (i = 0; i < length; ++i) {
+            snprintf(p, endp - p, "%02x", payload[i]);
+            p += strlen(p);
+        }
+    }
+
+    static ucs_log_func_rc_t
+    log_handler(const char *file, unsigned line, const char *function,
+                ucs_log_level_t level,
+                const ucs_log_component_config_t *comp_conf,
+                const char *message, va_list ap)
+    {
+        char buf[UCT_IB_LOG_LINE_LEN * 2];
+        va_list ap2;
+
+        if (level != UCS_LOG_LEVEL_TRACE_DATA) {
+            /* Hide the verbose messages the raised log level lets through */
+            return (level >= UCS_LOG_LEVEL_DEBUG) ? UCS_LOG_FUNC_RC_STOP :
+                                                    UCS_LOG_FUNC_RC_CONTINUE;
+        }
+
+        va_copy(ap2, ap);
+        vsnprintf(buf, sizeof(buf), message, ap2);
+        va_end(ap2);
+
+        m_lines.push_back(buf);
+        return UCS_LOG_FUNC_RC_STOP;
+    }
+
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags)
+    {
+        ++test_uct_ib::m_ib_am_handler_counter;
+        return UCS_OK;
+    }
+
+    static std::vector<std::string> m_lines;
+};
+
+std::vector<std::string> test_uct_ib_log_data::m_lines;
+
+UCS_TEST_SKIP_COND_P(test_uct_ib_log_data, dump_am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    /* Two hex digits per byte, so this fills the log line and forces it to be
+     * cut */
+    static const size_t min_length = UCT_IB_LOG_LINE_LEN / 2;
+    size_t start_counter = test_uct_ib::m_ib_am_handler_counter;
+    size_t length        = ucs_min(m_e1->iface_attr().cap.am.max_zcopy, 1024ul);
+    uint64_t hdr         = 0xfeedbeef;
+    bool truncated       = false;
+    bool dumped          = false;
+
+    if (UCS_MAX_LOG_LEVEL < UCS_LOG_LEVEL_TRACE_DATA) {
+        UCS_TEST_SKIP_R("trace-data logging is not compiled in");
+    } else if (length < min_length) {
+        UCS_TEST_SKIP_R("am_zcopy is too small to fill a log line");
+    }
+
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    uct_iov_t iov{sendbuf.ptr(), sendbuf.length(), sendbuf.memh(), 0, 1};
+
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_handler, NULL, 0);
+    ASSERT_UCS_OK(uct_iface_set_am_tracer(m_e1->iface(), am_tracer, NULL));
+    ASSERT_UCS_OK(uct_iface_set_am_tracer(m_e2->iface(), am_tracer, NULL));
+
+    m_lines.clear();
+    {
+        scoped_log_handler capture(log_handler);
+        ucs::scoped_log_level trace_data(UCS_LOG_LEVEL_TRACE_DATA);
+
+        ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_am_zcopy(m_e1->ep(0), 0, &hdr,
+                                                    sizeof(hdr), &iov, 1, 0,
+                                                    NULL));
+        flush();
+        wait_for_value(&test_uct_ib::m_ib_am_handler_counter,
+                       start_counter + 1, true);
+    }
+
+    ASSERT_FALSE(m_lines.empty());
+    for (const std::string &line : m_lines) {
+        ASSERT_LT(line.size(), (size_t)UCT_IB_LOG_LINE_LEN);
+        if (line.size() == (UCT_IB_LOG_LINE_LEN - 1)) {
+            EXPECT_EQ("...", line.substr(line.size() - 3));
+            truncated = true;
+        }
+
+        dumped = dumped || (line.find(" am 0 ") != std::string::npos);
+    }
+
+    EXPECT_TRUE(dumped);
+    EXPECT_TRUE(truncated);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_log_data);
 
 
 /* Also creates connected entities for the relevant transports, exercising

@@ -501,7 +501,7 @@ void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
 
 void uct_ib_mlx5_cqe_dump(const char *file, int line, const char *function, struct mlx5_cqe64 *cqe)
 {
-    char buf[256] = {0};
+    char buf[UCT_IB_LOG_LINE_LEN] = {0};
 
     snprintf(buf, sizeof(buf) - 1,
             "CQE(op_own 0x%x) qp 0x%x sqp 0x%x slid %d bytes %d wqe_idx %d ",
