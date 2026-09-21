@@ -123,8 +123,8 @@ static void ucs_interval_map_foreach_overlapping_subtree(
 {
     ucs_interval_map_node_t *node;
 
-    if ((rb_node == NULL) ||
-        (ucs_interval_map_subtree_max(rb_node) <= start)) {
+    /* Also the base case: an empty subtree has a maximum end of 0 */
+    if (ucs_interval_map_subtree_max(rb_node) <= start) {
         return;
     }
 
