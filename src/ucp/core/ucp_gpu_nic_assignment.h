@@ -23,7 +23,7 @@ typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
         ucp_gpu_nic_sys_dev_bitmap_t;
 
 
-typedef struct {
+typedef struct ucp_gpu_nic_assignment {
     /* NIC sys_dev bitmaps referenced by bitmap_idx_by_gpu_sys_dev. */
     ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmaps;
 

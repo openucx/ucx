@@ -11,6 +11,7 @@
 #endif
 
 #include "ucp_context.h"
+#include "ucp_gpu_nic_assignment.h"
 #include "ucp_request.h"
 #include "ucp_tl_info.h"
 

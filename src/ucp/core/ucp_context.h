@@ -12,7 +12,6 @@
 
 #include "ucp_types.h"
 #include "ucp_thread.h"
-#include "ucp_gpu_nic_assignment.h"
 
 #include <ucp/api/ucp.h>
 #include <ucp/dt/dt.h>
@@ -394,6 +393,10 @@ typedef struct ucp_context_alloc_md_index {
     ucs_sys_device_t sys_dev;
     uint8_t          mem_flags;
 } ucp_context_alloc_md_index_t;
+
+
+/* Forward declaration */
+typedef struct ucp_gpu_nic_assignment ucp_gpu_nic_assignment_t;
 
 
 /**
