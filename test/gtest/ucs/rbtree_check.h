@@ -100,7 +100,8 @@ static inline size_t validate_node(const ucs_rbtree_node_t *node,
  * Check the red-black invariants and the node count.
  *
  * @param [in]  tree            Tree to validate.
- * @param [in]  expected_count  Number of nodes the tree should hold.
+ * @param [in]  expected_count  Number of nodes the tree should hold, checked
+ *                              against both the walk and the tree's own count.
  * @param [in]  visit           Optional per-node check for data the embedding
  *                              structure derives, such as an augmentation.
  *
@@ -121,6 +122,7 @@ static inline bool validate(const ucs_rbtree_t *tree, size_t expected_count,
                      validate_node(tree->root, black_height, ok, visit) ==
                              expected_count,
                      tree->root);
+    UCS_RBTREE_CHECK(ok, tree->num_nodes == expected_count, tree->root);
     return ok;
 }
 

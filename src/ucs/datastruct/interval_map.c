@@ -150,6 +150,6 @@ void ucs_interval_map_foreach_overlapping(const ucs_interval_map_t *map,
 {
     UCS_INTERVAL_MAP_ASSERT_RANGE(start, end);
 
-    ucs_interval_map_foreach_overlapping_subtree(map->rb.root, start, end,
-                                                cb, arg);
+    ucs_interval_map_foreach_overlapping_subtree(map->rb.root, start, end, cb,
+                                                 arg);
 }
