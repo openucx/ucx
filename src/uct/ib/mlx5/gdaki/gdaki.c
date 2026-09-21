@@ -1056,6 +1056,8 @@ int uct_rc_gdaki_ep_is_connected(uct_ep_h tl_ep,
     union ibv_gid *rgid;
     const uct_ib_address_t *ib_addr;
 
+    UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(params);
+
     status = uct_ib_mlx5_query_qp_peer_info(
             &iface->super.super.super, &ep->channel_block->channels[0].qp.super,
             &ah_attr, &qp_num);

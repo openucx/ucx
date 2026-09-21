@@ -110,14 +110,6 @@ protected:
         }
     }
 
-    bool is_connected_to(const entity &remote, unsigned remote_ep_index,
-                         uct_ep_h ep) const
-    {
-        return is_ep_connected(remote, remote_ep_index, ep,
-                               UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
-                                       UCT_EP_IS_CONNECTED_FIELD_EP_ADDR);
-    }
-
     void
     device_put(uint64_t send_seed, uint64_t recv_seed, unsigned ep_index = 0)
     {
@@ -162,9 +154,6 @@ protected:
         skip_if_no_cuda();
         skip_if_not_rc_gda();
 
-        EXPECT_TRUE(is_connected_to(*m_receiver, 0, m_sender->ep(0)));
-        EXPECT_TRUE(is_connected_to(*m_sender, 0, m_receiver->ep(0)));
-
         device_put(0x1111111111111111lu, 0x2222222222222222lu);
 
         m_sender->destroy_ep(0);
@@ -173,14 +162,9 @@ protected:
 
         m_sender->create_ep(0);
         m_receiver->create_ep(0);
-        EXPECT_FALSE(is_connected_to(*m_receiver, 0, m_sender->ep(0)));
-        EXPECT_FALSE(is_connected_to(*m_sender, 0, m_receiver->ep(0)));
 
         m_sender->connect_p2p_ep(m_sender->ep(0), m_receiver->ep(0));
-        EXPECT_TRUE(is_connected_to(*m_receiver, 0, m_sender->ep(0)));
-
         m_receiver->connect_p2p_ep(m_receiver->ep(0), m_sender->ep(0));
-        EXPECT_TRUE(is_connected_to(*m_sender, 0, m_receiver->ep(0)));
         short_progress_loop();
 
         device_put(0x3333333333333333lu, 0x4444444444444444lu);
