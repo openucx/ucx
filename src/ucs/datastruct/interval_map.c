@@ -16,6 +16,11 @@
 #include <inttypes.h>
 
 
+#define UCS_INTERVAL_MAP_ASSERT_RANGE(_start, _end) \
+    ucs_assertv((_start) < (_end), "start=%" PRIu64 " end=%" PRIu64, (_start), \
+                (_end))
+
+
 static UCS_F_ALWAYS_INLINE ucs_interval_map_node_t *
 ucs_interval_map_node(ucs_rbtree_node_t *rb_node)
 {
@@ -57,7 +62,7 @@ void ucs_interval_map_insert(ucs_interval_map_t *map,
     ucs_rbtree_node_t *parent = NULL;
     ucs_rbtree_node_t **link  = &map->rb.root;
 
-    ucs_assertv(start < end, "start=%" PRIu64 " end=%" PRIu64, start, end);
+    UCS_INTERVAL_MAP_ASSERT_RANGE(start, end);
 
     while (*link != NULL) {
         parent = *link;
@@ -88,7 +93,7 @@ ucs_interval_map_find_containing(const ucs_interval_map_t *map, uint64_t start,
     ucs_rbtree_node_t *rb_node = map->rb.root;
     ucs_interval_map_node_t *node;
 
-    ucs_assertv(start < end, "start=%" PRIu64 " end=%" PRIu64, start, end);
+    UCS_INTERVAL_MAP_ASSERT_RANGE(start, end);
 
     while (rb_node != NULL) {
         node = ucs_interval_map_node(rb_node);
@@ -105,11 +110,9 @@ ucs_interval_map_find_containing(const ucs_interval_map_t *map, uint64_t start,
 
         /* Every node on the left starts at or before this one, so all of them
          * satisfy the start condition; descend if any reaches far enough. */
-        if (ucs_interval_map_subtree_max(rb_node->left) >= end) {
-            rb_node = rb_node->left;
-        } else {
-            rb_node = rb_node->right;
-        }
+        rb_node = (ucs_interval_map_subtree_max(rb_node->left) >= end) ?
+                          rb_node->left :
+                          rb_node->right;
     }
 
     return NULL;
@@ -149,7 +152,7 @@ void ucs_interval_map_foreach_overlapping(const ucs_interval_map_t *map,
                                           uint64_t start, uint64_t end,
                                           ucs_interval_map_cb_t cb, void *arg)
 {
-    ucs_assertv(start < end, "start=%" PRIu64 " end=%" PRIu64, start, end);
+    UCS_INTERVAL_MAP_ASSERT_RANGE(start, end);
 
     ucs_interval_map_foreach_overlapping_subtree(map->rb.root, start, end,
                                                 cb, arg);
