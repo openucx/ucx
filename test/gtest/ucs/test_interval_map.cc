@@ -240,10 +240,10 @@ UCS_TEST_F(test_interval_map, random_stress) {
     size_t live                     = 0;
 
     for (unsigned i = 0; i < NUM_ITERS; ++i) {
-        unsigned idx = ucs::rand() % NUM_ENTRIES;
+        const unsigned idx = ucs::rand() % NUM_ENTRIES;
 
         if (!m_entries[idx].live) {
-            uint64_t start = ucs::rand() % 900;
+            const uint64_t start = ucs::rand() % 900;
             insert(idx, start, start + 1 + (ucs::rand() % 200));
             ++live;
         } else {
@@ -257,8 +257,8 @@ UCS_TEST_F(test_interval_map, random_stress) {
 
         validate(live);
 
-        uint64_t start = ucs::rand() % 1000;
-        uint64_t end   = start + 1 + (ucs::rand() % 150);
+        const uint64_t start = ucs::rand() % 1000;
+        const uint64_t end   = start + 1 + (ucs::rand() % 150);
         ucs_interval_map_node_t *node =
                 ucs_interval_map_find_containing(&m_map, start, end);
         EXPECT_EQ(ref_contains(start, end), node != NULL);
