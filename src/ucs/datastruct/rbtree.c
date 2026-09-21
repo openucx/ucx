@@ -13,23 +13,24 @@
 #include <ucs/debug/assert.h>
 
 
-void ucs_rbtree_init(ucs_rbtree_t *tree)
+void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment)
 {
-    tree->root = NULL;
+    tree->root    = NULL;
+    tree->augment = augment;
 }
 
 /*
  * Recompute derived data from 'node' up to the root.
  */
-static void ucs_rbtree_propagate(ucs_rbtree_augment_cb_t augment,
+static void ucs_rbtree_propagate(const ucs_rbtree_t *tree,
                                  ucs_rbtree_node_t *node)
 {
-    if (augment == NULL) {
+    if (tree->augment == NULL) {
         return;
     }
 
     while (node != NULL) {
-        augment(node);
+        tree->augment(node);
         node = node->parent;
     }
 }
@@ -37,9 +38,7 @@ static void ucs_rbtree_propagate(ucs_rbtree_augment_cb_t augment,
 /*
  * Rotate left: 'node' becomes the left child of its right child.
  */
-static void ucs_rbtree_rotate_left(ucs_rbtree_t *tree,
-                                   ucs_rbtree_node_t *node,
-                                   ucs_rbtree_augment_cb_t augment)
+static void ucs_rbtree_rotate_left(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 {
     ucs_rbtree_node_t *right = node->right;
 
@@ -60,16 +59,14 @@ static void ucs_rbtree_rotate_left(ucs_rbtree_t *tree,
     right->left  = node;
     node->parent = right;
 
-    if (augment != NULL) {
-        augment(node);
-        augment(right);
+    if (tree->augment != NULL) {
+        tree->augment(node);
+        tree->augment(right);
     }
 }
 
 /* Rotate right: 'node' becomes the right child of its left child. */
-static void ucs_rbtree_rotate_right(ucs_rbtree_t *tree,
-                                    ucs_rbtree_node_t *node,
-                                    ucs_rbtree_augment_cb_t augment)
+static void ucs_rbtree_rotate_right(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 {
     ucs_rbtree_node_t *left = node->left;
 
@@ -90,15 +87,13 @@ static void ucs_rbtree_rotate_right(ucs_rbtree_t *tree,
     left->right  = node;
     node->parent = left;
 
-    if (augment != NULL) {
-        augment(node);
-        augment(left);
+    if (tree->augment != NULL) {
+        tree->augment(node);
+        tree->augment(left);
     }
 }
 
-static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree,
-                                    ucs_rbtree_node_t *node,
-                                    ucs_rbtree_augment_cb_t augment)
+static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 {
     ucs_rbtree_node_t *parent, *grandparent, *uncle;
 
@@ -119,14 +114,14 @@ static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree,
 
             if (node == parent->right) {
                 node = parent;
-                ucs_rbtree_rotate_left(tree, node, augment);
+                ucs_rbtree_rotate_left(tree, node);
                 parent      = node->parent;
                 grandparent = parent->parent;
             }
 
             parent->color      = UCS_RBTREE_BLACK;
             grandparent->color = UCS_RBTREE_RED;
-            ucs_rbtree_rotate_right(tree, grandparent, augment);
+            ucs_rbtree_rotate_right(tree, grandparent);
         } else {
             uncle = grandparent->left;
             if ((uncle != NULL) && (uncle->color == UCS_RBTREE_RED)) {
@@ -139,25 +134,22 @@ static void ucs_rbtree_insert_fixup(ucs_rbtree_t *tree,
 
             if (node == parent->left) {
                 node = parent;
-                ucs_rbtree_rotate_right(tree, node, augment);
+                ucs_rbtree_rotate_right(tree, node);
                 parent      = node->parent;
                 grandparent = parent->parent;
             }
 
             parent->color      = UCS_RBTREE_BLACK;
             grandparent->color = UCS_RBTREE_RED;
-            ucs_rbtree_rotate_left(tree, grandparent, augment);
+            ucs_rbtree_rotate_left(tree, grandparent);
         }
     }
 
     tree->root->color = UCS_RBTREE_BLACK;
 }
 
-void ucs_rbtree_insert_at_augmented(ucs_rbtree_t *tree,
-                                    ucs_rbtree_node_t *parent,
-                                    ucs_rbtree_node_t **link,
-                                    ucs_rbtree_node_t *node,
-                                    ucs_rbtree_augment_cb_t augment)
+void ucs_rbtree_insert_at(ucs_rbtree_t *tree, ucs_rbtree_node_t *parent,
+                          ucs_rbtree_node_t **link, ucs_rbtree_node_t *node)
 {
     ucs_assert(*link == NULL);
     ucs_assert((parent == NULL) ? (link == &tree->root) :
@@ -170,14 +162,8 @@ void ucs_rbtree_insert_at_augmented(ucs_rbtree_t *tree,
     node->color  = UCS_RBTREE_RED;
     *link        = node;
 
-    ucs_rbtree_propagate(augment, node);
-    ucs_rbtree_insert_fixup(tree, node, augment);
-}
-
-void ucs_rbtree_insert_at(ucs_rbtree_t *tree, ucs_rbtree_node_t *parent,
-                          ucs_rbtree_node_t **link, ucs_rbtree_node_t *node)
-{
-    ucs_rbtree_insert_at_augmented(tree, parent, link, node, NULL);
+    ucs_rbtree_propagate(tree, node);
+    ucs_rbtree_insert_fixup(tree, node);
 }
 
 /* Replace the subtree rooted at 'old_node' with the one rooted at 'new_node' */
@@ -208,8 +194,7 @@ ucs_rbtree_is_black(const ucs_rbtree_node_t *node)
  * Restore the red-black invariants after removing a black node.
  */
 static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
-                                    ucs_rbtree_node_t *parent,
-                                    ucs_rbtree_augment_cb_t augment)
+                                    ucs_rbtree_node_t *parent)
 {
     ucs_rbtree_node_t *sibling;
 
@@ -223,7 +208,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
             if (sibling->color == UCS_RBTREE_RED) {
                 sibling->color = UCS_RBTREE_BLACK;
                 parent->color  = UCS_RBTREE_RED;
-                ucs_rbtree_rotate_left(tree, parent, augment);
+                ucs_rbtree_rotate_left(tree, parent);
                 sibling = parent->right;
                 ucs_assert(sibling != NULL);
             }
@@ -241,7 +226,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
                 ucs_assert(sibling->left != NULL);
                 sibling->left->color = UCS_RBTREE_BLACK;
                 sibling->color       = UCS_RBTREE_RED;
-                ucs_rbtree_rotate_right(tree, sibling, augment);
+                ucs_rbtree_rotate_right(tree, sibling);
                 sibling = parent->right;
             }
 
@@ -251,7 +236,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
              * old sibling into that slot */
             ucs_assert(sibling->right != NULL);
             sibling->right->color = UCS_RBTREE_BLACK;
-            ucs_rbtree_rotate_left(tree, parent, augment);
+            ucs_rbtree_rotate_left(tree, parent);
         } else {
             sibling = parent->left;
             /* Removing a black node leaves the opposite subtree non-empty, so
@@ -261,7 +246,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
             if (sibling->color == UCS_RBTREE_RED) {
                 sibling->color = UCS_RBTREE_BLACK;
                 parent->color  = UCS_RBTREE_RED;
-                ucs_rbtree_rotate_right(tree, parent, augment);
+                ucs_rbtree_rotate_right(tree, parent);
                 sibling = parent->left;
                 ucs_assert(sibling != NULL);
             }
@@ -279,7 +264,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
                 ucs_assert(sibling->right != NULL);
                 sibling->right->color = UCS_RBTREE_BLACK;
                 sibling->color        = UCS_RBTREE_RED;
-                ucs_rbtree_rotate_left(tree, sibling, augment);
+                ucs_rbtree_rotate_left(tree, sibling);
                 sibling = parent->left;
             }
 
@@ -289,7 +274,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
              * old sibling into that slot */
             ucs_assert(sibling->left != NULL);
             sibling->left->color = UCS_RBTREE_BLACK;
-            ucs_rbtree_rotate_right(tree, parent, augment);
+            ucs_rbtree_rotate_right(tree, parent);
         }
 
         node   = tree->root;
@@ -301,8 +286,7 @@ static void ucs_rbtree_remove_fixup(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
     }
 }
 
-void ucs_rbtree_remove_augmented(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
-                                 ucs_rbtree_augment_cb_t augment)
+void ucs_rbtree_remove(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 {
     ucs_rbtree_node_t *child, *child_parent, *successor;
     ucs_rbtree_color_t removed_color;
@@ -347,20 +331,15 @@ void ucs_rbtree_remove_augmented(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
     /* 'child_parent' is at or below the deepest node whose subtree changed, so
      * walking up from it refreshes every stale value, including the one at the
      * successor's new position. */
-    ucs_rbtree_propagate(augment, child_parent);
+    ucs_rbtree_propagate(tree, child_parent);
 
     if (removed_color == UCS_RBTREE_BLACK) {
-        ucs_rbtree_remove_fixup(tree, child, child_parent, augment);
+        ucs_rbtree_remove_fixup(tree, child, child_parent);
     }
 
     node->parent = NULL;
     node->left   = NULL;
     node->right  = NULL;
-}
-
-void ucs_rbtree_remove(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
-{
-    ucs_rbtree_remove_augmented(tree, node, NULL);
 }
 
 ucs_rbtree_node_t *ucs_rbtree_first(const ucs_rbtree_t *tree)

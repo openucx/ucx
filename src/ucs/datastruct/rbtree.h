@@ -47,16 +47,18 @@ typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
  * Intrusive red-black tree.
  */
 typedef struct {
-    ucs_rbtree_node_t *root; /**< Root node, NULL when empty */
+    ucs_rbtree_node_t      *root;    /**< Root node, NULL when empty */
+    ucs_rbtree_augment_cb_t augment; /**< Derived-data hook, NULL if unused */
 } ucs_rbtree_t;
 
 
 /**
  * @brief Initialize an empty tree
  *
- * @param [in]  tree  Tree to initialize.
+ * @param [in]  tree     Tree to initialize.
+ * @param [in]  augment  Derived-data hook, or NULL if the caller keeps none.
  */
-void ucs_rbtree_init(ucs_rbtree_t *tree);
+void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment);
 
 
 /**
@@ -100,37 +102,6 @@ void ucs_rbtree_insert_at(ucs_rbtree_t *tree, ucs_rbtree_node_t *parent,
  * @param [in]  node  Node to remove, which must be in @a tree.
  */
 void ucs_rbtree_remove(ucs_rbtree_t *tree, ucs_rbtree_node_t *node);
-
-
-/**
- * @brief Attach a node, refreshing derived data up to the root
- *
- * As @ref ucs_rbtree_insert_at, and additionally invokes @a augment on every
- * node whose subtree changed. The same callback must be used for every
- * operation on a given tree.
- *
- * @param [in]  tree     Tree to insert into.
- * @param [in]  parent   Node to attach under, NULL to make @a node the root.
- * @param [in]  link     Empty child slot of @a parent, or &tree->root.
- * @param [in]  node     Node to attach. Its links and color are overwritten.
- * @param [in]  augment  Derived-data hook.
- */
-void ucs_rbtree_insert_at_augmented(ucs_rbtree_t *tree,
-                                    ucs_rbtree_node_t *parent,
-                                    ucs_rbtree_node_t **link,
-                                    ucs_rbtree_node_t *node,
-                                    ucs_rbtree_augment_cb_t augment);
-
-
-/**
- * @brief Remove a node, refreshing derived data up to the root
- *
- * @param [in]  tree     Tree to remove from.
- * @param [in]  node     Node to remove, which must be in @a tree.
- * @param [in]  augment  Derived-data hook.
- */
-void ucs_rbtree_remove_augmented(ucs_rbtree_t *tree, ucs_rbtree_node_t *node,
-                                 ucs_rbtree_augment_cb_t augment);
 
 END_C_DECLS
 

@@ -26,7 +26,7 @@ protected:
     void init()
     {
         ucs::test::init();
-        ucs_rbtree_init(&m_tree);
+        ucs_rbtree_init(&m_tree, NULL);
         m_nodes.assign(NUM_NODES, node());
     }
 
@@ -62,15 +62,6 @@ protected:
         ucs_rbtree_insert_at(&m_tree, parent, link, &m_nodes[idx].super);
     }
 
-    void insert_augmented(unsigned idx, uint64_t key)
-    {
-        ucs_rbtree_node_t *parent;
-        ucs_rbtree_node_t **link = descend(idx, key, &parent);
-
-        ucs_rbtree_insert_at_augmented(&m_tree, parent, link,
-                                       &m_nodes[idx].super, augment);
-    }
-
     /* Insert in order, node i holding keys[i] */
     void insert_keys(const std::vector<uint64_t> &keys)
     {
@@ -92,12 +83,6 @@ protected:
     void remove(unsigned idx)
     {
         ucs_rbtree_remove(&m_tree, &m_nodes[idx].super);
-        detached(idx);
-    }
-
-    void remove_augmented(unsigned idx)
-    {
-        ucs_rbtree_remove_augmented(&m_tree, &m_nodes[idx].super, augment);
         detached(idx);
     }
 
@@ -143,6 +128,12 @@ protected:
             max = std::max(max, expected_max(rb_node->right));
         }
         return max;
+    }
+
+    /* The hook belongs to the tree, so it is chosen at init time */
+    void use_augment()
+    {
+        ucs_rbtree_init(&m_tree, augment);
     }
 
     static void check_subtree_max(const ucs_rbtree_node_t *rb_node)
@@ -331,8 +322,10 @@ UCS_TEST_F(test_rbtree, random_stress) {
 /* Ascending keys rotate on nearly every insert, so the hook has to run for
  * each one to keep the root's value exact. */
 UCS_TEST_F(test_rbtree, augmented_insert_maintains_subtree_max) {
+    use_augment();
+
     for (unsigned i = 0; i < 64; ++i) {
-        insert_augmented(i, (i * 37) % 64);
+        insert(i, (i * 37) % 64);
         validate(check_subtree_max);
     }
 
@@ -342,13 +335,15 @@ UCS_TEST_F(test_rbtree, augmented_insert_maintains_subtree_max) {
 /* Draining the tree covers all three removal shapes, including the two-child
  * one, where the relinked successor must be re-augmented in its new place. */
 UCS_TEST_F(test_rbtree, augmented_remove_maintains_subtree_max) {
+    use_augment();
+
     for (unsigned i = 0; i < 16; ++i) {
-        insert_augmented(i, (i * 7) % 16);
+        insert(i, (i * 7) % 16);
     }
     validate(check_subtree_max);
 
     for (unsigned i = 0; i < 16; ++i) {
-        remove_augmented(i);
+        remove(i);
         validate(check_subtree_max);
     }
 
