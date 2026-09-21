@@ -395,10 +395,6 @@ typedef struct ucp_context_alloc_md_index {
 } ucp_context_alloc_md_index_t;
 
 
-/* Forward declaration */
-typedef struct ucp_gpu_nic_assignment ucp_gpu_nic_assignment_t;
-
-
 /**
  * UCP context
  */

@@ -78,6 +78,7 @@ typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
 typedef struct ucp_rkey_config_key    ucp_rkey_config_key_t;
 typedef struct ucp_proto              ucp_proto_t;
 typedef struct ucp_mem_desc           ucp_mem_desc_t;
+typedef struct ucp_gpu_nic_assignment ucp_gpu_nic_assignment_t;
 
 
 /**
