@@ -28,11 +28,9 @@ ucs_interval_map_node(ucs_rbtree_node_t *rb_node)
 }
 
 static UCS_F_ALWAYS_INLINE uint64_t
-ucs_interval_map_subtree_max(const ucs_rbtree_node_t *rb_node)
+ucs_interval_map_subtree_max(ucs_rbtree_node_t *rb_node)
 {
-    return (rb_node == NULL) ?
-                   0 :
-                   ucs_derived_of(rb_node, ucs_interval_map_node_t)->max_end;
+    return (rb_node == NULL) ? 0 : ucs_interval_map_node(rb_node)->max_end;
 }
 
 /*
@@ -42,6 +40,8 @@ static void ucs_interval_map_augment(ucs_rbtree_node_t *rb_node)
 {
     ucs_interval_map_node_t *node = ucs_interval_map_node(rb_node);
     uint64_t max_end;
+
+    ucs_assert(rb_node != NULL);
 
     max_end       = ucs_max(node->end,
                             ucs_interval_map_subtree_max(rb_node->left));
