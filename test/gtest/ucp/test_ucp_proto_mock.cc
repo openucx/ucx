@@ -7,6 +7,7 @@
 #include "ucp_test.h"
 
 extern "C" {
+#include <ucp/core/ucp_gpu_nic_assignment.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
@@ -25,6 +26,8 @@ extern "C" {
 #include <uct/ib/base/ib_md.h>
 #endif
 }
+
+#include <set>
 
 class mock_iface {
 public:
@@ -2363,12 +2366,271 @@ protected:
         }
     }
 
-protected:
+    static ucs_sys_device_t register_mock_gpu(uint8_t slot)
+    {
+        const ucs_sys_bus_id_t bus_id = {
+            .domain   = 0xfffc,
+            .bus      = 0xfc,
+            .slot     = slot,
+            .function = 0,
+        };
+        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(sys_dev,
+                                                    UCS_TOPO_DEVICE_CLASS_ACC));
+        return sys_dev;
+    }
+
     ucs_sys_device_t m_gpus[3] = {
         UCS_SYS_DEVICE_ID_UNKNOWN,
         UCS_SYS_DEVICE_ID_UNKNOWN,
         UCS_SYS_DEVICE_ID_UNKNOWN,
     };
+};
+
+class test_ucp_proto_mock_rcx_gpu_nic :
+    protected test_ucp_proto_mock_scoped_acc_devices,
+    public test_ucp_proto_mock {
+public:
+    using sys_dev_set_t = std::set<ucs_sys_device_t>;
+
+    test_ucp_proto_mock_rcx_gpu_nic() :
+        m_assignment(nullptr),
+        m_original_assignment(nullptr),
+        m_original_cuda_reg_md_map(0),
+        m_context_state_saved(false),
+        m_absent_nic(UCS_SYS_DEVICE_ID_UNKNOWN)
+    {
+        mock_transport("rc_mlx5");
+        std::fill_n(m_nics, 3, UCS_SYS_DEVICE_ID_UNKNOWN);
+    }
+
+    virtual void init() override
+    {
+        for (unsigned i = 0; i < 3; ++i) {
+            add_rc_device(i);
+        }
+
+        m_gpus[0]    = register_mock_gpu(0x11);
+        m_gpus[1]    = register_mock_gpu(0x12);
+        m_absent_nic = register_absent_nic();
+
+        test_ucp_proto_mock::init();
+    }
+
+    virtual void cleanup() override
+    {
+        if (m_context_state_saved) {
+            ucp_context_h context = sender().worker()->context;
+
+            context->gpu_nic_assignment = m_original_assignment;
+            context->reg_md_map[UCS_MEMORY_TYPE_CUDA] =
+                    m_original_cuda_reg_md_map;
+            if (m_assignment != nullptr) {
+                ucp_gpu_nic_assignment_release(m_assignment);
+                ucs_free(m_assignment);
+                m_assignment = nullptr;
+            }
+
+            m_context_state_saved = false;
+        }
+
+        test_ucp_proto_mock::cleanup();
+    }
+
+protected:
+    virtual void post_ucp_init() override
+    {
+        ucp_context_h context    = sender().worker()->context;
+        ucp_md_map_t mock_md_map = 0;
+        ucp_rsc_index_t rsc_index;
+
+        for (unsigned i = 0; i < 3; ++i) {
+            m_nics[i] = get_mock_sys_dev_by_name(nic_name(i));
+        }
+
+        m_original_assignment      = context->gpu_nic_assignment;
+        m_original_cuda_reg_md_map = context->reg_md_map[UCS_MEMORY_TYPE_CUDA];
+        m_context_state_saved      = true;
+
+        for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+            const ucp_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index];
+
+            if ((strcmp(tl_rsc->tl_rsc.tl_name, "rc_mlx5") == 0) &&
+                (endpoint_nics().count(tl_rsc->tl_rsc.sys_device) != 0)) {
+                mock_md_map |= UCS_BIT(tl_rsc->md_index);
+            }
+        }
+
+        EXPECT_NE(0, mock_md_map);
+        context->reg_md_map[UCS_MEMORY_TYPE_CUDA] |= mock_md_map;
+    }
+
+    void install_assignment(ucs_sys_device_t gpu_sys_dev,
+                            const sys_dev_set_t &assigned_nics)
+    {
+        ucs_topo_groups_t groups;
+        ucs_topo_group_t *group;
+        ucs_topo_group_element_t *gpu;
+        ucs_topo_group_element_t *nic;
+        ucp_gpu_nic_assignment_t *assignment;
+        ucs_status_t status;
+
+        ASSERT_TRUE(m_context_state_saved);
+        ASSERT_EQ(nullptr, m_assignment);
+
+        ucs_array_init_dynamic(&groups);
+        group = ucs_array_append(&groups,
+                                 FAIL() << "failed to append topology group");
+        ucs_topo_init_group(group);
+
+        gpu = ucs_array_append(&group->gpus,
+                               FAIL() << "failed to append topology GPU");
+        memset(gpu, 0, sizeof(*gpu));
+        gpu->sys_devs[0]  = gpu_sys_dev;
+        gpu->num_sys_devs = 1;
+
+        for (auto nic_sys_dev : assigned_nics) {
+            nic = ucs_array_append(&group->nics,
+                                   FAIL() << "failed to append topology NIC");
+            memset(nic, 0, sizeof(*nic));
+            nic->sys_devs[0]  = nic_sys_dev;
+            nic->num_sys_devs = 1;
+        }
+
+        assignment = static_cast<ucp_gpu_nic_assignment_t*>(
+                ucs_malloc(sizeof(*assignment), "mock gpu-nic assignment"));
+        ASSERT_NE(nullptr, assignment);
+
+        status = ucp_gpu_nic_assignment_build(
+                &groups, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, assignment);
+        ucs_topo_release_groups(&groups);
+        if (status != UCS_OK) {
+            ucs_free(assignment);
+            ASSERT_UCS_OK(status);
+            return;
+        }
+
+        m_assignment                                   = assignment;
+        sender().worker()->context->gpu_nic_assignment = m_assignment;
+    }
+
+    void set_nic_bandwidth(unsigned index, double bandwidth)
+    {
+        ASSERT_LT(index, 3u);
+        m_bandwidth[nic_name(index)] = bandwidth;
+    }
+
+    void reset_perf_query_counts()
+    {
+        m_perf_query_counts.clear();
+    }
+
+    unsigned perf_query_count(unsigned index, uct_ep_operation_t op) const
+    {
+        const auto device_iter = m_perf_query_counts.find(nic_name(index));
+
+        if (device_iter == m_perf_query_counts.end()) {
+            return 0;
+        }
+
+        const auto op_iter = device_iter->second.find(op);
+        return (op_iter == device_iter->second.end()) ? 0 : op_iter->second;
+    }
+
+    sys_dev_set_t endpoint_nics() const
+    {
+        return {m_nics[0], m_nics[1], m_nics[2]};
+    }
+
+    ucs_sys_device_t mapped_gpu() const
+    {
+        return m_gpus[0];
+    }
+
+    ucs_sys_device_t unmapped_gpu() const
+    {
+        return m_gpus[1];
+    }
+
+    ucs_sys_device_t nic(unsigned index) const
+    {
+        EXPECT_LT(index, 3u);
+        return m_nics[index];
+    }
+
+    ucs_sys_device_t absent_nic() const
+    {
+        return m_absent_nic;
+    }
+
+    ucp_gpu_nic_assignment_t *assignment() const
+    {
+        return m_assignment;
+    }
+
+private:
+    static std::string nic_name(unsigned index)
+    {
+        return std::string("mock_") + std::to_string(index) + ":1";
+    }
+
+    void add_rc_device(unsigned index)
+    {
+        const std::string dev_name = nic_name(index);
+
+        m_bandwidth[dev_name] = 20e9;
+        add_mock_iface(
+                dev_name,
+                [this, dev_name](uct_iface_attr_t &iface_attr) {
+                    iface_attr.cap.am.max_short    = 208;
+                    iface_attr.cap.put.min_zcopy   = 0;
+                    iface_attr.cap.put.max_zcopy   = UCS_MBYTE;
+                    iface_attr.cap.put.max_iov     = 1;
+                    iface_attr.cap.get.min_zcopy   = 0;
+                    iface_attr.cap.get.max_zcopy   = UCS_MBYTE;
+                    iface_attr.cap.get.max_iov     = 1;
+                    iface_attr.bandwidth.dedicated = 0;
+                    iface_attr.bandwidth.shared    = m_bandwidth.at(dev_name);
+                    iface_attr.latency.c           = 500e-9;
+                    iface_attr.latency.m           = 0;
+                },
+                [this, dev_name](uct_perf_attr_t &perf_attr) {
+                    perf_attr.bandwidth.shared = m_bandwidth.at(dev_name);
+                    perf_attr.path_bandwidth   = perf_attr.bandwidth;
+                    if ((perf_attr.field_mask &
+                         UCT_PERF_ATTR_FIELD_OPERATION) &&
+                        ((perf_attr.operation == UCT_EP_OP_PUT_ZCOPY) ||
+                         (perf_attr.operation == UCT_EP_OP_GET_ZCOPY))) {
+                        ++m_perf_query_counts[dev_name][perf_attr.operation];
+                    }
+                });
+    }
+
+    static ucs_sys_device_t register_absent_nic()
+    {
+        const ucs_sys_bus_id_t bus_id = {
+            .domain   = 0xfffb,
+            .bus      = 0xfb,
+            .slot     = 0x1f,
+            .function = 0,
+        };
+        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+        return sys_dev;
+    }
+
+    std::map<std::string, double> m_bandwidth;
+    std::map<std::string, std::map<uct_ep_operation_t, unsigned>>
+            m_perf_query_counts;
+    ucs_sys_device_t m_nics[3];
+    ucp_gpu_nic_assignment_t *m_assignment;
+    ucp_gpu_nic_assignment_t *m_original_assignment;
+    ucp_md_map_t m_original_cuda_reg_md_map;
+    bool m_context_state_saved;
+    ucs_sys_device_t m_absent_nic;
 };
 
 class test_ucp_proto_mock_rcx_single_net_dev :
@@ -2502,23 +2764,6 @@ protected:
 
         ADD_FAILURE() << "all automatic selections matched " << selection_id;
         return m_gpus[0];
-    }
-
-private:
-    static ucs_sys_device_t register_mock_gpu(uint8_t slot)
-    {
-        const ucs_sys_bus_id_t bus_id = {
-            .domain   = 0xfffc,
-            .bus      = 0xfc,
-            .slot     = slot,
-            .function = 0,
-        };
-        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
-        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(sys_dev,
-                                                    UCS_TOPO_DEVICE_CLASS_ACC));
-        return sys_dev;
     }
 };
 
