@@ -586,20 +586,13 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
     ucs_status_t status;
     size_t addr_len;
     int port, retry;
-    char vrf_master_name[IFNAMSIZ];
 
     /* retry is 1 for a range of ports or when port value is zero.
      * retry is 0 for a single value port that is not zero */
     retry = (port_range_start == 0) || (port_range_start < port_range_end);
 
     if (iface->vrf_info.master_if_index > 0) {
-        socket_params.bind_device = if_indextoname(
-                iface->vrf_info.master_if_index, vrf_master_name);
-        if (socket_params.bind_device == NULL) {
-            ucs_error("if_indextoname(%u) failed: %m",
-                      iface->vrf_info.master_if_index);
-            return UCS_ERR_IO_ERROR;
-        }
+        socket_params.bind_device = iface->vrf_info.master_name;
     }
 
     do {
@@ -882,6 +875,16 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->vrf_info.table_id        = RT_TABLE_UNSPEC;
     if (ucs_ifname_to_ndev_index(self->if_name, &if_index) == UCS_OK) {
         ucs_netlink_get_vrf_master_info(if_index, &self->vrf_info);
+    }
+
+    if (self->vrf_info.master_if_index > 0) {
+        if (if_indextoname(self->vrf_info.master_if_index,
+                           self->vrf_info.master_name) == NULL) {
+            ucs_error("if_indextoname(%u) failed: %m",
+                      self->vrf_info.master_if_index);
+            status = UCS_ERR_IO_ERROR;
+            goto err_cleanup_event_set;
+        }
     }
 
     status = uct_tcp_iface_listener_init(self);

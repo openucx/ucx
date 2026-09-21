@@ -12,6 +12,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <netinet/in.h>
+#include <net/if.h>
 
 BEGIN_C_DECLS
 
@@ -28,6 +29,11 @@ typedef struct {
      * VRF master table index, or RT_TABLE_UNSPEC if none.
      */
     uint32_t table_id;
+
+    /**
+     * VRF master if name.
+     */
+    char master_name[IFNAMSIZ];
 } ucs_netlink_vrf_info_t;
 
 typedef enum {
