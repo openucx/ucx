@@ -31,8 +31,7 @@ typedef struct {
  * Does not merge overlapping and touching intervals into one node.
  */
 typedef struct {
-    ucs_rbtree_t rb;        /**< Balanced tree ordered by 'start' */
-    size_t       num_nodes; /**< Number of intervals */
+    ucs_rbtree_t rb; /**< Balanced tree ordered by 'start' */
 } ucs_interval_map_t;
 
 
@@ -61,7 +60,7 @@ void ucs_interval_map_init(ucs_interval_map_t *map);
 static UCS_F_ALWAYS_INLINE size_t
 ucs_interval_map_count(const ucs_interval_map_t *map)
 {
-    return map->num_nodes;
+    return map->rb.num_nodes;
 }
 
 

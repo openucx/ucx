@@ -52,7 +52,6 @@ static void ucs_interval_map_augment(ucs_rbtree_node_t *rb_node)
 void ucs_interval_map_init(ucs_interval_map_t *map)
 {
     ucs_rbtree_init(&map->rb, ucs_interval_map_augment);
-    map->num_nodes = 0;
 }
 
 void ucs_interval_map_insert(ucs_interval_map_t *map,
@@ -75,15 +74,12 @@ void ucs_interval_map_insert(ucs_interval_map_t *map,
     node->start = start;
     node->end   = end;
     ucs_rbtree_insert_at(&map->rb, parent, link, &node->super);
-    map->num_nodes++;
 }
 
 void ucs_interval_map_remove(ucs_interval_map_t *map,
                              ucs_interval_map_node_t *node)
 {
-    ucs_assertv(map->num_nodes > 0, "map=%p node=%p", map, node);
     ucs_rbtree_remove(&map->rb, &node->super);
-    map->num_nodes--;
 }
 
 ucs_interval_map_node_t *

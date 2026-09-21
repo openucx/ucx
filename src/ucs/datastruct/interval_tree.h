@@ -40,7 +40,6 @@ typedef struct ucs_interval_node {
 typedef struct {
     ucs_rbtree_t rb;         /**< Balanced tree ordered by 'start' */
     ucs_mpool_t  *mpool;     /**< Memory pool for node allocation */
-    size_t       num_nodes;  /**< Number of nodes in the tree */
     size_t       total_size; /**< Sum of (end - start) across all nodes */
 } ucs_interval_tree_t;
 
@@ -104,7 +103,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
                 "tree=%p, start=%lu, end=%lu", tree, range.start, range.end);
 
     /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
-    if (ucs_likely(tree->num_nodes == 1) &&
+    if (ucs_likely(tree->rb.num_nodes == 1) &&
         ucs_likely(range.start <= (root->end + 1)) &&
         ucs_likely(root->start <= (range.end + 1))) {
         uint64_t old_size = root->end - root->start;
@@ -128,7 +127,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
 static UCS_F_ALWAYS_INLINE int
 ucs_interval_tree_is_empty(const ucs_interval_tree_t *tree)
 {
-    return tree->num_nodes == 0;
+    return tree->rb.num_nodes == 0;
 }
 
 
@@ -142,7 +141,7 @@ ucs_interval_tree_is_empty(const ucs_interval_tree_t *tree)
 static UCS_F_ALWAYS_INLINE size_t
 ucs_interval_tree_count(const ucs_interval_tree_t *tree)
 {
-    return tree->num_nodes;
+    return tree->rb.num_nodes;
 }
 
 
@@ -176,7 +175,7 @@ ucs_interval_tree_is_equal_range(const ucs_interval_tree_t *tree,
     ucs_assertv(range.start <= (range.end + 1),
                 "tree=%p, start=%lu, end=%lu", tree, range.start, range.end);
 
-    return (tree->num_nodes == 1) && (root->start == range.start) &&
+    return (tree->rb.num_nodes == 1) && (root->start == range.start) &&
            (root->end == range.end);
 }
 

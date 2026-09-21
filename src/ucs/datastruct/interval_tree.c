@@ -27,7 +27,6 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
     node->start = start;
     node->end   = end;
 
-    tree->num_nodes++;
     tree->total_size += (end - start);
     return node;
 }
@@ -35,9 +34,7 @@ ucs_interval_tree_node_create(ucs_interval_tree_t *tree, uint64_t start,
 static void ucs_interval_tree_node_free(ucs_interval_tree_t *tree,
                                         ucs_interval_node_t *node)
 {
-    ucs_assertv(tree->num_nodes > 0, "tree=%p, node=%p", tree, node);
     tree->total_size -= (node->end - node->start);
-    tree->num_nodes--;
     ucs_mpool_put_inline(node);
 }
 
@@ -45,7 +42,6 @@ void ucs_interval_tree_init(ucs_interval_tree_t *tree, ucs_mpool_t *mpool)
 {
     ucs_rbtree_init(&tree->rb, NULL);
     tree->mpool      = mpool;
-    tree->num_nodes  = 0;
     tree->total_size = 0;
 }
 

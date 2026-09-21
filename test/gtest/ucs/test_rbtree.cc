@@ -88,6 +88,7 @@ protected:
     void validate()
     {
         EXPECT_TRUE(rbtree_check::validate(&m_tree, m_count));
+        EXPECT_EQ(m_count, m_tree.num_nodes);
 
         const std::vector<uint64_t> ordered = keys();
         EXPECT_TRUE(std::is_sorted(ordered.begin(), ordered.end()));

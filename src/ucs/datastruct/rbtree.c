@@ -15,8 +15,9 @@
 
 void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment)
 {
-    tree->root    = NULL;
-    tree->augment = augment;
+    tree->root      = NULL;
+    tree->augment   = augment;
+    tree->num_nodes = 0;
 }
 
 /*
@@ -161,6 +162,7 @@ void ucs_rbtree_insert_at(ucs_rbtree_t *tree, ucs_rbtree_node_t *parent,
     node->right  = NULL;
     node->color  = UCS_RBTREE_RED;
     *link        = node;
+    tree->num_nodes++;
 
     ucs_rbtree_propagate(tree, node);
     ucs_rbtree_insert_fixup(tree, node);
@@ -290,6 +292,9 @@ void ucs_rbtree_remove(ucs_rbtree_t *tree, ucs_rbtree_node_t *node)
 {
     ucs_rbtree_node_t *child, *child_parent, *successor;
     ucs_rbtree_color_t removed_color;
+
+    ucs_assertv(tree->num_nodes > 0, "tree=%p, node=%p", tree, node);
+    tree->num_nodes--;
 
     removed_color = node->color;
 

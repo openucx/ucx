@@ -53,8 +53,9 @@ typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
  * Intrusive red-black tree.
  */
 typedef struct {
-    ucs_rbtree_node_t      *root;    /**< Root node, NULL when empty */
-    ucs_rbtree_augment_cb_t augment; /**< Derived-data hook, NULL if unused */
+    ucs_rbtree_node_t      *root;      /**< Root node, NULL when empty */
+    ucs_rbtree_augment_cb_t augment;   /**< Derived-data hook, NULL if unused */
+    size_t                  num_nodes; /**< Number of nodes in the tree */
 } ucs_rbtree_t;
 
 
