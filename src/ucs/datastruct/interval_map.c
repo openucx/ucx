@@ -115,9 +115,12 @@ ucs_interval_map_find_containing(const ucs_interval_map_t *map, uint64_t start,
     return NULL;
 }
 
-static void
-ucs_interval_map_foreach_node(ucs_rbtree_node_t *rb_node, uint64_t start,
-                              uint64_t end, ucs_interval_map_cb_t cb, void *arg)
+/*
+ * Invoke 'cb' for every interval in this subtree that overlaps [start, end).
+ */
+static void ucs_interval_map_foreach_overlapping_subtree(
+        ucs_rbtree_node_t *rb_node, uint64_t start, uint64_t end,
+        ucs_interval_map_cb_t cb, void *arg)
 {
     ucs_interval_map_node_t *node;
 
@@ -126,11 +129,11 @@ ucs_interval_map_foreach_node(ucs_rbtree_node_t *rb_node, uint64_t start,
         return;
     }
 
-    ucs_interval_map_foreach_node(rb_node->left, start, end, cb, arg);
+    ucs_interval_map_foreach_overlapping_subtree(rb_node->left, start, end, cb,
+                                                 arg);
 
     node = ucs_interval_map_node(rb_node);
     if (node->start >= end) {
-        /* This node and everything to its right start at or after the range */
         return;
     }
 
@@ -138,7 +141,8 @@ ucs_interval_map_foreach_node(ucs_rbtree_node_t *rb_node, uint64_t start,
         cb(node, arg);
     }
 
-    ucs_interval_map_foreach_node(rb_node->right, start, end, cb, arg);
+    ucs_interval_map_foreach_overlapping_subtree(rb_node->right, start, end, cb,
+                                                 arg);
 }
 
 void ucs_interval_map_foreach_overlapping(const ucs_interval_map_t *map,
@@ -147,5 +151,6 @@ void ucs_interval_map_foreach_overlapping(const ucs_interval_map_t *map,
 {
     ucs_assertv(start < end, "start=%" PRIu64 " end=%" PRIu64, start, end);
 
-    ucs_interval_map_foreach_node(map->rb.root, start, end, cb, arg);
+    ucs_interval_map_foreach_overlapping_subtree(map->rb.root, start, end,
+                                                cb, arg);
 }
