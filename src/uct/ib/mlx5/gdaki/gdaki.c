@@ -470,14 +470,66 @@ uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
     }
 }
 
-static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
-                                                ucs_mpool_t *mp, void *elems,
-                                                unsigned num_elems,
-                                                unsigned end_ep,
-                                                unsigned end_ch)
+static int uct_rc_gdaki_devx_uar_cmp(uct_rc_gdaki_devx_uar_t *wrap,
+                                     uct_priv_worker_t *worker,
+                                     uct_ib_mlx5_md_t *md,
+                                     uct_ib_mlx5_devx_uar_t *uar)
+{
+    return wrap->uar == uar;
+}
+
+static void uct_rc_gdaki_devx_uar_cleanup(uct_rc_gdaki_devx_uar_t *wrap)
+{
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(
+            cuMemHostUnregister(wrap->uar->super.addr.ptr));
+    uct_worker_tl_data_put(wrap->uar, uct_ib_mlx5_devx_uar_cleanup);
+}
+
+static ucs_status_t
+uct_rc_gdaki_devx_uar_init(uct_rc_gdaki_devx_uar_t *wrap,
+                           uct_priv_worker_t *worker, uct_ib_mlx5_md_t *md,
+                           uct_ib_mlx5_devx_uar_t *uar)
+{
+    ucs_status_t status;
+
+    wrap->uar = uct_worker_tl_data_get(worker, UCT_IB_MLX5_DEVX_UAR_KEY,
+                                       uct_ib_mlx5_devx_uar_t,
+                                       uct_ib_mlx5_devx_uar_cmp,
+                                       uct_ib_mlx5_devx_uar_init, md,
+                                       uar->super.mode);
+    if (UCS_PTR_IS_ERR(wrap->uar)) {
+        return UCS_PTR_STATUS(wrap->uar);
+    }
+
+    ucs_assert(wrap->uar == uar);
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(
+            cuMemHostRegister(uar->super.addr.ptr, UCT_IB_MLX5_BF_REG_SIZE * 2,
+                              UCT_GDAKI_CUDA_REG_FLAGS));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemHostGetDevicePointer(&wrap->device_ptr, uar->super.addr.ptr,
+                                      0));
+    if (status != UCS_OK) {
+        goto out_unreg;
+    }
+
+    return UCS_OK;
+
+out_unreg:
+    uct_rc_gdaki_devx_uar_cleanup(wrap);
+    return status;
+}
+
+static void
+uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
+                                    uct_rc_gdaki_channel_block_mem_t *mem,
+                                    ucs_mpool_t *mp, void *elems,
+                                    unsigned num_elems, unsigned end_ep,
+                                    unsigned end_ch)
 {
     uct_rc_gdaki_channel_block_t *channel_block;
     unsigned ep_index, channel_index, num_channels;
+    ucs_status_t status;
 
     for (ep_index = 0; ep_index < num_elems; ++ep_index) {
         channel_block = uct_rc_gdaki_channel_block(iface, mp, elems, ep_index);
@@ -485,9 +537,21 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
         for (channel_index = 0; channel_index < num_channels; ++channel_index) {
             uct_ib_mlx5_devx_destroy_qp_common(
                     &channel_block->channels[channel_index].qp.super);
+            uct_ib_mlx5_qp_mmio_cleanup(
+                    &channel_block->channels[channel_index].qp.super,
+                    channel_block->channels[channel_index].qp.reg);
             uct_ib_mlx5_devx_destroy_cq_common(
                     &channel_block->channels[channel_index].cq);
         }
+    }
+
+    if (mem->uar_wrap != NULL) {
+        status = UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPushCurrent(iface->cuda.ctx));
+        uct_worker_tl_data_put(mem->uar_wrap, uct_rc_gdaki_devx_uar_cleanup);
+        if (status == UCS_OK) {
+            (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+        }
+        mem->uar_wrap = NULL;
     }
 }
 
@@ -497,6 +561,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                 size_t dev_ep_size, ucs_mpool_t *mp,
                                 void *elems, unsigned num_elems)
 {
+    uct_ib_iface_t *ib_iface           = &iface->super.super.super;
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
@@ -519,9 +584,10 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
-    ep_qp_offset = UCT_GDAKI_DEV_EP_SIZE;
-    ep_wq_offset = ep_qp_offset + iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
-    dbrec.mem_id = mem->umem->umem_id;
+    ep_qp_offset  = UCT_GDAKI_DEV_EP_SIZE;
+    ep_wq_offset  = ep_qp_offset + iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
+    dbrec.mem_id  = mem->umem->umem_id;
+    mem->uar_wrap = NULL;
 
     for (channel_index = 0; channel_index < iface->num_channels;
          ++channel_index) {
@@ -565,11 +631,44 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
         }
     }
 
+    /* All channels share the same UAR; register it with CUDA once per chunk */
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(iface->cuda.ctx));
+    if (status != UCS_OK) {
+        goto err_cleanup_all;
+    }
+
+    mem->uar_wrap = uct_worker_tl_data_get(
+            ib_iface->super.worker, UCT_RC_GDAKI_DEVX_UAR_KEY,
+            uct_rc_gdaki_devx_uar_t, uct_rc_gdaki_devx_uar_cmp,
+            uct_rc_gdaki_devx_uar_init, ib_iface->super.worker,
+            ucs_derived_of(ib_iface->super.md, uct_ib_mlx5_md_t),
+            ucs_derived_of(uct_rc_gdaki_channel_block(iface, mp, elems, 0)
+                                   ->channels[0]
+                                   .qp.reg,
+                           uct_ib_mlx5_devx_uar_t));
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+    if (UCS_PTR_IS_ERR(mem->uar_wrap)) {
+        status        = UCS_PTR_STATUS(mem->uar_wrap);
+        mem->uar_wrap = NULL;
+        ucs_error("gdaki channel chunk init: register UAR failed");
+        goto err_cleanup_all;
+    }
+
+    for (ep_index = 0; ep_index < num_elems; ++ep_index) {
+        uct_rc_gdaki_channel_block(iface, mp, elems, ep_index)->sq_db =
+                mem->uar_wrap->device_ptr;
+    }
+
     return UCS_OK;
 
+err_cleanup_all:
+    uct_rc_gdaki_chunk_channels_destroy(iface, mem, mp, elems, num_elems,
+                                        num_elems, iface->num_channels - 1);
+    return status;
+
 err_cleanup:
-    uct_rc_gdaki_chunk_channels_destroy(iface, mp, elems, num_elems, ep_index,
-                                        channel_index);
+    uct_rc_gdaki_chunk_channels_destroy(iface, mem, mp, elems, num_elems,
+                                        ep_index, channel_index);
     ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
               channel_index, ep_index);
     return status;
@@ -632,7 +731,7 @@ static void uct_rc_gdaki_pool_chunk_release(ucs_mpool_t *mp, void *chunk)
             (uct_rc_gdaki_channel_block_mem_t*)chunk - 1;
     ucs_mpool_chunk_t *mp_chunk = chunk;
 
-    uct_rc_gdaki_chunk_channels_destroy(iface, mp, mp_chunk->elems,
+    uct_rc_gdaki_chunk_channels_destroy(iface, hdr, mp, mp_chunk->elems,
                                         mp_chunk->num_elems,
                                         mp_chunk->num_elems,
                                         iface->num_channels - 1);
@@ -782,7 +881,8 @@ static void uct_rc_gdaki_cleanup_channels_direct(uct_rc_gdaki_iface_t *iface,
         return;
     }
 
-    uct_rc_gdaki_chunk_channels_destroy(iface, NULL, ep->channel_block, 1, 1,
+    uct_rc_gdaki_chunk_channels_destroy(iface, &ep->mem, NULL,
+                                        ep->channel_block, 1, 1,
                                         iface->num_channels - 1);
     mlx5dv_devx_umem_dereg(ep->mem.umem);
     uct_cuda_mem_free(&ep->mem.gpu_raw);
@@ -863,14 +963,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                  uct_rc_gdaki_iface_t);
-    unsigned i;
 
-    if (self->dev_ep_init) {
-        uct_rc_gdaki_channel_t *channels = self->channel_block->channels;
-        for (i = 0; i < iface->num_channels; i++) {
-            (void)cuMemHostUnregister(channels[i].qp.reg->addr.ptr);
-        }
-    }
     uct_rc_gdaki_ep_cleanup_channels(iface, self);
 }
 
@@ -1071,19 +1164,9 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                           iface->num_channels *
                                                   UCT_GDAKI_DEV_QP_SIZE);
 
+        sq_db = ep->channel_block->sq_db;
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
-                                    UCT_IB_MLX5_BF_REG_SIZE * 2,
-                                    UCT_GDAKI_CUDA_REG_FLAGS);
-
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
-                                              0));
-            if (status != UCS_OK) {
-                goto out_unreg;
-            }
-
             dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
             dev_ep->qps[i].sq_num = channel->qp.super.qp_num;
             dev_ep->qps[i].qpn_ds = htonl(channel->qp.super.qp_num <<
@@ -1095,7 +1178,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                 cuMemcpyHtoD((CUdeviceptr)ep->channel_block->gpu_ptr, dev_ep,
                              dev_ep_host_size));
         if (status != UCS_OK) {
-            goto out_unreg;
+            goto out_free;
         }
 
         ucs_free(dev_ep);
@@ -1108,12 +1191,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     pthread_mutex_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
-out_unreg:
-    do {
-        (void)cuMemHostUnregister(
-                ep->channel_block->channels[i].qp.reg->addr.ptr);
-    } while (i-- > 0);
-
+out_free:
     ucs_free(dev_ep);
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));

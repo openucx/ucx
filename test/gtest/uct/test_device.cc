@@ -118,7 +118,8 @@ protected:
                                        UCT_EP_IS_CONNECTED_FIELD_EP_ADDR);
     }
 
-    void device_put(uint64_t send_seed, uint64_t recv_seed)
+    void
+    device_put(uint64_t send_seed, uint64_t recv_seed, unsigned ep_index = 0)
     {
         constexpr size_t length = 1024;
         mapped_buffer sendbuf(length, send_seed, *m_sender, 0,
@@ -145,7 +146,7 @@ protected:
                                sizeof(src_elem_host)));
 
         uct_device_ep_h dev_ep;
-        ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
+        ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(ep_index), &dev_ep));
         ASSERT_UCS_OK(ucx_cuda::launch_uct_put(
                 dev_ep, (const uct_device_mem_elem_t*)src_elembuf.ptr(),
                 (const uct_device_mem_elem_t*)rem_elembuf.ptr(), sendbuf.ptr(),
@@ -183,6 +184,14 @@ protected:
         short_progress_loop();
 
         device_put(0x3333333333333333lu, 0x4444444444444444lu);
+    }
+
+    void connect_ep(unsigned index)
+    {
+        m_sender->create_ep(index);
+        m_receiver->create_ep(index);
+        m_sender->connect_p2p_ep(m_sender->ep(index), m_receiver->ep(index));
+        m_receiver->connect_p2p_ep(m_receiver->ep(index), m_sender->ep(index));
     }
 
     void init()
@@ -246,6 +255,25 @@ UCS_TEST_P(test_device, reconnect)
 UCS_TEST_P(test_device, reconnect_multi_channel, "RC_GDA_NUM_CHANNELS?=4")
 {
     reconnect_test();
+}
+
+UCS_TEST_P(test_device, destroy_one_of_multiple_eps)
+{
+    skip_if_no_cuda();
+    skip_if_not_rc_gda();
+
+    connect_ep(1);
+    device_put(0x1111111111111111lu, 0x2222222222222222lu, 0);
+    device_put(0x3333333333333333lu, 0x4444444444444444lu, 1);
+
+    m_sender->destroy_ep(0);
+    m_receiver->destroy_ep(0);
+    short_progress_loop();
+
+    device_put(0x5555555555555555lu, 0x6666666666666666lu, 1);
+
+    connect_ep(0);
+    device_put(0x7777777777777777lu, 0x8888888888888888lu, 0);
 }
 
 UCS_TEST_P(test_device, atomic)
