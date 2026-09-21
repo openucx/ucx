@@ -10,28 +10,16 @@
 #include <cstring>
 #include <vector>
 
-class test_ucp_gpu_nic : public ucs::test {
+class test_ucp_gpu_nic_assignment : public ucs::test {
 public:
-    test_ucp_gpu_nic() :
-        m_groups(),
-        m_assignment(),
-        m_groups_initialized(false),
-        m_assignment_initialized(false)
+    test_ucp_gpu_nic_assignment() : m_groups(), m_assignment()
     {
     }
 
     virtual void cleanup()
     {
-        if (m_assignment_initialized) {
-            ucp_gpu_nic_assignment_release(&m_assignment);
-            m_assignment_initialized = false;
-        }
-
-        if (m_groups_initialized) {
-            ucs_topo_release_groups(&m_groups);
-            m_groups_initialized = false;
-        }
-
+        ucp_gpu_nic_assignment_release(&m_assignment);
+        ucs_topo_release_groups(&m_groups);
         ucs::test::cleanup();
     }
 
@@ -56,6 +44,11 @@ protected:
         size_t first_nic_port_sys_dev() const noexcept
         {
             return num_gpus() * num_gpu_devices;
+        }
+
+        size_t num_sys_devs() const noexcept
+        {
+            return first_nic_port_sys_dev() + (num_nics() * num_nic_ports);
         }
     };
 
@@ -82,13 +75,8 @@ protected:
         ucs_topo_group_element_t *gpu;
         ucs_topo_group_element_t *nic;
 
-        if (m_groups_initialized) {
-            ucs_topo_release_groups(&m_groups);
-            m_groups_initialized = false;
-        }
-
+        ucs_topo_release_groups(&m_groups);
         ucs_array_init_dynamic(&m_groups);
-        m_groups_initialized = true;
 
         for (size_t group_idx = 0; group_idx < config.num_groups; ++group_idx) {
             group = ucs_array_append(&m_groups,
@@ -134,14 +122,9 @@ protected:
     {
         ucs_status_t status;
 
-        if (m_assignment_initialized) {
-            ucp_gpu_nic_assignment_release(&m_assignment);
-            m_assignment_initialized = false;
-        }
-
+        ucp_gpu_nic_assignment_release(&m_assignment);
         status = ucp_gpu_nic_assignment_build(&m_groups, policy, &m_assignment);
         ASSERT_UCS_OK(status);
-        m_assignment_initialized = true;
 
         /* Unknown device lookup */
         EXPECT_EQ(nullptr,
@@ -247,9 +230,8 @@ protected:
         ASSERT_LE(config.num_gpu_devices, UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT);
         ASSERT_LE(config.num_nic_ports, UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT);
 
-        ASSERT_LE(config.first_nic_port_sys_dev() +
-                          (config.num_nics() * config.num_nic_ports),
-                  UCS_SYS_DEVICE_ID_COUNT);
+        /* Leave (UCS_SYS_DEVICE_ID_UNKNOWN - 1) unmapped for the ungrouped lookup. */
+        ASSERT_LE(config.num_sys_devs(), UCS_SYS_DEVICE_ID_COUNT - 1);
 
         if (config.num_gpus() == 0) {
             ASSERT_TRUE(expected_owners.empty());
@@ -300,19 +282,17 @@ protected:
 private:
     ucs_topo_groups_t m_groups;
     ucp_gpu_nic_assignment_t m_assignment;
-    bool m_groups_initialized;
-    bool m_assignment_initialized;
 };
 
-UCS_TEST_F(test_ucp_gpu_nic, no_nics) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, no_nics) {
     check_clique_assignment(2, 3, 0, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, {});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, no_gpus) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, no_gpus) {
     check_clique_assignment(2, 0, 3, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, {});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_flip_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_flip_divisible) {
     /* Number of NICs is divisible by the number of GPUs. */
     check_clique_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
                             {0, 1, 1, 0, /**/
@@ -323,7 +303,7 @@ UCS_TEST_F(test_ucp_gpu_nic, clique_flip_divisible) {
                              3, 4, 5, 5, 4, 3});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_flip_not_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_flip_not_divisible) {
     check_clique_assignment(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
                             {0, 1, 1, 0, 0, /**/
                              2, 3, 3, 2, 2});
@@ -332,7 +312,7 @@ UCS_TEST_F(test_ucp_gpu_nic, clique_flip_not_divisible) {
                              3, 4});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_round_robin_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_round_robin_divisible) {
     check_clique_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
                             {0, 1, 0, 1, /**/
                              2, 3, 2, 3, /**/
@@ -342,7 +322,7 @@ UCS_TEST_F(test_ucp_gpu_nic, clique_round_robin_divisible) {
                              3, 4, 5, 3, 4, 5});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic, clique_round_robin_not_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, clique_round_robin_not_divisible) {
     check_clique_assignment(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
                             {0, 1, 0, 1, 0, /**/
                              2, 3, 2, 3, 2});

@@ -24,6 +24,14 @@ protected:
     }
 
     void test_is_reachable();
+
+    /* cuda_ipc cannot open memory handles exported by the same process, so it
+     * reports such peers as unreachable unless same process communication is
+     * explicitly enabled */
+    virtual bool expected_reachability() const
+    {
+        return !has_cuda_ipc();
+    }
 };
 
 void test_uct_iface::test_is_reachable()
@@ -58,11 +66,9 @@ void test_uct_iface::test_is_reachable()
     ASSERT_UCS_OK(status);
 
     bool is_reachable = uct_iface_is_reachable_v2(iface, &params);
-    if (has_cuda_ipc()) {
-        EXPECT_FALSE(is_reachable);
+    EXPECT_EQ(expected_reachability(), is_reachable);
+    if (!expected_reachability()) {
         EXPECT_EQ(std::string("same process"), std::string(info_str));
-    } else {
-        EXPECT_TRUE(is_reachable);
     }
 
     // Allocate corrupted address buffers, make it larger than the correct
@@ -99,3 +105,24 @@ UCS_TEST_P(test_uct_iface, is_reachable)
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_iface)
 _UCT_INSTANTIATE_TEST_CASE(test_uct_iface, rc_gda)
+
+class test_uct_iface_same_process : public test_uct_iface {
+protected:
+    void init() override
+    {
+        modify_config("CUDA_IPC_ENABLE_SAME_PROCESS", "y");
+        test_uct_iface::init();
+    }
+
+    bool expected_reachability() const override
+    {
+        return true;
+    }
+};
+
+UCS_TEST_P(test_uct_iface_same_process, is_reachable)
+{
+    test_is_reachable();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_iface_same_process, cuda_ipc)

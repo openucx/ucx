@@ -194,6 +194,7 @@ gtest_SOURCES = \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
 	ucs/test_interval_tree.cc \
+	ucs/test_rbtree.cc \
     ucs/test_lru.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
@@ -264,7 +265,6 @@ gtest_SOURCES += \
 endif
 if HAVE_MLX5_DV
 gtest_SOURCES += \
-	uct/ib/test_ib_mlx5_ext.cc \
 	uct/ib/test_cqe_zipping.cc
 endif
 if HAVE_EFA
@@ -320,15 +320,19 @@ include $(top_srcdir)/config/hip.am
 gtest_SOURCES += \
 	ucm/rocm_hooks.cc \
 	uct/rocm/test_kernels_uct.hip \
-	uct/rocm/test_rocm_ipc_device.hip
+	uct/rocm/test_rocm_ipc_device.hip \
+	uct/rocm/test_rocm_signal.cc
 
 gtest_CPPFLAGS += \
-	$(HIP_CPPFLAGS)
+	$(HIP_CPPFLAGS) \
+	$(ROCM_CPPFLAGS)
 gtest_CXXFLAGS += \
 	$(HIP_CXXFLAGS)
 gtest_LDADD += \
 	$(HIP_LDFLAGS) \
 	$(HIP_LIBS) \
+	$(ROCM_LDFLAGS) \
+	$(ROCM_LIBS) \
 	$(top_builddir)/src/uct/rocm/libuct_rocm.la
 endif # HAVE_GNUXX11
 endif # HAVE_HIP
@@ -350,6 +354,8 @@ noinst_HEADERS = \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
+	\
+	ucs/rbtree_check.h \
 	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \

@@ -859,6 +859,23 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
     return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
 }
 
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    uint8_t ds = ntohl(ctrl->qpn_ds) & UINT8_MAX;
+
+    ucs_assertv_always(
+            (ds > 0) &&
+            ((ds * UCT_IB_MLX5_WQE_SEG_SIZE) <=
+             UCT_IB_MLX5_MAX_SEND_WQE_SIZE),
+            "ds=%u", ds);
+    return ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+}
+
+uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size)
+{
+    return index + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+}
+
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {
@@ -874,8 +891,8 @@ uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(pi == txwq->hw_ci);
     do {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
-        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-        pi      += (wqe_size + MLX5_SEND_WQE_BB - 1) / MLX5_SEND_WQE_BB;
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        pi       = uct_ib_mlx5_txwq_next_wqe_index(pi, wqe_size);
         ++count;
     } while (pi != txwq->sw_pi);
 

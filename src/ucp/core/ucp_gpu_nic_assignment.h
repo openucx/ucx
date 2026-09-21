@@ -24,8 +24,13 @@ typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
 
 
 typedef struct {
+    /* NIC sys_dev bitmaps referenced by bitmap_idx_by_gpu_sys_dev. */
     ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmaps;
+
+    /* Number of entries in nic_sys_dev_bitmaps. */
     size_t                       num_bitmaps;
+
+    /* Maps each GPU sys_dev to a nic_sys_dev_bitmaps index, or INVALID. */
     uint8_t bitmap_idx_by_gpu_sys_dev[UCS_SYS_DEVICE_ID_COUNT];
 } ucp_gpu_nic_assignment_t;
 
@@ -53,6 +58,9 @@ typedef enum {
 
 /**
  * Build GPU-to-NIC assignments from topology groups.
+ *
+ * @note The groups must be disjoint: each sys_dev may appear in at most one
+ *       topology group.
  *
  * @param [in]  groups        Topology groups to build assignments from.
  * @param [in]  policy        Assignment policy.
