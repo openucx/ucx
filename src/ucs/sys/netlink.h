@@ -138,8 +138,7 @@ int ucs_netlink_route_matches_by_table(int if_index,
  * Get VRF information associated with a network interface.
  *
  * @param [in]  if_index         Network interface index to query.
- * @param [out] vrf_info_p       VRF information. Set only when the function
- *                               returns UCS_OK.
+ * @param [out] vrf_info_p       VRF information.
  *
  * @return UCS_OK if the query succeeded, otherwise an error status.
  */

@@ -500,6 +500,10 @@ ucs_netlink_get_vrf_master_info(unsigned if_index,
         .ifi_index  = if_index
     };
 
+    vrf_info_p->master_if_index = 0;
+    vrf_info_p->table_id        = RT_TABLE_UNSPEC;
+    vrf_info_p->master_name[0]  = '\0';
+
     return ucs_netlink_send_request(
             NETLINK_ROUTE, RTM_GETLINK, 0, &ifm, sizeof(ifm),
             ucs_netlink_parse_vrf_master_info_cb, vrf_info_p);

@@ -871,12 +871,12 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_cleanup_rx_mpool;
     }
 
-    self->vrf_info.master_if_index = 0;
-    self->vrf_info.table_id        = RT_TABLE_UNSPEC;
-    if (ucs_ifname_to_ndev_index(self->if_name, &if_index) == UCS_OK) {
-        ucs_netlink_get_vrf_master_info(if_index, &self->vrf_info);
+    status = ucs_ifname_to_ndev_index(self->if_name, &if_index);
+    if (status != UCS_OK) {
+        goto err_cleanup_event_set;
     }
 
+    ucs_netlink_get_vrf_master_info(if_index, &self->vrf_info);
     if (self->vrf_info.master_if_index > 0) {
         if (if_indextoname(self->vrf_info.master_if_index,
                            self->vrf_info.master_name) == NULL) {
