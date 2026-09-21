@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_types.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
+#include <ucp/proto/proto_multi.h>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/rndv/proto_rndv.h>
@@ -2399,6 +2400,7 @@ public:
         m_assignment(nullptr),
         m_original_assignment(nullptr),
         m_original_cuda_reg_md_map(0),
+        m_rkey_cfg_index(UCP_WORKER_CFG_INDEX_NULL),
         m_context_state_saved(false),
         m_absent_nic(UCS_SYS_DEVICE_ID_UNKNOWN)
     {
@@ -2539,6 +2541,56 @@ protected:
         return (op_iter == device_iter->second.end()) ? 0 : op_iter->second;
     }
 
+    const ucp_gpu_nic_sys_dev_bitmap_t *
+    resolve_assignment(ucs_memory_type_t mem_type, ucp_dt_class_t dt_class,
+                       ucs_sys_device_t sys_dev, uint8_t sg_count)
+    {
+        ucp_proto_select_key_t select_key   = make_select_key(UCP_OP_ID_PUT,
+                                                              mem_type, dt_class,
+                                                              sys_dev, sg_count);
+        ucp_proto_init_params_t init_params = {};
+
+        init_params.worker       = sender().worker();
+        init_params.select_param = &select_key.param;
+        return ucp_proto_multi_get_assigned_nic_bitmap(&init_params);
+    }
+
+    void expect_direct_candidates(ucs_sys_device_t gpu_sys_dev,
+                                  const sys_dev_set_t &expected_nics,
+                                  const sys_dev_set_t &excluded_nics = {})
+    {
+        const ucp_operation_id_t op_ids[] = {UCP_OP_ID_PUT, UCP_OP_ID_GET};
+
+        for (auto op_id : op_ids) {
+            const ucp_proto_select_elem_t *select_elem =
+                    select_direct(op_id, gpu_sys_dev);
+            const ucp_proto_multi_priv_t *mpriv =
+                    find_direct_candidate(select_elem, op_id);
+
+            ASSERT_NE(nullptr, mpriv) << operation_name(op_id);
+            const sys_dev_set_t actual_nics = selected_nics(*mpriv);
+
+            EXPECT_EQ(expected_nics, actual_nics) << operation_name(op_id);
+            for (auto excluded_nic : excluded_nics) {
+                EXPECT_EQ(0u, actual_nics.count(excluded_nic))
+                        << operation_name(op_id);
+            }
+        }
+    }
+
+    void expect_no_direct_candidates(ucs_sys_device_t gpu_sys_dev)
+    {
+        const ucp_operation_id_t op_ids[] = {UCP_OP_ID_PUT, UCP_OP_ID_GET};
+
+        for (auto op_id : op_ids) {
+            const ucp_proto_select_elem_t *select_elem =
+                    select_direct(op_id, gpu_sys_dev);
+
+            EXPECT_EQ(nullptr, find_direct_candidate(select_elem, op_id))
+                    << operation_name(op_id);
+        }
+    }
+
     sys_dev_set_t endpoint_nics() const
     {
         return {m_nics[0], m_nics[1], m_nics[2]};
@@ -2574,6 +2626,16 @@ private:
     static std::string nic_name(unsigned index)
     {
         return std::string("mock_") + std::to_string(index) + ":1";
+    }
+
+    static const char *operation_name(ucp_operation_id_t op_id)
+    {
+        return (op_id == UCP_OP_ID_PUT) ? "PUT" : "GET";
+    }
+
+    static const char *direct_protocol_name(ucp_operation_id_t op_id)
+    {
+        return (op_id == UCP_OP_ID_PUT) ? "put/offload/zcopy" : "get/zcopy";
     }
 
     void add_rc_device(unsigned index)
@@ -2622,6 +2684,168 @@ private:
         return sys_dev;
     }
 
+    ucp_worker_cfg_index_t rkey_config_index()
+    {
+        ucp_worker_h worker;
+        ucp_ep_config_t *ep_config;
+        ucp_rkey_config_key_t rkey_config_key = {};
+        ucp_lane_index_t lane;
+        ucp_md_index_t dst_md_index;
+        ucs_status_t status;
+
+        if (m_rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+            return m_rkey_cfg_index;
+        }
+
+        worker    = sender().worker();
+        ep_config = ucp_worker_ep_config(worker, ep_config_index(sender()));
+        rkey_config_key.ep_cfg_index = ep_config_index(sender());
+        rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
+        rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        for (unsigned i = 0; (i < UCP_MAX_LANES) &&
+                             (ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE);
+             ++i) {
+            lane         = ep_config->key.rma_bw_lanes[i];
+            dst_md_index = ep_config->key.lanes[lane].dst_md_index;
+            EXPECT_NE(UCP_NULL_RESOURCE, dst_md_index);
+            if (dst_md_index != UCP_NULL_RESOURCE) {
+                rkey_config_key.md_map |= UCS_BIT(dst_md_index);
+            }
+        }
+
+        EXPECT_NE(0, rkey_config_key.md_map);
+        if (rkey_config_key.md_map == 0) {
+            return UCP_WORKER_CFG_INDEX_NULL;
+        }
+
+        status = ucp_worker_rkey_config_get(worker, &rkey_config_key, nullptr,
+                                            &m_rkey_cfg_index);
+        EXPECT_UCS_OK(status);
+        return (status == UCS_OK) ? m_rkey_cfg_index :
+                                    UCP_WORKER_CFG_INDEX_NULL;
+    }
+
+    static ucp_proto_select_key_t
+    make_select_key(ucp_operation_id_t op_id, ucs_memory_type_t mem_type,
+                    ucp_dt_class_t dt_class, ucs_sys_device_t sys_dev,
+                    uint8_t sg_count)
+    {
+        ucp_memory_info_t mem_info        = {
+            .type    = static_cast<uint8_t>(mem_type),
+            .sys_dev = sys_dev,
+            .flags   = UCS_MEM_FLAG_REGISTRABLE
+        };
+        ucp_proto_select_key_t select_key = {};
+
+        ucp_proto_select_param_init(&select_key.param, op_id, 0, 0, dt_class,
+                                    &mem_info, sg_count);
+        return select_key;
+    }
+
+    const ucp_proto_select_elem_t *
+    select_direct(ucp_operation_id_t op_id, ucs_sys_device_t gpu_sys_dev)
+    {
+        const ucp_worker_cfg_index_t rkey_cfg_index = rkey_config_index();
+        ucp_worker_h worker                         = sender().worker();
+        ucp_proto_select_key_t select_key =
+                make_select_key(op_id, UCS_MEMORY_TYPE_CUDA,
+                                UCP_DATATYPE_CONTIG, gpu_sys_dev, 1);
+        ucp_proto_select_t *proto_select;
+
+        if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+            return nullptr;
+        }
+
+        proto_select = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index)
+                                .proto_select;
+        return ucp_proto_select_lookup_slow(worker, proto_select, 0,
+                                            ep_config_index(sender()),
+                                            rkey_cfg_index, &select_key.param);
+    }
+
+    static const ucp_proto_multi_priv_t *
+    find_direct_candidate(const ucp_proto_select_elem_t *select_elem,
+                          ucp_operation_id_t op_id)
+    {
+        const ucp_proto_init_elem_t *init_elem;
+        const ucp_proto_multi_priv_t *mpriv;
+        const size_t min_priv_size = ucs_offsetof(ucp_proto_multi_priv_t,
+                                                  lanes);
+        size_t priv_buf_length;
+        size_t priv_size;
+
+        if (select_elem == nullptr) {
+            return nullptr;
+        }
+
+        priv_buf_length = ucs_array_length(&select_elem->proto_init.priv_buf);
+        ucs_array_for_each(init_elem, &select_elem->proto_init.protocols) {
+            if (strcmp(ucp_proto_id_field(init_elem->proto_id, name),
+                       direct_protocol_name(op_id)) != 0) {
+                continue;
+            }
+
+            if ((init_elem->priv_offset ==
+                 UCP_PROTO_INIT_ELEM_PRIV_OFFSET_INVALID) ||
+                (init_elem->priv_offset > priv_buf_length) ||
+                ((priv_buf_length - init_elem->priv_offset) < min_priv_size)) {
+                ADD_FAILURE() << operation_name(op_id)
+                              << " direct candidate has invalid private data";
+                return nullptr;
+            }
+
+            mpriv = reinterpret_cast<const ucp_proto_multi_priv_t*>(
+                    &ucs_array_elem(&select_elem->proto_init.priv_buf,
+                                    init_elem->priv_offset));
+            if ((mpriv->num_lanes == 0) || (mpriv->num_lanes > UCP_MAX_LANES)) {
+                ADD_FAILURE() << operation_name(op_id)
+                              << " direct candidate has invalid lane count "
+                              << static_cast<unsigned>(mpriv->num_lanes);
+                return nullptr;
+            }
+
+            priv_size = ucp_proto_multi_priv_size(mpriv);
+            if (priv_size > (priv_buf_length - init_elem->priv_offset)) {
+                ADD_FAILURE() << operation_name(op_id)
+                              << " direct candidate private data is truncated";
+                return nullptr;
+            }
+
+            return mpriv;
+        }
+
+        return nullptr;
+    }
+
+    sys_dev_set_t selected_nics(const ucp_proto_multi_priv_t &mpriv)
+    {
+        ucp_context_h context            = sender().worker()->context;
+        const ucp_ep_config_t *ep_config = ucp_worker_ep_config(
+                sender().worker(), ep_config_index(sender()));
+        sys_dev_set_t result;
+        ucp_lane_index_t lane;
+        ucp_rsc_index_t rsc_index;
+
+        EXPECT_NE(0, mpriv.lane_map);
+        EXPECT_EQ(static_cast<unsigned>(mpriv.num_lanes),
+                  ucs_popcount(mpriv.lane_map));
+        ucs_for_each_bit(lane, mpriv.lane_map) {
+            EXPECT_LT(lane, ep_config->key.num_lanes);
+            if (lane >= ep_config->key.num_lanes) {
+                continue;
+            }
+
+            rsc_index = ep_config->key.lanes[lane].rsc_index;
+            EXPECT_NE(UCP_NULL_RESOURCE, rsc_index);
+            if (rsc_index != UCP_NULL_RESOURCE) {
+                result.insert(context->tl_rscs[rsc_index].tl_rsc.sys_device);
+            }
+        }
+
+        return result;
+    }
+
     std::map<std::string, double> m_bandwidth;
     std::map<std::string, std::map<uct_ep_operation_t, unsigned>>
             m_perf_query_counts;
@@ -2629,9 +2853,93 @@ private:
     ucp_gpu_nic_assignment_t *m_assignment;
     ucp_gpu_nic_assignment_t *m_original_assignment;
     ucp_md_map_t m_original_cuda_reg_md_map;
+    ucp_worker_cfg_index_t m_rkey_cfg_index;
     bool m_context_state_saved;
     ucs_sys_device_t m_absent_nic;
 };
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, filters_before_performance_modeling,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=3", "MULTI_LANE_MAX_RATIO=4",
+           "ZCOPY_THRESH=0")
+{
+    set_nic_bandwidth(1, 100e9);
+    install_assignment(mapped_gpu(), {nic(0), nic(2)});
+    reset_perf_query_counts();
+
+    expect_direct_candidates(mapped_gpu(), {nic(0), nic(2)}, {nic(1)});
+    for (auto op : {UCT_EP_OP_PUT_ZCOPY, UCT_EP_OP_GET_ZCOPY}) {
+        EXPECT_GT(perf_query_count(0, op), 0u);
+        EXPECT_EQ(0u, perf_query_count(1, op));
+        EXPECT_GT(perf_query_count(2, op), 0u);
+    }
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           empty_assignment_rejects_direct_zcopy, "IB_NUM_PATHS?=1",
+           "MAX_RMA_RAILS=3", "MULTI_LANE_MAX_RATIO=4", "ZCOPY_THRESH=0")
+{
+    install_assignment(mapped_gpu(), {});
+
+    expect_direct_candidates(unmapped_gpu(), endpoint_nics());
+    expect_no_direct_candidates(mapped_gpu());
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           assignment_eligibility_preserves_legacy_lanes, "IB_NUM_PATHS?=1",
+           "MAX_RMA_RAILS=3", "MULTI_LANE_MAX_RATIO=4", "ZCOPY_THRESH=0")
+{
+    struct resolver_case {
+        const char        *name;
+        ucs_memory_type_t mem_type;
+        ucp_dt_class_t    dt_class;
+        ucs_sys_device_t  sys_dev;
+        uint8_t           sg_count;
+    };
+    const resolver_case disabled_cases[] =
+            {{"managed CUDA", UCS_MEMORY_TYPE_CUDA_MANAGED, UCP_DATATYPE_CONTIG,
+              mapped_gpu(), 1},
+             {"IOV", UCS_MEMORY_TYPE_CUDA, UCP_DATATYPE_IOV, mapped_gpu(), 2},
+             {"unknown device", UCS_MEMORY_TYPE_CUDA, UCP_DATATYPE_CONTIG,
+              UCS_SYS_DEVICE_ID_UNKNOWN, 1},
+             {"unmapped GPU", UCS_MEMORY_TYPE_CUDA, UCP_DATATYPE_CONTIG,
+              unmapped_gpu(), 1}};
+    ucp_context_h context;
+    const ucp_gpu_nic_sys_dev_bitmap_t *expected_bitmap;
+
+    install_assignment(mapped_gpu(), {nic(0)});
+    expected_bitmap = ucp_gpu_nic_assignment_lookup(assignment(), mapped_gpu());
+    ASSERT_NE(nullptr, expected_bitmap);
+    EXPECT_EQ(expected_bitmap,
+              resolve_assignment(UCS_MEMORY_TYPE_CUDA, UCP_DATATYPE_CONTIG,
+                                 mapped_gpu(), 1));
+
+    for (const auto &test_case : disabled_cases) {
+        EXPECT_EQ(nullptr,
+                  resolve_assignment(test_case.mem_type, test_case.dt_class,
+                                     test_case.sys_dev, test_case.sg_count))
+                << test_case.name;
+    }
+
+    context                     = sender().worker()->context;
+    context->gpu_nic_assignment = nullptr;
+    EXPECT_EQ(nullptr, resolve_assignment(UCS_MEMORY_TYPE_CUDA,
+                                          UCP_DATATYPE_CONTIG, mapped_gpu(), 1))
+            << "NULL context assignment";
+    context->gpu_nic_assignment = assignment();
+
+    expect_direct_candidates(unmapped_gpu(), endpoint_nics());
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           partial_assignment_uses_available_nic, "IB_NUM_PATHS?=1",
+           "MAX_RMA_RAILS=3", "MULTI_LANE_MAX_RATIO=4", "ZCOPY_THRESH=0")
+{
+    install_assignment(mapped_gpu(), {nic(2), absent_nic()});
+
+    expect_direct_candidates(mapped_gpu(), {nic(2)});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic, rcx, "rc_x")
 
 class test_ucp_proto_mock_rcx_single_net_dev :
     protected test_ucp_proto_mock_scoped_acc_devices,

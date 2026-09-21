@@ -10,6 +10,7 @@
 #include "proto.h"
 #include "proto_common.h"
 
+#include <ucp/core/ucp_gpu_nic_assignment.h>
 #include <ucp/dt/datatype_iter.h>
 
 
@@ -131,6 +132,9 @@ typedef struct {
        to account for the overhead of registering on them */
     ucp_md_map_t                   initial_reg_md_map;
 
+    /* NIC system devices assigned to the application GPU, or NULL if disabled */
+    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
+
     /* Offset in uct_iface_attr_t structure of the field which specifies the
      * optimal alignment for buffer address for the UCT operation used
      * by this protocol */
@@ -187,6 +191,10 @@ size_t ucp_proto_multi_priv_size(const ucp_proto_multi_priv_t *mpriv);
 
 
 void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params);
+
+
+const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
+        const ucp_proto_init_params_t *init_params);
 
 
 void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
