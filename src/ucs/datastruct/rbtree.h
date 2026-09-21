@@ -45,6 +45,9 @@ struct ucs_rbtree_node {
  * or count - and not of its shape. A rotation re-augments only the two rotated
  * nodes, because it leaves every ancestor's node set unchanged; a
  * shape-dependent attribute such as height would go stale above it.
+ *
+ * The node being inserted is one of those visited, so whatever the attribute
+ * is derived from must already be set when ucs_rbtree_insert_at() is called.
  */
 typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
 

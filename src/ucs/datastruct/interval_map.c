@@ -38,11 +38,12 @@ ucs_interval_map_subtree_max(ucs_rbtree_node_t *rb_node)
  */
 static void ucs_interval_map_augment(ucs_rbtree_node_t *rb_node)
 {
-    ucs_interval_map_node_t *node = ucs_interval_map_node(rb_node);
+    ucs_interval_map_node_t *node;
     uint64_t max_end;
 
     ucs_assert(rb_node != NULL);
 
+    node          = ucs_interval_map_node(rb_node);
     max_end       = ucs_max(node->end,
                             ucs_interval_map_subtree_max(rb_node->left));
     node->max_end = ucs_max(max_end,
