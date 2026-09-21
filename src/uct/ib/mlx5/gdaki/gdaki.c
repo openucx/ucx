@@ -565,6 +565,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
+    uct_ib_mlx5_mmio_reg_t *uar_reg    = NULL;
     uct_ib_mlx5_dbrec_t dbrec;
     size_t ep_offset, ep_qp_offset, ep_wq_offset;
     unsigned ep_index, channel_index;
@@ -628,6 +629,15 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                 uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
                 goto err_cleanup;
             }
+
+            if (uar_reg == NULL) {
+                uar_reg = channel->qp.reg;
+            }
+            ucs_assertv_always(uar_reg == channel->qp.reg,
+                               "ch %u ep %u qp 0x%x reg %p != %p",
+                               channel_index, ep_index,
+                               channel->qp.super.qp_num, channel->qp.reg,
+                               uar_reg);
         }
     }
 
@@ -642,10 +652,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
             uct_rc_gdaki_devx_uar_t, uct_rc_gdaki_devx_uar_cmp,
             uct_rc_gdaki_devx_uar_init, ib_iface->super.worker,
             ucs_derived_of(ib_iface->super.md, uct_ib_mlx5_md_t),
-            ucs_derived_of(uct_rc_gdaki_channel_block(iface, mp, elems, 0)
-                                   ->channels[0]
-                                   .qp.reg,
-                           uct_ib_mlx5_devx_uar_t));
+            ucs_derived_of(uar_reg, uct_ib_mlx5_devx_uar_t));
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     if (UCS_PTR_IS_ERR(mem->uar_wrap)) {
         status        = UCS_PTR_STATUS(mem->uar_wrap);
