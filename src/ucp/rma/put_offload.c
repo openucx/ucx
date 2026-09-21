@@ -229,8 +229,6 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    params.assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(
-            init_params);
     ucp_proto_multi_probe(&params);
 }
 
@@ -337,6 +335,8 @@ ucp_proto_put_offload_zcopy_probe_param(
         return;
     }
 
+    params.assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(
+            init_params);
     ucp_proto_multi_probe(&params);
 }
 
