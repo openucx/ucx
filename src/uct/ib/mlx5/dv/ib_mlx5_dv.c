@@ -259,6 +259,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
     return UCS_OK;
 
 err_free:
+    qp->type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     uct_ib_mlx5_devx_obj_destroy(qp->devx.obj, "QP");
 err_uar:
     uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);

@@ -528,6 +528,7 @@ uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
                                     unsigned end_ch)
 {
     uct_rc_gdaki_channel_block_t *channel_block;
+    uct_rc_gdaki_channel_t *channel;
     unsigned ep_index, channel_index, num_channels;
     ucs_status_t status;
 
@@ -535,13 +536,10 @@ uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
         channel_block = uct_rc_gdaki_channel_block(iface, mp, elems, ep_index);
         num_channels  = (ep_index < end_ep) ? end_ch + 1 : end_ch;
         for (channel_index = 0; channel_index < num_channels; ++channel_index) {
-            uct_ib_mlx5_devx_destroy_qp_common(
-                    &channel_block->channels[channel_index].qp.super);
-            uct_ib_mlx5_qp_mmio_cleanup(
-                    &channel_block->channels[channel_index].qp.super,
-                    channel_block->channels[channel_index].qp.reg);
-            uct_ib_mlx5_devx_destroy_cq_common(
-                    &channel_block->channels[channel_index].cq);
+            channel = &channel_block->channels[channel_index];
+            uct_ib_mlx5_devx_destroy_qp_common(&channel->qp.super);
+            uct_ib_mlx5_qp_mmio_cleanup(&channel->qp.super, channel->qp.reg);
+            uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
         }
     }
 
@@ -657,7 +655,6 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     if (UCS_PTR_IS_ERR(mem->uar_wrap)) {
         status        = UCS_PTR_STATUS(mem->uar_wrap);
         mem->uar_wrap = NULL;
-        ucs_error("gdaki channel chunk init: register UAR failed");
         goto err_cleanup_all;
     }
 
@@ -819,6 +816,7 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
 {
     ep->mem.umem      = NULL;
     ep->mem.gpu_mem   = NULL;
+    ep->mem.uar_wrap  = NULL;
     ep->channel_block = NULL;
 }
 
