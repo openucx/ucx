@@ -60,7 +60,7 @@ void ucs_interval_map_init(ucs_interval_map_t *map);
 static UCS_F_ALWAYS_INLINE size_t
 ucs_interval_map_count(const ucs_interval_map_t *map)
 {
-    return map->rb.num_nodes;
+    return ucs_rbtree_count(&map->rb);
 }
 
 

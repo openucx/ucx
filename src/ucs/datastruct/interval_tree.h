@@ -87,6 +87,20 @@ ucs_status_t ucs_interval_tree_insert_slow(ucs_interval_tree_t *tree,
 
 
 /**
+ * Return the number of intervals (nodes) in the tree
+ *
+ * @param [in]  tree  Interval tree
+ *
+ * @return Number of nodes
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucs_interval_tree_count(const ucs_interval_tree_t *tree)
+{
+    return ucs_rbtree_count(&tree->rb);
+}
+
+
+/**
  * Insert a new interval into the tree
  *
  * @param [in]  tree   Interval tree
@@ -103,7 +117,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
                 "tree=%p, start=%lu, end=%lu", tree, range.start, range.end);
 
     /* Fast path: if tree has only root and new interval overlaps/touches it, extend it */
-    if (ucs_likely(tree->rb.num_nodes == 1) &&
+    if (ucs_likely(ucs_interval_tree_count(tree) == 1) &&
         ucs_likely(range.start <= (root->end + 1)) &&
         ucs_likely(root->start <= (range.end + 1))) {
         uint64_t old_size = root->end - root->start;
@@ -127,21 +141,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucs_interval_tree_insert(
 static UCS_F_ALWAYS_INLINE int
 ucs_interval_tree_is_empty(const ucs_interval_tree_t *tree)
 {
-    return tree->rb.num_nodes == 0;
-}
-
-
-/**
- * Return the number of intervals (nodes) in the tree
- *
- * @param [in]  tree  Interval tree
- *
- * @return Number of nodes
- */
-static UCS_F_ALWAYS_INLINE size_t
-ucs_interval_tree_count(const ucs_interval_tree_t *tree)
-{
-    return tree->rb.num_nodes;
+    return ucs_interval_tree_count(tree) == 0;
 }
 
 
@@ -175,7 +175,8 @@ ucs_interval_tree_is_equal_range(const ucs_interval_tree_t *tree,
     ucs_assertv(range.start <= (range.end + 1),
                 "tree=%p, start=%lu, end=%lu", tree, range.start, range.end);
 
-    return (tree->rb.num_nodes == 1) && (root->start == range.start) &&
+    return (ucs_interval_tree_count(tree) == 1) &&
+           (root->start == range.start) &&
            (root->end == range.end);
 }
 

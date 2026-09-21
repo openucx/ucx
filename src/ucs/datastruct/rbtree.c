@@ -20,9 +20,7 @@ void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment)
     tree->num_nodes = 0;
 }
 
-/*
- * Recompute derived data from 'node' up to the root.
- */
+/* Recompute derived data from 'node' up to the root. */
 static void ucs_rbtree_propagate(const ucs_rbtree_t *tree,
                                  ucs_rbtree_node_t *node)
 {

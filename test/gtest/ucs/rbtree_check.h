@@ -122,7 +122,8 @@ static inline bool validate(const ucs_rbtree_t *tree, size_t expected_count,
                      validate_node(tree->root, black_height, ok, visit) ==
                              expected_count,
                      tree->root);
-    UCS_RBTREE_CHECK(ok, tree->num_nodes == expected_count, tree->root);
+    UCS_RBTREE_CHECK(ok, ucs_rbtree_count(tree) == expected_count,
+                     tree->root);
     return ok;
 }
 

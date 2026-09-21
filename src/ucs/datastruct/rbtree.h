@@ -63,6 +63,19 @@ typedef struct {
 
 
 /**
+ * @brief Number of nodes in the tree
+ *
+ * @param [in]  tree  Tree to query.
+ *
+ * @return Number of nodes currently in @a tree.
+ */
+static UCS_F_ALWAYS_INLINE size_t ucs_rbtree_count(const ucs_rbtree_t *tree)
+{
+    return tree->num_nodes;
+}
+
+
+/**
  * @brief Initialize an empty tree
  *
  * @param [in]  tree     Tree to initialize.

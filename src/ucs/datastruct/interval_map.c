@@ -115,9 +115,7 @@ ucs_interval_map_find_containing(const ucs_interval_map_t *map, uint64_t start,
     return NULL;
 }
 
-/*
- * Invoke 'cb' for every interval in this subtree that overlaps [start, end).
- */
+/* Invoke 'cb' for every interval in this subtree that overlaps [start, end). */
 static void ucs_interval_map_foreach_overlapping_subtree(
         ucs_rbtree_node_t *rb_node, uint64_t start, uint64_t end,
         ucs_interval_map_cb_t cb, void *arg)
