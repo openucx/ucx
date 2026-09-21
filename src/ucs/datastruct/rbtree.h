@@ -33,12 +33,18 @@ struct ucs_rbtree_node {
 
 
 /**
- * Invoked bottom-up on every node whose subtree changed.
+ * Recompute one node's derived attribute, invoked bottom-up on every node
+ * whose subtree changed.
  *
- * The value must be a function of the subtree's node set - a maximum, sum or
- * count - and not of its shape. A rotation re-augments only the two rotated
- * nodes, so a shape-dependent value such as height would go stale in every
- * ancestor.
+ * The object embedding a node may cache an attribute summarizing that node's
+ * whole subtree. ucs_interval_map_t, for instance, keeps the largest interval
+ * end below each node. The callback recomputes that attribute for a single node
+ * from the node itself and the attribute already stored in its two children.
+ *
+ * The attribute must be a function of the subtree's node set - a maximum, sum
+ * or count - and not of its shape. A rotation re-augments only the two rotated
+ * nodes, because it leaves every ancestor's node set unchanged; a
+ * shape-dependent attribute such as height would go stale above it.
  */
 typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
 
