@@ -1280,7 +1280,10 @@ public:
         vsnprintf(buf, sizeof(buf), message, ap2);
         va_end(ap2);
 
+        /* Trace-data is also emitted from the async progress thread */
+        pthread_mutex_lock(&m_logger_mutex);
         m_lines.push_back(buf);
+        pthread_mutex_unlock(&m_logger_mutex);
         return UCS_LOG_FUNC_RC_STOP;
     }
 
@@ -1302,9 +1305,10 @@ UCS_TEST_SKIP_COND_P(test_uct_ib_log_data, dump_am_zcopy,
     /* Two hex digits per byte, so this fills the log line and forces it to be
      * cut */
     static const size_t min_length = UCT_IB_LOG_LINE_LEN / 2;
-    size_t start_counter = test_uct_ib::m_ib_am_handler_counter;
-    size_t length        = ucs_min(m_e1->iface_attr().cap.am.max_zcopy, 1024ul);
     uint64_t hdr         = 0xfeedbeef;
+    size_t start_counter = test_uct_ib::m_ib_am_handler_counter;
+    size_t max_length    = m_e1->iface_attr().cap.am.max_zcopy - sizeof(hdr);
+    size_t length        = ucs_min(max_length, 1024ul);
     bool truncated       = false;
     bool dumped          = false;
 
