@@ -228,9 +228,22 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
             ep, MLX5_OPCODE_RDMA_WRITE, iov, iovcnt, 0ul, 0, NULL, 0,
             remote_addr, rkey, 0ul, 0, 0, NULL,
             fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
-            uct_rc_ep_send_op_completion_handler, 0, comp);
-    UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
-                                 uct_iov_total_length(iov, iovcnt));
+            uct_rc_ep_put_zcopy_completion_handler, 0, comp);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
+    if (comp == NULL) {
+        /* Outstanding purge can identify put zcopy by distinct handler. */
+        uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
+                                         uct_rc_ep_put_zcopy_completion_handler,
+                                         NULL, ep->tx.wq.sig_pi,
+                                         UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL,
+                                         0, 0);
+    }
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY,
+                      uct_iov_total_length(iov, iovcnt));
     uct_rc_ep_enable_flush_remote(&ep->super);
     return status;
 }
@@ -345,10 +358,11 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
     uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp,
-                              uct_rc_ep_send_op_completion_handler, comp,
-                              txwq->sig_pi, UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
-                              NULL, 0, total);
+    uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
+                                     uct_rc_ep_put_sgl_zcopy_completion_handler,
+                                     comp, txwq->sig_pi,
+                                     UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL, 0,
+                                     total);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total);
     uct_rc_ep_enable_flush_remote(&ep->super);
@@ -720,19 +734,22 @@ uct_rc_mlx5_base_ep_post_check(uct_ep_h tl_ep, uct_completion_t *comp)
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uint64_t dummy = 0; /* Dummy buffer to suppress compiler warning */
 
-    if (comp == NULL) {
-        uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, &ep->super.txqp,
-                                     &ep->tx.wq, MLX5_OPCODE_RDMA_WRITE, &dummy,
-                                     0, 0, 0, 0, 0, 0, 0, 0, 0, INT_MAX);
-        return UCS_OK;
+    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, &ep->super.txqp, &ep->tx.wq,
+                                 MLX5_OPCODE_RDMA_WRITE, &dummy, 0, 0, 0, 0, 0,
+                                 0, 0, MLX5_WQE_CTRL_CQ_UPDATE, 0, INT_MAX);
+
+    /* Always create an op so that the WQE is distinguishable from a zero-length
+     * put short during outstanding WQE parsing. uct_rc_ep_check_internal()
+     * already verified a CQ credit is available. */
+    uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
+                                     uct_rc_ep_check_completion_handler, comp,
+                                     ep->tx.wq.sig_pi, 0, NULL, 0, 0);
+
+    if (comp != NULL) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super.super);
     }
 
-    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, &ep->super.txqp,
-                                 &ep->tx.wq, MLX5_OPCODE_RDMA_WRITE, &dummy,
-                                 0, 0, 0, 0, 0, 0, 0, MLX5_WQE_CTRL_CQ_UPDATE,
-                                 0, INT_MAX);
-    return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
-                                      &ep->super.txqp, comp, ep->tx.wq.sig_pi);
+    return UCS_INPROGRESS;
 }
 
 void uct_rc_mlx5_base_ep_vfs_populate(uct_rc_ep_t *rc_ep)
@@ -852,6 +869,11 @@ static int uct_rc_mlx5_send_op_is_flush(const uct_rc_iface_send_op_t *op)
     return op->handler == uct_rc_ep_flush_op_completion_handler;
 }
 
+static int uct_rc_mlx5_send_op_is_ep_check(const uct_rc_iface_send_op_t *op)
+{
+    return op->handler == uct_rc_ep_check_completion_handler;
+}
+
 static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == (uct_rc_send_handler_t)ucs_mpool_put;
@@ -871,7 +893,8 @@ uct_rc_mlx5_ep_outstanding_peek_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
                                        uct_rc_iface_send_op_t, queue);
     ucs_assert(UCS_CIRCULAR_COMPARE16(op->sn, >=, pi));
 
-    if ((op->sn != pi) || uct_rc_mlx5_send_op_is_flush(op)) {
+    if ((op->sn != pi) || uct_rc_mlx5_send_op_is_flush(op) ||
+        uct_rc_mlx5_send_op_is_ep_check(op)) {
         return NULL;
     }
 
@@ -1213,9 +1236,16 @@ static void
 uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_send_op_t *op)
 {
     ucs_assert(uct_rc_mlx5_send_op_is_put_bcopy(op) ||
-               uct_rc_mlx5_send_op_is_flush(op));
+               uct_rc_mlx5_send_op_is_flush(op) ||
+               uct_rc_mlx5_send_op_is_ep_check(op));
+
     op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_INUSE;
-    ucs_mpool_put(op);
+
+    if (uct_rc_mlx5_send_op_is_ep_check(op)) {
+        uct_rc_iface_put_send_op(op);
+    } else {
+        ucs_mpool_put(op);
+    }
 }
 
 static void
@@ -1225,13 +1255,15 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_mlx5_base_ep_t *ep,
     uct_rc_iface_send_op_t *op;
 
     ucs_queue_for_each_extract(op, &ep->super.txqp.outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, pi)) {
-        ucs_assertv_always(uct_rc_mlx5_send_op_is_flush(op) ||
-                                   uct_rc_mlx5_send_op_is_put_bcopy(op),
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
+        ucs_assertv_always(uct_rc_mlx5_send_op_is_put_bcopy(op) ||
+                                   uct_rc_mlx5_send_op_is_flush(op) ||
+                                   uct_rc_mlx5_send_op_is_ep_check(op),
                            "ep %p qp 0x%x unexpected send op sn %u handler %s",
                            ep, ep->tx.wq.super.qp_num, op->sn,
                            ucs_debug_get_symbol_name(op->handler));
-        if (uct_rc_mlx5_send_op_is_flush(op)) {
+        if ((uct_rc_mlx5_send_op_is_flush(op) ||
+             uct_rc_mlx5_send_op_is_ep_check(op)) && (op->user_comp != NULL)) {
             uct_invoke_completion(op->user_comp, status);
         }
         uct_rc_mlx5_ep_outstanding_release_send_op(op);
