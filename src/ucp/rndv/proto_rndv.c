@@ -768,6 +768,8 @@ void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
     ucp_am_release_user_header(req);
     ucp_request_rndv_flush_complete(req);
 
+    /* Fragments of this request may have already completed (e.g. aborted
+     * during EP purge), so ucp_proto_rndv_rts_reset() cannot be used here */
     invalidating = ucp_request_memh_invalidate(req, status);
     ucp_proto_request_zcopy_id_reset(req);
     if (!invalidating) {

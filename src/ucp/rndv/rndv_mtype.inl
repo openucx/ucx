@@ -123,9 +123,10 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                   (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
                   ucs_memory_type_names[frag_mem_type],
                   frag_sys_dev);
-    UCS_STATS_UPDATE_COUNTER(worker->stats,
-                             UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
+    UCP_WORKER_STAT_RNDV(worker, MTYPE_FC_THROTTLED, 1);
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK));
+    /* The EP list link aliases send.state fields used once initialized */
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
     req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                    &req->send.rndv.fc.queue_elem);
