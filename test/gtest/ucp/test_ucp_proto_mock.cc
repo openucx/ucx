@@ -2483,6 +2483,8 @@ protected:
         ASSERT_EQ(nullptr, m_assignment);
 
         ucs_array_init_dynamic(&groups);
+        ucs::handle<ucs_topo_groups_t*> groups_guard(&groups,
+                                                     ucs_topo_release_groups);
         group = ucs_array_append(&groups,
                                  FAIL() << "failed to append topology group");
         ucs_topo_init_group(group);
@@ -2507,7 +2509,6 @@ protected:
 
         status = ucp_gpu_nic_assignment_build(
                 &groups, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, assignment);
-        ucs_topo_release_groups(&groups);
         if (status != UCS_OK) {
             ucs_free(assignment);
             ASSERT_UCS_OK(status);
@@ -2608,7 +2609,11 @@ protected:
 
     ucs_sys_device_t nic(unsigned index) const
     {
-        EXPECT_LT(index, 3u);
+        if (index >= ucs_static_array_size(m_nics)) {
+            ADD_FAILURE() << "NIC index " << index << " is out of range";
+            return UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
+
         return m_nics[index];
     }
 
