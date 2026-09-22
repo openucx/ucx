@@ -2765,7 +2765,8 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucs_status_t status;
 
     if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-        ucs_debug("gpu-nic assignment is not supported on %s architecture",
+        ucs_debug("gpu-nic assignment is not supported on %s architecture, "
+                  "skipping",
                   ucs_cpu_model_name());
         return UCS_OK;
     }
@@ -2776,7 +2777,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     }
 
     if (ucs_array_is_empty(&groups)) {
-        ucs_warn("groups are empty, skipping gpu-nic assignment");
+        ucs_warn("topology groups are empty, skipping gpu-nic assignment");
         goto out_release_groups;
     }
 
