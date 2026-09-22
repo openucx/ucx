@@ -1255,7 +1255,7 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_mlx5_base_ep_t *ep,
     uct_rc_iface_send_op_t *op;
 
     ucs_queue_for_each_extract(op, &ep->super.txqp.outstanding, queue,
-                               UCS_CIRCULAR_COMPARE16(op->sn, <=, ci)) {
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, pi)) {
         ucs_assertv_always(uct_rc_mlx5_send_op_is_put_bcopy(op) ||
                                    uct_rc_mlx5_send_op_is_flush(op) ||
                                    uct_rc_mlx5_send_op_is_ep_check(op),
@@ -1263,7 +1263,8 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_mlx5_base_ep_t *ep,
                            ep, ep->tx.wq.super.qp_num, op->sn,
                            ucs_debug_get_symbol_name(op->handler));
         if ((uct_rc_mlx5_send_op_is_flush(op) ||
-             uct_rc_mlx5_send_op_is_ep_check(op)) && (op->user_comp != NULL)) {
+             uct_rc_mlx5_send_op_is_ep_check(op)) &&
+            (op->user_comp != NULL)) {
             uct_invoke_completion(op->user_comp, status);
         }
         uct_rc_mlx5_ep_outstanding_release_send_op(op);
