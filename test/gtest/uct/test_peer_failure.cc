@@ -392,6 +392,9 @@ protected:
         size_t                     send_len;
         const uct_iov_t            *iov;
         size_t                     iovcnt;
+        uct_unpack_callback_t      unpack_cb;
+        void                       *unpack_arg;
+        size_t                     unpack_length;
     };
 
     using send_func_t =
@@ -470,6 +473,10 @@ protected:
         case UCT_EP_OP_PUT_ZCOPY:
             validate_put(info, ctx);
             return;
+        case UCT_EP_OP_GET_BCOPY:
+        case UCT_EP_OP_GET_ZCOPY:
+            validate_get(info, ctx);
+            return;
         default:
             UCS_TEST_ABORT("unsupported operation " << info->operation
                                                      << " at index "
@@ -537,6 +544,43 @@ protected:
         ++ctx->num_ops_purged;
     }
 
+    static void validate_get(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
+                                         UCT_EP_OP_INFO_FIELD_RMA;
+        const uint16_t expected_rma_fields =
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+        EXPECT_EQ(&ctx->comp, info->comp);
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+
+        if (ctx->operation == UCT_EP_OP_GET_ZCOPY) {
+            ASSERT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+            ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+            for (size_t i = 0; i < ctx->iovcnt; ++i) {
+                EXPECT_EQ(ctx->iov[i].buffer,
+                          info->rma.payload.zcopy.iov[i].buffer);
+                EXPECT_EQ(ctx->iov[i].length,
+                          info->rma.payload.zcopy.iov[i].length);
+            }
+        } else {
+            ASSERT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
+            EXPECT_EQ(ctx->unpack_cb, info->rma.payload.unpack.unpack_cb);
+            EXPECT_EQ(ctx->unpack_arg, info->rma.payload.unpack.arg);
+            EXPECT_EQ(ctx->unpack_length, info->rma.payload.unpack.length);
+        }
+
+        uct_invoke_completion(info->comp, UCS_OK);
+        ++ctx->num_ops_purged;
+    }
+
     static ucs_status_t err_handler(void *arg, uct_ep_h ep,
                                     ucs_status_t status)
     {
@@ -569,6 +613,10 @@ protected:
     static ucs_status_t am_handler(void*, void*, size_t, unsigned)
     {
         return UCS_OK;
+    }
+
+    static void unpack_cb(void*, const void*, size_t)
+    {
     }
 
     void purge_outstanding(purge_ctx *ctx)
@@ -759,6 +807,59 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
     };
 
     test_purge_outstanding(put_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.get.max_iov, 2);
+    const size_t size            = ucs_max(
+            attr.cap.get.min_zcopy,
+            ucs_min((size_t)4096, attr.cap.get.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_GET_ZCOPY,
+                       {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t get_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_get_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(get_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size = ucs_min((size_t)4096, attr.cap.get.max_bcopy);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    purge_ctx ctx     = {this, UCT_EP_OP_GET_BCOPY,
+                         {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr   = recvbuf.addr();
+    ctx.rkey          = recvbuf.rkey();
+    ctx.unpack_cb     = unpack_cb;
+    ctx.unpack_arg    = this;
+    ctx.unpack_length = size;
+
+    send_func_t get_bcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_get_bcopy(ep, ctx.unpack_cb, ctx.unpack_arg,
+                                ctx.unpack_length, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(get_bcopy, ctx);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
