@@ -787,8 +787,9 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
 {
     const uct_iface_attr_t &attr = m_sender->iface_attr();
     const size_t num_iov         = ucs_min(attr.cap.put.max_iov, 2);
-    const size_t size            = ucs_max(attr.cap.put.min_zcopy,
-                                           ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+    const size_t size            = ucs_max(
+            attr.cap.put.min_zcopy,
+            ucs_min((size_t)4096, attr.cap.put.max_zcopy));
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
     mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
 

@@ -1426,8 +1426,8 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
                            ucs_debug_get_symbol_name(op->handler));
         if (uct_rc_mlx5_send_op_is_flush(op)) {
             uct_invoke_completion(op->user_comp, status);
-        } else if ((status == UCS_OK) && (op->user_comp != NULL) &&
-                   uct_rc_mlx5_send_op_is_put_zcopy(op)) {
+        } else if ((status == UCS_OK) && uct_rc_mlx5_send_op_is_put_zcopy(op) &&
+                   (op->user_comp != NULL)) {
             uct_invoke_completion(op->user_comp, UCS_OK);
         }
         uct_rc_mlx5_ep_outstanding_release_send_op(iface, op);
