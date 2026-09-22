@@ -300,7 +300,7 @@ void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
     };
 
     struct mlx5_wqe_ctrl_seg *ctrl = wqe;
-    uint8_t opcode                 = ctrl->opmod_idx_opcode >> 24;
+    uint8_t opcode                 = uct_ib_mlx5_wqe_opcode(ctrl);
     uint8_t opmod                  = ctrl->opmod_idx_opcode & 0xff;
     uint32_t qp_num                = ntohl(ctrl->qpn_ds) >> 8;
     int ds                         = ntohl(ctrl->qpn_ds) & UINT8_MAX;
