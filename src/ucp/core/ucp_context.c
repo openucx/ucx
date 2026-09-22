@@ -2765,6 +2765,8 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t **assignment_p)
     ucs_topo_groups_t groups;
     ucs_status_t status;
 
+    *assignment_p = NULL;
+
     /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
     if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
         ucs_debug("gpu-nic assignment is not supported on %s architecture, "
