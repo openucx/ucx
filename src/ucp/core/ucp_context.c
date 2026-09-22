@@ -2758,7 +2758,8 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
-static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
+static ucs_status_t
+ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t **assignment_p)
 {
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
@@ -2797,21 +2798,22 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
         goto out_release_groups;
     }
 
-    context->gpu_nic_assignment = assignment;
+    *assignment_p = assignment;
 
 out_release_groups:
     ucs_topo_release_groups(&groups);
     return status;
 }
 
-static void ucp_context_gpu_nic_assignment_cleanup(ucp_context_h context)
+static void
+ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
 {
-    if (context->gpu_nic_assignment == NULL) {
+    if (assignment == NULL) {
         return;
     }
 
-    ucp_gpu_nic_assignment_release(context->gpu_nic_assignment);
-    ucs_free(context->gpu_nic_assignment);
+    ucp_gpu_nic_assignment_release(assignment);
+    ucs_free(assignment);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
@@ -2857,7 +2859,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
-    status = ucp_context_gpu_nic_assignment_init(context);
+    status = ucp_context_gpu_nic_assignment_init(&context->gpu_nic_assignment);
     if (status != UCS_OK) {
         goto err_free_res;
     }
@@ -2897,7 +2899,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     return UCS_OK;
 
 err_cleanup_gpu_nic_assignment:
-    ucp_context_gpu_nic_assignment_cleanup(context);
+    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
 err_free_res:
     ucp_free_resources(context);
 err_thread_lock_finalize:
@@ -2917,7 +2919,7 @@ void ucp_cleanup(ucp_context_h context)
 {
     ucs_vfs_obj_remove(context);
     ucp_mem_rcache_cleanup(context);
-    ucp_context_gpu_nic_assignment_cleanup(context);
+    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
