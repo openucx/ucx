@@ -361,7 +361,7 @@ public:
         check_skip_test();
 
         if (!m_sender->check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) ||
-            !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+            !m_sender->check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
             UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
         }
 
@@ -388,16 +388,6 @@ protected:
 
     using send_func_t =
             std::function<ucs_status_t(uct_ep_h, uct_completion_t*)>;
-
-    bool check_caps_v2(uint64_t required_flags)
-    {
-        uct_iface_attr_v2_t attr = {};
-
-        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
-        EXPECT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &attr));
-
-        return ucs_test_all_flags(attr.cap.flags, required_flags);
-    }
 
     static ucs_status_t post_op(uct_ep_h ep, uct_completion_t *comp,
                                 const send_func_t &send_func)
