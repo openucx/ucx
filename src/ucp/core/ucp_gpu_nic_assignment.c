@@ -33,6 +33,22 @@ typedef struct {
 } ucp_nics_string_buffers_t;
 
 
+ucp_gpu_nic_assignment_policy_t
+ucp_gpu_net_device_mode_get_policy(ucp_gpu_net_device_mode_t mode)
+{
+    switch (mode) {
+    case UCP_GPU_NET_DEVICE_MODE_NOT_SHARED:
+    case UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_FLIP:
+        return UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP;
+    case UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_ROUND_ROBIN:
+        return UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN;
+    case UCP_GPU_NET_DEVICE_MODE_SHARED:
+        return UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED;
+    default:
+        ucs_fatal("invalid gpu network device mode %d", (int)mode);
+    }
+}
+
 static size_t
 ucp_gpu_nic_assignment_get_gpu_idx(ucp_gpu_nic_assignment_policy_t policy,
                                    size_t num_gpus, size_t nic_idx)
@@ -327,16 +343,39 @@ ucp_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t *assignment,
 }
 
 static void
-ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
-                                 const ucs_topo_group_t *group,
-                                 ucp_gpu_nic_assignment_policy_t policy)
+ucp_gpu_nic_assignment_add_group_shared(ucp_gpu_nic_assignment_t *assignment,
+                                        const ucs_topo_group_t *group)
+{
+    ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap;
+    const ucs_topo_group_element_t *gpu, *nic;
+
+    ucs_array_for_each(gpu, &group->gpus) {
+        ucs_assert((gpu->num_sys_devs > 0) &&
+                   (gpu->sys_devs[0] != UCS_SYS_DEVICE_ID_UNKNOWN));
+
+        nic_sys_dev_bitmap = ucs_const_cast(
+                ucp_gpu_nic_sys_dev_bitmap_t*,
+                ucp_gpu_nic_assignment_lookup(assignment, gpu->sys_devs[0]));
+        ucs_assert(nic_sys_dev_bitmap != NULL);
+
+        /* Assign all NICs in the group to the GPU. */
+        ucs_array_for_each(nic, &group->nics) {
+            ucp_gpu_nic_bitmap_add_nic(nic_sys_dev_bitmap, nic);
+        }
+    }
+}
+
+static void ucp_gpu_nic_assignment_add_group_not_shared(
+        ucp_gpu_nic_assignment_t *assignment, const ucs_topo_group_t *group,
+        ucp_gpu_nic_assignment_policy_t policy)
 {
     size_t num_gpus = ucs_array_length(&group->gpus);
     ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap;
-    const ucs_topo_group_element_t *nic;
-    const ucs_topo_group_element_t *gpu;
-    size_t nic_idx;
-    size_t gpu_idx;
+    const ucs_topo_group_element_t *gpu, *nic;
+    size_t nic_idx, gpu_idx;
+
+    ucs_assertv(policy != UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED,
+                "invalid policy: %d", (int)policy);
 
     ucs_array_for_each_index(nic, nic_idx, &group->nics) {
         gpu_idx = ucp_gpu_nic_assignment_get_gpu_idx(policy, num_gpus, nic_idx);
@@ -351,6 +390,18 @@ ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
         ucs_assert(nic_sys_dev_bitmap != NULL);
 
         ucp_gpu_nic_bitmap_add_nic(nic_sys_dev_bitmap, nic);
+    }
+}
+
+static void
+ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
+                                 const ucs_topo_group_t *group,
+                                 ucp_gpu_nic_assignment_policy_t policy)
+{
+    if (policy == UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED) {
+        ucp_gpu_nic_assignment_add_group_shared(assignment, group);
+    } else {
+        ucp_gpu_nic_assignment_add_group_not_shared(assignment, group, policy);
     }
 }
 

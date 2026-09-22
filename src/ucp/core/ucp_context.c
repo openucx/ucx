@@ -108,6 +108,14 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
+static const char *ucp_gpu_net_device_modes[] = {
+    [UCP_GPU_NET_DEVICE_MODE_NOT_SHARED]             = "not_shared",
+    [UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_FLIP]        = "not_shared_flip",
+    [UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_ROUND_ROBIN] = "not_shared_round_robin",
+    [UCP_GPU_NET_DEVICE_MODE_SHARED]                 = "shared",
+    [UCP_GPU_NET_DEVICE_MODE_LAST]                   = NULL
+};
+
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -614,6 +622,16 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "are reachable through the transport layer.",
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"GPU_NET_DEVICE_MODE", "not_shared",
+   "Select how network devices are assigned to GPUs.\n"
+   " - not_shared             : use the default FLIP assignment.\n"
+   " - not_shared_flip        : use the FLIP assignment.\n"
+   " - not_shared_round_robin : use the round-robin assignment.\n"
+   " - shared                 : assign every network device in a topology\n"
+   "                            group to every GPU in that group.",
+   ucs_offsetof(ucp_context_config_t, gpu_net_device_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_gpu_net_device_modes)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"

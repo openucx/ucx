@@ -7,6 +7,8 @@
 #ifndef UCP_GPU_NIC_ASSIGNMENT_H_
 #define UCP_GPU_NIC_ASSIGNMENT_H_
 
+#include "ucp_types.h"
+
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/sys/topo/base/topo_groups.h>
 
@@ -52,8 +54,24 @@ typedef enum {
      */
     UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
 
+    /**
+     * Assign every NIC, with all of its ports, to every GPU in the group.
+     */
+    UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED,
+
     UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST
 } ucp_gpu_nic_assignment_policy_t;
+
+
+/**
+ * Get the assignment policy of a GPU network device mode.
+ *
+ * @param [in] mode  GPU network device mode.
+ *
+ * @return Assignment policy corresponding to @a mode.
+ */
+ucp_gpu_nic_assignment_policy_t
+ucp_gpu_net_device_mode_get_policy(ucp_gpu_net_device_mode_t mode);
 
 
 /**

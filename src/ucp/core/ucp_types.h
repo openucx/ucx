@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -231,6 +231,18 @@ typedef enum {
     UCP_FENCE_MODE_EP_BASED, /* Use EP-based fence mode */
     UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;
+
+
+/**
+ * GPU network device assignment mode.
+ */
+typedef enum {
+    UCP_GPU_NET_DEVICE_MODE_NOT_SHARED,
+    UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_FLIP,
+    UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_ROUND_ROBIN,
+    UCP_GPU_NET_DEVICE_MODE_SHARED,
+    UCP_GPU_NET_DEVICE_MODE_LAST
+} ucp_gpu_net_device_mode_t;
 
 
 /**
