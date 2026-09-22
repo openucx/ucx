@@ -256,32 +256,6 @@ protected:
         }
     }
 
-    void check_assignment_not_shared(size_t num_groups,
-                                     size_t num_gpus_per_group,
-                                     size_t num_nics_per_group,
-                                     ucp_gpu_nic_assignment_policy_t policy,
-                                     const std::vector<size_t> &expected_owners)
-    {
-        topology_shape_t config;
-
-        config.num_groups         = num_groups;
-        config.num_gpus_per_group = num_gpus_per_group;
-        config.num_nics_per_group = num_nics_per_group;
-
-        /* Each GPU may appear as two devices if MPS MLOPart is enabled. */
-        for (size_t num_gpu_devices = 1; num_gpu_devices <= 2;
-             ++num_gpu_devices) {
-            /* Each NIC may appear as two ports if dual-port mode is enabled. */
-            for (size_t num_nic_ports = 1; num_nic_ports <= 2;
-                 ++num_nic_ports) {
-                config.num_gpu_devices = num_gpu_devices;
-                config.num_nic_ports   = num_nic_ports;
-                check_assignment_not_shared_inner(config, policy,
-                                                  expected_owners);
-            }
-        }
-    }
-
     void check_assignment_shared_inner(const topology_shape_t &config)
     {
         ASSERT_NE(config.num_groups, 0);
@@ -329,8 +303,9 @@ protected:
         }
     }
 
-    void check_assignment_shared(size_t num_groups, size_t num_gpus_per_group,
-                                 size_t num_nics_per_group)
+    template<typename Check>
+    void check_assignment(size_t num_groups, size_t num_gpus_per_group,
+                          size_t num_nics_per_group, Check check)
     {
         topology_shape_t config;
 
@@ -338,15 +313,40 @@ protected:
         config.num_gpus_per_group = num_gpus_per_group;
         config.num_nics_per_group = num_nics_per_group;
 
+        /* Each GPU may appear as two devices if MPS MLOPart is enabled. */
         for (size_t num_gpu_devices = 1; num_gpu_devices <= 2;
              ++num_gpu_devices) {
+            /* Each NIC may appear as two ports if dual-port mode is enabled. */
             for (size_t num_nic_ports = 1; num_nic_ports <= 2;
                  ++num_nic_ports) {
                 config.num_gpu_devices = num_gpu_devices;
                 config.num_nic_ports   = num_nic_ports;
-                check_assignment_shared_inner(config);
+                check(config);
             }
         }
+    }
+
+    void check_assignment_not_shared(size_t num_groups,
+                                     size_t num_gpus_per_group,
+                                     size_t num_nics_per_group,
+                                     ucp_gpu_nic_assignment_policy_t policy,
+                                     const std::vector<size_t> &expected_owners)
+    {
+        check_assignment(num_groups, num_gpus_per_group, num_nics_per_group,
+                         [this, policy,
+                          &expected_owners](const topology_shape_t &config) {
+                             check_assignment_not_shared_inner(config, policy,
+                                                               expected_owners);
+                         });
+    }
+
+    void check_assignment_shared(size_t num_groups, size_t num_gpus_per_group,
+                                 size_t num_nics_per_group)
+    {
+        check_assignment(num_groups, num_gpus_per_group, num_nics_per_group,
+                         [this](const topology_shape_t &config) {
+                             check_assignment_shared_inner(config);
+                         });
     }
 
 private:
