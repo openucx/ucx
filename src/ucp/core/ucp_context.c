@@ -2764,6 +2764,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucs_topo_groups_t groups;
     ucs_status_t status;
 
+    /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
     if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
         ucs_debug("gpu-nic assignment is not supported on %s architecture, "
                   "skipping",
@@ -2777,7 +2778,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     }
 
     if (ucs_array_is_empty(&groups)) {
-        ucs_warn("topology groups are empty, skipping gpu-nic assignment");
+        ucs_diag("topology groups are empty, skipping gpu-nic assignment");
         goto out_release_groups;
     }
 
