@@ -349,6 +349,13 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_purge_outstanding : public uct_test {
 public:
+    static const uint64_t SEND_SEED         = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED         = 0xb2b2b2b2b2b2b2b2ul;
+    static const uint8_t AM_SHORT_ID        = 3;
+    static const uint8_t AM_ZCOPY_ID        = 5;
+    static const uint64_t AM_SHORT_HEADER   = 0x0123456789abcdefull;
+    static const uint64_t AM_ZCOPY_HDR_SEED = 0xc3c3c3c3c3c3c3c3ul;
+
     void init() override
     {
         uct_test::init();
@@ -375,15 +382,20 @@ public:
 protected:
     struct purge_ctx {
         test_uct_purge_outstanding *self;
+        uct_ep_operation_t         operation;
         uct_completion_t           comp;
         uint32_t                   num_ops_purged;
         uint32_t                   num_ops_purged_at_completion;
         uint32_t                   num_ops_posted_after_flush;
-        uint32_t                   num_flush_purged;
         unsigned                   num_completions;
-        uint8_t                    am_short_id;
-        uint64_t                   am_short_header;
-        std::vector<uint8_t>       am_short_payload;
+        uint64_t                   remote_addr;
+        uct_rkey_t                 rkey;
+        const void                 *send_buf;
+        size_t                     send_len;
+        const void                 *am_header;
+        size_t                     am_header_length;
+        const uct_iov_t            *iov;
+        size_t                     iovcnt;
     };
 
     using send_func_t =
@@ -440,12 +452,20 @@ protected:
 
     void validate_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        ASSERT_EQ(ctx->operation, info->operation);
+
         switch (info->operation) {
         case UCT_EP_OP_AM_SHORT:
             validate_am_short(info, ctx);
             return;
-        case UCT_EP_OP_FLUSH:
-            validate_flush(info, ctx);
+        case UCT_EP_OP_AM_ZCOPY:
+            validate_am_zcopy(info, ctx);
+            return;
+        case UCT_EP_OP_PUT_SHORT:
+        case UCT_EP_OP_PUT_BCOPY:
+        case UCT_EP_OP_PUT_ZCOPY:
+            validate_put(info, ctx);
             return;
         default:
             UCS_TEST_ABORT("unsupported operation " << info->operation
@@ -464,28 +484,84 @@ protected:
         ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
         ASSERT_TRUE(ucs_test_all_flags(info->am.field_mask, required_fields));
         EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
-        EXPECT_EQ(ctx->am_short_id, info->am.am_id);
-        EXPECT_EQ(ctx->am_short_header, info->am.header.value);
-        ASSERT_EQ(ctx->am_short_payload.size(), info->am.payload.data.length);
+        EXPECT_EQ(AM_SHORT_ID, info->am.am_id);
+        EXPECT_EQ(AM_SHORT_HEADER, info->am.header.value);
+        ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
         ASSERT_NE(nullptr, info->am.payload.data.buffer);
-        EXPECT_EQ(0, memcmp(ctx->am_short_payload.data(),
-                            info->am.payload.data.buffer,
-                            ctx->am_short_payload.size()));
+        mem_buffer::pattern_check(info->am.payload.data.buffer,
+                                  info->am.payload.data.length, SEND_SEED);
         ++ctx->num_ops_purged;
     }
 
-    static void validate_flush(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    static void validate_am_zcopy(const uct_ep_op_info_t *info,
+                                  purge_ctx *ctx)
     {
-        const uint64_t required_fields = UCT_EP_OP_INFO_FIELD_COMP |
-                                         UCT_EP_OP_INFO_FIELD_FLUSH;
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_AM |
+                                         UCT_EP_OP_INFO_FIELD_COMP;
+        const uint64_t expected_am_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID | UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY;
 
-        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, required_fields));
-        ASSERT_TRUE(info->flush.field_mask &
-                    UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS);
-        EXPECT_EQ(0u, info->flush.flags);
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->am.field_mask, expected_am_fields));
+        EXPECT_EQ(AM_ZCOPY_ID, info->am.am_id);
+        EXPECT_EQ(0u, info->am.flags);
         EXPECT_EQ(&ctx->comp, info->comp);
-        ASSERT_EQ(0u, ctx->num_flush_purged);
-        ++ctx->num_flush_purged;
+        uct_invoke_completion(info->comp, UCS_OK);
+
+        ASSERT_EQ(ctx->am_header_length, info->am.header.zcopy.length);
+        EXPECT_EQ(0, memcmp(ctx->am_header, info->am.header.zcopy.buffer,
+                            ctx->am_header_length));
+        ASSERT_EQ(ctx->iovcnt, info->am.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer, info->am.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length, info->am.payload.zcopy.iov[i].length);
+        }
+
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_RMA;
+        const uint16_t expected_rma_fields =
+                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                UCT_EP_OP_INFO_RMA_FIELD_RKEY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+
+        if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(&ctx->comp, info->comp);
+            uct_invoke_completion(info->comp, UCS_OK);
+
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+            ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+            for (size_t i = 0; i < ctx->iovcnt; ++i) {
+                EXPECT_EQ(ctx->iov[i].buffer,
+                          info->rma.payload.zcopy.iov[i].buffer);
+                EXPECT_EQ(ctx->iov[i].length,
+                          info->rma.payload.zcopy.iov[i].length);
+            }
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA);
+            ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
+            ASSERT_NE(nullptr, info->rma.payload.data.buffer);
+            mem_buffer::pattern_check(info->rma.payload.data.buffer,
+                                      info->rma.payload.data.length, SEND_SEED);
+        }
+
+        ++ctx->num_ops_purged;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep,
@@ -505,8 +581,6 @@ protected:
         purge_ctx *ctx = static_cast<purge_ctx*>(arg);
 
         ASSERT_TRUE(info != NULL);
-        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
-        ASSERT_LT(unsigned(info->operation), unsigned(UCT_EP_OP_LAST));
 
         ctx->self->validate_op(info, ctx);
     }
@@ -566,7 +640,6 @@ protected:
         static constexpr uint32_t NUM_MSG_BEFORE_INVALIDATE = 2;
         uct_ep_invalidate_params_t invalidate_params = {};
         uint32_t num_posted = 0;
-        uint32_t num_ops_purged;
         unsigned num_outstanding, num_completions;
         ucs_status_t status;
 
@@ -595,7 +668,6 @@ protected:
 
         EXPECT_GT(ctx.num_ops_purged, 0u);
         EXPECT_LE(ctx.num_ops_purged, num_posted);
-        EXPECT_EQ(0u, ctx.num_flush_purged);
 
         wait_for_value(&ctx.comp.count, 0, true);
         if (num_outstanding != 0) {
@@ -603,11 +675,6 @@ protected:
             ++num_completions;
         }
 
-        EXPECT_EQ(num_completions, ctx.num_completions);
-
-        num_ops_purged = ctx.num_ops_purged;
-        purge_outstanding(&ctx);
-        EXPECT_EQ(num_ops_purged, ctx.num_ops_purged);
         EXPECT_EQ(num_completions, ctx.num_completions);
 
         flush();
@@ -619,25 +686,140 @@ protected:
     unsigned m_err_count = 0;
 };
 
+const uint8_t test_uct_purge_outstanding::AM_SHORT_ID;
+const uint8_t test_uct_purge_outstanding::AM_ZCOPY_ID;
+const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
+
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    purge_ctx ctx = {this, {completion_cb, 0, UCS_OK}, 0, 0, 0, 0, 0,
-                     3, 0x0123456789abcdefull, {1, 2, 3, 4}};
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size            = ucs_min((size_t)64, attr.cap.am.max_short);
+    std::vector<uint8_t> payload(size);
+    mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
 
-    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), ctx.am_short_id,
+    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+    ctx.send_buf  = payload.data();
+    ctx.send_len  = payload.size();
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
                                            am_handler, NULL, 0));
 
-    test_purge_outstanding([&ctx](uct_ep_h ep, uct_completion_t*) {
-        return uct_ep_am_short(ep, ctx.am_short_id, ctx.am_short_header,
-                               ctx.am_short_payload.data(),
-                               ctx.am_short_payload.size());
-    }, ctx);
+    send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
+        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER, ctx.send_buf,
+                               ctx.send_len);
+    };
+    test_purge_outstanding(am_short, ctx);
 
     EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
     EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
     EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
                                   ctx.num_ops_posted_after_flush);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_short,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size            = ucs_min((size_t)64, attr.cap.put.max_short);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_SHORT, {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.send_buf    = sendbuf.ptr();
+    ctx.send_len    = size;
+
+    send_func_t put_short = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_short(ep, ctx.send_buf, ctx.send_len, ctx.remote_addr,
+                                ctx.rkey);
+    };
+
+    test_purge_outstanding(put_short, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size = ucs_min((size_t)4096, attr.cap.put.max_bcopy);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.send_buf    = sendbuf.ptr();
+    ctx.send_len    = size;
+
+    send_func_t put_bcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        ssize_t ret = uct_ep_put_bcopy(ep, mapped_buffer::pack, &sendbuf,
+                                       ctx.remote_addr, ctx.rkey);
+        return (ret >= 0) ? UCS_OK : (ucs_status_t)ret;
+    };
+
+    test_purge_outstanding(put_bcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size            = ucs_max(attr.cap.put.min_zcopy,
+                                           ucs_min((size_t)4096,
+                                                   attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_ZCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t put_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(put_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.am.max_iov, 2);
+    const size_t hdr_size        = ucs_min((size_t)64, attr.cap.am.max_hdr);
+    const size_t size            = ucs_min((size_t)4096, attr.cap.am.max_zcopy);
+    std::vector<uint8_t> header(hdr_size);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+
+    mem_buffer::pattern_fill(header.data(), header.size(), AM_ZCOPY_HDR_SEED);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_AM_ZCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.am_header        = header.data();
+    ctx.am_header_length = header.size();
+    ctx.iov              = iov;
+    ctx.iovcnt           = iovcnt;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_ZCOPY_ID,
+                                           am_handler, NULL, 0));
+
+    send_func_t am_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_am_zcopy(ep, AM_ZCOPY_ID, ctx.am_header,
+                               ctx.am_header_length, iov, iovcnt, 0, comp);
+    };
+
+    test_purge_outstanding(am_zcopy, ctx);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
