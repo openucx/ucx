@@ -709,7 +709,8 @@ err:
     return status;
 }
 
-static void uct_ib_ah_entry_release(uct_ib_ah_entry_t *entry);
+static void
+uct_ib_ah_entry_release(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry);
 
 static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 {
@@ -721,7 +722,7 @@ static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
                      entry, entry->ah, entry->refcount);
         }
         /* Drop the cache's own reference, a referenced entry stays valid */
-        uct_ib_ah_entry_release(entry);
+        uct_ib_ah_entry_release(dev, entry);
     });
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 }
@@ -1451,6 +1452,16 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
     return UCS_OK;
 }
 
+static void uct_ib_device_destroy_ah(uct_ib_device_t *dev, struct ibv_ah *ah)
+{
+    int ret = ibv_destroy_ah(ah);
+
+    if (ret != 0) {
+        ucs_warn("%s: ibv_destroy_ah(ah=%p) failed with error %d: %m",
+                 uct_ib_device_name(dev), ah, ret);
+    }
+}
+
 static uct_ib_ah_entry_t *
 uct_ib_ah_entry_alloc(const struct ibv_ah_attr *ah_attr, struct ibv_ah *ah,
                       int refcount)
@@ -1474,11 +1485,12 @@ uct_ib_ah_entry_alloc(const struct ibv_ah_attr *ah_attr, struct ibv_ah *ah,
 }
 
 /* Must be called with dev->ah_lock held for an entry reachable via ah_hash */
-static void uct_ib_ah_entry_release(uct_ib_ah_entry_t *entry)
+static void
+uct_ib_ah_entry_release(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry)
 {
     ucs_assert(entry->refcount > 0);
     if (--entry->refcount == 0) {
-        ibv_destroy_ah(entry->ah);
+        uct_ib_device_destroy_ah(dev, entry->ah);
         ucs_free(entry);
     }
 }
@@ -1514,7 +1526,7 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
             ucs_trace("evicting stale ah_entry %p (ah %p) refcount %d %s",
                       entry, entry->ah, entry->refcount,
                       uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
-            uct_ib_ah_entry_release(entry);
+            uct_ib_ah_entry_release(dev, entry);
             kh_del(uct_ib_ah, &dev->ah_hash, iter);
         }
     }
@@ -1527,7 +1539,7 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
 
     entry = uct_ib_ah_entry_alloc(ah_attr, ah, 1);
     if (entry == NULL) {
-        ibv_destroy_ah(ah);
+        uct_ib_device_destroy_ah(dev, ah);
         status = UCS_ERR_NO_MEMORY;
         goto unlock;
     }
@@ -1536,7 +1548,7 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
         /* Add the cache's own reference and store it for reuse */
         iter = kh_put(uct_ib_ah, &dev->ah_hash, *ah_attr, &ret);
         if (iter == kh_end(&dev->ah_hash)) {
-            ibv_destroy_ah(ah);
+            uct_ib_device_destroy_ah(dev, ah);
             ucs_free(entry);
             status = UCS_ERR_NO_MEMORY;
             goto unlock;
@@ -1558,7 +1570,7 @@ unlock:
 void uct_ib_device_ah_put(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry)
 {
     ucs_recursive_spin_lock(&dev->ah_lock);
-    uct_ib_ah_entry_release(entry);
+    uct_ib_ah_entry_release(dev, entry);
     ucs_recursive_spin_unlock(&dev->ah_lock);
 }
 
