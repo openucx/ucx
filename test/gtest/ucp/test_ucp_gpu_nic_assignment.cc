@@ -276,6 +276,23 @@ protected:
 
         check_gpu_device_aliases(config);
 
+        ASSERT_NE(config.num_gpus_per_group, 0);
+
+        if (config.num_nics() == 0) {
+            for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
+                const auto *nic_sys_dev_bitmap = ucp_gpu_nic_assignment_lookup(
+                        &m_assignment, gpu_sys_dev(config, gpu_idx, 0));
+
+                ASSERT_NE(nullptr, nic_sys_dev_bitmap);
+                EXPECT_EQ(0ul, static_cast<size_t>(UCS_STATIC_BITMAP_POPCOUNT(
+                                       *nic_sys_dev_bitmap)));
+            }
+
+            return;
+        }
+
+        ASSERT_NE(config.num_nics_per_group, 0);
+
         for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
             const auto *nic_sys_dev_bitmap = ucp_gpu_nic_assignment_lookup(
                     &m_assignment, gpu_sys_dev(config, gpu_idx, 0));
@@ -354,19 +371,49 @@ private:
     ucp_gpu_nic_assignment_t m_assignment;
 };
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, mode_to_policy) {
-    EXPECT_EQ(UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-              ucp_gpu_net_device_mode_get_policy(
-                      UCP_GPU_NET_DEVICE_MODE_NOT_SHARED));
-    EXPECT_EQ(UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-              ucp_gpu_net_device_mode_get_policy(
-                      UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_FLIP));
-    EXPECT_EQ(UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-              ucp_gpu_net_device_mode_get_policy(
-                      UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_ROUND_ROBIN));
-    EXPECT_EQ(UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED,
-              ucp_gpu_net_device_mode_get_policy(
-                      UCP_GPU_NET_DEVICE_MODE_SHARED));
+UCS_TEST_F(test_ucp_gpu_nic_assignment, mode_resolution) {
+    struct test_param_t {
+        ucp_gpu_nic_assignment_mode_t   mode;
+        ucs_cpu_model_t                 cpu_model;
+        int                             expected_enabled;
+        ucp_gpu_nic_assignment_policy_t expected_policy;
+    };
+
+    const test_param_t test_params[] = {
+        /* Auto mode with VERA CPU. */
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO, UCS_CPU_MODEL_NVIDIA_VERA, 1,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP},
+        /* Auto mode with non-VERA CPU. */
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO, UCS_CPU_MODEL_UNKNOWN, 0,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO, UCS_CPU_MODEL_NVIDIA_GRACE, 0,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
+        /* Off mode. */
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_OFF, UCS_CPU_MODEL_NVIDIA_VERA, 0,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_OFF, UCS_CPU_MODEL_UNKNOWN, 0,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
+        /* Flip mode. */
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP, UCS_CPU_MODEL_UNKNOWN, 1,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP},
+        /* Round-robin mode. */
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN, UCS_CPU_MODEL_UNKNOWN, 1,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN},
+        /* Shared mode. */
+        {UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED, UCS_CPU_MODEL_UNKNOWN, 1,
+         UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED},
+    };
+
+    for (const auto &params : test_params) {
+        ucp_gpu_nic_assignment_policy_t policy =
+                UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST;
+
+        EXPECT_EQ(params.expected_enabled,
+                  ucp_gpu_nic_assignment_policy_resolve(params.mode,
+                                                        params.cpu_model,
+                                                        &policy));
+        EXPECT_EQ(params.expected_policy, policy);
+    }
 }
 
 UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_no_nics) {

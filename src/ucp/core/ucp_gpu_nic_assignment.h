@@ -9,6 +9,7 @@
 
 #include "ucp_types.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/sys/topo/base/topo_groups.h>
 
@@ -64,14 +65,18 @@ typedef enum {
 
 
 /**
- * Get the assignment policy of a GPU network device mode.
+ * Resolve the GPU-to-NIC assignment policy.
  *
- * @param [in] mode  GPU network device mode.
+ * @param [in]  mode       GPU-to-NIC assignment mode.
+ * @param [in]  cpu_model  CPU model used to resolve automatic mode.
+ * @param [out] policy_p   Resolved assignment policy,
+ *                         populated only when assignment is enabled.
  *
- * @return Assignment policy corresponding to @a mode.
+ * @return Nonzero if assignment is enabled, or zero if it is disabled.
  */
-ucp_gpu_nic_assignment_policy_t
-ucp_gpu_net_device_mode_get_policy(ucp_gpu_net_device_mode_t mode);
+int ucp_gpu_nic_assignment_policy_resolve(
+        ucp_gpu_nic_assignment_mode_t mode, ucs_cpu_model_t cpu_model,
+        ucp_gpu_nic_assignment_policy_t *policy_p);
 
 
 /**

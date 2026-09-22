@@ -33,19 +33,32 @@ typedef struct {
 } ucp_nics_string_buffers_t;
 
 
-ucp_gpu_nic_assignment_policy_t
-ucp_gpu_net_device_mode_get_policy(ucp_gpu_net_device_mode_t mode)
+int ucp_gpu_nic_assignment_policy_resolve(
+        ucp_gpu_nic_assignment_mode_t mode, ucs_cpu_model_t cpu_model,
+        ucp_gpu_nic_assignment_policy_t *policy_p)
 {
+    ucs_assert(policy_p != NULL);
+
     switch (mode) {
-    case UCP_GPU_NET_DEVICE_MODE_NOT_SHARED:
-    case UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_FLIP:
-        return UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP;
-    case UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_ROUND_ROBIN:
-        return UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN;
-    case UCP_GPU_NET_DEVICE_MODE_SHARED:
-        return UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED;
+    case UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO:
+        if (cpu_model != UCS_CPU_MODEL_NVIDIA_VERA) {
+            return 0;
+        }
+        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP;
+        return 1;
+    case UCP_GPU_NIC_ASSIGNMENT_MODE_OFF:
+        return 0;
+    case UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP:
+        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP;
+        return 1;
+    case UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN:
+        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN;
+        return 1;
+    case UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED:
+        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED;
+        return 1;
     default:
-        ucs_fatal("invalid gpu network device mode %d", (int)mode);
+        ucs_fatal("invalid gpu-nic assignment mode %d", (int)mode);
     }
 }
 

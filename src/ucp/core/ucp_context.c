@@ -108,12 +108,13 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
-static const char *ucp_gpu_net_device_modes[] = {
-    [UCP_GPU_NET_DEVICE_MODE_NOT_SHARED]             = "not_shared",
-    [UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_FLIP]        = "not_shared_flip",
-    [UCP_GPU_NET_DEVICE_MODE_NOT_SHARED_ROUND_ROBIN] = "not_shared_round_robin",
-    [UCP_GPU_NET_DEVICE_MODE_SHARED]                 = "shared",
-    [UCP_GPU_NET_DEVICE_MODE_LAST]                   = NULL
+static const char *ucp_gpu_nic_assignment_modes[] = {
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO]        = "auto",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_OFF]         = "off",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP]        = "flip",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN] = "round_robin",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED]      = "shared",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_LAST]        = NULL
 };
 
 static const char *ucp_rndv_modes[] = {
@@ -170,6 +171,7 @@ const char *ucp_extra_op_attr_flags_names[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
+/* clang-format off */
 static ucs_config_field_t ucp_context_config_table[] = {
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -623,15 +625,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
 
-  {"GPU_NET_DEVICE_MODE", "not_shared",
-   "Select how network devices are assigned to GPUs.\n"
-   " - not_shared             : use the default FLIP assignment.\n"
-   " - not_shared_flip        : use the FLIP assignment.\n"
-   " - not_shared_round_robin : use the round-robin assignment.\n"
-   " - shared                 : assign every network device in a topology\n"
-   "                            group to every GPU in that group.",
-   ucs_offsetof(ucp_context_config_t, gpu_net_device_mode),
-   UCS_CONFIG_TYPE_ENUM(ucp_gpu_net_device_modes)},
+  {"GPU_NIC_ASSIGNMENT_MODE", "auto",
+   "Select how NICs are assigned to GPUs.\n"
+   " - auto        : enable automatically on supported hardware, otherwise disable.\n"
+   " - off         : disable GPU-to-NIC assignment, fallback to free lane selection.\n"
+   " - flip        : require the not shared flip assignment policy.\n"
+   " - round_robin : require the not shared round-robin assignment policy.\n"
+   " - shared      : require the shared assignment policy.",
+   ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"
@@ -668,6 +670,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {NULL}
 };
+/* clang-format on */
 
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
