@@ -2776,6 +2776,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     }
 
     if (ucs_array_is_empty(&groups)) {
+        ucs_warn("groups are empty, skipping gpu-nic assignment");
         goto out_release_groups;
     }
 
