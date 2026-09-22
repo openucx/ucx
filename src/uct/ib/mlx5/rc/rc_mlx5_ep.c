@@ -1220,14 +1220,21 @@ uct_rc_mlx5_op_info_fill(uct_rc_mlx5_base_ep_t *ep,
     }
 }
 
-static int uct_ib_mlx5_wqe_is_delivered(uint32_t wqe_first_psn,
-                                        uint32_t receiver_next_psn,
-                                        uint32_t num_packets)
+static int
+uct_ib_mlx5_wqe_is_data_delivered(const struct mlx5_wqe_ctrl_seg *ctrl,
+                                  uint32_t wqe_first_psn,
+                                  uint32_t receiver_next_psn,
+                                  uint32_t num_packets)
 {
     const uint32_t psn_half = UCS_BIT(UCT_IB_MLX5_PSN_BITS - 1);
     uint32_t diff;
 
     ucs_assert(num_packets > 0);
+
+    /* Responder PSN tracks the read request, but not response delivery. */
+    if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_RDMA_READ) {
+        return 0;
+    }
 
     /*
      * PSNs wrap in a 24-bit sequence space. Since the outstanding window is
@@ -1419,9 +1426,10 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
                            ucs_debug_get_symbol_name(op->handler));
         if (uct_rc_mlx5_send_op_is_flush(op)) {
             uct_invoke_completion(op->user_comp, status);
-        } else if ((status == UCS_OK) && (op->user_comp != NULL)) {
-            /* This must be put_zcopy, get_bcopy or get_zcopy,
-             * so invoke user completion */
+        } else if ((status == UCS_OK) && (op->user_comp != NULL) &&
+                    (uct_rc_mlx5_send_op_is_put_zcopy(op) ||
+                     uct_rc_mlx5_send_op_is_get_bcopy(op) ||
+                     uct_rc_mlx5_send_op_is_get_zcopy(op))) {
             uct_invoke_completion(op->user_comp, UCS_OK);
         }
         uct_rc_mlx5_ep_outstanding_release_send_op(iface, op);
@@ -1488,8 +1496,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                                                   ctrl, wqe_size);
 
         if (delivered && (num_packets != 0) &&
-            !uct_ib_mlx5_wqe_is_delivered(wqe_first_psn, receiver_next_psn,
-                                          num_packets)) {
+            !uct_ib_mlx5_wqe_is_data_delivered(
+                    ctrl, wqe_first_psn, receiver_next_psn, num_packets)) {
             delivered = 0;
         }
 
