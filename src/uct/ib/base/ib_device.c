@@ -1500,27 +1500,22 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
 
     if (cache_enabled) {
         iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
-        if ((dev->ah_cache_ttl != UCS_TIME_INFINITY) &&
-            (iter != kh_end(&dev->ah_hash)) &&
-            ((ucs_get_time() - kh_value(&dev->ah_hash, iter)->creation_time) >=
-             dev->ah_cache_ttl)) {
-            /* Stale: drop the cache's own reference and forget this entry */
+        if (iter != kh_end(&dev->ah_hash)) {
             entry = kh_value(&dev->ah_hash, iter);
+            if ((dev->ah_cache_ttl == UCS_TIME_INFINITY) ||
+                ((ucs_get_time() - entry->creation_time) <
+                 dev->ah_cache_ttl)) {
+                /* Reuse the existing, shared entry */
+                entry->refcount++;
+                goto out;
+            }
+
+            /* Stale: drop the cache's own reference and forget this entry */
             ucs_trace("evicting stale ah_entry %p (ah %p) refcount %d %s",
                       entry, entry->ah, entry->refcount,
                       uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
             uct_ib_ah_entry_release(entry);
             kh_del(uct_ib_ah, &dev->ah_hash, iter);
-            iter = kh_end(&dev->ah_hash);
-        }
-
-        if (iter != kh_end(&dev->ah_hash)) {
-            /* found existing, shared entry */
-            entry = kh_value(&dev->ah_hash, iter);
-            entry->refcount++;
-            *entry_p = entry;
-            status   = UCS_OK;
-            goto unlock;
         }
     }
 
@@ -1551,6 +1546,7 @@ uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
         kh_value(&dev->ah_hash, iter) = entry;
     }
 
+out:
     *entry_p = entry;
     status   = UCS_OK;
 

@@ -59,7 +59,6 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
     self->psn        = UCT_SRD_INITIAL_PSN;
     self->flags      = 0;
     self->dest_qpn   = uct_ib_unpack_uint24(if_addr->qp_num);
-    self->ah_entry   = NULL;
 
     ucs_arbiter_group_init(&self->pending_group);
     ucs_list_head_init(&self->outstanding_list);
@@ -103,9 +102,7 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
 err_remove_ep:
     uct_srd_iface_remove_ep(iface, self);
 err_release_ah:
-    if (self->ah_entry != NULL) {
-        uct_ib_iface_ah_put(&iface->super, self->ah_entry);
-    }
+    uct_ib_iface_ah_put(&iface->super, self->ah_entry);
 err_arb_cleanup:
     ucs_arbiter_group_cleanup(&self->pending_group);
     return status;
