@@ -763,16 +763,16 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
+    int invalidating;
+
     ucp_am_release_user_header(req);
     ucp_request_rndv_flush_complete(req);
 
-    if (ucp_request_memh_invalidate(req, status)) {
-        ucp_proto_rndv_rts_reset(req);
-        return;
+    invalidating = ucp_request_memh_invalidate(req, status);
+    ucp_proto_request_zcopy_id_reset(req);
+    if (!invalidating) {
+        ucp_request_complete_send(req, status);
     }
-
-    ucp_proto_rndv_rts_reset(req);
-    ucp_request_complete_send(req, status);
 }
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
