@@ -276,7 +276,10 @@ protected:
 
         check_gpu_device_aliases(config);
 
-        ASSERT_NE(config.num_gpus_per_group, 0);
+        if (config.num_gpus_per_group == 0) {
+            ADD_FAILURE() << "num_gpus_per_group must be non-zero";
+            return;
+        }
 
         if (config.num_nics() == 0) {
             for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
@@ -291,7 +294,10 @@ protected:
             return;
         }
 
-        ASSERT_NE(config.num_nics_per_group, 0);
+        if (config.num_nics_per_group == 0) {
+            ADD_FAILURE() << "num_nics_per_group must be non-zero";
+            return;
+        }
 
         for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
             const auto *nic_sys_dev_bitmap = ucp_gpu_nic_assignment_lookup(
