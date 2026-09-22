@@ -74,7 +74,7 @@ typedef struct {
 typedef struct {
     uint8_t  movabs_reg[2]; /* REX.W ; 0xB8+reg */
     uint64_t addr;
-    uint8_t  mov_load[3];   /* REX.W ; 0x8B ; ModR/M */
+    uint8_t  mov_load[3]; /* REX.W ; 0x8B ; ModR/M */
 } UCS_S_PACKED ucm_bistro_mov_rip_xlt_t;
 
 
@@ -128,7 +128,8 @@ typedef struct {
 #define UCM_BISTRO_X86_MODRM_MOD_DISP32 2 /* 0b10 */
 #define UCM_BISTRO_X86_MODRM_MOD_REG    3 /* 0b11 */
 #define UCM_BISTRO_X86_MODRM_RM_SIB     4 /* 0b100 */
-#define UCM_BISTRO_X86_MODRM_RM_DISP32  5 /* 0b101 (%rbp / RIP-relative disp32) */
+#define UCM_BISTRO_X86_MODRM_RM_DISP32 \
+    5 /* 0b101 (%rbp / RIP-relative disp32) */
 
 /* ModR/M encoding for SUB RSP
  * mod=0b11, reg=0b101 (SUB as opcode extension), r/m=0b100
@@ -182,21 +183,24 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
     }
 
     if ((rex == 0) && (opcode == UCM_BISTRO_X86_ENDBR64_B0) &&
-        (*(const uint8_t*)ctx->src_p                 == UCM_BISTRO_X86_ENDBR64_B1) &&
-        (((const uint8_t*)ctx->src_p)[1]             == UCM_BISTRO_X86_ENDBR64_B2) &&
-        (((const uint8_t*)ctx->src_p)[2]             == UCM_BISTRO_X86_ENDBR64_B3)) {
+        (*(const uint8_t*)ctx->src_p == UCM_BISTRO_X86_ENDBR64_B1) &&
+        (((const uint8_t*)ctx->src_p)[1] == UCM_BISTRO_X86_ENDBR64_B2) &&
+        (((const uint8_t*)ctx->src_p)[2] == UCM_BISTRO_X86_ENDBR64_B3)) {
         /* endbr64 (CET landing pad) - position independent, copy verbatim */
         ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0x0F */
         ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0x1E */
         ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0xFA */
         goto out_copy_src;
     } else if (((rex == 0) || rex == UCM_BISTRO_X86_REX_B) &&
-        ((opcode & UCM_BISTRO_X86_PUSH_R_MASK) == UCM_BISTRO_X86_PUSH_R)) {
+               ((opcode & UCM_BISTRO_X86_PUSH_R_MASK) ==
+                UCM_BISTRO_X86_PUSH_R)) {
         /* push reg */
         goto out_copy_src;
     } else if ((rex == UCM_BISTRO_X86_REX_W) &&
-               ((opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IZ) ||  /* sub $imm32, r/m64 */
-                (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IB))) { /* sub $imm8, r/m64 */
+               ((opcode ==
+                 UCM_BISTRO_X86_IMM_GRP1_EV_IZ) || /* sub $imm32, r/m64 */
+                (opcode ==
+                 UCM_BISTRO_X86_IMM_GRP1_EV_IB))) { /* sub $imm8, r/m64 */
         modrm = *ucs_serialize_next(&ctx->src_p, const uint8_t);
         if (modrm == UCM_BISTRO_X86_MODRM_SUB_SP) {
             if (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IB) {
@@ -238,7 +242,7 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
          * Emitted e.g. by CET-built dispatch thunks that load an API table
          * pointer. Translate to an absolute-address load, because the relocated
          * code is not guaranteed to be within 32-bit range of the target. */
-        mod = modrm >> UCM_BISTRO_X86_MODRM_MOD_SHIFT;
+        mod   = modrm >> UCM_BISTRO_X86_MODRM_MOD_SHIFT;
         if ((mod == 0) && ((modrm & UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS)) ==
                            UCM_BISTRO_X86_MODRM_RM_DISP32)) {
             reg = (modrm >> UCM_BISTRO_X86_MODRM_REG_SHIFT) &
@@ -248,19 +252,19 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
              * pointer, so leave those unsupported. */
             if ((reg != UCM_BISTRO_X86_MODRM_RM_SIB) &&
                 (reg != UCM_BISTRO_X86_MODRM_RM_DISP32)) {
-                disp32              = *ucs_serialize_next(&ctx->src_p,
-                                                          const int32_t);
+                disp32 = *ucs_serialize_next(&ctx->src_p, const int32_t);
                 mov_rip.movabs_reg[0] = UCM_BISTRO_X86_REX_W;
                 mov_rip.movabs_reg[1] = UCM_BISTRO_X86_MOV_IR | reg;
-                mov_rip.addr          = (uintptr_t)UCS_PTR_BYTE_OFFSET(
-                                                ctx->src_p, disp32);
-                mov_rip.mov_load[0]   = UCM_BISTRO_X86_REX_W;
-                mov_rip.mov_load[1]   = UCM_BISTRO_X86_MOV_GV_EV;
+                mov_rip.addr = (uintptr_t)UCS_PTR_BYTE_OFFSET(ctx->src_p,
+                                                              disp32);
+                mov_rip.mov_load[0] = UCM_BISTRO_X86_REX_W;
+                mov_rip.mov_load[1] = UCM_BISTRO_X86_MOV_GV_EV;
+
                 /* ModR/M: mod=00, reg=reg, r/m=reg -> "mov (%reg), %reg" */
-                mov_rip.mov_load[2]   = (reg << UCM_BISTRO_X86_MODRM_REG_SHIFT) |
-                                        reg;
-                copy_src              = &mov_rip;
-                dst_length            = sizeof(mov_rip);
+                mov_rip.mov_load[2] = (reg << UCM_BISTRO_X86_MODRM_REG_SHIFT) |
+                                      reg;
+                copy_src            = &mov_rip;
+                dst_length          = sizeof(mov_rip);
                 goto out_copy;
             }
         }
@@ -342,9 +346,11 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
                     break;
                 }
                 if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP8) {
-                    ucs_serialize_next(&ctx->src_p, const uint8_t);  /* disp8 */
+                    ucs_serialize_next(&ctx->src_p, const uint8_t); /* disp8 */
                 } else if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP32) {
-                    ucs_serialize_next(&ctx->src_p, const uint32_t); /* disp32 */
+                    ucs_serialize_next(&ctx->src_p,
+                                       const uint32_t); /* disp32 */
+
                 }
             }
             /* Unconditional transfer - do not relocate past it */

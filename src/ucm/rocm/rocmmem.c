@@ -29,7 +29,7 @@
 
 /* Use the PTR variant so that ucm_orig_<fn> is a function pointer that bistro
  * can redirect to the relocated (trampoline) original, allowing us to intercept
- * callers that resolve the HSA symbol via dlopen/dlsym, which the reloc/GOT 
+ * callers that resolve the HSA symbol via dlopen/dlsym, which the reloc/GOT
  * hook cannot see. */
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
                                   HSA_STATUS_ERROR, hsa_amd_memory_pool_t,
@@ -138,7 +138,7 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
 #define UCM_ROCM_FUNC_ENTRY(_func) \
     { \
         {UCS_PP_MAKE_STRING(_func), ucm_override_##_func}, \
-        (void**)&ucm_orig_##_func \
+                (void**)&ucm_orig_##_func \
     }
 
 typedef struct {
@@ -146,11 +146,11 @@ typedef struct {
     void              **orig_func_ptr;
 } ucm_rocm_func_t;
 
-static ucm_rocm_func_t ucm_rocm_funcs[] = {
-    UCM_ROCM_FUNC_ENTRY(hsa_amd_memory_pool_allocate),
-    UCM_ROCM_FUNC_ENTRY(hsa_amd_memory_pool_free),
-    {{NULL, NULL}, NULL}
-};
+static ucm_rocm_func_t ucm_rocm_funcs[] =
+        {UCM_ROCM_FUNC_ENTRY(hsa_amd_memory_pool_allocate),
+         UCM_ROCM_FUNC_ENTRY(hsa_amd_memory_pool_free),
+         {{NULL, NULL}, NULL}};
+
 
 static ucs_status_t
 ucm_rocmmem_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_hooks_p)
@@ -245,8 +245,8 @@ static ucs_status_t ucm_rocmmem_install(int events)
     }
 
     /* Success as long as at least one hooking mode was installed. */
-    if (installed_hooks & (UCS_BIT(UCM_MMAP_HOOK_BISTRO) |
-                           UCS_BIT(UCM_MMAP_HOOK_RELOC))) {
+    if (installed_hooks &
+        (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))) {
         status = UCS_OK;
         ucm_info("rocm hooks are ready");
     } else {

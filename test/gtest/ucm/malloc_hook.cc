@@ -1641,7 +1641,8 @@ UCS_TEST_F(bistro_relocate, mov_rip_relative_reg) {
     ASSERT_UCS_OK(relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
                                &dst_used));
     EXPECT_EQ(13u, dst_used);
-    EXPECT_EQ(0xB9, dst[1]);  /* 0xB8 | %rcx(1) */
+    EXPECT_EQ(0xB9, dst[1]); /* 0xB8 | %rcx(1) */
+
     EXPECT_EQ(0x09, dst[12]); /* mod=00, reg=%rcx, r/m=%rcx */
 }
 
