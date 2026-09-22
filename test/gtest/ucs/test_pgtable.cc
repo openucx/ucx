@@ -189,7 +189,6 @@ UCS_TEST_F(test_pgtable, multi_search) {
         ucs_pgt_addr_t max = 0;
 
         /* generate random regions */
-        unsigned num_regions = 0;
         for (int i = 0; i < 200 / ucs::test_time_multiplier(); ++i) {
             ucs_pgt_addr_t start = (ucs::rand() & 0x7fffffff) << 24;
             size_t         size  = ucs_min((size_t)ucs::rand(),
@@ -203,7 +202,6 @@ UCS_TEST_F(test_pgtable, multi_search) {
             min = ucs_min(start, min);
             max = ucs_max(start, max);
             regions.push_back(make_region(start, end));
-            ++num_regions;
         }
 
         /* Insert regions */
