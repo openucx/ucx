@@ -352,8 +352,8 @@ public:
     static const uint64_t SEND_SEED         = 0xa1a1a1a1a1a1a1a1ul;
     static const uint64_t RECV_SEED         = 0xb2b2b2b2b2b2b2b2ul;
     static const uint8_t AM_SHORT_ID        = 3;
+    static const uint8_t AM_ZCOPY_ID        = 5;
     static const uint64_t AM_SHORT_HEADER   = 0x0123456789abcdefull;
-    static const uint8_t AM_ZCOPY_ID        = 1;
     static const uint64_t AM_ZCOPY_HDR_SEED = 0xc3c3c3c3c3c3c3c3ul;
 
     void init() override
@@ -697,6 +697,7 @@ protected:
 };
 
 const uint8_t test_uct_purge_outstanding::AM_SHORT_ID;
+const uint8_t test_uct_purge_outstanding::AM_ZCOPY_ID;
 const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
@@ -777,7 +778,8 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
     const uct_iface_attr_t &attr = m_sender->iface_attr();
     const size_t num_iov         = ucs_min(attr.cap.put.max_iov, 2);
     const size_t size            = ucs_max(attr.cap.put.min_zcopy,
-                                           ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+                                           ucs_min((size_t)4096,
+                                                   attr.cap.put.max_zcopy));
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
     mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
 

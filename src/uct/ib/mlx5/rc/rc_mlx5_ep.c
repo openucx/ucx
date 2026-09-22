@@ -1007,21 +1007,16 @@ static void uct_rc_mlx5_op_callback_data_fill_iov(
         const uct_ib_mlx5_txwq_t *txwq, const struct mlx5_wqe_data_seg *dptr,
         size_t num_dseg, uct_rc_mlx5_op_callback_data_t *callback_data)
 {
-    uint32_t byte_count;
     size_t i;
 
     ucs_assert(num_dseg <= ucs_static_array_size(callback_data->iov));
 
     for (i = 0; i < num_dseg; ++i) {
-        byte_count = ntohl(dptr->byte_count);
-        ucs_assertv_always(!(byte_count & MLX5_INLINE_SEG),
-                           "inline segment in zcopy WQE");
-
         callback_data->memh[i].lkey  = ntohl(dptr->lkey);
         callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;
         callback_data->memh[i].flags = 0;
         callback_data->iov[i].buffer = (void*)(uintptr_t)be64toh(dptr->addr);
-        callback_data->iov[i].length = byte_count;
+        callback_data->iov[i].length = ntohl(dptr->byte_count);
         callback_data->iov[i].memh   = &callback_data->memh[i];
         callback_data->iov[i].stride = 0;
         callback_data->iov[i].count  = 1;
@@ -1110,9 +1105,9 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am(
     }
 
     ucs_fatal("rc mlx5: unexpected am wqe send op %p sn %d handler %s "
-        "wqe_size %zu",
-        op, op->sn, ucs_debug_get_symbol_name((void*)op->handler),
-        wqe_size);
+              "wqe_size %zu",
+              op, op->sn, ucs_debug_get_symbol_name((void*)op->handler),
+              wqe_size);
 }
 
 static void uct_rc_mlx5_op_info_fill_put_zcopy(
@@ -1239,70 +1234,106 @@ uct_rc_mlx5_wqe_unsupported(uct_ib_iface_t *iface,
               uct_ib_mlx5_wqe_opcode(ctrl), wqe_size, wqe_dump);
 }
 
-static size_t uct_rc_mlx5_wqe_put_length(const uct_ib_mlx5_txwq_t *txwq,
-                                         const struct mlx5_wqe_ctrl_seg *ctrl,
-                                         size_t wqe_size)
+static size_t
+uct_rc_mlx5_wqe_dseg_length(const uct_ib_mlx5_txwq_t *txwq,
+                            const struct mlx5_wqe_data_seg *dptr,
+                            size_t num_dseg)
+{
+    size_t length = 0;
+    size_t i;
+    uint32_t byte_count;
+
+    for (i = 0; i < num_dseg; ++i) {
+        byte_count = ntohl(dptr->byte_count);
+        ucs_assertv_always(!(byte_count & MLX5_INLINE_SEG),
+                           "inline segment detected");
+
+        length += byte_count;
+        dptr    = uct_ib_mlx5_txwq_wrap_any_const(txwq, dptr + 1);
+    }
+
+    return length;
+}
+
+static uint32_t uct_rc_mlx5_wqe_num_packets_put(
+        const uct_ib_mlx5_txwq_t *txwq,
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size)
 {
     const size_t header_size = sizeof(*ctrl) +
                                sizeof(struct mlx5_wqe_raddr_seg);
     const struct mlx5_wqe_raddr_seg *raddr;
     const struct mlx5_wqe_inl_data_seg *inl;
     const struct mlx5_wqe_data_seg *dptr;
-    size_t length, remaining;
+    size_t length, dseg_size;
 
     ucs_assertv_always(wqe_size >= header_size, "wqe_size=%zu", wqe_size);
+    /* A zero-length RDMA write still consumes one packet/PSN. */
     if (wqe_size == header_size) {
-        return 0;
+        return 1;
     }
 
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
+    /* Put short inline consumes one packet/PSN. */
     if (uct_rc_mlx5_wqe_inline_seg(txwq, raddr + 1, &inl, &length) == UCS_OK) {
         ucs_assertv_always(length <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE,
                            "inline_length=%zu", length);
-        return length;
+        return 1;
     }
 
     dptr      = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-    length    = 0;
-    remaining = wqe_size - header_size;
-    do {
-        length    += ntohl(dptr->byte_count);
-        remaining -= sizeof(*dptr);
-        dptr       = uct_ib_mlx5_txwq_wrap_any_const(txwq, dptr + 1);
-    } while (remaining > 0);
+    dseg_size = wqe_size - header_size;
+    ucs_assertv_always((dseg_size % sizeof(*dptr)) == 0,
+                        "invalid RDMA write WQE size %zu", wqe_size);
+    length = uct_rc_mlx5_wqe_dseg_length(txwq, dptr, dseg_size / sizeof(*dptr));
 
-    return length;
+    return (length == 0) ? 1 : uct_rc_mlx5_num_packets(txwq, length);
+}
+
+static uint32_t uct_rc_mlx5_wqe_num_packets_am(
+        uct_ib_iface_t *iface, const uct_ib_mlx5_txwq_t *txwq,
+        const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size)
+{
+    const struct mlx5_wqe_inl_data_seg *inl;
+    const struct mlx5_wqe_data_seg *dptr;
+    size_t length, inline_length, inline_seg_size;
+    size_t num_dseg;
+
+    if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) !=
+        UCS_OK) {
+        uct_rc_mlx5_wqe_unsupported(iface, txwq, ctrl, wqe_size);
+    }
+
+    inline_seg_size = ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                        UCT_IB_MLX5_WQE_SEG_SIZE);
+    ucs_assertv_always(wqe_size >= (sizeof(*ctrl) + inline_seg_size),
+                       "wqe_size=%zu inline_seg_size=%zu", wqe_size,
+                       inline_seg_size);
+    /* AM short is fully inline. */
+    if (wqe_size == (sizeof(*ctrl) + inline_seg_size)) {
+        return 1;
+    }
+
+    ucs_assertv_always(((wqe_size - sizeof(*ctrl) - inline_seg_size) %
+                        sizeof(*dptr)) == 0,
+                        "invalid am zcopy WQE size %zu", wqe_size);
+    dptr     = uct_ib_mlx5_txwq_wrap_any_const(
+                        txwq, UCS_PTR_BYTE_OFFSET(inl, inline_seg_size));
+    num_dseg = (wqe_size - sizeof(*ctrl) - inline_seg_size) / sizeof(*dptr);
+    length = inline_length + uct_rc_mlx5_wqe_dseg_length(txwq, dptr, num_dseg);
+    return uct_rc_mlx5_num_packets(txwq, length);
 }
 
 static uint32_t uct_ib_mlx5_wqe_num_packets(
         uct_ib_iface_t *iface, const uct_ib_mlx5_txwq_t *txwq,
         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size)
 {
-    uint8_t opcode = uct_ib_mlx5_wqe_opcode(ctrl);
-    const struct mlx5_wqe_inl_data_seg *inl;
-    size_t length, inline_length, inline_wqe_size;
-
-    switch (opcode) {
+    switch (uct_ib_mlx5_wqe_opcode(ctrl)) {
     case MLX5_OPCODE_NOP:
         return 0;
     case MLX5_OPCODE_RDMA_WRITE:
-        length = uct_rc_mlx5_wqe_put_length(txwq, ctrl, wqe_size);
-        /* A zero-length RDMA read or write still consumes one packet/PSN */
-        return (length == 0) ? 1 : uct_rc_mlx5_num_packets(txwq, length);
+        return uct_rc_mlx5_wqe_num_packets_put(txwq, ctrl, wqe_size);
     case MLX5_OPCODE_SEND:
-        if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) ==
-            UCS_OK) {
-            inline_wqe_size = sizeof(*ctrl) +
-                              ucs_align_up_pow2(sizeof(*inl) + inline_length,
-                                                UCT_IB_MLX5_WQE_SEG_SIZE);
-            /* AM short is fully inline. IOV-backed AM zcopy also starts
-             * inline, but has trailing data segments we do not support. */
-            if (wqe_size == inline_wqe_size) {
-                return 1;
-            }
-        }
-
-        /* Fall through */
+        return uct_rc_mlx5_wqe_num_packets_am(iface, txwq, ctrl, wqe_size);
     default:
         uct_rc_mlx5_wqe_unsupported(iface, txwq, ctrl, wqe_size);
     }
