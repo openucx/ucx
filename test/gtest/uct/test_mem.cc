@@ -229,7 +229,6 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     const size_t            n_tryes     = 101;
     uct_alloc_method_t      meth;
     size_t                  length      = 1;
-    size_t                  n_success;
     ucs::mmap_fixed_address p_addr(page_size * 2 * (n_tryes + 1));
     void*                   curr_addr;
 
@@ -245,7 +244,6 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     params.name            = "test";
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
 
-    n_success = 0;
     curr_addr = *p_addr;
 
     for (i = 0; i < n_tryes; ++i) {
@@ -254,7 +252,6 @@ UCS_TEST_P(test_mem, mmap_fixed) {
 
         status = uct_mem_alloc(length, &meth, 1, &params, &uct_mem);
         if (status == UCS_OK) {
-            ++n_success;
             EXPECT_EQ(meth, uct_mem.method);
             EXPECT_EQ(curr_addr, uct_mem.address);
             EXPECT_GE(uct_mem.length, (size_t)1);
