@@ -11,6 +11,7 @@
 #endif
 
 #include "ucp_context.h"
+#include "ucp_gpu_nic_assignment.h"
 #include "ucp_request.h"
 #include "ucp_tl_info.h"
 
@@ -18,6 +19,7 @@
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
@@ -106,6 +108,15 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_AUTO]     = "auto",
     [UCP_FENCE_MODE_EP_BASED] = "ep_based",
     [UCP_FENCE_MODE_LAST]     = NULL
+};
+
+static const char *ucp_gpu_nic_assignment_modes[] = {
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO]        = "auto",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_OFF]         = "off",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP]        = "flip",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN] = "round_robin",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED]      = "shared",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_LAST]        = NULL
 };
 
 static const char *ucp_rndv_modes[] = {
@@ -400,10 +411,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"RMA_PPLN_ENABLE", "n",
-   "Force-enable the RMA rendezvous put/get protocols.",
-   ucs_offsetof(ucp_context_config_t, rma_ppln_enable), UCS_CONFIG_TYPE_BOOL},
-
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"
@@ -618,6 +625,26 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "are reachable through the transport layer.",
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"GPU_NIC_ASSIGNMENT_MODE", "auto",
+   "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
+   "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "All ports of a NIC are assigned together.\n"
+   "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
+   "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
+   "some GPUs without any NICs.\n"
+   " - auto        : use 'flip' on hardware with a known GPU-NIC topology,\n"
+   "                 otherwise 'off'.\n"
+   " - off         : do not assign; select lanes from all NICs.\n"
+   " - flip        : assign each NIC to a single GPU, walking the N GPUs of\n"
+   "                 the group forward then backward:\n"
+   "                 0, 1, .., N-1, N-1, .., 1, 0, 0, 1, ..\n"
+   " - round_robin : assign each NIC to a single GPU, walking the N GPUs of\n"
+   "                 the group in ascending order:\n"
+   "                 0, 1, .., N-1, 0, 1, .., N-1, 0, ..\n"
+   " - shared      : assign all NICs of a group to every GPU of that group.",
+   ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"
@@ -2756,6 +2783,74 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
+static ucs_status_t
+ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
+                                    ucp_gpu_nic_assignment_t **assignment_p)
+{
+    ucp_gpu_nic_assignment_t *assignment;
+    ucs_topo_groups_t groups;
+    ucs_status_t status;
+
+    *assignment_p = NULL;
+
+    if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
+        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+            ucs_debug("gpu-nic assignment is not supported on %s "
+                      "architecture, skipping",
+                      ucs_cpu_model_name());
+            return UCS_OK;
+        }
+
+        mode = UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP;
+    } else if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_OFF) {
+        ucs_debug("gpu-nic assignment is disabled by configuration");
+        return UCS_OK;
+    }
+
+    ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
+
+    status = ucs_topo_build_groups(&groups);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (ucs_array_is_empty(&groups)) {
+        ucs_diag("topology groups are empty, skipping gpu-nic assignment");
+        goto out_release_groups;
+    }
+
+    assignment = ucs_malloc(sizeof(*assignment), "ucp gpu-nic assignment");
+    if (assignment == NULL) {
+        ucs_error("failed to allocate gpu-nic assignment");
+        status = UCS_ERR_NO_MEMORY;
+        goto out_release_groups;
+    }
+
+    status = ucp_gpu_nic_assignment_build(&groups, mode, assignment);
+    if (status != UCS_OK) {
+        ucs_free(assignment);
+        goto out_release_groups;
+    }
+
+    *assignment_p = assignment;
+
+out_release_groups:
+    ucs_topo_release_groups(&groups);
+    return status;
+}
+
+static void
+ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
+{
+    if (assignment == NULL) {
+        return;
+    }
+
+    ucp_gpu_nic_assignment_release(assignment);
+    ucs_free(assignment);
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -2799,6 +2894,13 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
+    status = ucp_context_gpu_nic_assignment_init(
+            context->config.ext.gpu_nic_assignment_mode,
+            &context->gpu_nic_assignment);
+    if (status != UCS_OK) {
+        goto err_free_res;
+    }
+
     context->uuid             = ucs_generate_uuid((uintptr_t)context);
     context->next_memh_reg_id = 0;
 
@@ -2808,7 +2910,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
             if (config->enable_rcache == UCS_YES) {
                 ucs_error("could not create UCP registration cache: %s",
                           ucs_status_string(status));
-                goto err_free_res;
+                goto err_cleanup_gpu_nic_assignment;
             } else {
                 ucs_diag("could not create UCP registration cache: %s",
                          ucs_status_string(status));
@@ -2833,6 +2935,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
+err_cleanup_gpu_nic_assignment:
+    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
 err_free_res:
     ucp_free_resources(context);
 err_thread_lock_finalize:
@@ -2852,6 +2956,7 @@ void ucp_cleanup(ucp_context_h context)
 {
     ucs_vfs_obj_remove(context);
     ucp_mem_rcache_cleanup(context);
+    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);

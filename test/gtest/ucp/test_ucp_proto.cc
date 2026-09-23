@@ -559,6 +559,33 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_ep_print_info(sender().ep(), stdout);
 }
 
+UCS_TEST_P(test_ucp_proto, ep_config_proto_init_on_send)
+{
+    static constexpr ucp_tag_t tag = 0xdeadbeef;
+    ucp_request_param_t param      = {};
+    uint64_t send_data             = 0x0123456789abcdef;
+    uint64_t recv_data             = 0;
+    ucp_ep_config_t *ep_config;
+    void *send_req, *recv_req;
+
+    recv_req = ucp_tag_recv_nbx(receiver().worker(), &recv_data,
+                                sizeof(recv_data), tag, UINT64_MAX, &param);
+
+    ep_config = &ucs_array_elem(&worker()->ep_config, sender().ep()->cfg_index);
+    EXPECT_FALSE(ep_config->proto_init_flags &
+                 UCP_EP_PROTO_SHORT_INITIALIZED);
+
+    /* No protocol can be cached while the initialization flag is clear */
+    send_req = ucp_tag_send_nbx(sender().ep(), &send_data, sizeof(send_data),
+                                tag, &param);
+
+    /* Expect short-circuit path initialization to be done after first send */
+    EXPECT_TRUE(ep_config->proto_init_flags & UCP_EP_PROTO_SHORT_INITIALIZED);
+
+    ASSERT_UCS_OK(requests_wait({send_req, recv_req}));
+    EXPECT_EQ(send_data, recv_data);
+}
+
 UCS_TEST_P(test_ucp_proto, rkey_config) {
     ucp_rkey_config_key_t rkey_config_key = create_rkey_config_key(0);
     ucs_status_t status;
@@ -973,9 +1000,11 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
 }
 
+/* Remove the GET zcopy protocol, which replaces GET/RNDV on registrable
+ * memory, so that GET/RNDV is always selected */
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
            cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",
-           "RNDV_SCHEME=get_zcopy", "RMA_PPLN_ENABLE=y")
+           "RNDV_SCHEME=get_zcopy", "PROTOS=^get/zcopy")
 {
     /* Keep the real CUDA allocation small, but inspect a large protocol range
      * where RMA GET/RNDV is selected. */

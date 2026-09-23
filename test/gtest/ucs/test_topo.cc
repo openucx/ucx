@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 extern "C" {
+#include <ucs/algorithm/qsort_r.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
@@ -55,6 +56,15 @@ topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
                           ucs_sys_dev_distance_t *distance)
 {
     *distance = ucs_topo_default_distance;
+}
+
+static int topo_test_sys_device_cmp(const void *elem1, const void *elem2,
+                                    void *UCS_V_UNUSED arg)
+{
+    const auto sys_dev1 = *static_cast<const ucs_sys_device_t*>(elem1);
+    const auto sys_dev2 = *static_cast<const ucs_sys_device_t*>(elem2);
+
+    return ucs_topo_sys_device_cmp(sys_dev1, sys_dev2);
 }
 
 class test_topo : public ucs::test {
@@ -166,6 +176,50 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_EQ(bus_id2.function, dummy_bus_id.function);
 
     EXPECT_GE(ucs_topo_num_devices(), 2);
+}
+
+UCS_TEST_F(test_topo, sys_device_cmp) {
+    static const uintptr_t user_value1 = 17;
+    static const uintptr_t user_value2 = 42;
+    const ucs_sys_bus_id_t bus_id1     = {0, 1, 2, 0};
+    const ucs_sys_bus_id_t bus_id2     = {0, 2, 2, 0};
+    ucs_sys_device_t dev1, dev1_alias1, dev1_alias2, dev2, dev2_alias1;
+
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id1, &dev1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id2, &dev2));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id1,
+                                                                user_value1,
+                                                                &dev1_alias1));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id1,
+                                                                user_value2,
+                                                                &dev1_alias2));
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id2,
+                                                                user_value1,
+                                                                &dev2_alias1));
+
+    /* Identical devices compare equal; BDF is the primary key. */
+    EXPECT_EQ(0, ucs_topo_sys_device_cmp(dev1, dev1));
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1, dev2), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev2, dev1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias2, dev2_alias1), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev2_alias1, dev1_alias2), 0);
+
+    /* User value breaks BDF ties; the empty value sorts last. */
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias1, dev1_alias2), 0);
+    EXPECT_GT(ucs_topo_sys_device_cmp(dev1_alias2, dev1_alias1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev1_alias2, dev1), 0);
+    EXPECT_LT(ucs_topo_sys_device_cmp(dev2_alias1, dev2), 0);
+
+    /* Validate sorting order. */
+    std::vector<ucs_sys_device_t> sys_devs = {dev2, dev1, dev2_alias1,
+                                              dev1_alias2, dev1_alias1};
+
+    ucs_qsort_r(sys_devs.data(), sys_devs.size(), sizeof(sys_devs[0]),
+                topo_test_sys_device_cmp, NULL);
+
+    const std::vector<ucs_sys_device_t> expected = {dev1_alias1, dev1_alias2,
+                                                    dev1, dev2_alias1, dev2};
+    EXPECT_EQ(expected, sys_devs);
 }
 
 UCS_TEST_F(test_topo, pci_id_equal) {
@@ -496,6 +550,14 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
     ASSERT_UCS_OK(
             ucs_topo_sys_device_set_class(net_dev, UCS_TOPO_DEVICE_CLASS_NET));
 
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_set_class(acc_hi,
+                                                UCS_TOPO_DEVICE_CLASS_LAST));
+    }
+
     /* Ordinals follow the bus id (BDF) order within the ACC class, regardless
      * of registration order. */
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo));
@@ -525,6 +587,71 @@ UCS_TEST_F(test_topo, device_bdf_ordinal) {
     EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
               ucs_topo_sys_device_get_bdf_class_ordinal(
                       UCS_SYS_DEVICE_ID_UNKNOWN));
+}
+
+UCS_TEST_F(test_topo, device_bdf_ordinal_incomplete_class) {
+    ucs_sys_device_t acc_dev, acc_new, net_dev, isolated_acc_dev;
+    ucs_global_state_t *state;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xfefc;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+
+    bus_id.bus = 0x20;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_dev));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_dev, UCS_TOPO_DEVICE_CLASS_ACC));
+
+    bus_id.bus = 0x30;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &net_dev));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(net_dev, UCS_TOPO_DEVICE_CLASS_NET));
+
+    /* Cache both class ordinals before marking the ACC class incomplete. */
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
+
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_device_class_mark_incomplete(
+                          UCS_TOPO_DEVICE_CLASS_UNKNOWN));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_topo_device_class_mark_incomplete(
+                                                 UCS_TOPO_DEVICE_CLASS_LAST));
+    }
+
+    ASSERT_UCS_OK(
+            ucs_topo_device_class_mark_incomplete(UCS_TOPO_DEVICE_CLASS_ACC));
+
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
+
+    /* Class changes must not make ordinals available again. */
+    bus_id.bus = 0x10;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &acc_new));
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_set_class(acc_new, UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_new));
+
+    /* Extracted topology state must include and isolate class availability. */
+    state = ucs_topo_extract_state();
+    ASSERT_TRUE(state != NULL);
+
+    bus_id.bus = 0x40;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &isolated_acc_dev));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_class(isolated_acc_dev,
+                                                UCS_TOPO_DEVICE_CLASS_ACC));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(isolated_acc_dev));
+
+    ucs_topo_restore_state(state);
+
+    EXPECT_EQ(UCS_SYS_DEVICE_ORDINAL_INVALID,
+              ucs_topo_sys_device_get_bdf_class_ordinal(acc_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_dev));
 }
 
 UCS_TEST_F(test_topo, device_bdf_ordinal_aliases) {

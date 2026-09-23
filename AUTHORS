@@ -24,6 +24,7 @@ Changcheng Liu <jerrliu@nvidia.com>
 Colin Hirsch <chirsch@nvidia.com>
 Corey J. Nolet <cjnolet@gmail.com>
 Daniel Pressler <danielpr@nvidia.com>
+David DeBonis <ddebonis@amd.com>
 David Wootton <dwootton@us.ibm.com>
 Devendar Bureddy <devendar@mellanox.com>
 Devesh Sharma <devesh.sharma@broadcom.com>
@@ -59,6 +60,7 @@ Ivan Kochin <ikochin@nvidia.com>
 Jakir Kham <jakirkham@gmail.com>
 Jason Gunthorpe <jgg@mellanox.com>
 Jeff Daily <jeff.daily@amd.com>
+Jeffrey Mahou <jmahou@nvidia.com>
 Jianxin Xiong <jianxin.xiong@intel.com>
 John Snyder <jms285@duke.edu>
 Jonas Zhou <JonasZhou@zhaoxin.com>
@@ -88,6 +90,7 @@ Netanel Yosephian <netanelyo@mellanox.com>
 Nicolas 'Pixel' Noble <nicolas@nobis-crew.org>
 Nicolas Morey <nmorey@suse.com>
 Nir Wolfer <nwolfer@nvidia.com>
+Noam Tsemah <ntsemah@nvidia.com>
 Ofir Farjon <ofarjon@nvidia.com>
 Olly Perks <olly.perks@arm.com>
 Or Balayla <obalayla@nvidia.com>
@@ -135,6 +138,7 @@ Yiltan Hassan Temucin <yiltan.temucin@amd.com>
 Yossi Itigin <yosefe@nvidia.com>
 Yuriy Shestakov <yuriis@mellanox.com>
 Zhenlong Ma <zhenlongm@nvidia.com>
+Zhixian Li <anjoj0@users.noreply.github.com>
 Zhongkai Zhang <zhzhang@habana.ai>
 Zhu Yanjun <yanjunz@mellanox.com>
 Zihao Zhao <zizhao@nvidia.com>

@@ -1462,7 +1462,9 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 class test_rc_mlx5_token_query : public test_rc {
 protected:
-    static constexpr uint32_t NUM_MESSAGES = 10;
+    static constexpr uint32_t NUM_MESSAGES      = 10;
+    static constexpr size_t   NUM_SGL_ELEMENTS  = 4;
+    static constexpr size_t   SGL_BUFFER_LENGTH = 1024;
 
     static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
     {
@@ -1493,24 +1495,39 @@ protected:
         attr.rx_token   = rx_token;
         ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
     }
+
+    size_t max_put_sgl_zcopy_count()
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+        ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+        return attr.max_put_sgl_zcopy_count;
+    }
+
+    void verify_tokens(uint32_t expected_rx_token)
+    {
+        uct_rc_mlx5_tx_token_t tx_token = {};
+        uct_rc_mlx5_rx_token_t rx_token = {};
+        uct_rc_mlx5_base_ep_t *rx_ep;
+
+        query_tx_token(m_e1->ep(0), &tx_token);
+        query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+
+        rx_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
+        EXPECT_EQ(rx_ep->tx.wq.super.qp_num, be32toh(tx_token));
+        EXPECT_EQ(expected_rx_token, be32toh(rx_token) & UCT_IB_MLX5_PSN_MASK);
+    }
 };
 
 constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
 
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT) ||
+                     !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN))
 {
-    uct_rc_mlx5_tx_token_t tx_token = {};
-    uct_rc_mlx5_rx_token_t rx_token = {};
-    uint32_t rx_count               = 0;
-    uct_ib_mlx5_md_t *md            = uct_ib_mlx5_iface_md(
-            ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
-    uct_rc_mlx5_base_ep_t *e2_ep;
+    uint32_t rx_count = 0;
     ucs_status_t status;
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        UCS_TEST_SKIP_R("DEVX is not supported");
-    }
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
                                            &rx_count, 0));
@@ -1523,12 +1540,56 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 
     wait_for_value(&rx_count, NUM_MESSAGES, true);
 
-    query_tx_token(m_e1->ep(0), &tx_token);
-    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+    verify_tokens(NUM_MESSAGES);
+}
 
-    e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
-    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, be32toh(tx_token));
-    EXPECT_EQ(NUM_MESSAGES, be32toh(rx_token));
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_sgl_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY) ||
+                     !check_caps_v2(UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
+                                    UCT_IFACE_FLAG_V2_QUERY_TOKEN))
+{
+    if (max_put_sgl_zcopy_count() < NUM_SGL_ELEMENTS) {
+        UCS_TEST_SKIP_R("max_put_sgl_zcopy_count is too small");
+    }
+
+    uct_rc_mlx5_base_ep_t *ep  = ucs_derived_of(m_e1->ep(0),
+                                                uct_rc_mlx5_base_ep_t);
+    const uct_iface_attr &attr = m_e1->iface_attr();
+    size_t length = ucs_min(ucs_max(SGL_BUFFER_LENGTH, attr.cap.put.min_zcopy),
+                            attr.cap.put.max_zcopy);
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    uct_completion_t comp;
+    ucs_status_t status;
+
+    void *buffers[NUM_SGL_ELEMENTS]    = {sendbuf.ptr(), NULL,
+                                          sendbuf.ptr(), NULL};
+    size_t lengths[NUM_SGL_ELEMENTS]   = {length, 0, length, 0};
+    uct_mem_h memhs[NUM_SGL_ELEMENTS]  = {sendbuf.memh(), UCT_MEM_HANDLE_NULL,
+                                          sendbuf.memh(), UCT_MEM_HANDLE_NULL};
+    uint64_t addrs[NUM_SGL_ELEMENTS]   = {recvbuf.addr(), recvbuf.addr(),
+                                          recvbuf.addr(), recvbuf.addr()};
+    uct_rkey_t rkeys[NUM_SGL_ELEMENTS] = {recvbuf.rkey(), recvbuf.rkey(),
+                                          recvbuf.rkey(), recvbuf.rkey()};
+
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = NUM_MESSAGES;
+    comp.status = UCS_OK;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(
+                uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                     addrs, rkeys, NULL, NULL,
+                                     NUM_SGL_ELEMENTS, &comp),
+                status);
+        ASSERT_EQ(UCS_INPROGRESS, status);
+    }
+
+    wait_for_value(&comp.count, 0, true);
+
+    verify_tokens(uct_ib_mlx5_txwq_get_next_wqe_psn(&ep->tx.wq));
+
+    flush();
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)
