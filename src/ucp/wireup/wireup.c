@@ -566,6 +566,7 @@ unsigned ucp_wireup_eps_progress(void *arg)
     }
 
     /* Replay pending requests */
+    ucs_trace("ep %p: replaying pending requests", ucp_ep);
     ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
     return 1;
@@ -1212,16 +1213,33 @@ uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 static void
 ucp_wireup_replay_pending_request(uct_pending_req_t *self, ucp_ep_h ucp_ep)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_lane_index_t am_lane = ucp_ep_get_am_lane(ucp_ep);
+    int pending_added;
 
     ucs_assert(req->send.ep == ucp_ep);
 
     if ((req->flags & UCP_REQUEST_FLAG_PROTO_SEND) &&
         ((ucp_ep->cfg_index != req->send.proto_config->ep_cfg_index) ||
          ucp_ep->worker->context->config.ext.proto_request_reset)) {
-        ucp_trace_req(req, "replay proto %s",
-                      req->send.proto_config->proto->name);
-        ucp_proto_request_restart(req);
+        if (ucp_wireup_ep_test(ucp_ep_get_lane(ucp_ep, am_lane))) {
+            ucs_debug("ep %p: adding request %p to pending of lane %d", ucp_ep,
+                      req, am_lane);
+            req->send.lane = am_lane;
+            pending_added  = ucp_request_pending_add(req);
+
+            /* Pending add should always succeed, since am_lane is a wireup_ep */
+            ucs_assertv_always(pending_added, "ep=%p req=%p am_lane=%d", ucp_ep,
+                               req, am_lane);
+        } else {
+            /* This path should not be reachable from async thread, because only
+             * wireup protocol can trigger an async thread callback, and in this
+             * case there would be a wireup ep on am_lane.
+             */
+            ucp_trace_req(req, "replay proto %s",
+                          req->send.proto_config->proto->name);
+            ucp_proto_request_restart(req);
+        }
     } else {
         ucp_trace_req(req, "replay proto %s lane %d",
                       (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) ?
