@@ -925,6 +925,14 @@ size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl);
 /* Get the index of the WQE that follows a WQE of the given size */
 uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size);
 
+/* Get the opcode of a WQE */
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl);
+
+/* Copy 'length' bytes from the send WQ starting at 'src' into 'dst',
+   wrapping around 'qend' if needed */
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, void *dst,
+                                const void *src, size_t length);
+
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding);

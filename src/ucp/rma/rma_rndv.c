@@ -19,14 +19,11 @@
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_single.inl>
 #include <ucp/rndv/proto_rndv.inl>
-#include <ucs/arch/cpu.h>
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
 #define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
-#define UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY 1e-3
-#define UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY 1e-3
 
 
 static int
@@ -34,14 +31,6 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
                                ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *sel_param = init_params->select_param;
-    const ucp_context_h context               = init_params->worker->context;
-
-    /* TODO: We prefer to use direct zcopy when possible, remove this check when
-     * prioritization of protocols is implemented. */
-    if (!context->config.ext.rma_ppln_enable &&
-        (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA)) {
-        return 0;
-    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
@@ -171,10 +160,7 @@ ucp_proto_put_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ctrl_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        /* Prefer direct PUT zcopy when it is available; keep PUT/RNDV as a
-         * fallback for cases where the peer can only pull the data. */
-        .super.overhead      = context->config.ext.proto_overhead_rndv_rts +
-                               UCP_PROTO_RMA_RNDV_PUT_FALLBACK_PENALTY,
+        .super.overhead      = context->config.ext.proto_overhead_rndv_rts,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 5,
         .super.min_length    = 0,
@@ -260,14 +246,10 @@ ucp_proto_get_rndv_zero_length_variant(const ucp_proto_init_elem_t *proto)
 static double ucp_proto_get_rndv_variant_overhead(ucp_context_h context,
                                                   ucp_proto_init_elem_t *proto)
 {
-    /* Prefer direct GET zcopy when it is available; keep GET/RNDV as a
-     * fallback for cases where the peer can only send the data. */
-    double overhead = context->config.ext.proto_overhead_rndv_rtr +
-                      UCP_PROTO_RMA_RNDV_GET_FALLBACK_PENALTY;
+    double overhead = context->config.ext.proto_overhead_rndv_rtr;
 
+    /* Avoid RNDV for a zero-length GET when no zcopy protocol replaces it */
     if (ucp_proto_get_rndv_zero_length_variant(proto)) {
-        /* Keep zero-only RNDV receive variants available, but make direct GET
-         * protocols preferable for zero-length RMA GET. */
         overhead += UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY;
     }
 
@@ -635,25 +617,27 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
 }
 
 ucp_proto_t ucp_put_rndv_proto = {
-    .name     = "put/rndv",
-    .desc     = UCP_PROTO_RNDV_DESC,
-    .flags    = 0,
-    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
-    .probe    = ucp_proto_put_rndv_probe,
-    .query    = ucp_proto_rma_rndv_query,
-    .progress = {ucp_proto_put_rndv_progress},
-    .abort    = ucp_proto_rndv_rts_abort,
-    .reset    = ucp_proto_rndv_rts_reset
+    .name        = "put/rndv",
+    .desc        = UCP_PROTO_RNDV_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe       = ucp_proto_put_rndv_probe,
+    .query       = ucp_proto_rma_rndv_query,
+    .progress    = {ucp_proto_put_rndv_progress},
+    .abort       = ucp_proto_rndv_rts_abort,
+    .reset       = ucp_proto_rndv_rts_reset
 };
 
 ucp_proto_t ucp_get_rndv_proto = {
-    .name     = "get/rndv",
-    .desc     = UCP_PROTO_RNDV_DESC,
-    .flags    = 0,
-    .dt_mask  = UCS_BIT(UCP_DATATYPE_CONTIG),
-    .probe    = ucp_proto_get_rndv_probe,
-    .query    = ucp_proto_rma_rndv_query,
-    .progress = {ucp_proto_get_rndv_progress},
-    .abort    = ucp_proto_get_rndv_abort,
-    .reset    = ucp_proto_get_rndv_reset
+    .name        = "get/rndv",
+    .desc        = UCP_PROTO_RNDV_DESC,
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
+    .probe       = ucp_proto_get_rndv_probe,
+    .query       = ucp_proto_rma_rndv_query,
+    .progress    = {ucp_proto_get_rndv_progress},
+    .abort       = ucp_proto_get_rndv_abort,
+    .reset       = ucp_proto_get_rndv_reset
 };

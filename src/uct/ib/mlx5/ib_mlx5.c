@@ -876,6 +876,26 @@ uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size)
     return index + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
 }
 
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    return ctrl->opmod_idx_opcode >> 24;
+}
+
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, void *dst,
+                                const void *src, size_t length)
+{
+    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
+
+    ucs_assert((src >= (const void*)txwq->qstart) &&
+               (src <= (const void*)txwq->qend));
+
+    memcpy(dst, src, copy_len);
+    if (copy_len < length) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
+               length - copy_len);
+    }
+}
+
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {
