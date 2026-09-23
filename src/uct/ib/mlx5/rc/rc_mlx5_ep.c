@@ -1324,16 +1324,16 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_mlx5_base_ep_t *ep,
 
     ucs_queue_for_each_extract(op, &ep->super.txqp.outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, pi)) {
-        ucs_assertv_always(uct_rc_mlx5_send_op_is_flush(op) ||
-                                   uct_rc_mlx5_send_op_is_put_bcopy(op) ||
-                                   uct_rc_mlx5_send_op_is_put_zcopy(op),
+        ucs_assertv_always(uct_rc_mlx5_send_op_is_put_bcopy(op) ||
+                                   uct_rc_mlx5_send_op_is_put_zcopy(op) ||
+                                   uct_rc_mlx5_send_op_is_flush(op),
                            "ep %p qp 0x%x unexpected send op sn %u handler %s",
                            ep, ep->tx.wq.super.qp_num, op->sn,
                            ucs_debug_get_symbol_name(op->handler));
         if (uct_rc_mlx5_send_op_is_flush(op)) {
             uct_invoke_completion(op->user_comp, status);
-        } else if ((status == UCS_OK) && (op->user_comp != NULL) &&
-                   (uct_rc_mlx5_send_op_is_put_zcopy(op))) {
+        } else if ((status == UCS_OK) && uct_rc_mlx5_send_op_is_put_zcopy(op) &&
+                   (op->user_comp != NULL)) {
             uct_invoke_completion(op->user_comp, UCS_OK);
         }
         uct_rc_mlx5_ep_outstanding_release_send_op(op);
