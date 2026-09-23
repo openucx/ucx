@@ -11,6 +11,7 @@
 #endif
 
 #include "ucp_context.h"
+#include "ucp_gpu_nic_assignment.h"
 #include "ucp_request.h"
 #include "ucp_tl_info.h"
 
@@ -18,6 +19,7 @@
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
@@ -2752,6 +2754,66 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
+static ucs_status_t
+ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t **assignment_p)
+{
+    ucp_gpu_nic_assignment_t *assignment;
+    ucs_topo_groups_t groups;
+    ucs_status_t status;
+
+    *assignment_p = NULL;
+
+    /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
+    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        ucs_debug("gpu-nic assignment is not supported on %s architecture, "
+                  "skipping",
+                  ucs_cpu_model_name());
+        return UCS_OK;
+    }
+
+    status = ucs_topo_build_groups(&groups);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (ucs_array_is_empty(&groups)) {
+        ucs_diag("topology groups are empty, skipping gpu-nic assignment");
+        goto out_release_groups;
+    }
+
+    assignment = ucs_malloc(sizeof(*assignment), "ucp gpu-nic assignment");
+    if (assignment == NULL) {
+        ucs_error("failed to allocate gpu-nic assignment");
+        status = UCS_ERR_NO_MEMORY;
+        goto out_release_groups;
+    }
+
+    status = ucp_gpu_nic_assignment_build(&groups,
+                                          UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
+                                          assignment);
+    if (status != UCS_OK) {
+        ucs_free(assignment);
+        goto out_release_groups;
+    }
+
+    *assignment_p = assignment;
+
+out_release_groups:
+    ucs_topo_release_groups(&groups);
+    return status;
+}
+
+static void
+ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
+{
+    if (assignment == NULL) {
+        return;
+    }
+
+    ucp_gpu_nic_assignment_release(assignment);
+    ucs_free(assignment);
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -2795,6 +2857,11 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
+    status = ucp_context_gpu_nic_assignment_init(&context->gpu_nic_assignment);
+    if (status != UCS_OK) {
+        goto err_free_res;
+    }
+
     context->uuid             = ucs_generate_uuid((uintptr_t)context);
     context->next_memh_reg_id = 0;
 
@@ -2804,7 +2871,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
             if (config->enable_rcache == UCS_YES) {
                 ucs_error("could not create UCP registration cache: %s",
                           ucs_status_string(status));
-                goto err_free_res;
+                goto err_cleanup_gpu_nic_assignment;
             } else {
                 ucs_diag("could not create UCP registration cache: %s",
                          ucs_status_string(status));
@@ -2829,6 +2896,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
+err_cleanup_gpu_nic_assignment:
+    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
 err_free_res:
     ucp_free_resources(context);
 err_thread_lock_finalize:
@@ -2848,6 +2917,7 @@ void ucp_cleanup(ucp_context_h context)
 {
     ucs_vfs_obj_remove(context);
     ucp_mem_rcache_cleanup(context);
+    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
