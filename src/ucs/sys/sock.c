@@ -1091,12 +1091,43 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
     return UCS_OK;
 }
 
-ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen)
+ucs_status_t ucs_sockaddr_get_ifname_by_addr(const struct sockaddr *addr,
+                                             char *ifname_str,
+                                             size_t max_strlen)
 {
     ucs_status_t status = UCS_ERR_NO_DEVICE;
     struct ifaddrs *ifa;
-    struct ifaddrs* ifaddrs;
+    struct ifaddrs *ifaddrs;
     struct sockaddr *sa;
+
+    if (getifaddrs(&ifaddrs)) {
+        ucs_warn("getifaddrs error: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        sa = (struct sockaddr*) ifa->ifa_addr;
+
+        if (sa == NULL) {
+            ucs_debug("NULL ifaddr encountered with ifa_name: %s", ifa->ifa_name);
+            continue;
+        }
+
+        if (((sa->sa_family == AF_INET) || (sa->sa_family == AF_INET6)) &&
+            (!ucs_sockaddr_cmp(sa, addr, NULL))) {
+            ucs_debug("matching ip found iface on %s", ifa->ifa_name);
+            ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);
+            status = UCS_OK;
+            break;
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+    return status;
+}
+
+ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen)
+{
     struct sockaddr *my_addr;
     socklen_t sockaddr_len;
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
@@ -1119,31 +1150,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
     ucs_debug("check ifname for socket on %s",
               ucs_sockaddr_str(my_addr, str_local_addr, UCS_SOCKADDR_STRING_LEN));
 
-    if (getifaddrs(&ifaddrs)) {
-        ucs_warn("getifaddrs error: %m");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-        sa = (struct sockaddr*) ifa->ifa_addr;
-
-        if (sa == NULL) {
-            ucs_debug("NULL ifaddr encountered with ifa_name: %s", ifa->ifa_name);
-            continue;
-        }
-
-        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) &&
-            (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
-            ucs_debug("matching ip found iface on %s", ifa->ifa_name);
-            ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);
-            status = UCS_OK;
-            break;
-        }
-    }
-
-    freeifaddrs(ifaddrs);
-
-    return status;
+    return ucs_sockaddr_get_ifname_by_addr(my_addr, ifname_str, max_strlen);
 }
 
 const char *ucs_sockaddr_address_family_str(sa_family_t af)

@@ -646,6 +646,19 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
 
 
 /**
+ * Find the name of the first network interface that has the given IP address.
+ * IPv4 and IPv6 addresses are supported.
+ *
+ * @param [in]   addr        Address.
+ * @param [out]  ifname_str  A string filled with the interface name.
+ * @param [in]   max_strlen  Maximum length of the ifname_str.
+ */
+ucs_status_t ucs_sockaddr_get_ifname_by_addr(const struct sockaddr *addr,
+                                             char *ifname_str,
+                                             size_t max_strlen);
+
+
+/**
  * Copy into ifname_name the interface associated the IP on which the socket
  * file descriptor fd is bound on. IPv4 and IPv6 addresses are handled.
  *
