@@ -90,6 +90,13 @@
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC (1U << 31)
 #endif
 
+/* BlueFlame copy by AArch64 ST64B is compiled in */
+#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+#  define UCT_IB_MLX5_HAVE_ST64B 1
+#else
+#  define UCT_IB_MLX5_HAVE_ST64B 0
+#endif
+
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
 
@@ -694,7 +701,7 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-#if defined(__aarch64__)
+#if UCT_IB_MLX5_HAVE_ST64B
     uint8_t                     bf_copy_mode;
 #endif
 #if UCS_ENABLE_ASSERT

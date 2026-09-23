@@ -556,7 +556,7 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
 #endif
 }
 
-#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+#if UCT_IB_MLX5_HAVE_ST64B
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_bf_copy_bb_st64b(void *restrict dst, void *restrict src)
 {
@@ -597,7 +597,7 @@ static UCS_F_ALWAYS_INLINE
 void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
                           const uct_ib_mlx5_txwq_t *wq)
 {
-#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+#if UCT_IB_MLX5_HAVE_ST64B
     if (wq->bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
         return UCT_IB_MLX5_BF_COPY(dst, src, num_bb, wq,
                                    uct_ib_mlx5_bf_copy_bb_st64b);

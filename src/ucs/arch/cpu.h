@@ -162,6 +162,25 @@ static inline void ucs_clear_cache(void *start, void *end)
 }
 
 
+/**
+ * Check whether the CPU supports a given feature flag.
+ *
+ * Architectures which cannot detect CPU flags report @ref
+ * UCS_CPU_FLAG_UNKNOWN, which has all bits set, so the result of @ref
+ * ucs_arch_get_cpu_flag must not be tested by a plain bitwise AND.
+ *
+ * @param flag  Feature flag to check.
+ *
+ * @return Nonzero if the CPU is known to support the flag.
+ */
+static inline int ucs_cpu_has_flag(ucs_cpu_flag_t flag)
+{
+    int flags = ucs_arch_get_cpu_flag();
+
+    return (flags != UCS_CPU_FLAG_UNKNOWN) && (flags & flag);
+}
+
+
 static inline int ucs_cpu_prefer_relaxed_order()
 {
     ucs_cpu_vendor_t cpu_vendor = ucs_arch_get_cpu_vendor();

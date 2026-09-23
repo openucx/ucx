@@ -785,34 +785,32 @@ uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
 {
     ucs_assert(bf_copy_mode < UCT_IB_MLX5_BF_COPY_MODE_LAST);
 
-#if defined(__aarch64__)
+#if UCT_IB_MLX5_HAVE_ST64B
     txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
     if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_GENERIC) {
         return UCS_OK;
     }
 
-#if HAVE_AARCH64_ST64B_ASM
-    if (ucs_arch_get_cpu_flag() & UCS_CPU_FLAG_LS64) {
+    if (ucs_cpu_has_flag(UCS_CPU_FLAG_LS64)) {
         txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_ST64B;
         return UCS_OK;
     }
-#endif
 
     if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
-#if HAVE_AARCH64_ST64B_ASM
         ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
                   "not report LS64 support");
-#else
-        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
-                  "without assembler support for ST64B");
-#endif
         return UCS_ERR_UNSUPPORTED;
     }
 #else
     (void)txwq;
 
     if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+#if defined(__aarch64__)
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
+                  "without assembler support for ST64B");
+#else
         ucs_error("mlx5 BlueFlame ST64B copy is supported only on AArch64");
+#endif
         return UCS_ERR_UNSUPPORTED;
     }
 #endif
