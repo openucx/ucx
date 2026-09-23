@@ -335,6 +335,8 @@ ucp_proto_put_offload_zcopy_probe_param(
         return;
     }
 
+    params.assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(
+            &params);
     ucp_proto_multi_probe(&params);
 }
 
