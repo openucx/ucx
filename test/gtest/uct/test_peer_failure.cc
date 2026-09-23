@@ -993,6 +993,21 @@ UCS_TEST_SKIP_COND_P(test_uct_ep_check_async, no_comp_when_connected,
 }
 
 
+/* Destroying an EP while the ep_check without completion is still outstanding.
+ * It will be silently purged. */
+UCS_TEST_SKIP_COND_P(test_uct_ep_check_async,
+                     destroy_with_outstanding_check_no_comp,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    m_e1->connect(0, *m_e2, 0);
+    flush();
+
+    ASSERT_EQ(UCS_OK, uct_ep_check(m_e1->ep(0), 0, NULL));
+
+    m_e1->destroy_ep(0);
+}
+
+
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_ep_check_async)
 
 
