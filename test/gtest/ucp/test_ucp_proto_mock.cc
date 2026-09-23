@@ -2833,7 +2833,7 @@ protected:
         ASSERT_NE(nullptr, assignment);
 
         status = ucp_gpu_nic_assignment_build(
-                &groups, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, assignment);
+                &groups, UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP, assignment);
         if (status != UCS_OK) {
             ucs_free(assignment);
         }
