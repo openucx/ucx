@@ -6,11 +6,10 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = profiling
-
-SUBDIRS += iodemo
 
 if HAVE_TEST_APPS
+SUBDIRS = profiling iodemo
+
 noinst_PROGRAMS = \
 	test_ucp_dlopen \
 	test_ucp_config \
