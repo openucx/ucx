@@ -464,14 +464,12 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
     return UCS_OK;
 }
 
-/* Apply the resolved assignment to discovered RMA_BW candidates. */
+/* Apply the resolved assignment to discovered network RMA_BW candidates. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         const ucp_proto_multi_init_params_t *params, ucp_lane_index_t *lanes,
         ucp_lane_index_t *num_lanes_p)
 {
-    ucp_lane_index_t num_filtered_lanes       = 0;
-    ucp_lane_index_t num_rma_bw_lanes         = 0;
-    ucp_lane_index_t num_allowed_rma_bw_lanes = 0;
+    ucp_lane_index_t num_filtered_lanes = 0;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
@@ -485,12 +483,13 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         lane      = lanes[i];
         lane_type = (i == 0) ? params->first.lane_type :
                                params->middle.lane_type;
-        if (lane_type != UCP_LANE_TYPE_RMA_BW) {
+        /* The assignment covers only NICs, e.g. cuda_ipc lanes are kept */
+        if ((lane_type != UCP_LANE_TYPE_RMA_BW) ||
+            !ucp_proto_common_is_net_dev(&params->super.super, lane)) {
             lanes[num_filtered_lanes++] = lane;
             continue;
         }
 
-        ++num_rma_bw_lanes;
         lane_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
 
         /* Keep only lanes whose local transport function is assigned. */
@@ -504,18 +503,12 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         ucs_trace("assignment keeps lane %d on network sys_dev %d", lane,
                   lane_sys_dev);
         lanes[num_filtered_lanes++] = lane;
-        ++num_allowed_rma_bw_lanes;
     }
 
-    /* A non-RMA_BW invocation remains unchanged. */
+    ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes,
+              *num_lanes_p);
     *num_lanes_p = num_filtered_lanes;
-    if (num_rma_bw_lanes == 0) {
-        return UCS_OK;
-    }
-
-    ucs_trace("assignment retained %u/%u allowed RMA_BW lanes",
-              num_allowed_rma_bw_lanes, num_rma_bw_lanes);
-    return (num_allowed_rma_bw_lanes == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
+    return (num_filtered_lanes == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
 }
 
 /* Get the performance and maximal bandwidth of all candidate lanes. */

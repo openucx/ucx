@@ -99,21 +99,21 @@ public:
     void set_mock_sys_dev(ucp_context_h context, const std::string &dev_name,
                           ucs_sys_device_t sys_dev)
     {
-        unsigned count = 0;
-
-        for (ucp_rsc_index_t rsc_index = 0; rsc_index < context->num_tls;
-             ++rsc_index) {
-            uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
-
-            if ((dev_name == tl_rsc->dev_name) &&
-                (m_tl->name == std::string(tl_rsc->tl_name))) {
-                tl_rsc->sys_device = sys_dev;
-                ++count;
-            }
-        }
-
-        ASSERT_GT(count, 0);
+        update_mock_resources(context, dev_name,
+                              [sys_dev](uct_tl_resource_desc_t &tl_rsc) {
+                                  tl_rsc.sys_device = sys_dev;
+                              });
         m_sys_devs_by_name.at(dev_name) = sys_dev;
+    }
+
+    /* Retarget a mock resource before the protocols using it are initialized */
+    void set_mock_dev_type(ucp_context_h context, const std::string &dev_name,
+                           uct_device_type_t dev_type)
+    {
+        update_mock_resources(context, dev_name,
+                              [dev_type](uct_tl_resource_desc_t &tl_rsc) {
+                                  tl_rsc.dev_type = dev_type;
+                              });
     }
 
     void mock_transport(const std::string &tl_name)
@@ -202,6 +202,26 @@ public:
 #endif
 
 private:
+    void update_mock_resources(
+            ucp_context_h context, const std::string &dev_name,
+            const std::function<void(uct_tl_resource_desc_t&)> &update)
+    {
+        unsigned count = 0;
+
+        for (ucp_rsc_index_t rsc_index = 0; rsc_index < context->num_tls;
+             ++rsc_index) {
+            uct_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index].tl_rsc;
+
+            if ((dev_name == tl_rsc->dev_name) &&
+                (m_tl->name == std::string(tl_rsc->tl_name))) {
+                update(*tl_rsc);
+                ++count;
+            }
+        }
+
+        ASSERT_GT(count, 0);
+    }
+
     static ucs_status_t
     query_devices_mock(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                        unsigned *num_tl_devices_p)
@@ -2788,8 +2808,8 @@ protected:
         ASSERT_EQ(nullptr, m_assignment);
 
         ucs_array_init_dynamic(&groups);
-        ucs::handle<ucs_topo_groups_t*> groups_guard(&groups,
-                                                     ucs_topo_release_groups);
+        const ucs::handle<ucs_topo_groups_t*> groups_guard(
+                &groups, ucs_topo_release_groups);
         group = ucs_array_append(&groups,
                                  FAIL() << "failed to append topology group");
         ucs_topo_init_group(group);
@@ -2827,6 +2847,14 @@ protected:
     {
         ASSERT_LT(index, ucs_static_array_size(m_nics));
         m_bandwidth[nic_name(index)] = bandwidth;
+    }
+
+    /* Present a mock NIC as an intra-node device, like cuda_ipc */
+    void set_intra_node_device(unsigned index)
+    {
+        ASSERT_LT(index, ucs_static_array_size(m_nics));
+        set_mock_dev_type(sender().ucph(), nic_name(index),
+                          UCT_DEVICE_TYPE_SHM);
     }
 
     const ucp_gpu_nic_sys_dev_bitmap_t *
@@ -3230,6 +3258,23 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
            partial_assignment_uses_available_nic)
 {
     install_assignment(mapped_gpu(), {nic(2), absent_nic()});
+
+    expect_direct_candidates(mapped_gpu(), {nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, assignment_keeps_intra_node_lanes)
+{
+    set_intra_node_device(2);
+    install_assignment(mapped_gpu(), {nic(0)});
+
+    expect_direct_candidates(mapped_gpu(), {nic(0), nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           empty_assignment_keeps_intra_node_lanes)
+{
+    set_intra_node_device(2);
+    install_assignment(mapped_gpu(), {});
 
     expect_direct_candidates(mapped_gpu(), {nic(2)});
 }
