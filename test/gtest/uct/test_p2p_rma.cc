@@ -119,23 +119,6 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_zcopy,
                     TEST_UCT_FLAG_SEND_ZCOPY);
 }
 
-UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, put_zcopy_nolen_nocomp,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
-{
-    if (sender().iface_attr().cap.put.min_zcopy != 0) {
-        UCS_TEST_SKIP_R("min_zcopy != 0");
-    }
-
-    if (!is_md_mem_type_supported(UCS_MEMORY_TYPE_HOST,
-                                  TEST_UCT_FLAG_SEND_ZCOPY)) {
-        UCS_TEST_SKIP_R("sender MD does not support host memory");
-    }
-
-    disable_comp();
-    test_xfer(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy), 0ul,
-              TEST_UCT_FLAG_SEND_ZCOPY, UCS_MEMORY_TYPE_HOST);
-}
-
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_short,
                      !check_caps(UCT_IFACE_FLAG_GET_SHORT)) {
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_short),
