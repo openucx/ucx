@@ -283,6 +283,12 @@ ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->reg_cost                  = md->reg_cost;
     md_attr->exported_mkey_packed_size = sizeof(uct_ib_md_packed_mkey_t);
 
+    /* TODO: Detect DPU VFs, which share the generic mlx5 VF PCI id, by the
+     * board PSID (board_id) */
+    if (uct_ib_device_spec(&md->dev)->flags & UCT_IB_DEVICE_FLAG_DPU) {
+        md_attr->flags |= UCT_MD_FLAG_DPU;
+    }
+
     ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
     UCS_STATIC_ASSERT(sizeof(guid) <=
                       (UCT_MD_GLOBAL_ID_MAX - UCT_COMPONENT_NAME_MAX));

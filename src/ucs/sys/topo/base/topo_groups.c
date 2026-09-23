@@ -16,15 +16,8 @@
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack_int.h>
-#include <ucs/sys/string.h>
-#include <ucs/sys/sys.h>
 
-#include <dirent.h>
 #include <string.h>
-
-
-#define UCS_TOPO_GROUPS_FW_VER_MAX 64
 
 
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_sys_dev_array_t, size_t,
@@ -72,141 +65,6 @@ static int ucs_topo_groups_bus_id_equal(const ucs_sys_bus_id_t *bus_id1,
 {
     return ucs_topo_groups_bus_id_same_slot(bus_id1, bus_id2) &&
            (bus_id1->function == bus_id2->function);
-}
-
-static ucs_status_t
-ucs_topo_groups_read_ib_fw_ver(const ucs_sys_bus_id_t *bus_id, char *fw_ver,
-                               size_t max)
-{
-    char *sysfs_path;
-    struct dirent *entry;
-    ucs_status_t status;
-    size_t path_len;
-    DIR *dir;
-
-    status = ucs_string_alloc_path_buffer(&sysfs_path, "sysfs_path");
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = ucs_topo_bus_id_to_sysfs_path(bus_id, sysfs_path, PATH_MAX);
-    if (status != UCS_OK) {
-        goto out_free_sysfs_path;
-    }
-
-    path_len = strlen(sysfs_path);
-    ucs_strncpy_safe(sysfs_path + path_len, "/infiniband", PATH_MAX - path_len);
-
-    dir = opendir(sysfs_path);
-    if (dir == NULL) {
-        status = UCS_ERR_NO_ELEM;
-        goto out_free_sysfs_path;
-    }
-
-    /* Find the device name directory (e.g. mlx5_0) */
-    do {
-        entry = readdir(dir);
-    } while ((entry != NULL) && (entry->d_name[0] == '.'));
-
-    if (entry == NULL) {
-        status = UCS_ERR_NO_ELEM;
-        goto out_close_dir;
-    }
-
-    if (ucs_read_file_str(fw_ver, max, 1, "%s/%s/fw_ver", sysfs_path,
-                          entry->d_name) < 0) {
-        status = UCS_ERR_IO_ERROR;
-        goto out_close_dir;
-    }
-
-    ucs_strtrim(fw_ver);
-    status = UCS_OK;
-
-out_close_dir:
-    closedir(dir);
-out_free_sysfs_path:
-    ucs_free(sysfs_path);
-    return status;
-}
-
-static int ucs_topo_groups_is_nic_cx9(const ucs_topo_sys_device_info_t *device,
-                                      const char **reason_p)
-{
-    const ucs_sys_pci_id_t *pci_id = &device->pci_id;
-    const ucs_sys_bus_id_t *bus_id = &device->bus_id;
-    char fw_ver[UCS_TOPO_GROUPS_FW_VER_MAX];
-    ucs_status_t status;
-
-    if (pci_id->vendor != UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID) {
-        *reason_p = "not a mellanox device";
-        return 0;
-    }
-
-    if (pci_id->device == UCS_TOPO_GROUPS_CX9_DEVICE_ID) {
-        *reason_p = "cx9 device by device id";
-        return 1;
-    }
-
-    if (pci_id->device != UCS_TOPO_GROUPS_MLX5_VF_DEVICE_ID) {
-        *reason_p = "not a cx9 device by device id";
-        return 0;
-    }
-
-    /* PCI device ID is not indicative when the device is a VF, instead use
-     * the fact that fw version is 82.XX.XXXX for CX9 */
-    status = ucs_topo_groups_read_ib_fw_ver(bus_id, fw_ver, sizeof(fw_ver));
-    if (status != UCS_OK) {
-        ucs_debug("could not read firmware version (error: %s)",
-                  ucs_status_string(status));
-        *reason_p = "vf device, could not read firmware version";
-        return 0;
-    }
-
-    if (strncmp(fw_ver, "82.", 3) != 0) {
-        *reason_p = "vf device, firmware version mismatch";
-        return 0;
-    }
-
-    *reason_p = "cx9 device by firmware version";
-    return 1;
-}
-
-static void
-ucs_topo_groups_nics_cx9_filter(const ucs_topo_sys_device_info_t *devices,
-                                ucs_topo_groups_sys_dev_array_t *nics)
-{
-    size_t dst = 0;
-    const ucs_topo_sys_device_info_t *device;
-    ucs_sys_device_t sys_dev;
-    const char *reason;
-    size_t src;
-    int is_cx9;
-
-    if (ucs_array_is_empty(nics)) {
-        return;
-    }
-
-    ucs_assert(ucs_array_begin(nics) != NULL);
-
-    for (src = 0; src < ucs_array_length(nics); ++src) {
-        sys_dev = ucs_array_elem(nics, src);
-        device  = &devices[sys_dev];
-
-        /* TODO: Refactor to have this provided by UCT */
-        is_cx9 = ucs_topo_groups_is_nic_cx9(device, &reason);
-        if (is_cx9) {
-            ucs_array_elem(nics, dst++) = sys_dev;
-        }
-
-        ucs_debug("cx9_filter: network device sys_dev=%u, "
-                  "bus_id=" UCS_SYS_BUS_ID_FMT ", pci_id=" UCS_SYS_PCI_ID_FMT
-                  " %s (%s)",
-                  sys_dev, UCS_SYS_BUS_ID_ARG(&device->bus_id),
-                  UCS_SYS_PCI_ID_ARG(&device->pci_id),
-                  is_cx9 ? "added" : "skipped", reason);
-    }
-
-    ucs_array_set_length(nics, dst);
 }
 
 static ucs_status_t ucs_topo_groups_devices_collect(
@@ -315,7 +173,7 @@ void ucs_topo_release_group(ucs_topo_group_t *group)
 
 static ucs_status_t ucs_topo_groups_inventory_build(
         const ucs_topo_sys_device_info_t *devices, unsigned num_devices,
-        const ucs_sys_device_bitmap_t *allowed_net_devices, int is_vera_rubin,
+        const ucs_sys_device_bitmap_t *allowed_net_devices,
         ucs_topo_group_t *inventory_p)
 {
     ucs_topo_groups_sys_dev_array_t acc_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
@@ -334,10 +192,6 @@ static ucs_status_t ucs_topo_groups_inventory_build(
 
     ucs_topo_groups_sys_dev_sort(&acc_devices, devices);
     ucs_topo_groups_sys_dev_sort(&net_devices, devices);
-
-    if (is_vera_rubin) {
-        ucs_topo_groups_nics_cx9_filter(devices, &net_devices);
-    }
 
     /* Accelerator devices (GPUs) are grouped by full bus id equality. */
     status = ucs_topo_groups_elements_build(devices, &acc_devices,
@@ -526,8 +380,7 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
     ucs_topo_init_groups(&groups);
 
     status = ucs_topo_groups_inventory_build(devices, num_devices,
-                                             allowed_net_devices, 1,
-                                             &inventory);
+                                             allowed_net_devices, &inventory);
     if (status != UCS_OK) {
         return status;
     }

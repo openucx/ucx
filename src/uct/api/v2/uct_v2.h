@@ -1141,7 +1141,12 @@ typedef enum {
      * Memory domain supports interfaces that perform inter-process memory type
      * copy operations.
      */
-    UCT_MD_FLAG_IPC_MEMTYPE_COPY = UCS_BIT(13)
+    UCT_MD_FLAG_IPC_MEMTYPE_COPY = UCS_BIT(13),
+
+    /**
+     * The device behind the memory domain is a DPU (e.g. BlueField).
+     */
+    UCT_MD_FLAG_DPU              = UCS_BIT(14)
 } uct_md_flags_v2_t;
 
 

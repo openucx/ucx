@@ -7,12 +7,14 @@
 #include <common/test.h>
 #include <ucp/core/ucp_gpu_nic_assignment.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
 class test_ucp_gpu_nic_assignment : public ucs::test {
 public:
-    test_ucp_gpu_nic_assignment() : m_groups(), m_assignment()
+    test_ucp_gpu_nic_assignment() : m_groups(), m_assignment(), m_candidates()
     {
     }
 
@@ -24,6 +26,9 @@ public:
     }
 
 protected:
+    /* Expected owner of a NIC which is not an assignment candidate */
+    static constexpr size_t NO_OWNER = SIZE_MAX;
+
     struct topology_shape_t {
         size_t num_groups;
         size_t num_gpus_per_group;
@@ -118,12 +123,35 @@ protected:
         }
     }
 
+    void clear_candidate_port(const topology_shape_t &config, size_t nic_idx,
+                              size_t port_idx)
+    {
+        UCS_STATIC_BITMAP_RESET(&m_candidates,
+                                nic_port_sys_dev(config, nic_idx, port_idx));
+    }
+
+    void set_candidates(const topology_shape_t &config,
+                        const std::vector<size_t> &non_candidate_nics)
+    {
+        UCS_STATIC_BITMAP_SET_ALL(&m_candidates);
+
+        for (const size_t nic_idx : non_candidate_nics) {
+            ASSERT_LT(nic_idx, config.num_nics());
+
+            for (size_t port_idx = 0; port_idx < config.num_nic_ports;
+                 ++port_idx) {
+                clear_candidate_port(config, nic_idx, port_idx);
+            }
+        }
+    }
+
     void build_assignment(ucp_gpu_nic_assignment_mode_t mode)
     {
         ucs_status_t status;
 
         ucp_gpu_nic_assignment_release(&m_assignment);
-        status = ucp_gpu_nic_assignment_build(&m_groups, mode, &m_assignment);
+        status = ucp_gpu_nic_assignment_build(&m_groups, mode, &m_candidates,
+                                              &m_assignment);
         ASSERT_UCS_OK(status);
 
         /* Unknown device lookup */
@@ -165,18 +193,22 @@ protected:
         ASSERT_EQ(config.num_nics(), expected_owners.size());
         for (size_t owner_idx = 0; owner_idx < expected_owners.size();
              ++owner_idx) {
-            ASSERT_LT(expected_owners[owner_idx], config.num_gpus());
+            if (expected_owners[owner_idx] != NO_OWNER) {
+                ASSERT_LT(expected_owners[owner_idx], config.num_gpus());
+            }
         }
 
         /* Expected number of assigned NIC ports per physical GPU. */
         std::vector<size_t> expected_port_counts(config.num_gpus(), 0);
 
-        /* Verify that each NIC has exactly one expected physical GPU owner. */
+        /* Verify that each NIC has at most one expected physical GPU owner. */
         for (size_t nic_idx = 0; nic_idx < config.num_nics(); ++nic_idx) {
             const size_t expected_owner = expected_owners[nic_idx];
-            size_t actual_owner         = config.num_gpus();
+            size_t actual_owner         = NO_OWNER;
 
-            expected_port_counts[expected_owner] += config.num_nic_ports;
+            if (expected_owner != NO_OWNER) {
+                expected_port_counts[expected_owner] += config.num_nic_ports;
+            }
 
             for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
                 const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap =
@@ -201,7 +233,7 @@ protected:
                 }
 
                 if (gpu_owns_nic) {
-                    EXPECT_EQ(config.num_gpus(), actual_owner);
+                    EXPECT_EQ(NO_OWNER, actual_owner);
                     actual_owner = gpu_idx;
                 }
 
@@ -226,13 +258,26 @@ protected:
         }
     }
 
-    void check_nic_shared(const topology_shape_t &config)
+    void check_nic_shared(const topology_shape_t &config,
+                          const std::vector<size_t> &skipped_nics)
     {
-        /* Verify that each GPU owns all ports of every NIC in its group. */
+        const auto is_skipped = [&skipped_nics](size_t nic_idx) {
+            return std::find(skipped_nics.begin(), skipped_nics.end(),
+                             nic_idx) != skipped_nics.end();
+        };
+
+        /* Verify that each GPU owns all ports of every candidate NIC in its
+         * group. */
         for (size_t group_idx = 0; group_idx < config.num_groups; ++group_idx) {
             const size_t first_nic_idx = group_idx * config.num_nics_per_group;
             const size_t end_nic_idx   = first_nic_idx +
                                          config.num_nics_per_group;
+            size_t num_group_nics      = 0;
+
+            for (size_t nic_idx = first_nic_idx; nic_idx < end_nic_idx;
+                 ++nic_idx) {
+                num_group_nics += is_skipped(nic_idx) ? 0 : 1;
+            }
 
             for (size_t local_idx = 0; local_idx < config.num_gpus_per_group;
                  ++local_idx) {
@@ -246,12 +291,13 @@ protected:
 
                 for (size_t nic_idx = 0; nic_idx < config.num_nics();
                      ++nic_idx) {
-                    const bool same_group = (nic_idx >= first_nic_idx) &&
-                                            (nic_idx < end_nic_idx);
+                    const bool owned = (nic_idx >= first_nic_idx) &&
+                                       (nic_idx < end_nic_idx) &&
+                                       !is_skipped(nic_idx);
 
                     for (size_t port_idx = 0; port_idx < config.num_nic_ports;
                          ++port_idx) {
-                        EXPECT_EQ(same_group,
+                        EXPECT_EQ(owned,
                                   ucp_gpu_nic_bitmap_get(
                                           nic_sys_dev_bitmap,
                                           nic_port_sys_dev(config, nic_idx,
@@ -259,7 +305,7 @@ protected:
                     }
                 }
 
-                EXPECT_EQ(config.num_nics_per_group * config.num_nic_ports,
+                EXPECT_EQ(num_group_nics * config.num_nic_ports,
                           static_cast<size_t>(UCS_STATIC_BITMAP_POPCOUNT(
                                   *nic_sys_dev_bitmap)));
             }
@@ -268,7 +314,8 @@ protected:
 
     void check_assignment(const topology_shape_t &config,
                           ucp_gpu_nic_assignment_mode_t mode,
-                          const std::vector<size_t> &expected_owners)
+                          const std::vector<size_t> &expected_owners,
+                          const std::vector<size_t> &non_candidate_nics)
     {
         ASSERT_NE(config.num_groups, 0);
         ASSERT_NE(config.num_nic_ports, 0);
@@ -281,6 +328,7 @@ protected:
         ASSERT_LE(config.num_sys_devs(), UCS_SYS_DEVICE_ID_COUNT - 1);
 
         build_groups(config);
+        set_candidates(config, non_candidate_nics);
         build_assignment(mode);
 
         if (config.num_gpus() == 0) {
@@ -291,7 +339,7 @@ protected:
             check_gpu_device_aliases(config);
             if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED) {
                 ASSERT_TRUE(expected_owners.empty());
-                check_nic_shared(config);
+                check_nic_shared(config, non_candidate_nics);
             } else {
                 check_nic_owners(config, expected_owners);
             }
@@ -301,7 +349,8 @@ protected:
     void check_assignment(size_t num_groups, size_t num_gpus_per_group,
                           size_t num_nics_per_group,
                           ucp_gpu_nic_assignment_mode_t mode,
-                          const std::vector<size_t> &expected_owners)
+                          const std::vector<size_t> &expected_owners,
+                          const std::vector<size_t> &non_candidate_nics = {})
     {
         topology_shape_t config;
 
@@ -317,7 +366,8 @@ protected:
                  ++num_nic_ports) {
                 config.num_gpu_devices = num_gpu_devices;
                 config.num_nic_ports   = num_nic_ports;
-                check_assignment(config, mode, expected_owners);
+                check_assignment(config, mode, expected_owners,
+                                 non_candidate_nics);
             }
         }
     }
@@ -325,7 +375,10 @@ protected:
 private:
     ucs_topo_groups_t m_groups;
     ucp_gpu_nic_assignment_t m_assignment;
+    ucp_gpu_nic_sys_dev_bitmap_t m_candidates;
 };
+
+constexpr size_t test_ucp_gpu_nic_assignment::NO_OWNER;
 
 UCS_TEST_F(test_ucp_gpu_nic_assignment, no_nics) {
     check_assignment(2, 3, 0, UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP, {});
@@ -378,4 +431,45 @@ UCS_TEST_F(test_ucp_gpu_nic_assignment, shared) {
     check_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED, {});
     /* More GPUs than NICs. */
     check_assignment(2, 3, 2, UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED, {});
+}
+
+UCS_TEST_F(test_ucp_gpu_nic_assignment, skip_non_candidates) {
+    check_assignment(1, 2, 5, UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+                     {0, 1, NO_OWNER, 1, 0}, {2});
+    check_assignment(2, 2, 3, UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+                     {0, NO_OWNER, 1, /**/
+                      2, 3, 3},
+                     {1});
+    check_assignment(1, 2, 4, UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+                     {NO_OWNER, 0, 1, 0}, {0});
+    check_assignment(2, 2, 3, UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED, {}, {1, 5});
+}
+
+UCS_TEST_F(test_ucp_gpu_nic_assignment, keep_partial_candidate) {
+    topology_shape_t config = {};
+
+    config.num_groups         = 1;
+    config.num_gpus_per_group = 2;
+    config.num_nics_per_group = 2;
+    config.num_gpu_devices    = 1;
+    config.num_nic_ports      = 2;
+
+    for (const auto mode : {UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+                            UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED}) {
+        build_groups(config);
+        set_candidates(config, {});
+
+        /* Remove one port of each NIC from the candidates. Each NIC must stay
+         * assigned, since its other port is still a candidate. */
+        clear_candidate_port(config, 0, 1);
+        clear_candidate_port(config, 1, 0);
+
+        build_assignment(mode);
+
+        if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED) {
+            check_nic_shared(config, {});
+        } else {
+            check_nic_owners(config, {0, 1});
+        }
+    }
 }

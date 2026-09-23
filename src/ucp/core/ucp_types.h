@@ -90,6 +90,13 @@ typedef ucs_static_bitmap_s(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
 
 
 /**
+ * Bitmap of system devices, used by the GPU-to-NIC assignment.
+ */
+typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
+        ucp_gpu_nic_sys_dev_bitmap_t;
+
+
+/**
  * Max possible value of TL bitmap (all bits are 1)
  */
 extern const ucp_tl_bitmap_t ucp_tl_bitmap_max;

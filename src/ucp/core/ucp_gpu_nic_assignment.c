@@ -344,16 +344,38 @@ ucp_gpu_nic_assignment_add_nic_to_gpu(ucp_gpu_nic_assignment_t *assignment,
     ucp_gpu_nic_bitmap_add_nic(nic_sys_dev_bitmap, nic);
 }
 
-static void
-ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
-                                 const ucs_topo_group_t *group,
-                                 ucp_gpu_nic_assignment_mode_t mode)
+/* A NIC is assignable if any of its sys_devs is set in the candidate_nics 
+ * bitmap. */
+static int ucp_gpu_nic_assignment_is_assignable(
+        const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics,
+        const ucs_topo_group_element_t *nic)
+{
+    const ucs_sys_device_t *nic_sys_dev;
+
+    ucs_carray_for_each(nic_sys_dev, nic->sys_devs, nic->num_sys_devs) {
+        if (ucp_gpu_nic_bitmap_get(candidate_nics, *nic_sys_dev)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void ucp_gpu_nic_assignment_add_group(
+        ucp_gpu_nic_assignment_t *assignment, const ucs_topo_group_t *group,
+        ucp_gpu_nic_assignment_mode_t mode,
+        const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics)
 {
     size_t num_gpus = ucs_array_length(&group->gpus);
+    size_t nic_idx  = 0;
     const ucs_topo_group_element_t *gpu, *nic;
-    size_t nic_idx, gpu_idx;
+    size_t gpu_idx;
 
-    ucs_array_for_each_index(nic, nic_idx, &group->nics) {
+    ucs_array_for_each(nic, &group->nics) {
+        if (!ucp_gpu_nic_assignment_is_assignable(candidate_nics, nic)) {
+            continue;
+        }
+
         if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED) {
             /* Assign the NIC to every GPU in the group. */
             ucs_array_for_each(gpu, &group->gpus) {
@@ -365,12 +387,15 @@ ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
             gpu     = &ucs_array_elem(&group->gpus, gpu_idx);
             ucp_gpu_nic_assignment_add_nic_to_gpu(assignment, gpu, nic);
         }
+
+        ++nic_idx;
     }
 }
 
 ucs_status_t
 ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
                              ucp_gpu_nic_assignment_mode_t mode,
+                             const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics,
                              ucp_gpu_nic_assignment_t *assignment_p)
 {
     ucp_gpu_nic_assignment_t assignment;
@@ -378,6 +403,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
     ucs_status_t status;
 
     ucs_assert(groups != NULL);
+    ucs_assert(candidate_nics != NULL);
     ucs_assertv((mode == UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP) ||
                         (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN) ||
                         (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED),
@@ -393,7 +419,8 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
             continue;
         }
 
-        ucp_gpu_nic_assignment_add_group(&assignment, group, mode);
+        ucp_gpu_nic_assignment_add_group(&assignment, group, mode,
+                                         candidate_nics);
     }
 
     ucp_gpu_nic_assignment_log(&assignment, groups);

@@ -1397,6 +1397,58 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     return UCS_OK;
 }
 
+static int
+ucp_tl_resources_has_dev_type(const uct_tl_resource_desc_t *resources,
+                              unsigned num_resources,
+                              uct_device_type_t dev_type)
+{
+    const uct_tl_resource_desc_t *resource;
+
+    ucs_carray_for_each(resource, resources, num_resources) {
+        if (resource->dev_type == dev_type) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void ucp_gpu_nic_candidates_add(ucp_context_h context,
+                                       const ucp_tl_md_t *md,
+                                       const uct_tl_resource_desc_t *resources,
+                                       unsigned num_resources)
+{
+    const char *reject_reason = NULL;
+    const uct_tl_resource_desc_t *resource;
+
+    if (!ucp_tl_resources_has_dev_type(resources, num_resources,
+                                       UCT_DEVICE_TYPE_NET)) {
+        ucs_trace("md %s does not have any network transports",
+                  md->rsc.md_name);
+        return;
+    }
+
+    if (md->attr.flags & UCT_MD_FLAG_DPU) {
+        reject_reason = "dpu";
+    } else if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
+        reject_reason = "no memory registration";
+    }
+
+    if (reject_reason != NULL) {
+        ucs_debug("md %s is not a gpu-nic assignment candidate: %s",
+                  md->rsc.md_name, reject_reason);
+        return;
+    }
+
+    ucs_carray_for_each(resource, resources, num_resources) {
+        if ((resource->dev_type == UCT_DEVICE_TYPE_NET) &&
+            (resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            UCS_STATIC_BITMAP_SET(&context->gpu_nic_candidates,
+                                  resource->sys_device);
+        }
+    }
+}
+
 static ucs_status_t
 ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      const ucp_config_t *config,
@@ -1427,6 +1479,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         ucs_debug("No tl resources found for md %s", md->rsc.md_name);
         goto free_resources;
     }
+
+    ucp_gpu_nic_candidates_add(context, md, tl_resources, num_tl_resources);
 
     /* Collect the full (pre-filter) resource list for the transport tables */
     if (ucp_context_print_transport_tables_enabled(context)) {
@@ -2783,9 +2837,10 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
-static ucs_status_t
-ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
-                                    ucp_gpu_nic_assignment_t **assignment_p)
+static ucs_status_t ucp_context_gpu_nic_assignment_init(
+        ucp_gpu_nic_assignment_mode_t mode,
+        const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics,
+        ucp_gpu_nic_assignment_t **assignment_p)
 {
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
@@ -2827,7 +2882,8 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
         goto out_release_groups;
     }
 
-    status = ucp_gpu_nic_assignment_build(&groups, mode, assignment);
+    status = ucp_gpu_nic_assignment_build(&groups, mode, candidate_nics,
+                                          assignment);
     if (status != UCS_OK) {
         ucs_free(assignment);
         goto out_release_groups;
@@ -2896,7 +2952,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
     status = ucp_context_gpu_nic_assignment_init(
             context->config.ext.gpu_nic_assignment_mode,
-            &context->gpu_nic_assignment);
+            &context->gpu_nic_candidates, &context->gpu_nic_assignment);
     if (status != UCS_OK) {
         goto err_free_res;
     }

@@ -453,6 +453,9 @@ typedef struct ucp_context {
     /* GPU-to-NIC assignment, set to NULL when not in use */
     ucp_gpu_nic_assignment_t      *gpu_nic_assignment;
 
+    /* Network sys_devs that the GPU-to-NIC assignment may use */
+    ucp_gpu_nic_sys_dev_bitmap_t  gpu_nic_candidates;
+
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;
 
