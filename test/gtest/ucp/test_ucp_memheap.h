@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -9,6 +9,8 @@
 #define TEST_UCP_MEMHEAP_H
 
 #include "ucp_test.h"
+
+#include <common/mem_buffer.h>
 
 
 class test_ucp_memheap : public ucp_test {
@@ -35,6 +37,14 @@ public:
 
 protected:
     virtual void init();
+
+    /* Factory for the buffers used by @ref test_xfer. Subclasses can override
+     * it to change how the buffers are allocated (e.g. asynchronously). */
+    virtual mem_buffer *create_mem_buffer(size_t size,
+                                          ucs_memory_type_t mem_type)
+    {
+        return new mem_buffer(size, mem_type);
+    }
 
     void test_xfer(send_func_t send_func, size_t size, unsigned num_iters,
                    size_t alignment, ucs_memory_type_t send_mem_type,

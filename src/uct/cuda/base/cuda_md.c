@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2018-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -8,11 +8,9 @@
 #endif
 
 #include "cuda_md.h"
-#include "cuda_iface.h"
 #include "cuda_util.h"
 
 #include <ucs/sys/module.h>
-#include <ucs/sys/string.h>
 
 
 ucs_status_t
@@ -20,39 +18,14 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,
                                  unsigned *num_resources_p)
 {
-    const unsigned sys_device_priority = 10;
-    ucs_sys_device_t sys_dev;
-    CUdevice cuda_device;
-    ucs_status_t status;
-    char device_name[10];
-    int i, num_gpus;
+    unsigned num_visible_gpus = uct_cuda_init_devices();
 
-    status = UCT_CUDADRV_FUNC(cuDeviceGetCount(&num_gpus), UCS_LOG_LEVEL_DIAG);
-    if ((status != UCS_OK) || (num_gpus == 0)) {
+    if (num_visible_gpus == 0) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    } else {
+        return uct_md_query_single_md_resource(component, resources_p,
+                                               num_resources_p);
     }
-
-    for (i = 0; i < num_gpus; ++i) {
-        status = UCT_CUDADRV_FUNC(cuDeviceGet(&cuda_device, i),
-                                  UCS_LOG_LEVEL_DIAG);
-        if (status != UCS_OK) {
-            continue;
-        }
-
-        sys_dev = uct_cuda_get_sys_dev(cuda_device);
-        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-            continue;
-        }
-
-        ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
-                          cuda_device);
-        status = ucs_topo_sys_device_set_name(sys_dev, device_name,
-                                              sys_device_priority);
-        ucs_assert_always(status == UCS_OK);
-    }
-
-    return uct_md_query_single_md_resource(component, resources_p,
-                                           num_resources_p);
 }
 
 UCS_STATIC_INIT

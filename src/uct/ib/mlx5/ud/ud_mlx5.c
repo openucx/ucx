@@ -320,9 +320,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     /* set iov to dptr */
     if (iovcnt > 0) {
         wqe_size  = ucs_align_up_pow2(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
-        wqe_size += uct_ib_mlx5_set_data_seg_iov(&iface->tx.wq,
-                                                 UCS_PTR_BYTE_OFFSET(ctrl, wqe_size),
-                                                 iov, iovcnt);
+        wqe_size += uct_ib_mlx5_set_data_seg_iov(
+                &iface->tx.wq, UCS_PTR_BYTE_OFFSET(ctrl, wqe_size), iov,
+                iovcnt, NULL);
     }
 
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, neth,
@@ -666,10 +666,23 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     return UCS_OK;
 }
 
-static void *uct_ud_mlx5_ep_get_peer_address(uct_ud_ep_t *ud_ep)
+static ucs_status_t
+uct_ud_mlx5_ep_resolve_peer_address(uct_ud_ep_t *ud_ep,
+                                    const uct_ib_address_t *ib_addr UCS_V_UNUSED,
+                                    const void *address)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
-    return &ep->peer_address;
+
+    memcpy(&ep->peer_address, address, sizeof(ep->peer_address));
+    return UCS_OK;
+}
+
+static void
+uct_ud_mlx5_ep_get_peer_address(const uct_ud_ep_t *ud_ep, void *address_p)
+{
+    const uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
+
+    memcpy(address_p, &ep->peer_address, sizeof(ep->peer_address));
 }
 
 static size_t uct_ud_mlx5_get_peer_address_length()
@@ -865,7 +878,8 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_connect_to_ep_v2    = uct_ud_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_ib_iface_is_reachable_v2,
             .ep_is_connected        = uct_ud_mlx5_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ud_mlx5_create_cq,
         .destroy_cq     = uct_ib_verbs_destroy_cq,
@@ -879,6 +893,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .create_qp               = uct_ud_mlx5_iface_create_qp,
     .destroy_qp              = uct_ud_mlx5_iface_destroy_qp,
     .unpack_peer_address     = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_resolve_peer_address = uct_ud_mlx5_ep_resolve_peer_address,
     .ep_get_peer_address     = uct_ud_mlx5_ep_get_peer_address,
     .get_peer_address_length = uct_ud_mlx5_get_peer_address_length,
     .peer_address_str        = uct_ud_mlx5_iface_peer_address_str,

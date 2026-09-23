@@ -36,6 +36,9 @@ docker_run_srv() {
     local test_name="$1"
     HCA=$(detect_active_ib_hca)
     sudo chmod 777 /dev/infiniband/umad*
+    # A zombie server from a canceled or crashed run still holds the MAD
+    # registration on the HCA, which makes this server fail to register
+    docker ps -aq --filter "name=ucx_perftest_" | xargs -r docker rm -f
     docker run \
         --rm \
         --detach \
@@ -53,8 +56,9 @@ docker_run_srv() {
 
 docker_stop_srv() {
     local test_name="$1"
-    cat "${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log"
+    # Stop first so a missing log cannot leave a zombie server container
     docker stop ucx_perftest_"$BUILD_BUILDID" || true
+    cat "${PWD}/ucx_perf_srv_${test_name}_${BUILD_BUILDID}.log" || true
 }
 
 set_vars() {
@@ -77,7 +81,7 @@ set_vars() {
 run_mad_test() {
     local ib_address="$1"
     sudo chmod 777 /dev/infiniband/umad*
-    "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" -e "$ib_address"
+    "$PWD"/install/bin/ucx_perftest -t tag_bw -e -K "$HCA" "$ib_address"
 }
 
 detect_active_ib_hca() {

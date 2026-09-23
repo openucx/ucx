@@ -5,6 +5,7 @@
 */
 
 #include <uct/ib/test_ib.h>
+#include <uct/api/v2/uct_v2.h>
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
@@ -79,6 +80,81 @@ void test_uct_ib::send_recv_short() {
 }
 
 size_t test_uct_ib::m_ib_am_handler_counter = 0;
+
+class test_uct_ib_perf : public test_uct_ib {
+protected:
+    void create_connected_entities() override
+    {
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+    }
+
+    static uct_perf_attr_t init_perf_attr(uct_ep_operation_t op)
+    {
+        uct_perf_attr_t perf_attr = {};
+
+        perf_attr.field_mask         = UCT_PERF_ATTR_FIELD_OPERATION |
+                                       UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
+                                       UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
+                                       UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
+                                       UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
+                                       UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                                       UCT_PERF_ATTR_FIELD_PATH_BANDWIDTH;
+        perf_attr.operation          = op;
+        perf_attr.local_memory_type  = UCS_MEMORY_TYPE_HOST;
+        perf_attr.remote_memory_type = UCS_MEMORY_TYPE_HOST;
+        perf_attr.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
+        perf_attr.remote_sys_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        return perf_attr;
+    }
+
+    void check_get_put_bandwidth(bool expect_equal_bandwidth)
+    {
+        uct_ib_iface_t *iface    = ucs_derived_of(m_e1->iface(),
+                                                  uct_ib_iface_t);
+        uct_perf_attr_t get_perf = init_perf_attr(UCT_EP_OP_GET_ZCOPY);
+        uct_perf_attr_t put_perf = init_perf_attr(UCT_EP_OP_PUT_ZCOPY);
+
+        if (!(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) ||
+            !(m_e1->iface_attr().cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            UCS_TEST_SKIP_R("requires PUT and GET zcopy");
+        }
+
+        ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &get_perf));
+        ASSERT_UCS_OK(uct_iface_estimate_perf(m_e1->iface(), &put_perf));
+
+        if (uct_ib_iface_is_multiplane_xdr_bw(iface)) {
+            if (expect_equal_bandwidth) {
+                EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
+                                 get_perf.bandwidth.shared);
+                EXPECT_DOUBLE_EQ(put_perf.path_bandwidth.shared,
+                                 get_perf.path_bandwidth.shared);
+            } else {
+                EXPECT_GT(put_perf.bandwidth.shared,
+                          get_perf.bandwidth.shared);
+                EXPECT_GT(put_perf.path_bandwidth.shared,
+                          get_perf.path_bandwidth.shared);
+            }
+        } else {
+            EXPECT_DOUBLE_EQ(put_perf.bandwidth.shared,
+                             get_perf.bandwidth.shared);
+        }
+    }
+};
+
+UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth, "IB_NUM_PATHS?=auto")
+{
+    check_get_put_bandwidth(false);
+}
+
+UCS_TEST_P(test_uct_ib_perf, get_path_bandwidth_explicit_num_paths,
+           "IB_NUM_PATHS=4")
+{
+    check_get_put_bandwidth(true);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_perf);
 
 class test_uct_ib_addr : public test_uct_ib {
 public:
@@ -228,6 +304,174 @@ UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_addr);
+
+
+class test_uct_ib_ah_cache : public test_uct_ib {
+public:
+    /* Single unconnected entity: some transports (e.g. ud_verbs, srd) keep
+     * a persistent AH ref on connected peers, which would skew the refcount
+     * baseline these tests rely on. */
+    void create_connected_entities() override
+    {
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+    }
+
+    uct_ib_iface_t *ib_iface() {
+        return ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    }
+
+    uct_ib_device_t *dev() {
+        return uct_ib_iface_device(ib_iface());
+    }
+
+    /* ah_attr for this iface's own device address */
+    ucs_status_t get_self_ah_attr(struct ibv_ah_attr *ah_attr) {
+        uct_ib_iface_t *iface = ib_iface();
+        std::vector<char> buf(uct_ib_iface_address_size(iface));
+        uct_ib_address_t *ib_addr = (uct_ib_address_t*)&buf[0];
+        enum ibv_mtu path_mtu;
+        ucs_status_t status;
+
+        status = uct_ib_iface_get_device_address(
+                &iface->super.super, (uct_device_addr_t*)ib_addr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        return uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, ah_attr,
+                                                    &path_mtu);
+    }
+};
+
+UCS_TEST_P(test_uct_ib_ah_cache, get_shares_entry_and_refcounts,
+           "IB_AH_CACHE_TTL=60m")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *e1, *e2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    /* refcount includes the cache's own reference, in addition to callers' */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e1));
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e2));
+    EXPECT_EQ(e1, e2);
+    EXPECT_EQ(3, e1->refcount);
+
+    uct_ib_iface_ah_put(ib_iface(), e1);
+    EXPECT_EQ(2, e2->refcount);
+    uct_ib_iface_ah_put(ib_iface(), e2);
+    EXPECT_EQ(1, e2->refcount); /* only the cache's own hold is left */
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, within_ttl_is_reused, "IB_AH_CACHE_TTL=60m")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+    struct ibv_ah *ah1, *ah2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    ah1 = entry->ah;
+    uct_ib_iface_ah_put(ib_iface(), entry); /* only the cache's own hold left */
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    ah2 = entry->ah;
+    EXPECT_EQ(ah1, ah2);
+    uct_ib_iface_ah_put(ib_iface(), entry);
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, past_ttl_is_requeried, "IB_AH_CACHE_TTL=1ms")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    uct_ib_iface_ah_put(ib_iface(), entry); /* only the cache's own hold left */
+
+    /* Force the entry's age past the TTL deterministically */
+    entry->creation_time = 0;
+
+    /* Stale + no external holder: evicted and destroyed immediately, a new
+     * entry is created and cached in its place. */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    EXPECT_NE(0, entry->creation_time);
+    uct_ib_iface_ah_put(ib_iface(), entry);
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, referenced_past_ttl_keeps_old_entry_valid,
+           "IB_AH_CACHE_TTL=1ms")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *held_entry, *entry;
+    struct ibv_ah *ah1;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    /* Keep a reference, so the entry is still held once it goes stale */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test",
+                                      &held_entry));
+    ah1 = held_entry->ah;
+
+    /* Force the entry's age past the TTL deterministically */
+    held_entry->creation_time = 0;
+
+    /* Stale + still referenced: the cache drops its own hold and forgets
+     * this entry (but doesn't destroy it), and hands out a fresh one. */
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    EXPECT_NE(held_entry, entry);
+    EXPECT_NE(ah1, entry->ah);
+    EXPECT_EQ(1, held_entry->refcount); /* only our own hold is left */
+
+    /* The old entry's AH is still valid for as long as we hold it */
+    EXPECT_EQ(ah1, held_entry->ah);
+
+    uct_ib_iface_ah_put(ib_iface(), entry);
+    uct_ib_iface_ah_put(ib_iface(), held_entry); /* frees the orphaned entry */
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, ttl_zero_disables_cache, "IB_AH_CACHE_TTL=0")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *e1, *e2;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e1));
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &e2));
+
+    EXPECT_NE(e1, e2);
+    EXPECT_NE(e1->ah, e2->ah);
+    EXPECT_EQ(1, e1->refcount); /* private entry: no cache reference */
+    EXPECT_EQ(0u, kh_size(&dev()->ah_hash));
+
+    uct_ib_iface_ah_put(ib_iface(), e1);
+    uct_ib_iface_ah_put(ib_iface(), e2);
+    EXPECT_EQ(0u, kh_size(&dev()->ah_hash));
+}
+
+UCS_TEST_P(test_uct_ib_ah_cache, hold_adds_independent_reference,
+           "IB_AH_CACHE_TTL=60m")
+{
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+
+    ASSERT_UCS_OK(get_self_ah_attr(&ah_attr));
+
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface(), &ah_attr, "test", &entry));
+    uct_ib_iface_ah_hold(ib_iface(), entry);
+    EXPECT_EQ(3, entry->refcount);
+
+    uct_ib_iface_ah_put(ib_iface(), entry);
+    EXPECT_EQ(2, entry->refcount);
+    uct_ib_iface_ah_put(ib_iface(), entry);
+    EXPECT_EQ(1, entry->refcount); /* only the cache's own hold is left */
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_ah_cache);
 
 
 test_uct_ib_with_specific_port::test_uct_ib_with_specific_port() {
@@ -604,6 +848,22 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     rnr_val = uct_ib_to_rnr_fabric_time(1.);
     EXPECT_EQ(0, rnr_val);
 }
+
+#ifdef HAVE_MLX5_DV
+UCS_TEST_F(test_uct_ib_utils, fw_ver_release_at_least) {
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.48.1000", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("82.48.1000", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("32.48.1000", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.49.1", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.48.1001", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.44.1036", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.48.999", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.47.1026", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("0.0.0.0", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("bogus", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("", 48, 1000));
+}
+#endif
 
 
 #if HAVE_DEVX

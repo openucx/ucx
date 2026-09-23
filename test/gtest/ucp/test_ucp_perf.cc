@@ -8,6 +8,7 @@
 
 #include "ucp_test.h"
 
+#include <common/mem_buffer.h>
 #include <common/test_perf.h>
 #include <ucp/core/ucp_types.h>
 
@@ -375,6 +376,44 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)
+
+class test_ucp_perf_cuda : public test_ucp_perf {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, 0);
+    }
+};
+
+UCS_TEST_P(test_ucp_perf_cuda, am_recv_copy)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    std::stringstream ss;
+    ss << GetParam().transports;
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
+    ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
+
+    test_spec test = {"am cuda receive copy", "Mpps",
+                      UCX_PERF_API_UCP, UCX_PERF_CMD_AM,
+                      UCX_PERF_TEST_TYPE_STREAM_UNI,
+                      UCX_PERF_WAIT_MODE_POLL,
+                      UCP_PERF_DATATYPE_CONTIG, 0, 1, {8}, 1, 1000lu,
+                      ucs_offsetof(ucx_perf_result_t, msgrate.total_average),
+                      1e-6, 0.0, std::numeric_limits<double>::max(),
+                      UCX_PERF_TEST_FLAG_AM_RECV_COPY,
+                      UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA};
+
+    run_test(test, 0, false, "", "");
+
+    test.test_flags |= UCX_PERF_TEST_FLAG_PREREG;
+    run_test(test, 0, false, "", "");
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_perf_cuda)
 
 class test_ucp_loopback : public test_ucp_perf {};
 

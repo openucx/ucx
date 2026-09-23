@@ -97,6 +97,9 @@ function add_timestamp() {
 }
 
 function az_init_modules() {
+    # Public vendor images (e.g. the Intel oneAPI ZE builder) do not ship the
+    # Environment Modules system. Nothing to initialize there.
+    [ -f /etc/profile.d/modules.sh ] || return 0
     . /etc/profile.d/modules.sh
     export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
     # Read module files (W/A if there're some network instabilities lead to autofs issues)
@@ -185,8 +188,11 @@ try_load_cuda_env() {
     # Check nvidia driver
     [ -f "/proc/driver/nvidia/version" ] || return 0
 
-    # Check peer mem driver
-    [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+    # Check peer mem driver. Required on Azure only; other clusters (dlcluster,
+    # funk) may provide GPUDirect RDMA through dmabuf without nvidia_peermem.
+    if [ "x$RUNNING_IN_AZURE" = "xyes" ]; then
+        [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ] || return 0
+    fi
 
     # Check number of available GPUs
     nvidia-smi -a || true
@@ -203,10 +209,11 @@ try_load_cuda_env() {
         have_cuda=yes
     fi
 
-    # Check gdrcopy
-    if [ -w "/dev/gdrdrv" ]
+    # Check gdrcopy. Load it inside the if so a missing module does not
+    # fail this function under set -e.
+    if [ -w "/dev/gdrdrv" ] && az_module_load dev/gdrcopy2.5.1_cuda13.0.2
     then
-        az_module_load dev/gdrcopy2.5.1_cuda13.0.2 && have_gdrcopy=yes
+        have_gdrcopy=yes
     fi
 }
 
@@ -249,11 +256,12 @@ check_release_build() {
 
     elif [ "${build_reason}" == "PullRequest" ]
     then
-        # In case of pull request, HEAD^ is the branch commit we merge with
-        range="$(git rev-parse HEAD^)..${build_sourceversion}"
-        for sha1 in `git log $range --format="%h"`
+        base_revision=$(git rev-parse "${build_sourceversion}^1")
+        head_revision=$(git rev-parse "${build_sourceversion}^2")
+        for sha1 in $(git log --first-parent --no-merges \
+                         "${base_revision}..${head_revision}" --format="%h")
         do
-            title=`git log -1 --format="%s" $sha1`
+            title=$(git log -1 --format="%s" $sha1)
             [[ "$title" == "${title_mask}"* ]] && launch=True;
         done
     fi

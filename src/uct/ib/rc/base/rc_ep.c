@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
@@ -147,8 +147,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
         return status;
     }
 
-    self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
-    self->flags      = 0;
+    self->path_index   = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->flags        = 0;
+    self->txqp_reserve = 0;
+    self->cq_reserve   = 0;
 
     status = uct_rc_fc_init(&self->fc, iface UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
@@ -287,6 +289,23 @@ void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
     ucs_mpool_put(desc);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_send_op_complete(uct_rc_iface_send_op_t *op)
+{
+    if (op->user_comp != NULL) {
+        uct_invoke_completion(op->user_comp, UCS_OK);
+    }
+
+    uct_rc_iface_put_send_op(op);
+}
+
+/* Put zcopy completion handler which allows null user completion. */
+void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
+}
+
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
@@ -301,11 +320,27 @@ void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
     uct_rc_iface_put_send_op(op);
 }
 
+/* Outstanding purge can tell put sgl zcopy from put zcopy by handler.
+ * The operation may not have a user completion (comp == NULL). */
+void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
+}
+
 void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
                                            const void *resp)
 {
     uct_invoke_completion(op->user_comp, UCS_OK);
     ucs_mpool_put(op);
+}
+
+/* Outstanding purge can tell ep_check from flush by handler.
+ * The operation may not have a user completion (comp == NULL). */
+void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
+                                        const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
 }
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
@@ -314,7 +349,8 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
     uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
     uct_rc_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_ep_t);
 
-    if (uct_rc_ep_has_tx_resources(ep) &&
+    if (uct_rc_ep_have_tx_cqe_avail(ep) &&
+        uct_rc_ep_has_tx_resources(ep) &&
         uct_rc_iface_has_tx_resources(iface)) {
         return UCS_ERR_BUSY;
     }
@@ -344,10 +380,13 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 
     status = uct_rc_iface_invoke_pending_cb(iface, req);
     if (status == UCS_OK) {
+        ep->txqp_reserve = 0;
+        ep->cq_reserve   = 0;
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
-    } else if (!uct_rc_iface_has_tx_resources(iface)) {
+    } else if (!uct_rc_iface_has_tx_resources(iface) ||
+               !uct_rc_ep_have_tx_cqe_avail(ep)) {
         /* No iface resources */
         return UCS_ARBITER_CB_RESULT_STOP;
     }
@@ -456,9 +495,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            /* Allow clean flush cancel op from destroy flow */
+            /* Allow from destroy flow: clean flush cancel and ep_check ops. */
             if (warn &&
-                (op->handler != uct_rc_ep_flush_op_completion_handler)) {
+                (op->handler != uct_rc_ep_flush_op_completion_handler) &&
+                (op->handler != uct_rc_ep_check_completion_handler)) {
                 ucs_warn("destroying txqp %p with uncompleted operation %p"
                          " handler %s",
                          txqp, op, ucs_debug_get_symbol_name(op->handler));
@@ -468,7 +508,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                 /* This must be uct_rc_ep_get_bcopy_handler,
                  * uct_rc_ep_get_bcopy_handler_no_completion,
                  * uct_rc_ep_get_zcopy_completion_handler,
-                 * uct_rc_ep_flush_op_completion_handler or
+                 * uct_rc_ep_put_zcopy_completion_handler,
+                 * uct_rc_ep_put_sgl_zcopy_completion_handler,
+                 * uct_rc_ep_flush_op_completion_handler,
+                 * uct_rc_ep_check_completion_handler or
                  * one of the atomic handlers,
                  * so invoke user completion */
                 uct_invoke_completion(op->user_comp, status);
@@ -489,7 +532,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
 
         if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
-            (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
+            (op->handler == uct_rc_ep_put_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_get_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_check_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);

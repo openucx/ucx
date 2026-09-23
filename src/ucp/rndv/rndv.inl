@@ -23,6 +23,12 @@ ucp_rndv_rts_is_tag(const ucp_rndv_rts_hdr_t *rts_hdr)
     return rts_hdr->opcode == UCP_RNDV_RTS_TAG_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_rndv_rts_is_rma(const ucp_rndv_rts_hdr_t *rts_hdr)
+{
+    return rts_hdr->opcode == UCP_RNDV_RTS_RMA;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_rndv_receive_start(ucp_worker_h worker, ucp_request_t *rreq,
                        const ucp_rndv_rts_hdr_t *rndv_rts_hdr,

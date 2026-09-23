@@ -399,6 +399,7 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
     uct_iface_t *tl_iface   = UCT_EP_PARAM_VALUE(params, iface, IFACE, NULL);
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     uct_ib_mlx5_md_t *md    = ucs_derived_of(iface->md, uct_ib_mlx5_md_t);
+    uint64_t access_flags;
     int ret;
     ucs_status_t status;
 
@@ -413,15 +414,17 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_ep_t, const uct_ep_params_t *params)
         goto err;
     }
 
+    access_flags        = uct_ib_md_access_flags(&md->super,
+                                                 IBV_ACCESS_LOCAL_WRITE);
     self->dma_opaque.mr = ibv_reg_mr(md->super.pd, self->dma_opaque.buf,
                                      UCT_GGA_MLX5_OPAQUE_BUF_LEN,
-                                     IBV_ACCESS_LOCAL_WRITE);
+                                     access_flags);
 
     if (self->dma_opaque.mr == NULL) {
-        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%x) failed to register "
-                  "DMA/MMO opaque buffer: %m", md->super.pd,
+        ucs_error("ibv_reg_mr(pd=%p, buf=%p, len=%d, 0x%" PRIx64 ") failed "
+                  "to register DMA/MMO opaque buffer: %m", md->super.pd,
                   self->dma_opaque.buf, UCT_GGA_MLX5_OPAQUE_BUF_LEN,
-                  IBV_ACCESS_LOCAL_WRITE);
+                  access_flags);
         status = UCS_ERR_IO_ERROR;
         goto err_free_buf;
     }
@@ -529,6 +532,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return status;
     }
 
+    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
     ep->super.super.atomic_mr_offset = 0;
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
     ep->super.super.flush_rkey       =
@@ -536,19 +540,6 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
             (uct_ib_unpack_uint24(gga_ep_addr->flush_rkey) << 8) :
             UCT_IB_MD_INVALID_FLUSH_RKEY;
     return UCS_OK;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_gga_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface,
-                          uct_ib_mlx5_txwq_t *txwq, uct_rkey_t *rkey,
-                          uint64_t *addr, uint8_t *fm_ce_se)
-{
-    if (ucs_unlikely(uct_rc_ep_fm(&iface->super, &txwq->fi, 1))) {
-        *rkey      = uct_ib_resolve_atomic_rkey(*rkey, 0, addr);
-        *fm_ce_se |= UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
-    } else {
-        *rkey = uct_ib_md_direct_rkey(*rkey);
-    }
 }
 
 static ucs_status_t
@@ -561,7 +552,7 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     uct_gga_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.md,
                                                uct_gga_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
-    uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
+    uint8_t fm_ce_se;
     uct_rkey_t rkey_copy;
     ucs_status_t status;
 
@@ -577,13 +568,14 @@ uct_gga_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     rkey_copy = rkey_handle->rkey_ob.rkey;
-    uct_gga_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey_copy, &remote_addr,
-                              &fm_ce_se);
+    uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey_copy, &remote_addr, 0,
+                             &fm_ce_se);
 
     status = uct_rc_mlx5_base_ep_zcopy_post(
             ep, MLX5_OPCODE_MMO | UCT_RC_MLX5_OPCODE_FLAG_MMO_PUT, iov, iovcnt,
             0ul, 0, NULL, 0, remote_addr, rkey_copy, 0ul, 0, 0,
-            &gga_ep->dma_opaque.opaque_mr, fm_ce_se,
+            &gga_ep->dma_opaque.opaque_mr,
+            fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
             uct_rc_ep_send_op_completion_handler, 0, comp);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
                                  uct_iov_total_length(iov, iovcnt));
@@ -602,7 +594,7 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
                                                uct_gga_mlx5_md_t);
     uct_gga_mlx5_rkey_handle_t *rkey_handle = (uct_gga_mlx5_rkey_handle_t*)rkey;
     size_t total_length                     = uct_iov_total_length(iov, iovcnt);
-    uint8_t fm_ce_se                        = MLX5_WQE_CTRL_CQ_UPDATE;
+    uint8_t fm_ce_se;
     uct_rkey_t rkey_copy;
     ucs_status_t status;
 
@@ -623,7 +615,8 @@ uct_gga_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     status = uct_rc_mlx5_base_ep_zcopy_post(
             ep, MLX5_OPCODE_MMO | UCT_RC_MLX5_OPCODE_FLAG_MMO_GET, iov, iovcnt,
             total_length, 0, NULL, 0, remote_addr, rkey_copy, 0ul, 0, 0,
-            &gga_ep->dma_opaque.opaque_mr, fm_ce_se,
+            &gga_ep->dma_opaque.opaque_mr,
+            fm_ce_se | MLX5_WQE_CTRL_CQ_UPDATE,
             uct_rc_ep_get_zcopy_completion_handler,
             UCT_RC_IFACE_SEND_OP_FLAG_IOV, comp);
 
@@ -748,7 +741,8 @@ static uct_rc_iface_ops_t uct_gga_mlx5_iface_ops = {
             .ep_connect_to_ep_v2    = uct_gga_mlx5_ep_connect_to_ep_v2,
             .iface_is_reachable_v2  = uct_gga_mlx5_iface_is_reachable_v2,
             .ep_is_connected        = uct_gga_mlx5_ep_is_connected,
-            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+            .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+            .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,
@@ -807,9 +801,23 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
 
     uct_gga_mlx5_iface_disable_rx(&self->super);
 
-    config->super.super.fc.enable        = 0; /* FC requires AM capability */
-    self->super.config.atomic_fence_flag = UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
-    self->super.super.config.fence_mode  = UCT_RC_FENCE_MODE_AUTO;
+    /* MMO DMA ordering is independent of QP data placement ordering. */
+    if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
+        self->super.super.config.fence_mode  = UCT_RC_FENCE_MODE_NONE;
+        self->super.config.put_fence_flag    = 0;
+        self->super.config.atomic_fence_flag = 0;
+    } else {
+        self->super.super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
+        self->super.config.put_fence_flag =
+                UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER;
+        if (self->super.config.atomic_fence_flag !=
+            UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER) {
+            self->super.config.atomic_fence_flag =
+                    UCT_IB_MLX5_WQE_CTRL_FLAG_FENCE;
+        }
+    }
+
+    config->super.super.fc.enable = 0; /* FC requires AM capability */
 
     uct_rc_iface_adjust_max_get_zcopy(&self->super.super, &config->super.super,
             UCT_GGA_MAX_MSG_SIZE,
@@ -888,7 +896,8 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
     .mem_attach         = uct_ib_mlx5_gga_mem_attach,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
-    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
 };
 
 static ucs_status_t

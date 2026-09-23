@@ -13,6 +13,7 @@
 #endif
 
 #include "module.h"
+#include "module_int.h"
 
 #include <ucs/sys/preprocessor.h>
 #include <ucs/datastruct/string_buffer.h>
@@ -245,6 +246,9 @@ static int ucs_module_flags_to_dlopen_mode(unsigned flags)
     } else {
         mode |= RTLD_LOCAL;
     }
+#if defined(UCX_MODULE_DLOPEN_DEEPBIND) && defined(RTLD_DEEPBIND)
+    mode |= RTLD_DEEPBIND;
+#endif
 
     return mode;
 }
@@ -324,6 +328,7 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         }
 
         ucs_module_filename_to_base(entry->d_name, base, sizeof(base));
+        ucs_module_normalize_base(base, prefix);
         if (strchr(base + prefix_len, '_') != NULL) {
             ucs_module_debug("module name contains '_': %s, skipping", base + prefix_len);
             continue;

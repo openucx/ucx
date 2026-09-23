@@ -3,6 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -16,7 +17,7 @@ libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) $(BFD_CPPFLAGS) \
                      -DUCX_MODULE_DIR=\"$(moduledir)\" \
                      -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
-libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION)
+libucs_la_LDFLAGS  = -ldl $(BFD_LDFLAGS) -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la $(BFD_LIBS)
 
@@ -96,6 +97,7 @@ noinst_HEADERS = \
 	arch/ppc64/cpu.h \
 	arch/rv64/cpu.h \
 	arch/x86_64/cpu.h \
+	arch/x86_64/cpu_nt_avx2.inl \
 	arch/cpu.h \
 	config/ucm_opts.h \
 	datastruct/arbiter.h \
@@ -109,6 +111,7 @@ noinst_HEADERS = \
 	datastruct/mpool_set.inl \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
+	datastruct/rbtree.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/conn_match.h \
@@ -131,7 +134,10 @@ noinst_HEADERS = \
 	sys/compiler.h \
 	sys/lib.h \
 	sys/module.h \
+	sys/module_int.h \
 	sys/sys.h \
+	sys/topo/base/topo_int.h \
+	sys/topo/base/topo_groups.h \
 	sys/iovec.h \
 	sys/iovec.inl \
 	sys/ptr_arith.h \
@@ -185,6 +191,7 @@ libucs_la_SOURCES = \
 	datastruct/piecewise_func.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
+	datastruct/rbtree.c \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \
@@ -212,6 +219,7 @@ libucs_la_SOURCES = \
 	sys/lib.c \
 	sys/sock.c \
 	sys/topo/base/topo.c \
+	sys/topo/base/topo_groups.c \
 	sys/stubs.c \
 	sys/netlink.c \
 	sys/uid.c \

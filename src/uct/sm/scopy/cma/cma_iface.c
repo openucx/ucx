@@ -62,7 +62,7 @@ uct_cma_iface_is_reachable_v2(const uct_iface_h tl_iface,
                               const uct_iface_is_reachable_params_t *params)
 {
     struct iovec iov = {
-        .iov_base = &iov,
+        .iov_base = NULL,
         .iov_len  = sizeof(iov),
     };
     ucs_cma_iface_ext_device_addr_t *iface_addr;
@@ -150,7 +150,8 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
         .ep_connect_to_ep_v2    = (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
         .iface_is_reachable_v2  = uct_cma_iface_is_reachable_v2,
         .ep_is_connected        = uct_cma_ep_is_connected,
-        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported
+        .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
+        .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
     },
     .ep_tx = uct_cma_ep_tx,
 };

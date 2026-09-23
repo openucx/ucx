@@ -66,7 +66,7 @@ static void ucp_am_rndv_rts_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
-    ucp_proto_rndv_rts_probe(init_params);
+    ucp_proto_rndv_rts_probe(init_params, 0);
 }
 
 ucp_proto_t ucp_am_rndv_proto = {

@@ -14,5 +14,5 @@ Name: @PACKAGE@-ucs
 Description: Unified Communication X Library UCS module
 Version: @VERSION@
 Cflags: -I${includedir}
-Libs: -L${libdir} -lucs -lucm
+Libs: -L${libdir} -lucs@UCX_LIBRARY_FILE_SUFFIX@ -lucm@UCX_LIBRARY_FILE_SUFFIX@
 Libs.private: -Wl,--undefined=ucs_init @BFD_LIBS@ @BFD_LDFLAGS@ @BFD_DEPS@ -ldl -lrt -lm -pthread

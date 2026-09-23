@@ -8,13 +8,26 @@
   * Indent function arguments on column
   * Indent structure fields on column
   * Scope: open on same line, except function body, which is on a new line.
-  * Indent multiple consecutive assignments on the column
+  * Indent multiple consecutive assignments on the column; the longest
+    left-hand side gets one space before `=`, others align to it.
   * 2 space lines between types and prototypes (header files)
   * 1 space line between functions (source files) 
   * Prefer `sizeof(*ptr)` or `sizeof(variable)` over `sizeof(type)`.
   * Use `ucs_container_of` and `ucs_derived_of` instead of open-coded pointer
     arithmetic.
   * Use `ucs_assert*` for internal invariants, not user-input validation.
+  * Unless external linkage is required, functions used only within one source
+    file must be declared `static`.
+
+
+## Comments
+  * Usually one line; use more only for a non-obvious or complex point, or
+    per the `## Doxygen` section below.
+  * Focus on "why" rather than "what"; no PR/issue references, no dev-process
+    narration.
+  * Document once, in the most relevant area.
+  * Explain locking, ownership, tradeoffs, or step-by-step processing when
+    non-obvious.
 
 
 ## Naming convention:
@@ -87,9 +100,16 @@
 
 ## Miscellaneous examples
 
-### Boolean expression
+### Boolean expressions
 
-Use explicit checks with added parenthesis like below.
+- Non-boolean values (pointers, counts, status/enum codes) should use explicit
+  comparisons.
+- Boolean flags (integers that hold only 0/1, e.g. flags like `is_*`/`has_*`, 
+  the return value of a predicate function, etc.) should be tested directly.
+- Add parentheses around every comparison in compound expressions (excluding
+  direct boolean tests) to ensure correct operator precedence.
+- Negation with `!` takes no parentheses when applied to a single flag or
+  predicate call (`!is_enabled`).
 
 Good
 ```C
@@ -97,8 +117,30 @@ Good
 
     if (a == 0) {
 
-    if ((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
-        (ret == UCS_KH_PUT_BUCKET_CLEAR)) {
+    if (is_enabled) {
+
+    if (!uct_iface_is_reachable(iface)) {
+
+    if ((ret == UCS_KH_PUT_BUCKET_EMPTY) || (ret == UCS_KH_PUT_BUCKET_CLEAR)) {
+
+    if (is_enabled || ((a == 2) && (b > 0))) {
+```
+
+Bad
+```C
+    if (!ptr) {
+
+    if (!a) {
+
+    if (is_enabled == 1) {
+
+    if (uct_iface_is_reachable(iface) == 0) {
+
+    if (!(uct_iface_is_reachable(iface))) {
+
+    if (ret == UCS_KH_PUT_BUCKET_EMPTY || ret == UCS_KH_PUT_BUCKET_CLEAR) {
+
+    if (is_enabled || a == 2 && b > 0) {
 ```
 
 ### Variable definition

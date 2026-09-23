@@ -48,7 +48,8 @@ UCS_TEST_F(test_debug, lookup_invalid) {
     EXPECT_EQ(UCS_ERR_NO_ELEM, status);
 }
 
-UCS_TEST_SKIP_COND_F(test_debug, lookup_address, BULLSEYE_ON) {
+UCS_TEST_SKIP_COND_F(test_debug, lookup_address,
+                     BULLSEYE_ON || RUNNING_ON_VALGRIND) {
     unsigned lineno;
 
     my_cool_function(&lineno);
@@ -73,7 +74,7 @@ UCS_TEST_SKIP_COND_F(test_debug, lookup_address, BULLSEYE_ON) {
 #endif
 }
 
-UCS_TEST_F(test_debug, print_backtrace) {
+UCS_TEST_SKIP_COND_F(test_debug, print_backtrace, RUNNING_ON_VALGRIND) {
     char *data;
     size_t size;
 

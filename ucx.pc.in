@@ -14,6 +14,6 @@ Name: @PACKAGE@
 Description: Unified Communication X Library
 Version: @VERSION@
 Cflags: -I${includedir}
-Libs: -L${libdir} -lucp
+Libs: -L${libdir} -lucp@UCX_LIBRARY_FILE_SUFFIX@
 Libs.private: -Wl,--undefined=ucp_global_init
 Requires: @PACKAGE@-uct, @PACKAGE@-ucs

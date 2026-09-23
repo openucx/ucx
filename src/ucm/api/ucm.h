@@ -15,6 +15,7 @@ BEGIN_C_DECLS
 
 #include <ucs/config/types.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/type/status.h>
 
 #include <sys/types.h>
@@ -192,11 +193,15 @@ typedef union ucm_event {
      * Memory type allocation and deallocation event.
      * If mem_type is @ref UCS_MEMORY_TYPE_LAST, the memory type is unknown, and
      * further memory type detection is required.
+     * If sys_dev is @ref UCS_SYS_DEVICE_ID_UNKNOWN and mem_flags is 0, the
+     * remaining memory attributes are unknown and require detection.
      */
     struct {
         void               *address;
         size_t             size;
         ucs_memory_type_t  mem_type;
+        ucs_sys_device_t   sys_dev;
+        uint8_t            mem_flags;
     } mem_type;
 
 } ucm_event_t;

@@ -84,7 +84,8 @@ void uct_srd_iface_remove_ep(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 /* Request the remote interface to create the address handler */
 ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface,
                                    uct_srd_ctl_id_t ctl_id, uint64_t ep_uuid,
-                                   struct ibv_ah *ah, uint32_t remote_qpn)
+                                   uct_ib_ah_entry_t *ah_entry,
+                                   uint32_t remote_qpn)
 {
     ucs_status_t status;
     uct_srd_ctl_op_t *ctl_op;
@@ -94,13 +95,14 @@ ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface,
     ctl_op = ucs_malloc(sizeof(*ctl_op) + sizeof(*hdr) + iface->super.addr_size,
                         "uct_srd_ctl_op_t");
     if (ctl_op == NULL) {
-        ucs_error("iface=%p ctl_id=%d ep_uuid=%" PRIx64 " ah=%p remote_qpn=%u "
-                  "failed to allocate ctl_op",
-                  iface, ctl_id, ep_uuid, ah, remote_qpn);
+        ucs_error("iface=%p ctl_id=%d ep_uuid=%" PRIx64
+                  " ah_entry=%p remote_qpn=%u failed to allocate ctl_op",
+                  iface, ctl_id, ep_uuid, ah_entry, remote_qpn);
+        uct_ib_iface_ah_put(&iface->super, ah_entry);
         return UCS_ERR_NO_MEMORY;
     }
 
-    ctl_op->ah         = ah;
+    ctl_op->ah_entry   = ah_entry;
     ctl_op->remote_qpn = remote_qpn;
 
     hdr          = (uct_srd_ctl_hdr_t*)(ctl_op + 1);
@@ -113,9 +115,11 @@ ucs_status_t uct_srd_iface_ctl_add(uct_srd_iface_t *iface,
                                                  (uct_device_addr_t*)(hdr + 1));
         if (status != UCS_OK) {
             ucs_error("iface=%p ctl_id=%d ep_uuid=%" PRIx64
-                      " ah=%p remote_qpn=%u failed to get device address %s",
-                      iface, ctl_id, ep_uuid, ah, remote_qpn,
+                      " ah_entry=%p remote_qpn=%u failed to get device "
+                      "address %s",
+                      iface, ctl_id, ep_uuid, ah_entry, remote_qpn,
                       ucs_status_string(status));
+            uct_ib_iface_ah_put(&iface->super, ah_entry);
             ucs_free(ctl_op);
             return status;
         }
@@ -144,6 +148,9 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
 
     send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
     send_op->ep      = NULL;
+    /* Take over the control operation's AH reference, so that the AH outlives
+     * the WQE posted below */
+    send_op->ah_entry = ctl_op->ah_entry;
 
     iface->tx.sge[0].addr   = (uintptr_t)hdr;
     iface->tx.sge[0].length = sizeof(*hdr);
@@ -154,7 +161,7 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
     iface->tx.wr_inl.wr_id   = (uintptr_t)send_op;
     iface->tx.wr_inl.num_sge = 1;
 
-    uct_srd_iface_post_send(iface, ctl_op->ah, ctl_op->remote_qpn,
+    uct_srd_iface_post_send(iface, ctl_op->ah_entry->ah, ctl_op->remote_qpn,
                             &iface->tx.wr_inl, IBV_SEND_INLINE);
     iface->tx.available--;
     ucs_list_add_tail(&iface->tx.outstanding_list, &send_op->list);
@@ -174,6 +181,7 @@ void uct_srd_iface_ctl_op_progress(uct_srd_iface_t *iface)
             break;
         }
 
+        /* The AH reference is now owned by the posted send_op */
         ucs_queue_pull_non_empty(&iface->tx.ctl_queue);
         ucs_free(ctl_op);
     }
@@ -236,6 +244,8 @@ static uct_ib_iface_ops_t uct_srd_iface_ops = {
         .iface_is_reachable_v2 = uct_ib_iface_is_reachable_v2,
         .ep_is_connected       = uct_srd_ep_is_connected,
         .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)
+            ucs_empty_function_return_unsupported,
+        .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)
             ucs_empty_function_return_unsupported
     },
     .create_cq      = uct_ib_verbs_create_cq,
@@ -391,6 +401,7 @@ static void uct_srd_iface_send_op_purge(uct_srd_iface_t *iface)
                                         list);
 
         ucs_assertv(send_op->ep == NULL, "send_op_ep=%p", send_op->ep);
+        uct_ib_iface_ah_put(&iface->super, send_op->ah_entry);
         ucs_mpool_put(send_op);
     }
 }
@@ -402,6 +413,7 @@ static void uct_srd_iface_ctl_op_purge(uct_srd_iface_t *iface)
     while (!ucs_queue_is_empty(&iface->tx.ctl_queue)) {
         ctl_op = ucs_queue_pull_elem_non_empty(&iface->tx.ctl_queue,
                                                uct_srd_ctl_op_t, queue);
+        uct_ib_iface_ah_put(&iface->super, ctl_op->ah_entry);
         ucs_free(ctl_op);
     }
 }
@@ -585,10 +597,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_iface_t)
 
     uct_base_iface_progress_disable(&self->super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    uct_srd_iface_send_op_purge(self);
     uct_srd_iface_ctl_op_purge(self);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     uct_ib_destroy_qp(self->qp);
+    /* Release the AH references owned by outstanding send operations only
+     * after the QP is gone, as until then the device could consume their
+     * posted WQEs */
+    uct_srd_iface_send_op_purge(self);
     kh_foreach_value(&self->rx.ctx_hash, ctx, {
         uct_iface_rx_ctx_cleanup(ctx);
     });
@@ -647,7 +662,7 @@ uct_srd_iface_poll_tx(uct_srd_iface_t *iface)
             uct_srd_iface_pending_ctl_progress(iface);
         }
 
-        uct_srd_ep_send_op_completion(send_op);
+        uct_srd_ep_send_op_completion(iface, send_op);
     }
 
     iface->tx.available += num_wcs;
@@ -765,7 +780,7 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     ucs_status_t status;
-    struct ibv_ah *ah;
+    uct_ib_ah_entry_t *ah_entry;
     uct_srd_ep_t *ep;
 
     if (ctl->id == UCT_SRD_CTL_ID_RESP) {
@@ -800,7 +815,8 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         goto out;
     }
 
-    status = uct_ib_iface_create_ah(&iface->super, &ah_attr, "SRD AH", &ah);
+    status = uct_ib_iface_ah_get(&iface->super, &ah_attr, "SRD AH",
+                                 &ah_entry);
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u failed to create ah"
                   "status=%s",
@@ -808,8 +824,9 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
         goto out;
     }
 
-    status = uct_srd_iface_ctl_add(iface, UCT_SRD_CTL_ID_RESP, ctl->ep_uuid, ah,
-                                   qpn);
+    /* ctl_add() takes ownership of this reference. */
+    status = uct_srd_iface_ctl_add(iface, UCT_SRD_CTL_ID_RESP, ctl->ep_uuid,
+                                   ah_entry, qpn);
     if (status != UCS_OK) {
         ucs_error("iface=%p id=%u ep_uuid=%"PRIx64" qpn=%u failed to add "
                   "ctl response status=%s",
@@ -1003,6 +1020,10 @@ uct_srd_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
     struct ibv_context *ctx;
     struct efadv_device_attr efa_attr;
     int ret;
+
+    if (!uct_ib_efadv_pci_vendor_match(&ib_md->dev.pci_id)) {
+        return UCS_ERR_NO_DEVICE;
+    }
 
     ctx = ibv_open_device(ib_md->dev.ibv_context->device);
     if (ctx == NULL) {
