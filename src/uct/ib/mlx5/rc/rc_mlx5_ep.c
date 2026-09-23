@@ -1420,8 +1420,8 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 }
 
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                                    void *data, size_t length, size_t valid_length,
-                                    char *buffer, size_t max)
+                                    void *data, size_t length, char *buffer,
+                                    size_t max)
 {
     uct_rc_mlx5_hdr_t *rch = data;
 
@@ -1454,8 +1454,8 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 
     data = &rch->rc_hdr;
     /* coverity[overrun-buffer-val] */
-    uct_rc_ep_packet_dump(iface, type, data, length - UCS_PTR_BYTE_DIFF(rch, data),
-                          valid_length, buffer, max);
+    uct_rc_ep_packet_dump(iface, type, data,
+                          length - UCS_PTR_BYTE_DIFF(rch, data), buffer, max);
 }
 
 void uct_rc_mlx5_txwq_set_path_mtu(uct_ib_mlx5_txwq_t *txwq,

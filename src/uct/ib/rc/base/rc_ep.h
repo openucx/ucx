@@ -240,8 +240,7 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*
 
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                           void *data, size_t length, size_t valid_length,
-                           char *buffer, size_t max);
+                           void *data, size_t length, char *buffer, size_t max);
 
 void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
                                size_t iovcnt);

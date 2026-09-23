@@ -287,8 +287,7 @@ uct_ud_iface_set_event_cb(uct_ud_iface_t *iface, ucs_async_event_cb_t event_cb);
 void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface);
 
 void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                        void *data, size_t length, size_t valid_length,
-                        char *buffer, size_t max);
+                        void *data, size_t length, char *buffer, size_t max);
 
 union ibv_gid* uct_ud_grh_get_dgid(struct ibv_grh *grh, size_t dgid_len);
 
