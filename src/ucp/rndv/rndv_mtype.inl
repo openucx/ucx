@@ -267,6 +267,8 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED) {
         ucp_trace_req(req, "mtype_fc: remove aborted request from queue");
+        /* O(n) for a single request; endpoint purge and reconfiguration
+         * dequeue all requests of the endpoint in one pass instead */
         ucs_queue_remove(&worker->rndv_mtype_fc.pending_q[fc_op],
                          &req->send.rndv.fc.queue_elem);
         owns_wakeup = 0;

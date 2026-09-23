@@ -51,11 +51,47 @@ int ucp_proto_rndv_mtype_fc_reschedule_filter(
     return 1;
 }
 
+/* Move all queued requests of the endpoint out of the worker pending queues
+ * and out of the flow-control state into @a reqs, in a single pass. Requests
+ * which were already woken up are not queued and stay on the endpoint list. */
+static void
+ucp_proto_rndv_mtype_fc_ep_dequeue(ucp_ep_h ep, ucs_queue_head_t *reqs)
+{
+    ucp_worker_h worker = ep->worker;
+    ucs_queue_head_t *pending_q;
+    ucs_queue_iter_t iter;
+    ucp_request_t *req;
+    unsigned q_index;
+
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; ++q_index) {
+        pending_q = &worker->rndv_mtype_fc.pending_q[q_index];
+        ucs_queue_for_each_safe(req, iter, pending_q,
+                                send.rndv.fc.queue_elem) {
+            if (req->send.ep != ep) {
+                continue;
+            }
+
+            ucs_queue_del_iter(pending_q, iter);
+            ucp_proto_rndv_mtype_fc_leave(req);
+            ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
+        }
+    }
+}
+
 void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
 {
     ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
+    ucs_queue_head_t reqs;
     ucp_request_t *req;
 
+    ucs_queue_head_init(&reqs);
+    ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs);
+    ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+        ucp_proto_request_abort(req, status);
+    }
+
+    /* Aborting a woken-up request may wake up another request of this ep,
+     * which is then aborted on a later iteration */
     while (!ucs_hlist_is_empty(fc_reqs)) {
         req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
                                   send.state.rndv_fc_ep_list);
@@ -66,29 +102,45 @@ void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
     }
 }
 
+/* Reset the request, since the replay does not always restart it, and add it
+ * to the replay queue */
+static void
+ucp_proto_rndv_mtype_fc_extract_one(ucp_request_t *req,
+                                    ucs_queue_head_t *replay_queue)
+{
+    ucs_status_t status;
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+    ucp_trace_req(req, "mtype_fc: extract for replay");
+
+    status = req->send.proto_config->proto->reset(req);
+    ucs_assertv_always(status == UCS_OK, "req %p, failed to reset: %s", req,
+                       ucs_status_string(status));
+    ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+}
+
 void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
                                         ucs_queue_head_t *replay_queue)
 {
     ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
+    ucs_queue_head_t reqs;
     ucp_request_t *req;
-    ucs_status_t status;
 
-    /* The replay does not always restart (and reset) the request, so clear
-     * its flow-control state here. This may wake up another request of this
-     * ep, which is then extracted on a later iteration. */
+    ucs_queue_head_init(&reqs);
+    ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs);
+    ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+        ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
+    }
+
+    /* Resetting a woken-up request may wake up another request of this ep,
+     * which is then extracted on a later iteration */
     while (!ucs_hlist_is_empty(fc_reqs)) {
         req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
                                   send.state.rndv_fc_ep_list);
-        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
-        ucp_trace_req(req, "mtype_fc: extract for replay");
-
-        status = req->send.proto_config->proto->reset(req);
-        ucs_assertv_always(status == UCS_OK, "req %p, failed to reset: %s",
-                           req, ucs_status_string(status));
+        ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
         ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
                    (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
                                         send.state.rndv_fc_ep_list) != req));
-        ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
     }
 }
 
