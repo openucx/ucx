@@ -2789,20 +2789,28 @@ static ucs_status_t
 ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
                                     ucp_gpu_nic_assignment_t **assignment_p)
 {
-    ucp_gpu_nic_assignment_policy_t policy;
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
     ucs_status_t status;
 
     *assignment_p = NULL;
 
-    if (!ucp_gpu_nic_assignment_policy_resolve(mode, ucs_arch_get_cpu_model(),
-                                               &policy)) {
-        ucs_debug("gpu-nic assignment is disabled (mode %s, cpu model %s), "
-                  "skipping",
-                  ucp_gpu_nic_assignment_modes[mode], ucs_cpu_model_name());
+    if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
+        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+            ucs_debug("gpu-nic assignment is not supported on %s "
+                      "architecture, skipping",
+                      ucs_cpu_model_name());
+            return UCS_OK;
+        }
+
+        mode = UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP;
+    } else if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_OFF) {
+        ucs_debug("gpu-nic assignment is disabled by configuration");
         return UCS_OK;
     }
+
+    ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
     status = ucs_topo_build_groups(&groups);
     if (status != UCS_OK) {
@@ -2821,7 +2829,7 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
         goto out_release_groups;
     }
 
-    status = ucp_gpu_nic_assignment_build(&groups, policy, assignment);
+    status = ucp_gpu_nic_assignment_build(&groups, mode, assignment);
     if (status != UCS_OK) {
         ucs_free(assignment);
         goto out_release_groups;

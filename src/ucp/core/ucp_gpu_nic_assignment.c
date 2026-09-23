@@ -33,38 +33,8 @@ typedef struct {
 } ucp_nics_string_buffers_t;
 
 
-int ucp_gpu_nic_assignment_policy_resolve(
-        ucp_gpu_nic_assignment_mode_t mode, ucs_cpu_model_t cpu_model,
-        ucp_gpu_nic_assignment_policy_t *policy_p)
-{
-    ucs_assert(policy_p != NULL);
-
-    switch (mode) {
-    case UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO:
-        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
-        if (cpu_model != UCS_CPU_MODEL_NVIDIA_VERA) {
-            return 0;
-        }
-        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP;
-        return 1;
-    case UCP_GPU_NIC_ASSIGNMENT_MODE_OFF:
-        return 0;
-    case UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP:
-        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP;
-        return 1;
-    case UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN:
-        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN;
-        return 1;
-    case UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED:
-        *policy_p = UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED;
-        return 1;
-    default:
-        ucs_fatal("invalid gpu-nic assignment mode %d", (int)mode);
-    }
-}
-
 static size_t
-ucp_gpu_nic_assignment_get_gpu_idx(ucp_gpu_nic_assignment_policy_t policy,
+ucp_gpu_nic_assignment_get_gpu_idx(ucp_gpu_nic_assignment_mode_t mode,
                                    size_t num_gpus, size_t nic_idx)
 {
     size_t gpu_idx, leg;
@@ -72,12 +42,12 @@ ucp_gpu_nic_assignment_get_gpu_idx(ucp_gpu_nic_assignment_policy_t policy,
     ucs_assert(num_gpus > 0);
 
     gpu_idx = nic_idx % num_gpus;
-    if (policy == UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN) {
+    if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN) {
         return gpu_idx;
     }
 
-    ucs_assertv(policy == UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                "invalid policy: %d", (int)policy);
+    ucs_assertv(mode == UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP, "invalid mode: %d",
+                (int)mode);
     leg = nic_idx / num_gpus;
     if ((leg % 2) != 0) {
         gpu_idx = num_gpus - 1 - gpu_idx;
@@ -377,20 +347,20 @@ ucp_gpu_nic_assignment_add_nic_to_gpu(ucp_gpu_nic_assignment_t *assignment,
 static void
 ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
                                  const ucs_topo_group_t *group,
-                                 ucp_gpu_nic_assignment_policy_t policy)
+                                 ucp_gpu_nic_assignment_mode_t mode)
 {
     size_t num_gpus = ucs_array_length(&group->gpus);
     const ucs_topo_group_element_t *gpu, *nic;
     size_t nic_idx, gpu_idx;
 
     ucs_array_for_each_index(nic, nic_idx, &group->nics) {
-        if (policy == UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED) {
+        if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED) {
             /* Assign the NIC to every GPU in the group. */
             ucs_array_for_each(gpu, &group->gpus) {
                 ucp_gpu_nic_assignment_add_nic_to_gpu(assignment, gpu, nic);
             }
         } else {
-            gpu_idx = ucp_gpu_nic_assignment_get_gpu_idx(policy, num_gpus,
+            gpu_idx = ucp_gpu_nic_assignment_get_gpu_idx(mode, num_gpus,
                                                          nic_idx);
             gpu     = &ucs_array_elem(&group->gpus, gpu_idx);
             ucp_gpu_nic_assignment_add_nic_to_gpu(assignment, gpu, nic);
@@ -400,7 +370,7 @@ ucp_gpu_nic_assignment_add_group(ucp_gpu_nic_assignment_t *assignment,
 
 ucs_status_t
 ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
-                             ucp_gpu_nic_assignment_policy_t policy,
+                             ucp_gpu_nic_assignment_mode_t mode,
                              ucp_gpu_nic_assignment_t *assignment_p)
 {
     ucp_gpu_nic_assignment_t assignment;
@@ -408,8 +378,10 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
     ucs_status_t status;
 
     ucs_assert(groups != NULL);
-    ucs_assertv(policy < UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST,
-                "invalid gpu-nic assignment policy %d", (int)policy);
+    ucs_assertv((mode == UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP) ||
+                        (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN) ||
+                        (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED),
+                "invalid gpu-nic assignment mode %d", (int)mode);
 
     status = ucp_gpu_nic_assignment_init(&assignment, groups);
     if (status != UCS_OK) {
@@ -421,7 +393,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
             continue;
         }
 
-        ucp_gpu_nic_assignment_add_group(&assignment, group, policy);
+        ucp_gpu_nic_assignment_add_group(&assignment, group, mode);
     }
 
     ucp_gpu_nic_assignment_log(&assignment, groups);
