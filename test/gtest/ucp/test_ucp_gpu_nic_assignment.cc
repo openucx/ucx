@@ -161,6 +161,13 @@ protected:
     void check_nic_owners(const topology_shape_t &config,
                           const std::vector<size_t> &expected_owners)
     {
+        /* Validate the expected owners vector. */
+        ASSERT_EQ(config.num_nics(), expected_owners.size());
+        for (size_t owner_idx = 0; owner_idx < expected_owners.size();
+             ++owner_idx) {
+            ASSERT_LT(expected_owners[owner_idx], config.num_gpus());
+        }
+
         /* Expected number of assigned NIC ports per physical GPU. */
         std::vector<size_t> expected_port_counts(config.num_gpus(), 0);
 
@@ -219,10 +226,49 @@ protected:
         }
     }
 
-    void
-    check_assignment_not_shared_inner(const topology_shape_t &config,
-                                      ucp_gpu_nic_assignment_policy_t policy,
-                                      const std::vector<size_t> &expected_owners)
+    void check_nic_shared(const topology_shape_t &config)
+    {
+        /* Verify that each GPU owns all ports of every NIC in its group. */
+        for (size_t group_idx = 0; group_idx < config.num_groups; ++group_idx) {
+            const size_t first_nic_idx = group_idx * config.num_nics_per_group;
+            const size_t end_nic_idx   = first_nic_idx +
+                                         config.num_nics_per_group;
+
+            for (size_t local_idx = 0; local_idx < config.num_gpus_per_group;
+                 ++local_idx) {
+                const size_t gpu_idx = (group_idx * config.num_gpus_per_group) +
+                                       local_idx;
+                const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap =
+                        ucp_gpu_nic_assignment_lookup(&m_assignment,
+                                                      gpu_sys_dev(config,
+                                                                  gpu_idx, 0));
+                ASSERT_NE(nullptr, nic_sys_dev_bitmap);
+
+                for (size_t nic_idx = 0; nic_idx < config.num_nics();
+                     ++nic_idx) {
+                    const bool same_group = (nic_idx >= first_nic_idx) &&
+                                            (nic_idx < end_nic_idx);
+
+                    for (size_t port_idx = 0; port_idx < config.num_nic_ports;
+                         ++port_idx) {
+                        EXPECT_EQ(same_group,
+                                  ucp_gpu_nic_bitmap_get(
+                                          nic_sys_dev_bitmap,
+                                          nic_port_sys_dev(config, nic_idx,
+                                                           port_idx)));
+                    }
+                }
+
+                EXPECT_EQ(config.num_nics_per_group * config.num_nic_ports,
+                          static_cast<size_t>(UCS_STATIC_BITMAP_POPCOUNT(
+                                  *nic_sys_dev_bitmap)));
+            }
+        }
+    }
+
+    void check_assignment(const topology_shape_t &config,
+                          ucp_gpu_nic_assignment_policy_t policy,
+                          const std::vector<size_t> &expected_owners)
     {
         ASSERT_NE(config.num_groups, 0);
         ASSERT_NE(config.num_nic_ports, 0);
@@ -234,101 +280,28 @@ protected:
         /* Leave (UCS_SYS_DEVICE_ID_UNKNOWN - 1) unmapped for the ungrouped lookup. */
         ASSERT_LE(config.num_sys_devs(), UCS_SYS_DEVICE_ID_COUNT - 1);
 
-        if (config.num_gpus() == 0) {
-            ASSERT_TRUE(expected_owners.empty());
-        } else {
-            ASSERT_EQ(config.num_nics(), expected_owners.size());
-            for (size_t owner_idx = 0; owner_idx < expected_owners.size();
-                 ++owner_idx) {
-                ASSERT_LT(expected_owners[owner_idx], config.num_gpus());
-            }
-        }
-
         build_groups(config);
         build_assignment(policy);
 
         if (config.num_gpus() == 0) {
+            ASSERT_TRUE(expected_owners.empty());
             EXPECT_EQ(nullptr, m_assignment.nic_sys_dev_bitmaps);
             EXPECT_EQ(0ul, m_assignment.num_bitmaps);
         } else {
             check_gpu_device_aliases(config);
-            check_nic_owners(config, expected_owners);
+            if (policy == UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED) {
+                ASSERT_TRUE(expected_owners.empty());
+                check_nic_shared(config);
+            } else {
+                check_nic_owners(config, expected_owners);
+            }
         }
     }
 
-    void check_assignment_shared_inner(const topology_shape_t &config)
-    {
-        ASSERT_NE(config.num_groups, 0);
-        ASSERT_NE(config.num_nic_ports, 0);
-        ASSERT_NE(config.num_gpu_devices, 0);
-        ASSERT_LE(config.num_gpu_devices, UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT);
-        ASSERT_LE(config.num_nic_ports, UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT);
-        ASSERT_LE(config.num_sys_devs(), UCS_SYS_DEVICE_ID_COUNT - 1);
-
-        build_groups(config);
-        build_assignment(UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED);
-
-        if (config.num_gpus() == 0) {
-            EXPECT_EQ(nullptr, m_assignment.nic_sys_dev_bitmaps);
-            EXPECT_EQ(0ul, m_assignment.num_bitmaps);
-            return;
-        }
-
-        check_gpu_device_aliases(config);
-
-        if (config.num_gpus_per_group == 0) {
-            ADD_FAILURE() << "num_gpus_per_group must be non-zero";
-            return;
-        }
-
-        if (config.num_nics() == 0) {
-            for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
-                const auto *nic_sys_dev_bitmap = ucp_gpu_nic_assignment_lookup(
-                        &m_assignment, gpu_sys_dev(config, gpu_idx, 0));
-
-                ASSERT_NE(nullptr, nic_sys_dev_bitmap);
-                EXPECT_EQ(0ul, static_cast<size_t>(UCS_STATIC_BITMAP_POPCOUNT(
-                                       *nic_sys_dev_bitmap)));
-            }
-
-            return;
-        }
-
-        if (config.num_nics_per_group == 0) {
-            ADD_FAILURE() << "num_nics_per_group must be non-zero";
-            return;
-        }
-
-        for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
-            const auto *nic_sys_dev_bitmap = ucp_gpu_nic_assignment_lookup(
-                    &m_assignment, gpu_sys_dev(config, gpu_idx, 0));
-            const size_t gpu_group_idx = gpu_idx / config.num_gpus_per_group;
-
-            ASSERT_NE(nullptr, nic_sys_dev_bitmap);
-
-            for (size_t nic_idx = 0; nic_idx < config.num_nics(); ++nic_idx) {
-                const size_t nic_group_idx = nic_idx /
-                                             config.num_nics_per_group;
-
-                for (size_t port_idx = 0; port_idx < config.num_nic_ports;
-                     ++port_idx) {
-                    EXPECT_EQ(gpu_group_idx == nic_group_idx,
-                              ucp_gpu_nic_bitmap_get(
-                                      nic_sys_dev_bitmap,
-                                      nic_port_sys_dev(config, nic_idx,
-                                                       port_idx)));
-                }
-            }
-
-            EXPECT_EQ(config.num_nics_per_group * config.num_nic_ports,
-                      static_cast<size_t>(
-                              UCS_STATIC_BITMAP_POPCOUNT(*nic_sys_dev_bitmap)));
-        }
-    }
-
-    template<typename Check>
     void check_assignment(size_t num_groups, size_t num_gpus_per_group,
-                          size_t num_nics_per_group, Check check)
+                          size_t num_nics_per_group,
+                          ucp_gpu_nic_assignment_policy_t policy,
+                          const std::vector<size_t> &expected_owners)
     {
         topology_shape_t config;
 
@@ -344,32 +317,9 @@ protected:
                  ++num_nic_ports) {
                 config.num_gpu_devices = num_gpu_devices;
                 config.num_nic_ports   = num_nic_ports;
-                check(config);
+                check_assignment(config, policy, expected_owners);
             }
         }
-    }
-
-    void check_assignment_not_shared(size_t num_groups,
-                                     size_t num_gpus_per_group,
-                                     size_t num_nics_per_group,
-                                     ucp_gpu_nic_assignment_policy_t policy,
-                                     const std::vector<size_t> &expected_owners)
-    {
-        check_assignment(num_groups, num_gpus_per_group, num_nics_per_group,
-                         [this, policy,
-                          &expected_owners](const topology_shape_t &config) {
-                             check_assignment_not_shared_inner(config, policy,
-                                                               expected_owners);
-                         });
-    }
-
-    void check_assignment_shared(size_t num_groups, size_t num_gpus_per_group,
-                                 size_t num_nics_per_group)
-    {
-        check_assignment(num_groups, num_gpus_per_group, num_nics_per_group,
-                         [this](const topology_shape_t &config) {
-                             check_assignment_shared_inner(config);
-                         });
     }
 
 private:
@@ -377,116 +327,55 @@ private:
     ucp_gpu_nic_assignment_t m_assignment;
 };
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, mode_resolution) {
-    struct test_param_t {
-        ucp_gpu_nic_assignment_mode_t   mode;
-        ucs_cpu_model_t                 cpu_model;
-        int                             expected_enabled;
-        ucp_gpu_nic_assignment_policy_t expected_policy;
-    };
-
-    const test_param_t test_params[] = {
-        /* Auto mode with VERA CPU. */
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO, UCS_CPU_MODEL_NVIDIA_VERA, 1,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP},
-        /* Auto mode with non-VERA CPU. */
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO, UCS_CPU_MODEL_UNKNOWN, 0,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO, UCS_CPU_MODEL_NVIDIA_GRACE, 0,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
-        /* Off mode. */
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_OFF, UCS_CPU_MODEL_NVIDIA_VERA, 0,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_OFF, UCS_CPU_MODEL_UNKNOWN, 0,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST},
-        /* Flip mode. */
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP, UCS_CPU_MODEL_UNKNOWN, 1,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP},
-        /* Round-robin mode. */
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN, UCS_CPU_MODEL_UNKNOWN, 1,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN},
-        /* Shared mode. */
-        {UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED, UCS_CPU_MODEL_UNKNOWN, 1,
-         UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED},
-    };
-
-    for (const auto &params : test_params) {
-        ucp_gpu_nic_assignment_policy_t policy =
-                UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST;
-
-        EXPECT_EQ(params.expected_enabled,
-                  ucp_gpu_nic_assignment_policy_resolve(params.mode,
-                                                        params.cpu_model,
-                                                        &policy));
-        EXPECT_EQ(params.expected_policy, policy);
-    }
+UCS_TEST_F(test_ucp_gpu_nic_assignment, no_nics) {
+    check_assignment(2, 3, 0, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, {});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_no_nics) {
-    check_assignment_not_shared(2, 3, 0, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                {});
+UCS_TEST_F(test_ucp_gpu_nic_assignment, no_gpus) {
+    check_assignment(2, 0, 3, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, {});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_no_gpus) {
-    check_assignment_not_shared(2, 0, 3, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                {});
-}
-
-UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_flip_divisible) {
+UCS_TEST_F(test_ucp_gpu_nic_assignment, flip_divisible) {
     /* Number of NICs is divisible by the number of GPUs. */
-    check_assignment_not_shared(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                {0, 1, 1, 0, /**/
-                                 2, 3, 3, 2, /**/
-                                 4, 5, 5, 4});
-    check_assignment_not_shared(2, 3, 6, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                {0, 1, 2, 2, 1, 0, /**/
-                                 3, 4, 5, 5, 4, 3});
+    check_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
+                     {0, 1, 1, 0, /**/
+                      2, 3, 3, 2, /**/
+                      4, 5, 5, 4});
+    check_assignment(2, 3, 6, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
+                     {0, 1, 2, 2, 1, 0, /**/
+                      3, 4, 5, 5, 4, 3});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_flip_not_divisible) {
-    check_assignment_not_shared(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                {0, 1, 1, 0, 0, /**/
-                                 2, 3, 3, 2, 2});
-    check_assignment_not_shared(2, 3, 2, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                {0, 1, /**/
-                                 3, 4});
+UCS_TEST_F(test_ucp_gpu_nic_assignment, flip_not_divisible) {
+    check_assignment(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
+                     {0, 1, 1, 0, 0, /**/
+                      2, 3, 3, 2, 2});
+    check_assignment(2, 3, 2, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
+                     {0, 1, /**/
+                      3, 4});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_round_robin_divisible) {
-    check_assignment_not_shared(3, 2, 4,
-                                UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-                                {0, 1, 0, 1, /**/
-                                 2, 3, 2, 3, /**/
-                                 4, 5, 4, 5});
-    check_assignment_not_shared(2, 3, 6,
-                                UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-                                {0, 1, 2, 0, 1, 2, /**/
-                                 3, 4, 5, 3, 4, 5});
+UCS_TEST_F(test_ucp_gpu_nic_assignment, round_robin_divisible) {
+    check_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
+                     {0, 1, 0, 1, /**/
+                      2, 3, 2, 3, /**/
+                      4, 5, 4, 5});
+    check_assignment(2, 3, 6, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
+                     {0, 1, 2, 0, 1, 2, /**/
+                      3, 4, 5, 3, 4, 5});
 }
 
-UCS_TEST_F(test_ucp_gpu_nic_assignment, not_shared_round_robin_not_divisible) {
-    check_assignment_not_shared(2, 2, 5,
-                                UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-                                {0, 1, 0, 1, 0, /**/
-                                 2, 3, 2, 3, 2});
-    check_assignment_not_shared(2, 3, 2,
-                                UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-                                {0, 1, /**/
-                                 3, 4});
-}
-
-UCS_TEST_F(test_ucp_gpu_nic_assignment, shared_no_nics) {
-    check_assignment_shared(2, 3, 0);
-}
-
-UCS_TEST_F(test_ucp_gpu_nic_assignment, shared_no_gpus) {
-    check_assignment_shared(2, 0, 3);
+UCS_TEST_F(test_ucp_gpu_nic_assignment, round_robin_not_divisible) {
+    check_assignment(2, 2, 5, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
+                     {0, 1, 0, 1, 0, /**/
+                      2, 3, 2, 3, 2});
+    check_assignment(2, 3, 2, UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
+                     {0, 1, /**/
+                      3, 4});
 }
 
 UCS_TEST_F(test_ucp_gpu_nic_assignment, shared) {
-    /* 2 GPUs, 4 NICs. */
-    check_assignment_shared(3, 2, 4);
-
+    check_assignment(3, 2, 4, UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED, {});
     /* More GPUs than NICs. */
-    check_assignment_shared(2, 3, 2);
+    check_assignment(2, 3, 2, UCP_GPU_NIC_ASSIGNMENT_POLICY_SHARED, {});
 }

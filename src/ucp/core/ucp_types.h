@@ -238,10 +238,15 @@ typedef enum {
  * GPU-to-NIC assignment mode.
  */
 typedef enum {
+    /* Enable on hardware with a known GPU-NIC topology, otherwise disable */
     UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO,
+    /* Do not assign NICs to GPUs, select lanes from all NICs */
     UCP_GPU_NIC_ASSIGNMENT_MODE_OFF,
+    /* Assign each NIC to a single GPU, walking GPUs forward then backward */
     UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+    /* Assign each NIC to a single GPU, walking the GPUs in ascending order */
     UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+    /* Assign every NIC of a group to every GPU of that group */
     UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED,
     UCP_GPU_NIC_ASSIGNMENT_MODE_LAST
 } ucp_gpu_nic_assignment_mode_t;

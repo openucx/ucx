@@ -41,17 +41,17 @@ struct ucp_gpu_nic_assignment {
 typedef enum {
     /**
      * Assign each NIC, with all of its ports, going forward and then backward
-     * across the GPUs.
+     * across the N GPUs of the group.
      * The group's NICs are assigned to the following GPU indices in order:
-     * 0, 1, ..., num_gpus-1, num_gpus-1, ..., 1, 0, 0, 1, ...
+     * 0, 1, ..., N-1, N-1, ..., 1, 0, 0, 1, ...
      */
     UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
 
     /**
-     * Assign each NIC, with all of its ports, to GPUs repeatedly in ascending
-     * order.
+     * Assign each NIC, with all of its ports, to the N GPUs of the group
+     * repeatedly in ascending order.
      * The group's NICs are assigned to the following GPU indices in order:
-     * 0, 1, ..., num_gpus-1, 0, 1, ..., num_gpus-1, 0, 1, ...
+     * 0, 1, ..., N-1, 0, 1, ..., N-1, 0, 1, ...
      */
     UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
 

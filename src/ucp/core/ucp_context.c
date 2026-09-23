@@ -628,12 +628,22 @@ static ucs_config_field_t ucp_context_config_table[] = {
    UCS_CONFIG_TYPE_BOOL},
 
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
-   "Select how NICs are assigned to GPUs.\n"
-   " - auto        : enable automatically on supported hardware, otherwise disable.\n"
-   " - off         : disable GPU-to-NIC assignment, fallback to free lane selection.\n"
-   " - flip        : require the not shared flip assignment policy.\n"
-   " - round_robin : require the not shared round-robin assignment policy.\n"
-   " - shared      : require the shared assignment policy.",
+   "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
+   "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "All ports of a NIC are assigned together.\n"
+   "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
+   "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
+   "some GPUs without any NICs.\n"
+   " - auto        : use 'flip' on hardware with a known GPU-NIC topology,\n"
+   "                 otherwise 'off'.\n"
+   " - off         : do not assign; select lanes from all NICs.\n"
+   " - flip        : assign each NIC to a single GPU, walking the N GPUs of\n"
+   "                 the group forward then backward:\n"
+   "                 0, 1, .., N-1, N-1, .., 1, 0, 0, 1, ..\n"
+   " - round_robin : assign each NIC to a single GPU, walking the N GPUs of\n"
+   "                 the group in ascending order:\n"
+   "                 0, 1, .., N-1, 0, 1, .., N-1, 0, ..\n"
+   " - shared      : assign all NICs of a group to every GPU of that group.",
    ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
 
