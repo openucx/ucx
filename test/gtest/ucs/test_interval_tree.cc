@@ -104,7 +104,7 @@ protected:
 
     bool check_invariants() const
     {
-        if (!rbtree_check::validate(&m_tree.rb, m_tree.num_nodes)) {
+        if (!rbtree_check::validate(&m_tree.rb, ucs_interval_tree_count(&m_tree))) {
             return false;
         }
 
