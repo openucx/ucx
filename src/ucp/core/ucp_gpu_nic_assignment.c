@@ -41,6 +41,7 @@ int ucp_gpu_nic_assignment_policy_resolve(
 
     switch (mode) {
     case UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO:
+        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
         if (cpu_model != UCS_CPU_MODEL_NVIDIA_VERA) {
             return 0;
         }
