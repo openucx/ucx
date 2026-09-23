@@ -528,12 +528,13 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
 {
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr,
+        uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, 0,
                                srq->verbs.srq);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
     case UCT_IB_MLX5_OBJ_TYPE_NULL:
-        uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, NULL);
+        uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, 0,
+                               NULL);
         qp_attr->mmio_mode = iface->tx.mmio_mode;
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:

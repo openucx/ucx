@@ -826,7 +826,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     uct_rc_iface_common_config_t *rc_config,
                     uct_rc_mlx5_iface_common_config_t *mlx5_config,
-                    uct_ib_iface_init_attr_t *init_attr)
+                    uct_rc_iface_init_attr_t *init_attr)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev;
@@ -844,20 +844,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
-    uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
+    init_attr->super.flags |= UCT_IB_CQ_IGNORE_OVERRUN;
+    uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, &init_attr->super);
 
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,
-                                       params, init_attr);
+                                       params, &init_attr->super);
     if (status != UCS_OK) {
         return status;
     }
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
-    init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
+    init_attr->super.rx_hdr_len      = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
-    init_attr->xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t),
+    init_attr->super.xport_hdr_len   = ucs_max(sizeof(uct_rc_hdr_t),
                                                UCT_IB_RETH_LEN);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
@@ -905,7 +905,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     status = uct_rc_mlx5_iface_init_fence_flags(
             self, rc_config, md, dev,
-            (init_attr->qp_type == IBV_QPT_RC) &&
+            (init_attr->super.qp_type == IBV_QPT_RC) &&
                     md->super.relaxed_order_required);
     if (status != UCS_OK) {
         goto cleanup_dm;
@@ -996,22 +996,22 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     uct_rc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_rc_mlx5_iface_config_t);
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    uct_ib_iface_init_attr_t init_attr = {};
+    uct_rc_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
-    init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
-    init_attr.flags                 = IBV_DEVICE_TM_FLAGS(&md->super.dev) ?
-                                      UCT_IB_TM_SUPPORTED : 0;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
-    init_attr.qp_type               = IBV_QPT_RC;
-    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
-                                                   max_qp_rd_atom);
-    init_attr.tx_moderation         = config->super.tx_cq_moderation;
-    init_attr.dev_name              = params->mode.device.dev_name;
+    init_attr.super.fc_req_size           = sizeof(uct_rc_pending_req_t);
+    init_attr.super.flags                 =
+            IBV_DEVICE_TM_FLAGS(&md->super.dev) ? UCT_IB_TM_SUPPORTED : 0;
+    init_attr.super.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.super.qp_type               = IBV_QPT_RC;
+    init_attr.super.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
+                                                         max_qp_rd_atom);
+    init_attr.super.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.super.dev_name              = params->mode.device.dev_name;
 
     if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
         md->ddp_support_dv.rc) {
-        init_attr.flags |= UCT_IB_DDP_SUPPORTED;
+        init_attr.super.flags |= UCT_IB_DDP_SUPPORTED;
     }
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
