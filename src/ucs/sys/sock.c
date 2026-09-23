@@ -1113,8 +1113,8 @@ ucs_status_t ucs_sockaddr_get_ifname_by_addr(const struct sockaddr *addr,
             continue;
         }
 
-        if (((sa->sa_family == AF_INET) || (sa->sa_family == AF_INET6)) &&
-            (!ucs_sockaddr_cmp(sa, addr, NULL))) {
+        if ((sa->sa_family == addr->sa_family) &&
+            !ucs_sockaddr_ip_cmp(sa, addr)) {
             ucs_debug("matching ip found iface on %s", ifa->ifa_name);
             ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);
             status = UCS_OK;
@@ -1138,13 +1138,6 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
     if (getsockname(fd, my_addr, &sockaddr_len)) {
         ucs_warn("getsockname error: %m");
         return UCS_ERR_IO_ERROR;
-    }
-
-    /* port number is not important, so we assign zero because sockaddr
-     * structures returned by getifaddrs have ports assigned to zero */
-    if (UCS_OK != ucs_sockaddr_set_port(my_addr, 0)) {
-        ucs_warn("sockcm doesn't support unknown address family");
-        return UCS_ERR_INVALID_PARAM;
     }
 
     ucs_debug("check ifname for socket on %s",
