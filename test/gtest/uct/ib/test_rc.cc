@@ -9,6 +9,10 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
+extern "C" {
+#include <ucs/arch/cpu.h>
+}
+
 #ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/rc/rc_mlx5_common.h>
@@ -310,6 +314,137 @@ UCS_TEST_SKIP_COND_P(test_rc_max_wr, send_limit,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
+
+#ifdef HAVE_MLX5_DV
+class test_rc_mlx5_bf_copy : public test_rc {
+public:
+    virtual void init()
+    {
+        test_rc::init();
+
+        m_rx_count  = 0;
+        m_rx_errors = 0;
+        uct_iface_set_am_handler(m_e2->iface(), AM_ID, am_handler, this, 0);
+    }
+
+protected:
+    enum {
+        AM_ID       = 0,
+        NUM_ITERS   = 512,
+        MAX_PAYLOAD = UCT_IB_MLX5_BF_REG_SIZE
+    };
+
+    /* Post AM shorts of varying size, so that single-BB and multi-BB BlueFlame
+     * copies and the send queue wrap-around are all exercised. */
+    void test_bf_copy()
+    {
+        uct_rc_mlx5_base_ep_t *ep;
+        uint8_t payload[MAX_PAYLOAD];
+        size_t max_len, len, i;
+        ucs_status_t status;
+        unsigned iter;
+
+        ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        ASSERT_TRUE(ep->tx.wq.reg != NULL);
+        ASSERT_EQ(UCT_IB_MLX5_MMIO_MODE_BF_POST, ep->tx.wq.reg->mode);
+
+        max_len = m_e1->iface_attr().cap.am.max_short - sizeof(uint64_t);
+        if (max_len > sizeof(payload)) {
+            max_len = sizeof(payload);
+        }
+
+        for (iter = 0; iter < NUM_ITERS; ++iter) {
+            len = iter % (max_len + 1);
+            for (i = 0; i < len; ++i) {
+                payload[i] = iter + i;
+            }
+
+            do {
+                status = uct_ep_am_short(m_e1->ep(0), AM_ID, iter, payload,
+                                         len);
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    progress_loop();
+                }
+            } while (status == UCS_ERR_NO_RESOURCE);
+
+            ASSERT_UCS_OK(status);
+        }
+
+        flush();
+        wait_for_value(&m_rx_count, (unsigned)NUM_ITERS, true);
+        EXPECT_EQ((unsigned)NUM_ITERS, m_rx_count);
+        EXPECT_EQ(0u, m_rx_errors);
+    }
+
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags)
+    {
+        test_rc_mlx5_bf_copy *self = reinterpret_cast<test_rc_mlx5_bf_copy*>(
+                arg);
+        const uint8_t *payload;
+        uint64_t hdr;
+        size_t i;
+
+        if (length < sizeof(hdr)) {
+            ++self->m_rx_errors;
+            return UCS_OK;
+        }
+
+        memcpy(&hdr, data, sizeof(hdr));
+        payload = reinterpret_cast<const uint8_t*>(data) + sizeof(hdr);
+
+        for (i = 0; i < (length - sizeof(hdr)); ++i) {
+            if (payload[i] != (uint8_t)(hdr + i)) {
+                ++self->m_rx_errors;
+                break;
+            }
+        }
+
+        ++self->m_rx_count;
+        return UCS_OK;
+    }
+
+    volatile unsigned m_rx_count;
+    volatile unsigned m_rx_errors;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_copy, generic,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=generic",
+                     "RC_FC_ENABLE?=n")
+{
+    test_bf_copy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_copy, rc_mlx5)
+
+#if UCT_IB_MLX5_HAVE_ST64B
+class test_rc_mlx5_bf_copy_st64b : public test_rc_mlx5_bf_copy {
+public:
+    virtual void init()
+    {
+        if (!ucs_cpu_has_flag(UCS_CPU_FLAG_LS64)) {
+            UCS_TEST_SKIP_R("CPU does not report LS64 support");
+        }
+
+        test_rc_mlx5_bf_copy::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_copy_st64b, st64b,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=st64b",
+                     "RC_FC_ENABLE?=n")
+{
+    test_bf_copy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_copy_st64b, rc_mlx5)
+#endif
+
+#endif
 
 
 class test_rc_iface_flush_remote : public uct_test {
