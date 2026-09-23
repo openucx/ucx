@@ -763,7 +763,8 @@ static ucs_status_t ucp_device_remote_mem_list_params_check(
             return UCS_ERR_INVALID_PARAM;
         }
 
-        if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) &&
+            (ucp_ep_config(ep)->p2p_lanes != 0)) {
             /*
              * Do not log error here because UCS_ERR_NOT_CONNECTED is expected
              * during connection establishment. Applications are expected to retry

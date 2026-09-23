@@ -801,3 +801,5 @@ UCS_TEST_P(test_ucp_device_xfer, counter)
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, rc_gda,
                                         "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device_xfer, cuda_ipc,
+                                        "sm,cuda_ipc")
