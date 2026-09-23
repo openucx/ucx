@@ -110,6 +110,15 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
+static const char *ucp_gpu_nic_assignment_modes[] = {
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO]        = "auto",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_OFF]         = "off",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP]        = "flip",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN] = "round_robin",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED]      = "shared",
+    [UCP_GPU_NIC_ASSIGNMENT_MODE_LAST]        = NULL
+};
+
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -616,6 +625,26 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "are reachable through the transport layer.",
    ucs_offsetof(ucp_context_config_t, connect_all_to_all),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"GPU_NIC_ASSIGNMENT_MODE", "auto",
+   "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
+   "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "All ports of a NIC are assigned together.\n"
+   "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
+   "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
+   "some GPUs without any NICs.\n"
+   " - auto        : use 'flip' on hardware with a known GPU-NIC topology,\n"
+   "                 otherwise 'off'.\n"
+   " - off         : do not assign; select lanes from all NICs.\n"
+   " - flip        : assign each NIC to a single GPU, walking the N GPUs of\n"
+   "                 the group forward then backward:\n"
+   "                 0, 1, .., N-1, N-1, .., 1, 0, 0, 1, ..\n"
+   " - round_robin : assign each NIC to a single GPU, walking the N GPUs of\n"
+   "                 the group in ascending order:\n"
+   "                 0, 1, .., N-1, 0, 1, .., N-1, 0, ..\n"
+   " - shared      : assign all NICs of a group to every GPU of that group.",
+   ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_modes)},
 
   {"SINGLE_NET_DEVICE", "n",
    "Restrict each protocol's lanes to one network device.\n"
@@ -2755,7 +2784,8 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
 }
 
 static ucs_status_t
-ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t **assignment_p)
+ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
+                                    ucp_gpu_nic_assignment_t **assignment_p)
 {
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
@@ -2763,13 +2793,22 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t **assignment_p)
 
     *assignment_p = NULL;
 
-    /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
-    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-        ucs_debug("gpu-nic assignment is not supported on %s architecture, "
-                  "skipping",
-                  ucs_cpu_model_name());
+    if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
+        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+            ucs_debug("gpu-nic assignment is not supported on %s "
+                      "architecture, skipping",
+                      ucs_cpu_model_name());
+            return UCS_OK;
+        }
+
+        mode = UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP;
+    } else if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_OFF) {
+        ucs_debug("gpu-nic assignment is disabled by configuration");
         return UCS_OK;
     }
+
+    ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
     status = ucs_topo_build_groups(&groups);
     if (status != UCS_OK) {
@@ -2788,9 +2827,7 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_t **assignment_p)
         goto out_release_groups;
     }
 
-    status = ucp_gpu_nic_assignment_build(&groups,
-                                          UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-                                          assignment);
+    status = ucp_gpu_nic_assignment_build(&groups, mode, assignment);
     if (status != UCS_OK) {
         ucs_free(assignment);
         goto out_release_groups;
@@ -2857,7 +2894,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
-    status = ucp_context_gpu_nic_assignment_init(&context->gpu_nic_assignment);
+    status = ucp_context_gpu_nic_assignment_init(
+            context->config.ext.gpu_nic_assignment_mode,
+            &context->gpu_nic_assignment);
     if (status != UCS_OK) {
         goto err_free_res;
     }

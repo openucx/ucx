@@ -32,7 +32,8 @@ int uct_srd_ep_is_connected(const uct_ep_h tl_ep,
         return 0;
     }
 
-    return uct_ib_iface_is_connected(ib_iface, ib_addr, ep->path_index, ep->ah);
+    return uct_ib_iface_ah_is_peer(ib_iface, ep->ah_entry, ib_addr,
+                                   ep->path_index);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
@@ -69,21 +70,21 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
         goto err_arb_cleanup;
     }
 
-    status = uct_ib_device_create_ah_cached(uct_ib_iface_device(&iface->super),
-                                            &ah_attr,
-                                            uct_ib_iface_md(&iface->super)->pd,
-                                            "SRD AH", &self->ah);
+    status = uct_ib_iface_ah_get(&iface->super, &ah_attr, "SRD AH",
+                                 &self->ah_entry);
     if (status != UCS_OK) {
         goto err_arb_cleanup;
     }
 
     status = uct_srd_iface_add_ep(iface, self);
     if (status != UCS_OK) {
-        goto err_arb_cleanup;
+        goto err_release_ah;
     }
 
+    /* ctl_add() takes ownership of a reference; duplicate for the ep's own */
+    uct_ib_iface_ah_hold(&iface->super, self->ah_entry);
     status = uct_srd_iface_ctl_add(iface, UCT_SRD_CTL_ID_REQ, self->ep_uuid,
-                                   self->ah, self->dest_qpn);
+                                   self->ah_entry, self->dest_qpn);
     if (status != UCS_OK) {
         goto err_remove_ep;
     }
@@ -100,6 +101,8 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t *params)
 
 err_remove_ep:
     uct_srd_iface_remove_ep(iface, self);
+err_release_ah:
+    uct_ib_iface_ah_put(&iface->super, self->ah_entry);
 err_arb_cleanup:
     ucs_arbiter_group_cleanup(&self->pending_group);
     return status;
@@ -130,20 +133,25 @@ uct_srd_ep_send_op_complete(uct_srd_send_op_t *send_op, uct_srd_iface_t *iface,
     iface->tx.outstanding--;
 }
 
-void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op)
+void uct_srd_ep_send_op_completion(uct_srd_iface_t *iface,
+                                   uct_srd_send_op_t *send_op)
 {
     uct_srd_ep_t *ep = send_op->ep;
-    uct_srd_iface_t *iface;
     uct_srd_send_op_t *flush_op;
     ucs_status_t comp_status;
 
     if (ucs_unlikely(ep == NULL)) {
+        /* The device is done with the WQE, so the AH may be released now */
         ucs_list_del(&send_op->list);
+        uct_ib_iface_ah_put(&iface->super, send_op->ah_entry);
         ucs_mpool_put(send_op);
         return;
     }
 
-    iface       = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
+    ucs_assertv(&iface->super.super.super == ep->super.super.iface,
+                "iface=%p ep=%p ep_iface=%p", iface, ep,
+                ep->super.super.iface);
+
     comp_status = (ep->flags & UCT_SRD_EP_FLAG_CANCELED)?
                   UCS_ERR_CANCELED : UCS_OK;
 
@@ -205,7 +213,12 @@ void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep)
             ucs_list_del(&send_op->list);
             ucs_mpool_put(send_op);
         } else {
-            send_op->ep = NULL;
+            /* The ep reference is about to be dropped, but the device may
+             * still consume the posted WQE, so keep the AH alive until the
+             * send completion is polled */
+            uct_ib_iface_ah_hold(&iface->super, ep->ah_entry);
+            send_op->ah_entry = ep->ah_entry;
+            send_op->ep       = NULL;
         }
 
         iface->tx.outstanding--;
@@ -327,6 +340,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
     uct_srd_ep_send_op_purge(self);
     uct_srd_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_srd_iface_remove_ep(iface, self);
+    uct_ib_iface_ah_put(&iface->super, self->ah_entry);
     ucs_arbiter_group_cleanup(&self->pending_group);
 }
 
@@ -402,7 +416,8 @@ uct_srd_ep_post_send(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
 {
     uct_srd_send_op_t *send_op = (uct_srd_send_op_t*)wr->wr_id;
 
-    uct_srd_iface_post_send(iface, ep->ah, ep->dest_qpn, wr, send_flags);
+    uct_srd_iface_post_send(iface, ep->ah_entry->ah, ep->dest_qpn, wr,
+                            send_flags);
     ep->psn++;
     uct_srd_ep_posted(iface, ep, send_op);
     iface->tx.available--;
@@ -568,7 +583,8 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
         }; \
         __uct_ib_log_post_send_one(__FILE__, __LINE__, __func__, \
                                    &(_iface)->super, (_iface)->qp, &__wr, \
-                                   (_ep)->ah, (_ep)->dest_qpn, 2, NULL); \
+                                   (_ep)->ah_entry->ah, (_ep)->dest_qpn, 2, \
+                                   NULL); \
     }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -596,7 +612,7 @@ uct_srd_ep_post_rma(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_read,
     }
 
     ibv_wr_set_sge_list(qp_ex, num_sge, sge);
-    ibv_wr_set_ud_addr(qp_ex, ep->ah, ep->dest_qpn, UCT_IB_KEY);
+    ibv_wr_set_ud_addr(qp_ex, ep->ah_entry->ah, ep->dest_qpn, UCT_IB_KEY);
     if (ibv_wr_complete(qp_ex)) {
         ucs_fatal("ibv_wr_complete failed %m");
         return UCS_ERR_IO_ERROR;

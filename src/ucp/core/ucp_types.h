@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -232,6 +232,39 @@ typedef enum {
     UCP_FENCE_MODE_EP_BASED, /* Use EP-based fence mode */
     UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;
+
+
+/**
+ * GPU-to-NIC assignment mode.
+ */
+typedef enum {
+    /** Use flip on hardware with a known GPU-NIC topology, otherwise off */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO,
+
+    /** Do not assign NICs to GPUs, select lanes from all NICs */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_OFF,
+
+    /**
+     * Assign each NIC, with all of its ports, going forward and then backward
+     * across the N GPUs of the group.
+     * The group's NICs are assigned to the following GPU indices in order:
+     * 0, 1, ..., N-1, N-1, ..., 1, 0, 0, 1, ...
+     */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+
+    /**
+     * Assign each NIC, with all of its ports, to the N GPUs of the group
+     * repeatedly in ascending order.
+     * The group's NICs are assigned to the following GPU indices in order:
+     * 0, 1, ..., N-1, 0, 1, ..., N-1, 0, 1, ...
+     */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+
+    /** Assign every NIC, with all of its ports, to every GPU in the group */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED,
+
+    UCP_GPU_NIC_ASSIGNMENT_MODE_LAST
+} ucp_gpu_nic_assignment_mode_t;
 
 
 /**
