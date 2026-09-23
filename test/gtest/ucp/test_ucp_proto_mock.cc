@@ -8,11 +8,13 @@
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_gpu_nic_assignment.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_types.h>
 #include <ucp/core/ucp_worker.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_multi.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/rndv/proto_rndv.h>
 #include <uct/base/uct_iface.h>
@@ -25,6 +27,8 @@ extern "C" {
 #include <uct/ib/base/ib_md.h>
 #endif
 }
+
+#include <set>
 
 class mock_iface {
 public:
@@ -432,6 +436,7 @@ public:
     };
 
     using proto_select_data_vec_t = std::vector<proto_select_data>;
+    using sys_dev_set_t           = std::set<ucs_sys_device_t>;
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -827,6 +832,69 @@ protected:
         key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
 
         check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
+    }
+
+    sys_dev_set_t lane_map_sys_devs(ucp_lane_map_t lane_map)
+    {
+        ucp_context_h context            = sender().worker()->context;
+        const ucp_ep_config_t *ep_config = ucp_worker_ep_config(
+                sender().worker(), ep_config_index(sender()));
+        sys_dev_set_t result;
+        ucp_lane_index_t lane;
+        ucp_rsc_index_t rsc_index;
+
+        ucs_for_each_bit(lane, lane_map) {
+            EXPECT_LT(lane, ep_config->key.num_lanes);
+            if (lane >= ep_config->key.num_lanes) {
+                continue;
+            }
+
+            rsc_index = ep_config->key.lanes[lane].rsc_index;
+            EXPECT_NE(UCP_NULL_RESOURCE, rsc_index);
+            if (rsc_index != UCP_NULL_RESOURCE) {
+                result.insert(context->tl_rscs[rsc_index].tl_rsc.sys_device);
+            }
+        }
+
+        return result;
+    }
+
+    const ucp_proto_config_t *
+    am_rndv_remote_proto_config(ucs_memory_type_t mem_type,
+                                ucs_sys_device_t sys_dev)
+    {
+        ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
+                                                          ep_config_index(
+                                                                  sender()));
+        const ucp_memory_info_t mem_info = {
+            .type    = static_cast<uint8_t>(mem_type),
+            .sys_dev = sys_dev,
+            .flags   = UCS_MEM_FLAG_REGISTRABLE
+        };
+        ucp_proto_select_param_t select_param;
+        const ucp_proto_threshold_elem_t *threshold;
+
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_AM_SEND, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        threshold = ucp_proto_select_lookup(sender().worker(),
+                                            &ep_config->proto_select,
+                                            ep_config_index(sender()),
+                                            UCP_WORKER_CFG_INDEX_NULL,
+                                            &select_param, UCS_MBYTE);
+        if (threshold == nullptr) {
+            ADD_FAILURE() << "protocol selection failed";
+            return nullptr;
+        }
+
+        if (strcmp(threshold->proto_config.proto->name, "am/rndv") != 0) {
+            ADD_FAILURE() << "expected am/rndv protocol, got "
+                          << threshold->proto_config.proto->name;
+            return nullptr;
+        }
+
+        return &static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
+                        threshold->proto_config.priv)
+                        ->remote_proto_config;
     }
 };
 
@@ -2604,13 +2672,647 @@ protected:
         }
     }
 
-protected:
+    static ucs_sys_device_t register_mock_gpu(uint8_t slot)
+    {
+        const ucs_sys_bus_id_t bus_id = {
+            .domain   = 0xfffc,
+            .bus      = 0xfc,
+            .slot     = slot,
+            .function = 0,
+        };
+        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(sys_dev,
+                                                    UCS_TOPO_DEVICE_CLASS_ACC));
+        return sys_dev;
+    }
+
     ucs_sys_device_t m_gpus[3] = {
         UCS_SYS_DEVICE_ID_UNKNOWN,
         UCS_SYS_DEVICE_ID_UNKNOWN,
         UCS_SYS_DEVICE_ID_UNKNOWN,
     };
 };
+
+class test_ucp_proto_mock_rcx_gpu_nic :
+    protected test_ucp_proto_mock_scoped_acc_devices,
+    public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_gpu_nic() :
+        m_assignment(nullptr),
+        m_original_assignment(nullptr),
+        m_original_cuda_reg_md_map(0),
+        m_rkey_cfg_index(UCP_WORKER_CFG_INDEX_NULL),
+        m_context_state_saved(false),
+        m_absent_nic(UCS_SYS_DEVICE_ID_UNKNOWN)
+    {
+        mock_transport("rc_mlx5");
+        modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
+        modify_config("MAX_RMA_RAILS", "3");
+        modify_config("MAX_RNDV_LANES", "3");
+    }
+
+    virtual void init() override
+    {
+        for (unsigned i = 0; i < ucs_static_array_size(m_nics); ++i) {
+            add_rc_device(i);
+        }
+
+        m_gpus[0]    = register_mock_gpu(0x11);
+        m_gpus[1]    = register_mock_gpu(0x12);
+        m_absent_nic = register_absent_nic();
+
+        test_ucp_proto_mock::init();
+    }
+
+    virtual void cleanup() override
+    {
+        if (m_context_state_saved) {
+            ucp_context_h context = sender().worker()->context;
+
+            context->gpu_nic_assignment = m_original_assignment;
+            context->reg_md_map[UCS_MEMORY_TYPE_CUDA] =
+                    m_original_cuda_reg_md_map;
+            if (m_assignment != nullptr) {
+                ucp_gpu_nic_assignment_release(m_assignment);
+                ucs_free(m_assignment);
+                m_assignment = nullptr;
+            }
+
+            m_context_state_saved = false;
+        }
+
+        test_ucp_proto_mock::cleanup();
+    }
+
+protected:
+    virtual void post_ucp_init() override
+    {
+        ucp_context_h context    = sender().worker()->context;
+        ucp_md_map_t mock_md_map = 0;
+        ucp_rsc_index_t rsc_index;
+
+        for (unsigned i = 0; i < ucs_static_array_size(m_nics); ++i) {
+            m_nics[i] = get_mock_sys_dev_by_name(nic_name(i));
+        }
+
+        m_original_assignment      = context->gpu_nic_assignment;
+        m_original_cuda_reg_md_map = context->reg_md_map[UCS_MEMORY_TYPE_CUDA];
+        m_context_state_saved      = true;
+
+        for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+            const ucp_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index];
+
+            if ((strcmp(tl_rsc->tl_rsc.tl_name, "rc_mlx5") == 0) &&
+                (endpoint_nics().count(tl_rsc->tl_rsc.sys_device) != 0)) {
+                mock_md_map |= UCS_BIT(tl_rsc->md_index);
+            }
+        }
+
+        EXPECT_NE(0, mock_md_map);
+        context->reg_md_map[UCS_MEMORY_TYPE_CUDA] |= mock_md_map;
+    }
+
+    void install_assignment(ucs_sys_device_t gpu_sys_dev,
+                            const sys_dev_set_t &assigned_nics)
+    {
+        ucs_topo_groups_t groups;
+        ucs_topo_group_t *group;
+        ucs_topo_group_element_t *gpu;
+        ucs_topo_group_element_t *nic;
+        ucp_gpu_nic_assignment_t *assignment;
+        ucs_status_t status;
+
+        ASSERT_TRUE(m_context_state_saved);
+        ASSERT_EQ(nullptr, m_assignment);
+
+        ucs_array_init_dynamic(&groups);
+        ucs::handle<ucs_topo_groups_t*> groups_guard(&groups,
+                                                     ucs_topo_release_groups);
+        group = ucs_array_append(&groups,
+                                 FAIL() << "failed to append topology group");
+        ucs_topo_init_group(group);
+
+        gpu = ucs_array_append(&group->gpus,
+                               FAIL() << "failed to append topology GPU");
+        memset(gpu, 0, sizeof(*gpu));
+        gpu->sys_devs[0]  = gpu_sys_dev;
+        gpu->num_sys_devs = 1;
+
+        for (auto nic_sys_dev : assigned_nics) {
+            nic = ucs_array_append(&group->nics,
+                                   FAIL() << "failed to append topology NIC");
+            memset(nic, 0, sizeof(*nic));
+            nic->sys_devs[0]  = nic_sys_dev;
+            nic->num_sys_devs = 1;
+        }
+
+        assignment = static_cast<ucp_gpu_nic_assignment_t*>(
+                ucs_malloc(sizeof(*assignment), "mock gpu-nic assignment"));
+        ASSERT_NE(nullptr, assignment);
+
+        status = ucp_gpu_nic_assignment_build(
+                &groups, UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP, assignment);
+        if (status != UCS_OK) {
+            ucs_free(assignment);
+        }
+
+        ASSERT_UCS_OK(status);
+        m_assignment                                   = assignment;
+        sender().worker()->context->gpu_nic_assignment = m_assignment;
+    }
+
+    void set_nic_bandwidth(unsigned index, double bandwidth)
+    {
+        ASSERT_LT(index, ucs_static_array_size(m_nics));
+        m_bandwidth[nic_name(index)] = bandwidth;
+    }
+
+    const ucp_gpu_nic_sys_dev_bitmap_t *
+    resolve_assignment(ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
+                       uct_ep_operation_t memtype_op,
+                       ucs_memory_type_t reg_mem_type,
+                       ucs_sys_device_t reg_mem_sys_dev)
+    {
+        const ucp_proto_select_key_t select_key       = make_select_key(
+                UCP_OP_ID_PUT, mem_type, UCP_DATATYPE_CONTIG, sys_dev, 1);
+        ucp_proto_multi_init_params_t params          = {};
+        ucp_proto_common_init_params_t *common_params = &params.super;
+        ucp_proto_init_params_t *init_params          = &common_params->super;
+
+        init_params->worker                 = sender().worker();
+        init_params->select_param           = &select_key.param;
+        common_params->memtype_op           = memtype_op;
+        common_params->reg_mem_info.type    = reg_mem_type;
+        common_params->reg_mem_info.sys_dev = reg_mem_sys_dev;
+
+        return ucp_proto_multi_get_assigned_nic_bitmap(&params);
+    }
+
+    ucp_proto_query_attr_t
+    query_protocol_candidate(ucp_operation_id_t op_id,
+                             ucs_memory_type_t mem_type,
+                             ucp_dt_class_t dt_class, ucs_sys_device_t sys_dev,
+                             uint8_t sg_count, const char *protocol_name,
+                             uint8_t op_flags = 0)
+    {
+        const ucp_proto_select_key_t select_key    = make_select_key(
+                op_id, mem_type, dt_class, sys_dev, sg_count, op_flags);
+        const ucp_proto_select_elem_t *select_elem = select_direct(
+                select_key.param);
+        const ucp_proto_init_elem_t *init_elem =
+                find_protocol_candidate(select_elem, protocol_name);
+        ucp_proto_query_attr_t attr = {};
+
+        if (init_elem == nullptr) {
+            ADD_FAILURE() << protocol_name << " candidate not found";
+            return attr;
+        }
+
+        const ucp_proto_query_params_t query_params = {
+            .proto         = ucp_protocols[init_elem->proto_id],
+            .priv          = &ucs_array_elem(&select_elem->proto_init.priv_buf,
+                                    init_elem->priv_offset),
+            .worker        = sender().worker(),
+            .select_param  = &select_key.param,
+            .ep_config_key = &ucp_worker_ep_config(sender().worker(),
+                                                   ep_config_index(sender()))
+                                      ->key,
+            .msg_length    = UCS_MBYTE
+        };
+
+        query_params.proto->query(&query_params, &attr);
+        return attr;
+    }
+
+    bool
+    has_protocol_candidate(ucp_operation_id_t op_id, ucs_memory_type_t mem_type,
+                           ucp_dt_class_t dt_class, ucs_sys_device_t sys_dev,
+                           uint8_t sg_count, const char *protocol_name)
+    {
+        const ucp_proto_select_key_t select_key =
+                make_select_key(op_id, mem_type, dt_class, sys_dev, sg_count);
+
+        return find_protocol_candidate(select_direct(select_key.param),
+                                       protocol_name) != nullptr;
+    }
+
+    void expect_direct_candidates(ucs_sys_device_t gpu_sys_dev,
+                                  const sys_dev_set_t &expected_nics)
+    {
+        const ucp_operation_id_t op_ids[] = {UCP_OP_ID_PUT, UCP_OP_ID_GET};
+
+        for (auto op_id : op_ids) {
+            expect_protocol_candidates(op_id, UCS_MEMORY_TYPE_CUDA,
+                                       UCP_DATATYPE_CONTIG, gpu_sys_dev, 1,
+                                       direct_protocol_name(op_id),
+                                       expected_nics);
+        }
+    }
+
+    void expect_protocol_candidates(ucp_operation_id_t op_id,
+                                    ucs_memory_type_t mem_type,
+                                    ucp_dt_class_t dt_class,
+                                    ucs_sys_device_t sys_dev, uint8_t sg_count,
+                                    const char *protocol_name,
+                                    const sys_dev_set_t &expected_nics,
+                                    uint8_t op_flags = 0)
+    {
+        const ucp_proto_query_attr_t attr =
+                query_protocol_candidate(op_id, mem_type, dt_class, sys_dev,
+                                         sg_count, protocol_name, op_flags);
+
+        EXPECT_EQ(expected_nics, lane_map_sys_devs(attr.lane_map))
+                << protocol_name;
+    }
+
+    void expect_mtype_candidates(ucs_memory_type_t mem_type,
+                                 ucs_sys_device_t sys_dev,
+                                 const sys_dev_set_t &expected_nics)
+    {
+        const uint8_t op_flags = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+
+        expect_protocol_candidates(UCP_OP_ID_RNDV_RECV, mem_type,
+                                   UCP_DATATYPE_CONTIG, sys_dev, 1,
+                                   "rndv/get/mtype", expected_nics, op_flags);
+        expect_protocol_candidates(UCP_OP_ID_RNDV_SEND, mem_type,
+                                   UCP_DATATYPE_CONTIG, sys_dev, 1,
+                                   "rndv/put/mtype", expected_nics, op_flags);
+    }
+
+    ucs_sys_device_t local_cuda_staging_sys_dev()
+    {
+        ucp_memory_info_t mem_info = ucp_mem_info_unknown;
+        ucp_md_index_t md_index;
+
+        EXPECT_UCS_OK(ucp_mm_get_alloc_md_index(sender().ucph(),
+                                                UCS_MEMORY_TYPE_CUDA,
+                                                UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                &md_index, &mem_info));
+        return mem_info.sys_dev;
+    }
+
+    sys_dev_set_t endpoint_nics() const
+    {
+        return {m_nics[0], m_nics[1], m_nics[2]};
+    }
+
+    ucs_sys_device_t mapped_gpu() const
+    {
+        return m_gpus[0];
+    }
+
+    ucs_sys_device_t unmapped_gpu() const
+    {
+        return m_gpus[1];
+    }
+
+    ucs_sys_device_t nic(unsigned index) const
+    {
+        if (index >= ucs_static_array_size(m_nics)) {
+            ADD_FAILURE() << "NIC index " << index << " is out of range";
+            return UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
+
+        return m_nics[index];
+    }
+
+    ucs_sys_device_t absent_nic() const
+    {
+        return m_absent_nic;
+    }
+
+    ucp_gpu_nic_assignment_t *assignment() const
+    {
+        return m_assignment;
+    }
+
+private:
+    static std::string nic_name(unsigned index)
+    {
+        return std::string("mock_") + std::to_string(index) + ":1";
+    }
+
+    static const char *direct_protocol_name(ucp_operation_id_t op_id)
+    {
+        return (op_id == UCP_OP_ID_PUT) ? "put/offload/zcopy" : "get/zcopy";
+    }
+
+    void add_rc_device(unsigned index)
+    {
+        const std::string dev_name = nic_name(index);
+
+        m_bandwidth[dev_name] = 20e9;
+        add_mock_iface(
+                dev_name,
+                [this, dev_name](uct_iface_attr_t &iface_attr) {
+                    iface_attr.cap.am.max_short    = 208;
+                    iface_attr.cap.put.min_zcopy   = 0;
+                    iface_attr.cap.put.max_zcopy   = UCS_MBYTE;
+                    iface_attr.cap.put.max_iov     = 1;
+                    iface_attr.cap.get.max_zcopy   = UCS_MBYTE;
+                    iface_attr.cap.get.max_iov     = 1;
+                    iface_attr.bandwidth.dedicated = 0;
+                    iface_attr.bandwidth.shared    = m_bandwidth.at(dev_name);
+                    iface_attr.latency.c           = 500e-9;
+                    iface_attr.latency.m           = 0;
+                },
+                [this, dev_name](uct_perf_attr_t &perf_attr) {
+                    perf_attr.bandwidth.shared = m_bandwidth.at(dev_name);
+                    perf_attr.path_bandwidth   = perf_attr.bandwidth;
+                });
+    }
+
+    static ucs_sys_device_t register_absent_nic()
+    {
+        const ucs_sys_bus_id_t bus_id = {
+            .domain   = 0xfffb,
+            .bus      = 0xfb,
+            .slot     = 0x1f,
+            .function = 0,
+        };
+        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+
+        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+        return sys_dev;
+    }
+
+    ucp_worker_cfg_index_t rkey_config_index()
+    {
+        uint8_t remote = 0;
+
+        if (m_rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+            auto memh        = mem_map(receiver(), &remote, sizeof(remote));
+            auto rkey_packed = rkey_pack(receiver(), memh);
+            auto rkey        = rkey_unpack(sender().ep(), rkey_packed);
+
+            m_rkey_cfg_index = rkey->cfg_index;
+        }
+
+        return m_rkey_cfg_index;
+    }
+
+    static ucp_proto_select_key_t
+    make_select_key(ucp_operation_id_t op_id, ucs_memory_type_t mem_type,
+                    ucp_dt_class_t dt_class, ucs_sys_device_t sys_dev,
+                    uint8_t sg_count, uint8_t op_flags = 0)
+    {
+        const ucp_memory_info_t mem_info  = {
+            .type    = static_cast<uint8_t>(mem_type),
+            .sys_dev = sys_dev,
+            .flags   = UCS_MEM_FLAG_REGISTRABLE
+        };
+        ucp_proto_select_key_t select_key = {};
+
+        ucp_proto_select_param_init(&select_key.param, op_id, 0, op_flags,
+                                    dt_class, &mem_info, sg_count);
+        return select_key;
+    }
+
+    const ucp_proto_select_elem_t *
+    select_direct(const ucp_proto_select_param_t &select_param)
+    {
+        const ucp_worker_cfg_index_t rkey_cfg_index = rkey_config_index();
+        ucp_worker_h worker                         = sender().worker();
+        ucp_proto_select_t *proto_select;
+
+        proto_select = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index)
+                                .proto_select;
+        return ucp_proto_select_lookup_slow(worker, proto_select, 0,
+                                            ep_config_index(sender()),
+                                            rkey_cfg_index, &select_param);
+    }
+
+    static const ucp_proto_init_elem_t *
+    find_protocol_candidate(const ucp_proto_select_elem_t *select_elem,
+                            const char *protocol_name)
+    {
+        const ucp_proto_init_elem_t *init_elem;
+
+        if (select_elem == nullptr) {
+            return nullptr;
+        }
+
+        ucs_array_for_each(init_elem, &select_elem->proto_init.protocols) {
+            if (strcmp(ucp_proto_id_field(init_elem->proto_id, name),
+                       protocol_name) == 0) {
+                return init_elem;
+            }
+        }
+
+        return nullptr;
+    }
+
+    std::map<std::string, double> m_bandwidth;
+    ucs_sys_device_t m_nics[3] = {
+        UCS_SYS_DEVICE_ID_UNKNOWN,
+        UCS_SYS_DEVICE_ID_UNKNOWN,
+        UCS_SYS_DEVICE_ID_UNKNOWN,
+    };
+    ucp_gpu_nic_assignment_t *m_assignment;
+    ucp_gpu_nic_assignment_t *m_original_assignment;
+    ucp_md_map_t m_original_cuda_reg_md_map;
+    ucp_worker_cfg_index_t m_rkey_cfg_index;
+    bool m_context_state_saved;
+    ucs_sys_device_t m_absent_nic;
+};
+
+static const struct {
+    ucp_operation_id_t op_id;
+    ucp_dt_class_t     dt_class;
+    uint8_t            sg_count;
+    const char         *name;
+} gpu_nic_rma_protocols[] =
+        {{UCP_OP_ID_PUT, UCP_DATATYPE_CONTIG, 1, "put/offload/zcopy"},
+         {UCP_OP_ID_GET, UCP_DATATYPE_CONTIG, 1, "get/zcopy"},
+         {UCP_OP_ID_PUT, UCP_DATATYPE_IOV, 2, "put/offload/zcopy"},
+         {UCP_OP_ID_GET, UCP_DATATYPE_IOV, 2, "get/zcopy"},
+         {UCP_OP_ID_PUT, UCP_DATATYPE_SGL, 0, "put/sgl/offload_sw"}};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, filters_before_performance_modeling)
+{
+    /* Filtering after the slow-lane check would drop both assigned NICs */
+    set_nic_bandwidth(1, 100e9);
+    install_assignment(mapped_gpu(), {nic(0), nic(2)});
+
+    expect_direct_candidates(mapped_gpu(), {nic(0), nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, assigned_nic_filters_rma_protocols)
+{
+    /* Without the assignment, only this NIC would pass the slow-lane check */
+    set_nic_bandwidth(0, 100e9);
+    install_assignment(mapped_gpu(), {nic(2)});
+
+    for (const auto &proto : gpu_nic_rma_protocols) {
+        expect_protocol_candidates(proto.op_id, UCS_MEMORY_TYPE_CUDA,
+                                   proto.dt_class, mapped_gpu(), proto.sg_count,
+                                   proto.name, {nic(2)});
+    }
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           empty_assignment_rejects_rma_protocols)
+{
+    install_assignment(mapped_gpu(), {});
+
+    expect_direct_candidates(unmapped_gpu(), endpoint_nics());
+    for (const auto &proto : gpu_nic_rma_protocols) {
+        EXPECT_FALSE(has_protocol_candidate(proto.op_id, UCS_MEMORY_TYPE_CUDA,
+                                            proto.dt_class, mapped_gpu(),
+                                            proto.sg_count, proto.name))
+                << proto.name;
+    }
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
+{
+    struct resolver_case {
+        const char        *name;
+        ucs_memory_type_t mem_type;
+        ucs_sys_device_t  sys_dev;
+        bool              staged;
+        ucs_memory_type_t reg_mem_type;
+        ucs_sys_device_t  reg_sys_dev;
+        bool              assigned;
+    };
+    const ucs_sys_device_t unknown = UCS_SYS_DEVICE_ID_UNKNOWN;
+    const resolver_case cases[]    = {
+        {"application GPU", UCS_MEMORY_TYPE_CUDA, mapped_gpu(), false,
+            UCS_MEMORY_TYPE_UNKNOWN, unknown, true},
+        {"direct protocol ignores registration identity", UCS_MEMORY_TYPE_CUDA,
+            unmapped_gpu(), false, UCS_MEMORY_TYPE_CUDA, mapped_gpu(), false},
+        {"managed CUDA", UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(), false,
+            UCS_MEMORY_TYPE_UNKNOWN, unknown, false},
+        {"unknown device", UCS_MEMORY_TYPE_CUDA, unknown, false,
+            UCS_MEMORY_TYPE_UNKNOWN, unknown, false},
+        {"unmapped GPU", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), false,
+            UCS_MEMORY_TYPE_UNKNOWN, unknown, false},
+        {"CUDA staging owner", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), true,
+            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true},
+        {"CUDA staging owner does not fall back", UCS_MEMORY_TYPE_CUDA,
+            mapped_gpu(), true, UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), false},
+        {"host staging falls back to the application owner",
+            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true, UCS_MEMORY_TYPE_HOST,
+            unknown, true},
+        {"unknown staging device falls back to the application owner",
+            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true, UCS_MEMORY_TYPE_CUDA,
+            unknown, true}
+    };
+    const ucp_gpu_nic_sys_dev_bitmap_t *expected_bitmap;
+    ucp_context_h context;
+
+    install_assignment(mapped_gpu(), {nic(0)});
+    expected_bitmap = ucp_gpu_nic_assignment_lookup(assignment(), mapped_gpu());
+    ASSERT_NE(nullptr, expected_bitmap);
+
+    for (const auto &test_case : cases) {
+        EXPECT_EQ(test_case.assigned ? expected_bitmap : nullptr,
+                  resolve_assignment(test_case.mem_type, test_case.sys_dev,
+                                     test_case.staged ? UCT_EP_OP_PUT_ZCOPY :
+                                                        UCT_EP_OP_LAST,
+                                     test_case.reg_mem_type,
+                                     test_case.reg_sys_dev))
+                << test_case.name;
+    }
+
+    context                     = sender().worker()->context;
+    context->gpu_nic_assignment = nullptr;
+    EXPECT_EQ(nullptr, resolve_assignment(UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
+                                          UCT_EP_OP_LAST,
+                                          UCS_MEMORY_TYPE_UNKNOWN, unknown))
+            << "NULL context assignment";
+    context->gpu_nic_assignment = assignment();
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           partial_assignment_uses_available_nic)
+{
+    install_assignment(mapped_gpu(), {nic(2), absent_nic()});
+
+    expect_direct_candidates(mapped_gpu(), {nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           assignment_breaks_ties_by_first_lane, "MAX_RMA_RAILS=1")
+{
+    /* The BDF-ordinal tie break would pick nic(1) for an odd ordinal */
+    const unsigned ordinal     = ucs_topo_sys_device_get_bdf_class_ordinal(
+            m_gpus[0]);
+    const ucs_sys_device_t gpu = ((ordinal % 2) != 0) ? m_gpus[0] : m_gpus[1];
+
+    install_assignment(gpu, {nic(0), nic(1)});
+    expect_direct_candidates(gpu, {nic(0)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           rndv_zcopy_uses_application_assignment, "RNDV_THRESH=1")
+{
+    install_assignment(mapped_gpu(), {nic(2)});
+
+    expect_protocol_candidates(UCP_OP_ID_RNDV_RECV, UCS_MEMORY_TYPE_CUDA,
+                               UCP_DATATYPE_CONTIG, mapped_gpu(), 1,
+                               "rndv/get/zcopy", {nic(2)});
+    expect_protocol_candidates(UCP_OP_ID_RNDV_SEND, UCS_MEMORY_TYPE_CUDA,
+                               UCP_DATATYPE_CONTIG, mapped_gpu(), 1,
+                               "rndv/put/zcopy", {nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           rndv_remote_estimate_uses_local_assignment, "RNDV_THRESH=1",
+           "RNDV_SCHEME=get_zcopy")
+{
+    const ucp_proto_config_t *remote_config;
+    ucp_proto_query_attr_t attr;
+
+    install_assignment(mapped_gpu(), {nic(2)});
+    remote_config = am_rndv_remote_proto_config(UCS_MEMORY_TYPE_CUDA,
+                                                mapped_gpu());
+    ASSERT_NE(nullptr, remote_config);
+    EXPECT_STREQ("rndv/get/zcopy", remote_config->proto->name);
+
+    ucp_proto_config_query(sender().worker(), remote_config, UCS_MBYTE, &attr);
+    EXPECT_EQ(sys_dev_set_t{nic(2)}, lane_map_sys_devs(attr.lane_map));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda :
+    public test_ucp_proto_mock_rcx_gpu_nic {
+public:
+    virtual void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        test_ucp_proto_mock_rcx_gpu_nic::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
+           host_staging_falls_back_to_application_assignment, "RNDV_THRESH=1",
+           "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K")
+{
+    install_assignment(mapped_gpu(), {nic(2)});
+    expect_mtype_candidates(UCS_MEMORY_TYPE_CUDA, mapped_gpu(), {nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
+           cuda_staging_uses_staging_assignment, "RNDV_THRESH=1",
+           "RNDV_FRAG_MEM_TYPES=cuda", "RNDV_FRAG_SIZE=cuda:8K")
+{
+    const ucs_sys_device_t stage_gpu = local_cuda_staging_sys_dev();
+
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, stage_gpu);
+    install_assignment(stage_gpu, {nic(2)});
+    expect_mtype_candidates(UCS_MEMORY_TYPE_CUDA_MANAGED,
+                            UCS_SYS_DEVICE_ID_UNKNOWN, {nic(2)});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
+                              rcx_gpu, "rc_x,cuda,rocm")
 
 class test_ucp_proto_mock_rcx_single_net_dev :
     protected test_ucp_proto_mock_scoped_acc_devices,
@@ -2673,64 +3375,27 @@ protected:
 
     ucp_proto_query_attr_t select_am_rndv_data_attr(ucs_sys_device_t sys_dev)
     {
-        const size_t msg_length     = UCS_MBYTE;
-        ucp_ep_config_t *ep_config  = ucp_worker_ep_config(sender().worker(),
-                                                           ep_config_index(
-                                                                  sender()));
-        ucp_memory_info_t mem_info  = {
-            .type    = UCS_MEMORY_TYPE_HOST,
-            .sys_dev = sys_dev,
-            .flags   = UCS_MEM_FLAG_REGISTRABLE
-        };
+        const ucp_proto_config_t *remote_config =
+                am_rndv_remote_proto_config(UCS_MEMORY_TYPE_HOST, sys_dev);
         ucp_proto_query_attr_t attr = {};
-        ucp_proto_select_param_t select_param;
-        const ucp_proto_threshold_elem_t *threshold;
-        const ucp_proto_rndv_ctrl_priv_t *rpriv;
 
-        ucp_proto_select_param_init(&select_param, UCP_OP_ID_AM_SEND, 0, 0,
-                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
-        threshold = ucp_proto_select_lookup(sender().worker(),
-                                            &ep_config->proto_select,
-                                            ep_config_index(sender()),
-                                            UCP_WORKER_CFG_INDEX_NULL,
-                                            &select_param, msg_length);
-        if (threshold == nullptr) {
-            ADD_FAILURE() << "protocol selection failed";
-            return attr;
+        if (remote_config != nullptr) {
+            ucp_proto_config_query(sender().worker(), remote_config, UCS_MBYTE,
+                                   &attr);
         }
 
-        if (strcmp(threshold->proto_config.proto->name, "am/rndv") != 0) {
-            ADD_FAILURE() << "expected am/rndv protocol, got "
-                          << threshold->proto_config.proto->name;
-            return attr;
-        }
-
-        rpriv = static_cast<const ucp_proto_rndv_ctrl_priv_t*>(
-                threshold->proto_config.priv);
-        ucp_proto_config_query(sender().worker(), &rpriv->remote_proto_config,
-                               msg_length, &attr);
         return attr;
     }
 
     void expect_selected_device(ucs_sys_device_t sys_dev, unsigned selection_id)
     {
         const ucp_proto_query_attr_t attr = select_am_rndv_data_attr(sys_dev);
-        ucp_context_h context             = sender().worker()->context;
-        ucp_ep_config_t *ep_config = ucp_worker_ep_config(sender().worker(),
-                                                          ep_config_index(
-                                                                  sender()));
         const ucs_sys_device_t expected_sys_dev = get_mock_sys_dev_by_name(
                 expected_device_name(selection_id));
-        ucp_lane_index_t lane;
-        ucp_rsc_index_t rsc_index;
 
         EXPECT_GT(ucs_popcount(attr.lane_map), 1);
-        ucs_for_each_bit(lane, attr.lane_map) {
-            rsc_index = ep_config->key.lanes[lane].rsc_index;
-            ASSERT_NE(UCP_NULL_RESOURCE, rsc_index);
-            EXPECT_EQ(expected_sys_dev,
-                      context->tl_rscs[rsc_index].tl_rsc.sys_device);
-        }
+        EXPECT_EQ(sys_dev_set_t{expected_sys_dev},
+                  lane_map_sys_devs(attr.lane_map));
     }
 
     ucs_sys_device_t gpu_with_auto_selection_not(unsigned selection_id)
@@ -2743,23 +3408,6 @@ protected:
 
         ADD_FAILURE() << "all automatic selections matched " << selection_id;
         return m_gpus[0];
-    }
-
-private:
-    static ucs_sys_device_t register_mock_gpu(uint8_t slot)
-    {
-        const ucs_sys_bus_id_t bus_id = {
-            .domain   = 0xfffc,
-            .bus      = 0xfc,
-            .slot     = slot,
-            .function = 0,
-        };
-        ucs_sys_device_t sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-        EXPECT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
-        EXPECT_UCS_OK(ucs_topo_sys_device_set_class(sys_dev,
-                                                    UCS_TOPO_DEVICE_CLASS_ACC));
-        return sys_dev;
     }
 };
 

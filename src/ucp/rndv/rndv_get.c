@@ -68,6 +68,8 @@ ucp_proto_rndv_get_common_probe(const ucp_proto_init_params_t *init_params,
         return;
     }
 
+    params.assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(
+            &params);
     status = ucp_proto_rndv_bulk_init(&params, UCP_PROTO_RNDV_GET_DESC,
                                       UCP_PROTO_RNDV_ATS_NAME, &perf, &rpriv);
     if (status != UCS_OK) {

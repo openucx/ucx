@@ -240,6 +240,8 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    params.assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(
+            &params);
     ucp_proto_multi_probe(&params);
 }
 
