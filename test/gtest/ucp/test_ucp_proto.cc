@@ -1105,13 +1105,28 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
 
-class test_ucp_proto_ze : public test_ucp_proto {
+class test_ucp_proto_cpu_accessible : public test_ucp_proto {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant(variants, UCP_FEATURE_TAG);
     }
 
+protected:
+    /* Protocols which access the payload directly (memtype_op ==
+     * UCT_EP_OP_LAST) have to stay eligible for CPU-accessible memory. This
+     * covers protocol selection only, it does not exercise data movement. */
+    void check_direct_proto_eligible(ucs_memory_type_t mem_type)
+    {
+        const ucp_proto_threshold_elem_t *thresh =
+                select_tag_send_protocol(mem_type, 1);
+        ASSERT_NE(nullptr, thresh);
+        EXPECT_STREQ("egr/short", thresh->proto_config.proto->name)
+                << "mem_type=" << ucs_memory_type_names[mem_type];
+    }
+};
+
+class test_ucp_proto_ze : public test_ucp_proto_cpu_accessible {
 protected:
     void init() override
     {
@@ -1123,10 +1138,7 @@ protected:
     }
 };
 
-/* ZE-host and ZE-managed memory is accessible from the CPU, so protocols which
- * access the payload directly (memtype_op == UCT_EP_OP_LAST) have to stay
- * eligible for it. This covers protocol selection only, it does not exercise
- * data movement. */
+/* ZE-host and ZE-managed memory is accessible from the CPU */
 UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_direct_proto_eligible,
            "RNDV_THRESH=inf")
 {
@@ -1138,15 +1150,33 @@ UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_direct_proto_eligible,
             continue;
         }
 
-        const ucp_proto_threshold_elem_t *thresh =
-                select_tag_send_protocol(mem_type, 1);
-        ASSERT_NE(nullptr, thresh);
-        EXPECT_STREQ("egr/short", thresh->proto_config.proto->name)
-                << "mem_type=" << ucs_memory_type_names[mem_type];
+        check_direct_proto_eligible(mem_type);
     }
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze, rc_ze, "rc,ze_copy")
+
+class test_ucp_proto_rocm : public test_ucp_proto_cpu_accessible {
+protected:
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ROCM_MANAGED)) {
+            UCS_TEST_SKIP_R("ROCm managed memory is not supported");
+        }
+
+        test_ucp_proto::init();
+    }
+};
+
+/* ROCm managed memory is CPU-accessible as well, and is affected by the same
+ * protocol selection path as the ZE memory types */
+UCS_TEST_P(test_ucp_proto_rocm, cpu_accessible_direct_proto_eligible,
+           "RNDV_THRESH=inf")
+{
+    check_direct_proto_eligible(UCS_MEMORY_TYPE_ROCM_MANAGED);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_rocm, rc_rocm, "rc,rocm_copy")
 
 class test_perf_node : public test_ucp_proto {
 };
