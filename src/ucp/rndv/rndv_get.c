@@ -398,7 +398,7 @@ ucp_proto_rndv_get_mtype_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_t *super_req;
 
-    if (!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK)) {
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
         ucp_proto_abort_fatal_not_implemented(req, status);
         return;
     }

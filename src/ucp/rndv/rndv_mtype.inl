@@ -79,6 +79,8 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_worker_h worker)
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req->send.ep,
                                   ucp_proto_rndv_mtype_fc_reschedule_cb,
                                   pending_req);
+        /* The retry is not tied to any event, so wake up a blocked worker */
+        ucp_worker_signal_internal(worker);
         return;
     }
 }

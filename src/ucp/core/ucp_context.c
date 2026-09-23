@@ -405,9 +405,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "fragments. Both \"auto\" and \"inf\" mean no limit. This setting has no\n"
    "effect when PROTO_ENABLE=n. The same limit is applied independently to\n"
    "each fragment memory type, and per device when available. It is\n"
-   "converted to a fragment count using RNDV_FRAG_SIZE and\n"
-   "RNDV_FRAG_ALLOC_COUNT. When the limit is reached, further fragment\n"
-   "requests are queued until fragments are released",
+   "converted to a fragment count using RNDV_FRAG_SIZE. When the limit is\n"
+   "reached, further fragment requests are queued until fragments are\n"
+   "released",
    ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem),
    UCS_CONFIG_TYPE_MEMUNITS},
 

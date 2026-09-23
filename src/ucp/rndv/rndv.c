@@ -1144,6 +1144,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     ucp_worker_mpool_key_t key;
     ucs_status_t status;
     unsigned num_frags;
+    unsigned max_elems;
     ucs_mpool_t *mpool;
     khiter_t khiter;
     int khret;
@@ -1168,16 +1169,18 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
 
     mpool     = &kh_value(&worker->mpool_hash, khiter);
     num_frags = worker->context->config.ext.rndv_num_frags[key.mem_type];
+    max_elems = worker->context->config.ext.proto_enable ?
+                        ucp_proto_rndv_frag_max_elems(worker->context,
+                                                      key.mem_type) :
+                        UINT_MAX;
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.priv_size       = sizeof(ucp_rndv_mpool_priv_t);
     mp_params.elem_size       = sizeof(ucp_mem_desc_t);
     mp_params.alignment       = 1;
-    mp_params.elems_per_chunk = num_frags;
-    mp_params.max_elems       = worker->context->config.ext.proto_enable ?
-                                    ucp_proto_rndv_frag_max_elems(
-                                            worker->context, key.mem_type) :
-                                    UINT_MAX;
+    /* A chunk may not exceed the limit */
+    mp_params.elems_per_chunk = ucs_min(num_frags, max_elems);
+    mp_params.max_elems       = max_elems;
     mp_params.ops             = &ucp_frag_mpool_ops;
     mp_params.name            = "ucp_rndv_frags";
     status = ucs_mpool_init(&mp_params, mpool);
