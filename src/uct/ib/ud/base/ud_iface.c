@@ -156,11 +156,18 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
 
 void uct_ud_iface_cep_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
+    void *peer_address;
+
     if (!(ep->flags & UCT_UD_EP_FLAG_ON_CEP)) {
         return;
     }
 
-    ucs_conn_match_remove_elem(&iface->conn_match_ctx, &ep->conn_match,
+    peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
+    uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
+                              ep_get_peer_address, ep, peer_address);
+
+    ucs_conn_match_remove_elem(&iface->conn_match_ctx, peer_address,
+                               &ep->conn_match,
                                uct_ud_iface_cep_ep_queue_type(ep));
     ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
 }
@@ -298,7 +305,6 @@ uct_ud_iface_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 {
     ucs_conn_match_ops_t conn_match_ops = {
-        .get_address = uct_ud_ep_get_peer_address,
         .get_conn_sn = uct_ud_iface_conn_match_get_conn_sn,
         .address_str = uct_ud_iface_conn_match_peer_address_str,
         .purge_cb    = uct_ud_iface_conn_match_purge_cb
