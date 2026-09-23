@@ -1124,6 +1124,25 @@ protected:
         EXPECT_STREQ("egr/short", thresh->proto_config.proto->name)
                 << "mem_type=" << ucs_memory_type_names[mem_type];
     }
+
+    /* Eager bcopy protocols set a SHORT memtype operation, but pack the payload
+     * with ucp_dt_contig_pack(), which memcpy-s CPU-accessible memory instead of
+     * using the memtype endpoint. Estimating those copies with the copy
+     * interface bandwidth prices eager out of small messages, so rendezvous is
+     * selected from the very first byte. */
+    void check_eager_proto_selected(ucs_memory_type_t mem_type,
+                                    size_t msg_length)
+    {
+        const ucp_proto_threshold_elem_t *thresh =
+                select_tag_send_protocol(mem_type, msg_length);
+        const char *name;
+
+        ASSERT_NE(nullptr, thresh);
+        name = thresh->proto_config.proto->name;
+        EXPECT_EQ(0, strncmp(name, "egr/", 4))
+                << "mem_type=" << ucs_memory_type_names[mem_type]
+                << " length=" << msg_length << " proto=" << name;
+    }
 };
 
 class test_ucp_proto_ze : public test_ucp_proto_cpu_accessible {
@@ -1154,6 +1173,37 @@ UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_direct_proto_eligible,
     }
 }
 
+/* Eager has to win small messages for CPU-accessible memory, with rendezvous
+ * enabled, because the payload is packed by memcpy */
+UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_eager_costed_as_memcpy)
+{
+    static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_ZE_HOST,
+                                                  UCS_MEMORY_TYPE_ZE_MANAGED};
+
+    for (auto mem_type : mem_types) {
+        if (!mem_buffer::is_mem_type_supported(mem_type)) {
+            continue;
+        }
+
+        check_eager_proto_selected(mem_type, 1);
+    }
+}
+
+/* ZE-device memory is not CPU-accessible, so its payload is copied by the
+ * memtype endpoint and the copy interface estimation must be kept */
+UCS_TEST_P(test_ucp_proto_ze, device_memory_uses_mtype_copy)
+{
+    const ucp_proto_threshold_elem_t *thresh;
+
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_DEVICE)) {
+        UCS_TEST_SKIP_R("ZE device memory is not supported");
+    }
+
+    thresh = select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, UCS_MBYTE);
+    ASSERT_NE(nullptr, thresh);
+    EXPECT_STREQ("tag/rndv", thresh->proto_config.proto->name);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze, rc_ze, "rc,ze_copy")
 
 class test_ucp_proto_rocm : public test_ucp_proto_cpu_accessible {
@@ -1174,6 +1224,11 @@ UCS_TEST_P(test_ucp_proto_rocm, cpu_accessible_direct_proto_eligible,
            "RNDV_THRESH=inf")
 {
     check_direct_proto_eligible(UCS_MEMORY_TYPE_ROCM_MANAGED);
+}
+
+UCS_TEST_P(test_ucp_proto_rocm, cpu_accessible_eager_costed_as_memcpy)
+{
+    check_eager_proto_selected(UCS_MEMORY_TYPE_ROCM_MANAGED, 1);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_rocm, rc_rocm, "rc,rocm_copy")

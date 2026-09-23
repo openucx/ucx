@@ -278,18 +278,30 @@ ucp_proto_init_add_memreg_time(const ucp_proto_common_init_params_t *params,
 /*
  * Whether copying between the given memory types is done by a CPU memcpy rather
  * than by a memtype endpoint. Protocols which access the buffer directly don't
- * set a memtype operation, see ucp_proto_common_check_mem_access().
+ * set a memtype operation, see ucp_proto_common_check_mem_access(). Protocols
+ * which pack the payload set a SHORT operation, but ucp_dt_contig_pack() and
+ * ucp_dt_contig_unpack() use memcpy for CPU-accessible memory and reach the
+ * memtype endpoint only for non-CPU-accessible memory.
  */
 static int
 ucp_proto_buffer_copy_is_memcpy(ucs_memory_type_t local_mem_type,
                                 ucs_memory_type_t remote_mem_type,
                                 uct_ep_operation_t memtype_op)
 {
-    return (UCP_MEM_IS_HOST(local_mem_type) &&
-            UCP_MEM_IS_HOST(remote_mem_type)) ||
-           ((memtype_op == UCT_EP_OP_LAST) &&
-            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) &&
-            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(remote_mem_type));
+    if (UCP_MEM_IS_HOST(local_mem_type) && UCP_MEM_IS_HOST(remote_mem_type)) {
+        return 1;
+    }
+
+    if (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) ||
+        !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(remote_mem_type)) {
+        return 0;
+    }
+
+    /* Zero-copy operations are performed by the memtype endpoint even for
+     * CPU-accessible memory, so they keep the copy interface estimation */
+    return (memtype_op == UCT_EP_OP_LAST) ||
+           (memtype_op == UCT_EP_OP_GET_SHORT) ||
+           (memtype_op == UCT_EP_OP_PUT_SHORT);
 }
 
 static ucp_proto_perf_factor_id_t
@@ -301,7 +313,7 @@ ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
               UCP_MEM_IS_HOST(remote_mem_type);
 
     /* RNDV mtype protocols which do async copy set ZCOPY as `memtype_op`
-     * while eager procols that imply blocking copy set SHORT */
+     * while eager protocols that imply blocking copy set SHORT */
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
         (memtype_op == UCT_EP_OP_PUT_SHORT) || h2h) {
         return ucp_proto_buffer_copy_cpu_factor_id(is_local);
