@@ -244,7 +244,12 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
 {
 #if _OPENMP
 #  pragma omp barrier
-#  pragma omp master
+/* The 'master' construct is deprecated since OpenMP 5.1 */
+#  if _OPENMP >= 202011
+#    pragma omp masked
+#  else
+#    pragma omp master
+#  endif
 #endif
   {
     sock_rte_group_t *group = rte_group;
@@ -578,7 +583,12 @@ static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
 
 #pragma omp barrier
 
-#pragma omp master
+/* The 'master' construct is deprecated since OpenMP 5.1 */
+#if _OPENMP >= 202011
+#  pragma omp masked
+#else
+#  pragma omp master
+#endif
   {
     /*
      * Naive non-blocking barrier implementation over send/recv, to call user
