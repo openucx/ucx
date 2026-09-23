@@ -890,7 +890,7 @@ static int uct_rc_mlx5_send_op_is_put_bcopy(const uct_rc_iface_send_op_t *op)
 
 static int uct_rc_mlx5_send_op_is_put_zcopy(const uct_rc_iface_send_op_t *op)
 {
-    return op->handler == uct_rc_ep_send_op_completion_handler;
+    return op->handler == uct_rc_ep_put_zcopy_completion_handler;
 }
 
 /* Return the non-flush send operation waiting on the WQE at the given pi */
@@ -1018,9 +1018,15 @@ static void uct_rc_mlx5_op_info_fill_put_short(
     info->operation  = UCT_EP_OP_PUT_SHORT;
 
     uct_rc_mlx5_op_info_fill_rma_raddr(raddr, info);
-    uct_ib_mlx5_txwq_copy_segs(txwq, callback_data->data, inl + 1,
-                               inline_length);
-    uct_rc_mlx5_op_info_fill_rma_data(callback_data->data, inline_length, info);
+
+    if (inline_length == 0) {
+        uct_rc_mlx5_op_info_fill_rma_data(NULL, 0, info);
+    } else {
+        uct_ib_mlx5_txwq_copy_segs(txwq, callback_data->data, inl + 1,
+                                   inline_length);
+        uct_rc_mlx5_op_info_fill_rma_data(callback_data->data, inline_length,
+                                          info);
+    }
 }
 
 static void
@@ -1099,9 +1105,14 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
     uct_rc_mlx5_op_info_fill_user_comp(op, info);
     uct_rc_mlx5_op_info_fill_rma_raddr(raddr, info);
 
-    uct_rc_mlx5_op_callback_data_fill_iov(txwq, dptr, num_dseg, callback_data);
-    uct_rc_mlx5_op_info_fill_rma_zcopy_iov(callback_data->zcopy.iov, num_dseg,
-                                           info);
+    if (num_dseg == 0) {
+        uct_rc_mlx5_op_info_fill_rma_data(NULL, 0, info);
+    } else {
+        uct_rc_mlx5_op_callback_data_fill_iov(txwq, dptr, num_dseg,
+                                              callback_data);
+        uct_rc_mlx5_op_info_fill_rma_zcopy_iov(callback_data->zcopy.iov,
+                                               num_dseg, info);
+    }
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_put(
@@ -1119,11 +1130,22 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
 
     ucs_assert(wqe_size >= header_size);
 
+    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     if (wqe_size == header_size) {
-        ucs_fatal("no-payload rdma write is not supported");
+        op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+        if (op == NULL) {
+            uct_rc_mlx5_op_info_fill_put_short(txwq, raddr, NULL, 0, NULL,
+                                               info);
+            return UCS_OK;
+        } else if (uct_rc_mlx5_send_op_is_put_zcopy(op)) {
+            uct_rc_mlx5_op_info_fill_put_zcopy(txwq, op, raddr, NULL, 0, NULL,
+                                               info);
+            return UCS_OK;
+        } else {
+            goto err;
+        }
     }
 
-    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     if (uct_rc_mlx5_wqe_inline_seg(txwq, raddr + 1, &inl, &inline_length) ==
         UCS_OK) {
         uct_rc_mlx5_op_info_fill_put_short(txwq, raddr, inl, inline_length,
@@ -1146,6 +1168,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         return UCS_OK;
     }
 
+err:
     ucs_fatal("rc mlx5: unexpected put wqe send op %p sn %d handler %s "
               "wqe_size %zu",
               op, op->sn, ucs_debug_get_symbol_name((void*)op->handler),
