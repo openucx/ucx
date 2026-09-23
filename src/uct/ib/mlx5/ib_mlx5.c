@@ -377,7 +377,7 @@ err:
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
-    struct ibv_ah      *ah;
+    uct_ib_ah_entry_t  *ah_entry;
     uct_ib_address_t   *ib_addr;
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
@@ -399,13 +399,14 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     }
 
     ah_attr.is_global = iface->config.force_global_addr;
-    status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
+    status = uct_ib_iface_ah_get(iface, &ah_attr, "compact AV check",
+                                 &ah_entry);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_ib_mlx5_get_av(ah, &mlx5_av);
-    uct_ib_iface_release_ah(iface, ah);
+    uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+    uct_ib_iface_ah_put(iface, ah_entry);
 
     /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
      * the device supports compact address vector. */
@@ -874,6 +875,26 @@ size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl)
 uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size)
 {
     return index + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+}
+
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    return ctrl->opmod_idx_opcode >> 24;
+}
+
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, void *dst,
+                                const void *src, size_t length)
+{
+    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
+
+    ucs_assert((src >= (const void*)txwq->qstart) &&
+               (src <= (const void*)txwq->qend));
+
+    memcpy(dst, src, copy_len);
+    if (copy_len < length) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
+               length - copy_len);
+    }
 }
 
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,

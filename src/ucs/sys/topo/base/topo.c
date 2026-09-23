@@ -11,7 +11,6 @@
 #include "topo_int.h"
 #include "topo_groups.h"
 
-#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -73,11 +72,13 @@ typedef struct ucs_topo_global_ctx {
     khash_t(bus_to_sys_dev)    bus_to_sys_dev_hash;
     ucs_topo_sys_device_info_t devices[UCS_SYS_DEVICE_ID_COUNT];
     unsigned                   num_devices;
+    unsigned                   device_class_incomplete_mask;
 } ucs_topo_global_ctx_t;
 
 
 struct ucs_global_state {
     unsigned                   num_devices;
+    unsigned                   device_class_incomplete_mask;
     ucs_topo_sys_device_info_t devices[];
 };
 
@@ -1091,6 +1092,11 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (device_class >= UCS_TOPO_DEVICE_CLASS_LAST) {
+        ucs_error("invalid device class %u", device_class);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
@@ -1113,6 +1119,29 @@ out_unlock:
     return status;
 }
 
+ucs_status_t
+ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class)
+{
+    if ((device_class <= UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
+        (device_class >= UCS_TOPO_DEVICE_CLASS_LAST)) {
+        ucs_error("invalid device class %u", device_class);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    ucs_topo_global_ctx.device_class_incomplete_mask |= UCS_BIT(device_class);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return UCS_OK;
+}
+
+static int
+ucs_topo_device_class_is_incomplete_nolock(ucs_topo_device_class_t device_class)
+{
+    return UCS_BIT_GET(ucs_topo_global_ctx.device_class_incomplete_mask,
+                       device_class);
+}
+
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
     ucs_topo_device_class_t device_class;
@@ -1131,7 +1160,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
     }
 
     device_class = ucs_topo_global_ctx.devices[sys_dev].device_class;
-    if (device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) {
+    if ((device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
+        ucs_topo_device_class_is_incomplete_nolock(device_class)) {
         ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
         goto out_unlock;
     }
@@ -1420,12 +1450,6 @@ ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
 
-    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-        /* Currently only Vera Rubin architecture supports topology groups. */
-        ucs_debug("topology groups are not supported on this architecture");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
@@ -1452,8 +1476,11 @@ ucs_global_state_t *ucs_topo_extract_state(void)
 
     memcpy(state->devices, ucs_topo_global_ctx.devices, devices_size);
     state->num_devices = ucs_topo_global_ctx.num_devices;
+    state->device_class_incomplete_mask =
+            ucs_topo_global_ctx.device_class_incomplete_mask;
 
-    ucs_topo_global_ctx.num_devices = 0;
+    ucs_topo_global_ctx.num_devices                  = 0;
+    ucs_topo_global_ctx.device_class_incomplete_mask = 0;
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -1474,6 +1501,8 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
     memcpy(ucs_topo_global_ctx.devices, state->devices,
            sizeof(ucs_topo_sys_device_info_t) * state->num_devices);
     ucs_topo_global_ctx.num_devices = state->num_devices;
+    ucs_topo_global_ctx.device_class_incomplete_mask =
+            state->device_class_incomplete_mask;
 
     /* Create the hash table */
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
@@ -1505,7 +1534,9 @@ void ucs_topo_init()
 {
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
-    ucs_topo_global_ctx.num_devices = 0;
+    ucs_topo_global_ctx.num_devices                  = 0;
+    /* coverity[missing_lock] */
+    ucs_topo_global_ctx.device_class_incomplete_mask = 0;
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
                       &ucs_sys_topo_provider_default.list);
     ucs_list_add_tail(&ucs_sys_topo_providers_list,

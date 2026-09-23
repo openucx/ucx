@@ -259,8 +259,17 @@ void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp);
 
+void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp);
+
 void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
                                            const void *resp);
+
+void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp);
+
+void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
+                                        const void *resp);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
@@ -393,23 +402,31 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
     uct_rc_txqp_add_send_op(txqp, op);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                          uct_rc_send_handler_t handler, uct_completion_t *comp,
-                          uint16_t sn, uint16_t flags, const uct_iov_t *iov,
-                          size_t iovcnt, size_t length)
+static inline void
+uct_rc_ep_init_send_op(uct_rc_iface_send_op_t *op, unsigned flags,
+                       uct_completion_t *comp, uct_rc_send_handler_t handler,
+                       size_t length)
 {
-    uct_rc_iface_send_op_t *op;
-
-    if (comp == NULL) {
-        return;
-    }
-
-    op            = uct_rc_iface_get_send_op(iface);
-    op->handler   = handler;
+    op->flags     = flags;
     op->user_comp = comp;
-    op->flags    |= flags;
+    op->handler   = handler;
     op->length    = length;
+}
+
+/* Always create a send op, even if comp is NULL, so that outstanding purge can
+ * identify the operation by its completion handler. */
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_add_send_comp_always(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                                 uct_rc_send_handler_t handler,
+                                 uct_completion_t *comp, uint16_t sn,
+                                 uint16_t flags, const uct_iov_t *iov,
+                                 size_t iovcnt, size_t length)
+{
+    uct_rc_iface_send_op_t *op = uct_rc_iface_get_send_op(iface);
+
+    uct_rc_ep_init_send_op(op, flags | UCT_RC_IFACE_SEND_OP_FLAG_IFACE, comp,
+                           handler, length);
+
     if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV) {
         /* coverity[dead_error_line] */
         uct_rc_ep_send_op_set_iov(op, iov, iovcnt);
@@ -417,14 +434,18 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
-static inline void
-uct_rc_ep_init_send_op(uct_rc_iface_send_op_t *op, unsigned flags,
-                       uct_completion_t *comp,
-                       uct_rc_send_handler_t handler)
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                          uct_rc_send_handler_t handler, uct_completion_t *comp,
+                          uint16_t sn, uint16_t flags, const uct_iov_t *iov,
+                          size_t iovcnt, size_t length)
 {
-    op->flags     = flags;
-    op->user_comp = comp;
-    op->handler   = handler;
+    if (comp == NULL) {
+        return;
+    }
+
+    uct_rc_txqp_add_send_comp_always(iface, txqp, handler, comp, sn, flags, iov,
+                                     iovcnt, length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -441,7 +462,8 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
             return UCS_ERR_NO_MEMORY;
         }
 
-        uct_rc_ep_init_send_op(op, 0, comp, uct_rc_ep_flush_op_completion_handler);
+        uct_rc_ep_init_send_op(op, 0, comp,
+                               uct_rc_ep_flush_op_completion_handler, 0);
         uct_rc_iface_send_op_set_name(op, "rc_txqp_add_flush_comp");
         op->iface = iface;
         uct_rc_txqp_add_send_op_sn(txqp, op, sn);
