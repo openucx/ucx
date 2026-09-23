@@ -289,6 +289,23 @@ void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
     ucs_mpool_put(desc);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_send_op_complete(uct_rc_iface_send_op_t *op)
+{
+    if (op->user_comp != NULL) {
+        uct_invoke_completion(op->user_comp, UCS_OK);
+    }
+
+    uct_rc_iface_put_send_op(op);
+}
+
+/* Put zcopy completion handler which allows null user completion. */
+void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
+}
+
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
@@ -303,11 +320,27 @@ void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
     uct_rc_iface_put_send_op(op);
 }
 
+/* Outstanding purge can tell put sgl zcopy from put zcopy by handler.
+ * The operation may not have a user completion (comp == NULL). */
+void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
+}
+
 void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
                                            const void *resp)
 {
     uct_invoke_completion(op->user_comp, UCS_OK);
     ucs_mpool_put(op);
+}
+
+/* Outstanding purge can tell ep_check from flush by handler.
+ * The operation may not have a user completion (comp == NULL). */
+void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
+                                        const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
 }
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
@@ -462,9 +495,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            /* Allow clean flush cancel op from destroy flow */
+            /* Allow from destroy flow: clean flush cancel and ep_check ops. */
             if (warn &&
-                (op->handler != uct_rc_ep_flush_op_completion_handler)) {
+                (op->handler != uct_rc_ep_flush_op_completion_handler) &&
+                (op->handler != uct_rc_ep_check_completion_handler)) {
                 ucs_warn("destroying txqp %p with uncompleted operation %p"
                          " handler %s",
                          txqp, op, ucs_debug_get_symbol_name(op->handler));
@@ -474,7 +508,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                 /* This must be uct_rc_ep_get_bcopy_handler,
                  * uct_rc_ep_get_bcopy_handler_no_completion,
                  * uct_rc_ep_get_zcopy_completion_handler,
-                 * uct_rc_ep_flush_op_completion_handler or
+                 * uct_rc_ep_put_zcopy_completion_handler,
+                 * uct_rc_ep_put_sgl_zcopy_completion_handler,
+                 * uct_rc_ep_flush_op_completion_handler,
+                 * uct_rc_ep_check_completion_handler or
                  * one of the atomic handlers,
                  * so invoke user completion */
                 uct_invoke_completion(op->user_comp, status);
@@ -495,7 +532,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
 
         if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
-            (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
+            (op->handler == uct_rc_ep_put_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_get_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_check_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);
