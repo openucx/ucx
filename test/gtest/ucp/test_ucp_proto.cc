@@ -1146,7 +1146,7 @@ UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_direct_proto_eligible,
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze, rcx_ze, "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze, rc_ze, "rc,ze_copy")
 
 class test_perf_node : public test_ucp_proto {
 };
