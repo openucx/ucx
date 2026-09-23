@@ -11,7 +11,6 @@
 #include "topo_int.h"
 #include "topo_groups.h"
 
-#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -1450,12 +1449,6 @@ static void ucs_topo_release_devices()
 ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
-
-    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-        /* Currently only Vera Rubin architecture supports topology groups. */
-        ucs_debug("topology groups are not supported on this architecture");
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
