@@ -833,31 +833,49 @@ static int ucs_rcache_check_adj_size(ucs_pgt_addr_t start, ucs_pgt_addr_t end,
 }
 
 static void
-ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, ucs_pgt_addr_t start,
-                             ucs_pgt_addr_t end, ucs_list_link_t *list)
+ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
+                             ucs_pgt_addr_t start, ucs_pgt_addr_t end,
+                             ucs_list_link_t *list)
 {
     ucs_pgt_region_t *pgt_left, *pgt_right;
     ucs_rcache_region_t *region_left, *region_right;
+    int can_merge_left  = 0;
+    int can_merge_right = 0;
+
+    if (rcache->params.ops->can_merge == NULL) {
+        return;
+    }
 
     pgt_left  = ucs_pgtable_lookup(&rcache->pgtable, start - 1);
     pgt_right = ucs_pgtable_lookup(&rcache->pgtable, end);
 
-    if (pgt_left != NULL && pgt_right == NULL) {
+    if (pgt_left != NULL) {
         region_left = ucs_derived_of(pgt_left, ucs_rcache_region_t);
+        can_merge_left = rcache->params.ops->can_merge(arg, region_left);
+    }
+
+    if (pgt_right != NULL) {
+        region_right = ucs_derived_of(pgt_right, ucs_rcache_region_t);
+        can_merge_right = rcache->params.ops->can_merge(arg, region_right);
+    }
+
+    /* Fill in a gap between two existing registrations */
+    if (can_merge_left && can_merge_right) {
+        ucs_list_add_tail(list, &region_left->tmp_list);
+        ucs_list_add_tail(list, &region_right->tmp_list);
+        return;
+    }
+
+    if ((region_left != NULL) && can_merge_left) {
         if (ucs_rcache_check_adj_size(start, end, region_left)) {
             ucs_list_add_tail(list, &region_left->tmp_list);
         }
-    } else if (pgt_left == NULL && pgt_right != NULL) {
-        region_right = ucs_derived_of(pgt_right, ucs_rcache_region_t);
+    }
+
+    if ((region_right != NULL) && can_merge_right) {
         if (ucs_rcache_check_adj_size(start, end, region_right)) {
             ucs_list_add_tail(list, &region_right->tmp_list);
         }
-    } else if (pgt_left != NULL && pgt_right != NULL) {
-        /* Fill in a gap between two existing registrations */
-        region_left  = ucs_derived_of(pgt_left, ucs_rcache_region_t);
-        region_right = ucs_derived_of(pgt_right, ucs_rcache_region_t);
-        ucs_list_add_tail(list, &region_left->tmp_list);
-        ucs_list_add_tail(list, &region_right->tmp_list);
     }
 }
 
@@ -922,7 +940,7 @@ ucs_rcache_check_neighbors(ucs_rcache_t *rcache, void *arg,
 
         if ((rcache->params.flags & UCS_RCACHE_FLAG_MERGE_ADJACENT) &&
             (ucs_list_is_empty(&region_list))) {
-            ucs_rcache_check_adj_regions(rcache, *start, *end, &region_list);
+            ucs_rcache_check_adj_regions(rcache, arg, *start, *end, &region_list);
         }
     } while (!ucs_list_is_empty(&region_list));
 

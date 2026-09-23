@@ -94,7 +94,7 @@ protected:
     virtual ucs_rcache_params_t rcache_params()
     {
         static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb, merge_cb,
-                                             dump_region_cb};
+                                             dump_region_cb, can_merge_cb};
         ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
         params.region_struct_size         = sizeof(region);
         return params;
@@ -218,6 +218,11 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->dump_region(
                         ucs_derived_of(r, struct region), buf, max);
+    }
+
+    static int can_merge_cb(void *arg, ucs_rcache_region_t *rg)
+    {
+        return 1;
     }
 };
 
@@ -1260,6 +1265,7 @@ UCS_TEST_F(test_rcache_merge_adjacent, random_merge) {
 
     free(mem);
 }
+
 UCS_TEST_F(test_rcache_merge_adjacent, random_overlap_merge) {
     /*
      * 0          1          2          3              255
