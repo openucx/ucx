@@ -10,7 +10,9 @@
 
 #include "tcp_sockcm_ep.h"
 
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
 
 
@@ -93,10 +95,44 @@ err:
     ucs_close_fd(&conn_fd);
 }
 
+static char *
+uct_tcp_sockaddr_get_bind_device(const struct sockaddr *saddr,
+                                 ucs_netlink_vrf_info_t *vrf_info_p)
+{
+    ucs_status_t status;
+    char if_name[IFNAMSIZ];
+    unsigned if_index;
+
+    status = ucs_sockaddr_get_ifname_by_addr(saddr, if_name, sizeof(if_name));
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    status = ucs_ifname_to_ndev_index(if_name, &if_index);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
+    ucs_netlink_get_vrf_master_info(if_index, vrf_info_p);
+    if (vrf_info_p->master_if_index == 0) {
+        return NULL;
+    }
+
+    if (if_indextoname(vrf_info_p->master_if_index,
+                       vrf_info_p->master_name) == NULL) {
+        ucs_error("if_indextoname(%u) failed: %m", vrf_info_p->master_if_index);
+        return NULL;
+    }
+
+    return vrf_info_p->master_name;
+}
+
 UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
                     const struct sockaddr *saddr, socklen_t socklen,
                     const uct_listener_params_t *params)
 {
+    ucs_socket_options_t socket_params = {0};
+    ucs_netlink_vrf_info_t vrf_info;
     ucs_async_context_t *async_ctx;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
@@ -114,9 +150,11 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
         goto err;
     }
 
-    status = ucs_socket_server_init(saddr, socklen, backlog, 0,
-                                    self->sockcm->super.config.reuse_addr,
-                                    &self->listen_fd);
+    socket_params.reuse_addr  = self->sockcm->super.config.reuse_addr;
+    socket_params.bind_device = uct_tcp_sockaddr_get_bind_device(saddr,
+                                                                 &vrf_info);
+    status = ucs_socket_server_init_v2(saddr, socklen, backlog, 0,
+                                       &socket_params, &self->listen_fd);
     if (status != UCS_OK) {
         goto err;
     }
