@@ -783,7 +783,11 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 }
 
 #ifdef __AVX__
+#if defined(__AVX512BW__)
+#include "cpu_nt_avx512.inl"
+#else
 #include "cpu_nt_avx2.inl"
+#endif
 
 void ucs_x86_nt_buffer_transfer(void *dst, const void *src, size_t len,
                                 ucs_arch_memcpy_hint_t hint, size_t total_len)
