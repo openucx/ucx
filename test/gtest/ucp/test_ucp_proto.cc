@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1103,6 +1104,118 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
                               "rc_x,cuda_copy")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
+
+class test_ucp_proto_cpu_accessible : public test_ucp_proto {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+
+protected:
+    /* Non-host memory types in UCS_MEMORY_TYPES_CPU_ACCESSIBLE */
+    static std::vector<ucs_memory_type_t> cpu_accessible_mem_types()
+    {
+        std::vector<ucs_memory_type_t> mem_types;
+
+        for (unsigned i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
+            ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(i);
+
+            if ((UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&
+                (mem_type != UCS_MEMORY_TYPE_HOST)) {
+                mem_types.push_back(mem_type);
+            }
+        }
+
+        return mem_types;
+    }
+
+    /* Protocols which access the payload directly (memtype_op ==
+     * UCT_EP_OP_LAST) have to stay eligible for CPU-accessible memory. This
+     * covers protocol selection only, it does not exercise data movement. */
+    void check_direct_proto_eligible(ucs_memory_type_t mem_type)
+    {
+        const ucp_proto_threshold_elem_t *thresh =
+                select_tag_send_protocol(mem_type, 1);
+        ASSERT_NE(nullptr, thresh);
+        EXPECT_STREQ("egr/short", thresh->proto_config.proto->name)
+                << "mem_type=" << ucs_memory_type_names[mem_type];
+    }
+
+    /* Eager bcopy protocols set a SHORT memtype operation, but pack the payload
+     * with ucp_dt_contig_pack(), which memcpy-s CPU-accessible memory instead of
+     * using the memtype endpoint. Estimating those copies with the copy
+     * interface bandwidth prices eager out of small messages, so rendezvous is
+     * selected from the very first byte. */
+    void check_eager_proto_selected(ucs_memory_type_t mem_type,
+                                    size_t msg_length)
+    {
+        const ucp_proto_threshold_elem_t *thresh =
+                select_tag_send_protocol(mem_type, msg_length);
+        const char *name;
+
+        ASSERT_NE(nullptr, thresh);
+        name = thresh->proto_config.proto->name;
+        EXPECT_EQ(0, strncmp(name, "egr/", 4))
+                << "mem_type=" << ucs_memory_type_names[mem_type]
+                << " length=" << msg_length << " proto=" << name;
+    }
+};
+
+/* These checks only run protocol selection, which builds a select_param and
+ * never allocates a payload buffer, so they need neither the memory type to be
+ * allocatable nor a copy transport for it */
+UCS_TEST_P(test_ucp_proto_cpu_accessible, direct_proto_eligible,
+           "RNDV_THRESH=inf")
+{
+    for (auto mem_type : cpu_accessible_mem_types()) {
+        check_direct_proto_eligible(mem_type);
+    }
+}
+
+/* Eager has to win small messages for CPU-accessible memory, with rendezvous
+ * enabled, because the payload is packed by memcpy */
+UCS_TEST_P(test_ucp_proto_cpu_accessible, eager_costed_as_memcpy)
+{
+    for (auto mem_type : cpu_accessible_mem_types()) {
+        check_eager_proto_selected(mem_type, 1);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cpu_accessible, rc, "rc")
+
+/* Unlike the checks above, the negative path needs the copy transport, so it is
+ * gated on ZE support */
+class test_ucp_proto_ze_device : public test_ucp_proto {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+
+protected:
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_DEVICE)) {
+            UCS_TEST_SKIP_R("ZE device memory is not supported");
+        }
+
+        test_ucp_proto::init();
+    }
+};
+
+/* ZE-device memory is not CPU-accessible, so its payload is copied by the
+ * memtype endpoint and the copy interface estimation must be kept */
+UCS_TEST_P(test_ucp_proto_ze_device, device_memory_uses_mtype_copy)
+{
+    const ucp_proto_threshold_elem_t *thresh =
+            select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, UCS_MBYTE);
+
+    ASSERT_NE(nullptr, thresh);
+    EXPECT_STREQ("tag/rndv", thresh->proto_config.proto->name);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze_device, rc_ze, "rc,ze_copy")
 
 class test_perf_node : public test_ucp_proto {
 };
