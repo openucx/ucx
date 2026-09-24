@@ -1113,6 +1113,13 @@ public:
     }
 
 protected:
+    /* Non-host memory types in UCS_MEMORY_TYPES_CPU_ACCESSIBLE */
+    static std::vector<ucs_memory_type_t> cpu_accessible_mem_types()
+    {
+        return {UCS_MEMORY_TYPE_ZE_HOST, UCS_MEMORY_TYPE_ZE_MANAGED,
+                UCS_MEMORY_TYPE_ROCM_MANAGED};
+    }
+
     /* Protocols which access the payload directly (memtype_op ==
      * UCT_EP_OP_LAST) have to stay eligible for CPU-accessible memory. This
      * covers protocol selection only, it does not exercise data movement. */
@@ -1145,93 +1152,60 @@ protected:
     }
 };
 
-class test_ucp_proto_ze : public test_ucp_proto_cpu_accessible {
-protected:
-    void init() override
-    {
-        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_HOST)) {
-            UCS_TEST_SKIP_R("ZE memory is not supported");
-        }
-
-        test_ucp_proto::init();
-    }
-};
-
-/* ZE-host and ZE-managed memory is accessible from the CPU */
-UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_direct_proto_eligible,
+/* These checks only run protocol selection, which builds a select_param and
+ * never allocates a payload buffer, so they need neither the memory type to be
+ * allocatable nor a copy transport for it */
+UCS_TEST_P(test_ucp_proto_cpu_accessible, direct_proto_eligible,
            "RNDV_THRESH=inf")
 {
-    static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_ZE_HOST,
-                                                  UCS_MEMORY_TYPE_ZE_MANAGED};
-
-    for (auto mem_type : mem_types) {
-        if (!mem_buffer::is_mem_type_supported(mem_type)) {
-            continue;
-        }
-
+    for (auto mem_type : cpu_accessible_mem_types()) {
         check_direct_proto_eligible(mem_type);
     }
 }
 
 /* Eager has to win small messages for CPU-accessible memory, with rendezvous
  * enabled, because the payload is packed by memcpy */
-UCS_TEST_P(test_ucp_proto_ze, cpu_accessible_eager_costed_as_memcpy)
+UCS_TEST_P(test_ucp_proto_cpu_accessible, eager_costed_as_memcpy)
 {
-    static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_ZE_HOST,
-                                                  UCS_MEMORY_TYPE_ZE_MANAGED};
-
-    for (auto mem_type : mem_types) {
-        if (!mem_buffer::is_mem_type_supported(mem_type)) {
-            continue;
-        }
-
+    for (auto mem_type : cpu_accessible_mem_types()) {
         check_eager_proto_selected(mem_type, 1);
     }
 }
 
-/* ZE-device memory is not CPU-accessible, so its payload is copied by the
- * memtype endpoint and the copy interface estimation must be kept */
-UCS_TEST_P(test_ucp_proto_ze, device_memory_uses_mtype_copy)
-{
-    const ucp_proto_threshold_elem_t *thresh;
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cpu_accessible, rc, "rc")
 
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_DEVICE)) {
-        UCS_TEST_SKIP_R("ZE device memory is not supported");
+/* Unlike the checks above, the negative path needs the copy transport, so it is
+ * gated on ZE support */
+class test_ucp_proto_ze_device : public test_ucp_proto {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
     }
 
-    thresh = select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, UCS_MBYTE);
-    ASSERT_NE(nullptr, thresh);
-    EXPECT_STREQ("tag/rndv", thresh->proto_config.proto->name);
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze, rc_ze, "rc,ze_copy")
-
-class test_ucp_proto_rocm : public test_ucp_proto_cpu_accessible {
 protected:
     void init() override
     {
-        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ROCM_MANAGED)) {
-            UCS_TEST_SKIP_R("ROCm managed memory is not supported");
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ZE_DEVICE)) {
+            UCS_TEST_SKIP_R("ZE device memory is not supported");
         }
 
         test_ucp_proto::init();
     }
 };
 
-/* ROCm managed memory is CPU-accessible as well, and is affected by the same
- * protocol selection path as the ZE memory types */
-UCS_TEST_P(test_ucp_proto_rocm, cpu_accessible_direct_proto_eligible,
-           "RNDV_THRESH=inf")
+/* ZE-device memory is not CPU-accessible, so its payload is copied by the
+ * memtype endpoint and the copy interface estimation must be kept */
+UCS_TEST_P(test_ucp_proto_ze_device, device_memory_uses_mtype_copy)
 {
-    check_direct_proto_eligible(UCS_MEMORY_TYPE_ROCM_MANAGED);
+    const ucp_proto_threshold_elem_t *thresh =
+            select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, UCS_MBYTE);
+
+    ASSERT_NE(nullptr, thresh);
+    EXPECT_STREQ("tag/rndv", thresh->proto_config.proto->name);
 }
 
-UCS_TEST_P(test_ucp_proto_rocm, cpu_accessible_eager_costed_as_memcpy)
-{
-    check_eager_proto_selected(UCS_MEMORY_TYPE_ROCM_MANAGED, 1);
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_rocm, rc_rocm, "rc,rocm_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_ze_device, rc_ze, "rc,ze_copy")
 
 class test_perf_node : public test_ucp_proto {
 };
