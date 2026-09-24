@@ -18,7 +18,6 @@
 #include <ucs/debug/assert.h>
 #include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/preprocessor.h>
 
 #include <sys/mman.h>
 
@@ -26,6 +25,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define UCM_ROCM_HOOK_MODES_MASK \
+    (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))
 
 /* Use the PTR variant so that ucm_orig_<fn> is a function pointer that bistro
  * can redirect to the relocated (trampoline) original, allowing us to intercept
@@ -135,20 +137,17 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     return status;
 }
 
-#define UCM_ROCM_FUNC_ENTRY(_func) \
-    { \
-        {UCS_PP_MAKE_STRING(_func), ucm_override_##_func}, \
-                (void**)&ucm_orig_##_func \
-    }
-
 typedef struct {
     ucm_reloc_patch_t patch;
     void              **orig_func_ptr;
 } ucm_rocm_func_t;
 
 static ucm_rocm_func_t ucm_rocm_funcs[] =
-        {UCM_ROCM_FUNC_ENTRY(hsa_amd_memory_pool_allocate),
-         UCM_ROCM_FUNC_ENTRY(hsa_amd_memory_pool_free),
+        {{{"hsa_amd_memory_pool_allocate",
+           ucm_override_hsa_amd_memory_pool_allocate},
+          (void**)&ucm_orig_hsa_amd_memory_pool_allocate},
+         {{"hsa_amd_memory_pool_free", ucm_override_hsa_amd_memory_pool_free},
+          (void**)&ucm_orig_hsa_amd_memory_pool_free},
          {{NULL, NULL}, NULL}};
 
 
@@ -217,7 +216,7 @@ static ucs_status_t ucm_rocmmem_install(int events)
         goto out;
     }
 
-    if (ucm_global_opts.rocm_hook_modes == 0) {
+    if (!(ucm_global_opts.rocm_hook_modes & UCM_ROCM_HOOK_MODES_MASK)) {
         ucm_info("rocm memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;
@@ -245,8 +244,7 @@ static ucs_status_t ucm_rocmmem_install(int events)
     }
 
     /* Success as long as at least one hooking mode was installed. */
-    if (installed_hooks &
-        (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))) {
+    if (installed_hooks & UCM_ROCM_HOOK_MODES_MASK) {
         status = UCS_OK;
         ucm_info("rocm hooks are ready");
     } else {

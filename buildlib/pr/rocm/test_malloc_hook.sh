@@ -34,13 +34,14 @@ build() {
 
 test_malloc_hook_mode() {
 	mode=$1
+	filter=${2:-'rocm_hooks.*'}
 
 	export UCX_MEM_ROCM_HOOK_MODE=${mode}
 
 	# Test hooks in gtest for the selected hook mode. Check the exit status
 	# explicitly: a login shell (-l) may reset errexit, so a failing gtest
 	# would otherwise not fail the script.
-	if ! UCX_MEM_LOG_LEVEL=diag ./test/gtest/gtest --gtest_filter='rocm_hooks.*'
+	if ! UCX_MEM_LOG_LEVEL=diag ./test/gtest/gtest --gtest_filter="${filter}"
 	then
 		azure_log_error "rocm memory hooks test failed in ${mode} mode"
 		exit 1
@@ -60,6 +61,9 @@ test_malloc_hook() {
 	export UCX_MEM_BISTRO_FORCE_FAR_JUMP=y
 	test_malloc_hook_mode 'bistro'
 	unset UCX_MEM_BISTRO_FORCE_FAR_JUMP
+
+	echo "==== Running rocm malloc hooks test with hooks disabled ===="
+	test_malloc_hook_mode 'none' 'rocm_hooks_disabled.*'
 }
 
 prepare
