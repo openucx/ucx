@@ -69,8 +69,14 @@ enum {
     UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
     UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
-    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
+    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED  = UCS_BIT(30),
+    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED = UCS_BIT(31)
 };
+
+#define UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK \
+    (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED | \
+     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED)
 
 
 /**
@@ -197,6 +203,11 @@ struct ucp_request {
                      * Used by rkey_ptr to track copied data size
                      */
                     ssize_t          completed_size;
+
+                    /* Element in per-EP list of rndv mtype requests throttled
+                     * while waiting for a fragment. Used only before
+                     * UCP_REQUEST_FLAG_PROTO_INITIALIZED is set. */
+                    ucs_hlist_link_t rndv_fc_ep_list;
                 };
             } state;
 
@@ -333,6 +344,13 @@ struct ucp_request {
                                     /* Size to send in ack message */
                                     ssize_t ack_data_size;
                                 } ppln;
+
+                                /* Used by throttled rndv mtype requests before
+                                 * UCP_REQUEST_FLAG_PROTO_INITIALIZED is set. */
+                                struct {
+                                    /* Element in worker-level pending queue */
+                                    ucs_queue_elem_t queue_elem;
+                                } fc;
 
                                 /* Used by rndv/rkey_ptr */
                                 struct {

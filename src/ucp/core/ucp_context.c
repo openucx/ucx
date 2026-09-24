@@ -411,6 +411,17 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_FRAG_WORKER_MAX_MEM", "auto",
+   "Maximum amount of memory a worker may use for rendezvous staging\n"
+   "fragments. Both \"auto\" and \"inf\" mean no limit. This setting has no\n"
+   "effect when PROTO_ENABLE=n. The same limit is applied independently to\n"
+   "each fragment memory type, and per device when available. It is\n"
+   "converted to a fragment count using RNDV_FRAG_SIZE and\n"
+   "RNDV_FRAG_ALLOC_COUNT. When the limit is reached, further fragment\n"
+   "requests are queued until fragments are released",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem),
+   UCS_CONFIG_TYPE_MEMUNITS},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"

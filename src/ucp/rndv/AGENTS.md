@@ -59,6 +59,10 @@ Defined in `rndv.h`:
   pool growth.
 - For GPU paths, always go through `rndv_mtype.inl` helpers and the
   `memtype_cache`. Direct CUDA driver-API calls in this dir are wrong.
+- Acquire mtype staging fragments with `ucp_proto_rndv_mtype_request_init()`
+  and return them with `ucp_proto_rndv_mtype_mdesc_release()`. A plain
+  `ucs_mpool_put()` on `send.rndv.mdesc` skips the flow-control wakeup and
+  can leave throttled requests queued forever.
 - Pipelining (`ppln`) is a meta-protocol: it owns a parent request that
   spawns child requests selected with `UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG`.
   Never inline-progress a pipeline child — schedule it through the

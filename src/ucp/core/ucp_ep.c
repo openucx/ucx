@@ -25,6 +25,7 @@
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucp/rma/rma.inl>
@@ -280,6 +281,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     memset(&ep->ext->ep_match, 0, sizeof(ep->ext->ep_match));
 
     ucs_hlist_head_init(&ep->ext->proto_reqs);
+    ucs_hlist_head_init(&ep->ext->rndv_mtype_fc_reqs);
 
     for (lane = 0; lane < UCP_MAX_FAST_PATH_LANES; ++lane) {
         ucp_ep_set_lane(ep, lane, NULL);
@@ -524,7 +526,8 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_proto_rndv_mtype_fc_reschedule_filter(elem, arg)) {
         return 1;
     }
 
@@ -542,6 +545,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_ep_refcount_assert(ep, discard, ==, 0);
     ucp_ep_refcount_assert(ep, probe, ==, 0);
     ucs_assert(ucs_hlist_is_empty(&ep->ext->proto_reqs));
+    ucs_assert(ucs_hlist_is_empty(&ep->ext->rndv_mtype_fc_reqs));
 
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucs_assert(worker->num_all_eps > 0);
@@ -4520,6 +4524,8 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     ucs_hlist_head_t *proto_reqs = &ucp_ep->ext->proto_reqs;
     ucp_ep_flush_state_t *flush_state;
     ucp_request_t *req;
+
+    ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep, status);
 
     while (!ucs_hlist_is_empty(proto_reqs)) {
         req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);

@@ -2272,6 +2272,28 @@ protected:
         m_mem_type = mem_type;
     }
 
+    static uint64_t get_stats(const entity &e, uint64_t cntr)
+    {
+        return UCS_STATS_GET_COUNTER(e.worker()->stats, cntr);
+    }
+
+    static const char *stats_name(const entity &e, uint64_t cntr)
+    {
+        return e.worker()->stats->cls->counter_names[cntr];
+    }
+
+    void check_stats(const entity &e, uint64_t cntr, uint64_t exp_value)
+    {
+        EXPECT_EQ(exp_value, get_stats(e, cntr))
+                << "counter is " << stats_name(e, cntr);
+    }
+
+    void check_stats_ge(const entity &e, uint64_t cntr, uint64_t min_value)
+    {
+        EXPECT_GE(get_stats(e, cntr), min_value)
+                << "counter is " << stats_name(e, cntr);
+    }
+
 private:
     ucs_memory_type_t tx_memtype() const override
     {
@@ -2281,15 +2303,6 @@ private:
     ucs_memory_type_t rx_memtype() const override
     {
         return m_mem_type;
-    }
-
-    void check_stats(entity &e, uint64_t cntr, uint64_t exp_value)
-    {
-        auto stats_node = e.worker()->stats;
-        auto value      = UCS_STATS_GET_COUNTER(stats_node, cntr);
-
-        EXPECT_EQ(exp_value, value) << "counter is "
-                                    << stats_node->cls->counter_names[cntr];
     }
 
     ucp_err_handling_mode_t get_err_mode() const
@@ -2345,6 +2358,87 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_ppln, cuda_managed_buff,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_ppln);
+
+
+class test_ucp_am_nbx_rndv_mtype_fc : public test_ucp_am_nbx_rndv_ppln {
+protected:
+    struct fc_counters {
+        uint64_t sender_throttled;
+        uint64_t receiver_throttled;
+    };
+
+    void verify_clean_fc_state()
+    {
+        for (auto *ep : {&sender(), &receiver()}) {
+            check_pending_queues_empty(*ep);
+        }
+    }
+
+    void run_fc_test(size_t num_frags, fc_counters &fc)
+    {
+        if (!sender().is_rndv_put_ppln_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+
+        send_message(num_frags);
+
+        check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY, 1);
+        check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE, 1);
+
+        const uint64_t cntr   = UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED;
+
+        fc.sender_throttled   = get_stats(sender(), cntr);
+        fc.receiver_throttled = get_stats(receiver(), cntr);
+    }
+
+private:
+    static void check_pending_queues_empty(const entity &e)
+    {
+        ucp_worker_h worker = e.worker();
+
+        for (unsigned i = 0; i < UCP_WORKER_RNDV_FC_OP_LAST; i++) {
+            EXPECT_TRUE(ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[i]))
+                    << "pending_q[" << i << "] should be empty";
+        }
+    }
+
+    void send_message(size_t num_frags)
+    {
+        set_mem_type(UCS_MEMORY_TYPE_CUDA_MANAGED);
+        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) * num_frags);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
+           "RNDV_FRAG_SIZE=cuda:256K", "RNDV_FRAG_ALLOC_COUNT=cuda:4",
+           "RNDV_FRAG_WORKER_MAX_MEM=1M", "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    /* 16 fragments against a 4-fragment quota */
+    run_fc_test(16, fc);
+
+    EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
+            << "throttling should have occurred with MAX_MEM=1M";
+
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(8, fc);
+
+    EXPECT_EQ(0u, fc.sender_throttled)
+            << "FC disabled - no throttling expected";
+    EXPECT_EQ(0u, fc.receiver_throttled)
+            << "FC disabled - no throttling expected";
+}
+
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_mtype_fc);
 
 #endif
 
