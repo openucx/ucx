@@ -12,7 +12,6 @@
 
 #include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
-#include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
 
 
@@ -93,38 +92,6 @@ err_delete_ep:
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 err:
     ucs_close_fd(&conn_fd);
-}
-
-static char *
-uct_tcp_sockaddr_get_bind_device(const struct sockaddr *saddr,
-                                 ucs_netlink_vrf_info_t *vrf_info_p)
-{
-    ucs_status_t status;
-    char if_name[IFNAMSIZ];
-    unsigned if_index;
-
-    status = ucs_sockaddr_get_ifname_by_addr(saddr, if_name, sizeof(if_name));
-    if (status != UCS_OK) {
-        return NULL;
-    }
-
-    status = ucs_ifname_to_ndev_index(if_name, &if_index);
-    if (status != UCS_OK) {
-        return NULL;
-    }
-
-    ucs_netlink_get_vrf_master_info(if_index, vrf_info_p);
-    if (vrf_info_p->master_if_index == 0) {
-        return NULL;
-    }
-
-    if (if_indextoname(vrf_info_p->master_if_index,
-                       vrf_info_p->master_name) == NULL) {
-        ucs_error("if_indextoname(%u) failed: %m", vrf_info_p->master_if_index);
-        return NULL;
-    }
-
-    return vrf_info_p->master_name;
 }
 
 UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
