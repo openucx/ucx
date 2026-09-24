@@ -848,20 +848,21 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     ucs_status_t status;
     CUuuid uuid;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
-    if (status != UCS_OK) {
-        return status;
-    }
+    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns)) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns) &&
-        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
-        /* TODO: added for test purpose to enable cuda_ipc tests in gtest
-         * mapped addrr is set to be same as d_bptr avoiding any calls to
-         * uct_cuda_ipc_open_memhandle which would fail with invalid argument
-         * error
-         */
-        *mapped_addr = (CUdeviceptr*)key->d_bptr;
-        return UCS_OK;
+        if (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0) {
+            /* TODO: added for test purpose to enable cuda_ipc tests in gtest
+             * mapped addrr is set to be same as d_bptr avoiding any calls to
+             * uct_cuda_ipc_open_memhandle which would fail with invalid argument
+             * error
+             */
+            *mapped_addr = (CUdeviceptr*)key->d_bptr;
+            return UCS_OK;
+        }
     }
 
     ucs_rw_spinlock_write_lock(&uct_cuda_ipc_remote_cache.lock);
