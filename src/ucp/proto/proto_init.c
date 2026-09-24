@@ -334,14 +334,10 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     buffer_copy_factor_id = ucp_proto_buffer_copy_factor_id(local_mem_type,
                                                             remote_mem_type,
                                                             memtype_op, local);
-    /* The copy is done by a CPU memcpy when it is attributed to the CPU factor
-     * and both buffers are CPU accessible. Protocols which access the buffer
-     * directly don't set a memtype operation, see
-     * ucp_proto_common_check_mem_access(), and protocols which pack the payload
-     * set a SHORT operation, but ucp_dt_contig_pack() and ucp_dt_contig_unpack()
-     * use memcpy for CPU-accessible memory and reach the memtype endpoint only
-     * for non-CPU-accessible memory. Zero-copy operations are attributed to the
-     * memtype copy factor, so they keep the copy interface estimation. */
+    /* A copy between CPU-accessible buffers is modeled as memcpy when its cost
+     * is attributed to the CPU factor: ucp_dt_contig_pack()/unpack() use
+     * memcpy for such memory and the memtype endpoint otherwise. ZCOPY
+     * involving non-host memory keeps the copy interface estimation. */
     if ((buffer_copy_factor_id ==
          ucp_proto_buffer_copy_cpu_factor_id(local)) &&
         UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) &&

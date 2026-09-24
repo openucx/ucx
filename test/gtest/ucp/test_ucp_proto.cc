@@ -1116,8 +1116,18 @@ protected:
     /* Non-host memory types in UCS_MEMORY_TYPES_CPU_ACCESSIBLE */
     static std::vector<ucs_memory_type_t> cpu_accessible_mem_types()
     {
-        return {UCS_MEMORY_TYPE_ZE_HOST, UCS_MEMORY_TYPE_ZE_MANAGED,
-                UCS_MEMORY_TYPE_ROCM_MANAGED};
+        std::vector<ucs_memory_type_t> mem_types;
+
+        for (unsigned i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
+            ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(i);
+
+            if ((UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&
+                (mem_type != UCS_MEMORY_TYPE_HOST)) {
+                mem_types.push_back(mem_type);
+            }
+        }
+
+        return mem_types;
     }
 
     /* Protocols which access the payload directly (memtype_op ==
