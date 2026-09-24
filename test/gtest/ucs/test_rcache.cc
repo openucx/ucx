@@ -931,7 +931,7 @@ UCS_TEST_F(test_rcache_merge_adjacent, merge_adjacent_ascending) {
      * +----------+----------+-------------+-----------+
      *
      * Add 256 regions in ascending order and verify that they are merged
-     * into a single region. 
+     * into a single region.
      */
     static const size_t region_count = 256;
     static const size_t size         = ucs_get_page_size();
@@ -1257,7 +1257,7 @@ UCS_TEST_F(test_rcache_merge_adjacent, random_merge) {
 
     size_t regions_in_use = ucs_pgtable_num_regions(&m_rcache.get()->pgtable);
     size_t regions_max    = max_merged_regions(region_count);
-    EXPECT_LE(regions_in_use,regions_max);
+    EXPECT_LE(regions_in_use, regions_max);
 
     for (region *region : regions) {
         put(region);
@@ -1301,15 +1301,15 @@ UCS_TEST_F(test_rcache_merge_adjacent, random_overlap_merge) {
     }
 
     std::random_shuffle(ranges.begin(), ranges.end(), ucs::rand_range);
-    for (const auto &range: ranges) {
+    for (const auto &range : ranges) {
         regions.push_back(get(range.first, range.second));
     }
 
     size_t regions_in_use = ucs_pgtable_num_regions(&m_rcache.get()->pgtable);
     size_t regions_max    = max_merged_regions(region_count);
-    EXPECT_LE(regions_in_use,regions_max);
+    EXPECT_LE(regions_in_use, regions_max);
 
-    for (region *region: regions) {
+    for (region *region : regions) {
         put(region);
     }
 

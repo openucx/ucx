@@ -144,12 +144,11 @@ struct ucs_rcache_ops {
      * existing memory registration by checking if they share memory type,
      * memory flags, and memory allocation.
      *
-     *
      * @param [in]  arg      Custom argument passed to @ref ucs_rcache_get().
      * @param [in]  region   Existing region to be checked for merge
      *                       compatibility.
      *
-     * @return 1 if new region is compatible with existing region. 0 if not. 
+     * @return 1 if new region is compatible with existing region. 0 if not.
      */
     int                     (*can_merge)(void *arg,
                                          ucs_rcache_region_t *region);

@@ -1802,15 +1802,22 @@ static int ucp_mem_rcache_can_merge_cb(void *arg, ucs_rcache_region_t *rregion)
 {
     ucp_mem_rcache_reg_ctx_t *reg_ctx = arg;
     ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
-    ucs_pgt_addr_t alloc_start        = (uintptr_t)reg_ctx->alloc_base;
-    ucs_pgt_addr_t alloc_end          = (uintptr_t)reg_ctx->alloc_base +
-                                        reg_ctx->alloc_len;
     ucs_pgt_addr_t start              = rregion->super.start;
     ucs_pgt_addr_t end                = rregion->super.end;
+    ucs_pgt_addr_t alloc_start, alloc_end;
 
-    return (memh->mem_type == reg_ctx->mem_type) &&
-           (memh->mem_flags == reg_ctx->mem_flags) &&
-           (start >= alloc_start) && (end <= alloc_end);
+    if ((memh->mem_flags != reg_ctx->mem_flags) ||
+        (memh->mem_type != reg_ctx->mem_type)) {
+        return 0;
+    }
+
+    if (memh->mem_type == UCS_MEMORY_TYPE_HOST) {
+        return 1;
+    }
+
+    alloc_start = (uintptr_t)reg_ctx->alloc_base;
+    alloc_end   = (uintptr_t)reg_ctx->alloc_base + reg_ctx->alloc_len;
+    return (start >= alloc_start) && (end <= alloc_end);
 }
 
 static ucs_rcache_ops_t ucp_mem_rcache_ops = {
@@ -2012,6 +2019,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
     char rcache_name[128];
     khiter_t iter;
     int ret;
+    ucs_memory_info_t mem_info = { 0 };
 
     ucs_assert(user_memh != NULL);
 
@@ -2044,7 +2052,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 
         status = ucp_memh_rcache_get(rcache, unpacked->address,
                                      unpacked->length, UCS_RCACHE_MIN_ALIGNMENT,
-                                     unpacked->mem_type, 0, 0, 0, "", &memh);
+                                     unpacked->mem_type, &mem_info, 0, 0, "", &memh);
         if (status != UCS_OK) {
             goto err_rcache_destroy;
         }
