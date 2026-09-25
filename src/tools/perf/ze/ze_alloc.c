@@ -109,7 +109,9 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
         .priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
     };
     ze_result_t ret;
-    unsigned group_index, i;
+    ucs_status_t status;
+    unsigned group_index;
+    int gpu_index;
 
     ret = ze_init_devices();
     if (ret != ZE_RESULT_SUCCESS) {
@@ -117,15 +119,19 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
     }
 
     group_index = rte_call(perf, group_index);
-    i           = group_index % gpu_count;
+    status      = ucx_perf_get_gpu_index(perf, group_index, (int)gpu_count,
+                                         "ze", &gpu_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-    if ((tls_cmdlist != NULL) && (tls_gpu_index != i)) {
+    if ((tls_cmdlist != NULL) && (tls_gpu_index != (unsigned)gpu_index)) {
         ucx_perf_ze_destroy_tls_cmdlist();
     }
 
-    tls_gpu_index = i;
+    tls_gpu_index = gpu_index;
     if (tls_cmdlist == NULL) {
-        ret = ucx_perf_ze_create_tls_cmdlist(i, &cmdq_desc);
+        ret = ucx_perf_ze_create_tls_cmdlist(gpu_index, &cmdq_desc);
         if (ret != ZE_RESULT_SUCCESS) {
             return UCS_ERR_NO_DEVICE;
         }

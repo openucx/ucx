@@ -18,6 +18,7 @@
 static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
 {
     hipError_t ret;
+    ucs_status_t status;
     unsigned group_index;
     int num_gpus;
     int gpu_index;
@@ -29,7 +30,11 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
-    gpu_index = group_index % num_gpus;
+    status = ucx_perf_get_gpu_index(perf, group_index, num_gpus, "rocm",
+                                    &gpu_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ret = hipSetDevice(gpu_index);
     if (ret != hipSuccess) {
