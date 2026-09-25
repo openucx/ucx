@@ -177,6 +177,9 @@ static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
         case UCT_ATOMIC_OP_XOR: \
             ucs_atomic_xor##_bits(ptr, args[0]); \
             break; \
+        case UCT_ATOMIC_OP_SWAP: \
+            (void)ucs_atomic_swap##_bits(ptr, args[0]); \
+            break; \
         default: \
             ucs_fatal("invalid opcode: %d", atomicreqh->opcode); \
         } \
