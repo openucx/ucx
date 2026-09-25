@@ -65,7 +65,7 @@ typedef struct {
     uint64_t                  addr;
 } UCS_S_PACKED ucm_bistro_jcc_xlt_t;
 
-/* Translation of RIP-relative "mov %reg, disp32(%rip)" (load form) into a
+/* Translation of RIP-relative "mov disp32(%rip), %reg" (load form) into a
  * position-independent sequence, since the relocated code is not guaranteed to
  * be within 32-bit range of the referenced address:
  *   movabs $addr64, %reg  ; $addr64 = $disp32 + %rip

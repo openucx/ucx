@@ -34,27 +34,26 @@
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
 
- ucm_global_config_t ucm_global_opts = {
-    .log_level           = UCS_LOG_LEVEL_WARN,
-    .enable_events       = 1,
-    .mmap_hook_mode      = UCM_DEFAULT_HOOK_MODE,
-    .enable_malloc_hooks = 1,
-    .enable_malloc_reloc = 0,
-    .cuda_hook_modes =
- #if UCM_BISTRO_HOOKS
-            UCS_BIT(UCM_MMAP_HOOK_BISTRO) |
- #endif
-            UCS_BIT(UCM_MMAP_HOOK_RELOC),
-    .rocm_hook_modes =
- #if UCM_BISTRO_HOOKS
-            UCS_BIT(UCM_MMAP_HOOK_BISTRO) |
- #endif
-            UCS_BIT(UCM_MMAP_HOOK_RELOC),
+#if UCM_BISTRO_HOOKS
+#  define UCM_DEFAULT_GPU_HOOK_MODES \
+       (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))
+#else
+#  define UCM_DEFAULT_GPU_HOOK_MODES UCS_BIT(UCM_MMAP_HOOK_RELOC)
+#endif
+
+ucm_global_config_t ucm_global_opts = {
+    .log_level                  = UCS_LOG_LEVEL_WARN,
+    .enable_events              = 1,
+    .mmap_hook_mode             = UCM_DEFAULT_HOOK_MODE,
+    .enable_malloc_hooks        = 1,
+    .enable_malloc_reloc        = 0,
+    .cuda_hook_modes            = UCM_DEFAULT_GPU_HOOK_MODES,
+    .rocm_hook_modes            = UCM_DEFAULT_GPU_HOOK_MODES,
     .enable_dynamic_mmap_thresh = 1,
-    .alloc_alignment = 16,
-    .dlopen_process_rpath = 1,
-    .bistro_force_far_jump = 0,
- };
+    .alloc_alignment            = 16,
+    .dlopen_process_rpath       = 1,
+    .bistro_force_far_jump      = 0,
+};
 
 size_t ucm_get_page_size()
 {
