@@ -14,6 +14,12 @@
 #include <uct/api/device/uct_device_types.h>
 #include <ucs/sys/device_code.h>
 
+UCS_F_DEVICE void uct_ib_d2p_store_word(volatile uint64_t *dst,
+                                        uint64_t value, uint64_t owner)
+{
+    asm volatile("st.relaxed.sys.global.u64 [%0], %1;" ::
+                 "l"(dst), "l"(value | (owner << 63)) : "memory");
+}
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
@@ -54,18 +60,16 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
                                 ch->queue_base) +
                         slot;
 
-            desc->opcode         = opcode;
-            desc->length         = length;
-            desc->ep_idx         = ep->ep_idx;
-            desc->lkey           = lkey;
-            desc->laddr          = laddr;
-            desc->rkey           = rkey;
-            desc->raddr          = raddr;
-            desc->add            = add;
-            desc->flags          = flags;
-            const uint32_t owner = (pi >> iface->log_depth) & 0x1;
-            asm volatile("st.release.sys.global.u8 [%0], %1;" ::
-                         "l"(&desc->owner), "r"(owner) : "memory");
+            const uint64_t owner = (pi >> iface->log_depth) & 0x1;
+            uct_ib_d2p_store_word(&desc->op_len_flags,
+                    length | ((uint64_t)flags << 32) |
+                    ((uint64_t)opcode << 48), owner);
+            uct_ib_d2p_store_word(&desc->ep_id, ep->ep_id, owner);
+            uct_ib_d2p_store_word(&desc->lkey_rkey,
+                    lkey | ((uint64_t)rkey << 32), owner);
+            uct_ib_d2p_store_word(&desc->laddr, laddr, owner);
+            uct_ib_d2p_store_word(&desc->raddr, raddr, owner);
+            uct_ib_d2p_store_word(&desc->add, add, owner);
         }
     }
 
