@@ -274,6 +274,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
+    ep->ext->flags                        = 0;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
                       sizeof(ep->ext->flush_state));
@@ -1283,6 +1284,10 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
             ucs_snprintf_zero(ep->name, UCP_ENTITY_NAME_MAX, "%p", ep);
         }
 #endif
+
+        if (flags & UCP_EP_PARAMS_FLAGS_RKEY_BOUND_LIFETIME) {
+            ep->ext->flags |= UCP_EP_EXT_FLAG_RKEY_BOUND_LIFETIME;
+        }
 
         ucp_ep_params_check_err_handling(ep, params);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
