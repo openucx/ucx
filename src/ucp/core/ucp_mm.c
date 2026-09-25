@@ -1306,16 +1306,22 @@ static void ucp_mtype_pack_dereg(ucp_context_h context,
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
                                       ucp_md_index_t md_index,
+                                      unsigned uct_flags,
                                       ucp_mtype_pack_context_t *pack_context)
 {
-    ucp_context_h context            = worker->context;
-    const uct_md_attr_v2_t *md_attr  = &context->tl_mds[md_index].attr;
+    ucp_context_h context           = worker->context;
+    const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
     uct_md_mkey_pack_params_t params = { .field_mask = 0 };
+    ucs_log_level_t log_level;
     uct_md_mem_reg_params_t reg_params;
     uct_component_h cmpt;
     ucp_tl_md_t *tl_md;
     ucs_status_t status;
     char *rkey_buffer;
+
+    log_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+                        UCS_LOG_LEVEL_DEBUG :
+                        UCS_LOG_LEVEL_ERROR;
 
     if (!(md_attr->flags & UCT_MD_FLAG_NEED_RKEY)) {
         pack_context->rkey_bundle.handle = NULL;
@@ -1328,7 +1334,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
     if (!(context->cache_md_map[mem_type] & UCS_BIT(md_index))) {
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-        reg_params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        reg_params.flags      = UCT_MD_MEM_ACCESS_ALL | uct_flags;
         if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
             reg_params.mem_type    = mem_type;
@@ -1344,10 +1350,18 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
         pack_context->ucp_memh = NULL;
     } else {
         status = ucp_memh_get(context, remote_addr, length, mem_type,
-                              UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL,
-                              "mem_type", &pack_context->ucp_memh);
+                              UCS_BIT(md_index),
+                              UCT_MD_MEM_ACCESS_ALL | uct_flags, "mem_type",
+                              &pack_context->ucp_memh);
         if (status != UCS_OK) {
             return status;
+        }
+
+        /* MD may be skipped by required_mem_flags filtering */
+        if (!(pack_context->ucp_memh->md_map & UCS_BIT(md_index)) ||
+            (pack_context->ucp_memh->uct[md_index] == NULL)) {
+            ucp_memh_put(pack_context->ucp_memh);
+            return UCS_ERR_UNSUPPORTED;
         }
 
         pack_context->uct_memh = pack_context->ucp_memh->uct[md_index];
@@ -1358,15 +1372,15 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     status = uct_md_mkey_pack_v2(tl_md->md, pack_context->uct_memh, remote_addr,
                                  length, &params, rkey_buffer);
     if (status != UCS_OK) {
-        ucs_error("failed to pack key from md[%d]: %s",
-                  md_index, ucs_status_string(status));
+        ucs_log(log_level, "failed to pack key from md[%d]: %s", md_index,
+                ucs_status_string(status));
         goto out_dereg_mem;
     }
 
     status = uct_rkey_unpack(cmpt, rkey_buffer, &pack_context->rkey_bundle);
     if (status != UCS_OK) {
-        ucs_error("failed to unpack key from md[%d]: %s",
-                  md_index, ucs_status_string(status));
+        ucs_log(log_level, "failed to unpack key from md[%d]: %s", md_index,
+                ucs_status_string(status));
         goto out_dereg_mem;
     }
     return UCS_OK;
