@@ -514,6 +514,7 @@ public:
     void init()
     {
         create_entity();
+        create_entity();
         sender().connect(&receiver(), get_ep_params(), 0);
     }
 };
