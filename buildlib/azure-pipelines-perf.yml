@@ -110,8 +110,8 @@ stages:
               echo "PR's merge message: $(Build.SourceVersionMessage)"
               
               # Extract commit SHAs from the PR's merge message.
-              SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
-              SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
+              SHA_After=$(echo "$(Build.SourceVersionMessage)" | awk '{print $2}')
+              SHA_Before=$(echo "$(Build.SourceVersionMessage)" | awk '{print $4}')
                             
               printf '\n%79s\n\n' | tr ' ' =
               echo "Base SHA from Git log:       $(cd $(WorkDir)/ucx && git rev-parse HEAD^)"
