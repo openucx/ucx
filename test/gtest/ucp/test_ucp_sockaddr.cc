@@ -3359,8 +3359,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_iface_activate, iface_activate_count,
 
     client_connect_disconnect(true);
 
-    /* Receiver stays activated to progress incoming messages */
-    EXPECT_TRUE(is_any_interface_activated(receiver()));
+    /* Interfaces are released together with the last endpoint using them, even
+     * if they were used to receive messages. Relies on tcp built-in keepalive:
+     * a keepalive lane would keep its interface activated. */
+    EXPECT_FALSE(is_any_interface_activated(receiver()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_iface_activate, tcp, "tcp")

@@ -529,11 +529,11 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
 
     ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
     lane_map  = ucp_proto_select_get_lane_map(worker, select_elem) &
-                ~ep_config->proto_lane_map;
+                ~ep_config->active_lane_map;
     ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
                                      ucp_worker_iface_progress_ep);
 
-    ep_config->proto_lane_map |= lane_map;
+    ep_config->active_lane_map |= lane_map;
 }
 
 static ucs_status_t
