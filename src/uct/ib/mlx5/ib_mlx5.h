@@ -53,6 +53,7 @@
 #define UCT_IB_MLX5_DEVX_UAR_KEY         0xdea1ab1eU
 #define UCT_IB_MLX5_RES_DOMAIN_KEY       0x1b1bda7aU
 #define UCT_IB_MLX5_WORKER_DM_KEY        0xacdf1245u
+#define UCT_RC_GDAKI_DEVX_UAR_KEY        0x0009da31u
 #define UCT_IB_MLX5_EXTENDED_UD_AV       0x80 /* htonl(0x80000000) */
 #define UCT_IB_MLX5_AV_GRH_PRESENT       0x40 /* htonl(UCS_BIT(30)) */
 #define UCT_IB_MLX5_BF_REG_SIZE          256
@@ -1030,6 +1031,9 @@ ucs_status_t uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in,
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
+ucs_status_t uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface,
+                                          uct_ib_mlx5_qp_t *qp, int qp_type);
+
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
 void uct_ib_mlx5_devx_destroy_qp_common(uct_ib_mlx5_qp_t *qp);
@@ -1221,6 +1225,13 @@ uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 
 static inline ucs_status_t
 uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline ucs_status_t uct_ib_mlx5_devx_qp_rst2init(uct_ib_iface_t *iface,
+                                                        uct_ib_mlx5_qp_t *qp,
+                                                        int qp_type)
 {
     return UCS_ERR_UNSUPPORTED;
 }
