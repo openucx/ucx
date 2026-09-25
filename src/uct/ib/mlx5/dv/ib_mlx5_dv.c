@@ -694,7 +694,7 @@ uct_ib_mlx5_devx_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         goto err_free_db;
     }
 
-    uct_ib_mlx5_fill_cq_buf(cq, attr.umem_len);
+    uct_ib_mlx5_fill_cq_buf(cq, attr.cq_size);
     return UCS_OK;
 
 err_free_db:
