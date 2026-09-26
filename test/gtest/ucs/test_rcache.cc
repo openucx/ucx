@@ -94,7 +94,7 @@ protected:
     virtual ucs_rcache_params_t rcache_params()
     {
         static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb, merge_cb,
-                                             dump_region_cb};
+                                             dump_region_cb, can_merge_cb};
         ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
         params.region_struct_size         = sizeof(region);
         return params;
@@ -218,6 +218,11 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->dump_region(
                         ucs_derived_of(r, struct region), buf, max);
+    }
+
+    static int can_merge_cb(void *arg, ucs_rcache_region_t *rg)
+    {
+        return 1;
     }
 };
 
@@ -872,10 +877,450 @@ UCS_TEST_F(test_rcache_with_limit, by_size_inuse) {
     free(ptr1);
 }
 
+class test_rcache_merge_adjacent : public test_rcache {
+protected:
+    virtual ucs_rcache_params_t rcache_params()
+    {
+        ucs_rcache_params_t params = test_rcache::rcache_params();
+        params.flags              |= UCS_RCACHE_FLAG_MERGE_ADJACENT;
+        return params;
+    }
+
+    /*
+     * Adjacent merge absorbs a neighbor only if the new region is at
+     * least as large. After every chunk is registered, the worst-case
+     * pgtable layout is a size pyramid that grows toward the center.
+     *
+     *   +---+-----+-------+---------+-------+-----+---+
+     *   | 1 |  2  |   3   |    4    |   3   |  2  | 1 |
+     *   +---+-----+-------+---------+-------+-----+---+
+     *
+     * Work from outside inward to determine the maximum number of regions
+     * that can be generated from a given number of chunks in the worst case
+     * merge.
+     */
+    size_t max_merged_regions(size_t chunks)
+    {
+        size_t width            = 1;
+        size_t regions          = 0;
+        size_t chunks_remaining = chunks;
+        
+        while (true) {
+            if (chunks_remaining >= 2 * width + 1) {
+                /* Add step on left and right sides */
+                regions += 2;
+                chunks_remaining -= 2 * width;
+                ++width;
+            } else {
+                /* No room for two equal steps on left and right */
+                /* Check if there is room for a final center region */
+                if (chunks_remaining >= width) {
+                    ++regions;
+                }
+                return regions;
+            }
+        }
+    }
+};
+
+UCS_TEST_F(test_rcache_merge_adjacent, merge_adjacent_ascending) {
+    /*
+     * 0          1          2              256 pages
+     * +----------+----------+-------------+-----------+
+     * | region0  | region1  |     ...     | region255 |
+     * +----------+----------+-------------+-----------+
+     *
+     * Add 256 regions in ascending order and verify that they are merged
+     * into a single region.
+     */
+    static const size_t region_count = 256;
+    static const size_t size         = ucs_get_page_size();
+    static const size_t total_size   = region_count * size;
+    void *mem                        = NULL;
+
+    std::vector<void*> ptrs;
+    std::vector<region*> regions;
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    /* Create regions 0 - 255 */
+    for (size_t i = 0; i < region_count; ++i) {
+        void *ptr = (char*)mem + i * size;
+        ptrs.push_back(ptr);
+        regions.push_back(get(ptrs[i], size));
+    }
+
+    region *last = regions.back();
+
+    /* Expect last region to encompass entire memory range */
+    EXPECT_EQ(last->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(last->super.super.end, (uintptr_t)mem + total_size);
+
+    for (size_t i = 0; i < region_count - 1; ++i) {
+        /* Get the same area as original region - should be a different region now */
+        region *region = get(ptrs[i], size);
+        EXPECT_NE(region, regions[i]);
+        EXPECT_EQ(region, last);
+
+        put(region);
+    }
+
+    for (region *region : regions) {
+        put(region);
+    }
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_merge_adjacent, merge_adjacent_descending) {
+    /*
+     * 0          1          2              256 pages
+     * +----------+----------+-------------+-----------+
+     * | region0  | region1  |     ...     | region255 |
+     * +----------+----------+-------------+-----------+
+     *
+     * Add 256 regions in descending order and verify that they are merged
+     * into a single region.
+     */
+    static const size_t region_count = 256;
+    static const size_t size         = ucs_get_page_size();
+    static const size_t total_size   = region_count * size;
+    void *mem                        = NULL;
+
+    std::vector<void*> ptrs;
+    std::vector<region*> regions;
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    /* Create regions 0 - 255 */
+    for (size_t i = region_count; i > 0; --i) {
+        ptrs.push_back((char*)mem + (i - 1) * size);
+        regions.push_back(get(ptrs.back(), size));
+    }
+
+    region *last = regions.back();
+
+    /* Expect last region to encompass entire memory range */
+    EXPECT_EQ(last->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(last->super.super.end, (uintptr_t)mem + total_size);
+
+    for (size_t i = 0; i < region_count - 1; ++i) {
+        /* Get the same area as original region - should be a different region now */
+        region *region = get(ptrs[i], size);
+        EXPECT_NE(region, regions[i]);
+        EXPECT_EQ(region, last);
+
+        put(region);
+        put(regions[i]);
+    }
+    put(last);
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_merge_adjacent, fill_gap_merge) {
+    /*
+     * +----------+          +----------+
+     * | region1  |          | region2  |
+     * +----------+----------+----------+
+     *            | region3  |
+     * +----------+----------+----------+
+     * |            merged              |
+     * +--------------------------------+
+     *
+     * Register two regions with a one-page gap, then fill the gap and
+     * verify all three merge into a single region.
+     */
+    static const size_t size       = ucs_get_page_size();
+    static const size_t total_size = size * 3;
+    void *mem                      = NULL;
+
+    region *region1, *region2, *region3, *region1_2, *region2_2, *region3_2;
+    void *ptr1, *ptr2, *ptr3;
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    ptr1 = (char*)mem;
+    ptr2 = (char*)mem + size * 2;
+    ptr3 = (char*)mem + size;
+
+    region1 = get(ptr1, size);
+    region2 = get(ptr2, size);
+    EXPECT_NE(region1, region2);
+
+    region3 = get(ptr3, size);
+    /* Expect region3 to encompass entire memory range after merge */
+    EXPECT_EQ(region3->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(region3->super.super.end, (uintptr_t)mem + total_size);
+
+    /* Get the same area as region1 - should be a different region now */
+    region1_2 = get(ptr1, size);
+    EXPECT_NE(region1_2, region1);
+    EXPECT_EQ(region1_2, region3);
+
+    /* Get the same area as region2 - should be a different region now */
+    region2_2 = get(ptr2, size);
+    EXPECT_NE(region2, region2_2);
+    EXPECT_EQ(region2_2, region3);
+
+    /* Get the same area as region3 - should be the same */
+    region3_2 = get(ptr3, size);
+    EXPECT_EQ(region3_2, region3);
+
+    put(region1);
+    put(region2);
+    put(region3);
+    put(region1_2);
+    put(region2_2);
+    put(region3_2);
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_merge_adjacent, fill_gap_merge_expand) {
+    /*
+     *             16B gap
+     *            |
+     * +----------+  +---------------------+----------+
+     * | region1  |  |       region3       | region2  |
+     * +----------+--+---------------------+----------+
+     * |                  merged                      |
+     * +----------------------------------------------+
+     *
+     * Register two page-sized regions with a two-page gap, then a third
+     * region that fills the gap except for its first 16 bytes and is
+     * adjacent to region2. Merging region3 with region2 takes region2's
+     * page alignment, which expands the merged start back over the
+     * 16-byte gap until it is adjacent to region1 and joins all three
+     * regions.
+     */
+    static const size_t size       = ucs_get_page_size();
+    static const size_t total_size = size * 4;
+    static const size_t offset     = 16;
+    const int prot                 = PROT_READ | PROT_WRITE;
+    void *mem                      = NULL;
+
+    region *region1, *region2, *region3, *region1_2, *region2_2, *region3_2;
+    void *ptr1, *ptr2, *ptr3;
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    ptr1 = (char*)mem;
+    ptr2 = (char*)mem + size * 3;
+    ptr3 = (char*)mem + size + offset;
+
+    /* Create region1 */
+    region1 = get(ptr1, size, prot, ucs_get_page_size());
+    /* Create region2. 2 page gap between end of region1 and start of region2 */
+    region2 = get(ptr2, size, prot, ucs_get_page_size());
+    EXPECT_NE(region1, region2);
+
+    /* Create region3. 16 byte gap between end of region1 and start of region3 */
+    /* End of region3 is adjacent to start of region2 */
+    region3 = get(ptr3, size * 2 - offset, prot, offset);
+    /* Expect region3 to encompass entire memory range after merge */
+    /* 16 byte gap disappears after region3 takes on region2's larger alignment */
+    EXPECT_EQ(region3->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(region3->super.super.end, (uintptr_t)mem + total_size);
+
+    /* Get the same area as region1 - should be a different region now */
+    region1_2 = get(ptr1, size);
+    EXPECT_NE(region1_2, region1);
+    EXPECT_EQ(region1_2, region3);
+
+    /* Get the same area as region2 - should be a different region now */
+    region2_2 = get(ptr2, size);
+    EXPECT_NE(region2, region2_2);
+    EXPECT_EQ(region2_2, region3);
+
+    /* Get the same area as region3 - should be the same */
+    region3_2 = get(ptr3, size);
+    EXPECT_EQ(region3_2, region3);
+
+    put(region1);
+    put(region2);
+    put(region3);
+    put(region1_2);
+    put(region2_2);
+    put(region3_2);
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_merge_adjacent, merge_adjacent_smaller) {
+    /*
+     * 0                     3           5           7 pages
+     * +---------------------+-----------+-----------+
+     * |       region1       |  region2  |  region3  |
+     * +---------------------+-----------+-----------+
+     * |                   merged                    |
+     * +---------------------------------------------+
+     *
+     * An adjacent neighbor is absorbed only if the new region is at least
+     * as large as that neighbor. region2 is smaller than its neighbor
+     * region1, so it is not merged. region3 is the same size as its
+     * neighbor region2, so it absorbs it, and the resulting 4-page region
+     * is larger than region1 and absorbs it as well.
+     */
+    static const size_t size       = ucs_get_page_size();
+    static const size_t total_size = size * 7;
+    void *mem                      = NULL;
+
+    region *region1, *region2, *region3, *region1_2, *region1_3, *region2_2;
+    void *ptr1, *ptr2, *ptr3;
+
+    EXPECT_EQ(posix_memalign(&mem, ucs_get_page_size(), total_size), 0);
+    memset(mem, 0, total_size);
+
+    ptr1 = (char*)mem;
+    ptr2 = (char*)mem + size * 3;
+    ptr3 = (char*)mem + size * 5;
+
+    /* Create 3-page region1 */
+    region1 = get(ptr1, size * 3);
+    EXPECT_EQ(region1->super.super.start, (uintptr_t)ptr1);
+    EXPECT_EQ(region1->super.super.end, (uintptr_t)ptr1 + size * 3);
+
+    /* Create 2-page region2, adjacent to region1 - should not merge because
+     * it is smaller than region1 */
+    region2 = get(ptr2, size * 2);
+    EXPECT_NE(region1, region2);
+    EXPECT_EQ(region2->super.super.start, (uintptr_t)ptr2);
+    EXPECT_EQ(region2->super.super.end, (uintptr_t)ptr2 + size * 2);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    /* Get the same area as region1 - should be unchanged */
+    region1_2 = get(ptr1, size);
+    EXPECT_EQ(region1_2, region1);
+
+    /* Create 2-page region3, adjacent to region2 */
+    region3 = get(ptr3, size * 2);
+    /* Expect region3 to encompass entire memory range after merge */
+    EXPECT_EQ(region3->super.super.start, (uintptr_t)mem);
+    EXPECT_EQ(region3->super.super.end, (uintptr_t)mem + total_size);
+
+    /* Get the same area as region1 - should be a different region now */
+    region1_3 = get(ptr1, size);
+    EXPECT_NE(region1_3, region1);
+    EXPECT_EQ(region1_3, region3);
+
+    /* Get the same area as region2 - should be a different region now */
+    region2_2 = get(ptr2, size);
+    EXPECT_NE(region2_2, region2);
+    EXPECT_EQ(region2_2, region3);
+
+    put(region1);
+    put(region2);
+    put(region3);
+    put(region1_2);
+    put(region1_3);
+    put(region2_2);
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_merge_adjacent, random_merge) {
+    /*
+     * 0          1          2              256 pages
+     * +----------+----------+-------------+-----------+
+     * | region0  | region1  |     ...     | region255 |
+     * +----------+----------+-------------+-----------+
+     *
+     * Add 256 adjacent page-sized regions in random order and verify that
+     * the number of merged regions is less than or equal to the worst case
+     * merge scenario.
+     */
+    static const size_t region_count = 256;
+    static const size_t size         = ucs_get_page_size();
+    static const size_t total_size   = size * region_count;
+    void *mem                        = NULL;
+    std::vector<void*> ptrs;
+    std::vector<region*> regions;
+
+    EXPECT_EQ(posix_memalign(&mem, size, total_size), 0);
+
+    for (size_t i = 0; i < region_count; ++i) {
+        void *ptr = (char*)mem + i * size;
+        ptrs.push_back(ptr);
+    }
+
+    std::random_shuffle(ptrs.begin(), ptrs.end(), ucs::rand_range);
+    for (void *ptr : ptrs) {
+        region *region;
+        region = get(ptr, size);
+        regions.push_back(region);
+    }
+
+    size_t regions_in_use = ucs_pgtable_num_regions(&m_rcache.get()->pgtable);
+    size_t regions_max    = max_merged_regions(region_count);
+    EXPECT_LE(regions_in_use, regions_max);
+
+    for (region *region : regions) {
+        put(region);
+    }
+
+    free(mem);
+}
+
+UCS_TEST_F(test_rcache_merge_adjacent, random_overlap_merge) {
+    /*
+     * 0          1          2          3              255
+     * +----------+----------+----------+-------------+---+
+     * | region0  | region1  | region2  |     ...     |   |
+     * +----------+----------+----------+-------------+---+
+     *            |     overlap (2-4 pages)     |
+     *            +-----------------------------+
+     *
+     * Add page-sized regions together with 10 overlapping 2-4 page regions
+     * in random order and verify that number of merged regions is less than or
+     * equal to the worst case merge scenario.
+     */
+    static const size_t overlap_count = 10;
+    static const size_t region_count  = 256;
+    static const size_t size          = ucs_get_page_size();
+    static const size_t total_size    = size * region_count;
+    void *mem                         = NULL;
+    std::vector<std::pair<void*, size_t>> ranges;
+    std::vector<region*> regions;
+
+    EXPECT_EQ(posix_memalign(&mem, size, total_size), 0);
+
+    for (size_t i = 0; i < region_count; ++i) {
+        ranges.push_back(std::make_pair((char*)mem + i * size, size));
+    }
+
+    for (size_t i = 0; i < overlap_count; ++i) {
+        size_t pages = 2 + ucs::rand_range(3);
+        size_t start = ucs::rand_range(region_count - pages + 1);
+        ranges.push_back(
+                std::make_pair((char*)mem + start * size, pages * size));
+    }
+
+    std::random_shuffle(ranges.begin(), ranges.end(), ucs::rand_range);
+    for (const auto &range : ranges) {
+        regions.push_back(get(range.first, range.second));
+    }
+
+    size_t regions_in_use = ucs_pgtable_num_regions(&m_rcache.get()->pgtable);
+    size_t regions_max    = max_merged_regions(region_count);
+    EXPECT_LE(regions_in_use, regions_max);
+
+    for (region *region : regions) {
+        put(region);
+    }
+
+    free(mem);
+}
+
 #ifdef ENABLE_STATS
 class test_rcache_stats : public test_rcache {
 protected:
     test_rcache_stats()
+
     {
         stats_activate();
     }
