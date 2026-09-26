@@ -1351,6 +1351,82 @@ UCS_TEST_P(test_ucp_mmap_export, export_import) {
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
 
 
+class test_ucp_rcache_merge : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               UCS_MEMORY_TYPE_HOST, "host");
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               UCS_MEMORY_TYPE_CUDA, "cuda");
+    }
+
+    virtual void init()
+    {
+        /* Turn on merging of adjacent rcache regions */
+        modify_config("RCACHE_MERGE_ADJACENT", "y");
+        /* Turn off CUDA registering full allocations. Allow exercising merge */
+        /* path for CUDA buffers */
+        modify_config("MEMTYPE_REG_WHOLE_ALLOC_TYPES", "");
+        /* Force zcopy */
+        modify_config("ZCOPY_THRESH", "0");
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+};
+
+UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
+{
+    ucs_memory_type_t mem_type =
+            static_cast<ucs_memory_type_t>(get_variant_value());
+    if (!mem_buffer::is_mem_type_supported(mem_type)) {
+        UCS_TEST_SKIP_R("memory type is not supported");
+    }
+
+    const size_t size     = ucs_get_page_size();
+    void *ptr1            = mem_buffer::allocate(size * 2, mem_type);
+    void *ptr2            = (char*)ptr1 + size;
+    ucp_context_h context = sender().ucph();
+    ucp_mem_map_params_t params;
+    ucp_mem_h memh1, memh2;
+    ucp_request_param_t put_params;
+    ucs_status_ptr_t request;
+
+    /* Register first half of buffer */
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = ptr1;
+    params.length     = size;
+    ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh1));
+    EXPECT_EQ(ptr1, ucp_memh_address(memh1->parent));
+    EXPECT_EQ(size, ucp_memh_length(memh1->parent));
+
+    /* Register second half of buffer, two halves merged */
+    params.address = ptr2;
+    ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh2));
+    EXPECT_EQ(ptr1, ucp_memh_address(memh2->parent));
+    EXPECT_EQ(size * 2, ucp_memh_length(memh2->parent));
+
+    /* Verify merged registration is healthy by performing zcopy put */
+    mapped_buffer target = mapped_buffer(size, receiver(), UCS_MEMORY_TYPE_HOST);
+    ucs::handle<ucp_rkey_h> rkey = target.rkey(sender());
+    mem_buffer::pattern_fill(ptr2, size, ucs::rand(), mem_type);
+    put_params.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+    put_params.memh         = memh2;
+    request = ucp_put_nbx(sender().ep(), ptr2, size,
+                                           (uintptr_t)target.ptr(), rkey,
+                                           &put_params);
+    ASSERT_UCS_OK(request_wait(request));
+    flush_worker(sender());
+    EXPECT_TRUE(mem_buffer::compare(ptr2, target.ptr(), size, mem_type,
+                                    UCS_MEMORY_TYPE_HOST));
+
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh2));
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh1));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rcache_merge, rcx, "rc_x,cuda_copy")
+
 class test_ucp_mmap_max_hca : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
