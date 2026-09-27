@@ -1851,6 +1851,13 @@ ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
         return status;
     }
 
+    /*
+     * A recovery proxy may remain installed while its failed lane is down.
+     * The failed transport EP and requests queued on the proxy are accounted
+     * separately, so the idle proxy itself must not block worker flush.
+     */
+    ucp_wireup_ep_untrack_flush(wireup_ep_uct);
+
     ucs_trace("ep %p: recovery lane[%d] %p -> wireup_ep %p", ep, lane,
               old_uct_ep, wireup_ep_uct);
     ucp_ep_set_lane(ep, lane, wireup_ep_uct);

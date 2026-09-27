@@ -460,7 +460,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->aux_ep        = NULL;
     self->aux_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count = 0;
-    self->flags         = 0;
+    self->flags         = UCP_WIREUP_EP_FLAG_TRACK_FLUSH;
     ucs_queue_head_init(&self->pending_q);
     UCS_STATIC_BITMAP_RESET_ALL(&self->cm_resolve_tl_bitmap);
 
@@ -500,12 +500,26 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
         ucp_proxy_ep_set_uct_ep(&self->super, NULL, 0, UCP_NULL_RESOURCE);
     }
 
-    UCS_ASYNC_BLOCK(&worker->async);
-    ucp_worker_flush_ops_count_add(worker, -1);
-    UCS_ASYNC_UNBLOCK(&worker->async);
+    if (self->flags & UCP_WIREUP_EP_FLAG_TRACK_FLUSH) {
+        UCS_ASYNC_BLOCK(&worker->async);
+        ucp_worker_flush_ops_count_add(worker, -1);
+        UCS_ASYNC_UNBLOCK(&worker->async);
+    }
 }
 
 UCS_CLASS_DEFINE(ucp_wireup_ep_t, ucp_proxy_ep_t);
+
+void ucp_wireup_ep_untrack_flush(uct_ep_h uct_ep)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_worker_h worker        = wireup_ep->super.ucp_ep->worker;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_TRACK_FLUSH);
+    wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_TRACK_FLUSH;
+    ucp_worker_flush_ops_count_add(worker, -1);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
 
 ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
 {
@@ -616,7 +630,8 @@ void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep)
     uct_ep_destroy(uct_ep);
 
     wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    ucs_assert((wireup_ep->flags & ~UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID) == 0);
+    ucs_assert((wireup_ep->flags & ~(UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID |
+                                     UCP_WIREUP_EP_FLAG_TRACK_FLUSH)) == 0);
 }
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep)

@@ -974,6 +974,62 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
     }
 }
 
+UCS_TEST_P(test_ucp_fault_tolerance, worker_flush_during_recovery,
+           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000",
+           "KEEPALIVE_INTERVAL=0.1s")
+{
+    skip_unless_rc_probe_gate();
+
+    m_held_probe_comp = NULL;
+
+    ucs::mock mock;
+    mock_recovery_probe(sender().worker(), mock, recovery_probe_hold);
+
+    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_AM);
+
+    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+    if (ucp_ep_get_failed_lanes(ep) == 0) {
+        UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
+    }
+
+    ASSERT_TRUE(wait_for_recovery_probe_in_flight(ep, ucs::get_deadline(5.0)))
+            << "could not catch an aux recovery probe in flight";
+
+    void *flush_req = sender().flush_worker_nb(0);
+    ASSERT_FALSE(UCS_PTR_IS_ERR(flush_req))
+            << "worker flush failed: "
+            << ucs_status_string(UCS_PTR_STATUS(flush_req));
+
+    ucs_status_t flush_status = UCS_PTR_STATUS(flush_req);
+    ucs_time_t deadline       = ucs::get_deadline(1.0);
+    while (UCS_PTR_IS_PTR(flush_req) && (flush_status == UCS_INPROGRESS) &&
+           (ucs_get_time() < deadline)) {
+        short_progress_loop();
+        flush_status = ucp_request_check_status(flush_req);
+    }
+
+    /*
+     * Close the endpoint and release the held probe before checking the
+     * result, so the test can clean up even when the regression leaves
+     * worker flush incomplete.
+     */
+    void *close_req = sender().disconnect_nb(0, INJECTED_EP_INDEX,
+                                             UCP_EP_CLOSE_FLAG_FORCE);
+    mock_invoke_completion(UCS_ERR_CANCELED);
+    ASSERT_FALSE(UCS_PTR_IS_ERR(close_req))
+            << "disconnect failed: "
+            << ucs_status_string(UCS_PTR_STATUS(close_req));
+    if (UCS_PTR_IS_PTR(close_req)) {
+        EXPECT_EQ(UCS_OK, request_wait(close_req));
+    }
+
+    EXPECT_EQ(UCS_OK, flush_status)
+            << "idle recovery wireup endpoint blocked worker flush";
+    if (UCS_PTR_IS_PTR(flush_req)) {
+        EXPECT_EQ(UCS_OK, request_wait(flush_req));
+    }
+}
+
 UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
            "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", "KEEPALIVE_INTERVAL=0.1s")
 {

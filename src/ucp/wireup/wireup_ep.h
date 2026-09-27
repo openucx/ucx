@@ -32,7 +32,10 @@ enum {
     UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3),
 
     /* Indicates that aux_ep is CONNECT_TO_EP */
-    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4)
+    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4),
+
+    /* Wireup endpoint prevents worker flush from completing */
+    UCP_WIREUP_EP_FLAG_TRACK_FLUSH      = UCS_BIT(5)
 };
 
 
@@ -65,6 +68,12 @@ struct ucp_wireup_ep {
  */
 ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep,
                                   uct_ep_h *ep_p);
+
+
+/**
+ * Stop the wireup endpoint itself from preventing worker flush completion.
+ */
+void ucp_wireup_ep_untrack_flush(uct_ep_h uct_ep);
 
 
 /**
