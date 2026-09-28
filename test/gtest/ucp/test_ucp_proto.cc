@@ -535,12 +535,14 @@ UCS_TEST_P(test_ucp_proto, rkey_config_stable_after_growth)
 {
     ucp_rkey_config_key_t key = create_rkey_config_key(0);
     ucp_worker_cfg_index_t first_index, cfg_index;
+    ucp_rkey_config_t **old_buffer;
     ucp_rkey_config_t *first_config;
 
     key.ep_cfg_index = sender().ep()->cfg_index;
     ASSERT_UCS_OK(
             ucp_worker_rkey_config_get(worker(), &key, NULL, &first_index));
     first_config = ucp_worker_rkey_config(worker(), first_index);
+    old_buffer   = ucs_array_begin(&worker()->rkey_config);
 
     /* Grow past the initial reserve using the production path only */
     for (key.md_map = 1; key.md_map <= 64; ++key.md_map) {
@@ -548,6 +550,7 @@ UCS_TEST_P(test_ucp_proto, rkey_config_stable_after_growth)
                 ucp_worker_rkey_config_get(worker(), &key, NULL, &cfg_index));
     }
 
+    ASSERT_NE(old_buffer, ucs_array_begin(&worker()->rkey_config));
     EXPECT_EQ(first_config, ucp_worker_rkey_config(worker(), first_index));
 }
 
