@@ -110,6 +110,13 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
+static const char *ucp_failover_modes[] = {
+    [UCP_FAILOVER_MODE_AUTO]  = "auto",
+    [UCP_FAILOVER_MODE_SW]    = "sw",
+    [UCP_FAILOVER_MODE_TOKEN] = "token",
+    [UCP_FAILOVER_MODE_LAST]  = NULL
+};
+
 static const char *ucp_gpu_nic_assignment_modes[] = {
     [UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO]        = "auto",
     [UCP_GPU_NIC_ASSIGNMENT_MODE_OFF]         = "off",
@@ -470,6 +477,17 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.",
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
+
+  {"FAILOVER_MODE", "auto",
+   "Failover method for endpoints created with\n"
+   "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
+   " auto  - token failover when the lane supports it, otherwise fallback to\n"
+   "         software PSN based protocols.\n"
+   " sw    - always software PSN based protocols.\n"
+   " token - force token based retransmits. Transports that do not support\n"
+   "         the required capabilities are disabled.",
+   ucs_offsetof(ucp_context_config_t, failover_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_failover_modes)},
 
   {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
    "Time interval between dynamic transport switching rounds. Must be\n"

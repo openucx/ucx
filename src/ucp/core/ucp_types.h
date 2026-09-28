@@ -235,6 +235,18 @@ typedef enum {
 
 
 /**
+ * Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints.
+ */
+typedef enum {
+    UCP_FAILOVER_MODE_AUTO,  /* Token failover when the lane supports it */
+    UCP_FAILOVER_MODE_SW,    /* Always software PSN based protocols */
+    UCP_FAILOVER_MODE_TOKEN, /* Token based failover and recovery;
+                              * disable unsupported transports */
+    UCP_FAILOVER_MODE_LAST
+} ucp_failover_mode_t;
+
+
+/**
  * GPU-to-NIC assignment mode.
  */
 typedef enum {
