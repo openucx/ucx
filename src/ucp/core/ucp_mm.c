@@ -29,8 +29,8 @@
 typedef struct {
     ucs_memory_type_t mem_type;    /* Memory type */
     uint8_t           mem_flags;   /* Memory flags (ucp_mem_flags_t) */
-    void *            alloc_base;  /* Start of the underlying allocation */
-    uint64_t          alloc_len;   /* Length of the underlying allocation */
+    void              *alloc_base; /* Start of the underlying allocation */
+    size_t            alloc_len;   /* Length of the underlying allocation */
     ucp_md_map_t      reg_md_map;  /* Map of memory domains to be registered */
     unsigned          uct_flags;   /* UCT memory registration flags */
     const char        *alloc_name; /* Memory allocation name */

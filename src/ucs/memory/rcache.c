@@ -837,11 +837,11 @@ ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
                              ucs_pgt_addr_t start, ucs_pgt_addr_t end,
                              ucs_list_link_t *list)
 {
-    ucs_pgt_region_t *pgt_left, *pgt_right;
-    ucs_rcache_region_t *region_left = NULL;
+    ucs_rcache_region_t *region_left  = NULL;
     ucs_rcache_region_t *region_right = NULL;
-    int can_merge_left  = 0;
-    int can_merge_right = 0;
+    int can_merge_left                = 0;
+    int can_merge_right               = 0;
+    ucs_pgt_region_t *pgt_left, *pgt_right;
 
     if (rcache->params.ops->can_merge == NULL) {
         return;

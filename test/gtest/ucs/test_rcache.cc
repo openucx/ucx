@@ -904,7 +904,7 @@ protected:
         size_t width            = 1;
         size_t regions          = 0;
         size_t chunks_remaining = chunks;
-        
+ 
         while (true) {
             if (chunks_remaining >= 2 * width + 1) {
                 /* Add step on left and right sides */
@@ -1320,7 +1320,6 @@ UCS_TEST_F(test_rcache_merge_adjacent, random_overlap_merge) {
 class test_rcache_stats : public test_rcache {
 protected:
     test_rcache_stats()
-
     {
         stats_activate();
     }

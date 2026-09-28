@@ -1423,6 +1423,7 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
 
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh2));
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh1));
+    mem_buffer::release(ptr1, mem_type);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rcache_merge, rcx, "rc_x,cuda_copy")
