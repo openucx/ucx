@@ -24,6 +24,7 @@ extern "C" {
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
+#include <ucp/core/ucp_ep.inl>
 #include <uct/api/v2/uct_v2.h>
 }
 
@@ -87,6 +88,32 @@ protected:
         }
 
         return false;
+    }
+
+    /* Skip unless a rendezvous lane of this endpoint can register @a mem_type,
+     * since otherwise rendezvous stages through a memtype copy and pays the
+     * same estimate as eager */
+    void require_rndv_reg_lane(ucs_memory_type_t mem_type)
+    {
+        ucp_ep_h ep                   = sender().ep();
+        const ucp_ep_config_t *config = ucp_ep_config(ep);
+        /* Same map rendezvous uses, so dma-buf-only registration counts */
+        ucp_md_map_t reg_md_map       = context()->reg_md_map[mem_type];
+        ucp_lane_index_t i, lane;
+
+        for (i = 0; i < config->key.num_lanes; ++i) {
+            lane = config->key.rma_bw_lanes[i];
+            if (lane == UCP_NULL_LANE) {
+                break;
+            }
+
+            if (reg_md_map & UCS_BIT(ucp_ep_md_index(ep, lane))) {
+                return;
+            }
+        }
+
+        UCS_TEST_SKIP_R(std::string("No rendezvous lane can register ") +
+                        ucs_memory_type_names[mem_type] + " memory");
     }
 
     void require_cuda_memory()
@@ -1208,6 +1235,8 @@ protected:
  * interface estimate; costing them as memcpy changes the one-byte selection */
 UCS_TEST_P(test_ucp_proto_ze_device, device_memory_not_costed_as_memcpy)
 {
+    require_rndv_reg_lane(UCS_MEMORY_TYPE_ZE_DEVICE);
+
     const ucp_proto_threshold_elem_t *thresh =
             select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, 1);
 
