@@ -67,7 +67,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      "the following:\n"
      " auto    - Select best according to runtime CPU capabilities.\n"
      " generic - Use portable scalar stores.\n"
-     " st64b   - Use AArch64 ST64B store when supported.",
+     " st64b   - Use AArch64 ST64B store, fail if LS64 is not supported.",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, bf_copy_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_bf_copy_modes)},
 
