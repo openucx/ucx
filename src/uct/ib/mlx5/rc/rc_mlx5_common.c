@@ -536,12 +536,12 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
     case UCT_IB_MLX5_OBJ_TYPE_NULL:
         uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, NULL);
+        qp_attr->mmio_mode = iface->tx.mmio_mode;
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
 
-    qp_attr->mmio_mode     = iface->tx.mmio_mode;
     qp_attr->bf_copy_mode  = iface->tx.bf_copy_mode;
     qp_attr->super.srq_num = srq->srq_num;
 }

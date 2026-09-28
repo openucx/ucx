@@ -32,12 +32,6 @@ AC_CHECK_DECLS([asprintf, basename, fmemopen], [],
 
 
 #
-# Auxiliary vector (getauxval() is checked by ucm.m4)
-#
-AC_CHECK_HEADERS([sys/auxv.h])
-
-
-#
 # CPU-sets 
 #
 AC_CHECK_HEADERS([sys/cpuset.h])

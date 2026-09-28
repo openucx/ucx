@@ -15,7 +15,6 @@
 #include <time.h>
 #include <string.h>
 #include <sys/times.h>
-#include <ucs/sys/compiler.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/arch/generic/cpu.h>
@@ -170,7 +169,7 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
     return UCS_CPU_MODEL_ARM_AARCH64;
 }
 
-ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
+ucs_cpu_flag_t ucs_arch_get_cpu_flag();
 
 static inline void ucs_cpu_init()
 {

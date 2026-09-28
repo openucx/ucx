@@ -700,6 +700,7 @@ typedef struct uct_ib_mlx5_qp {
     };
 } uct_ib_mlx5_qp_t;
 
+/* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
     uct_ib_mlx5_qp_t            super;
     uint16_t                    sw_pi;      /* PI for next WQE */
@@ -713,13 +714,13 @@ typedef struct uct_ib_mlx5_txwq {
     void                        *qend;
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
-#if UCT_IB_MLX5_HAVE_ST64B
-    uint8_t                     bf_copy_mode;
-#endif
     uint16_t                    hw_ci;      /* First BB index of last completed WQE */
     uint16_t                    ft_ci;      /* First BB index of last ft completed WQE */
     uint16_t                    path_mtu_mask;  /* Path MTU in bytes - 1 */
     uint8_t                     path_mtu_shift; /* log2(path MTU in bytes) */
+#if UCT_IB_MLX5_HAVE_ST64B
+    uint8_t                     bf_copy_mode;
+#endif
 #if UCS_ENABLE_ASSERT
     uint8_t                     flags; /* Debug flags */
 #endif

@@ -822,8 +822,6 @@ uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
         return UCS_ERR_UNSUPPORTED;
     }
 #else
-    (void)txwq;
-
     if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
 #if defined(__aarch64__)
         ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "

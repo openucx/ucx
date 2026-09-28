@@ -13,7 +13,7 @@
 #include <ucs/arch/cpu.h>
 #include <stdio.h>
 
-#if HAVE_SYS_AUXV_H
+#if HAVE_DECL_GETAUXVAL
 #  include <sys/auxv.h>
 
 /* Older userspace headers may not expose Arm64 HWCAP3 definitions. */
@@ -82,24 +82,20 @@ void ucs_aarch64_cpuid(ucs_aarch64_cpuid_t *cpuid)
 
 ucs_cpu_flag_t ucs_arch_get_cpu_flag()
 {
-    static ucs_cpu_flag_t cpu_flag;
-    static int initialized = 0;
+    static ucs_cpu_flag_t cpu_flag = UCS_CPU_FLAG_UNKNOWN;
 
-    if (!initialized) {
+    if (cpu_flag == UCS_CPU_FLAG_UNKNOWN) {
         ucs_cpu_flag_t result = 0;
 
-#if HAVE_SYS_AUXV_H && HAVE_DECL_GETAUXVAL
+#if HAVE_DECL_GETAUXVAL
         if (getauxval(AT_HWCAP3) & HWCAP3_LS64) {
             result |= UCS_CPU_FLAG_LS64;
         }
 #endif
 
         cpu_flag = result;
-        ucs_memory_cpu_store_fence();
-        initialized = 1;
     }
 
-    ucs_memory_cpu_load_fence();
     return cpu_flag;
 }
 

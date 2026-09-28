@@ -322,9 +322,28 @@ public:
     {
         test_rc::init();
 
+        if (!check_bf_caps()) {
+            cleanup();
+            UCS_TEST_SKIP_R("write-combining UAR is not supported");
+        }
+
         m_rx_count  = 0;
         m_rx_errors = 0;
         uct_iface_set_am_handler(m_e2->iface(), AM_ID, am_handler, this, 0);
+    }
+
+    /* BlueFlame writes the full WQE to the MMIO register, which is only valid
+     * when the UAR is write-combining. */
+    bool check_bf_caps()
+    {
+        FOR_EACH_ENTITY(entity) {
+            uct_ib_mlx5_md_t *md = ucs_derived_of((*entity)->md(),
+                                                  uct_ib_mlx5_md_t);
+            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC)) {
+                return false;
+            }
+        }
+        return true;
     }
 
 protected:
