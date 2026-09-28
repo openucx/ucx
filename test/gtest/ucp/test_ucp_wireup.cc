@@ -997,7 +997,10 @@ UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
     const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
     EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
     EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
-    EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, key.am_lane)->tl_name);
+    EXPECT_GT(key.num_lanes, 0);
+    for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+        EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, lane)->tl_name);
+    }
 
     disconnect(ep);
 }
