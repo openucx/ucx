@@ -267,6 +267,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
 struct ucp_worker_iface {
     uct_iface_h                   iface;         /* UCT interface */
     uct_iface_attr_t              attr;          /* UCT interface attributes */
+    uct_iface_attr_v2_t           attr_v2;       /* UCT interface v2 attributes */
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
