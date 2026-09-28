@@ -1204,12 +1204,12 @@ protected:
     }
 };
 
-/* ZE-device memory is not CPU-accessible, so its payload is copied by the
- * memtype endpoint and the copy interface estimation must be kept */
-UCS_TEST_P(test_ucp_proto_ze_device, device_memory_uses_mtype_copy)
+/* ZE-device memory is not CPU-accessible, so its eager copies keep the copy
+ * interface estimate; costing them as memcpy changes the one-byte selection */
+UCS_TEST_P(test_ucp_proto_ze_device, device_memory_not_costed_as_memcpy)
 {
     const ucp_proto_threshold_elem_t *thresh =
-            select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, UCS_MBYTE);
+            select_tag_send_protocol(UCS_MEMORY_TYPE_ZE_DEVICE, 1);
 
     ASSERT_NE(nullptr, thresh);
     EXPECT_STREQ("tag/rndv", thresh->proto_config.proto->name);
