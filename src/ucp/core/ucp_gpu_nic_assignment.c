@@ -344,7 +344,7 @@ ucp_gpu_nic_assignment_add_nic_to_gpu(ucp_gpu_nic_assignment_t *assignment,
     ucp_gpu_nic_bitmap_add_nic(nic_sys_dev_bitmap, nic);
 }
 
-/* A NIC is assignable if any of its sys_devs is set in the candidate_nics 
+/* A NIC is assignable if any of its sys_devs is set in the candidate_nics
  * bitmap. */
 static int ucp_gpu_nic_assignment_is_assignable(
         const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics,

@@ -629,7 +629,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
    "for a GPU's memory to the NICs assigned to that GPU.\n"
-   "All ports of a NIC are assigned together.\n"
+   "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
+   "address are assigned together (e.g. MLOPart partitions of a GPU).\n"
+   "NICs without memory registration and DPUs are skipped during assignment.\n"
    "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
    "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
    "some GPUs without any NICs.\n"
@@ -1480,6 +1482,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         goto free_resources;
     }
 
+    /* Use the pre-filter resource list, so that all processes compute the same
+     * assignment regardless of their UCX_NET_DEVICES/UCX_TLS settings */
     ucp_gpu_nic_candidates_add(context, md, tl_resources, num_tl_resources);
 
     /* Collect the full (pre-filter) resource list for the transport tables */
