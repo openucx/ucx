@@ -904,7 +904,7 @@ protected:
         size_t width            = 1;
         size_t regions          = 0;
         size_t chunks_remaining = chunks;
- 
+
         while (true) {
             if (chunks_remaining >= 2 * width + 1) {
                 /* Add step on left and right sides */

@@ -1417,7 +1417,8 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     EXPECT_EQ(size * 2, ucp_memh_length(memh2->parent));
 
     /* Verify merged registration is healthy by performing zcopy put */
-    mapped_buffer target = mapped_buffer(size, receiver(), UCS_MEMORY_TYPE_HOST);
+    mapped_buffer target = mapped_buffer(size, receiver(), 0, 
+                                         UCS_MEMORY_TYPE_HOST);
     ucs::handle<ucp_rkey_h> rkey = target.rkey(sender());
     mem_buffer::pattern_fill(ptr2, size, ucs::rand(), mem_type);
     put_params.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
