@@ -1815,6 +1815,10 @@ static int ucp_mem_rcache_can_merge_cb(void *arg, ucs_rcache_region_t *rregion)
         return 1;
     }
 
+    if (reg_ctx->alloc_base == NULL) {
+        return 0;
+    }
+
     alloc_start = (uintptr_t)reg_ctx->alloc_base;
     alloc_end   = (uintptr_t)reg_ctx->alloc_base + reg_ctx->alloc_len;
     return (start >= alloc_start) && (end <= alloc_end);

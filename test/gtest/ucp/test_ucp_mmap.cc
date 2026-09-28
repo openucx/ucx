@@ -1353,7 +1353,7 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
 
 class test_ucp_rcache_merge : public ucp_test {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_mem_type_variants(std::vector<ucp_test_variant>& variants)
     {
         add_variant_with_value(variants, UCP_FEATURE_RMA,
                                UCS_MEMORY_TYPE_HOST, "host");
@@ -1361,8 +1361,17 @@ public:
                                UCS_MEMORY_TYPE_CUDA, "cuda");
     }
 
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_values(variants, get_mem_type_variants, 0,
+                           "no_memtype_cache");
+        add_variant_values(variants, get_mem_type_variants, 1,
+                           "memtype_cache");
+    }
+
     virtual void init()
     {
+        modify_config("MEMTYPE_CACHE", get_variant_value(1) ? "y" : "n");
         /* Turn on merging of adjacent rcache regions */
         modify_config("RCACHE_MERGE_ADJACENT", "y");
         /* Turn off CUDA registering full allocations. Allow exercising merge */
