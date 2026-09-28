@@ -385,18 +385,20 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
     ucp_lane_index_t i;
     ucp_md_map_t inv_map;
 
-    /* Same-worker PEER EPs have no independent remote worker to access the
-     * request buffer after an error, so RMA invalidation is not needed. */
-    if ((key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) &&
-        (key->err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
-        return 0;
-    }
-
     for (i = 0, inv_map = 0;
          (key->rma_bw_lanes[i] != UCP_NULL_LANE) && (i < UCP_MAX_LANES); i++) {
         lane = key->rma_bw_lanes[i];
 
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
+            /* Same-worker PEER selection may include MDs without RMA
+             * invalidation, while capable MDs still need it. */
+            if ((key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) &&
+                (key->err_mode == UCP_ERR_HANDLING_MODE_PEER) &&
+                !(ucp_ep_md_attr(ep, lane)->flags &
+                  UCT_MD_FLAG_INVALIDATE_RMA)) {
+                continue;
+            }
+
             ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
                        UCT_IFACE_FLAG_GET_ZCOPY);
             ucs_assert(ucp_ep_md_attr(ep, lane)->flags &

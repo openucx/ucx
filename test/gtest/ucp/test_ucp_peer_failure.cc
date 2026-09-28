@@ -514,6 +514,8 @@ public:
     void init()
     {
         create_entity();
+
+        /* Use a different worker to keep the invalidation requirement tested. */
         create_entity();
         sender().connect(&receiver(), get_ep_params(), 0);
     }
