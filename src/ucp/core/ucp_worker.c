@@ -2374,7 +2374,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
 
     rkey_config_p  = ucs_array_append(&worker->rkey_config,
                                       status = UCS_ERR_NO_MEMORY;
-                                     goto err_free_rkey_config;);
+                                      goto err_free_rkey_config;);
     *rkey_config_p = rkey_config;
 
     /* Save key-to-index lookup */
