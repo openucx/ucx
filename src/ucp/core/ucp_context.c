@@ -1404,15 +1404,10 @@ static void ucp_gpu_nic_candidates_add(ucp_context_h context,
                                        const uct_tl_resource_desc_t *resources,
                                        unsigned num_resources)
 {
-    const char *reject_reason  = NULL;
+    int can_reg                = !!(md->attr.flags & UCT_MD_FLAG_REG);
     unsigned num_net_resources = 0;
+    unsigned num_dpu_resources = 0;
     const uct_tl_resource_desc_t *resource;
-
-    if (md->attr.flags & UCT_MD_FLAG_DPU) {
-        reject_reason = "dpu";
-    } else if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
-        reject_reason = "no memory registration";
-    }
 
     ucs_carray_for_each(resource, resources, num_resources) {
         if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
@@ -1421,23 +1416,38 @@ static void ucp_gpu_nic_candidates_add(ucp_context_h context,
         }
 
         ++num_net_resources;
-        if (reject_reason == NULL) {
-            UCS_STATIC_BITMAP_SET(&context->gpu_nic_candidates,
-                                  resource->sys_device);
+        if (!can_reg) {
+            continue;
         }
+
+        if (ucs_topo_sys_device_get_flags(resource->sys_device) &
+            UCS_TOPO_DEVICE_FLAG_DPU) {
+            ++num_dpu_resources;
+            continue;
+        }
+
+        UCS_STATIC_BITMAP_SET(&context->gpu_nic_candidates,
+                              resource->sys_device);
     }
 
     if (num_net_resources == 0) {
         return;
     }
 
-    if (reject_reason != NULL) {
-        ucs_debug("md %s is not a gpu-nic assignment candidate: %s",
-                  md->rsc.md_name, reject_reason);
-    } else {
-        ucs_trace("md %s added %u gpu-nic assignment candidate resources",
-                  md->rsc.md_name, num_net_resources);
+    if (!can_reg) {
+        ucs_debug("md %s is not a gpu-nic assignment candidate: no memory "
+                  "registration",
+                  md->rsc.md_name);
+        return;
     }
+
+    if (num_dpu_resources > 0) {
+        ucs_debug("md %s skipped %u dpu resources for gpu-nic assignment",
+                  md->rsc.md_name, num_dpu_resources);
+    }
+
+    ucs_trace("md %s added %u gpu-nic assignment candidate resources",
+              md->rsc.md_name, num_net_resources - num_dpu_resources);
 }
 
 static ucs_status_t
