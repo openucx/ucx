@@ -907,8 +907,7 @@ uct_rc_mlx5_ep_outstanding_peek_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
                                        uct_rc_iface_send_op_t, queue);
     ucs_assert(UCS_CIRCULAR_COMPARE16(op->sn, >=, pi));
 
-    if ((op->sn != pi) || uct_rc_mlx5_send_op_is_flush(op) ||
-        uct_rc_mlx5_send_op_is_ep_check(op)) {
+    if ((op->sn != pi) || uct_rc_mlx5_send_op_is_flush(op)) {
         return NULL;
     }
 
@@ -1106,7 +1105,7 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
     uct_rc_mlx5_op_info_fill_rma_raddr(raddr, info);
 
     if (num_dseg == 0) {
-        uct_rc_mlx5_op_info_fill_rma_data(NULL, 0, info);
+        uct_rc_mlx5_op_info_fill_rma_zcopy_iov(NULL, 0, info);
     } else {
         uct_rc_mlx5_op_callback_data_fill_iov(txwq, dptr, num_dseg,
                                               callback_data);
@@ -1115,24 +1114,25 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
     }
 }
 
-static ucs_status_t
-uct_rc_mlx5_op_info_fill_put_no_payload(uct_rc_iface_send_op_t *op,
-                                        const uct_ib_mlx5_txwq_t *txwq,
-                                        const struct mlx5_wqe_raddr_seg *raddr,
-                                        uct_ep_op_info_t *info)
+static void
+uct_rc_mlx5_op_info_fill_put_non_payload(uct_rc_iface_send_op_t *op,
+                                         const uct_ib_mlx5_txwq_t *txwq,
+                                         const struct mlx5_wqe_raddr_seg *raddr,
+                                         uct_ep_op_info_t *info)
 {
     if (op == NULL) {
         uct_rc_mlx5_op_info_fill_put_short(txwq, raddr, NULL, 0, NULL, info);
-        return UCS_OK;
+        return;
     }
 
     if (uct_rc_mlx5_send_op_is_put_zcopy(op)) {
         uct_rc_mlx5_op_info_fill_put_zcopy(txwq, op, raddr, NULL, 0, NULL,
                                            info);
-        return UCS_OK;
+        return;
     }
 
-    return UCS_ERR_UNSUPPORTED;
+    ucs_fatal("rc mlx5: unexpected non-payload put op %p sn %d handler %s", op,
+              op->sn, ucs_debug_get_symbol_name((void*)op->handler));
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_put(
@@ -1140,26 +1140,27 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
         uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
 {
-    const size_t header_size = sizeof(*ctrl) +
-                               sizeof(struct mlx5_wqe_raddr_seg);
     const struct mlx5_wqe_raddr_seg *raddr;
     const struct mlx5_wqe_inl_data_seg *inl;
     const struct mlx5_wqe_data_seg *dptr;
     uct_rc_iface_send_op_t *op;
-    size_t inline_length, num_dseg;
+    size_t dseg_size, inline_length, num_dseg;
 
-    ucs_assert(wqe_size >= header_size);
+    ucs_assert(wqe_size >= sizeof(*ctrl) + sizeof(struct mlx5_wqe_raddr_seg));
+    dseg_size = wqe_size - sizeof(*ctrl) - sizeof(struct mlx5_wqe_raddr_seg);
 
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
     op    = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
 
-    if (wqe_size == header_size) {
-        if (uct_rc_mlx5_op_info_fill_put_no_payload(op, txwq, raddr, info) ==
-            UCS_OK) {
-            return UCS_OK;
-        }
+    if ((op != NULL) && uct_rc_mlx5_send_op_is_ep_check(op)) {
+        ucs_assertv_always(dseg_size == 0,
+                           "rc mlx5: ep check dseg_size %zu != 0", dseg_size);
+        return UCS_ERR_NO_ELEM;
+    }
 
-        goto err;
+    if (dseg_size == 0) {
+        uct_rc_mlx5_op_info_fill_put_non_payload(op, txwq, raddr, info);
+        return UCS_OK;
     }
 
     if (uct_rc_mlx5_wqe_inline_seg(txwq, raddr + 1, &inl, &inline_length) ==
@@ -1176,18 +1177,17 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     }
 
     if ((op == NULL) || uct_rc_mlx5_send_op_is_put_zcopy(op)) {
-        ucs_assert(((wqe_size - header_size) % sizeof(*dptr)) == 0);
-        num_dseg = (wqe_size - header_size) / sizeof(*dptr);
+        ucs_assert((dseg_size % sizeof(*dptr)) == 0);
+        num_dseg = dseg_size / sizeof(*dptr);
         uct_rc_mlx5_op_info_fill_put_zcopy(txwq, op, raddr, dptr, num_dseg,
                                            callback_data, info);
         return UCS_OK;
     }
 
-err:
     ucs_fatal("rc mlx5: unexpected put wqe send op %p sn %d handler %s "
-              "wqe_size %zu",
+              "wqe_size %zu dseg_size %zu",
               op, op->sn, ucs_debug_get_symbol_name((void*)op->handler),
-              wqe_size);
+              wqe_size, dseg_size);
 }
 
 static ucs_status_t
@@ -1253,15 +1253,16 @@ static size_t uct_rc_mlx5_wqe_put_length(const uct_ib_mlx5_txwq_t *txwq,
                                          const struct mlx5_wqe_ctrl_seg *ctrl,
                                          size_t wqe_size)
 {
-    const size_t header_size = sizeof(*ctrl) +
-                               sizeof(struct mlx5_wqe_raddr_seg);
     const struct mlx5_wqe_raddr_seg *raddr;
     const struct mlx5_wqe_inl_data_seg *inl;
     const struct mlx5_wqe_data_seg *dptr;
     size_t length, remaining;
 
-    ucs_assertv_always(wqe_size >= header_size, "wqe_size=%zu", wqe_size);
-    if (wqe_size == header_size) {
+    ucs_assertv_always(wqe_size >= sizeof(*ctrl) +
+                                           sizeof(struct mlx5_wqe_raddr_seg),
+                       "wqe_size=%zu", wqe_size);
+    remaining = wqe_size - sizeof(*ctrl) - sizeof(struct mlx5_wqe_raddr_seg);
+    if (remaining == 0) {
         return 0;
     }
 
@@ -1272,9 +1273,8 @@ static size_t uct_rc_mlx5_wqe_put_length(const uct_ib_mlx5_txwq_t *txwq,
         return length;
     }
 
-    dptr      = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-    length    = 0;
-    remaining = wqe_size - header_size;
+    dptr   = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
+    length = 0;
     do {
         length    += ntohl(dptr->byte_count);
         remaining -= sizeof(*dptr);
