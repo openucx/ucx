@@ -478,13 +478,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
 
-  {"FAILOVER_MODE", "sw",
+  {"FAILOVER_MODE", "auto",
    "Failover method for endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
-   " sw is the default until token failover is fully implemented.\n"
-   " auto  - token failover when the lane supports it, otherwise fallback to\n"
-   "         software PSN based protocols.\n"
-   " sw    - always software PSN based protocols.\n"
+   " auto  - auto selected recovery protocol. Transport selection is\n"
+   "         unchanged.\n"
+   " sw    - force software PSN based recovery protocol. Transport\n"
+   "         selection is unchanged.\n"
    " token - force token based retransmits. Transports that do not support\n"
    "         the required capabilities are disabled.",
    ucs_offsetof(ucp_context_config_t, failover_mode),
@@ -2719,6 +2719,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     } else {
         context->config.worker_fence_mode = context->config.ext.fence_mode;
+    }
+
+    /* Token based recovery is not implemented yet, so automatic selection
+     * uses the software PSN recovery protocol. */
+    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
+        ucs_debug("failover mode auto selects software psn recovery");
     }
 
     context->config.progress_wrapper_enabled =

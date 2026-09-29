@@ -238,8 +238,8 @@ typedef enum {
  * Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints.
  */
 typedef enum {
-    UCP_FAILOVER_MODE_AUTO,  /* Token failover when the lane supports it */
-    UCP_FAILOVER_MODE_SW,    /* Always software PSN based protocols */
+    UCP_FAILOVER_MODE_AUTO,  /* Automatic recovery protocol selection */
+    UCP_FAILOVER_MODE_SW,    /* Force software PSN recovery */
     UCP_FAILOVER_MODE_TOKEN, /* Token based failover and recovery;
                               * disable unsupported transports */
     UCP_FAILOVER_MODE_LAST

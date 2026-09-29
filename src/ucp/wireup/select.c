@@ -3008,24 +3008,23 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                                 key);
 }
 
-static void
-ucp_wireup_filter_token_tls(ucp_worker_h worker,
-                            const ucp_tl_bitmap_t *tl_bitmap_in,
-                            ucp_tl_bitmap_t *tl_bitmap_out)
+static void ucp_wireup_filter_token_tls(ucp_worker_h worker,
+                                        const ucp_tl_bitmap_t *tl_bitmap_in,
+                                        ucp_tl_bitmap_t *tl_bitmap_out)
 {
     ucp_rsc_index_t rsc_index;
 
     memset(tl_bitmap_out, 0, sizeof(*tl_bitmap_out));
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap_in) {
-        if ((ucp_worker_iface_get_attr_v2(worker, rsc_index)->cap.flags &
-            UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+        if (ucp_worker_iface_get_attr_v2(worker, rsc_index)->cap.flags &
+            UCT_IFACE_FLAG_V2_QUERY_TOKEN) {
             UCS_STATIC_BITMAP_SET(tl_bitmap_out, rsc_index);
             continue;
         }
 
         ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : disabled, no token query",
-                    UCT_TL_RESOURCE_DESC_ARG(
-                        &worker->context->tl_rscs[rsc_index].tl_rsc));
+                  UCT_TL_RESOURCE_DESC_ARG(
+                          &worker->context->tl_rscs[rsc_index].tl_rsc));
     }
 }
 
