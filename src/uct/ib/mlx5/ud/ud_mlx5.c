@@ -666,10 +666,23 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     return UCS_OK;
 }
 
-static void *uct_ud_mlx5_ep_get_peer_address(uct_ud_ep_t *ud_ep)
+static ucs_status_t
+uct_ud_mlx5_ep_resolve_peer_address(uct_ud_ep_t *ud_ep,
+                                    const uct_ib_address_t *ib_addr UCS_V_UNUSED,
+                                    const void *address)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
-    return &ep->peer_address;
+
+    memcpy(&ep->peer_address, address, sizeof(ep->peer_address));
+    return UCS_OK;
+}
+
+static void
+uct_ud_mlx5_ep_get_peer_address(const uct_ud_ep_t *ud_ep, void *address_p)
+{
+    const uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
+
+    memcpy(address_p, &ep->peer_address, sizeof(ep->peer_address));
 }
 
 static size_t uct_ud_mlx5_get_peer_address_length()
@@ -879,6 +892,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .create_qp               = uct_ud_mlx5_iface_create_qp,
     .destroy_qp              = uct_ud_mlx5_iface_destroy_qp,
     .unpack_peer_address     = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_resolve_peer_address = uct_ud_mlx5_ep_resolve_peer_address,
     .ep_get_peer_address     = uct_ud_mlx5_ep_get_peer_address,
     .get_peer_address_length = uct_ud_mlx5_get_peer_address_length,
     .peer_address_str        = uct_ud_mlx5_iface_peer_address_str,

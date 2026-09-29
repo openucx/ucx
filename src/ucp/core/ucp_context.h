@@ -255,6 +255,8 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** GPU-to-NIC assignment mode */
+    ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
@@ -447,6 +449,9 @@ typedef struct ucp_context {
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
+
+    /* GPU-to-NIC assignment, set to NULL when not in use */
+    ucp_gpu_nic_assignment_t      *gpu_nic_assignment;
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;

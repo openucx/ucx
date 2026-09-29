@@ -204,12 +204,11 @@ ucs_config_field_t uct_ib_md_config_table[] = {
     {"DIRECT_NIC", "y", "Use Direct NIC functionality for GPU memory access",
      ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
 
-    {"AH_CACHE_TTL", "inf",
-     "Address handle (AH) cache: 0 disables it, inf keeps it enabled. No\n"
-     "other values are allowed. Only affects mlx5 transports; other\n"
-     "transports always use the cache.",
-     ucs_offsetof(uct_ib_md_config_t, ah_cache_ttl),
-     UCS_CONFIG_TYPE_TIME_UNITS},
+    {"AH_CACHE_TTL", "1s",
+     "How long a cached address handle can be reused for before it is\n"
+     "re-queried. Set to inf to never re-query cached address handles, or\n"
+     "to 0 to disable the address handle cache entirely.",
+     ucs_offsetof(uct_ib_md_config_t, ah_cache_ttl), UCS_CONFIG_TYPE_TIME_UNITS},
 
     {NULL}
 };
@@ -1404,13 +1403,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                 UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
-    }
-
-    if ((md_config->ah_cache_ttl != 0) &&
-        (md_config->ah_cache_ttl != UCS_TIME_INFINITY)) {
-        ucs_error("UCX_IB_AH_CACHE_TTL must be 0 or inf");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err_cleanup_device;
     }
 
     md->dev.ah_cache_ttl = md_config->ah_cache_ttl;
