@@ -112,6 +112,12 @@ protected:
         }
     }
 
+    void cleanup() override {
+        ucp_test::cleanup();
+
+        m_probe_mock = NULL;
+    }
+
     void set_am_handler() {
         ucp_am_handler_param_t param;
         param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
@@ -833,6 +839,8 @@ protected:
         ucp_context_h context = worker->context;
         ucp_rsc_index_t rsc_index;
 
+        m_probe_mock = &mock;
+
         for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
             if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
                 continue;
@@ -932,7 +940,6 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
     skip_unless_rc_probe_gate();
 
     ucs::mock mock;
-    m_probe_mock  = &mock;
     m_probe_count = 0;
     mock_recovery_probe(sender().worker(), mock, recovery_probe_count);
 
@@ -945,10 +952,9 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
         short_progress_loop();
     });
 
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "failed lanes are not recovered";
     EXPECT_NE(0u, m_probe_count)
             << "RC p2p lane recovery completed without arming an aux probe";
-
-    m_probe_mock = NULL;
 }
 
 UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
