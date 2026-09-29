@@ -1115,6 +1115,26 @@ static void uct_rc_mlx5_op_info_fill_put_zcopy(
     }
 }
 
+static ucs_status_t
+uct_rc_mlx5_op_info_fill_put_no_payload(uct_rc_iface_send_op_t *op,
+                                        const uct_ib_mlx5_txwq_t *txwq,
+                                        const struct mlx5_wqe_raddr_seg *raddr,
+                                        uct_ep_op_info_t *info)
+{
+    if (op == NULL) {
+        uct_rc_mlx5_op_info_fill_put_short(txwq, raddr, NULL, 0, NULL, info);
+        return UCS_OK;
+    }
+
+    if (uct_rc_mlx5_send_op_is_put_zcopy(op)) {
+        uct_rc_mlx5_op_info_fill_put_zcopy(txwq, op, raddr, NULL, 0, NULL,
+                                           info);
+        return UCS_OK;
+    }
+
+    return UCS_ERR_UNSUPPORTED;
+}
+
 static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         uct_rc_mlx5_base_ep_t *ep, const uct_ib_mlx5_txwq_t *txwq, uint16_t pi,
         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
@@ -1131,19 +1151,15 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     ucs_assert(wqe_size >= header_size);
 
     raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
+    op    = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+
     if (wqe_size == header_size) {
-        op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
-        if (op == NULL) {
-            uct_rc_mlx5_op_info_fill_put_short(txwq, raddr, NULL, 0, NULL,
-                                               info);
+        if (uct_rc_mlx5_op_info_fill_put_no_payload(op, txwq, raddr, info) ==
+            UCS_OK) {
             return UCS_OK;
-        } else if (uct_rc_mlx5_send_op_is_put_zcopy(op)) {
-            uct_rc_mlx5_op_info_fill_put_zcopy(txwq, op, raddr, NULL, 0, NULL,
-                                               info);
-            return UCS_OK;
-        } else {
-            goto err;
         }
+
+        goto err;
     }
 
     if (uct_rc_mlx5_wqe_inline_seg(txwq, raddr + 1, &inl, &inline_length) ==
@@ -1154,7 +1170,6 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     }
 
     dptr = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-    op   = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
     if ((op != NULL) && uct_rc_mlx5_send_op_is_put_bcopy(op)) {
         uct_rc_mlx5_op_info_fill_put_bcopy(op, raddr, dptr, info);
         return UCS_OK;
