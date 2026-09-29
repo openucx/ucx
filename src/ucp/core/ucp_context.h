@@ -27,7 +27,6 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/topo/base/topo_groups.h>
 #include <ucs/type/param.h>
 
 
@@ -453,9 +452,6 @@ typedef struct ucp_context {
 
     /* GPU-to-NIC assignment, set to NULL when not in use */
     ucp_gpu_nic_assignment_t      *gpu_nic_assignment;
-
-    /* Network sys_devs that the GPU-to-NIC assignment may use */
-    ucs_sys_device_bitmap_t       gpu_nic_candidates;
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;

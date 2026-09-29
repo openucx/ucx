@@ -632,6 +632,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
    "address are assigned together (e.g. MLOPart partitions of a GPU).\n"
    "NICs without memory registration and DPUs are skipped during assignment.\n"
+   "NICs excluded by UCX_NET_DEVICES or UCX_TLS are ignored.\n"
    "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
    "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
    "some GPUs without any NICs.\n"
@@ -1399,45 +1400,42 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     return UCS_OK;
 }
 
-static void ucp_gpu_nic_candidates_add(ucp_context_h context,
-                                       const ucp_tl_md_t *md,
-                                       const uct_tl_resource_desc_t *resources,
-                                       unsigned num_resources)
+static void
+ucp_add_allowed_net_devices(ucs_sys_device_bitmap_t *allowed_net_devices,
+                            const ucp_tl_md_t *md,
+                            const ucp_tl_resource_desc_t *resources,
+                            unsigned num_resources)
 {
-    int can_reg                = !!(md->attr.flags & UCT_MD_FLAG_REG);
     unsigned num_net_resources = 0;
     unsigned num_dpu_resources = 0;
-    const uct_tl_resource_desc_t *resource;
+    const uct_tl_resource_desc_t *tl_resource;
+    const ucp_tl_resource_desc_t *resource;
 
     ucs_carray_for_each(resource, resources, num_resources) {
-        if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
-            (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        tl_resource = &resource->tl_rsc;
+        if ((tl_resource->dev_type != UCT_DEVICE_TYPE_NET) ||
+            (tl_resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
             continue;
+        }
+
+        if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
+            ucs_debug("md %s network devices are not allowed for gpu-nic "
+                      "assignment: no memory registration",
+                      md->rsc.md_name);
+            return;
         }
 
         ++num_net_resources;
-        if (!can_reg) {
-            continue;
-        }
-
-        if (ucs_topo_sys_device_get_flags(resource->sys_device) &
+        if (ucs_topo_sys_device_get_flags(tl_resource->sys_device) &
             UCS_TOPO_DEVICE_FLAG_DPU) {
             ++num_dpu_resources;
             continue;
         }
 
-        UCS_STATIC_BITMAP_SET(&context->gpu_nic_candidates,
-                              resource->sys_device);
+        UCS_STATIC_BITMAP_SET(allowed_net_devices, tl_resource->sys_device);
     }
 
     if (num_net_resources == 0) {
-        return;
-    }
-
-    if (!can_reg) {
-        ucs_debug("md %s is not a gpu-nic assignment candidate: no memory "
-                  "registration",
-                  md->rsc.md_name);
         return;
     }
 
@@ -1446,7 +1444,7 @@ static void ucp_gpu_nic_candidates_add(ucp_context_h context,
                   md->rsc.md_name, num_dpu_resources);
     }
 
-    ucs_trace("md %s added %u gpu-nic assignment candidate resources",
+    ucs_trace("md %s allowed %u resources for gpu-nic assignment",
               md->rsc.md_name, num_net_resources - num_dpu_resources);
 }
 
@@ -1456,10 +1454,12 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      const ucs_string_set_t *aux_tls, unsigned *num_resources_p,
                      ucs_string_set_t avail_devices[],
                      ucs_string_set_t *avail_tls, uint64_t dev_cfg_masks[],
-                     uint64_t *tl_cfg_mask, ucp_tl_info_array_t *all_rscs)
+                     uint64_t *tl_cfg_mask, ucp_tl_info_array_t *all_rscs,
+                     ucs_sys_device_bitmap_t *allowed_net_devices)
 {
-    ucp_tl_md_t *md                 = &context->tl_mds[md_index];
-    ucp_tl_info_entry_t *added_rscs = NULL;
+    ucp_tl_md_t *md                  = &context->tl_mds[md_index];
+    ucp_tl_info_entry_t *added_rscs  = NULL;
+    ucp_rsc_index_t first_rsc_index  = context->num_tls;
     unsigned num_tl_resources, all_rscs_prev_len;
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
@@ -1480,10 +1480,6 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
         ucs_debug("No tl resources found for md %s", md->rsc.md_name);
         goto free_resources;
     }
-
-    /* Use the pre-filter resource list, so that all processes compute the same
-     * assignment regardless of their UCX_NET_DEVICES/UCX_TLS settings */
-    ucp_gpu_nic_candidates_add(context, md, tl_resources, num_tl_resources);
 
     /* Collect the full (pre-filter) resource list for the transport tables */
     if (ucp_context_print_transport_tables_enabled(context)) {
@@ -1544,6 +1540,10 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
             added_rscs[i].enabled = 1;
         }
     }
+
+    ucp_add_allowed_net_devices(allowed_net_devices, md,
+                                context->tl_rscs + first_rsc_index,
+                                *num_resources_p);
 
     status = UCS_OK;
 free_resources:
@@ -1865,7 +1865,8 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
                             uint64_t dev_cfg_masks[], uint64_t *tl_cfg_mask,
                             const ucp_config_t *config,
                             const ucs_string_set_t *aux_tls,
-                            ucp_tl_info_array_t *all_rscs)
+                            ucp_tl_info_array_t *all_rscs,
+                            ucs_sys_device_bitmap_t *allowed_net_devices)
 {
     const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
     size_t avail_mds             = config->max_component_mds;
@@ -1915,7 +1916,7 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
         status = ucp_add_tl_resources(context, md_index, config, aux_tls,
                                       &num_tl_resources, avail_devices,
                                       avail_tls, dev_cfg_masks, tl_cfg_mask,
-                                      all_rscs);
+                                      all_rscs, allowed_net_devices);
         if (status != UCS_OK) {
             uct_md_close(context->tl_mds[md_index].md);
             goto out;
@@ -2242,7 +2243,8 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
 }
 
 static ucs_status_t
-ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
+ucp_fill_resources(ucp_context_h context, const ucp_config_t *config,
+                   ucs_sys_device_bitmap_t *allowed_net_devices)
 {
     ucp_tl_info_array_t all_rscs = UCS_ARRAY_DYNAMIC_INITIALIZER;
     uint64_t dev_cfg_masks[UCT_DEVICE_TYPE_LAST] = {};
@@ -2351,7 +2353,7 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
         status = ucp_add_component_resources(context, i, avail_devices,
                                              &avail_tls, dev_cfg_masks,
                                              &tl_cfg_mask, config, &aux_tls,
-                                             &all_rscs);
+                                             &all_rscs, allowed_net_devices);
         if (status != UCS_OK) {
             goto err_free_resources;
         }
@@ -2842,7 +2844,7 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
 
 static ucs_status_t ucp_context_gpu_nic_assignment_init(
         ucp_gpu_nic_assignment_mode_t mode,
-        const ucs_sys_device_bitmap_t *candidate_nics,
+        const ucs_sys_device_bitmap_t *allowed_net_devices,
         ucp_gpu_nic_assignment_t **assignment_p)
 {
     ucp_gpu_nic_assignment_t *assignment;
@@ -2868,7 +2870,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
-    status = ucs_topo_build_groups(candidate_nics, &groups);
+    status = ucs_topo_build_groups(allowed_net_devices, &groups);
     if (status != UCS_OK) {
         return status;
     }
@@ -2913,6 +2915,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
 {
+    ucs_sys_device_bitmap_t allowed_net_devices =
+            UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_config_t *dfl_config = NULL;
     ucp_context_t *context;
     ucs_status_t status;
@@ -2947,14 +2951,14 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     UCP_THREAD_LOCK_INIT(&context->mt_lock);
 
     /* fill resources we should use */
-    status = ucp_fill_resources(context, config);
+    status = ucp_fill_resources(context, config, &allowed_net_devices);
     if (status != UCS_OK) {
         goto err_thread_lock_finalize;
     }
 
     status = ucp_context_gpu_nic_assignment_init(
-            context->config.ext.gpu_nic_assignment_mode,
-            &context->gpu_nic_candidates, &context->gpu_nic_assignment);
+            context->config.ext.gpu_nic_assignment_mode, &allowed_net_devices,
+            &context->gpu_nic_assignment);
     if (status != UCS_OK) {
         goto err_free_res;
     }
