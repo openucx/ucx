@@ -478,9 +478,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
 
-  {"FAILOVER_MODE", "auto",
+  {"FAILOVER_MODE", "sw",
    "Failover method for endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
+   " sw is the default until token failover is fully implemented.\n"
    " auto  - token failover when the lane supports it, otherwise fallback to\n"
    "         software PSN based protocols.\n"
    " sw    - always software PSN based protocols.\n"
