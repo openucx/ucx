@@ -502,7 +502,6 @@ protected:
         if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
             EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
             EXPECT_EQ(&ctx->comp, info->comp);
-            uct_invoke_completion(info->comp, UCS_OK);
 
             EXPECT_TRUE(info->rma.field_mask &
                         UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
@@ -513,6 +512,8 @@ protected:
                 EXPECT_EQ(ctx->iov[i].length,
                           info->rma.payload.zcopy.iov[i].length);
             }
+
+            uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
         } else {
             EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
 
