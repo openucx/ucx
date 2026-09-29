@@ -329,7 +329,7 @@ UCS_TEST_F(test_topo, device_flags) {
               ucs_topo_sys_device_get_flags(sys_dev));
     EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(other_sys_dev));
 
-    /* Adding flags again keeps the existing ones */
+    /* Adding no flags keeps the existing ones */
     ASSERT_UCS_OK(ucs_topo_sys_device_add_flags(sys_dev, 0));
     EXPECT_EQ(static_cast<unsigned>(UCS_TOPO_DEVICE_FLAG_DPU),
               ucs_topo_sys_device_get_flags(sys_dev));

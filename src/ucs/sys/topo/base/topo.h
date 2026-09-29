@@ -111,8 +111,7 @@ typedef enum {
  * Properties of a system device, set by the owning transport.
  */
 typedef enum {
-    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0) /**< DPU device (e.g. BlueField),
-                                               in either DPU or NIC mode */
+    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0) /**< DPU device (e.g. BlueField) */
 } ucs_topo_device_flags_t;
 
 

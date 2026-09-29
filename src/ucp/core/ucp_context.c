@@ -1400,52 +1400,34 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     return UCS_OK;
 }
 
-static void
-ucp_add_allowed_net_devices(ucs_sys_device_bitmap_t *allowed_net_devices,
-                            const ucp_tl_md_t *md,
-                            const ucp_tl_resource_desc_t *resources,
-                            unsigned num_resources)
+static int
+ucp_groups_is_net_device_allowed(const ucp_tl_md_t *md,
+                                 const uct_tl_resource_desc_t *resource)
 {
-    unsigned num_net_resources = 0;
-    unsigned num_dpu_resources = 0;
-    const uct_tl_resource_desc_t *tl_resource;
-    const ucp_tl_resource_desc_t *resource;
-
-    ucs_carray_for_each(resource, resources, num_resources) {
-        tl_resource = &resource->tl_rsc;
-        if ((tl_resource->dev_type != UCT_DEVICE_TYPE_NET) ||
-            (tl_resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-            continue;
-        }
-
-        if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
-            ucs_debug("md %s network devices are not allowed for gpu-nic "
-                      "assignment: no memory registration",
-                      md->rsc.md_name);
-            return;
-        }
-
-        ++num_net_resources;
-        if (ucs_topo_sys_device_get_flags(tl_resource->sys_device) &
-            UCS_TOPO_DEVICE_FLAG_DPU) {
-            ++num_dpu_resources;
-            continue;
-        }
-
-        UCS_STATIC_BITMAP_SET(allowed_net_devices, tl_resource->sys_device);
+    if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
+        (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
     }
 
-    if (num_net_resources == 0) {
-        return;
+    if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is not allowed for gpu-nic assignment: no memory "
+                  "registration",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
     }
 
-    if (num_dpu_resources > 0) {
-        ucs_debug("md %s skipped %u dpu resources for gpu-nic assignment",
-                  md->rsc.md_name, num_dpu_resources);
+    if (ucs_topo_sys_device_get_flags(resource->sys_device) &
+        UCS_TOPO_DEVICE_FLAG_DPU) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is not allowed for gpu-nic assignment: dpu device",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
     }
 
-    ucs_trace("md %s allowed %u resources for gpu-nic assignment",
-              md->rsc.md_name, num_net_resources - num_dpu_resources);
+    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is allowed for gpu-nic assignment",
+              UCT_TL_RESOURCE_DESC_ARG(resource));
+    return 1;
 }
 
 static ucs_status_t
@@ -1457,9 +1439,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      uint64_t *tl_cfg_mask, ucp_tl_info_array_t *all_rscs,
                      ucs_sys_device_bitmap_t *allowed_net_devices)
 {
-    ucp_tl_md_t *md                  = &context->tl_mds[md_index];
-    ucp_tl_info_entry_t *added_rscs  = NULL;
-    ucp_rsc_index_t first_rsc_index  = context->num_tls;
+    ucp_tl_md_t *md                 = &context->tl_mds[md_index];
+    ucp_tl_info_entry_t *added_rscs = NULL;
     unsigned num_tl_resources, all_rscs_prev_len;
     uct_tl_resource_desc_t *tl_resources;
     ucp_tl_resource_desc_t *tmp;
@@ -1534,16 +1515,17 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
             goto free_resources;
         }
 
+        if (ucp_groups_is_net_device_allowed(md, &tl_resources[i])) {
+            UCS_STATIC_BITMAP_SET(allowed_net_devices,
+                                  tl_resources[i].sys_device);
+        }
+
         ++(*num_resources_p);
 
         if (added_rscs != NULL) {
             added_rscs[i].enabled = 1;
         }
     }
-
-    ucp_add_allowed_net_devices(allowed_net_devices, md,
-                                context->tl_rscs + first_rsc_index,
-                                *num_resources_p);
 
     status = UCS_OK;
 free_resources:
