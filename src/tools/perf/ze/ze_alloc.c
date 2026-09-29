@@ -25,9 +25,9 @@ static pthread_once_t ze_init_once = PTHREAD_ONCE_INIT;
 static ze_context_handle_t gpu_context;
 static ze_device_handle_t gpu_devices[ZE_PERF_MAX_DEVICES];
 static ze_driver_handle_t gpu_driver;
-static unsigned gpu_count;
+static int gpu_count;
 
-static __thread unsigned tls_gpu_index;
+static __thread int tls_gpu_index;
 static __thread ze_command_list_handle_t tls_cmdlist;
 
 
@@ -119,13 +119,13 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
     }
 
     group_index = rte_call(perf, group_index);
-    status      = ucx_perf_get_gpu_index(perf, group_index, (int)gpu_count,
-                                         "ze", &gpu_index);
+    status      = ucx_perf_get_gpu_index(perf, group_index, gpu_count, "ze",
+                                         &gpu_index);
     if (status != UCS_OK) {
         return status;
     }
 
-    if ((tls_cmdlist != NULL) && (tls_gpu_index != (unsigned)gpu_index)) {
+    if ((tls_cmdlist != NULL) && (tls_gpu_index != gpu_index)) {
         ucx_perf_ze_destroy_tls_cmdlist();
     }
 

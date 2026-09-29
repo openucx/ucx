@@ -342,7 +342,7 @@ ucx_perf_mem_alloc_name(const ucx_perf_params_t *params, int is_send)
  * '-a <type:dev-id>' option if it was specified, otherwise spread the
  * processes over the available devices according to their group index.
  */
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static inline ucs_status_t
 ucx_perf_get_gpu_index(const ucx_perf_context_t *perf, unsigned group_index,
                        int num_gpus, const char *dev_type, int *gpu_index_p)
 {
@@ -358,7 +358,7 @@ ucx_perf_get_gpu_index(const ucx_perf_context_t *perf, unsigned group_index,
                                      perf->params.send_device.device_id;
     if (gpu_index == UCX_PERF_MEM_DEV_DEFAULT) {
         gpu_index = group_index % num_gpus;
-    } else if ((gpu_index < 0) || (gpu_index >= num_gpus)) {
+    } else if (gpu_index >= num_gpus) {
         ucs_error("illegal %s device %d, number of devices %d", dev_type,
                   gpu_index, num_gpus);
         return UCS_ERR_NO_DEVICE;
