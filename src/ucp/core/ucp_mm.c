@@ -1064,8 +1064,8 @@ ucs_status_t ucp_memh_get_slow(ucp_context_h context, void *address,
 
     UCP_THREAD_CS_ENTER(&context->mt_lock);
     status = ucp_memh_find_slow(context, reg_address, reg_length, reg_align,
-                                mem_type, &mem_info, reg_md_map,
-                                uct_flags, alloc_name, &memh);
+                                mem_type, &mem_info, reg_md_map, uct_flags,
+                                alloc_name, &memh);
     if (status != UCS_OK) {
         goto out;
     }
@@ -2023,7 +2023,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
     char rcache_name[128];
     khiter_t iter;
     int ret;
-    ucs_memory_info_t mem_info = { 0 };
+    ucs_memory_info_t mem_info = {0};
 
     ucs_assert(user_memh != NULL);
 
@@ -2056,7 +2056,8 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 
         status = ucp_memh_rcache_get(rcache, unpacked->address,
                                      unpacked->length, UCS_RCACHE_MIN_ALIGNMENT,
-                                     unpacked->mem_type, &mem_info, 0, 0, "", &memh);
+                                     unpacked->mem_type, &mem_info, 0, 0, "",
+                                     &memh);
         if (status != UCS_OK) {
             goto err_rcache_destroy;
         }

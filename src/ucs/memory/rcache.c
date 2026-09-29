@@ -832,10 +832,10 @@ static int ucs_rcache_check_adj_size(ucs_pgt_addr_t start, ucs_pgt_addr_t end,
     return (end - start) >= (region_adj->super.end - region_adj->super.start);
 }
 
-static void
-ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
-                             ucs_pgt_addr_t start, ucs_pgt_addr_t end,
-                             ucs_list_link_t *list)
+static void ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
+                                         ucs_pgt_addr_t start,
+                                         ucs_pgt_addr_t end,
+                                         ucs_list_link_t *list)
 {
     ucs_rcache_region_t *region_left  = NULL;
     ucs_rcache_region_t *region_right = NULL;
@@ -851,12 +851,12 @@ ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
     pgt_right = ucs_pgtable_lookup(&rcache->pgtable, end);
 
     if (pgt_left != NULL) {
-        region_left = ucs_derived_of(pgt_left, ucs_rcache_region_t);
+        region_left    = ucs_derived_of(pgt_left, ucs_rcache_region_t);
         can_merge_left = rcache->params.ops->can_merge(arg, region_left);
     }
 
     if (pgt_right != NULL) {
-        region_right = ucs_derived_of(pgt_right, ucs_rcache_region_t);
+        region_right    = ucs_derived_of(pgt_right, ucs_rcache_region_t);
         can_merge_right = rcache->params.ops->can_merge(arg, region_right);
     }
 
@@ -941,7 +941,8 @@ ucs_rcache_check_neighbors(ucs_rcache_t *rcache, void *arg,
 
         if ((rcache->params.flags & UCS_RCACHE_FLAG_MERGE_ADJACENT) &&
             (ucs_list_is_empty(&region_list))) {
-            ucs_rcache_check_adj_regions(rcache, arg, *start, *end, &region_list);
+            ucs_rcache_check_adj_regions(rcache, arg, *start, *end,
+                                         &region_list);
         }
     } while (!ucs_list_is_empty(&region_list));
 

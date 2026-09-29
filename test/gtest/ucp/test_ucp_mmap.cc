@@ -1353,20 +1353,19 @@ UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap_export)
 
 class test_ucp_rcache_merge : public ucp_test {
 public:
-    static void get_mem_type_variants(std::vector<ucp_test_variant>& variants)
+    static void get_mem_type_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
-                               UCS_MEMORY_TYPE_HOST, "host");
-        add_variant_with_value(variants, UCP_FEATURE_RMA,
-                               UCS_MEMORY_TYPE_CUDA, "cuda");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, UCS_MEMORY_TYPE_HOST,
+                               "host");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, UCS_MEMORY_TYPE_CUDA,
+                               "cuda");
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, get_mem_type_variants, 0,
                            "no_memtype_cache");
-        add_variant_values(variants, get_mem_type_variants, 1,
-                           "memtype_cache");
+        add_variant_values(variants, get_mem_type_variants, 1, "memtype_cache");
     }
 
     virtual void init()
@@ -1386,8 +1385,8 @@ public:
 
 UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
 {
-    ucs_memory_type_t mem_type =
-            static_cast<ucs_memory_type_t>(get_variant_value());
+    ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(
+            get_variant_value());
     if (!mem_buffer::is_mem_type_supported(mem_type)) {
         UCS_TEST_SKIP_R("memory type is not supported");
     }
@@ -1417,15 +1416,14 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     EXPECT_EQ(size * 2, ucp_memh_length(memh2->parent));
 
     /* Verify merged registration is healthy by performing zcopy put */
-    mapped_buffer target = mapped_buffer(size, receiver(), 0, 
-                                         UCS_MEMORY_TYPE_HOST);
+    mapped_buffer target         = mapped_buffer(size, receiver(), 0,
+                                                 UCS_MEMORY_TYPE_HOST);
     ucs::handle<ucp_rkey_h> rkey = target.rkey(sender());
     mem_buffer::pattern_fill(ptr2, size, ucs::rand(), mem_type);
     put_params.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
     put_params.memh         = memh2;
-    request = ucp_put_nbx(sender().ep(), ptr2, size,
-                          (uintptr_t)target.ptr(), rkey,
-                          &put_params);
+    request = ucp_put_nbx(sender().ep(), ptr2, size, (uintptr_t)target.ptr(),
+                          rkey, &put_params);
     ASSERT_UCS_OK(request_wait(request));
     flush_worker(sender());
     EXPECT_TRUE(mem_buffer::compare(ptr2, target.ptr(), size, mem_type,
