@@ -477,7 +477,15 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
-         * means failure on the UCP EP */
+         * means failure on the UCP EP. A token-capable lane is taken off the
+         * endpoint here; UCT keeps the TX ring only when this returns
+         * UCS_INPROGRESS. */
+        if ((wireup_ep == NULL) &&
+            (ucp_ep_tf_claim(ucp_ep, lane, uct_ep, status) == UCS_OK) &&
+            (ucp_ep_tf_detach(ucp_ep, lane) == UCS_OK)) {
+            return UCS_INPROGRESS;
+        }
+
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
         return UCS_OK;
     }

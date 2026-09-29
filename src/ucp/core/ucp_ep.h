@@ -507,6 +507,28 @@ typedef struct ucp_ep_recovery_probe {
 
 
 enum {
+    UCP_EP_TF_LANE_EMPTY = 0,
+    UCP_EP_TF_LANE_HELD
+};
+
+
+/* Per-lane token-failover state. The UCT ep is kept until
+ * outstanding purge, then destroyed. */
+typedef struct ucp_ep_lane_tf {
+    uct_ep_h         uct_ep;
+    ucp_rsc_index_t  rsc_index;
+    ucs_queue_head_t pending_q;
+    void             *tx_token;
+    void             *rx_token;
+    ucs_status_t     fail_status;
+    uint32_t         request_id;
+    uint8_t          tx_len;
+    uint8_t          rx_len;
+    uint8_t          state;
+} ucp_ep_lane_tf_t;
+
+
+enum {
     UCP_EP_RECOVERY_STATE_IDLE,
     UCP_EP_RECOVERY_STATE_WAIT_REPLY,
     UCP_EP_RECOVERY_STATE_PROBING,
@@ -520,11 +542,14 @@ typedef struct ucp_ep_recovery_arg {
     unsigned                retries_left;
     uint8_t                 state;
     /* Generation of the LANES_ADDR exchange, pre-incremented by every request
-     * and echoed by the peer in its answers. Only carried on the wire for now,
-     * the follow-up patch matches it against the tokens of an answer to tell
-     * apart the round they belong to */
+     * and echoed by the peer in its answers. A stored token is applied only
+     * when it carries this id. */
     uint32_t                request_id;
+    /* Set when a held lane cannot be purged; recovery then fails the ep. */
+    uint8_t                 tf_failed;
+    ucs_status_t            tf_fail_status;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+    ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
 } ucp_ep_recovery_arg_t;
 
 
@@ -1037,6 +1062,25 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Snapshot the TX token of a QUERY_TOKEN lane and keep its UCT ep.
+ *
+ * @return UCS_OK when the lane is held. Any other status means the caller
+ *         must use the software discard path.
+ */
+ucs_status_t ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane,
+                             uct_ep_h uct_ep, ucs_status_t status);
+
+
+/**
+ * Install the failed stub on a claimed lane and mark that lane failed.
+ *
+ * @return UCS_OK when the lane ep is the stub and @a lane is held. On
+ *         failure the claim is dropped and the UCT ep stays on the lane.
+ */
+ucs_status_t ucp_ep_tf_detach(ucp_ep_h ep, ucp_lane_index_t lane);
 
 
 /**
