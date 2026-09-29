@@ -28,14 +28,14 @@ static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
            (lane_type == UCP_LANE_TYPE_AM_BW);
 }
 
-const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
+const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         const ucp_proto_multi_init_params_t *params,
         ucs_sys_device_t *owner_gpu_sys_dev_p)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
     ucp_memory_info_t mem_info                 = params->super.reg_mem_info;
-    const ucp_gpu_nic_sys_dev_bitmap_t *bitmap = NULL;
+    const ucs_sys_device_bitmap_t *bitmap      = NULL;
     const char *UCS_V_UNUSED owner_desc;
 
     *owner_gpu_sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -499,7 +499,7 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
 /* Apply the resolved assignment to discovered RMA_BW and AM_BW candidates. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         const ucp_proto_multi_init_params_t *params,
-        const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap,
+        const ucs_sys_device_bitmap_t *assigned_nic_bitmap,
         ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
         ucp_lane_index_t *num_lanes_p)
 {
@@ -913,7 +913,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_sys_device_t req_sys_dev    = init_params->select_param->sys_dev;
     ucp_lane_map_t queried_lane_map = 0;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
-    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
+    const ucs_sys_device_bitmap_t *assigned_nic_bitmap;
     ucs_sys_device_t owner_gpu_sys_dev;
     ucp_proto_common_tl_perf_t perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
