@@ -804,6 +804,18 @@ protected:
         return UCS_ERR_ENDPOINT_TIMEOUT;
     }
 
+    static ucs_status_t recovery_probe_count(uct_ep_h ep, unsigned flags,
+                                             uct_completion_t *comp)
+    {
+        /* Keepalive passes no completion, recovery probes always do */
+        if (comp != NULL) {
+            ++m_probe_count;
+        }
+
+        return m_probe_mock->orig_func(&ep->iface->ops.ep_check, ep, flags,
+                                       comp);
+    }
+
     static ucs_status_t recovery_probe_hold(uct_ep_h ep, unsigned flags,
                                             uct_completion_t *comp)
     {
@@ -882,6 +894,8 @@ protected:
     }
 
     static uct_completion_t *m_held_probe_comp;
+    static ucs::mock        *m_probe_mock;
+    static unsigned          m_probe_count;
 
 private:
     size_t m_initiator_err_count = 0;
@@ -890,6 +904,8 @@ private:
 };
 
 uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
+ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
+unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 
@@ -915,31 +931,24 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
 {
     skip_unless_rc_probe_gate();
 
-    bool probe_armed = false;
+    ucs::mock mock;
+    m_probe_mock  = &mock;
+    m_probe_count = 0;
+    mock_recovery_probe(sender().worker(), mock, recovery_probe_count);
 
     test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
 
-    wait_for_cond([this, &probe_armed]() {
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-        ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
-        ucp_lane_index_t lane;
-
-        if (arg != NULL) {
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.func != NULL) {
-                    probe_armed = true;
-                    break;
-                }
-            }
-        }
-
+    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+    wait_for_cond([ep]() {
         return ucp_ep_get_failed_lanes(ep) == 0;
     }, [this]() {
         short_progress_loop();
     });
 
-    EXPECT_TRUE(probe_armed)
+    EXPECT_NE(0u, m_probe_count)
             << "RC p2p lane recovery completed without arming an aux probe";
+
+    m_probe_mock = NULL;
 }
 
 UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
