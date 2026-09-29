@@ -883,6 +883,12 @@ protected:
 
     static uct_completion_t *m_held_probe_comp;
 
+    void run_initiator_failure();
+    void run_target_failure();
+    void run_probe_gated_recovery();
+    void run_teardown_with_outstanding_probe();
+    void run_recovery_retries_exhausted_live_lanes();
+
 private:
     size_t m_initiator_err_count = 0;
     size_t m_total_err_count     = 0;
@@ -891,27 +897,33 @@ private:
 
 uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
+ * Disabled until token failover is complete. Enable with
+ * --gtest_also_run_disabled_tests. */
+class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
+public:
+    DISABLED_test_ucp_fault_tolerance_tf() {
+        modify_config("FAILOVER_MODE", "token");
+    }
+};
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_initiator_failure()
 {
-    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) && has_any_transport({"ud_v", "ud_x"})) {
-        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes leads to "
-                        "assertion failure in ud_ep_purge");
+    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) &&
+        has_any_transport({"ud_v", "ud_x"})) {
+        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes "
+                        "leads to assertion failure in ud_ep_purge");
     }
 
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_target_failure()
 {
     do_test(FAILURE_SIDE_TARGET);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_probe_gated_recovery()
 {
     skip_unless_rc_probe_gate();
 
@@ -942,8 +954,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
             << "RC p2p lane recovery completed without arming an aux probe";
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000")
+void test_ucp_fault_tolerance::run_teardown_with_outstanding_probe()
 {
     skip_unless_rc_probe_gate();
 
@@ -974,8 +985,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
     }
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", "KEEPALIVE_INTERVAL=0.1s")
+void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
 {
     skip_unless_rc_probe_gate();
 
@@ -1004,3 +1014,31 @@ UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
     EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true))
             << "data did not flow on live lanes after recovery give-up";
 }
+
+#define UCP_FT_TEST(_fixture, _name, ...) \
+    UCS_TEST_P(_fixture, _name, __VA_ARGS__) \
+    { \
+        run_##_name(); \
+    }
+
+#define UCP_FT_TESTS(_fixture) \
+    UCP_FT_TEST(_fixture, initiator_failure, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, target_failure, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, probe_gated_recovery, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, teardown_with_outstanding_probe, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000") \
+    UCP_FT_TEST(_fixture, recovery_retries_exhausted_live_lanes, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", \
+                "KEEPALIVE_INTERVAL=0.1s")
+
+UCP_FT_TESTS(test_ucp_fault_tolerance)
+UCP_FT_TESTS(DISABLED_test_ucp_fault_tolerance_tf)
+
+#undef UCP_FT_TEST
+#undef UCP_FT_TESTS
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+UCP_INSTANTIATE_TEST_CASE(DISABLED_test_ucp_fault_tolerance_tf)
