@@ -185,9 +185,9 @@ typedef struct ucp_wireup_msg_tokens_info_t {
     uint32_t request_id;
     /* uint8_t tx_lengths[popcount(provided_lane_map)] followed by the TX
      * tokens, then uint8_t rx_lengths[popcount(requested_lane_map)] followed by
-     * the RX tokens, then the packed addresses. A zero length means the
-     * respective lane carries no token, which is the case for every lane until
-     * the tokens themselves are exchanged. */
+     * the RX tokens, then the packed addresses. A zero length means that lane
+     * has no token. TX tokens belong to provided lanes and RX tokens to
+     * requested lanes. */
 } UCS_S_PACKED ucp_wireup_msg_tokens_info_t;
 
 
@@ -292,15 +292,25 @@ uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 unsigned ucp_wireup_eps_progress(void *arg);
 
 
+/* One lane's token in a LANES_ADDR trailer. Indexed by lane, not by the
+ * position in the length array. A zero length means the lane has no token. */
+typedef struct ucp_wireup_lane_token {
+    const void *token;
+    uint8_t     len;
+} ucp_wireup_lane_token_t;
+
+
 /**
  * Send a LANES_ADDR_REQUEST/REPLY/ACK wireup message over the AM lane, packing
  * addresses for the lanes in @a provided_lane_map. @a request_id identifies the
- * exchange, and is echoed by the peer in its answer.
+ * exchange and is echoed by the peer. @a rx_tokens supplies the RX section,
+ * indexed by lane; NULL sends an empty one. The TX section is the snapshotted
+ * token of each provided lane that was published for @a request_id.
  */
-void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
-                                    ucp_lane_map_t requested_lane_map,
-                                    ucp_lane_map_t provided_lane_map,
-                                    uint32_t request_id);
+void ucp_wireup_send_lanes_addr_msg(
+        ucp_ep_h ep, uint8_t msg_type, ucp_lane_map_t requested_lane_map,
+        ucp_lane_map_t provided_lane_map, uint32_t request_id,
+        const ucp_wireup_lane_token_t *rx_tokens);
 
 
 /* Size of one token section (gtest feeds it crafted buffers). */
