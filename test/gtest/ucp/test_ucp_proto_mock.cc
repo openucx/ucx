@@ -481,6 +481,9 @@ public:
          */
         modify_config("TOPO_PRIO", topo_prio());
 
+        /* Avoid a host-dependent assignment (the default is 'auto') */
+        modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
+
         ucp_test::init();
         post_ucp_init();
         connect();
