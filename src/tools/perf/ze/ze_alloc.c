@@ -42,7 +42,7 @@ static void ucx_perf_ze_destroy_tls_cmdlist(void)
 }
 
 static ze_result_t
-ucx_perf_ze_create_tls_cmdlist(unsigned gpu_idx,
+ucx_perf_ze_create_tls_cmdlist(int gpu_idx,
                                const ze_command_queue_desc_t *cmdq_desc)
 {
     return zeCommandListCreateImmediate(gpu_context, gpu_devices[gpu_idx],
