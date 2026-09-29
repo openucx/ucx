@@ -1424,8 +1424,8 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     put_params.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
     put_params.memh         = memh2;
     request = ucp_put_nbx(sender().ep(), ptr2, size,
-                                           (uintptr_t)target.ptr(), rkey,
-                                           &put_params);
+                          (uintptr_t)target.ptr(), rkey,
+                          &put_params);
     ASSERT_UCS_OK(request_wait(request));
     flush_worker(sender());
     EXPECT_TRUE(mem_buffer::compare(ptr2, target.ptr(), size, mem_type,

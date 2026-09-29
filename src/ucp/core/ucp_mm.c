@@ -789,7 +789,7 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
 static ucs_status_t
 ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
                     size_t alignment, ucs_memory_type_t mem_type,
-                    ucs_memory_info_t *mem_info, ucp_md_map_t reg_md_map,
+                    const ucs_memory_info_t *mem_info, ucp_md_map_t reg_md_map,
                     unsigned uct_flags, const char *alloc_name,
                     ucp_mem_h *memh_p)
 {
@@ -993,7 +993,7 @@ static size_t ucp_memh_reg_align(ucp_context_h context, ucp_md_map_t reg_md_map)
 static ucs_status_t
 ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
                    size_t align, ucs_memory_type_t mem_type,
-                   ucs_memory_info_t *mem_info, ucp_md_map_t reg_md_map,
+                   const ucs_memory_info_t *mem_info, ucp_md_map_t reg_md_map,
                    unsigned uct_flags, const char *alloc_name,
                    ucp_mem_h *memh_p)
 {
