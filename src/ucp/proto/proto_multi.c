@@ -36,6 +36,16 @@ const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         return NULL;
     }
 
+    if (params->middle.lane_type != UCP_LANE_TYPE_RMA_BW) {
+        /* The assignment restricts only RMA_BW lanes. */
+        return NULL;
+    }
+
+    if (common_params->reg_mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) {
+        /* Buffer is not registered (e.g. bcopy), so it has no NIC affinity. */
+        return NULL;
+    }
+
     /* Use the staging buffer device if applicable, otherwise use the
      * application buffer device if applicable. */
     if ((common_params->memtype_op != UCT_EP_OP_LAST) &&
@@ -466,17 +476,14 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
 
 /* Apply the resolved assignment to discovered network RMA_BW candidates. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
-        const ucp_proto_multi_init_params_t *params, ucp_lane_index_t *lanes,
-        ucp_lane_index_t *num_lanes_p)
+        const ucp_proto_multi_init_params_t *params,
+        const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap,
+        ucp_lane_index_t *lanes, ucp_lane_index_t *num_lanes_p)
 {
     ucp_lane_index_t num_filtered_lanes = 0;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
-
-    if (params->assigned_nic_bitmap == NULL) {
-        return UCS_OK;
-    }
 
     /* Classify before compaction because index zero has the first-lane role. */
     for (i = 0; i < *num_lanes_p; ++i) {
@@ -493,8 +500,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         lane_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
 
         /* Keep only lanes whose local transport function is assigned. */
-        if (!ucp_gpu_nic_bitmap_get(params->assigned_nic_bitmap,
-                                    lane_sys_dev)) {
+        if (!ucp_gpu_nic_bitmap_get(assigned_nic_bitmap, lane_sys_dev)) {
             ucs_trace("assignment removes lane %d on network sys_dev %d", lane,
                       lane_sys_dev);
             continue;
@@ -863,6 +869,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_sys_device_t req_sys_dev    = init_params->select_param->sys_dev;
     ucp_lane_map_t queried_lane_map = 0;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
+    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
     ucp_proto_common_tl_perf_t perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_proto_lane_selection_t selection;
@@ -883,10 +890,15 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return status;
     }
 
-    /* Remove unassigned RMA_BW lanes before acquiring performance nodes. */
-    status = ucp_proto_multi_filter_gpu_nic_lanes(params, lanes, &num_lanes);
-    if (status != UCS_OK) {
-        return status;
+    assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(params);
+    if (assigned_nic_bitmap != NULL) {
+        /* Filter out lanes that are not on the assigned NICs. */
+        status = ucp_proto_multi_filter_gpu_nic_lanes(params,
+                                                      assigned_nic_bitmap,
+                                                      lanes, &num_lanes);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     status = ucp_proto_multi_query_lanes(params, lanes, num_lanes, lanes_perf,
@@ -901,9 +913,10 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                          fixed_first_lane, num_lanes,
                                                          lanes);
 
-    /* Assignment already determines the eligible devices. Use the stable
-     * first-max-bandwidth tie break on every greedy selection round. */
-    req_sys_dev_ord = (params->assigned_nic_bitmap == NULL) ?
+    /* The assignment replaces the device-ordinal heuristics. With enough
+     * rails the greedy selection uses every assigned lane, so ties can go
+     * to the first lane. */
+    req_sys_dev_ord = (assigned_nic_bitmap == NULL) ?
                               ucs_topo_sys_device_get_bdf_class_ordinal(
                                       req_sys_dev) :
                               UCS_SYS_DEVICE_ORDINAL_INVALID;
@@ -914,7 +927,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
 
     if (init_params->worker->context->config.ext.proto_use_single_net_device) {
-        if (params->assigned_nic_bitmap == NULL) {
+        if (assigned_nic_bitmap == NULL) {
             num_lanes = ucp_proto_multi_filter_single_net_device(
                     num_lanes, init_params, lanes_perf, fixed_first_lane,
                     req_sys_dev_ord, lanes);

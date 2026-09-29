@@ -132,9 +132,6 @@ typedef struct {
        to account for the overhead of registering on them */
     ucp_md_map_t                   initial_reg_md_map;
 
-    /* NIC system devices assigned to the resolved owner, or NULL if disabled */
-    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
-
     /* Offset in uct_iface_attr_t structure of the field which specifies the
      * optimal alignment for buffer address for the UCT operation used
      * by this protocol */
