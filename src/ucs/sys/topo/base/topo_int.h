@@ -9,7 +9,16 @@
 
 #include "topo.h"
 
+#include <ucs/datastruct/static_bitmap.h>
+
 BEGIN_C_DECLS
+
+
+/**
+ * Bitmap of system devices.
+ */
+typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT) ucs_sys_device_bitmap_t;
+
 
 /* Possible role of a current device wrt its sibling */
 typedef enum {

@@ -9,18 +9,10 @@
 
 #include <ucs/sys/topo/base/topo_int.h>
 #include <ucs/datastruct/array.h>
-#include <ucs/datastruct/static_bitmap.h>
 
 BEGIN_C_DECLS
 
 #define UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT 8
-
-
-/**
- * @ingroup UCS_RESOURCE
- * Bitmap of system devices.
- */
-typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT) ucs_sys_device_bitmap_t;
 
 
 /**
