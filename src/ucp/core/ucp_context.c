@@ -2842,7 +2842,7 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
 
 static ucs_status_t ucp_context_gpu_nic_assignment_init(
         ucp_gpu_nic_assignment_mode_t mode,
-        const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics,
+        const ucs_sys_device_bitmap_t *candidate_nics,
         ucp_gpu_nic_assignment_t **assignment_p)
 {
     ucp_gpu_nic_assignment_t *assignment;
@@ -2868,7 +2868,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
-    status = ucs_topo_build_groups(NULL, &groups);
+    status = ucs_topo_build_groups(candidate_nics, &groups);
     if (status != UCS_OK) {
         return status;
     }
@@ -2885,8 +2885,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(
         goto out_release_groups;
     }
 
-    status = ucp_gpu_nic_assignment_build(&groups, mode, candidate_nics,
-                                          assignment);
+    status = ucp_gpu_nic_assignment_build(&groups, mode, assignment);
     if (status != UCS_OK) {
         ucs_free(assignment);
         goto out_release_groups;

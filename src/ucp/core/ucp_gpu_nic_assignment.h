@@ -21,6 +21,10 @@ BEGIN_C_DECLS
 #define UCP_GPU_NIC_BITMAP_INDEX_INVALID UCS_SYS_DEVICE_ID_COUNT
 
 
+typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
+        ucp_gpu_nic_sys_dev_bitmap_t;
+
+
 struct ucp_gpu_nic_assignment {
     /* NIC sys_dev bitmaps referenced by bitmap_idx_by_gpu_sys_dev. */
     ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmaps;
@@ -39,11 +43,9 @@ struct ucp_gpu_nic_assignment {
  * @note The groups must be disjoint: each sys_dev may appear in at most one
  *       topology group.
  *
- * @param [in]  groups          Topology groups to build assignments from.
- * @param [in]  mode            Assignment mode: flip, round-robin or shared.
- * @param [in]  candidate_nics  Network sys_devs that may be assigned. A NIC is
- *                              assigned if any of its sys_devs is set.
- * @param [out] assignment_p    Completed assignment. Updated only on success.
+ * @param [in]  groups        Topology groups to build assignments from.
+ * @param [in]  mode          Assignment mode: flip, round-robin or shared.
+ * @param [out] assignment_p  Completed assignment. Updated only on success.
  *
  * @return UCS_OK on success, or an error status if assignment construction
  *         failed.
@@ -51,7 +53,6 @@ struct ucp_gpu_nic_assignment {
 ucs_status_t
 ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
                              ucp_gpu_nic_assignment_mode_t mode,
-                             const ucp_gpu_nic_sys_dev_bitmap_t *candidate_nics,
                              ucp_gpu_nic_assignment_t *assignment_p);
 
 
