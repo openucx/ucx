@@ -41,6 +41,20 @@ ucp_proto_multi_request_init(ucp_request_t *req)
     ucp_proto_multi_set_send_lane(req);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_multi_request_init_lane(ucp_request_t *req,
+                                  const ucp_proto_multi_priv_t *mpriv)
+{
+    ucp_ep_ext_t *ep_ext = req->send.ep->ext;
+
+    if (ucs_unlikely(ep_ext->next_multi_send_lane >= mpriv->num_lanes)) {
+        ep_ext->next_multi_send_lane = 0;
+    }
+
+    req->send.multi_lane_idx = ep_ext->next_multi_send_lane++;
+    ucp_proto_multi_set_send_lane(req);
+}
+
 static UCS_F_ALWAYS_INLINE uint32_t
 ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
 {

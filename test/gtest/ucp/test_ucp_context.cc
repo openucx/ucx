@@ -72,6 +72,16 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
     EXPECT_EQ(2u, ucp_reg_devices_count(e->ucph()->config.ext.max_hca_per_gpu));
 }
 
+UCS_TEST_P(test_ucp_context, max_lanes_inf_config)
+{
+    modify_config("MAX_RNDV_RAILS", "inf");
+    modify_config("MAX_RMA_RAILS", "inf");
+
+    entity *e = create_entity();
+    EXPECT_EQ(UCP_MAX_LANES, e->ucph()->config.ext.max_rndv_lanes);
+    EXPECT_EQ(UCP_MAX_LANES, e->ucph()->config.ext.max_rma_lanes);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
 
 class test_ucp_aliases : public test_ucp_context {
