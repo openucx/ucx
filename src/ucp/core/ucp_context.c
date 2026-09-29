@@ -1399,36 +1399,14 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     return UCS_OK;
 }
 
-static int
-ucp_tl_resources_has_dev_type(const uct_tl_resource_desc_t *resources,
-                              unsigned num_resources,
-                              uct_device_type_t dev_type)
-{
-    const uct_tl_resource_desc_t *resource;
-
-    ucs_carray_for_each(resource, resources, num_resources) {
-        if (resource->dev_type == dev_type) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 static void ucp_gpu_nic_candidates_add(ucp_context_h context,
                                        const ucp_tl_md_t *md,
                                        const uct_tl_resource_desc_t *resources,
                                        unsigned num_resources)
 {
-    const char *reject_reason = NULL;
+    const char *reject_reason  = NULL;
+    unsigned num_net_resources = 0;
     const uct_tl_resource_desc_t *resource;
-
-    if (!ucp_tl_resources_has_dev_type(resources, num_resources,
-                                       UCT_DEVICE_TYPE_NET)) {
-        ucs_trace("md %s does not have any network transports",
-                  md->rsc.md_name);
-        return;
-    }
 
     if (md->attr.flags & UCT_MD_FLAG_DPU) {
         reject_reason = "dpu";
@@ -1436,18 +1414,29 @@ static void ucp_gpu_nic_candidates_add(ucp_context_h context,
         reject_reason = "no memory registration";
     }
 
-    if (reject_reason != NULL) {
-        ucs_debug("md %s is not a gpu-nic assignment candidate: %s",
-                  md->rsc.md_name, reject_reason);
-        return;
-    }
-
     ucs_carray_for_each(resource, resources, num_resources) {
-        if ((resource->dev_type == UCT_DEVICE_TYPE_NET) &&
-            (resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
+            (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            continue;
+        }
+
+        ++num_net_resources;
+        if (reject_reason == NULL) {
             UCS_STATIC_BITMAP_SET(&context->gpu_nic_candidates,
                                   resource->sys_device);
         }
+    }
+
+    if (num_net_resources == 0) {
+        return;
+    }
+
+    if (reject_reason != NULL) {
+        ucs_debug("md %s is not a gpu-nic assignment candidate: %s",
+                  md->rsc.md_name, reject_reason);
+    } else {
+        ucs_trace("md %s added %u gpu-nic assignment candidate resources",
+                  md->rsc.md_name, num_net_resources);
     }
 }
 
