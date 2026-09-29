@@ -2312,7 +2312,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t **rkey_config_p;
-    unsigned rkey_cfg_idx;
+    unsigned dump_idx;
     ucp_rkey_config_t *rkey_config;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2331,9 +2331,9 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         /* Dump all rkey config keys */
         ucs_string_buffer_init(&log_strb);
 
-        ucs_array_for_each_index(rkey_config_p, rkey_cfg_idx,
+        ucs_array_for_each_index(rkey_config_p, dump_idx,
                                  &worker->rkey_config) {
-            ucs_string_buffer_appendf(&log_strb, "rkey [%u]: ", rkey_cfg_idx);
+            ucs_string_buffer_appendf(&log_strb, "rkey [%u]: ", dump_idx);
             ucp_worker_dump_rkey_config_key(&log_strb, &(*rkey_config_p)->key);
         }
 
@@ -2372,9 +2372,9 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                                         sizeof(buf)));
     }
 
-    rkey_config_p  = ucs_array_append(&worker->rkey_config,
-                                      status = UCS_ERR_NO_MEMORY;
-                                      goto err_free_rkey_config;);
+    rkey_config_p = ucp_worker_config_array_append(worker, &worker->rkey_config,
+                                                   status = UCS_ERR_NO_MEMORY;
+                                                   goto err_free_rkey_config;);
     *rkey_config_p = rkey_config;
 
     /* Save key-to-index lookup */
