@@ -12,7 +12,7 @@
 #include "proto_select.inl"
 
 #include <ucp/am/ucp_am.inl>
-#include <ucp/core/ucp_worker.inl>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/debug/table.h>

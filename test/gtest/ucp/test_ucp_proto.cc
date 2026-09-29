@@ -59,15 +59,11 @@ protected:
     static size_t count_rkey_configs_with_flag(ucp_worker_h worker,
                                                 uint8_t flag)
     {
-        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_rkey_config_t **rkey_config_p;
         size_t count = 0;
 
-        for (rkey_cfg_index = 0;
-             rkey_cfg_index < ucs_array_length(&worker->rkey_config);
-             ++rkey_cfg_index) {
-            count += !!(
-                    ucp_worker_rkey_config(worker, rkey_cfg_index)->key.flags &
-                    flag);
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            count += !!((*rkey_config_p)->key.flags & flag);
         }
 
         return count;

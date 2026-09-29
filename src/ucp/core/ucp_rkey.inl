@@ -37,11 +37,21 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
             rkey_config_key2.unreachable_md_map);
 }
 
+/**
+ * @return remote key configuration by configuration index
+ */
+static inline ucp_rkey_config_t *
+ucp_worker_rkey_config(ucp_worker_h worker,
+                       ucp_worker_cfg_index_t cfg_index)
+{
+    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return ucs_array_elem(&worker->rkey_config, cfg_index);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_rkey_config_t *
 ucp_rkey_config(ucp_worker_h worker, ucp_rkey_h rkey)
 {
-    ucs_assert(rkey->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
-    return ucs_array_elem(&worker->rkey_config, rkey->cfg_index);
+    return ucp_worker_rkey_config(worker, rkey->cfg_index);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rkey_t

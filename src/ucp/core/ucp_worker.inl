@@ -366,15 +366,4 @@ static inline ucp_ep_config_t
     return &ucs_array_elem(&worker->ep_config, cfg_index);
 }
 
-/**
- * @return remote key configuration by configuration index
- */
-static inline ucp_rkey_config_t
-*ucp_worker_rkey_config(ucp_worker_h worker,
-                        ucp_worker_cfg_index_t cfg_index)
-{
-    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
-    return ucs_array_elem(&worker->rkey_config, cfg_index);
-}
-
 #endif

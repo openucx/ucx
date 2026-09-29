@@ -297,10 +297,6 @@ struct ucp_worker_cm {
 UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
-/*
- * Store rkey configurations indirectly so their addresses remain stable when
- * protocol initialization adds configurations and grows the array.
- */
 UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t*);
 
 
