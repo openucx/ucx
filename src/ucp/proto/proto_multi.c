@@ -228,6 +228,10 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
                 "selected_sys_dev=%d num_max_bw_devs=%u seed=%u",
                 selected_sys_dev, num_max_bw_devs, seed);
 
+    ucs_trace("device-ordinal tie-break: bdf_ord %u num_max_bw_devs %u "
+              "seed %u -> sys_dev %d",
+              req_sys_dev_ord, num_max_bw_devs, seed, selected_sys_dev);
+
     tie_break = "device-ordinal";
 out:
     ucs_trace("max avail bw lane: proto %s num_selected %u tie-break %s "

@@ -628,7 +628,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
-   "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "for a GPU's memory (CUDA only) to the NICs assigned to that GPU.\n"
    "The first AM (active message) lane is not restricted, and\n"
    "UCX_SINGLE_NET_DEVICE is ignored for the restricted protocols.\n"
    "All ports of a NIC are assigned together.\n"
