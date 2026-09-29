@@ -22,8 +22,15 @@
 #include <ucs/sys/topo/base/topo.h>
 
 
+static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
+{
+    return (lane_type == UCP_LANE_TYPE_RMA_BW) ||
+           (lane_type == UCP_LANE_TYPE_AM_BW);
+}
+
 const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
-        const ucp_proto_multi_init_params_t *params)
+        const ucp_proto_multi_init_params_t *params,
+        ucs_sys_device_t *owner_gpu_sys_dev_p)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
@@ -31,13 +38,15 @@ const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
     const ucp_gpu_nic_sys_dev_bitmap_t *bitmap = NULL;
     const char *UCS_V_UNUSED owner_desc;
 
+    *owner_gpu_sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
+
     if (context->gpu_nic_assignment == NULL) {
         /* No assignment configured. */
         return NULL;
     }
 
-    if (params->middle.lane_type != UCP_LANE_TYPE_RMA_BW) {
-        owner_desc = "no RMA_BW lanes";
+    if (!ucp_proto_multi_lane_type_is_assignable(params->middle.lane_type)) {
+        owner_desc = "no RMA_BW or AM_BW lanes";
         goto out;
     }
 
@@ -64,6 +73,8 @@ const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
     bitmap     = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
                                                mem_info.sys_dev);
     owner_desc = (bitmap == NULL) ? "gpu has no assignment" : "assigned";
+
+    *owner_gpu_sys_dev_p = mem_info.sys_dev;
 
 out:
     ucs_trace("gpu-nic owner: proto %s mem %s sys_dev %d: %s",
@@ -485,13 +496,16 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
     return UCS_OK;
 }
 
-/* Apply the resolved assignment to discovered network RMA_BW candidates. */
+/* Apply the resolved assignment to discovered RMA_BW and AM_BW candidates. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         const ucp_proto_multi_init_params_t *params,
         const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap,
-        ucp_lane_index_t *lanes, ucp_lane_index_t *num_lanes_p)
+        ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
+        ucp_lane_index_t *num_lanes_p)
 {
-    ucp_lane_index_t num_filtered_lanes = 0;
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_lane_index_t num_filtered_lanes        = 0;
+    ucp_lane_index_t num_bulk_lanes_kept       = 0;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
@@ -501,14 +515,22 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         lane      = lanes[i];
         lane_type = (i == 0) ? params->first.lane_type :
                                params->middle.lane_type;
-        /* The assignment covers only NICs, e.g. cuda_ipc lanes are kept */
-        if ((lane_type != UCP_LANE_TYPE_RMA_BW) ||
-            !ucp_proto_common_is_net_dev(&params->super.super, lane)) {
+        if (lane_type == UCP_LANE_TYPE_AM) {
+            /* TODO: The first AM lane is selected by wireup per endpoint
+             * regardless of the buffer's GPU, and carries a share of the
+             * data. Restrict it as well. */
             lanes[num_filtered_lanes++] = lane;
             continue;
         }
 
-        lane_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
+        /* The assignment covers only NICs, e.g. cuda_ipc lanes are kept */
+        if (!ucp_proto_common_is_net_dev(init_params, lane)) {
+            lanes[num_filtered_lanes++] = lane;
+            ++num_bulk_lanes_kept;
+            continue;
+        }
+
+        lane_sys_dev = ucp_proto_common_get_sys_dev(init_params, lane);
 
         /* Keep only lanes whose local transport function is assigned. */
         if (!ucp_gpu_nic_bitmap_get(assigned_nic_bitmap, lane_sys_dev)) {
@@ -520,12 +542,23 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         ucs_trace("assignment keeps lane %d on network sys_dev %d", lane,
                   lane_sys_dev);
         lanes[num_filtered_lanes++] = lane;
+        ++num_bulk_lanes_kept;
+    }
+
+    /* Drop the protocol only if the assignment removed all its bulk lanes */
+    if ((num_bulk_lanes_kept == 0) && (num_filtered_lanes < *num_lanes_p)) {
+        ucs_debug("proto %s: no lane matches the assignment of gpu %s "
+                  "(sys_dev %d), dropping %u lanes",
+                  ucp_proto_id_field(init_params->proto_id, name),
+                  ucs_topo_sys_device_get_name(gpu_sys_dev), gpu_sys_dev,
+                  *num_lanes_p);
+        return UCS_ERR_NO_ELEM;
     }
 
     ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes,
               *num_lanes_p);
     *num_lanes_p = num_filtered_lanes;
-    return (num_filtered_lanes == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
+    return UCS_OK;
 }
 
 /* Get the performance and maximal bandwidth of all candidate lanes. */
@@ -881,6 +914,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_lane_map_t queried_lane_map = 0;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
+    ucs_sys_device_t owner_gpu_sys_dev;
     ucp_proto_common_tl_perf_t perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_proto_lane_selection_t selection;
@@ -901,12 +935,14 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return status;
     }
 
-    assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(params);
+    assigned_nic_bitmap =
+            ucp_proto_multi_get_assigned_nic_bitmap(params, &owner_gpu_sys_dev);
     if (assigned_nic_bitmap != NULL) {
         /* Filter out lanes that are not on the assigned NICs. */
         status = ucp_proto_multi_filter_gpu_nic_lanes(params,
                                                       assigned_nic_bitmap,
-                                                      lanes, &num_lanes);
+                                                      owner_gpu_sys_dev, lanes,
+                                                      &num_lanes);
         if (status != UCS_OK) {
             return status;
         }

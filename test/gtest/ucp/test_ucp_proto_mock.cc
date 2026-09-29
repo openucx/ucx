@@ -2868,6 +2868,7 @@ protected:
         ucp_proto_multi_init_params_t params          = {};
         ucp_proto_common_init_params_t *common_params = &params.super;
         ucp_proto_init_params_t *init_params          = &common_params->super;
+        ucs_sys_device_t gpu_sys_dev;
 
         init_params->worker                 = sender().worker();
         init_params->select_param           = &select_key.param;
@@ -2876,7 +2877,7 @@ protected:
         params.first.lane_type              = lane_type;
         params.middle.lane_type             = lane_type;
 
-        return ucp_proto_multi_get_assigned_nic_bitmap(&params);
+        return ucp_proto_multi_get_assigned_nic_bitmap(&params, &gpu_sys_dev);
     }
 
     ucp_proto_query_attr_t
@@ -3243,10 +3244,15 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
                 << test_case.name;
     }
 
+    EXPECT_EQ(expected_bitmap,
+              resolve_assignment(UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
+                                 UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
+                                 UCP_LANE_TYPE_AM_BW))
+            << "AM_BW lanes";
     EXPECT_EQ(nullptr, resolve_assignment(UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
                                           UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
-                                          UCP_LANE_TYPE_AM_BW))
-            << "AM_BW lanes";
+                                          UCP_LANE_TYPE_AM))
+            << "AM lanes only";
 
     context                     = sender().worker()->context;
     context->gpu_nic_assignment = nullptr;

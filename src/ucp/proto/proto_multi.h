@@ -191,7 +191,8 @@ void ucp_proto_multi_probe(const ucp_proto_multi_init_params_t *params);
 
 
 const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
-        const ucp_proto_multi_init_params_t *params);
+        const ucp_proto_multi_init_params_t *params,
+        ucs_sys_device_t *owner_gpu_sys_dev_p);
 
 
 void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
