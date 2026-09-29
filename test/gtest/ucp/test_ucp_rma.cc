@@ -430,6 +430,63 @@ UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
 
 
+static const char *gpu_nic_assignment_modes[] = {"flip", "round_robin",
+                                                 "shared"};
+
+class test_ucp_rma_gpu_nic : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        size_t mode;
+
+        /* The base flags stay clear: flush worker, no user memory handle */
+        for (mode = 0; mode < ucs_static_array_size(gpu_nic_assignment_modes);
+             ++mode) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA,
+                                   mode << MODE_SHIFT,
+                                   gpu_nic_assignment_modes[mode]);
+        }
+    }
+
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
+        modify_config(
+                "GPU_NIC_ASSIGNMENT_MODE",
+                gpu_nic_assignment_modes[get_variant_value() >> MODE_SHIFT]);
+        /* Enough lanes to use every NIC assigned to a GPU */
+        modify_config("MAX_RMA_LANES", "8");
+        test_ucp_rma::init();
+    }
+
+protected:
+    static constexpr int MODE_SHIFT = 2;
+
+    void test_cuda_mem_types(send_func_t send_func)
+    {
+        /* The assignment follows the local buffer, so it must be CUDA */
+        test_message_sizes(send_func, 128, 16 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA,
+                           UCS_MEMORY_TYPE_CUDA, 0);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, put_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, get_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+/* Network lanes only, since the assignment restricts only NIC lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_gpu_nic, rcx_cuda, "rc_x,cuda_copy")
+
+
 class test_ucp_rma_rndv : public test_ucp_rma {
 public:
     static constexpr size_t SIZE = 512 * UCS_KBYTE;
