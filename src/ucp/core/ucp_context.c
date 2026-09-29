@@ -2812,7 +2812,7 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
-    status = ucs_topo_build_groups(&groups);
+    status = ucs_topo_build_groups(NULL, &groups);
     if (status != UCS_OK) {
         return status;
     }

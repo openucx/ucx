@@ -205,12 +205,23 @@ protected:
         return expected_result;
     }
 
-    ucs_status_t build()
+    ucs_status_t
+    build(const ucs_sys_device_bitmap_t *allowed_net_devices = nullptr)
     {
         return ucs_topo_build_groups_inner(m_devices.data(),
                                            static_cast<unsigned>(
                                                    m_devices.size()),
-                                           &m_groups);
+                                           allowed_net_devices, &m_groups);
+    }
+
+    void expect_groups(const std::vector<numa_devices> &expected_groups)
+    {
+        ASSERT_EQ(expected_groups.size(), ucs_array_length(&m_groups));
+
+        for (size_t i = 0; i < expected_groups.size(); ++i) {
+            expect_group(ucs_array_elem(&m_groups, i), expected_groups[i].gpus,
+                         expected_groups[i].nics);
+        }
     }
 
     void expect_group(const ucs_topo_group_t &group,
@@ -257,13 +268,37 @@ UCS_TEST_F(test_topo_groups, vera_groups_by_numa) {
     const std::vector<numa_devices> expected_groups = add_vera_rubin_devices();
 
     ASSERT_UCS_OK(build());
+    expect_groups(expected_groups);
+}
 
-    ASSERT_EQ(expected_groups.size(), ucs_array_length(&m_groups));
+UCS_TEST_F(test_topo_groups, allowed_net_devices) {
+    std::vector<numa_devices> expected_groups = add_vera_rubin_devices();
+    ucs_sys_device_bitmap_t allowed_net_devices;
 
-    for (size_t i = 0; i < expected_groups.size(); ++i) {
-        expect_group(ucs_array_elem(&m_groups, i), expected_groups[i].gpus,
-                     expected_groups[i].nics);
+    /* Set the allowed network devices to all network devices */
+    UCS_STATIC_BITMAP_RESET_ALL(&allowed_net_devices);
+    for (const auto &group : expected_groups) {
+        for (const physical_device &nic : group.nics) {
+            for (const ucs_sys_device_t sys_dev : nic) {
+                UCS_STATIC_BITMAP_SET(&allowed_net_devices, sys_dev);
+            }
+        }
     }
+
+    /* Disallow all ports of a NIC */
+    auto &group0_nics = expected_groups[0].nics;
+    for (const ucs_sys_device_t sys_dev : group0_nics[1]) {
+        UCS_STATIC_BITMAP_RESET(&allowed_net_devices, sys_dev);
+    }
+    group0_nics.erase(group0_nics.begin() + 1);
+
+    /* Disallow one port of a NIC, the NIC keeps its other port */
+    physical_device &partial_nic = expected_groups[1].nics[0];
+    UCS_STATIC_BITMAP_RESET(&allowed_net_devices, partial_nic.back());
+    partial_nic.pop_back();
+
+    ASSERT_UCS_OK(build(&allowed_net_devices));
+    expect_groups(expected_groups);
 }
 
 UCS_TEST_F(test_topo_groups, undefined_numa_elements_are_skipped) {
