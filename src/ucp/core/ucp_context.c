@@ -1402,10 +1402,18 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
 
 static int
 ucp_groups_is_net_device_allowed(const ucp_tl_md_t *md,
-                                 const uct_tl_resource_desc_t *resource)
+                                 const uct_tl_resource_desc_t *resource,
+                                 uint8_t rsc_flags)
 {
     if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
         (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
+    }
+
+    if (rsc_flags & UCP_TL_RSC_FLAG_AUX) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is not allowed for gpu-nic assignment: auxiliary transport",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
         return 0;
     }
 
@@ -1515,7 +1523,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
             goto free_resources;
         }
 
-        if (ucp_groups_is_net_device_allowed(md, &tl_resources[i])) {
+        if (ucp_groups_is_net_device_allowed(md, &tl_resources[i], rsc_flags)) {
             UCS_STATIC_BITMAP_SET(allowed_net_devices,
                                   tl_resources[i].sys_device);
         }
