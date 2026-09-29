@@ -2859,7 +2859,6 @@ protected:
 
     const ucp_gpu_nic_sys_dev_bitmap_t *
     resolve_assignment(ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
-                       uct_ep_operation_t memtype_op,
                        ucs_memory_type_t reg_mem_type,
                        ucs_sys_device_t reg_mem_sys_dev,
                        ucp_lane_type_t lane_type = UCP_LANE_TYPE_RMA_BW)
@@ -2872,7 +2871,6 @@ protected:
 
         init_params->worker                 = sender().worker();
         init_params->select_param           = &select_key.param;
-        common_params->memtype_op           = memtype_op;
         common_params->reg_mem_info.type    = reg_mem_type;
         common_params->reg_mem_info.sys_dev = reg_mem_sys_dev;
         params.first.lane_type              = lane_type;
@@ -3203,35 +3201,32 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
         const char        *name;
         ucs_memory_type_t mem_type;
         ucs_sys_device_t  sys_dev;
-        bool              staged;
         ucs_memory_type_t reg_mem_type;
         ucs_sys_device_t  reg_sys_dev;
         bool              assigned;
     };
     const ucs_sys_device_t unknown = UCS_SYS_DEVICE_ID_UNKNOWN;
     const resolver_case cases[]    = {
-        {"application GPU", UCS_MEMORY_TYPE_CUDA, mapped_gpu(), false,
+        {"application GPU", UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
             UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true},
-        {"direct protocol ignores registration identity", UCS_MEMORY_TYPE_CUDA,
-            unmapped_gpu(), false, UCS_MEMORY_TYPE_CUDA, mapped_gpu(), false},
-        {"unregistered buffer", UCS_MEMORY_TYPE_CUDA, mapped_gpu(), false,
+        {"unregistered buffer", UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
             UCS_MEMORY_TYPE_UNKNOWN, unknown, false},
-        {"managed CUDA", UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(), false,
+        {"managed CUDA", UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(),
             UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(), false},
-        {"unknown device", UCS_MEMORY_TYPE_CUDA, unknown, false,
-            UCS_MEMORY_TYPE_CUDA, unknown, false},
-        {"unmapped GPU", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), false,
+        {"unknown device", UCS_MEMORY_TYPE_CUDA, unknown, UCS_MEMORY_TYPE_CUDA,
+            unknown, false},
+        {"unmapped GPU", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(),
             UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), false},
-        {"CUDA staging owner", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), true,
+        {"CUDA staging owner", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(),
             UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true},
         {"CUDA staging owner does not fall back", UCS_MEMORY_TYPE_CUDA,
-            mapped_gpu(), true, UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), false},
+            mapped_gpu(), UCS_MEMORY_TYPE_CUDA, unmapped_gpu(), false},
         {"host staging falls back to the application owner",
-            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true, UCS_MEMORY_TYPE_HOST,
-            unknown, true},
+            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), UCS_MEMORY_TYPE_HOST, unknown,
+            true},
         {"unknown staging device falls back to the application owner",
-            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true, UCS_MEMORY_TYPE_CUDA,
-            unknown, true}
+            UCS_MEMORY_TYPE_CUDA, mapped_gpu(), UCS_MEMORY_TYPE_CUDA, unknown,
+            true},
     };
     const ucp_gpu_nic_sys_dev_bitmap_t *expected_bitmap;
     ucp_context_h context;
@@ -3243,23 +3238,20 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
     for (const auto &test_case : cases) {
         EXPECT_EQ(test_case.assigned ? expected_bitmap : nullptr,
                   resolve_assignment(test_case.mem_type, test_case.sys_dev,
-                                     test_case.staged ? UCT_EP_OP_PUT_ZCOPY :
-                                                        UCT_EP_OP_LAST,
                                      test_case.reg_mem_type,
                                      test_case.reg_sys_dev))
                 << test_case.name;
     }
 
     EXPECT_EQ(nullptr, resolve_assignment(UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
-                                          UCT_EP_OP_LAST, UCS_MEMORY_TYPE_CUDA,
-                                          mapped_gpu(), UCP_LANE_TYPE_AM_BW))
+                                          UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
+                                          UCP_LANE_TYPE_AM_BW))
             << "AM_BW lanes";
 
     context                     = sender().worker()->context;
     context->gpu_nic_assignment = nullptr;
     EXPECT_EQ(nullptr, resolve_assignment(UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
-                                          UCT_EP_OP_LAST, UCS_MEMORY_TYPE_CUDA,
-                                          mapped_gpu()))
+                                          UCS_MEMORY_TYPE_CUDA, mapped_gpu()))
             << "NULL context assignment";
     context->gpu_nic_assignment = assignment();
 }

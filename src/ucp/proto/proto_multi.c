@@ -25,11 +25,11 @@
 const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         const ucp_proto_multi_init_params_t *params)
 {
-    const ucp_proto_common_init_params_t *common_params = &params->super;
-    const ucp_proto_init_params_t *init_params   = &common_params->super;
-    const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucp_context_h context = init_params->worker->context;
-    ucs_sys_device_t assignment_gpu_sys_dev;
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_context_h context                      = init_params->worker->context;
+    ucp_memory_info_t mem_info                 = params->super.reg_mem_info;
+    const ucp_gpu_nic_sys_dev_bitmap_t *bitmap = NULL;
+    const char *UCS_V_UNUSED owner_desc;
 
     if (context->gpu_nic_assignment == NULL) {
         /* No assignment configured. */
@@ -37,29 +37,40 @@ const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
     }
 
     if (params->middle.lane_type != UCP_LANE_TYPE_RMA_BW) {
-        /* The assignment restricts only RMA_BW lanes. */
-        return NULL;
+        owner_desc = "no RMA_BW lanes";
+        goto out;
     }
 
-    if (common_params->reg_mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) {
+    if (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) {
         /* Buffer is not registered (e.g. bcopy), so it has no NIC affinity. */
-        return NULL;
+        owner_desc = "unregistered buffer";
+        goto out;
     }
 
-    /* Use the staging buffer device if applicable, otherwise use the
-     * application buffer device if applicable. */
-    if ((common_params->memtype_op != UCT_EP_OP_LAST) &&
-        (common_params->reg_mem_info.type == UCS_MEMORY_TYPE_CUDA) &&
-        (common_params->reg_mem_info.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        assignment_gpu_sys_dev = common_params->reg_mem_info.sys_dev;
-    } else if (select_param->mem_type == UCS_MEMORY_TYPE_CUDA) {
-        assignment_gpu_sys_dev = select_param->sys_dev;
-    } else {
-        return NULL;
+    /* Use the staging buffer's device if applicable. A host staging buffer has
+     * no device, so fall back to the application buffer's device, to spread
+     * traffic across NICs anyway. */
+    if ((mem_info.type != UCS_MEMORY_TYPE_CUDA) ||
+        (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        mem_info = ucp_proto_common_select_param_mem_info(
+                init_params->select_param);
     }
 
-    return ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
-                                         assignment_gpu_sys_dev);
+    if (mem_info.type != UCS_MEMORY_TYPE_CUDA) {
+        owner_desc = "not cuda memory";
+        goto out;
+    }
+
+    bitmap     = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                               mem_info.sys_dev);
+    owner_desc = (bitmap == NULL) ? "gpu has no assignment" : "assigned";
+
+out:
+    ucs_trace("gpu-nic owner: proto %s mem %s sys_dev %d: %s",
+              ucp_proto_id_field(init_params->proto_id, name),
+              ucs_memory_type_names[mem_info.type], mem_info.sys_dev,
+              owner_desc);
+    return bitmap;
 }
 
 static UCS_F_ALWAYS_INLINE double
