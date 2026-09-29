@@ -2835,8 +2835,9 @@ protected:
                 ucs_malloc(sizeof(*assignment), "mock gpu-nic assignment"));
         ASSERT_NE(nullptr, assignment);
 
-        status = ucp_gpu_nic_assignment_build(
-                &groups, UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP, assignment);
+        status = ucp_gpu_nic_assignment_build(&groups,
+                                              UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+                                              assignment);
         if (status != UCS_OK) {
             ucs_free(assignment);
         }
@@ -3106,12 +3107,24 @@ private:
     const ucp_proto_select_elem_t *
     select_direct(const ucp_proto_select_param_t &select_param)
     {
-        const ucp_worker_cfg_index_t rkey_cfg_index = rkey_config_index();
-        ucp_worker_h worker                         = sender().worker();
+        const ucp_operation_id_t op_id = ucp_proto_select_op_id(&select_param);
+        ucp_worker_h worker            = sender().worker();
+        ucp_worker_cfg_index_t rkey_cfg_index;
         ucp_proto_select_t *proto_select;
+        ucp_ep_config_t *ep_config;
+        ucp_rkey_config_t *rkey_config;
 
-        proto_select = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index)
-                                .proto_select;
+        /* Send operations without a remote key use the endpoint table */
+        if ((op_id == UCP_OP_ID_TAG_SEND) || (op_id == UCP_OP_ID_AM_SEND)) {
+            ep_config = ucp_worker_ep_config(worker, ep_config_index(sender()));
+            rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+            proto_select   = &ep_config->proto_select;
+        } else {
+            rkey_cfg_index = rkey_config_index();
+            rkey_config = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+            proto_select = &rkey_config->proto_select;
+        }
+
         return ucp_proto_select_lookup_slow(worker, proto_select, 0,
                                             ep_config_index(sender()),
                                             rkey_cfg_index, &select_param);
@@ -3332,9 +3345,25 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
     EXPECT_EQ(sys_dev_set_t{nic(2)}, lane_map_sys_devs(attr.lane_map));
 }
 
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
+           full_assignment_skips_single_net_device, "SINGLE_NET_DEVICE=y")
+{
+    ucp_proto_query_attr_t attr;
+
+    install_assignment(mapped_gpu(), endpoint_nics());
+
+    expect_direct_candidates(mapped_gpu(), endpoint_nics());
+
+    /* Without an assignment, the filter keeps a single network device */
+    attr = query_protocol_candidate(UCP_OP_ID_PUT, UCS_MEMORY_TYPE_CUDA,
+                                    UCP_DATATYPE_CONTIG, unmapped_gpu(), 1,
+                                    "put/offload/zcopy");
+    EXPECT_EQ(1u, lane_map_sys_devs(attr.lane_map).size());
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic, rcx, "rc_x")
 
-class test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda :
+class test_ucp_proto_mock_rcx_gpu_nic_cuda :
     public test_ucp_proto_mock_rcx_gpu_nic {
 public:
     virtual void init() override
@@ -3347,7 +3376,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
            host_staging_falls_back_to_application_assignment, "RNDV_THRESH=1",
            "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K")
 {
@@ -3355,7 +3384,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
     expect_mtype_candidates(UCS_MEMORY_TYPE_CUDA, mapped_gpu(), {nic(2)});
 }
 
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
            cuda_staging_uses_staging_assignment, "RNDV_THRESH=1",
            "RNDV_FRAG_MEM_TYPES=cuda", "RNDV_FRAG_SIZE=cuda:8K")
 {
@@ -3367,8 +3396,92 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
                             UCS_SYS_DEVICE_ID_UNKNOWN, {nic(2)});
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_rndv_cuda,
-                              rcx_gpu, "rc_x,cuda,rocm")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_cuda, rcx_gpu,
+                              "rc_x,cuda,rocm")
+
+static const struct {
+    ucp_operation_id_t op_id;
+    const char         *name;
+} gpu_nic_am_bw_protocols[] = {{UCP_OP_ID_TAG_SEND, "egr/multi/zcopy"},
+                               {UCP_OP_ID_AM_SEND, "am/egr/multi/zcopy"},
+                               {UCP_OP_ID_RNDV_SEND, "rndv/am/zcopy"}};
+
+/* Eager protocols need a CUDA memory type endpoint for the receiver copy */
+class test_ucp_proto_mock_rcx_gpu_nic_am_bw :
+    public test_ucp_proto_mock_rcx_gpu_nic_cuda {
+public:
+    test_ucp_proto_mock_rcx_gpu_nic_am_bw()
+    {
+        /* Wireup creates AM_BW lanes only with more than one eager lane */
+        modify_config("MAX_EAGER_LANES", "3");
+    }
+
+protected:
+    ucs_sys_device_t am_lane_nic()
+    {
+        const ucp_ep_config_t *ep_config = ucp_worker_ep_config(
+                sender().worker(), ep_config_index(sender()));
+        const sys_dev_set_t sys_devs     = lane_map_sys_devs(
+                UCS_BIT(ep_config->key.am_lane));
+
+        EXPECT_EQ(1u, sys_devs.size());
+        return sys_devs.empty() ? UCS_SYS_DEVICE_ID_UNKNOWN : *sys_devs.begin();
+    }
+
+    ucs_sys_device_t non_am_lane_nic()
+    {
+        const ucs_sys_device_t am_nic = am_lane_nic();
+
+        for (auto nic_sys_dev : endpoint_nics()) {
+            if (nic_sys_dev != am_nic) {
+                return nic_sys_dev;
+            }
+        }
+
+        ADD_FAILURE() << "no NIC without the AM lane";
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    void expect_am_protocol_candidates(ucs_sys_device_t gpu_sys_dev,
+                                       const sys_dev_set_t &expected_nics)
+    {
+        for (const auto &proto : gpu_nic_am_bw_protocols) {
+            expect_protocol_candidates(proto.op_id, UCS_MEMORY_TYPE_CUDA,
+                                       UCP_DATATYPE_CONTIG, gpu_sys_dev, 1,
+                                       proto.name, expected_nics);
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
+           assignment_filters_am_bw_lanes, "RNDV_THRESH=1")
+{
+    const ucs_sys_device_t assigned_nic = non_am_lane_nic();
+
+    install_assignment(mapped_gpu(), {assigned_nic});
+
+    /* A GPU without an assignment uses the AM_BW lanes of every NIC */
+    expect_am_protocol_candidates(unmapped_gpu(), endpoint_nics());
+    /* The first AM lane is kept even though its NIC is not assigned */
+    expect_am_protocol_candidates(mapped_gpu(), {am_lane_nic(), assigned_nic});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
+           am_lane_only_assignment_rejects_am_protocols, "RNDV_THRESH=1")
+{
+    /* Only the AM lane's NIC is assigned, so every AM_BW lane is removed */
+    install_assignment(mapped_gpu(), {am_lane_nic()});
+
+    for (const auto &proto : gpu_nic_am_bw_protocols) {
+        EXPECT_FALSE(has_protocol_candidate(proto.op_id, UCS_MEMORY_TYPE_CUDA,
+                                            UCP_DATATYPE_CONTIG, mapped_gpu(),
+                                            1, proto.name))
+                << proto.name;
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_am_bw, rcx_gpu,
+                              "rc_x,cuda,rocm")
 
 class test_ucp_proto_mock_rcx_single_net_dev :
     protected test_ucp_proto_mock_scoped_acc_devices,
