@@ -113,9 +113,11 @@ protected:
     }
 
     void cleanup() override {
-        ucp_test::cleanup();
+        test_ucp_memheap::cleanup();
 
-        m_probe_mock = NULL;
+        m_probe_mock      = NULL;
+        m_probe_count     = 0;
+        m_held_probe_comp = NULL;
     }
 
     void set_am_handler() {
@@ -940,7 +942,6 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
     skip_unless_rc_probe_gate();
 
     ucs::mock mock;
-    m_probe_count = 0;
     mock_recovery_probe(sender().worker(), mock, recovery_probe_count);
 
     test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
@@ -952,7 +953,8 @@ UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
         short_progress_loop();
     });
 
-    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "failed lanes are not recovered";
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep))
+            << "failed lanes are not recovered";
     EXPECT_NE(0u, m_probe_count)
             << "RC p2p lane recovery completed without arming an aux probe";
 }
@@ -961,8 +963,6 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
            "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000")
 {
     skip_unless_rc_probe_gate();
-
-    m_held_probe_comp = NULL;
 
     ucs::mock mock;
     mock_recovery_probe(sender().worker(), mock, recovery_probe_hold);
