@@ -632,6 +632,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "The first AM (active message) lane is not restricted, and\n"
    "UCX_SINGLE_NET_DEVICE is ignored for the restricted protocols.\n"
    "All ports of a NIC are assigned together.\n"
+   "NICs excluded by UCX_NET_DEVICES or UCX_TLS are ignored.\n"
    "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
    "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
    "some GPUs without any NICs.\n"
@@ -2785,15 +2786,33 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
-static ucs_status_t
-ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
-                                    ucp_gpu_nic_assignment_t **assignment_p)
+/* Resources left after resource selection, e.g. by UCX_NET_DEVICES, are the
+ * only ones that can carry the lanes of an assigned GPU */
+static ucs_sys_device_bitmap_t
+ucp_context_get_groups_allowed_net_devices(ucp_context_h context)
 {
+    ucs_sys_device_bitmap_t allowed_net_devices =
+            UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+        if ((rsc->tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) &&
+            (rsc->tl_rsc.sys_device != UCS_SYS_DEVICE_ID_UNKNOWN)) {
+            UCS_STATIC_BITMAP_SET(&allowed_net_devices, rsc->tl_rsc.sys_device);
+        }
+    }
+
+    return allowed_net_devices;
+}
+
+static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
+{
+    ucp_gpu_nic_assignment_mode_t mode =
+            context->config.ext.gpu_nic_assignment_mode;
+    ucs_sys_device_bitmap_t allowed_net_devices;
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
     ucs_status_t status;
-
-    *assignment_p = NULL;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
         /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
@@ -2812,7 +2831,8 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
-    status = ucs_topo_build_groups(NULL, &groups);
+    allowed_net_devices = ucp_context_get_groups_allowed_net_devices(context);
+    status              = ucs_topo_build_groups(&allowed_net_devices, &groups);
     if (status != UCS_OK) {
         return status;
     }
@@ -2835,22 +2855,21 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
         goto out_release_groups;
     }
 
-    *assignment_p = assignment;
+    context->gpu_nic_assignment = assignment;
 
 out_release_groups:
     ucs_topo_release_groups(&groups);
     return status;
 }
 
-static void
-ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
+static void ucp_context_gpu_nic_assignment_cleanup(ucp_context_h context)
 {
-    if (assignment == NULL) {
+    if (context->gpu_nic_assignment == NULL) {
         return;
     }
 
-    ucp_gpu_nic_assignment_release(assignment);
-    ucs_free(assignment);
+    ucp_gpu_nic_assignment_release(context->gpu_nic_assignment);
+    ucs_free(context->gpu_nic_assignment);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
@@ -2896,9 +2915,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
-    status = ucp_context_gpu_nic_assignment_init(
-            context->config.ext.gpu_nic_assignment_mode,
-            &context->gpu_nic_assignment);
+    status = ucp_context_gpu_nic_assignment_init(context);
     if (status != UCS_OK) {
         goto err_free_res;
     }
@@ -2945,7 +2962,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     return UCS_OK;
 
 err_cleanup_gpu_nic_assignment:
-    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
+    ucp_context_gpu_nic_assignment_cleanup(context);
 err_free_res:
     ucp_free_resources(context);
 err_thread_lock_finalize:
@@ -2965,7 +2982,7 @@ void ucp_cleanup(ucp_context_h context)
 {
     ucs_vfs_obj_remove(context);
     ucp_mem_rcache_cleanup(context);
-    ucp_context_gpu_nic_assignment_cleanup(context->gpu_nic_assignment);
+    ucp_context_gpu_nic_assignment_cleanup(context);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
