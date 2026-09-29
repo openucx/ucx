@@ -873,6 +873,31 @@ uct_rc_mlx5_wqe_inline_seg(const uct_ib_mlx5_txwq_t *txwq, const void *seg,
     return UCS_OK;
 }
 
+static const struct mlx5_wqe_raddr_seg *
+uct_rc_mlx5_wqe_rma_raddr_seg(const uct_ib_mlx5_txwq_t       *txwq,
+                              const struct mlx5_wqe_ctrl_seg *ctrl,
+                              size_t wqe_size, size_t *dseg_size_p)
+{
+    ucs_assert(wqe_size >= sizeof(*ctrl) + sizeof(struct mlx5_wqe_raddr_seg));
+
+    *dseg_size_p = wqe_size - sizeof(*ctrl) - sizeof(struct mlx5_wqe_raddr_seg);
+    return uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
+}
+
+static const struct mlx5_wqe_data_seg *
+uct_rc_mlx5_wqe_rma_data_segs(const uct_ib_mlx5_txwq_t        *txwq,
+                              const struct mlx5_wqe_raddr_seg *raddr,
+                              size_t dseg_size, size_t *num_dseg_p)
+{
+    const struct mlx5_wqe_data_seg *dptr =
+            uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
+
+    ucs_assert((dseg_size % sizeof(*dptr)) == 0);
+
+    *num_dseg_p = dseg_size / sizeof(*dptr);
+    return dptr;
+}
+
 static int uct_rc_mlx5_send_op_is_flush(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == uct_rc_ep_flush_op_completion_handler;
@@ -1157,10 +1182,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     uct_rc_iface_send_op_t *op;
     size_t dseg_size, inline_length, num_dseg;
 
-    ucs_assert(wqe_size >= sizeof(*ctrl) + sizeof(struct mlx5_wqe_raddr_seg));
-    dseg_size = wqe_size - sizeof(*ctrl) - sizeof(struct mlx5_wqe_raddr_seg);
-
-    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
+    raddr = uct_rc_mlx5_wqe_rma_raddr_seg(txwq, ctrl, wqe_size, &dseg_size);
     op    = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
 
     if ((op != NULL) && uct_rc_mlx5_send_op_is_ep_check(op)) {
@@ -1181,15 +1203,14 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
         return UCS_OK;
     }
 
-    dptr = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
     if ((op != NULL) && uct_rc_mlx5_send_op_is_put_bcopy(op)) {
+        dptr = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
         uct_rc_mlx5_op_info_fill_put_bcopy(op, raddr, dptr, info);
         return UCS_OK;
     }
 
     if ((op == NULL) || uct_rc_mlx5_send_op_is_put_zcopy(op)) {
-        ucs_assert((dseg_size % sizeof(*dptr)) == 0);
-        num_dseg = dseg_size / sizeof(*dptr);
+        dptr = uct_rc_mlx5_wqe_rma_data_segs(txwq, raddr, dseg_size, &num_dseg);
         uct_rc_mlx5_op_info_fill_rma_zcopy(UCT_EP_OP_PUT_ZCOPY, txwq, op, raddr,
                                            dptr, num_dseg, callback_data, info);
         return UCS_OK;
@@ -1234,16 +1255,12 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
         const struct mlx5_wqe_ctrl_seg *ctrl, size_t wqe_size,
         uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
 {
-    const size_t header_size = sizeof(*ctrl) +
-                               sizeof(struct mlx5_wqe_raddr_seg);
     const struct mlx5_wqe_raddr_seg *raddr;
     const struct mlx5_wqe_data_seg *dptr;
     uct_rc_iface_send_op_t *op;
-    size_t num_dseg;
+    size_t dseg_size, num_dseg;
 
-    ucs_assert(wqe_size >= header_size);
-
-    raddr = uct_ib_mlx5_txwq_wrap_any_const(txwq, ctrl + 1);
+    raddr = uct_rc_mlx5_wqe_rma_raddr_seg(txwq, ctrl, wqe_size, &dseg_size);
     op    = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
     if ((op != NULL) && uct_rc_mlx5_send_op_is_get_bcopy(op)) {
         uct_rc_mlx5_op_info_fill_get_bcopy(op, raddr, info);
@@ -1251,8 +1268,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
     }
 
     if ((op == NULL) || uct_rc_mlx5_send_op_is_get_zcopy(op)) {
-        dptr     = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-        num_dseg = (wqe_size - header_size) / sizeof(*dptr);
+        dptr = uct_rc_mlx5_wqe_rma_data_segs(txwq, raddr, dseg_size, &num_dseg);
         uct_rc_mlx5_op_info_fill_rma_zcopy(UCT_EP_OP_GET_ZCOPY, txwq, op, raddr,
                                            dptr, num_dseg, callback_data, info);
         return UCS_OK;
@@ -1300,7 +1316,13 @@ static int uct_ib_mlx5_wqe_is_delivered(const struct mlx5_wqe_ctrl_seg *ctrl,
 
     ucs_assert(num_packets > 0);
 
-    /* RDMA read is not delivered if has an error CQE */
+    /*
+     * receiver_next_psn only proves the read request was accepted by the
+     * responder. The response data travels in the opposite direction,
+     * and only a successful completion proves it reached the local buffer.
+     * Report the read as undelivered so the caller does not consume
+     * indeterminate buffer contents.
+     */
     if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_RDMA_READ) {
         return 0;
     }
