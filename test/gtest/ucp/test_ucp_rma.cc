@@ -1699,27 +1699,80 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 
 
+class test_ucp_rma_bw : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    test_ucp_rma_bw()
+    {
+        modify_config("RMA_BW_MEASURE", "y");
+        modify_config("ZCOPY_THRESH", "0");
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_bw, put_get_enabled)
+{
+    constexpr size_t size = 512 * UCS_KBYTE;
+    mem_buffer sendbuf(size, UCS_MEMORY_TYPE_HOST);
+    mem_buffer recvbuf(size, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer rbuf(size, receiver());
+    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+    ucp_request_param_t param    = {0};
+
+    mem_buffer::pattern_fill(sendbuf.ptr(), size, ucs::rand());
+    ASSERT_UCS_OK(request_wait(ucp_put_nbx(
+            sender().ep(), sendbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey,
+            &param)));
+    flush_ep(sender());
+    ASSERT_TRUE(mem_buffer::compare(sendbuf.ptr(), rbuf.ptr(), size,
+                                    UCS_MEMORY_TYPE_HOST));
+
+    ASSERT_UCS_OK(request_wait(ucp_get_nbx(
+            sender().ep(), recvbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey,
+            &param)));
+    ASSERT_TRUE(mem_buffer::compare(sendbuf.ptr(), recvbuf.ptr(), size,
+                                    UCS_MEMORY_TYPE_HOST));
+    EXPECT_EQ(0u, sender().worker()->rma_bw_active);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_bw, all, "all")
+
+
 extern "C" int ucp_rma_bw_test_async_sync_retry(void);
 extern "C" int ucp_rma_bw_test_abort(void);
 extern "C" int ucp_rma_bw_test_frag_cap(void);
 extern "C" int ucp_rma_bw_test_transport_error(void);
+extern "C" int ucp_rma_bw_test_detach_pending(void);
+extern "C" int ucp_rma_bw_test_admission(void);
 
-TEST(test_ucp_rma_bw, async_sync_retry)
+TEST(test_ucp_rma_bw_helpers, async_sync_retry)
 {
     EXPECT_EQ(0, ucp_rma_bw_test_async_sync_retry());
 }
 
-TEST(test_ucp_rma_bw, abort)
+TEST(test_ucp_rma_bw_helpers, abort)
 {
     EXPECT_EQ(0, ucp_rma_bw_test_abort());
 }
 
-TEST(test_ucp_rma_bw, frag_cap)
+TEST(test_ucp_rma_bw_helpers, frag_cap)
 {
     EXPECT_EQ(0, ucp_rma_bw_test_frag_cap());
 }
 
-TEST(test_ucp_rma_bw, transport_error_out_of_order)
+TEST(test_ucp_rma_bw_helpers, transport_error_out_of_order)
 {
     EXPECT_EQ(0, ucp_rma_bw_test_transport_error());
+}
+
+TEST(test_ucp_rma_bw_helpers, detach_pending)
+{
+    EXPECT_EQ(0, ucp_rma_bw_test_detach_pending());
+}
+
+TEST(test_ucp_rma_bw_helpers, admission)
+{
+    EXPECT_EQ(0, ucp_rma_bw_test_admission());
 }

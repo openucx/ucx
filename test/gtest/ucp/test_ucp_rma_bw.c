@@ -9,6 +9,7 @@
 #endif
 
 #include <ucp/rma/rma_bw.inl>
+#include <stdlib.h>
 
 #define RMA_BW_CHECK(_cond) do { if (!(_cond)) return __LINE__; } while (0)
 
@@ -134,5 +135,84 @@ int ucp_rma_bw_test_transport_error(void)
     ucp_invoke_uct_completion(comp0, UCS_OK);
     RMA_BW_CHECK(completed == 1);
     RMA_BW_CHECK(req.send.state.uct_comp.status == UCS_ERR_IO_ERROR);
+    return 0;
+}
+
+int ucp_rma_bw_test_detach_pending(void)
+{
+    ucp_request_t req;
+    ucp_rma_bw_sample_t sample;
+    ucp_rma_bw_frag_t *frag;
+    ucp_worker_t worker;
+    uct_completion_t *comp;
+    int completed;
+
+    memset(&worker, 0, sizeof(worker));
+    ucp_rma_bw_test_init(&req, &sample, &completed);
+    sample.worker        = &worker;
+    sample.in_use        = 1;
+    worker.rma_bw_active = 1;
+    comp = ucp_rma_bw_frag_start(&req, 0, &frag);
+    ucp_rma_bw_frag_posted(frag, 4096, UCS_INPROGRESS);
+    ++req.send.state.uct_comp.count;
+
+    ucp_rma_bw_sample_detach(&req);
+    RMA_BW_CHECK(!(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE));
+    RMA_BW_CHECK(req.send.rma.bw_sample == NULL);
+    RMA_BW_CHECK(sample.in_use);
+    RMA_BW_CHECK(worker.rma_bw_active == 1);
+
+    ucp_invoke_uct_completion(comp, UCS_OK);
+    RMA_BW_CHECK(completed == 0);
+    RMA_BW_CHECK(!sample.in_use);
+    RMA_BW_CHECK(worker.rma_bw_active == 0);
+    return 0;
+}
+
+int ucp_rma_bw_test_admission(void)
+{
+    static ucp_context_t context;
+    static ucp_worker_t worker;
+    ucp_rma_bw_sample_t *samples;
+    ucp_proto_multi_priv_t mpriv = {0};
+    ucp_request_t req            = {0};
+    ucp_ep_t ep                  = {0};
+
+    memset(&context, 0, sizeof(context));
+    memset(&worker, 0, sizeof(worker));
+    samples = calloc(UCP_RMA_BW_MAX_ACTIVE, sizeof(*samples));
+    RMA_BW_CHECK(samples != NULL);
+
+    context.config.ext.rma_bw_measure = 1;
+    worker.context                    = &context;
+    worker.rma_bw_samples             = samples;
+    ep.worker                         = &worker;
+    req.send.ep                       = &ep;
+    mpriv.num_lanes                   = 2;
+    req.send.state.dt_iter.length     = UCP_RMA_BW_MIN_LENGTH - 1;
+
+    ucp_rma_bw_sample_start(&req, &mpriv);
+    RMA_BW_CHECK(!(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE));
+
+    req.send.state.dt_iter.length = UCP_RMA_BW_MIN_LENGTH;
+    mpriv.num_lanes               = 1;
+    ucp_rma_bw_sample_start(&req, &mpriv);
+    RMA_BW_CHECK(!(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE));
+
+    mpriv.num_lanes             = 2;
+    worker.rma_bw_next_sample   = ucs_get_time() + ucs_time_from_sec(60);
+    ucp_rma_bw_sample_start(&req, &mpriv);
+    RMA_BW_CHECK(!(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE));
+
+    worker.rma_bw_next_sample = 0;
+    ucp_rma_bw_sample_start(&req, &mpriv);
+    RMA_BW_CHECK(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE);
+    RMA_BW_CHECK(worker.rma_bw_active == 1);
+    ucp_rma_bw_sample_detach(&req);
+    RMA_BW_CHECK(worker.rma_bw_active == 0);
+
+    ucp_rma_bw_sample_start(&req, &mpriv);
+    RMA_BW_CHECK(!(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE));
+    free(samples);
     return 0;
 }

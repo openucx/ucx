@@ -309,16 +309,23 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
         ucp_rma_bw_sample_start(req, mpriv);
     }
 
+    if (req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE) {
+        /* coverity[tainted_data_downcast] */
+        return ucp_proto_multi_zcopy_progress(
+                req, mpriv, ucp_proto_multi_rma_init_func,
+                UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
+                ucp_proto_put_offload_zcopy_sampled_send_func,
+                ucp_request_invoke_uct_completion_success,
+                ucp_rma_bw_sample_complete);
+    }
+
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, mpriv, ucp_proto_multi_rma_init_func,
             UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
-            (req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE) ?
-            ucp_proto_put_offload_zcopy_sampled_send_func :
             ucp_proto_put_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
-            (req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE) ?
-            ucp_rma_bw_sample_complete : ucp_proto_request_zcopy_completion);
+            ucp_proto_request_zcopy_completion);
 }
 
 static void
@@ -379,6 +386,12 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
             init_params, 30, UCP_PROTO_COMMON_INIT_FLAG_FAILOVER, 0);
 }
 
+static ucs_status_t ucp_proto_put_offload_zcopy_reset(ucp_request_t *req)
+{
+    ucp_rma_bw_sample_detach(req);
+    return ucp_proto_offload_zcopy_reset(req);
+}
+
 ucp_proto_t ucp_put_offload_zcopy_proto = {
     .name           = "put/offload/zcopy",
     .desc           = UCP_PROTO_ZCOPY_DESC,
@@ -389,7 +402,7 @@ ucp_proto_t ucp_put_offload_zcopy_proto = {
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_put_offload_zcopy_progress},
     .abort          = ucp_rma_bw_abort,
-    .reset          = ucp_proto_offload_zcopy_reset
+    .reset          = ucp_proto_put_offload_zcopy_reset
 };
 
 static void

@@ -7,41 +7,11 @@
 #ifndef UCP_RMA_BW_INL_
 #define UCP_RMA_BW_INL_
 
+#include "rma_bw.h"
+
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_multi.h>
-#include <ucs/debug/memtrack_int.h>
-
-/* The first measurement stage records completed payload throughput only. */
-#define UCP_RMA_BW_MAX_FRAGS      128
-#define UCP_RMA_BW_MAX_ACTIVE     4
-#define UCP_RMA_BW_MIN_LENGTH     (256 * UCS_KBYTE)
-
-typedef struct ucp_rma_bw_sample ucp_rma_bw_sample_t;
-
-typedef struct {
-    uct_completion_t    comp;
-    ucp_rma_bw_sample_t *sample;
-    ucs_time_t          post_time;
-    uint8_t             lane_idx;
-} ucp_rma_bw_frag_t;
-
-typedef struct {
-    size_t     bytes;
-    ucs_time_t first_post;
-    ucs_time_t last_comp;
-    unsigned   num_frags;
-    unsigned   num_async;
-} ucp_rma_bw_lane_t;
-
-struct ucp_rma_bw_sample {
-    ucp_request_t     *req;
-    ucp_worker_h      worker;
-    unsigned          num_frags;
-    unsigned          invalid;
-    ucp_rma_bw_lane_t lanes[2];
-    ucp_rma_bw_frag_t frags[UCP_RMA_BW_MAX_FRAGS];
-};
 
 static UCS_F_ALWAYS_INLINE ucp_rma_bw_sample_t *
 ucp_rma_bw_sample_get(ucp_request_t *req)
@@ -66,20 +36,19 @@ ucp_rma_bw_sample_complete(uct_completion_t *comp)
             (lane1->last_comp > lane1->first_post) &&
             (lane0->num_async != 0) && (lane1->num_async != 0);
     if (valid) {
-        ++sample->worker->rma_bw_valid;
         ucs_trace("rma bw sample req %p: lane0 %zu bytes / %.3f us, "
                   "lane1 %zu bytes / %.3f us", req, lane0->bytes,
                   ucs_time_to_sec(lane0->last_comp - lane0->first_post) * 1e6,
                   lane1->bytes,
                   ucs_time_to_sec(lane1->last_comp - lane1->first_post) * 1e6);
-    } else {
-        ++sample->worker->rma_bw_rejected;
     }
 
-    --sample->worker->rma_bw_active;
-    req->flags &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
+    req->flags             &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
     req->send.rma.bw_sample = NULL;
-    ucs_free(sample);
+    sample->req             = NULL;
+    ucs_assert(sample->pending == 0);
+    sample->in_use          = 0;
+    --sample->worker->rma_bw_active;
     ucp_proto_request_zcopy_complete(req, comp->status);
 }
 
@@ -91,6 +60,16 @@ static void ucp_rma_bw_frag_complete(uct_completion_t *comp)
 
     lane->last_comp = ucs_get_time();
     sample->invalid |= (comp->status != UCS_OK);
+    ucs_assert(sample->pending > 0);
+    --sample->pending;
+    if (sample->req == NULL) {
+        if (sample->pending == 0) {
+            sample->in_use = 0;
+            --sample->worker->rma_bw_active;
+        }
+        return;
+    }
+
     ucp_invoke_uct_completion(&sample->req->send.state.uct_comp, comp->status);
 }
 
@@ -101,6 +80,7 @@ ucp_rma_bw_sample_start(ucp_request_t *req,
     ucp_worker_h worker = req->send.ep->worker;
     ucp_rma_bw_sample_t *sample;
     ucs_time_t now;
+    unsigned i;
 
     if (ucs_likely(!worker->context->config.ext.rma_bw_measure) ||
         (mpriv->num_lanes != 2) ||
@@ -114,12 +94,16 @@ ucp_rma_bw_sample_start(ucp_request_t *req,
         return;
     }
 
-    sample = ucs_malloc(sizeof(*sample), "rma_bw_sample");
-    if (sample == NULL) {
-        return;
+    for (i = 0; i < UCP_RMA_BW_MAX_ACTIVE; ++i) {
+        sample = &worker->rma_bw_samples[i];
+        if (!sample->in_use) {
+            break;
+        }
     }
+    ucs_assert(i < UCP_RMA_BW_MAX_ACTIVE);
 
     memset(sample, 0, sizeof(*sample));
+    sample->in_use              = 1;
     sample->req                  = req;
     sample->worker               = worker;
     req->send.rma.bw_sample      = sample;
@@ -145,10 +129,10 @@ ucp_rma_bw_frag_start(ucp_request_t *req, ucp_lane_index_t lane_idx,
         return &req->send.state.uct_comp;
     }
 
-    frag            = &sample->frags[sample->num_frags];
-    frag->sample    = sample;
-    frag->lane_idx  = lane_idx;
-    frag->post_time = ucs_get_time();
+    frag              = &sample->frags[sample->num_frags];
+    frag->sample      = sample;
+    frag->lane_idx    = lane_idx;
+    frag->post_time   = ucs_get_time();
     frag->comp.func   = ucp_rma_bw_frag_complete;
     frag->comp.count  = 1;
     frag->comp.status = UCS_OK;
@@ -180,8 +164,28 @@ ucp_rma_bw_frag_posted(ucp_rma_bw_frag_t *frag, size_t bytes,
     if (status == UCS_INPROGRESS) {
         ++lane->num_async;
         ++sample->num_frags;
+        ++sample->pending;
     } else if (now > lane->last_comp) {
         lane->last_comp = now;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_rma_bw_sample_detach(ucp_request_t *req)
+{
+    ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
+
+    if (sample == NULL) {
+        return;
+    }
+
+    sample->invalid          = 1;
+    sample->req              = NULL;
+    req->flags              &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
+    req->send.rma.bw_sample  = NULL;
+    if (sample->pending == 0) {
+        sample->in_use = 0;
+        --sample->worker->rma_bw_active;
     }
 }
 

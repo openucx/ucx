@@ -314,10 +314,9 @@ typedef struct ucp_worker {
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
-    ucs_time_t                       rma_bw_next_sample;  /* Next sample admission */
-    unsigned                         rma_bw_active;       /* Active RMA samples */
-    uint64_t                         rma_bw_valid;        /* Valid RMA samples */
-    uint64_t                         rma_bw_rejected;     /* Rejected RMA samples */
+    struct ucp_rma_bw_sample        *rma_bw_samples;     /* Bounded sample pool */
+    ucs_time_t                       rma_bw_next_sample; /* Next sample admission */
+    unsigned                         rma_bw_active;      /* Occupied sample slots */
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
