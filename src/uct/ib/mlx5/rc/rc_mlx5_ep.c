@@ -24,12 +24,17 @@
 #include "rc_mlx5.inl"
 
 
+#define UCT_RC_MLX5_OP_CALLBACK_MAX_IOV \
+    ((UCT_RC_MLX5_RMA_MAX_IOV(0) > UCT_IB_MLX5_AM_ZCOPY_MAX_IOV) ? \
+             UCT_RC_MLX5_RMA_MAX_IOV(0) : \
+             UCT_IB_MLX5_AM_ZCOPY_MAX_IOV)
+
 typedef struct {
     /* Copied inline payload of AM and PUT operations */
     uint8_t      data[UCT_IB_MLX5_MAX_SEND_WQE_SIZE];
     /* Reconstructed IOV of zcopy operations */
-    uct_iov_t    iov[UCT_RC_MLX5_RMA_MAX_IOV(0)];
-    uct_ib_mem_t memh[UCT_RC_MLX5_RMA_MAX_IOV(0)];
+    uct_iov_t    iov[UCT_RC_MLX5_OP_CALLBACK_MAX_IOV];
+    uct_ib_mem_t memh[UCT_RC_MLX5_OP_CALLBACK_MAX_IOV];
 } uct_rc_mlx5_op_callback_data_t;
 
 static ucs_status_t
@@ -869,6 +874,40 @@ uct_rc_mlx5_wqe_inline_seg(const uct_ib_mlx5_txwq_t *txwq, const void *seg,
     return UCS_OK;
 }
 
+static void uct_rc_mlx5_wqe_am_segs(const uct_ib_mlx5_txwq_t *txwq,
+                                    const struct mlx5_wqe_ctrl_seg *ctrl,
+                                    size_t wqe_size,
+                                    const struct mlx5_wqe_inl_data_seg **inl_p,
+                                    size_t *inline_length_p,
+                                    const struct mlx5_wqe_data_seg **dptr_p,
+                                    size_t *num_dseg_p)
+{
+    const struct mlx5_wqe_inl_data_seg *inl;
+    const struct mlx5_wqe_data_seg *dptr;
+    size_t inline_length, inline_seg_size, dseg_size;
+
+    if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) !=
+        UCS_OK) {
+        ucs_fatal("rc mlx5: am wqe without inline seg wqe_size %zu", wqe_size);
+    }
+
+    inline_seg_size = ucs_align_up_pow2(sizeof(*inl) + inline_length,
+                                        UCT_IB_MLX5_WQE_SEG_SIZE);
+    ucs_assertv_always(wqe_size >= (sizeof(*ctrl) + inline_seg_size),
+                       "wqe_size=%zu inline_seg_size=%zu", wqe_size,
+                       inline_seg_size);
+
+    dseg_size = wqe_size - sizeof(*ctrl) - inline_seg_size;
+    ucs_assertv_always((dseg_size % sizeof(*dptr)) == 0,
+                       "invalid am zcopy WQE size %zu", wqe_size);
+
+    *inl_p           = inl;
+    *inline_length_p = inline_length;
+    *dptr_p          = uct_ib_mlx5_txwq_wrap_any_const(
+            txwq, UCS_PTR_BYTE_OFFSET(inl, inline_seg_size));
+    *num_dseg_p      = dseg_size / sizeof(*dptr);
+}
+
 static int uct_rc_mlx5_send_op_is_flush(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == uct_rc_ep_flush_op_completion_handler;
@@ -1055,32 +1094,21 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_am(
     const struct mlx5_wqe_inl_data_seg *inl;
     const struct mlx5_wqe_data_seg *dptr;
     uct_rc_iface_send_op_t *op;
-    size_t inline_length, inline_seg_size, num_dseg;
+    size_t inline_length, num_dseg;
 
     ucs_assert(uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_SEND);
 
-    if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) !=
-        UCS_OK) {
-        ucs_fatal("rc mlx5: am wqe without inline seg pi %u wqe_size %zu", pi,
-                  wqe_size);
-    }
-
-    inline_seg_size = ucs_align_up_pow2(sizeof(*inl) + inline_length,
-                                        UCT_IB_MLX5_WQE_SEG_SIZE);
-    ucs_assert(wqe_size >= (sizeof(*ctrl) + inline_seg_size));
+    uct_rc_mlx5_wqe_am_segs(txwq, ctrl, wqe_size, &inl, &inline_length, &dptr,
+                            &num_dseg);
 
     op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
-    if ((op == NULL) && (wqe_size == (sizeof(*ctrl) + inline_seg_size))) {
+    if ((op == NULL) && (num_dseg == 0)) {
+        /* AM short is fully inline */
         return uct_rc_mlx5_op_info_fill_am_short(txwq, inl, inline_length,
                                                  callback_data->data, info);
     }
 
     if ((op == NULL) || uct_rc_mlx5_send_op_is_am_zcopy(op)) {
-        ucs_assert(((wqe_size - sizeof(*ctrl) - inline_seg_size) %
-                    sizeof(*dptr)) == 0);
-        dptr     = uct_ib_mlx5_txwq_wrap_any_const(
-                txwq, UCS_PTR_BYTE_OFFSET(inl, inline_seg_size));
-        num_dseg = (wqe_size - sizeof(*ctrl) - inline_seg_size) / sizeof(*dptr);
         uct_rc_mlx5_op_info_fill_am_zcopy(txwq, op, inl, inline_length, dptr,
                                           num_dseg, callback_data, info);
         return UCS_OK;
@@ -1399,30 +1427,16 @@ uct_rc_mlx5_wqe_num_packets_am(uct_ib_iface_t *iface,
 {
     const struct mlx5_wqe_inl_data_seg *inl;
     const struct mlx5_wqe_data_seg *dptr;
-    size_t length, inline_length, inline_seg_size;
-    size_t num_dseg;
+    size_t length, inline_length, num_dseg;
 
-    if (uct_rc_mlx5_wqe_inline_seg(txwq, ctrl + 1, &inl, &inline_length) !=
-        UCS_OK) {
-        uct_rc_mlx5_wqe_unsupported(iface, txwq, ctrl, wqe_size);
-    }
+    uct_rc_mlx5_wqe_am_segs(txwq, ctrl, wqe_size, &inl, &inline_length, &dptr,
+                            &num_dseg);
 
-    inline_seg_size = ucs_align_up_pow2(sizeof(*inl) + inline_length,
-                                        UCT_IB_MLX5_WQE_SEG_SIZE);
-    ucs_assertv_always(wqe_size >= (sizeof(*ctrl) + inline_seg_size),
-                       "wqe_size=%zu inline_seg_size=%zu", wqe_size,
-                       inline_seg_size);
-    /* AM short is fully inline. */
-    if (wqe_size == (sizeof(*ctrl) + inline_seg_size)) {
+    /* AM short is fully inline */
+    if (num_dseg == 0) {
         return 1;
     }
 
-    ucs_assertv_always(((wqe_size - sizeof(*ctrl) - inline_seg_size) %
-                        sizeof(*dptr)) == 0,
-                       "invalid am zcopy WQE size %zu", wqe_size);
-    dptr     = uct_ib_mlx5_txwq_wrap_any_const(
-            txwq, UCS_PTR_BYTE_OFFSET(inl, inline_seg_size));
-    num_dseg = (wqe_size - sizeof(*ctrl) - inline_seg_size) / sizeof(*dptr);
     length = inline_length + uct_rc_mlx5_wqe_dseg_length(txwq, dptr, num_dseg);
     return uct_rc_mlx5_num_packets(txwq, length);
 }
