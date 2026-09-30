@@ -493,6 +493,19 @@ protected:
         ++ctx->num_ops_purged;
     }
 
+    static void validate_zcopy_iov(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        EXPECT_TRUE(info->rma.field_mask &
+                    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer,
+                      info->rma.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length,
+                      info->rma.payload.zcopy.iov[i].length);
+        }
+    }
+
     static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_RMA;
@@ -510,15 +523,7 @@ protected:
             EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
             EXPECT_EQ(&ctx->comp, info->comp);
 
-            EXPECT_TRUE(info->rma.field_mask &
-                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
-            ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
-            for (size_t i = 0; i < ctx->iovcnt; ++i) {
-                EXPECT_EQ(ctx->iov[i].buffer,
-                          info->rma.payload.zcopy.iov[i].buffer);
-                EXPECT_EQ(ctx->iov[i].length,
-                          info->rma.payload.zcopy.iov[i].length);
-            }
+            validate_zcopy_iov(info, ctx);
 
             uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
         } else {
@@ -551,15 +556,7 @@ protected:
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
 
         if (ctx->operation == UCT_EP_OP_GET_ZCOPY) {
-            ASSERT_TRUE(info->rma.field_mask &
-                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
-            ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
-            for (size_t i = 0; i < ctx->iovcnt; ++i) {
-                EXPECT_EQ(ctx->iov[i].buffer,
-                          info->rma.payload.zcopy.iov[i].buffer);
-                EXPECT_EQ(ctx->iov[i].length,
-                          info->rma.payload.zcopy.iov[i].length);
-            }
+            validate_zcopy_iov(info, ctx);
         } else {
             ASSERT_TRUE(info->rma.field_mask &
                         UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
