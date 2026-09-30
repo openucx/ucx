@@ -353,6 +353,10 @@ public:
 protected:
     void test_xfer_sizes(const std::vector<size_t> &sizes)
     {
+        if (sender().ucph()->gpu_nic_assignment == nullptr) {
+            UCS_TEST_SKIP_R("no gpu-nic assignment on this host");
+        }
+
         ucs::detail::message_stream ms("INFO");
 
         for (auto length : sizes) {
