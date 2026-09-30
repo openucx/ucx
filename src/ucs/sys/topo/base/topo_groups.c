@@ -69,7 +69,7 @@ static int ucs_topo_groups_bus_id_equal(const ucs_sys_bus_id_t *bus_id1,
 
 static ucs_status_t ucs_topo_groups_devices_collect(
         const ucs_topo_sys_device_info_t *devices, unsigned num_devices,
-        const ucs_sys_device_bitmap_t *allowed_net_devices,
+        const ucs_sys_device_bitmap_t *net_device_filter,
         ucs_topo_groups_sys_dev_array_t *acc_devices,
         ucs_topo_groups_sys_dev_array_t *net_devices)
 {
@@ -80,10 +80,10 @@ static ucs_status_t ucs_topo_groups_devices_collect(
         if (devices[i].device_class == UCS_TOPO_DEVICE_CLASS_ACC) {
             target_array = acc_devices;
         } else if (devices[i].device_class == UCS_TOPO_DEVICE_CLASS_NET) {
-            if ((allowed_net_devices != NULL) &&
-                !UCS_STATIC_BITMAP_GET(*allowed_net_devices, i)) {
-                ucs_debug("skipping network device %s (sys_dev=%u): not "
-                          "allowed",
+            if ((net_device_filter != NULL) &&
+                !UCS_STATIC_BITMAP_GET(*net_device_filter, i)) {
+                ucs_debug("skipping network device %s (sys_dev=%u): not in "
+                          "the device filter",
                           devices[i].name, i);
                 continue;
             }
@@ -173,7 +173,7 @@ void ucs_topo_release_group(ucs_topo_group_t *group)
 
 static ucs_status_t ucs_topo_groups_inventory_build(
         const ucs_topo_sys_device_info_t *devices, unsigned num_devices,
-        const ucs_sys_device_bitmap_t *allowed_net_devices,
+        const ucs_sys_device_bitmap_t *net_device_filter,
         ucs_topo_group_t *inventory_p)
 {
     ucs_topo_groups_sys_dev_array_t acc_devices = UCS_ARRAY_DYNAMIC_INITIALIZER;
@@ -184,7 +184,7 @@ static ucs_status_t ucs_topo_groups_inventory_build(
     ucs_topo_init_group(&inventory);
 
     status = ucs_topo_groups_devices_collect(devices, num_devices,
-                                             allowed_net_devices, &acc_devices,
+                                             net_device_filter, &acc_devices,
                                              &net_devices);
     if (status != UCS_OK) {
         goto err_free_arrays;
@@ -370,7 +370,7 @@ static void ucs_topo_groups_log(const ucs_topo_sys_device_info_t *devices,
 ucs_status_t
 ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
                             unsigned num_devices,
-                            const ucs_sys_device_bitmap_t *allowed_net_devices,
+                            const ucs_sys_device_bitmap_t *net_device_filter,
                             ucs_topo_groups_t *groups_p)
 {
     ucs_topo_group_t inventory;
@@ -380,7 +380,7 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
     ucs_topo_init_groups(&groups);
 
     status = ucs_topo_groups_inventory_build(devices, num_devices,
-                                             allowed_net_devices, &inventory);
+                                             net_device_filter, &inventory);
     if (status != UCS_OK) {
         return status;
     }

@@ -188,12 +188,12 @@ protected:
     }
 
     ucs_status_t
-    build(const ucs_sys_device_bitmap_t *allowed_net_devices = nullptr)
+    build(const ucs_sys_device_bitmap_t *net_device_filter = nullptr)
     {
         return ucs_topo_build_groups_inner(m_devices.data(),
                                            static_cast<unsigned>(
                                                    m_devices.size()),
-                                           allowed_net_devices, &m_groups);
+                                           net_device_filter, &m_groups);
     }
 
     void expect_groups(const std::vector<numa_devices> &expected_groups)
@@ -253,33 +253,33 @@ UCS_TEST_F(test_topo_groups, vera_groups_by_numa) {
     expect_groups(expected_groups);
 }
 
-UCS_TEST_F(test_topo_groups, allowed_net_devices) {
+UCS_TEST_F(test_topo_groups, net_device_filter) {
     std::vector<numa_devices> expected_groups = add_vera_rubin_devices();
-    ucs_sys_device_bitmap_t allowed_net_devices;
+    ucs_sys_device_bitmap_t net_device_filter;
 
-    /* Set the allowed network devices to all network devices */
-    UCS_STATIC_BITMAP_RESET_ALL(&allowed_net_devices);
+    /* Include all network devices in the filter */
+    UCS_STATIC_BITMAP_RESET_ALL(&net_device_filter);
     for (const auto &group : expected_groups) {
         for (const physical_device &nic : group.nics) {
             for (const ucs_sys_device_t sys_dev : nic) {
-                UCS_STATIC_BITMAP_SET(&allowed_net_devices, sys_dev);
+                UCS_STATIC_BITMAP_SET(&net_device_filter, sys_dev);
             }
         }
     }
 
-    /* Disallow all ports of a NIC */
+    /* Filter out all ports of a NIC */
     auto &group0_nics = expected_groups[0].nics;
     for (const ucs_sys_device_t sys_dev : group0_nics[1]) {
-        UCS_STATIC_BITMAP_RESET(&allowed_net_devices, sys_dev);
+        UCS_STATIC_BITMAP_RESET(&net_device_filter, sys_dev);
     }
     group0_nics.erase(group0_nics.begin() + 1);
 
-    /* Disallow one port of a NIC, the NIC keeps its other port */
+    /* Filter out one port of a NIC, the NIC keeps its other port */
     physical_device &partial_nic = expected_groups[1].nics[0];
-    UCS_STATIC_BITMAP_RESET(&allowed_net_devices, partial_nic.back());
+    UCS_STATIC_BITMAP_RESET(&net_device_filter, partial_nic.back());
     partial_nic.pop_back();
 
-    ASSERT_UCS_OK(build(&allowed_net_devices));
+    ASSERT_UCS_OK(build(&net_device_filter));
     expect_groups(expected_groups);
 }
 

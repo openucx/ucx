@@ -92,6 +92,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "                             'd' - DC version 1 (Connect-IB, ConnectX-4)\n"
      "                             'D' - DC version 2 (ConnectX-5 and above)\n"
      "                             'a' - Compact address vector support\n"
+     "                             'b' - DPU device (e.g. BlueField)\n"
      "  <priority>  - (optional) device priority, integer.\n"
      "\n"
      "Example: The value '0x02c9:4115:ConnectX4:5d' would specify a device named ConnectX-4\n"
@@ -1023,6 +1024,8 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
                     spec->flags |= UCT_IB_DEVICE_FLAG_DC_V2;
                 } else if (*p == 'a') {
                     spec->flags |= UCT_IB_DEVICE_FLAG_AV;
+                } else if (*p == 'b') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_DPU;
                 } else {
                     ucs_error("invalid device flag: '%c'", *p);
                     free(flags_str);

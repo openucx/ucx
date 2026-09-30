@@ -1493,7 +1493,7 @@ static void ucs_topo_release_devices()
 }
 
 ucs_status_t
-ucs_topo_build_groups(const ucs_sys_device_bitmap_t *allowed_net_devices,
+ucs_topo_build_groups(const ucs_sys_device_bitmap_t *net_device_filter,
                       ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
@@ -1501,7 +1501,7 @@ ucs_topo_build_groups(const ucs_sys_device_bitmap_t *allowed_net_devices,
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
-                                         allowed_net_devices, groups_p);
+                                         net_device_filter, groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return status;
