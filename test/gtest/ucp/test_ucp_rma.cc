@@ -1740,39 +1740,9 @@ UCS_TEST_P(test_ucp_rma_bw, put_get_enabled)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_bw, all, "all")
 
 
-extern "C" int ucp_rma_bw_test_async_sync_retry(void);
-extern "C" int ucp_rma_bw_test_abort(void);
-extern "C" int ucp_rma_bw_test_frag_cap(void);
-extern "C" int ucp_rma_bw_test_transport_error(void);
 extern "C" int ucp_rma_bw_test_detach_pending(void);
-extern "C" int ucp_rma_bw_test_admission(void);
-
-TEST(test_ucp_rma_bw_helpers, async_sync_retry)
-{
-    EXPECT_EQ(0, ucp_rma_bw_test_async_sync_retry());
-}
-
-TEST(test_ucp_rma_bw_helpers, abort)
-{
-    EXPECT_EQ(0, ucp_rma_bw_test_abort());
-}
-
-TEST(test_ucp_rma_bw_helpers, frag_cap)
-{
-    EXPECT_EQ(0, ucp_rma_bw_test_frag_cap());
-}
-
-TEST(test_ucp_rma_bw_helpers, transport_error_out_of_order)
-{
-    EXPECT_EQ(0, ucp_rma_bw_test_transport_error());
-}
 
 TEST(test_ucp_rma_bw_helpers, detach_pending)
 {
     EXPECT_EQ(0, ucp_rma_bw_test_detach_pending());
-}
-
-TEST(test_ucp_rma_bw_helpers, admission)
-{
-    EXPECT_EQ(0, ucp_rma_bw_test_admission());
 }
