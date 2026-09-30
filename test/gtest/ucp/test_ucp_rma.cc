@@ -470,8 +470,8 @@ protected:
                              const std::string &proto_name,
                              size_t max_size = 16 * UCS_MBYTE)
     {
-        if (!has_assigned_nics(sender().ucph()->gpu_nic_assignment)) {
-            UCS_TEST_SKIP_R("no nic is assigned to a gpu on this host");
+        if (!is_buffer_gpu_assigned()) {
+            UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
         }
 
         /* The assignment follows the local buffer, so it must be CUDA */
@@ -481,22 +481,25 @@ protected:
     }
 
 private:
-    static bool has_assigned_nics(const ucp_gpu_nic_assignment_t *assignment)
+    /* Check that the GPU the test buffers are allocated on has assigned NICs.
+     * With 'flip' and 'round_robin', a GPU may be left without any. */
+    bool is_buffer_gpu_assigned()
     {
+        const ucp_context_h context = sender().ucph();
         const ucp_gpu_nic_sys_dev_bitmap_t *bitmap;
+        ucp_memory_info_t mem_info;
 
-        if (assignment == nullptr) {
+        if (context->gpu_nic_assignment == nullptr) {
             return false;
         }
 
-        ucs_carray_for_each(bitmap, assignment->nic_sys_dev_bitmaps,
-                            assignment->num_bitmaps) {
-            if (!UCS_STATIC_BITMAP_IS_ZERO(*bitmap)) {
-                return true;
-            }
-        }
+        std::unique_ptr<mem_buffer> buffer(
+                create_mem_buffer(64, UCS_MEMORY_TYPE_CUDA));
+        ucp_memory_detect(context, buffer->ptr(), buffer->size(), &mem_info);
 
-        return false;
+        bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                               mem_info.sys_dev);
+        return (bitmap != nullptr) && !UCS_STATIC_BITMAP_IS_ZERO(*bitmap);
     }
 
     /* Check that the protocol moved data, and only over the NICs assigned to
