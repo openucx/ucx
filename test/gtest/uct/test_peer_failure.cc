@@ -490,7 +490,7 @@ protected:
 
             ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
             EXPECT_EQ(&ctx->comp, info->comp);
-            uct_invoke_completion(info->comp, UCS_OK);
+            uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
 
             ASSERT_EQ(ctx->am_header_length, info->am.header.zcopy.length);
             EXPECT_EQ(0, memcmp(ctx->am_header, info->am.header.zcopy.buffer,
