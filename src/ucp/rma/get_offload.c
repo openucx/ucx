@@ -10,6 +10,7 @@
 #endif
 
 #include "rma.inl"
+#include "rma_bw.inl"
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
@@ -157,16 +158,18 @@ ucp_proto_t ucp_get_offload_bcopy_proto = {
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
-                                      const ucp_proto_multi_lane_priv_t *lpriv,
-                                      ucp_datatype_iter_t *next_iter,
-                                      ucp_lane_index_t *lane_shift)
+ucp_proto_get_offload_zcopy_send_common(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter, int measure)
 {
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
     size_t offset      = req->send.state.dt_iter.offset;
     const ucp_proto_multi_priv_t *mpriv;
+    uct_completion_t *comp = &req->send.state.uct_comp;
+    ucp_rma_bw_frag_t *frag;
     uct_iov_t iov;
+    ucs_status_t status;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
@@ -176,22 +179,56 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
     mpriv = req->send.proto_config->priv;
     ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
                                            &iov, 1, &offset);
-    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
-                            &iov, 1, req->send.rma.remote_addr + offset,
-                            tl_rkey, &req->send.state.uct_comp);
+    if (measure) {
+        comp = ucp_rma_bw_frag_start(req, req->send.multi_lane_idx, &frag);
+    }
+
+    status = uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                              &iov, 1, req->send.rma.remote_addr + offset,
+                              tl_rkey, comp);
+    if (measure) {
+        ucp_rma_bw_frag_posted(frag, iov.length, status);
+    }
+
+    return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
+                                      const ucp_proto_multi_lane_priv_t *lpriv,
+                                      ucp_datatype_iter_t *next_iter,
+                                      ucp_lane_index_t *lane_shift)
+{
+    return ucp_proto_get_offload_zcopy_send_common(req, lpriv, next_iter, 0);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_offload_zcopy_sampled_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
+{
+    return ucp_proto_get_offload_zcopy_send_common(req, lpriv, next_iter, 1);
 }
 
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_rma_bw_sample_start(req, mpriv);
+    }
 
     /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
+            req, mpriv, ucp_proto_multi_rma_init_func,
             UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCP_DT_MASK_CONTIG_IOV,
+            (req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE) ?
+            ucp_proto_get_offload_zcopy_sampled_send_func :
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_zcopy_completion);
+            (req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE) ?
+            ucp_rma_bw_sample_complete : ucp_proto_request_zcopy_completion);
 }
 
 static void
@@ -258,6 +295,6 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .probe          = ucp_proto_get_offload_zcopy_probe,
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_get_offload_zcopy_progress},
-    .abort          = ucp_proto_request_zcopy_abort,
+    .abort          = ucp_rma_bw_abort,
     .reset          = ucp_proto_get_offload_zcopy_reset
 };

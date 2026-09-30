@@ -1697,3 +1697,29 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
+
+
+extern "C" int ucp_rma_bw_test_async_sync_retry(void);
+extern "C" int ucp_rma_bw_test_abort(void);
+extern "C" int ucp_rma_bw_test_frag_cap(void);
+extern "C" int ucp_rma_bw_test_transport_error(void);
+
+TEST(test_ucp_rma_bw, async_sync_retry)
+{
+    EXPECT_EQ(0, ucp_rma_bw_test_async_sync_retry());
+}
+
+TEST(test_ucp_rma_bw, abort)
+{
+    EXPECT_EQ(0, ucp_rma_bw_test_abort());
+}
+
+TEST(test_ucp_rma_bw, frag_cap)
+{
+    EXPECT_EQ(0, ucp_rma_bw_test_frag_cap());
+}
+
+TEST(test_ucp_rma_bw, transport_error_out_of_order)
+{
+    EXPECT_EQ(0, ucp_rma_bw_test_transport_error());
+}
