@@ -95,7 +95,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
    " none   - Don't set ROCm hooks.\n"
    " reloc  - Use ELF relocation table to set hooks. In this mode, if a caller\n"
    "          resolves the HSA memory APIs via dlopen/dlsym rather than the GOT,\n"
-   "          its allocations may be missed and reported as host memory.\n"
+   "          its allocations may be missed and reported as host memory."
 #if UCM_BISTRO_HOOKS
    "\n bistro - Use binary instrumentation to set hooks. In this mode, calls\n"
    "          into the HSA runtime are intercepted regardless of how the symbol\n"

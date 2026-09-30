@@ -26,9 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define UCM_ROCM_HOOK_MODES_MASK \
-    (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))
-
 /* Use the PTR variant so that ucm_orig_<fn> is a function pointer that bistro
  * can redirect to the relocated (trampoline) original, allowing us to intercept
  * callers that resolve the HSA symbol via dlopen/dlsym, which the reloc/GOT
@@ -216,7 +213,7 @@ static ucs_status_t ucm_rocmmem_install(int events)
         goto out;
     }
 
-    if (!(ucm_global_opts.rocm_hook_modes & UCM_ROCM_HOOK_MODES_MASK)) {
+    if (!(ucm_global_opts.rocm_hook_modes & UCM_GPU_HOOK_MODES_MASK)) {
         ucm_info("rocm memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;
@@ -244,7 +241,7 @@ static ucs_status_t ucm_rocmmem_install(int events)
     }
 
     /* Success as long as at least one hooking mode was installed. */
-    if (installed_hooks & UCM_ROCM_HOOK_MODES_MASK) {
+    if (installed_hooks & UCM_GPU_HOOK_MODES_MASK) {
         status = UCS_OK;
         ucm_info("rocm hooks are ready");
     } else {

@@ -1713,4 +1713,45 @@ UCS_TEST_F(bistro_relocate, jmp_indirect_sib_disp32) {
               relocate_one(src, sizeof(src), dst, sizeof(dst), &src_used,
                            &dst_used));
 }
+
+UCS_TEST_F(bistro_relocate, rocr_thunk_prologue) {
+    /* endbr64; mov 0x11223344(%rip),%rax; jmp *0x78(%rax). The trailing nops
+     * keep ucm_bistro_dump_code(), which dumps 16 bytes on error, in bounds. */
+    static const uint8_t thunk[16] = {0xF3, 0x0F, 0x1E, 0xFA,
+                                      0x48, 0x8B, 0x05, 0x44, 0x33, 0x22, 0x11,
+                                      0xFF, 0x60, 0x78,
+                                      0x90, 0x90};
+    ucm_bistro_relocate_context_t ctx;
+    size_t src_length, dst_length;
+    uint8_t dst[64];
+    uint64_t addr;
+
+    /* Far jump patch: the final jmp is relocated too */
+    ASSERT_UCS_OK(ucm_bistro_relocate_code(dst, thunk, 12, sizeof(dst),
+                                           &dst_length, &src_length, "thunk",
+                                           &ctx));
+    EXPECT_EQ(14u, src_length);
+    EXPECT_EQ(20u, dst_length);
+    EXPECT_EQ(0, memcmp(dst, thunk, 4));           /* endbr64 verbatim */
+    EXPECT_EQ(0x48, dst[4]);
+    EXPECT_EQ(0xB8, dst[5]);                       /* movabs $addr, %rax */
+    memcpy(&addr, &dst[6], sizeof(addr));
+    EXPECT_EQ((uintptr_t)UCS_PTR_BYTE_OFFSET(thunk, 11) + 0x11223344, addr);
+    EXPECT_EQ(0x48, dst[14]);
+    EXPECT_EQ(0x8B, dst[15]);
+    EXPECT_EQ(0x00, dst[16]);                      /* mov (%rax), %rax */
+    EXPECT_EQ(0, memcmp(&dst[17], &thunk[11], 3)); /* jmp verbatim */
+
+    /* Near jump patch: stops after the mov, before the jmp */
+    ASSERT_UCS_OK(ucm_bistro_relocate_code(dst, thunk, 5, sizeof(dst),
+                                           &dst_length, &src_length, "thunk",
+                                           &ctx));
+    EXPECT_EQ(11u, src_length);
+    EXPECT_EQ(17u, dst_length);
+
+    /* Destination too small for the expanded mov */
+    EXPECT_EQ(UCS_ERR_BUFFER_TOO_SMALL,
+              ucm_bistro_relocate_code(dst, thunk, 12, 16, &dst_length,
+                                       &src_length, "thunk", &ctx));
+}
 #endif /* __x86_64__ */

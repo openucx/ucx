@@ -105,9 +105,8 @@ typedef struct {
 
 /* ENDBR64 (CET landing pad): F3 0F 1E FA */
 #define UCM_BISTRO_X86_ENDBR64_B0 0xF3
-#define UCM_BISTRO_X86_ENDBR64_B1 0x0F
-#define UCM_BISTRO_X86_ENDBR64_B2 0x1E
-#define UCM_BISTRO_X86_ENDBR64_B3 0xFA
+
+static const uint8_t ucm_bistro_x86_endbr64_tail[] = {0x0F, 0x1E, 0xFA};
 
 /* MOV immediate word or double into word, double, or quad register
  * "mov $imm32, %reg"
@@ -130,6 +129,11 @@ typedef struct {
 #define UCM_BISTRO_X86_MODRM_RM_SIB     4 /* 0b100 */
 #define UCM_BISTRO_X86_MODRM_RM_DISP32 \
     5 /* 0b101 (%rbp / RIP-relative disp32) */
+
+/* Register indices (as encoded in the ModR/M reg or r/m field, or REX.B/R
+ * extended, without the extension bit) */
+#define UCM_BISTRO_X86_REG_RSP 4
+#define UCM_BISTRO_X86_REG_RBP 5
 
 /* ModR/M encoding for SUB RSP
  * mod=0b11, reg=0b101 (SUB as opcode extension), r/m=0b100
@@ -183,13 +187,11 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
     }
 
     if ((rex == 0) && (opcode == UCM_BISTRO_X86_ENDBR64_B0) &&
-        (*(const uint8_t*)ctx->src_p == UCM_BISTRO_X86_ENDBR64_B1) &&
-        (((const uint8_t*)ctx->src_p)[1] == UCM_BISTRO_X86_ENDBR64_B2) &&
-        (((const uint8_t*)ctx->src_p)[2] == UCM_BISTRO_X86_ENDBR64_B3)) {
+        !memcmp(ctx->src_p, ucm_bistro_x86_endbr64_tail,
+                sizeof(ucm_bistro_x86_endbr64_tail))) {
         /* endbr64 (CET landing pad) - position independent, copy verbatim */
-        ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0x0F */
-        ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0x1E */
-        ucs_serialize_next(&ctx->src_p, const uint8_t); /* 0xFA */
+        ucs_serialize_next_raw(&ctx->src_p, const uint8_t,
+                               sizeof(ucm_bistro_x86_endbr64_tail));
         goto out_copy_src;
     } else if (((rex == 0) || rex == UCM_BISTRO_X86_REX_B) &&
                ((opcode & UCM_BISTRO_X86_PUSH_R_MASK) ==
@@ -247,11 +249,12 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
                            UCM_BISTRO_X86_MODRM_RM_DISP32)) {
             reg = (modrm >> UCM_BISTRO_X86_MODRM_REG_SHIFT) &
                   UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS);
-            /* rm=100 (SIB) and rm=101 (disp8/RIP) can't encode "mov (%reg),
-             * %reg" directly; %rsp/%rbp are never used to hold a loaded
-             * pointer, so leave those unsupported. */
-            if ((reg != UCM_BISTRO_X86_MODRM_RM_SIB) &&
-                (reg != UCM_BISTRO_X86_MODRM_RM_DISP32)) {
+            /* reg=%rsp/%rbp can't encode "mov (%reg), %reg" directly (the
+             * r/m=100/101 bit patterns select SIB/disp32 addressing instead
+             * of a plain register-indirect form), and are never used to hold
+             * a loaded pointer anyway, so leave those unsupported. */
+            if ((reg != UCM_BISTRO_X86_REG_RSP) &&
+                (reg != UCM_BISTRO_X86_REG_RBP)) {
                 disp32 = *ucs_serialize_next(&ctx->src_p, const int32_t);
                 mov_rip.movabs_reg[0] = UCM_BISTRO_X86_REX_W;
                 mov_rip.movabs_reg[1] = UCM_BISTRO_X86_MOV_IR | reg;
@@ -350,7 +353,6 @@ ucs_status_t ucm_bistro_relocate_one(ucm_bistro_relocate_context_t *ctx)
                 } else if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP32) {
                     ucs_serialize_next(&ctx->src_p,
                                        const uint32_t); /* disp32 */
-
                 }
             }
             /* Unconditional transfer - do not relocate past it */
