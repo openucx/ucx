@@ -213,6 +213,7 @@ ucp_proto_get_offload_zcopy_sampled_send_func(
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {

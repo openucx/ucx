@@ -33,13 +33,15 @@ typedef struct {
 
 struct ucp_rma_bw_sample {
     ucp_request_t     *req;
-    ucp_worker_h      worker;
     unsigned          num_frags;
     unsigned          pending;
     unsigned          invalid;
-    unsigned          in_use;
     ucp_rma_bw_lane_t lanes[2];
     ucp_rma_bw_frag_t frags[UCP_RMA_BW_MAX_FRAGS];
 };
+
+void ucp_rma_bw_sample_complete(uct_completion_t *comp);
+void ucp_rma_bw_frag_complete(uct_completion_t *comp);
+void ucp_rma_bw_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif

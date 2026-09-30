@@ -160,7 +160,6 @@ gtest_SOURCES = \
 	ucp/test_ucp_proto_mock.cc \
 	ucp/test_ucp_ep_reconfig.cc \
 	ucp/test_ucp_rma.cc \
-	ucp/test_ucp_rma_bw.c \
 	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \
 	ucp/test_ucp_tag_match.cc \

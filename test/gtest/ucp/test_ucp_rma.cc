@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/proto/proto_multi.h>
+#include <ucp/rma/rma_bw.inl>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -1734,15 +1735,39 @@ UCS_TEST_P(test_ucp_rma_bw, put_get_enabled)
             &param)));
     ASSERT_TRUE(mem_buffer::compare(sendbuf.ptr(), recvbuf.ptr(), size,
                                     UCS_MEMORY_TYPE_HOST));
-    EXPECT_EQ(0u, sender().worker()->rma_bw_active);
+    for (unsigned i = 0; i < UCP_RMA_BW_MAX_ACTIVE; ++i) {
+        const auto &sample = sender().worker()->rma_bw_samples[i];
+        EXPECT_EQ(nullptr, sample.req);
+        EXPECT_EQ(0u, sample.pending);
+    }
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_bw, all, "all")
 
 
-extern "C" int ucp_rma_bw_test_detach_pending(void);
-
 TEST(test_ucp_rma_bw_helpers, detach_pending)
 {
-    EXPECT_EQ(0, ucp_rma_bw_test_detach_pending());
+    ucp_request_t req          = {};
+    ucp_rma_bw_sample_t sample = {};
+    ucp_rma_bw_frag_t *frag;
+    uct_completion_t *comp;
+
+    req.flags                     = UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
+    req.send.rma.bw_sample        = &sample;
+    req.send.state.uct_comp.count = 2;
+    sample.req                    = &req;
+
+    comp = ucp_rma_bw_frag_start(&req, 0, &frag);
+    ucp_rma_bw_frag_posted(frag, 4096, UCS_INPROGRESS);
+    ucp_rma_bw_abort(&req, UCS_ERR_CANCELED);
+    ucp_rma_bw_sample_detach(&req);
+
+    EXPECT_FALSE(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE);
+    EXPECT_EQ(nullptr, req.send.rma.bw_sample);
+    EXPECT_EQ(nullptr, sample.req);
+    EXPECT_TRUE(sample.invalid);
+    EXPECT_FALSE(ucp_rma_bw_sample_is_free(&sample));
+
+    comp->func(comp);
+    EXPECT_TRUE(ucp_rma_bw_sample_is_free(&sample));
 }

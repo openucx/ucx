@@ -252,7 +252,7 @@ struct ucp_request {
                             ucp_rkey_h const *rkeys;
                         } sgl;
                         /* Used only by sampled contiguous PUT/GET zcopy */
-                        void *bw_sample;
+                        struct ucp_rma_bw_sample *bw_sample;
                     };
                 } rma;
 
