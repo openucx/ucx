@@ -894,12 +894,12 @@ static void uct_rc_mlx5_wqe_am_segs(const uct_ib_mlx5_txwq_t *txwq,
     inline_seg_size = ucs_align_up_pow2(sizeof(*inl) + inline_length,
                                         UCT_IB_MLX5_WQE_SEG_SIZE);
     ucs_assertv_always(wqe_size >= (sizeof(*ctrl) + inline_seg_size),
-                       "wqe_size=%zu inline_seg_size=%zu", wqe_size,
+                       "wqe_size %zu inline_seg_size %zu", wqe_size,
                        inline_seg_size);
 
     dseg_size = wqe_size - sizeof(*ctrl) - inline_seg_size;
     ucs_assertv_always((dseg_size % sizeof(*dptr)) == 0,
-                       "invalid am zcopy WQE size %zu", wqe_size);
+                       "invalid am zcopy wqe size %zu", wqe_size);
 
     *inl_p           = inl;
     *inline_length_p = inline_length;
@@ -962,12 +962,12 @@ static void uct_rc_mlx5_op_callback_data_fill_iov(
     size_t i;
 
     ucs_assertv_always(num_dseg <= ucs_static_array_size(callback_data->iov),
-                       "num_dseg=%zu", num_dseg);
+                       "num_dseg %zu", num_dseg);
 
     for (i = 0; i < num_dseg; ++i) {
         byte_count = ntohl(dptr->byte_count);
         ucs_assertv_always(!(byte_count & MLX5_INLINE_SEG),
-                           "inline segment in zcopy WQE");
+                           "inline segment in zcopy wqe");
 
         callback_data->memh[i].lkey  = ntohl(dptr->lkey);
         callback_data->memh[i].rkey  = UCT_IB_INVALID_MKEY;
@@ -1056,8 +1056,12 @@ static void uct_rc_mlx5_op_info_fill_am_zcopy(
 {
     const uct_rc_mlx5_hdr_t *rch;
 
-    ucs_assert(inline_length >= sizeof(*rch));
-    ucs_assert(inline_length <= sizeof(callback_data->data));
+    ucs_assertv_always(inline_length >= sizeof(*rch),
+                       "inline_length %zu rch %zu", inline_length,
+                       sizeof(*rch));
+    ucs_assertv_always(inline_length <= sizeof(callback_data->data),
+                       "inline_length %zu callback_data->data %zu",
+                       inline_length, sizeof(callback_data->data));
 
     uct_ib_mlx5_txwq_copy_segs(txwq, callback_data->data, inl + 1,
                                inline_length);
@@ -1396,7 +1400,7 @@ uct_rc_mlx5_wqe_num_packets_put(const uct_ib_mlx5_txwq_t *txwq,
     const struct mlx5_wqe_data_seg *dptr;
     size_t length, dseg_size;
 
-    ucs_assertv_always(wqe_size >= header_size, "wqe_size=%zu", wqe_size);
+    ucs_assertv_always(wqe_size >= header_size, "wqe_size %zu", wqe_size);
     /* A zero-length RDMA write still consumes one packet/PSN. */
     if (wqe_size == header_size) {
         return 1;
@@ -1406,22 +1410,21 @@ uct_rc_mlx5_wqe_num_packets_put(const uct_ib_mlx5_txwq_t *txwq,
     /* Put short inline consumes one packet/PSN. */
     if (uct_rc_mlx5_wqe_inline_seg(txwq, raddr + 1, &inl, &length) == UCS_OK) {
         ucs_assertv_always(length <= UCT_IB_MLX5_MAX_SEND_WQE_SIZE,
-                           "inline_length=%zu", length);
+                           "inline_length %zu", length);
         return 1;
     }
 
     dptr      = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
     dseg_size = wqe_size - header_size;
     ucs_assertv_always((dseg_size % sizeof(*dptr)) == 0,
-                       "invalid RDMA write WQE size %zu", wqe_size);
+                       "invalid rdma write wqe size %zu", wqe_size);
     length = uct_rc_mlx5_wqe_dseg_length(txwq, dptr, dseg_size / sizeof(*dptr));
 
     return (length == 0) ? 1 : uct_rc_mlx5_num_packets(txwq, length);
 }
 
 static uint32_t
-uct_rc_mlx5_wqe_num_packets_am(uct_ib_iface_t *iface,
-                               const uct_ib_mlx5_txwq_t *txwq,
+uct_rc_mlx5_wqe_num_packets_am(const uct_ib_mlx5_txwq_t *txwq,
                                const struct mlx5_wqe_ctrl_seg *ctrl,
                                size_t wqe_size)
 {
@@ -1453,7 +1456,7 @@ uct_ib_mlx5_wqe_num_packets(uct_ib_iface_t *iface,
     case MLX5_OPCODE_RDMA_WRITE:
         return uct_rc_mlx5_wqe_num_packets_put(txwq, ctrl, wqe_size);
     case MLX5_OPCODE_SEND:
-        return uct_rc_mlx5_wqe_num_packets_am(iface, txwq, ctrl, wqe_size);
+        return uct_rc_mlx5_wqe_num_packets_am(txwq, ctrl, wqe_size);
     default:
         uct_rc_mlx5_wqe_unsupported(iface, txwq, ctrl, wqe_size);
     }
