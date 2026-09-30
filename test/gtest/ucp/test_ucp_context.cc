@@ -74,6 +74,51 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
 
+class test_ucp_context_gpu_nic : public test_ucp_context {
+protected:
+    /* Expect ucp_init() to fail when the assignment is combined with a
+     * conflicting configuration */
+    void expect_init_rejected(const char *name, const char *value)
+    {
+        ucs::handle<ucp_config_t*> config;
+        ucp_context_h ucph;
+        ucs_status_t status;
+
+        UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                               ucp_config_read, NULL, NULL);
+        ASSERT_UCS_OK(
+                ucp_config_modify(config.get(), "GPU_NIC_ASSIGNMENT_MODE",
+                                  "flip")); /* Change from the default 'auto' */
+        ASSERT_UCS_OK(ucp_config_modify(config.get(), name, value));
+
+        {
+            const scoped_log_handler slh(hide_errors_logger);
+            status = ucp_init(&get_variant_ctx_params(), config.get(), &ucph);
+        }
+
+        if (status == UCS_OK) {
+            /* Without GPUs in the topology groups, no assignment is built */
+            EXPECT_EQ(nullptr, ucph->gpu_nic_assignment);
+            ucp_cleanup(ucph);
+            UCS_TEST_SKIP_R("no gpu-nic assignment on this host");
+        }
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    }
+};
+
+UCS_TEST_P(test_ucp_context_gpu_nic, rejects_single_net_device)
+{
+    expect_init_rejected("SINGLE_NET_DEVICE", "y");
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic, rejects_old_protocols)
+{
+    expect_init_rejected("PROTO_ENABLE", "n");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context_gpu_nic, all, "all")
+
 class test_ucp_aliases : public test_ucp_context {
 };
 

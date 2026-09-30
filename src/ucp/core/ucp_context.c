@@ -628,9 +628,11 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
-   "for a GPU's memory (CUDA only) to the NICs assigned to that GPU.\n"
-   "The first AM (active message) lane is not restricted, and\n"
-   "UCX_SINGLE_NET_DEVICE is ignored for the restricted protocols.\n"
+   "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "Only protocol lanes are restricted, not the NICs the memory is\n"
+   "registered on, which UCX_MAX_HCA_PER_GPU controls independently.\n"
+   "The first Active Message lane is not restricted.\n"
+   "UCX_SINGLE_NET_DEVICE=y is not supported while an assignment is active.\n"
    "All ports of a NIC are assigned together.\n"
    "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
    "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
@@ -2853,6 +2855,25 @@ ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
     ucs_free(assignment);
 }
 
+static ucs_status_t
+ucp_context_gpu_nic_assignment_check_config(ucp_context_h context)
+{
+    const char *conflict;
+
+    if (!context->config.ext.proto_enable) {
+        conflict = "UCX_PROTO_ENABLE=n";
+    } else if (context->config.ext.proto_use_single_net_device) {
+        conflict = "UCX_SINGLE_NET_DEVICE=y";
+    } else {
+        return UCS_OK;
+    }
+
+    ucs_error("%s is not supported with the gpu-nic assignment, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
+              conflict);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -2903,11 +2924,11 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_res;
     }
 
-    if ((context->gpu_nic_assignment != NULL) &&
-        context->config.ext.proto_use_single_net_device) {
-        ucs_warn("UCX_SINGLE_NET_DEVICE is ignored for GPU memory protocols "
-                 "restricted by the gpu-nic assignment, set "
-                 "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it");
+    if (context->gpu_nic_assignment != NULL) {
+        status = ucp_context_gpu_nic_assignment_check_config(context);
+        if (status != UCS_OK) {
+            goto err_cleanup_gpu_nic_assignment;
+        }
     }
 
     context->uuid             = ucs_generate_uuid((uintptr_t)context);

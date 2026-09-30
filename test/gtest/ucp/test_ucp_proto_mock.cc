@@ -2932,15 +2932,16 @@ protected:
                                        protocol_name) != nullptr;
     }
 
-    void expect_direct_candidates(ucs_sys_device_t gpu_sys_dev,
-                                  const sys_dev_set_t &expected_nics)
+    void
+    expect_direct_candidates(ucs_sys_device_t sys_dev,
+                             const sys_dev_set_t &expected_nics,
+                             ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA)
     {
         const ucp_operation_id_t op_ids[] = {UCP_OP_ID_PUT, UCP_OP_ID_GET};
 
         for (auto op_id : op_ids) {
-            expect_protocol_candidates(op_id, UCS_MEMORY_TYPE_CUDA,
-                                       UCP_DATATYPE_CONTIG, gpu_sys_dev, 1,
-                                       direct_protocol_name(op_id),
+            expect_protocol_candidates(op_id, mem_type, UCP_DATATYPE_CONTIG,
+                                       sys_dev, 1, direct_protocol_name(op_id),
                                        expected_nics);
         }
     }
@@ -3228,8 +3229,12 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
             UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true},
         {"unregistered buffer", UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
             UCS_MEMORY_TYPE_UNKNOWN, unknown, false},
-        {"managed CUDA", UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(),
-            UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(), false},
+        {"managed CUDA located on the GPU", UCS_MEMORY_TYPE_CUDA_MANAGED,
+            mapped_gpu(), UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(), true},
+        {"non-CUDA GPU memory", UCS_MEMORY_TYPE_ROCM, mapped_gpu(),
+            UCS_MEMORY_TYPE_ROCM, mapped_gpu(), true},
+        {"host memory", UCS_MEMORY_TYPE_HOST, unknown, UCS_MEMORY_TYPE_HOST,
+            unknown, false},
         {"unknown device", UCS_MEMORY_TYPE_CUDA, unknown, UCS_MEMORY_TYPE_CUDA,
             unknown, false},
         {"unmapped GPU", UCS_MEMORY_TYPE_CUDA, unmapped_gpu(),
@@ -3276,6 +3281,14 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
                                           UCS_MEMORY_TYPE_CUDA, mapped_gpu()))
             << "NULL context assignment";
     context->gpu_nic_assignment = assignment();
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, host_memory_keeps_all_lanes)
+{
+    install_assignment(mapped_gpu(), {nic(2)});
+
+    expect_direct_candidates(UCS_SYS_DEVICE_ID_UNKNOWN, endpoint_nics(),
+                             UCS_MEMORY_TYPE_HOST);
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
@@ -3345,20 +3358,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
     EXPECT_EQ(sys_dev_set_t{nic(2)}, lane_map_sys_devs(attr.lane_map));
 }
 
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
-           full_assignment_skips_single_net_device, "SINGLE_NET_DEVICE=y")
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, full_assignment_keeps_all_lanes)
 {
-    ucp_proto_query_attr_t attr;
-
     install_assignment(mapped_gpu(), endpoint_nics());
 
     expect_direct_candidates(mapped_gpu(), endpoint_nics());
-
-    /* Without an assignment, the filter keeps a single network device */
-    attr = query_protocol_candidate(UCP_OP_ID_PUT, UCS_MEMORY_TYPE_CUDA,
-                                    UCP_DATATYPE_CONTIG, unmapped_gpu(), 1,
-                                    "put/offload/zcopy");
-    EXPECT_EQ(1u, lane_map_sys_devs(attr.lane_map).size());
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic, rcx, "rc_x")

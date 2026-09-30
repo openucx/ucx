@@ -22,6 +22,7 @@
 #include <ucs/sys/topo/base/topo.h>
 
 
+/* The assignment covers the bandwidth lanes, which wireup selects per NIC */
 static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
 {
     return (lane_type == UCP_LANE_TYPE_RMA_BW) ||
@@ -59,28 +60,33 @@ const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
     /* Use the staging buffer's device if applicable. A host staging buffer has
      * no device, so fall back to the application buffer's device, to spread
      * traffic across NICs anyway. */
-    if ((mem_info.type != UCS_MEMORY_TYPE_CUDA) ||
-        (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+    if (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         mem_info = ucp_proto_common_select_param_mem_info(
                 init_params->select_param);
+
+        if (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            /* E.g. host memory, or managed memory without a preferred
+             * location */
+            owner_desc = "unknown device";
+            goto out;
+        }
     }
 
-    if (mem_info.type != UCS_MEMORY_TYPE_CUDA) {
-        owner_desc = "not cuda memory";
+    bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                           mem_info.sys_dev);
+    if (bitmap == NULL) {
+        owner_desc = "device has no assignment";
         goto out;
     }
 
-    bitmap     = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
-                                               mem_info.sys_dev);
-    owner_desc = (bitmap == NULL) ? "gpu has no assignment" : "assigned";
-
+    owner_desc           = "assigned";
     *owner_gpu_sys_dev_p = mem_info.sys_dev;
 
 out:
-    ucs_trace("gpu-nic owner: proto %s mem %s sys_dev %d: %s",
+    ucs_trace("gpu-nic owner: proto %s mem %s sys_dev %d (%s): %s",
               ucp_proto_id_field(init_params->proto_id, name),
               ucs_memory_type_names[mem_info.type], mem_info.sys_dev,
-              owner_desc);
+              ucs_topo_sys_device_get_name(mem_info.sys_dev), owner_desc);
     return bitmap;
 }
 
@@ -500,7 +506,7 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
     return UCS_OK;
 }
 
-/* Apply the resolved assignment to discovered RMA_BW and AM_BW candidates. */
+/* Apply the resolved assignment to the discovered assignable lanes. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         const ucp_proto_multi_init_params_t *params,
         const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap,
@@ -519,10 +525,14 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         lane      = lanes[i];
         lane_type = (i == 0) ? params->first.lane_type :
                                params->middle.lane_type;
-        if (lane_type == UCP_LANE_TYPE_AM) {
-            /* TODO: The first AM lane is selected by wireup per endpoint
-             * regardless of the buffer's GPU, and carries a share of the
-             * data. Restrict it as well. */
+        if (!ucp_proto_multi_lane_type_is_assignable(lane_type)) {
+            /* In practice this is the first AM lane, selected by wireup per
+             * endpoint regardless of the buffer's GPU, which carries its
+             * share of the data on a possibly unassigned NIC. Only the
+             * AM-first protocols are affected: tag and AM eager multi, and
+             * rndv/am. RMA_BW protocols declare no AM lane type, so all their
+             * lanes are checked and no traffic can leak.
+             * TODO: restrict the AM lane as well. */
             lanes[num_filtered_lanes++] = lane;
             continue;
         }
@@ -964,13 +974,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                          fixed_first_lane, num_lanes,
                                                          lanes);
 
-    /* The assignment replaces the device-ordinal heuristics. With enough
-     * rails the greedy selection uses every assigned lane, so ties can go
-     * to the first lane. */
-    req_sys_dev_ord = (assigned_nic_bitmap == NULL) ?
+    /* The assignment already spreads the lanes over the GPU's NICs, so the
+     * device-ordinal tie-break is skipped */
+    req_sys_dev_ord = (assigned_nic_bitmap != NULL) ?
+                              UCS_SYS_DEVICE_ORDINAL_INVALID :
                               ucs_topo_sys_device_get_bdf_class_ordinal(
-                                      req_sys_dev) :
-                              UCS_SYS_DEVICE_ORDINAL_INVALID;
+                                      req_sys_dev);
 
     ucs_trace(
             "select bw lanes: proto %s req_sys_dev=%d (%s) req_sys_dev_ord=%u",
@@ -978,15 +987,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
 
     if (init_params->worker->context->config.ext.proto_use_single_net_device) {
-        if (assigned_nic_bitmap == NULL) {
-            num_lanes = ucp_proto_multi_filter_single_net_device(
-                    num_lanes, init_params, lanes_perf, fixed_first_lane,
-                    req_sys_dev_ord, lanes);
-        } else {
-            ucs_trace("proto %s skips single net device filtering with gpu-nic "
-                      "assignment",
-                      ucp_proto_id_field(init_params->proto_id, name));
-        }
+        /* ucp_init() rejects UCX_SINGLE_NET_DEVICE with an active assignment */
+        ucs_assert(assigned_nic_bitmap == NULL);
+
+        num_lanes = ucp_proto_multi_filter_single_net_device(
+                num_lanes, init_params, lanes_perf, fixed_first_lane,
+                req_sys_dev_ord, lanes);
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */

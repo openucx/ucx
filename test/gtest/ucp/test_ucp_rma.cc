@@ -437,15 +437,10 @@ class test_ucp_rma_gpu_nic : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        size_t mode;
-
-        /* The base flags stay clear: flush worker, no user memory handle */
-        for (mode = 0; mode < ucs_static_array_size(gpu_nic_assignment_modes);
-             ++mode) {
-            add_variant_with_value(variants, UCP_FEATURE_RMA,
-                                   mode << MODE_SHIFT,
-                                   gpu_nic_assignment_modes[mode]);
-        }
+        add_variant_values(variants, get_rma_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_assignment_modes)),
+                           gpu_nic_assignment_modes);
     }
 
     void init() override
@@ -454,16 +449,19 @@ public:
             UCS_TEST_SKIP_R("CUDA is not supported");
         }
 
-        modify_config(
-                "GPU_NIC_ASSIGNMENT_MODE",
-                gpu_nic_assignment_modes[get_variant_value() >> MODE_SHIFT]);
+        modify_config("GPU_NIC_ASSIGNMENT_MODE",
+                      gpu_nic_assignment_modes[get_variant_value(1)]);
         /* Enough lanes to use every NIC assigned to a GPU */
         modify_config("MAX_RMA_LANES", "8");
         test_ucp_rma::init();
     }
 
 protected:
-    static constexpr int MODE_SHIFT = 2;
+    static void get_rma_variants(std::vector<ucp_test_variant> &variants)
+    {
+        /* The base flags stay clear: flush worker, no user memory handle */
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
 
     void test_cuda_mem_types(send_func_t send_func)
     {
@@ -485,6 +483,54 @@ UCS_TEST_P(test_ucp_rma_gpu_nic, get_blocking)
 
 /* Network lanes only, since the assignment restricts only NIC lanes */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_gpu_nic, rcx_cuda, "rc_x,cuda_copy")
+
+
+static const char *gpu_nic_rndv_put_flows[] = {"zcopy", "mtype"};
+
+/* The RMA rendezvous protocols make the peer send the data by rndv/rtr and
+ * rndv/put, which are probed only for GPU memory */
+class test_ucp_rma_rndv_gpu_nic : public test_ucp_rma_gpu_nic {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_rndv_put_flows)),
+                           gpu_nic_rndv_put_flows);
+    }
+
+    void init() override
+    {
+        modify_config("PROTOS",
+                      std::string("put/rndv,get/rndv,rndv/rtr,rndv/put/") +
+                              put_flow());
+        test_ucp_rma_gpu_nic::init();
+
+        if ((std::string(put_flow()) == "zcopy") &&
+            !check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("no endpoint lane can register CUDA memory");
+        }
+    }
+
+protected:
+    const char *put_flow() const
+    {
+        return gpu_nic_rndv_put_flows[get_variant_value(2)];
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, put_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, get_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic, rcx_cuda,
+                              "rc_x,cuda_copy")
 
 
 class test_ucp_rma_rndv : public test_ucp_rma {

@@ -565,6 +565,13 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
                            << ucs_status_string(status));
         }
     }
+
+    /* The gpu-nic assignment rejects the old protocols with an error, and the 
+     * default value 'auto' enables it on some hardware, so turn it off 
+     * explicitly */
+    if ((name == "PROTO_ENABLE") && !is_proto_enabled()) {
+        modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
+    }
 }
 
 bool ucp_test::check_tls(const std::string& tls)
