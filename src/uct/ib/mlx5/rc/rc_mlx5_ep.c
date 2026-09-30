@@ -922,7 +922,8 @@ static void uct_rc_mlx5_op_callback_data_fill_iov(
     uint32_t byte_count;
     size_t i;
 
-    ucs_assert(num_dseg <= ucs_static_array_size(callback_data->iov));
+    ucs_assertv_always(num_dseg <= ucs_static_array_size(callback_data->iov),
+                       "num_dseg=%zu", num_dseg);
 
     for (i = 0; i < num_dseg; ++i) {
         byte_count = ntohl(dptr->byte_count);

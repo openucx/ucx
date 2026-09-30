@@ -797,6 +797,7 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_zcopy,
     const size_t num_iov         = ucs_min(attr.cap.am.max_iov, 2);
     const size_t hdr_size        = ucs_min((size_t)64, attr.cap.am.max_hdr);
     const size_t size = ucs_min((size_t)4096, attr.cap.am.max_zcopy);
+    purge_ctx ctx = {this, UCT_EP_OP_AM_ZCOPY, {completion_cb, 0, UCS_OK}};
     std::vector<uint8_t> header(hdr_size);
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
 
@@ -805,8 +806,7 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_zcopy,
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                             sendbuf.memh(), num_iov);
 
-    purge_ctx ctx = {this, UCT_EP_OP_AM_ZCOPY, {completion_cb, 0, UCS_OK}};
-    ctx.am_header = header.data();
+    ctx.am_header        = header.data();
     ctx.am_header_length = header.size();
     ctx.iov              = iov;
     ctx.iovcnt           = iovcnt;
