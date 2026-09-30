@@ -905,10 +905,10 @@ static void uct_rc_mlx5_wqe_rma_segs(
         return;
     }
 
-    ucs_assertv_always((dseg_size % sizeof(struct mlx5_wqe_data_seg)) == 0,
-                       "invalid RMA WQE size %zu", wqe_size);
+    ucs_assertv_always((dseg_size % sizeof(**dptr_p)) == 0,
+                       "invalid rma wqe size %zu", wqe_size);
     *dptr_p     = uct_ib_mlx5_txwq_wrap_any_const(txwq, raddr + 1);
-    *num_dseg_p = dseg_size / sizeof(struct mlx5_wqe_data_seg);
+    *num_dseg_p = dseg_size / sizeof(**dptr_p);
 }
 
 static size_t uct_rc_mlx5_wqe_dseg_length(const uct_ib_mlx5_txwq_t *txwq,
@@ -922,7 +922,7 @@ static size_t uct_rc_mlx5_wqe_dseg_length(const uct_ib_mlx5_txwq_t *txwq,
     for (i = 0; i < num_dseg; ++i) {
         byte_count = ntohl(dptr->byte_count);
         ucs_assertv_always(!(byte_count & MLX5_INLINE_SEG),
-                           "inline segment in RMA zcopy WQE");
+                           "inline segment in rma zcopy wqe");
 
         length += byte_count;
         dptr    = uct_ib_mlx5_txwq_wrap_any_const(txwq, dptr + 1);
@@ -1221,7 +1221,9 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
 
     if ((op != NULL) && uct_rc_mlx5_send_op_is_ep_check(op)) {
         ucs_assertv_always((inline_length == 0) && (num_dseg == 0),
-                           "rc mlx5: ep check wqe carries payload");
+                           "rc mlx5: ep check wqe carries payload, "
+                           "inline_length %zu num_dseg %zu",
+                           inline_length, num_dseg);
         return UCS_ERR_NO_ELEM;
     }
 
