@@ -1945,8 +1945,9 @@ typedef enum {
 typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
-     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. If @ref
+     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, every outstanding
+     *  operation is treated as undelivered. */
     uint64_t                            field_mask;
 
     /**
