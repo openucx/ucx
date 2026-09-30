@@ -493,7 +493,7 @@ protected:
         ++ctx->num_ops_purged;
     }
 
-    static void validate_zcopy_iov(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    static void validate_rma_iov(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
         EXPECT_TRUE(info->rma.field_mask &
                     UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
@@ -506,24 +506,26 @@ protected:
         }
     }
 
-    static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    static void validate_rma_addr(const uct_ep_op_info_t *info, purge_ctx *ctx)
     {
-        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_RMA;
-        const uint16_t expected_rma_fields =
-                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
-                UCT_EP_OP_INFO_RMA_FIELD_RKEY;
+        const uint64_t expected_fields = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                         UCT_EP_OP_INFO_RMA_FIELD_RKEY;
 
-        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
-        ASSERT_TRUE(
-                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
+        ASSERT_TRUE(ucs_test_all_flags(info->rma.field_mask, expected_fields));
         EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
         EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+    }
+
+    static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->field_mask, UCT_EP_OP_INFO_FIELD_RMA));
+        validate_rma_addr(info, ctx);
 
         if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
             EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
             EXPECT_EQ(&ctx->comp, info->comp);
-
-            validate_zcopy_iov(info, ctx);
+            validate_rma_iov(info, ctx);
 
             uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
         } else {
@@ -544,19 +546,13 @@ protected:
     {
         const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
                                          UCT_EP_OP_INFO_FIELD_RMA;
-        const uint16_t expected_rma_fields =
-                UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
-                UCT_EP_OP_INFO_RMA_FIELD_RKEY;
 
         ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
-        ASSERT_TRUE(
-                ucs_test_all_flags(info->rma.field_mask, expected_rma_fields));
         EXPECT_EQ(&ctx->comp, info->comp);
-        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
-        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+        validate_rma_addr(info, ctx);
 
         if (ctx->operation == UCT_EP_OP_GET_ZCOPY) {
-            validate_zcopy_iov(info, ctx);
+            validate_rma_iov(info, ctx);
         } else {
             ASSERT_TRUE(info->rma.field_mask &
                         UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
