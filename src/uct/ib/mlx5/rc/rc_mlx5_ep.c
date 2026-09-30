@@ -1246,8 +1246,8 @@ uct_rc_mlx5_op_info_fill_get_bcopy(uct_rc_iface_send_op_t *op,
 
     uct_rc_mlx5_op_info_fill_user_comp(op, info);
     uct_rc_mlx5_op_info_fill_rma_raddr(raddr, info);
-    uct_rc_mlx5_op_info_fill_rma_unpack(desc->unpack_cb, op->unpack_arg,
-                                        op->length, info);
+    uct_rc_mlx5_op_info_fill_rma_unpack(desc->unpack_cb, desc->super.unpack_arg,
+                                        desc->super.length, info);
 }
 
 static ucs_status_t uct_rc_mlx5_op_info_fill_get(
@@ -1268,6 +1268,10 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
     }
 
     if ((op == NULL) || uct_rc_mlx5_send_op_is_get_zcopy(op)) {
+        ucs_assertv_always(dseg_size > 0,
+                           "rc mlx5: read wqe without data segment, "
+                           "wqe_size %zu dseg_size %zu",
+                           wqe_size, dseg_size);
         dptr = uct_rc_mlx5_wqe_rma_data_segs(txwq, raddr, dseg_size, &num_dseg);
         uct_rc_mlx5_op_info_fill_rma_zcopy(UCT_EP_OP_GET_ZCOPY, txwq, op, raddr,
                                            dptr, num_dseg, callback_data, info);
