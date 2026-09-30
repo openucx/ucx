@@ -518,7 +518,6 @@ enum {
 typedef struct ucp_ep_lane_tf {
     uct_ep_h               uct_ep;
     void                   *tx_token;
-    void                   *rx_token;
     ucp_worker_cfg_index_t deactivate_cfg_index;
     uint8_t                state;
 } ucp_ep_lane_tf_t;
@@ -544,7 +543,8 @@ typedef struct ucp_ep_recovery_arg {
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
     ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
     /* Pending requests from held lanes, replayed after all of their
-     * outstanding operations are resolved */
+     * outstanding operations are resolved,
+     * outstanding re-posts also go here */
     ucs_queue_head_t        tf_pending_q;
 } ucp_ep_recovery_arg_t;
 

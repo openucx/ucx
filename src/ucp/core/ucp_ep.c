@@ -2537,9 +2537,7 @@ static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
 static void ucp_ep_tf_free_tokens(ucp_ep_lane_tf_t *tf)
 {
     ucs_free(tf->tx_token);
-    ucs_free(tf->rx_token);
     tf->tx_token = NULL;
-    tf->rx_token = NULL;
 }
 
 static void
@@ -2561,12 +2559,12 @@ ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
 {
     ucs_status_t status = UCS_PTR_STATUS(arg);
 
-    if (!(op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) ||
-        (op_info->comp == NULL) || (op_info->comp->count == 0)) {
-        return;
+    if ((status != UCS_OK) &&
+        (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
+        ucp_invoke_uct_completion(op_info->comp, status);
     }
 
-    ucp_invoke_uct_completion(op_info->comp, status);
+    /* TODO: re-schedule the operation via shared pending queue */
 }
 
 /* Resolve this lane's outstanding operations. Pending requests are appended
@@ -2584,18 +2582,14 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
 
     uct_ep_pending_purge(tf->uct_ep, ucp_request_purge_enqueue_cb,
                          &ep->ext->recovery_arg->tf_pending_q);
-    if (tf->rx_token != NULL) {
-        params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
-                            UCT_EP_OUTSTANDING_FIELD_CB |
-                            UCT_EP_OUTSTANDING_FIELD_ARG;
-        params.rx_token   = tf->rx_token;
-        params.cb         = ucp_ep_tf_outstanding_purge_cb;
-        params.arg        = UCS_STATUS_PTR(UCS_ERR_CANCELED);
-        status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
-        if (status != UCS_OK) {
-            ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
-                      lane, ucs_status_string(status));
-        }
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.cb         = ucp_ep_tf_outstanding_purge_cb;
+    params.arg        = UCS_STATUS_PTR(UCS_ERR_CANCELED);
+    status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
+                    lane, ucs_status_string(status));
     }
 
     uct_ep_destroy(tf->uct_ep);
