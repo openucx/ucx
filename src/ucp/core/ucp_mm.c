@@ -2016,6 +2016,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
                      ucp_mem_h user_memh,
                      ucp_unpacked_exported_memh_t *unpacked)
 {
+    ucs_memory_info_t mem_info = {0};
     ucs_rcache_t *rcache;
     ucs_rcache_params_t rcache_params;
     ucs_status_t status;
@@ -2023,7 +2024,6 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
     char rcache_name[128];
     khiter_t iter;
     int ret;
-    ucs_memory_info_t mem_info = {0};
 
     ucs_assert(user_memh != NULL);
 

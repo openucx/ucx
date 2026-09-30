@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
+#include <ucs/memory/rcache_int.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/float8.h>
 #include <ucs/type/serialize.h>
@@ -1395,6 +1396,7 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     void *ptr1            = mem_buffer::allocate(size * 2, mem_type);
     void *ptr2            = (char*)ptr1 + size;
     ucp_context_h context = sender().ucph();
+    ucs_rcache_t *rcache  = context->rcache;
     ucp_mem_map_params_t params;
     ucp_mem_h memh1, memh2;
     ucp_request_param_t put_params;
@@ -1408,12 +1410,14 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh1));
     EXPECT_EQ(ptr1, ucp_memh_address(memh1->parent));
     EXPECT_EQ(size, ucp_memh_length(memh1->parent));
+    EXPECT_EQ(1, rcache->num_regions);
 
     /* Register second half of buffer, two halves merged */
     params.address = ptr2;
     ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh2));
     EXPECT_EQ(ptr1, ucp_memh_address(memh2->parent));
     EXPECT_EQ(size * 2, ucp_memh_length(memh2->parent));
+    EXPECT_EQ(2, rcache->num_regions);
 
     /* Verify merged registration is healthy by performing zcopy put */
     mapped_buffer target         = mapped_buffer(size, receiver(), 0,

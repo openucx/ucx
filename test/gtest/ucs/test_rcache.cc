@@ -908,7 +908,7 @@ protected:
         while (true) {
             if (chunks_remaining >= 2 * width + 1) {
                 /* Add step on left and right sides */
-                regions += 2;
+                regions          += 2;
                 chunks_remaining -= 2 * width;
                 ++width;
             } else {
