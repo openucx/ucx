@@ -1400,14 +1400,18 @@ ucp_wireup_process_lanes_addr_reply(
 
     if (!ucp_wireup_ep_supports_tokens(ep)) {
         /* The ACK exists only to carry tokens, and a peer which does not add
-         * the trailer would not know the message type either */
+         * the trailer would not know the message type either. The reply may
+         * still have stored an RX token for our held lanes. */
+        ucp_ep_tf_lanes_purge_outstanding(ep,
+                                          lanes_info->requested_lane_map,
+                                          request_id, 0);
         return;
     }
 
     ucs_assert(request_id != 0);
 
-    /* The reply's TX tokens name our QPs. The derived RX tokens go back on
-     * the ACK and are not the tokens stored for our own purge. */
+    /* Derive RX tokens from the reply TX tokens. They go back on the ACK and
+     * are not the tokens stored for our own purge. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
     ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map, tx_tokens,
                                 rx_tokens);
@@ -1415,6 +1419,8 @@ ucp_wireup_process_lanes_addr_reply(
                                    lanes_info->provided_lane_map, 0, request_id,
                                    rx_tokens);
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
+    ucp_ep_tf_lanes_purge_outstanding(ep, lanes_info->requested_lane_map,
+                                      request_id, 0);
 }
 
 /* Locate the lanes info and the optional token trailer of a LANES_ADDR
@@ -1605,6 +1611,9 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 1, rx_tokens);
         ucs_debug("ep %p: LANES_ADDR_ACK request_id=0x%" PRIx32, ep,
                   request_id);
+        ucp_ep_tf_lanes_purge_outstanding(ep,
+                                          lanes_info->requested_lane_map,
+                                          request_id, 1);
     } else {
         ucs_bug("invalid wireup message");
     }

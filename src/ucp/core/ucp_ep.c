@@ -2759,6 +2759,15 @@ ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
     /* TODO: re-schedule the operation via shared pending queue */
 }
 
+/* Undelivered operations are reported here. Keeping them for replay is left
+ * to a later change. */
+static void
+ucp_ep_tf_purge_replay_cb(const uct_ep_op_info_t *op_info, void *arg)
+{
+    ucs_error("ep %p: replaying purged operation %p is not implemented", arg,
+              op_info);
+}
+
 /* Resolve this lane's outstanding operations. Pending requests are appended
  * to the shared queue and drained after every held lane. Without an RX
  * token, destroy cancels outstanding work. */
@@ -2786,6 +2795,45 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
 
     uct_ep_destroy(tf->uct_ep);
     tf->uct_ep = NULL;
+}
+
+void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
+                           uint32_t request_id, int from_ack)
+{
+    uct_ep_outstanding_purge_params_t params;
+    ucp_ep_lane_tf_t *tf;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    uint32_t expect;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+            (tf->uct_ep == NULL) || (tf->rx_token == NULL)) {
+            continue;
+        }
+
+        expect = from_ack ? tf->peer_id : tf->request_id;
+        if ((request_id == 0) || (request_id != expect)) {
+            continue;
+        }
+
+        params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                            UCT_EP_OUTSTANDING_FIELD_CB |
+                            UCT_EP_OUTSTANDING_FIELD_ARG;
+        params.rx_token   = tf->rx_token;
+        params.cb         = ucp_ep_tf_purge_replay_cb;
+        params.arg        = ep;
+        status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
+        if (status != UCS_OK) {
+            ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
+                      lane, ucs_status_string(status));
+            continue;
+        }
+
+        uct_ep_destroy(tf->uct_ep);
+        tf->uct_ep = NULL;
+    }
 }
 
 static void ucp_ep_tf_cleanup(ucp_ep_h ep)

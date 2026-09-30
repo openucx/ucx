@@ -1116,6 +1116,17 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
 
 
 /**
+ * Purge held lanes in @a lanes whose stored RX token matches @a request_id.
+ *
+ * A reply matches the lane's own request_id. An ACK matches peer_id.
+ * @a from_ack selects which one. The UCT endpoint is destroyed after a
+ * successful purge.
+ */
+void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
+                           uint32_t request_id, int from_ack);
+
+
+/**
  * Notify recovery progress that a lanes-address reply was received.
  */
 void ucp_ep_recovery_on_reply_received(ucp_ep_h ep);
