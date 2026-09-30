@@ -1400,57 +1400,6 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     return UCS_OK;
 }
 
-static int
-ucp_context_is_net_device_assignable(ucp_context_h context,
-                                     const ucp_tl_resource_desc_t *rsc)
-{
-    const uct_tl_resource_desc_t *resource = &rsc->tl_rsc;
-    const ucp_tl_md_t *md                  = &context->tl_mds[rsc->md_index];
-
-    if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
-        (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        return 0;
-    }
-
-    if (rsc->flags & UCP_TL_RSC_FLAG_AUX) {
-        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
-                  " is ignored for gpu-nic assignment: auxiliary transport",
-                  UCT_TL_RESOURCE_DESC_ARG(resource));
-        return 0;
-    }
-
-    if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
-        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
-                  " is ignored for gpu-nic assignment: no memory registration",
-                  UCT_TL_RESOURCE_DESC_ARG(resource));
-        return 0;
-    }
-
-    if (ucs_topo_sys_device_get_flags(resource->sys_device) &
-        UCS_TOPO_DEVICE_FLAG_DPU) {
-        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
-                  " is ignored for gpu-nic assignment: dpu device",
-                  UCT_TL_RESOURCE_DESC_ARG(resource));
-        return 0;
-    }
-
-    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is used for gpu-nic assignment",
-              UCT_TL_RESOURCE_DESC_ARG(resource));
-    return 1;
-}
-
-static void ucp_context_gpu_nic_assignment_net_device_filter_init(
-        ucp_context_h context, ucs_sys_device_bitmap_t *net_device_filter)
-{
-    const ucp_tl_resource_desc_t *rsc;
-
-    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
-        if (ucp_context_is_net_device_assignable(context, rsc)) {
-            UCS_STATIC_BITMAP_SET(net_device_filter, rsc->tl_rsc.sys_device);
-        }
-    }
-}
-
 static ucs_status_t
 ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                      const ucp_config_t *config,
@@ -2837,6 +2786,57 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
+static int
+ucp_context_is_net_device_assignable(ucp_context_h context,
+                                     const ucp_tl_resource_desc_t *rsc)
+{
+    const uct_tl_resource_desc_t *resource = &rsc->tl_rsc;
+    const ucp_tl_md_t *md                  = &context->tl_mds[rsc->md_index];
+
+    if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
+        (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
+    }
+
+    if (rsc->flags & UCP_TL_RSC_FLAG_AUX) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: auxiliary transport",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: no memory registration",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    if (ucs_topo_sys_device_get_flags(resource->sys_device) &
+        UCS_TOPO_DEVICE_FLAG_DPU) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: dpu device",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is used for gpu-nic assignment",
+              UCT_TL_RESOURCE_DESC_ARG(resource));
+    return 1;
+}
+
+static void ucp_context_gpu_nic_assignment_net_device_filter_init(
+        ucp_context_h context, ucs_sys_device_bitmap_t *net_device_filter)
+{
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+        if (ucp_context_is_net_device_assignable(context, rsc)) {
+            UCS_STATIC_BITMAP_SET(net_device_filter, rsc->tl_rsc.sys_device);
+        }
+    }
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -2866,6 +2866,10 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 
     ucp_context_gpu_nic_assignment_net_device_filter_init(context,
                                                           &net_device_filter);
+    if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
+        ucs_error("no network devices can be used for gpu-nic assignment");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     status = ucs_topo_build_groups(&net_device_filter, &groups);
     if (status != UCS_OK) {
