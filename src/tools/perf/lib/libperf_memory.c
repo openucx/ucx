@@ -309,7 +309,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     switch (perf->params.command) {
     case UCX_PERF_CMD_PUT:
         flags |= UCT_MD_MEM_ACCESS_REMOTE_PUT;
-        if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        if (params->flags & UCX_PERF_TEST_FLAG_DEVICE) {
             flags |= UCT_MD_MEM_ACCESS_REMOTE_ATOMIC;
         }
         break;

@@ -101,7 +101,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11), /* Create UCP eps with error handling support */
     UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12), /* Use loopback connection */
     UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13), /* Pass pre-registered memory handle */
-    UCX_PERF_TEST_FLAG_AM_RECV_COPY     = UCS_BIT(14)  /* Do additional memcopy during AM receive */
+    UCX_PERF_TEST_FLAG_AM_RECV_COPY     = UCS_BIT(14), /* Do additional memcopy during AM receive */
+    UCX_PERF_TEST_FLAG_DEVICE           = UCS_BIT(15)  /* Use device API to communicate */
 };
 
 
@@ -201,12 +202,6 @@ typedef struct ucx_perf_result {
 } ucx_perf_result_t;
 
 
-typedef struct {
-    ucs_memory_type_t mem_type;
-    int               device_id;
-} ucx_perf_accel_dev_t;
-
-
 typedef void (*ucx_perf_rte_progress_cb_t)(void *arg);
 
 typedef ucs_status_t (*ucx_perf_rte_setup_func_t)(void *arg);
@@ -279,8 +274,10 @@ typedef struct ucx_perf_params {
     char                    send_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX];
     /* Recv memory allocator name */
     char                    recv_mem_alloc_name[UCX_PERF_ALLOC_NAME_MAX];
-    ucx_perf_accel_dev_t    send_device;     /* Send memory device */
-    ucx_perf_accel_dev_t    recv_device;     /* Recv memory device */
+    /* Send memory device index, or UCX_PERF_MEM_DEV_DEFAULT */
+    int                     send_device_id;
+    /* Recv memory device index, or UCX_PERF_MEM_DEV_DEFAULT */
+    int                     recv_device_id;
     ucs_device_level_t      device_level;    /* Device level */
     unsigned                flags;           /* See ucx_perf_test_flags. */
 

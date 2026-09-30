@@ -845,7 +845,7 @@ run_ucx_perftest_cuda_device() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
 
 	# TODO: Run on all GPUs & NICs combinations
-	ucp_client_args="-a cuda:0 $(hostname)"
+	ucp_client_args="-a $(hostname)"
 	gda_tls="cuda_copy,rc,rc_gda"
 	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
 

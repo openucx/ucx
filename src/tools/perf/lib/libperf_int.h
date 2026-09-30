@@ -227,6 +227,34 @@ struct ucx_perf_context {
     };
 };
 
+static inline ucs_status_t
+ucx_perf_get_device_index(const ucx_perf_context_t *perf,
+                          unsigned group_index, unsigned device_count,
+                          unsigned *device_index_p)
+{
+    int device_id = (group_index == 0) ? perf->params.recv_device_id :
+                                         perf->params.send_device_id;
+
+    if (device_count == 0) {
+        ucs_error("no accelerator devices available");
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
+        *device_index_p = group_index % device_count;
+        return UCS_OK;
+    }
+
+    if ((device_id < 0) || ((unsigned)device_id >= device_count)) {
+        ucs_error("device index %d is invalid for %u available devices",
+                  device_id, device_count);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *device_index_p = device_id;
+    return UCS_OK;
+}
+
 struct ucx_perf_thread_context {
     pthread_t           pt;
     int                 tid;
