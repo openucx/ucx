@@ -485,38 +485,41 @@ UCS_TEST_P(test_ucp_rma_gpu_nic, get_blocking)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_gpu_nic, rcx_cuda, "rc_x,cuda_copy")
 
 
-static const char *gpu_nic_rndv_put_flows[] = {"zcopy", "mtype"};
+static const char *gpu_nic_rndv_gpu_direct_rdma[] = {"gdr", "no_gdr"};
 
-/* The RMA rendezvous protocols make the peer send the data by rndv/rtr and
- * rndv/put, which are probed only for GPU memory */
+/* The RMA rendezvous protocols make the peer send the data by rndv/put, which
+ * is probed only for GPU memory. Without GPU direct RDMA, the peer stages the
+ * data by rndv/put/mtype instead of rndv/put/zcopy. */
 class test_ucp_rma_rndv_gpu_nic : public test_ucp_rma_gpu_nic {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
                            UCS_MASK(ucs_static_array_size(
-                                   gpu_nic_rndv_put_flows)),
-                           gpu_nic_rndv_put_flows);
+                                   gpu_nic_rndv_gpu_direct_rdma)),
+                           gpu_nic_rndv_gpu_direct_rdma);
+    }
+
+    test_ucp_rma_rndv_gpu_nic()
+    {
+        /* The RMA rendezvous put/get protocols are a fallback of the direct
+         * zcopy protocols; keep only the rendezvous ones so they are always
+         * selected. */
+        modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
     }
 
     void init() override
     {
-        modify_config("PROTOS",
-                      std::string("put/rndv,get/rndv,rndv/rtr,rndv/put/") +
-                              put_flow());
-        test_ucp_rma_gpu_nic::init();
-
-        if ((std::string(put_flow()) == "zcopy") &&
-            !check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
-            UCS_TEST_SKIP_R("no endpoint lane can register CUDA memory");
+        if (get_variant_value(2) == NO_GPU_DIRECT_RDMA) {
+            m_env.push_back(
+                    new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
         }
+
+        test_ucp_rma_gpu_nic::init();
     }
 
 protected:
-    const char *put_flow() const
-    {
-        return gpu_nic_rndv_put_flows[get_variant_value(2)];
-    }
+    static constexpr int NO_GPU_DIRECT_RDMA = 1;
 };
 
 UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, put_blocking)
