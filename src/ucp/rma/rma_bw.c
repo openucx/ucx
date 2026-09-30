@@ -18,8 +18,8 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
     ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
                                           send.state.uct_comp);
     ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
-    ucp_rma_bw_lane_t *lane0     = &sample->lanes[0];
-    ucp_rma_bw_lane_t *lane1     = &sample->lanes[1];
+    ucp_rma_bw_lane_t *lane0    = &sample->lanes[0];
+    ucp_rma_bw_lane_t *lane1    = &sample->lanes[1];
     int valid;
 
     valid = (comp->status == UCS_OK) && !sample->invalid &&
@@ -67,4 +67,17 @@ void ucp_rma_bw_abort(ucp_request_t *req, ucs_status_t status)
         sample->invalid = 1;
     }
     ucp_proto_request_zcopy_abort(req, status);
+}
+
+void ucp_rma_bw_sample_detach(ucp_request_t *req)
+{
+    ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
+
+    if (sample == NULL) {
+        return;
+    }
+
+    sample->req             = NULL;
+    req->flags             &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
+    req->send.rma.bw_sample = NULL;
 }

@@ -43,5 +43,6 @@ struct ucp_rma_bw_sample {
 void ucp_rma_bw_sample_complete(uct_completion_t *comp);
 void ucp_rma_bw_frag_complete(uct_completion_t *comp);
 void ucp_rma_bw_abort(ucp_request_t *req, ucs_status_t status);
+void ucp_rma_bw_sample_detach(ucp_request_t *req);
 
 #endif

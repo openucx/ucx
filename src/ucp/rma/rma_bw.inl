@@ -120,18 +120,4 @@ ucp_rma_bw_frag_posted(ucp_rma_bw_frag_t *frag, size_t bytes,
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_rma_bw_sample_detach(ucp_request_t *req)
-{
-    ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
-
-    if (sample == NULL) {
-        return;
-    }
-
-    sample->req              = NULL;
-    req->flags              &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
-    req->send.rma.bw_sample  = NULL;
-}
-
 #endif
