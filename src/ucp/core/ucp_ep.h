@@ -507,6 +507,23 @@ typedef struct ucp_ep_recovery_probe {
 
 
 enum {
+    UCP_EP_TF_LANE_EMPTY = 0,
+    UCP_EP_TF_LANE_HELD
+};
+
+
+/* Per-lane token-failover state. The UCT ep is kept until an RX token purges
+ * its outstanding operations, or until the endpoint is fully failed and the
+ * lane is canceled. */
+typedef struct ucp_ep_lane_tf {
+    uct_ep_h               uct_ep;
+    void                   *tx_token;
+    ucp_worker_cfg_index_t deactivate_cfg_index;
+    uint8_t                state;
+} ucp_ep_lane_tf_t;
+
+
+enum {
     UCP_EP_RECOVERY_STATE_IDLE,
     UCP_EP_RECOVERY_STATE_WAIT_REPLY,
     UCP_EP_RECOVERY_STATE_PROBING,
@@ -520,11 +537,15 @@ typedef struct ucp_ep_recovery_arg {
     unsigned                retries_left;
     uint8_t                 state;
     /* Generation of the LANES_ADDR exchange, pre-incremented by every request
-     * and echoed by the peer in its answers. Only carried on the wire for now,
-     * the follow-up patch matches it against the tokens of an answer to tell
-     * apart the round they belong to */
+     * and echoed by the peer in its answers. A stored token is applied only
+     * when it carries this id. */
     uint32_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+    ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
+    /* Pending requests from held lanes, replayed after all of their
+     * outstanding operations are resolved,
+     * outstanding re-posts also go here */
+    ucs_queue_head_t        tf_pending_q;
 } ucp_ep_recovery_arg_t;
 
 
@@ -1037,6 +1058,19 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Snapshot the TX token of a QUERY_TOKEN lane, replace that lane with the
+ * failed stub, and keep the UCT ep until an RX token arrives or the endpoint
+ * is fully failed.
+ *
+ * @return UCS_OK when the stub is installed and the UCT ep is held. Any other
+ *         status means the caller must use the software discard path. On
+ *         failure the UCT ep stays on the lane.
+ */
+ucs_status_t
+ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
