@@ -105,7 +105,6 @@ static void ucp_ep_failed_destroy(uct_ep_h ep);
 static void ucp_ep_recovery_arg_free(ucp_ep_h ep);
 static void ucp_ep_tf_cleanup(ucp_ep_h ep);
 static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg);
-static void ucp_ep_tf_release_if_idle(ucp_ep_h ep);
 static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane);
 static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
@@ -2398,7 +2397,6 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
         /* Recovery completed between rounds, the ep operates normally. */
-        ucp_ep_tf_release_if_idle(ep);
         ucs_assert(ep->ext->recovery_arg == NULL);
         goto done;
     }
@@ -2602,7 +2600,7 @@ static void ucp_ep_tf_cleanup(ucp_ep_h ep)
     ucp_ep_lane_tf_t *tf;
     ucp_lane_index_t lane;
 
-    if (arg == NULL) {
+    if ((arg == NULL) || ucp_ep_has_cm_lane(ep)) {
         return;
     }
 
@@ -2629,28 +2627,6 @@ static void ucp_ep_tf_cleanup(ucp_ep_h ep)
     } else {
         ucp_wireup_replay_pending_requests(ep, &arg->tf_pending_q);
     }
-}
-
-static void ucp_ep_tf_release_if_idle(ucp_ep_h ep)
-{
-    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
-    ucp_ep_lane_tf_t *tf;
-    ucp_lane_index_t lane;
-
-    if (ucp_ep_has_cm_lane(ep) || (arg == NULL) ||
-        (ucp_ep_get_failed_lanes(ep) != 0) ||
-        !ucs_queue_is_empty(&arg->tf_pending_q)) {
-        return;
-    }
-
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-        tf = &arg->tf[lane];
-        if ((tf->state != UCP_EP_TF_LANE_EMPTY) || (tf->uct_ep != NULL)) {
-            return;
-        }
-    }
-
-    ucp_ep_recovery_arg_free(ep);
 }
 
 static ucs_status_t
