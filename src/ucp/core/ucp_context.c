@@ -110,6 +110,13 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
+static const char *ucp_failover_modes[] = {
+    [UCP_FAILOVER_MODE_AUTO]  = "auto",
+    [UCP_FAILOVER_MODE_SW]    = "sw",
+    [UCP_FAILOVER_MODE_TOKEN] = "token",
+    [UCP_FAILOVER_MODE_LAST]  = NULL
+};
+
 static const char *ucp_gpu_nic_assignment_modes[] = {
     [UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO]        = "auto",
     [UCP_GPU_NIC_ASSIGNMENT_MODE_OFF]         = "off",
@@ -470,6 +477,18 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Applies only to endpoints created with UCP_ERR_HANDLING_MODE_FAILOVER.",
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
+
+  {"FAILOVER_MODE", "auto",
+   "Failover method for endpoints created with\n"
+   "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
+   " auto  - auto selected recovery protocol. Transport selection is\n"
+   "         unchanged.\n"
+   " sw    - force software PSN based recovery protocol. Transport\n"
+   "         selection is unchanged.\n"
+   " token - force token based retransmits. Transports that do not support\n"
+   "         the required capabilities are disabled.",
+   ucs_offsetof(ucp_context_config_t, failover_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_failover_modes)},
 
   {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
    "Time interval between dynamic transport switching rounds. Must be\n"
@@ -2700,6 +2719,13 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     } else {
         context->config.worker_fence_mode = context->config.ext.fence_mode;
+    }
+
+    /* Token based recovery is not implemented yet, so automatic selection
+     * uses the software PSN recovery protocol. */
+    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
+        ucs_debug("failover mode auto selects software psn recovery");
     }
 
     context->config.progress_wrapper_enabled =

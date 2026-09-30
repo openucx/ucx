@@ -1441,6 +1441,33 @@ ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
     return UCS_OK;
 }
 
+/* Static v2 fields only. Token pointers are per-call derivation arguments and
+ * stay out of this cache. A transport that does not implement tokens returns
+ * UCS_ERR_UNSUPPORTED when a token field is requested; iface open still
+ * succeeds and both lengths stay 0. */
+static ucs_status_t
+ucp_worker_iface_query_attr_v2(ucp_worker_iface_t *wiface)
+{
+    uct_iface_attr_v2_t *attr_v2 = &wiface->attr_v2;
+    const uint64_t basic_mask    = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                                   UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+                                   UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+    const uint64_t token_mask    = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
+                                   UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
+    ucs_status_t status;
+
+    memset(attr_v2, 0, sizeof(*attr_v2));
+    attr_v2->field_mask = basic_mask | token_mask;
+    status              = uct_iface_query_v2(wiface->iface, attr_v2);
+    if (status != UCS_ERR_UNSUPPORTED) {
+        return status;
+    }
+
+    memset(attr_v2, 0, sizeof(*attr_v2));
+    attr_v2->field_mask = basic_mask;
+    return uct_iface_query_v2(wiface->iface, attr_v2);
+}
+
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface_p)
 {
@@ -1550,6 +1577,11 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
 
     status = uct_iface_query(wiface->iface, &wiface->attr);
+    if (status != UCS_OK) {
+        goto err_close_iface;
+    }
+
+    status = ucp_worker_iface_query_attr_v2(wiface);
     if (status != UCS_OK) {
         goto err_close_iface;
     }
