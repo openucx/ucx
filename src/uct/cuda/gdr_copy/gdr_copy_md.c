@@ -122,6 +122,10 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
     md_attr->reg_cost         = md->reg_cost;
 
+    /* Pinning goes through nvidia_p2p_get_pages, which cannot map memory
+     * backed by a CUDA memory pool */
+    md_attr->required_mem_flags = UCS_MEM_FLAG_PEER_MEM_PINNABLE;
+
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {
         md_attr->reg_alignment = GPU_PAGE_SIZE;

@@ -901,6 +901,27 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
     return dmabuf_fd != UCT_DMABUF_FD_INVALID;
 }
 
+/* Memory from the stream-ordered allocator is only compatible with dma_buf
+ * mappings, so the peer memory driver cannot pin it */
+static int uct_cuda_copy_md_is_peer_mem_pinnable(const void *address)
+{
+#if CUDA_VERSION >= 11020
+    CUmemoryPool mempool = NULL;
+
+    /* The query succeeds and reports a NULL handle outside of a pool */
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(
+                cuPointerGetAttribute(&mempool,
+                                      CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE,
+                                      (CUdeviceptr)address)) != UCS_OK) {
+        return 1;
+    }
+
+    return mempool == NULL;
+#else
+    return 1;
+#endif
+}
+
 static uint8_t
 uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   const ucs_memory_info_t *mem_info,
@@ -912,6 +933,10 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
     if (uct_cuda_copy_md_is_registrable(md, mem_info, is_async_managed,
                                         is_host_located, dmabuf)) {
         mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    if (uct_cuda_copy_md_is_peer_mem_pinnable(mem_info->base_address)) {
+        mem_flags |= UCS_MEM_FLAG_PEER_MEM_PINNABLE;
     }
 
     return mem_flags | uct_cuda_copy_md_detect_memtype_copy_flags(mem_info);

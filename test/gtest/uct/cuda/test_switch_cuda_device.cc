@@ -353,15 +353,31 @@ protected:
         EXPECT_NE(nullptr, cuda_mem_ctx);
     }
 
-    void query_managed_registrable(void *address, size_t size)
+    void query_registrable(void *address, size_t size,
+                           ucs_memory_type_t exp_mem_type)
     {
         uct_md_mem_attr_v2_t mem_attr = {};
 
         mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
                               UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
         EXPECT_UCS_OK(uct_md_mem_query_v2(md(), address, size, &mem_attr));
-        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA_MANAGED, mem_attr.mem_type);
+        EXPECT_EQ(exp_mem_type, mem_attr.mem_type);
         EXPECT_TRUE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    }
+
+    void query_managed_registrable(void *address, size_t size)
+    {
+        query_registrable(address, size, UCS_MEMORY_TYPE_CUDA_MANAGED);
+    }
+
+    void query_peer_mem_pinnable(void *address, size_t size, int expected)
+    {
+        uct_md_mem_attr_v2_t mem_attr = {};
+
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+        EXPECT_UCS_OK(uct_md_mem_query_v2(md(), address, size, &mem_attr));
+        EXPECT_EQ(expected,
+                  !!(mem_attr.mem_flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE));
     }
 
     void test_async_managed_mem_pool_registrable()
@@ -518,6 +534,44 @@ UCS_TEST_P(test_mem_alloc_device,
 {
     test_async_managed_mem_pool_registrable();
 }
+
+/* Plain device memory can be pinned by the peer memory driver */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_peer_mem_pinnable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_peer_mem_pinnable(buffer.ptr(), size, 1);
+}
+
+/* Stream-ordered memory is only compatible with dma_buf mappings, so the peer
+ * memory driver cannot pin it even though it stays registrable CUDA memory */
+UCS_TEST_P(test_mem_alloc_device, async_mem_pool_not_peer_mem_pinnable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
+    }
+
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA,
+                      mem_buffer::alloc_mode::ASYNC);
+
+    query_peer_mem_pinnable(buffer.ptr(), size, 0);
+}
+
+#if CUDA_VERSION >= 11020
+/* Exportability of the pool does not change the outcome */
+UCS_TEST_P(test_mem_alloc_device, async_exportable_mem_pool_registrable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_mempool_mem_buffer buffer(size,
+                                   CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR);
+
+    query_registrable(buffer.ptr(), size, UCS_MEMORY_TYPE_CUDA);
+    query_peer_mem_pinnable(buffer.ptr(), size, 0);
+}
+#endif
 
 UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
