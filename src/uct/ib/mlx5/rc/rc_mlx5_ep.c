@@ -1481,11 +1481,10 @@ uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_t *iface,
                uct_rc_mlx5_send_op_is_ep_check(op));
 
     if (uct_rc_mlx5_send_op_is_get_bcopy(op)) {
-        iface->tx.reads_completed += op->length;
+        uct_rc_op_release_get_bcopy(op);
         uct_rc_iface_update_reads(iface);
     } else if (uct_rc_mlx5_send_op_is_get_zcopy(op)) {
-        iface->tx.reads_completed += op->length;
-        uct_rc_op_release_iov_get_zcopy(op);
+        uct_rc_op_release_reads_get_zcopy(op);
         uct_rc_iface_update_reads(iface);
     }
 
