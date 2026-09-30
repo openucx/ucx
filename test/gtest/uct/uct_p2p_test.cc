@@ -145,23 +145,38 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
     }
 }
 
+bool uct_p2p_test::is_md_mem_type_supported(ucs_memory_type_t mem_type,
+                                            unsigned flags)
+{
+    const uct_md_attr_v2_t &md_attr = sender().md_attr();
+
+    /* The MD must access the memory type directly, or be a host MD that can
+     * register it.
+     */
+    if (!(md_attr.access_mem_types & UCS_BIT(mem_type)) &&
+        !((md_attr.access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
+          (md_attr.reg_mem_types & UCS_BIT(mem_type)))) {
+        return false;
+    }
+
+    /* CUDA memory is tested only for send/receive zcopy operations. */
+    if (mem_type == UCS_MEMORY_TYPE_CUDA) {
+        if (!(flags & (TEST_UCT_FLAG_RECV_ZCOPY | TEST_UCT_FLAG_SEND_ZCOPY))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
                                    size_t max_length, unsigned flags)
 {
     for (auto mem_type : mem_buffer::supported_mem_types()) {
-        /* test mem type if md supports mem type
-         * (or) if HOST MD can register mem type
-         */
-        if (!((sender().md_attr().access_mem_types & UCS_BIT(mem_type)) ||
-            ((sender().md_attr().access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
-		sender().md_attr().reg_mem_types & UCS_BIT(mem_type)))) {
+        if (!is_md_mem_type_supported(mem_type, flags)) {
             continue;
         }
-        if (mem_type == UCS_MEMORY_TYPE_CUDA) {
-            if (!(flags & (TEST_UCT_FLAG_RECV_ZCOPY | TEST_UCT_FLAG_SEND_ZCOPY))) {
-                continue;
-            }
-        }
+
         test_xfer_multi_mem_type(send, min_length, max_length, flags,
                                  (ucs_memory_type_t) mem_type);
     }

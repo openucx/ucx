@@ -283,14 +283,23 @@ uct_ib_mlx5_inline_iov_copy(void *restrict dest, const uct_iov_t *iov,
 }
 
 
-/* wrapping of 'seg' should not happen */
-static UCS_F_ALWAYS_INLINE void*
-uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
+/* Const-safe version of uct_ib_mlx5_txwq_wrap_none() */
+static UCS_F_ALWAYS_INLINE const void *
+uct_ib_mlx5_txwq_wrap_none_const(const uct_ib_mlx5_txwq_t *txwq,
+                                 const void *seg)
 {
     ucs_assertv(((unsigned long)seg % UCT_IB_MLX5_WQE_SEG_SIZE) == 0, "seg=%p", seg);
     ucs_assertv(seg >= txwq->qstart, "seg=%p qstart=%p", seg, txwq->qstart);
     ucs_assertv(seg <  txwq->qend,   "seg=%p qend=%p",   seg, txwq->qend);
     return seg;
+}
+
+
+/* wrapping of 'seg' should not happen */
+static UCS_F_ALWAYS_INLINE void*
+uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)
+{
+    return (void*)uct_ib_mlx5_txwq_wrap_none_const(txwq, seg);
 }
 
 
@@ -306,15 +315,24 @@ uct_ib_mlx5_txwq_wrap_exact(uct_ib_mlx5_txwq_t *txwq, void *seg)
 }
 
 
+/* Const-safe version of uct_ib_mlx5_txwq_wrap_any() */
+static UCS_F_ALWAYS_INLINE const void *
+uct_ib_mlx5_txwq_wrap_any_const(const uct_ib_mlx5_txwq_t *txwq, const void *seg)
+{
+    if (ucs_unlikely(seg >= txwq->qend)) {
+        seg = UCS_PTR_BYTE_OFFSET(seg,
+                                  -UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
+    }
+
+    return uct_ib_mlx5_txwq_wrap_none_const(txwq, seg);
+}
+
+
 /* wrapping of 'seg' could happen, even past 'qend' boundary */
 static UCS_F_ALWAYS_INLINE void *
 uct_ib_mlx5_txwq_wrap_any(uct_ib_mlx5_txwq_t *txwq, void *seg)
 {
-    if (ucs_unlikely(seg >= txwq->qend)) {
-        seg = UCS_PTR_BYTE_OFFSET(seg, -UCS_PTR_BYTE_DIFF(txwq->qstart,
-                                                          txwq->qend));
-    }
-    return uct_ib_mlx5_txwq_wrap_none(txwq, seg);
+    return (void*)uct_ib_mlx5_txwq_wrap_any_const(txwq, seg);
 }
 
 
@@ -562,21 +580,55 @@ static UCS_F_ALWAYS_INLINE void uct_ib_mlx5_bf_copy_bb(void * restrict dst,
 #endif
 }
 
+#if UCT_IB_MLX5_HAVE_ST64B
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_bf_copy_bb_st64b(void *restrict dst, void *restrict src)
+{
+    ucs_assert(((uintptr_t)src % MLX5_SEND_WQE_BB) == 0);
+    ucs_assert(((uintptr_t)dst % MLX5_SEND_WQE_BB) == 0);
+
+    asm volatile(".arch_extension ls64\n"
+                 "ldp x8, x9, [%[src], #0]\n"
+                 "ldp x10, x11, [%[src], #16]\n"
+                 "ldp x12, x13, [%[src], #32]\n"
+                 "ldp x14, x15, [%[src], #48]\n"
+                 "st64b x8, [%[dst]]"
+                 :
+                 : [src] "r"(src), [dst] "r"(dst)
+                 : "x8", "x9", "x10", "x11", "x12", "x13", "x14",
+                   "x15", "memory");
+}
+#endif
+
+#define UCT_IB_MLX5_BF_COPY(_dst, _src, _num_bb, _wq, _copy_bb) \
+    ({ \
+        uint16_t _bb_num = (_num_bb); \
+        uint16_t _n; \
+        \
+        for (_n = 0; _n < _bb_num; ++_n) { \
+            _copy_bb(_dst, _src); \
+            (_dst) = UCS_PTR_BYTE_OFFSET(_dst, MLX5_SEND_WQE_BB); \
+            (_src) = UCS_PTR_BYTE_OFFSET(_src, MLX5_SEND_WQE_BB); \
+            if (ucs_unlikely((_src) == (_wq)->qend)) { \
+                (_src) = (_wq)->qstart; \
+            } \
+        } \
+        \
+        (_src); \
+    })
+
 static UCS_F_ALWAYS_INLINE
 void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
                           const uct_ib_mlx5_txwq_t *wq)
 {
-    uint16_t n;
-
-    for (n = 0; n < num_bb; ++n) {
-        uct_ib_mlx5_bf_copy_bb(dst, src);
-        dst = UCS_PTR_BYTE_OFFSET(dst, MLX5_SEND_WQE_BB);
-        src = UCS_PTR_BYTE_OFFSET(src, MLX5_SEND_WQE_BB);
-        if (ucs_unlikely(src == wq->qend)) {
-            src = wq->qstart;
-        }
+#if UCT_IB_MLX5_HAVE_ST64B
+    if (wq->bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+        return UCT_IB_MLX5_BF_COPY(dst, src, num_bb, wq,
+                                   uct_ib_mlx5_bf_copy_bb_st64b);
     }
-    return src;
+#endif
+
+    return UCT_IB_MLX5_BF_COPY(dst, src, num_bb, wq, uct_ib_mlx5_bf_copy_bb);
 }
 
 static UCS_F_ALWAYS_INLINE void *
