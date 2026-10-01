@@ -12,6 +12,7 @@
 /* The first measurement stage records completed payload throughput only. */
 #define UCP_RMA_BW_MAX_FRAGS      128
 #define UCP_RMA_BW_MAX_ACTIVE     4
+#define UCP_RMA_BW_NUM_LANES      2
 #define UCP_RMA_BW_MIN_LENGTH     (256 * UCS_KBYTE)
 
 typedef struct ucp_rma_bw_sample ucp_rma_bw_sample_t;
@@ -36,7 +37,7 @@ struct ucp_rma_bw_sample {
     unsigned          num_frags;
     unsigned          pending;
     unsigned          invalid;
-    ucp_rma_bw_lane_t lanes[2];
+    ucp_rma_bw_lane_t lanes[UCP_RMA_BW_NUM_LANES];
     ucp_rma_bw_frag_t frags[UCP_RMA_BW_MAX_FRAGS];
 };
 

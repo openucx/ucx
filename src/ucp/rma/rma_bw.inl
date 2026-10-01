@@ -35,7 +35,7 @@ ucp_rma_bw_sample_start(ucp_request_t *req,
     unsigned i;
 
     if (ucs_likely(!worker->context->config.ext.rma_bw_measure) ||
-        (mpriv->num_lanes != 2) ||
+        (mpriv->num_lanes != UCP_RMA_BW_NUM_LANES) ||
         (req->send.state.dt_iter.length < UCP_RMA_BW_MIN_LENGTH)) {
         return;
     }
@@ -98,24 +98,27 @@ ucp_rma_bw_frag_posted(ucp_rma_bw_frag_t *frag, size_t bytes,
     ucp_rma_bw_lane_t *lane;
     ucs_time_t now;
 
-    if ((frag == NULL) || ((status != UCS_OK) &&
-                           (status != UCS_INPROGRESS))) {
+    if ((frag == NULL) || UCS_STATUS_IS_ERR(status)) {
         return;
     }
 
     sample = frag->sample;
     lane   = &sample->lanes[frag->lane_idx];
-    now    = ucs_get_time();
     if (lane->num_frags == 0) {
         lane->first_post = frag->post_time;
     }
     lane->bytes += bytes;
     ++lane->num_frags;
-    if (status == UCS_INPROGRESS) {
+    if (ucs_likely(status == UCS_INPROGRESS)) {
         ++lane->num_async;
         ++sample->num_frags;
         ++sample->pending;
-    } else if (now > lane->last_comp) {
+        return;
+    }
+
+    ucs_assert(status == UCS_OK);
+    now = ucs_get_time();
+    if (now > lane->last_comp) {
         lane->last_comp = now;
     }
 }

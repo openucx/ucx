@@ -587,7 +587,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
   {"RMA_BW_MEASURE", "n",
-   "Sample completed payload throughput of two-rail PUT/GET zcopy operations. "
+   "Sample completed payload throughput of two-lane PUT/GET zcopy operations. "
    "This experimental option records measurements but does not change lane "
    "weights.",
    ucs_offsetof(ucp_context_config_t, rma_bw_measure), UCS_CONFIG_TYPE_BOOL},
