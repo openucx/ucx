@@ -97,7 +97,8 @@ protected:
         }
 
         if (status == UCS_OK) {
-            /* Without GPUs in the topology groups, no assignment is built */
+            /* Only possible when topology groups are empty, leading to
+             * no assignment */
             EXPECT_EQ(nullptr, ucph->gpu_nic_assignment);
             ucp_cleanup(ucph);
             UCS_TEST_SKIP_R("no gpu-nic assignment on this host");

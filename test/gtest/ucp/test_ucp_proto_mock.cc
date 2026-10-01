@@ -3355,15 +3355,16 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
-           assignment_breaks_ties_by_first_lane, "MAX_RMA_RAILS=1")
+           assignment_keeps_device_ordinal_tie_break, "MAX_RMA_RAILS=1")
 {
-    /* The BDF-ordinal tie break would pick nic(1) for an odd ordinal */
+    /* The BDF-ordinal tie break picks nic(1) for an odd ordinal, rather than
+     * the first lane on nic(0) */
     const unsigned ordinal     = ucs_topo_sys_device_get_bdf_class_ordinal(
             m_gpus[0]);
     const ucs_sys_device_t gpu = ((ordinal % 2) != 0) ? m_gpus[0] : m_gpus[1];
 
     install_assignment(gpu, {nic(0), nic(1)});
-    expect_direct_candidates(gpu, {nic(0)});
+    expect_direct_candidates(gpu, {nic(1)});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,

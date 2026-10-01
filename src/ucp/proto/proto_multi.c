@@ -506,22 +506,28 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
     return UCS_OK;
 }
 
-/* Apply the resolved assignment to the discovered assignable lanes. */
+/* Resolve the owner GPU's assignment and apply it to the assignable lanes. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
-        const ucp_proto_multi_init_params_t *params,
-        const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap,
-        ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
+        const ucp_proto_multi_init_params_t *params, ucp_lane_index_t *lanes,
         ucp_lane_index_t *num_lanes_p)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
     ucp_lane_index_t num_filtered_lanes        = 0;
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
+    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
+    ucs_sys_device_t gpu_sys_dev;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
+
+    assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(params,
+                                                                  &gpu_sys_dev);
+    if (assigned_nic_bitmap == NULL) {
+        return UCS_OK;
+    }
 
     /* Classify before compaction because index zero has the first-lane role. */
     for (i = 0; i < *num_lanes_p; ++i) {
@@ -933,8 +939,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucs_sys_device_t req_sys_dev    = init_params->select_param->sys_dev;
     ucp_lane_map_t queried_lane_map = 0;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
-    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
-    ucs_sys_device_t owner_gpu_sys_dev;
     ucp_proto_common_tl_perf_t perf;
     ucp_lane_index_t lanes[UCP_PROTO_MAX_LANES];
     ucp_proto_lane_selection_t selection;
@@ -955,17 +959,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return status;
     }
 
-    assigned_nic_bitmap =
-            ucp_proto_multi_get_assigned_nic_bitmap(params, &owner_gpu_sys_dev);
-    if (assigned_nic_bitmap != NULL) {
-        /* Filter out lanes that are not on the assigned NICs. */
-        status = ucp_proto_multi_filter_gpu_nic_lanes(params,
-                                                      assigned_nic_bitmap,
-                                                      owner_gpu_sys_dev, lanes,
-                                                      &num_lanes);
-        if (status != UCS_OK) {
-            return status;
-        }
+    status = ucp_proto_multi_filter_gpu_nic_lanes(params, lanes, &num_lanes);
+    if (status != UCS_OK) {
+        return status;
     }
 
     status = ucp_proto_multi_query_lanes(params, lanes, num_lanes, lanes_perf,
@@ -980,12 +976,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                          fixed_first_lane, num_lanes,
                                                          lanes);
 
-    /* The assignment already spreads the lanes over the GPU's NICs, so the
-     * device-ordinal tie-break is skipped */
-    req_sys_dev_ord = (assigned_nic_bitmap != NULL) ?
-                              UCS_SYS_DEVICE_ORDINAL_INVALID :
-                              ucs_topo_sys_device_get_bdf_class_ordinal(
-                                      req_sys_dev);
+    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
 
     ucs_trace(
             "select bw lanes: proto %s req_sys_dev=%d (%s) req_sys_dev_ord=%u",
@@ -993,8 +984,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
 
     if (init_params->worker->context->config.ext.proto_use_single_net_device) {
-        /* ucp_init() rejects UCX_SINGLE_NET_DEVICE with an active assignment */
-        ucs_assert(assigned_nic_bitmap == NULL);
+        /* ucp_init() rejects UCX_SINGLE_NET_DEVICE with an active gpu-nic assignment */
+        ucs_assert(init_params->worker->context->gpu_nic_assignment == NULL);
 
         num_lanes = ucp_proto_multi_filter_single_net_device(
                 num_lanes, init_params, lanes_perf, fixed_first_lane,
