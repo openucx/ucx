@@ -14,7 +14,7 @@
 #include <ucp/proto/proto_common.inl>
 
 void ucp_rma_bw_sample_start(ucp_request_t *req,
-                             const ucp_proto_multi_priv_t *mpriv)
+                             ucp_lane_index_t num_lanes)
 {
     ucp_worker_h worker = req->send.ep->worker;
     ucp_rma_bw_sample_t *sample;
@@ -22,10 +22,10 @@ void ucp_rma_bw_sample_start(ucp_request_t *req,
     unsigned i;
 
     if (ucs_likely(!worker->context->config.ext.rma_bw_measure) ||
-        (mpriv->num_lanes < 2) ||
-        (mpriv->num_lanes > UCP_MAX_LANES) ||
+        (num_lanes < 2) ||
+        (num_lanes > UCP_MAX_LANES) ||
         (req->send.state.dt_iter.length <
-         UCP_RMA_BW_MIN_LANE_LENGTH * mpriv->num_lanes)) {
+         UCP_RMA_BW_MIN_LANE_LENGTH * num_lanes)) {
         return;
     }
 
@@ -46,7 +46,7 @@ void ucp_rma_bw_sample_start(ucp_request_t *req,
 
     memset(sample, 0, sizeof(*sample));
     sample->req                = req;
-    sample->num_lanes          = mpriv->num_lanes;
+    sample->num_lanes          = num_lanes;
     req->send.rma.bw_sample    = sample;
     req->flags                |= UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
     worker->rma_bw_next_sample = now +
@@ -72,11 +72,12 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
 
         if (i == sample->num_lanes) {
             for (i = 0; i < sample->num_lanes; ++i) {
-                lane = &sample->lanes[i];
                 ucp_trace_req(req, "rma bw sample lane %u/%u: %zu bytes / "
-                              "%.3f us", i, sample->num_lanes, lane->bytes,
-                              ucs_time_to_sec(lane->last_comp -
-                                              lane->first_post) * 1e6);
+                              "%.3f us", i, sample->num_lanes,
+                              sample->lanes[i].bytes,
+                              ucs_time_to_sec(sample->lanes[i].last_comp -
+                                              sample->lanes[i].first_post) *
+                              1e6);
             }
         }
     }
@@ -113,7 +114,9 @@ void ucp_rma_bw_sample_detach(ucp_request_t *req)
         return;
     }
 
-    sample->req             = NULL;
-    req->flags             &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
-    req->send.rma.bw_sample = NULL;
+    sample->req = NULL;
+    /* Overflow fragments may still use the request completion after reset. */
+    req->send.state.uct_comp.func = ucp_proto_request_zcopy_completion;
+    req->flags                   &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
+    req->send.rma.bw_sample       = NULL;
 }

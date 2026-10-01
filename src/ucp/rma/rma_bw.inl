@@ -9,8 +9,6 @@
 
 #include "rma_bw.h"
 
-#include <ucp/proto/proto_multi.h>
-
 /* A detached request keeps its slot until every UCT fragment completes. */
 static UCS_F_ALWAYS_INLINE int
 ucp_rma_bw_sample_is_free(const ucp_rma_bw_sample_t *sample)
@@ -25,15 +23,12 @@ ucp_rma_bw_sample_get(ucp_request_t *req)
            req->send.rma.bw_sample : NULL;
 }
 
-void ucp_rma_bw_sample_start(ucp_request_t *req,
-                             const ucp_proto_multi_priv_t *mpriv);
-
 static UCS_F_ALWAYS_INLINE void
 ucp_rma_bw_sample_try_start(ucp_request_t *req,
-                            const ucp_proto_multi_priv_t *mpriv)
+                            ucp_lane_index_t num_lanes)
 {
     if (ucs_unlikely(req->send.ep->worker->context->config.ext.rma_bw_measure)) {
-        ucp_rma_bw_sample_start(req, mpriv);
+        ucp_rma_bw_sample_start(req, num_lanes);
     }
 }
 

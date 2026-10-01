@@ -1755,6 +1755,7 @@ TEST(test_ucp_rma_bw_helpers, detach_pending)
     req.flags                     = UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
     req.send.rma.bw_sample        = &sample;
     req.send.state.uct_comp.count = 4;
+    req.send.state.uct_comp.func  = ucp_rma_bw_sample_complete;
     sample.req                    = &req;
     sample.num_lanes              = 3;
 
@@ -1766,6 +1767,8 @@ TEST(test_ucp_rma_bw_helpers, detach_pending)
     ucp_rma_bw_sample_detach(&req);
 
     EXPECT_FALSE(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE);
+    EXPECT_TRUE(req.send.state.uct_comp.func ==
+                ucp_proto_request_zcopy_completion);
     EXPECT_EQ(nullptr, req.send.rma.bw_sample);
     EXPECT_EQ(nullptr, sample.req);
     EXPECT_EQ(UCS_ERR_CANCELED, req.send.state.uct_comp.status);
