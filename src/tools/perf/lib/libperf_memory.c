@@ -383,6 +383,7 @@ void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 
 void ucx_perf_global_init()
 {
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     static ucx_perf_allocator_t host_allocator = {
         .name             = "host",
         .default_mem_type = UCS_MEMORY_TYPE_HOST,
@@ -412,12 +413,16 @@ void ucx_perf_global_init()
 
     UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
 
-    ucx_perf_allocator_register(&host_allocator);
-    ucx_perf_allocator_register(&rdma_allocator);
+    UCS_INIT_ONCE(&init_once) {
+        ucx_perf_allocator_register(&host_allocator);
+        ucx_perf_allocator_register(&rdma_allocator);
 
-    /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
-     * alloc hooks, which are using dlsym() to get pointer to original function,
-     * do not work. Need to use bistro for memtype hooks to fix it.
-     */
-    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, UCS_MODULE_LOAD_FLAG_GLOBAL);
+        /*
+         * FIXME Memtype allocator modules must be loaded to global scope,
+         * otherwise alloc hooks, which are using dlsym() to get pointer to
+         * original function, do not work. Need to use bistro for memtype hooks
+         * to fix it.
+         */
+        UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, UCS_MODULE_LOAD_FLAG_GLOBAL);
+    }
 }

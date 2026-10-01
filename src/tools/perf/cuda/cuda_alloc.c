@@ -477,6 +477,7 @@ static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
 #if CUDART_VERSION >= 11020
 static ucx_perf_allocator_t cuda_async_allocator = {
     .name             = "cuda-async",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED,
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_async_uct_alloc,
@@ -492,6 +493,7 @@ static ucx_perf_allocator_t cuda_async_allocator = {
 
 static ucx_perf_allocator_t cuda_ucp_allocator = {
     .name             = "cuda",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_CUDA,
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_uct_alloc,
@@ -503,6 +505,7 @@ static ucx_perf_allocator_t cuda_ucp_allocator = {
 
 static ucx_perf_allocator_t cuda_alloc_allocator = {
     .name             = "cuda-alloc",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_CUDA,
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_uct_alloc,
@@ -516,6 +519,7 @@ static ucx_perf_allocator_t cuda_alloc_allocator = {
 
 static ucx_perf_allocator_t cuda_managed_allocator = {
     .name             = "cuda-managed",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED,
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_managed_uct_alloc,
@@ -528,6 +532,7 @@ static ucx_perf_allocator_t cuda_managed_allocator = {
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
 static ucx_perf_allocator_t cuda_localized_allocator = {
     .name             = "cuda-localized",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_CUDA,
     .init             = ucx_perf_cuda_init,
     .uct_alloc        = ucx_perf_cuda_localized_uct_alloc,

@@ -715,8 +715,10 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory ===="
 
-		expect_failure "device API is not supported for host" \
+		expect_failure "device API is not supported for" \
 			"$ucx_perftest" -t ucp_put_lat -a -m cuda,host -l
+		expect_failure "device ids must match in loopback mode" \
+			"$ucx_perftest" -t tag_lat -m cuda:0,cuda:1 -l
 		expect_failure "cuda device index 2147483647 is invalid" \
 			"$ucx_perftest" -t tag_lat -m cuda:2147483647 -s 8 -l
 

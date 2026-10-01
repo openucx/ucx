@@ -262,8 +262,7 @@ static ucs_status_t parse_perf_mem_allocator(char *opt_arg,
     if (token == NULL) {
         parsed_device_id = UCX_PERF_MEM_DEV_DEFAULT;
     } else {
-        if ((resolved_mem_type == UCS_MEMORY_TYPE_HOST) ||
-            (resolved_mem_type == UCS_MEMORY_TYPE_RDMA)) {
+        if (!(allocator->flags & UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID)) {
             ucs_error("device id is not supported for memory allocator \"%s\"",
                       allocator->name);
             return UCS_ERR_INVALID_PARAM;
@@ -786,10 +785,22 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     }
 }
 
+static ucs_status_t
+validate_device_mem_type(ucs_memory_type_t mem_type, const char *error_prefix)
+{
+    if (ucx_perf_mem_type_device_dispatchers[mem_type] == NULL) {
+        ucs_error("%sdevice API is not supported for %s", error_prefix,
+                  ucs_memory_type_names[mem_type]);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t adjust_test_params(perftest_params_t *params,
                                 const char *error_prefix)
 {
-    ucs_memory_type_t mem_type;
+    ucs_status_t status;
     test_type_t *test;
 
     if (params->test_id == TEST_ID_UNDEFINED) {
@@ -803,19 +814,24 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
         params->super.max_outstanding = test->window_size;
     }
 
+    if ((params->super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (params->super.send_device_id != params->super.recv_device_id)) {
+        ucs_error("%ssend and receive device ids must match in loopback mode",
+                  error_prefix);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (params->super.flags & UCX_PERF_TEST_FLAG_DEVICE) {
-        mem_type = params->super.send_mem_type;
-        if (ucx_perf_mem_type_device_dispatchers[mem_type] == NULL) {
-            ucs_error("%sdevice API is not supported for %s", error_prefix,
-                      ucs_memory_type_names[mem_type]);
-            return UCS_ERR_INVALID_PARAM;
+        status = validate_device_mem_type(params->super.send_mem_type,
+                                          error_prefix);
+        if (status != UCS_OK) {
+            return status;
         }
 
-        mem_type = params->super.recv_mem_type;
-        if (ucx_perf_mem_type_device_dispatchers[mem_type] == NULL) {
-            ucs_error("%sdevice API is not supported for %s", error_prefix,
-                      ucs_memory_type_names[mem_type]);
-            return UCS_ERR_INVALID_PARAM;
+        status = validate_device_mem_type(params->super.recv_mem_type,
+                                          error_prefix);
+        if (status != UCS_OK) {
+            return status;
         }
 
         /* TODO: Add getter function for thread count */

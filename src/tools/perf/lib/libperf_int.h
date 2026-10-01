@@ -79,8 +79,13 @@ typedef void (*ucx_perf_memcpy_func_t)(void *dst,
 
 typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
 
+enum {
+    UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID = UCS_BIT(0)
+};
+
 struct ucx_perf_allocator {
     const char                       *name;
+    unsigned                         flags;
     ucs_memory_type_t                default_mem_type;
     ucx_perf_init_func_t             init;
     ucx_perf_uct_alloc_func_t        uct_alloc;
