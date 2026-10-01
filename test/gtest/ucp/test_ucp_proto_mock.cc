@@ -3122,8 +3122,8 @@ private:
             proto_select   = &ep_config->proto_select;
         } else {
             rkey_cfg_index = rkey_config_index();
-            rkey_config = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
-            proto_select = &rkey_config->proto_select;
+            rkey_config    = ucp_worker_rkey_config(worker, rkey_cfg_index);
+            proto_select   = &rkey_config->proto_select;
         }
 
         return ucp_proto_select_lookup_slow(worker, proto_select, 0,

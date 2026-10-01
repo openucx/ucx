@@ -509,7 +509,7 @@ private:
         unsigned num_used       = 0;
         unsigned num_restricted = 0;
         ucp_ep_config_t *ep_config;
-        ucp_rkey_config_t *rkey_config;
+        ucp_rkey_config_t **rkey_config_p;
         ucp_worker_h worker;
 
         for (auto iter = entities().begin(); iter != entities().end(); ++iter) {
@@ -519,8 +519,8 @@ private:
                                       proto_name, num_used, num_restricted);
             }
 
-            ucs_array_for_each(rkey_config, &worker->rkey_config) {
-                expect_assigned_lanes(worker, &rkey_config->proto_select,
+            ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+                expect_assigned_lanes(worker, &(*rkey_config_p)->proto_select,
                                       proto_name, num_used, num_restricted);
             }
         }
