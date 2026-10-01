@@ -328,9 +328,6 @@ build_cuda() {
 	make_clean distclean
 }
 
-#
-# Build ROCm
-#
 run_perftest_device_id_smoke() {
 	local allocator=$1
 	shift
@@ -340,6 +337,9 @@ run_perftest_device_id_smoke() {
 		-s 8 -n 1 -w 0 -l
 }
 
+#
+# Build ROCm
+#
 build_rocm() {
 	if [ -f /opt/rocm/bin/rocminfo ]; then
 		echo "==== Build with enable rocm  ===="
@@ -426,8 +426,6 @@ build_ze() {
 		null_ze_info=$(ZE_ENABLE_NULL_DRIVER=1 ZE_ENABLE_LOADER_DEBUG_TRACE=1 \
 			${ucx_inst}/bin/ucx_info -d)
 		check_ze_devices "${null_ze_info}" "null-driver"
-		run_perftest_device_id_smoke ze-device \
-			ZE_ENABLE_NULL_DRIVER=1 UCX_TLS=self,ze_copy
 	fi
 
 	make_clean distclean

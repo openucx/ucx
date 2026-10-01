@@ -815,6 +815,8 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
     }
 
     if ((params->super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (params->super.send_device_id != UCX_PERF_MEM_DEV_DEFAULT) &&
+        (params->super.recv_device_id != UCX_PERF_MEM_DEV_DEFAULT) &&
         (params->super.send_device_id != params->super.recv_device_id)) {
         ucs_error("%ssend and receive device ids must match in loopback mode",
                   error_prefix);

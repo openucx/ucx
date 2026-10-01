@@ -350,8 +350,15 @@ ucx_perf_get_device_index(const ucx_perf_context_t *perf,
 {
     int device_id;
 
-    device_id = (group_index == 0) ? perf->params.recv_device_id :
-                                     perf->params.send_device_id;
+    if (perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+        device_id = perf->params.recv_device_id;
+        if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
+            device_id = perf->params.send_device_id;
+        }
+    } else {
+        device_id = (group_index == 0) ? perf->params.recv_device_id :
+                                         perf->params.send_device_id;
+    }
 
     if (device_count == 0) {
         ucs_error("no %s devices available", device_type);

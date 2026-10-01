@@ -717,6 +717,7 @@ run_ucx_perftest() {
 
 		expect_failure "device API is not supported for" \
 			"$ucx_perftest" -t ucp_put_lat -a -m cuda,host -l
+		"$ucx_perftest" -t tag_lat -m cuda:0,host -s 8 -n 1 -w 0 -l -f
 		expect_failure "device ids must match in loopback mode" \
 			"$ucx_perftest" -t tag_lat -m cuda:0,cuda:1 -l
 		expect_failure "cuda device index 2147483647 is invalid" \
