@@ -2909,7 +2909,7 @@ protected:
         ucp_proto_multi_init_params_t params          = {};
         ucp_proto_common_init_params_t *common_params = &params.super;
         ucp_proto_init_params_t *init_params          = &common_params->super;
-        ucs_sys_device_t gpu_sys_dev;
+        ucs_sys_device_t owner_sys_dev;
 
         init_params->worker                 = sender().worker();
         init_params->select_param           = &select_key.param;
@@ -2918,7 +2918,8 @@ protected:
         params.first.lane_type              = lane_type;
         params.middle.lane_type             = lane_type;
 
-        return ucp_proto_multi_get_assigned_nic_bitmap(&params, &gpu_sys_dev);
+        owner_sys_dev = ucp_proto_multi_get_owner_sys_dev(&params);
+        return ucp_proto_multi_get_assigned_nic_bitmap(&params, owner_sys_dev);
     }
 
     ucp_proto_query_attr_t

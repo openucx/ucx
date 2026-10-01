@@ -29,17 +29,28 @@ static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
            (lane_type == UCP_LANE_TYPE_AM_BW);
 }
 
+ucs_sys_device_t
+ucp_proto_multi_get_owner_sys_dev(const ucp_proto_multi_init_params_t *params)
+{
+    ucs_sys_device_t reg_sys_dev = params->super.reg_mem_info.sys_dev;
+
+    /* The device of the registered buffer is the staging buffer if any,
+     * otherwise it is the application buffer.
+     * Host staging and unregistered buffers have no device, so fall back to
+     * the application buffer's device. */
+    return (reg_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                   reg_sys_dev :
+                   params->super.super.select_param->sys_dev;
+}
+
 const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         const ucp_proto_multi_init_params_t *params,
-        ucs_sys_device_t *owner_gpu_sys_dev_p)
+        ucs_sys_device_t owner_sys_dev)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
-    ucp_memory_info_t mem_info                 = params->super.reg_mem_info;
     const ucp_gpu_nic_sys_dev_bitmap_t *bitmap = NULL;
     const char *UCS_V_UNUSED owner_desc;
-
-    *owner_gpu_sys_dev_p = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     if (context->gpu_nic_assignment == NULL) {
         /* No assignment configured. */
@@ -51,42 +62,26 @@ const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         goto out;
     }
 
-    if (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) {
+    if (params->super.reg_mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) {
         /* Buffer is not registered (e.g. bcopy), so it has no NIC affinity. */
         owner_desc = "unregistered buffer";
         goto out;
     }
 
-    /* Use the staging buffer's device if applicable. A host staging buffer has
-     * no device, so fall back to the application buffer's device, to spread
-     * traffic across NICs anyway. */
-    if (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        mem_info = ucp_proto_common_select_param_mem_info(
-                init_params->select_param);
-
-        if (mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-            /* E.g. host memory, or managed memory without a preferred
-             * location */
-            owner_desc = "unknown device";
-            goto out;
-        }
-    }
-
-    bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
-                                           mem_info.sys_dev);
-    if (bitmap == NULL) {
-        owner_desc = "device has no assignment";
+    if (owner_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        /* E.g. host memory, or managed memory without a preferred location */
+        owner_desc = "unknown device";
         goto out;
     }
 
-    owner_desc           = "assigned";
-    *owner_gpu_sys_dev_p = mem_info.sys_dev;
+    bitmap     = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                               owner_sys_dev);
+    owner_desc = (bitmap != NULL) ? "assigned" : "device has no assignment";
 
 out:
-    ucs_trace("gpu-nic owner: proto %s mem %s sys_dev %d (%s): %s",
-              ucp_proto_id_field(init_params->proto_id, name),
-              ucs_memory_type_names[mem_info.type], mem_info.sys_dev,
-              ucs_topo_sys_device_get_name(mem_info.sys_dev), owner_desc);
+    ucs_trace("gpu-nic owner: proto %s sys_dev %d (%s): %s",
+              ucp_proto_id_field(init_params->proto_id, name), owner_sys_dev,
+              ucs_topo_sys_device_get_name(owner_sys_dev), owner_desc);
     return bitmap;
 }
 
@@ -508,7 +503,8 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
 
 /* Resolve the owner GPU's assignment and apply it to the assignable lanes. */
 static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
-        const ucp_proto_multi_init_params_t *params, ucp_lane_index_t *lanes,
+        const ucp_proto_multi_init_params_t *params,
+        ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
         ucp_lane_index_t *num_lanes_p)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
@@ -516,7 +512,6 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     ucp_lane_index_t num_filtered_lanes        = 0;
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
     const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
-    ucs_sys_device_t gpu_sys_dev;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
@@ -524,7 +519,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     ucp_md_index_t md_index;
 
     assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(params,
-                                                                  &gpu_sys_dev);
+                                                                  gpu_sys_dev);
     if (assigned_nic_bitmap == NULL) {
         return UCS_OK;
     }
@@ -936,7 +931,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   ucp_proto_multi_priv_t *mpriv)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
-    ucs_sys_device_t req_sys_dev    = init_params->select_param->sys_dev;
+    ucs_sys_device_t req_sys_dev = ucp_proto_multi_get_owner_sys_dev(params);
     ucp_lane_map_t queried_lane_map = 0;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t perf;
@@ -959,7 +954,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         return status;
     }
 
-    status = ucp_proto_multi_filter_gpu_nic_lanes(params, lanes, &num_lanes);
+    status = ucp_proto_multi_filter_gpu_nic_lanes(params, req_sys_dev, lanes,
+                                                  &num_lanes);
     if (status != UCS_OK) {
         return status;
     }
