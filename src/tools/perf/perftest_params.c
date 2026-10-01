@@ -21,7 +21,7 @@ const struct option TEST_PARAMS_ARGS_LONG[] =
 {
     {"daemon-local",  required_argument, 0, 'g'},
     {"daemon-remote", required_argument, 0, 'G'},
-    {"device",        no_argument,       0, 'a'},
+    {"device-api",    no_argument,       0, 'a'},
     {0, 0, 0, 0}
 };
 
@@ -73,7 +73,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
                api_names[test->api], test->desc);
     }
     printf("\n");
-    printf("     -a, --device   run the test from the accelerator selected by -m,\n");
+    printf("     -a, --device-api\n");
+    printf("                    run the test from the accelerator selected by -m,\n");
     printf("                    using the device API\n");
     printf("     -L <level>     device cooperation level for gdaki (thread)\n");
     printf("                    thread - thread level\n");
@@ -97,6 +98,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
            "(host)\n");
     printf("                    dev id is optional, it corresponds to the index of\n");
     printf("                    the device in the list of available devices\n");
+    printf("                    and is supported only by accelerator allocators\n");
     print_memory_allocator_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
@@ -258,6 +260,13 @@ static ucs_status_t parse_perf_mem_allocator(char *opt_arg,
     if (token == NULL) {
         *device_id = UCX_PERF_MEM_DEV_DEFAULT;
         return UCS_OK;
+    }
+
+    if ((*mem_type == UCS_MEMORY_TYPE_HOST) ||
+        (*mem_type == UCS_MEMORY_TYPE_RDMA)) {
+        ucs_error("device id is not supported for memory allocator \"%s\"",
+                  allocator->name);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return parse_int(token, device_id, "device id", 0, INT_MAX);

@@ -834,10 +834,14 @@ run_ucx_perftest_cuda_device() {
 		return 0
 	fi
 
-	if [ "$(get_num_gpus)" -eq 0 ]; then
+	num_gpus=$(get_num_gpus)
+	if [ "$num_gpus" -eq 0 ]; then
 		echo "==== No NVIDIA GPUs found, skipping CUDA device tests ===="
 		return 0
 	fi
+
+	# Pin both peers without constraining the installed batch configuration
+	export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
 
     echo "==== Running ucx_perftest with cuda kernel ===="
 	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
@@ -856,6 +860,7 @@ run_ucx_perftest_cuda_device() {
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 	done
 	unset UCX_TLS
+	unset CUDA_VISIBLE_DEVICES
 }
 
 #
