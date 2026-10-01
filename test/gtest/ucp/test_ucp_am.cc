@@ -339,6 +339,59 @@ UCS_TEST_P(test_ucp_am, set_am_handler_out_of_order)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 
+class test_ucp_am_bcopy_status : public test_ucp_am {
+public:
+    test_ucp_am_bcopy_status()
+    {
+        modify_config("SELF_SEG_SIZE",
+                      ucs::to_string(get_variant_value(1)),
+                      SETENV_IF_NOT_EXIST);
+        modify_config("ZCOPY_THRESH", "inf");
+        modify_config("RNDV_THRESH", "inf");
+    }
+
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        int base_len = 0xd00;
+        int len;
+
+        /* Exercise packed lengths whose low byte aliases UCS errors. */
+        for (int8_t low_byte = static_cast<int8_t>(UCS_OK);
+            low_byte >= static_cast<int8_t>(UCS_ERR_LAST); --low_byte) {
+            auto &variant = add_variant(variants, UCP_FEATURE_AM);
+            add_variant_value(variant.values, 1, "proto_v1");
+            len = base_len + static_cast<uint8_t>(low_byte);
+            add_variant_value(variant.values, len,
+                              "max_bcopy_" + ucs::to_string(len));
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_am_bcopy_status, multi)
+{
+    const size_t max_bcopy = get_variant_value(1);
+    std::vector<char> buf(2 * max_bcopy,
+                          static_cast<char>(2 * max_bcopy));
+
+    ASSERT_EQ(1, sizeof(ucs_status_t));
+    ASSERT_EQ(max_bcopy,
+              ucp_ep_get_max_bcopy(sender().ep(),
+                                   ucp_ep_get_am_lane(sender().ep())));
+
+    set_handlers(UCP_SEND_ID);
+    recv_ams = 0;
+    release  = 0;
+
+    ASSERT_UCS_OK(request_wait(
+            ucp_am_send_nb(sender().ep(), UCP_SEND_ID, buf.data(), 1,
+                           ucp_dt_make_contig(buf.size()),
+                           (ucp_send_callback_t)ucs_empty_function, 0)));
+    wait_for_value(&recv_ams, 1);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_bcopy_status, self, "self")
+
+
 class test_ucp_am_nbx : public test_ucp_am_base {
 public:
     static const uint64_t SEED = 0x1111111111111111lu;
