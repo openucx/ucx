@@ -374,23 +374,6 @@ const uct_ze_subdevice_t *uct_ze_base_get_subdevice_by_global_id(int global_id)
     return &ze_subdevices[global_id];
 }
 
-int uct_ze_base_get_device_ordinal(ze_device_handle_t device)
-{
-    int i;
-
-    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
-        return -1;
-    }
-
-    for (i = 0; i < uct_ze_base.num_devices; i++) {
-        if (uct_ze_base.devices[i].root_device == device) {
-            return i;
-        }
-    }
-
-    return -1; /* not found */
-}
-
 ze_device_handle_t uct_ze_base_get_device(int ordinal)
 {
     if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
@@ -558,9 +541,6 @@ uct_ze_base_query_devices_common(uct_md_h md, uct_device_type_t dev_type,
                                  uct_tl_device_resource_t **tl_devices_p,
                                  unsigned *num_tl_devices_p)
 {
-    ucs_info("ze_base: query_devices_common for md component=%s type=%d",
-             md->component->name, dev_type);
-
     return uct_single_device_resource(md, md->component->name, dev_type,
                                       UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
                                       num_tl_devices_p);

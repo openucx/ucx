@@ -196,7 +196,13 @@ static ucs_status_t uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
     remote_fd = *(int*)local_handle.data;
 
     /* Duplicate the file descriptor from remote process */
-    if (key->pid != getpid() && remote_fd > 0 && remote_fd < 65536) {
+    if (key->pid != getpid()) {
+        if (remote_fd < 0) {
+            ucs_error("invalid fd %d in ipc handle from pid %d", remote_fd,
+                      key->pid);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
         *dup_fd = uct_ze_ipc_dup_fd_from_pid(key->pid, remote_fd);
         if (*dup_fd < 0) {
             ucs_error("failed to duplicate fd %d from pid %d", remote_fd,

@@ -22,38 +22,6 @@
 #include <unistd.h>
 
 
-/* Helper function to compute a simple checksum of IPC handle for verification */
-static uint32_t uct_ze_ipc_handle_checksum(const ze_ipc_mem_handle_t *handle)
-{
-    const unsigned char *bytes = (const unsigned char*)handle;
-    uint32_t sum               = 0;
-    for (size_t i = 0; i < sizeof(ze_ipc_mem_handle_t); i++) {
-        sum += bytes[i];
-        sum  = (sum << 1) | (sum >> 31); /* rotate left */
-    }
-    return sum;
-}
-
-
-/* Helper function to print IPC handle bytes for debugging */
-static void uct_ze_ipc_print_handle(const char *prefix,
-                                    const ze_ipc_mem_handle_t *handle,
-                                    uintptr_t addr, size_t len, int dev_num)
-{
-    const unsigned char *bytes = (const unsigned char*)handle;
-    uint32_t checksum          = uct_ze_ipc_handle_checksum(handle);
-
-    /* Print first 16 bytes of handle + checksum for quick comparison */
-    ucs_info("%s: addr=0x%lx len=%zu dev=%d checksum=0x%08x "
-             "handle[0-15]=%02x%02x%02x%02x%02x%02x%02x%02x"
-             "%02x%02x%02x%02x%02x%02x%02x%02x",
-             prefix, (unsigned long)addr, len, dev_num, checksum, bytes[0],
-             bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-             bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12],
-             bytes[13], bytes[14], bytes[15]);
-}
-
-
 static ucs_config_field_t uct_ze_ipc_md_config_table[] = {
     {"", "", NULL, ucs_offsetof(uct_ze_ipc_md_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -85,11 +53,6 @@ uct_ze_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_ze_ipc_key_t *key    = memh;
 
     *packed = *key;
-
-    /* Print handle info for verification - compare with rkey_unpack output */
-    uct_ze_ipc_print_handle("PACK(sender)", &packed->ipc_handle,
-                            packed->address, packed->length, packed->dev_num);
-
     return UCS_OK;
 }
 
@@ -100,28 +63,16 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
     ze_memory_allocation_properties_t props = {
         .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
     };
-    ze_device_handle_t alloc_device         = NULL;
     void *base_address;
     size_t alloc_size;
     unsigned long proc_create_time;
     ze_result_t ret;
     ucs_status_t status;
-    int dev_ordinal;
 
-    /* Get memory allocation properties to verify this is ZE device memory
-     * Also get the device where memory was allocated */
-    ret = zeMemGetAllocProperties(md->ze_context, address, &props,
-                                  &alloc_device);
+    /* Get memory allocation properties to verify this is ZE device memory */
+    ret = zeMemGetAllocProperties(md->ze_context, address, &props, NULL);
     if ((ret != ZE_RESULT_SUCCESS) || (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
         ucs_error("failed to get allocation properties for %p", address);
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    /* Get device ordinal from the device handle */
-    dev_ordinal = uct_ze_base_get_device_ordinal(alloc_device);
-    if (dev_ordinal < 0) {
-        ucs_error("failed to get device ordinal for device %p (ptr=%p)",
-                  (void*)alloc_device, address);
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -153,12 +104,11 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
     key->pid              = getpid();
     key->address          = (uintptr_t)base_address;
     key->length           = alloc_size;
-    key->dev_num          = dev_ordinal;
     key->alloc_id         = props.id;
     key->proc_create_time = proc_create_time;
 
-    ucs_trace("packed IPC handle for %p base=%p len=%zu dev=%d pid=%d", address,
-              base_address, alloc_size, dev_ordinal, key->pid);
+    ucs_trace("packed ipc handle for %p base %p length %zu pid %d", address,
+              base_address, alloc_size, key->pid);
 
     return UCS_OK;
 }
@@ -171,9 +121,6 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uct_ze_ipc_md_t *md = ucs_derived_of(uct_md, uct_ze_ipc_md_t);
     uct_ze_ipc_key_t *key;
     ucs_status_t status;
-
-    ucs_info("ze_ipc_md: mem_reg called address=%p length=%zu", address,
-             length);
 
     key = ucs_malloc(sizeof(*key), "uct_ze_ipc_key_t");
     if (key == NULL) {
@@ -188,10 +135,6 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
         ucs_free(key);
         return status;
     }
-
-    ucs_info("ze_ipc_md: mem_reg succeeded address=%p key->address=0x%lx "
-             "key->length=%zu",
-             address, (unsigned long)key->address, key->length);
 
     *memh_p = key;
     return UCS_OK;
@@ -226,10 +169,6 @@ uct_ze_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 {
     uct_ze_ipc_key_t *packed = (uct_ze_ipc_key_t*)rkey_buffer;
     uct_ze_ipc_key_t *key;
-
-    /* Print handle info for verification - compare with mkey_pack output */
-    uct_ze_ipc_print_handle("UNPACK(receiver)", &packed->ipc_handle,
-                            packed->address, packed->length, packed->dev_num);
 
     key = ucs_malloc(sizeof(uct_ze_ipc_key_t), "uct_ze_ipc_key_t");
     if (key == NULL) {

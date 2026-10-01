@@ -65,9 +65,6 @@ ze_device_handle_t uct_ze_base_get_device_handle_from_subdevice(
 
 ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device);
 
-/* Get device ordinal from device handle, returns -1 if not found */
-int uct_ze_base_get_device_ordinal(ze_device_handle_t device);
-
 /* Get root device handle by ordinal, returns NULL if out of range */
 ze_device_handle_t uct_ze_base_get_device(int ordinal);
 

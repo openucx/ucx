@@ -23,6 +23,7 @@ typedef struct uct_ze_ipc_iface_config {
     unsigned           max_poll; /* query attempts w.o success */
     unsigned max_cmd_lists; /* max number of command lists for parallel progress */
     int      enable_cache; /* enable/disable ipc handle cache */
+    unsigned event_pool_size; /* number of events in the shared event pool */
     double bandwidth; /* estimated bandwidth */
     double latency; /* estimated latency */
     double overhead; /* estimated CPU overhead */
@@ -76,24 +77,24 @@ typedef struct uct_ze_ipc_event_desc {
 
 
 /**
- * Allocate an event from the shared event pool
+ * Allocate an event from the shared event pool, or from a private one-event
+ * pool when the shared pool is exhausted
  *
  * @param iface      Pointer to ze_ipc interface
- * @param event_p    Pointer to store the allocated event handle
- * @return           Event index on success, -1 on failure
+ * @param event_desc Descriptor to fill with the event, its pool and index
+ * @return           UCS_OK on success, error status on Level Zero failure
  */
-int uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface,
-                           ze_event_handle_t *event_p);
+ucs_status_t uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface,
+                                    uct_ze_ipc_event_desc_t *event_desc);
 
 /**
- * Free an event back to the shared event pool
+ * Release an event allocated by uct_ze_ipc_alloc_event
  *
- * @param iface       Pointer to ze_ipc interface
- * @param event       Event handle to destroy
- * @param event_index Index of the event in the pool
+ * @param iface      Pointer to ze_ipc interface
+ * @param event_desc Descriptor filled by uct_ze_ipc_alloc_event
  */
-void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface, ze_event_handle_t event,
-                           unsigned event_index);
+void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface,
+                           uct_ze_ipc_event_desc_t *event_desc);
 
 
 #endif

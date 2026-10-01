@@ -38,6 +38,12 @@ static ucs_config_field_t uct_ze_ipc_iface_config_table[] = {
      ucs_offsetof(uct_ze_ipc_iface_config_t, enable_cache),
      UCS_CONFIG_TYPE_BOOL},
 
+    {"EVENT_POOL_SIZE", "1024",
+     "Number of events in the shared event pool. Operations in flight beyond "
+     "this number use a slower per-operation event pool",
+     ucs_offsetof(uct_ze_ipc_iface_config_t, event_pool_size),
+     UCS_CONFIG_TYPE_UINT},
+
     {"BW", "50000MBs", "Effective p2p memory bandwidth",
      ucs_offsetof(uct_ze_ipc_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
 
@@ -116,9 +122,6 @@ uct_ze_ipc_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                   UCT_IFACE_FLAG_PENDING | UCT_IFACE_FLAG_GET_ZCOPY |
                                   UCT_IFACE_FLAG_PUT_ZCOPY;
 
-    iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                  UCT_IFACE_FLAG_EVENT_RECV;
-
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
@@ -144,17 +147,32 @@ uct_ze_ipc_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 }
 
 
-/**
- * Allocate an event from the shared event pool
- * Returns event index on success, -1 on failure
- */
-int uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface,
-                           ze_event_handle_t *event_p)
+static ucs_status_t uct_ze_ipc_create_event(ze_event_pool_handle_t event_pool,
+                                            unsigned index,
+                                            ze_event_handle_t *event_p)
 {
+    ze_event_desc_t event_desc = {
+        .stype  = ZE_STRUCTURE_TYPE_EVENT_DESC,
+        .index  = index,
+        .signal = ZE_EVENT_SCOPE_FLAG_HOST,
+        .wait   = ZE_EVENT_SCOPE_FLAG_HOST
+    };
+
+    return UCT_ZE_FUNC_LOG_ERR(zeEventCreate(event_pool, &event_desc, event_p));
+}
+
+
+ucs_status_t uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface,
+                                    uct_ze_ipc_event_desc_t *event_desc)
+{
+    ze_event_pool_desc_t pool_desc = {
+        .stype = ZE_STRUCTURE_TYPE_EVENT_POOL_DESC,
+        .flags = ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
+        .count = 1
+    };
     unsigned i, word_idx, bit_idx;
     uint64_t mask;
-    ze_event_desc_t event_desc;
-    ze_result_t ret;
+    ucs_status_t status;
 
     ucs_spin_lock(&iface->event_lock);
 
@@ -169,54 +187,69 @@ int uct_ze_ipc_alloc_event(uct_ze_ipc_iface_t *iface,
             iface->event_bitmap[word_idx] |= mask;
             ucs_spin_unlock(&iface->event_lock);
 
-            /* Create event from shared pool */
-            event_desc.stype  = ZE_STRUCTURE_TYPE_EVENT_DESC;
-            event_desc.pNext  = NULL;
-            event_desc.index  = i;
-            event_desc.signal = ZE_EVENT_SCOPE_FLAG_HOST;
-            event_desc.wait   = ZE_EVENT_SCOPE_FLAG_HOST;
-
-            ret = zeEventCreate(iface->ze_event_pool, &event_desc, event_p);
-            if (ret != ZE_RESULT_SUCCESS) {
-                ucs_error("zeEventCreate failed with error 0x%x", ret);
+            status = uct_ze_ipc_create_event(iface->ze_event_pool, i,
+                                             &event_desc->event);
+            if (status != UCS_OK) {
                 /* Mark as free again */
                 ucs_spin_lock(&iface->event_lock);
                 iface->event_bitmap[word_idx] &= ~mask;
                 ucs_spin_unlock(&iface->event_lock);
-                return -1;
+                return status;
             }
 
-            return i;
+            event_desc->event_pool  = NULL;
+            event_desc->event_index = i;
+            return UCS_OK;
         }
     }
 
     ucs_spin_unlock(&iface->event_lock);
-    ucs_warn("ze_ipc: event pool exhausted (size=%u)", iface->event_pool_size);
-    return -1;
+
+    /* ep_pending_add cannot queue the operation, so UCS_ERR_NO_RESOURCE here
+     * would make UCP retry the send in a tight loop */
+    ucs_trace("ze_ipc: event pool of %u events exhausted, using a private "
+              "event pool",
+              iface->event_pool_size);
+
+    status = UCT_ZE_FUNC_LOG_ERR(
+            zeEventPoolCreate(iface->ze_context, &pool_desc, 1,
+                              &iface->ze_device, &event_desc->event_pool));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ze_ipc_create_event(event_desc->event_pool, 0,
+                                     &event_desc->event);
+    if (status != UCS_OK) {
+        zeEventPoolDestroy(event_desc->event_pool);
+        return status;
+    }
+
+    event_desc->event_index = (unsigned)-1;
+    return UCS_OK;
 }
 
-/**
- * Free an event back to the shared event pool
- */
-void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface, ze_event_handle_t event,
-                           unsigned event_index)
+
+void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface,
+                           uct_ze_ipc_event_desc_t *event_desc)
 {
     unsigned word_idx, bit_idx;
     uint64_t mask;
 
-    if (event != NULL) {
-        zeEventDestroy(event);
+    zeEventDestroy(event_desc->event);
+
+    if (event_desc->event_pool != NULL) {
+        zeEventPoolDestroy(event_desc->event_pool);
+        return;
     }
 
-    if (event_index != (unsigned)-1) {
-        word_idx = event_index / 64;
-        bit_idx  = event_index % 64;
-        mask     = 1ULL << bit_idx;
+    word_idx = event_desc->event_index / 64;
+    bit_idx  = event_desc->event_index % 64;
+    mask     = 1ULL << bit_idx;
 
-        ucs_spin_lock(&iface->event_lock);
-        iface->event_bitmap[word_idx] &= ~mask;
-        ucs_spin_unlock(&iface->event_lock);
-    }
+    ucs_spin_lock(&iface->event_lock);
+    iface->event_bitmap[word_idx] &= ~mask;
+    ucs_spin_unlock(&iface->event_lock);
 }
 
 static unsigned uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
@@ -280,20 +313,7 @@ static unsigned uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
                                               UCS_ERR_IO_ERROR);
             }
 
-            /* Free event back to shared pool or destroy private pool */
-            if (event_desc->event_index != (unsigned)-1) {
-                /* Using shared event pool */
-                uct_ze_ipc_free_event(iface, event_desc->event,
-                                      event_desc->event_index);
-            } else {
-                /* Using private event pool (backward compatibility) */
-                if (event_desc->event != NULL) {
-                    zeEventDestroy(event_desc->event);
-                }
-                if (event_desc->event_pool != NULL) {
-                    zeEventPoolDestroy(event_desc->event_pool);
-                }
-            }
+            uct_ze_ipc_free_event(iface, event_desc);
             ucs_free(event_desc);
 
             count++;
@@ -523,24 +543,21 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     if (num_queues == 0) {
         /* No copy engines available, use single command list on compute engine */
         self->num_cmd_lists = 1;
-        ucs_info("ze_ipc_iface: no dedicated copy engines found, using 1 "
-                 "command list "
-                 "on queue group %u (compute engine fallback)",
-                 copy_ordinal);
+        ucs_debug("ze_ipc_iface: no dedicated copy engines found, using 1 "
+                  "command list on queue group %u (compute engine fallback)",
+                  copy_ordinal);
     } else {
         /* Match command list count to available Copy Engine queues */
         self->num_cmd_lists = ucs_min(num_queues, config->max_cmd_lists);
 
         if (self->num_cmd_lists < num_queues) {
-            ucs_info("ze_ipc_iface: limiting command lists to %u (hardware has "
-                     "%u copy queues, "
-                     "config limit is %u)",
-                     self->num_cmd_lists, num_queues, config->max_cmd_lists);
+            ucs_debug("ze_ipc_iface: limiting command lists to %u (hardware "
+                      "has %u copy queues, config limit is %u)",
+                      self->num_cmd_lists, num_queues, config->max_cmd_lists);
         } else {
-            ucs_info("ze_ipc_iface: creating %u command list(s) to match %u "
-                     "copy engine queue(s) "
-                     "on queue group %u",
-                     self->num_cmd_lists, num_queues, copy_ordinal);
+            ucs_debug("ze_ipc_iface: creating %u command list(s) to match %u "
+                      "copy engine queue(s) on queue group %u",
+                      self->num_cmd_lists, num_queues, copy_ordinal);
         }
     }
 
@@ -554,6 +571,10 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_error("ze_ipc_iface: computed num_cmd_lists (%u) exceeds maximum "
                   "(%u)",
                   self->num_cmd_lists, UCT_ZE_IPC_MAX_PEERS);
+        return UCS_ERR_INVALID_PARAM;
+    }
+    if (config->event_pool_size == 0) {
+        ucs_error("ze_ipc_iface: EVENT_POOL_SIZE must be at least 1");
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -614,7 +635,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
      * - Event reuse via bitmap tracking
      * - Typical pool size: 1024 events (configurable)
      */
-    self->event_pool_size = 1024; /* TODO: make this configurable */
+    self->event_pool_size = config->event_pool_size;
 
     event_pool_desc.stype = ZE_STRUCTURE_TYPE_EVENT_POOL_DESC;
     event_pool_desc.pNext = NULL;
@@ -659,10 +680,10 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-    ucs_info("ze_ipc_iface: initialized iface for device %p context %p "
-             "(pid=%d, copy_ordinal=%u, num_cmd_lists=%u, event_pool_size=%u)",
-             self->ze_device, self->ze_context, getpid(), copy_ordinal,
-             self->num_cmd_lists, self->event_pool_size);
+    ucs_debug("ze_ipc_iface: initialized iface for device %p context %p pid %d "
+              "copy ordinal %u, %u command lists, %u events",
+              self->ze_device, self->ze_context, getpid(), copy_ordinal,
+              self->num_cmd_lists, self->event_pool_size);
 
     return UCS_OK;
 }

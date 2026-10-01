@@ -259,7 +259,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     /* Use the device configured in the MD */
     device = ze_md->ze_device;
     if (device == NULL) {
-        ucs_error("ze_copy_iface: uct_ze_base_get_device(0) returned NULL");
+        ucs_error("ze_copy_iface: memory domain has no device");
         return UCS_ERR_NO_DEVICE;
     }
 
@@ -280,8 +280,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     self->ze_cmdl = cmdl;
     self->id      = ucs_generate_uuid((uintptr_t)self);
 
-    ucs_info("ze_copy_iface: initialized iface device=%p cmdq=%p cmdl=%p",
-             device, cmdq, cmdl);
+    ucs_debug("ze_copy_iface: initialized iface on device %p cmdq %p cmdl %p",
+              device, cmdq, cmdl);
 
     return UCS_OK;
 }

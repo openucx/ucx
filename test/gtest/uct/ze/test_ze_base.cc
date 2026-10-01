@@ -38,7 +38,7 @@ UCS_TEST_F(test_ze_base, get_num_devices_consistent) {
 }
 
 
-UCS_TEST_F(test_ze_base, get_device_by_ordinal_round_trip) {
+UCS_TEST_F(test_ze_base, get_device_by_ordinal) {
     if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
         UCS_TEST_SKIP_R("Level Zero runtime not available");
     }
@@ -49,11 +49,7 @@ UCS_TEST_F(test_ze_base, get_device_by_ordinal_round_trip) {
     }
 
     for (int i = 0; i < n; ++i) {
-        ze_device_handle_t dev = uct_ze_base_get_device(i);
-        ASSERT_TRUE(dev != NULL) << "ordinal " << i;
-
-        /* round-trip: handle -> ordinal must give same index back */
-        EXPECT_EQ(i, uct_ze_base_get_device_ordinal(dev));
+        EXPECT_TRUE(uct_ze_base_get_device(i) != NULL) << "ordinal " << i;
     }
 }
 
@@ -68,17 +64,4 @@ UCS_TEST_F(test_ze_base, get_device_out_of_range) {
     EXPECT_TRUE(uct_ze_base_get_device(-1) == NULL);
     EXPECT_TRUE(uct_ze_base_get_device(n) == NULL);
     EXPECT_TRUE(uct_ze_base_get_device(n + 100) == NULL);
-}
-
-
-UCS_TEST_F(test_ze_base, get_device_ordinal_unknown_handle) {
-    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
-        UCS_TEST_SKIP_R("Level Zero runtime not available");
-    }
-
-    /* Bogus pointer that cannot be a registered device handle. */
-    ze_device_handle_t bogus = reinterpret_cast<ze_device_handle_t>(
-            uintptr_t(0xdead));
-    EXPECT_EQ(-1, uct_ze_base_get_device_ordinal(bogus));
-    EXPECT_EQ(-1, uct_ze_base_get_device_ordinal(NULL));
 }

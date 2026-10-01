@@ -45,7 +45,6 @@ typedef struct uct_ze_ipc_key {
     pid_t               pid; /**< Remote process ID (for cache) */
     uintptr_t           address; /**< Base address of the allocation */
     size_t              length; /**< Size of the allocation */
-    int                 dev_num; /**< GPU device number */
 } uct_ze_ipc_key_t;
 
 
