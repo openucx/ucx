@@ -737,7 +737,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
 {
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucp_proto_multi_lane_priv_t *lpriv;
-    uct_iface_attr_v2_t iface_attr_v2;
+    const uct_iface_attr_v2_t *attr_v2;
     uint64_t v2_cap_flags;
     int sgl_is_put;
     size_t min_length;
@@ -746,7 +746,6 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ucp_md_map_t reg_md_map;
-    ucs_status_t status;
 
     v2_cap_flags        = params->first.tl_v2_cap_flags |
                           params->middle.tl_v2_cap_flags;
@@ -849,21 +848,11 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
             rsc_index = ucp_proto_common_get_rsc_index(&params->super.super,
                                                        lane);
-            iface_attr_v2.field_mask =
-                    sgl_is_put ?
-                    UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT :
-                    UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
-            status                   = uct_iface_query_v2(
-                    ucp_worker_iface(params->super.super.worker,
-                                     rsc_index)->iface,
-                    &iface_attr_v2);
-            if (status != UCS_OK) {
-                return status;
-            }
-
+            attr_v2 = ucp_worker_iface_get_attr_v2(params->super.super.worker,
+                                                   rsc_index);
             lpriv->max_sgl_zcopy_count =
-                    sgl_is_put ? iface_attr_v2.max_put_sgl_zcopy_count :
-                                 iface_attr_v2.max_get_sgl_zcopy_count;
+                    sgl_is_put ? attr_v2->max_put_sgl_zcopy_count :
+                                 attr_v2->max_get_sgl_zcopy_count;
         } else {
             lpriv->max_sgl_zcopy_count = 0;
         }
