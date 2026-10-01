@@ -514,11 +514,14 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         ucp_lane_index_t *num_lanes_p)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_context_h context                      = init_params->worker->context;
     ucp_lane_index_t num_filtered_lanes        = 0;
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
 
     /* Classify before compaction because index zero has the first-lane role. */
     for (i = 0; i < *num_lanes_p; ++i) {
@@ -539,6 +542,20 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
 
         /* The assignment covers only NICs, e.g. cuda_ipc lanes are kept */
         if (!ucp_proto_common_is_net_dev(init_params, lane)) {
+            lanes[num_filtered_lanes++] = lane;
+            ++num_bulk_lanes_kept;
+            continue;
+        }
+
+        /* The assignment covers only NICs that can register the buffer
+         * (e.g. tcp lanes are kept). */
+        rsc_index = ucp_proto_common_get_rsc_index(init_params, lane);
+        md_index  = context->tl_rscs[rsc_index].md_index;
+        if (!UCS_BIT_GET(context->reg_md_map[params->super.reg_mem_info.type],
+                         md_index)) {
+            ucs_trace("assignment keeps lane %d: md %s cannot register the "
+                      "buffer",
+                      lane, context->tl_mds[md_index].rsc.md_name);
             lanes[num_filtered_lanes++] = lane;
             ++num_bulk_lanes_kept;
             continue;

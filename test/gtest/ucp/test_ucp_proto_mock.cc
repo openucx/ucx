@@ -2725,7 +2725,7 @@ public:
     test_ucp_proto_mock_rcx_gpu_nic() :
         m_assignment(nullptr),
         m_original_assignment(nullptr),
-        m_original_cuda_reg_md_map(0),
+        m_original_reg_md_map(),
         m_rkey_cfg_index(UCP_WORKER_CFG_INDEX_NULL),
         m_context_state_saved(false),
         m_absent_nic(UCS_SYS_DEVICE_ID_UNKNOWN)
@@ -2755,8 +2755,12 @@ public:
             ucp_context_h context = sender().worker()->context;
 
             context->gpu_nic_assignment = m_original_assignment;
-            context->reg_md_map[UCS_MEMORY_TYPE_CUDA] =
-                    m_original_cuda_reg_md_map;
+            memcpy(context->reg_md_map, m_original_reg_md_map,
+                   sizeof(context->reg_md_map));
+            for (const auto &md_flags : m_original_md_flags) {
+                context->tl_mds[md_flags.first].attr.flags = md_flags.second;
+            }
+
             if (m_assignment != nullptr) {
                 ucp_gpu_nic_assignment_release(m_assignment);
                 ucs_free(m_assignment);
@@ -2780,9 +2784,10 @@ protected:
             m_nics[i] = get_mock_sys_dev_by_name(nic_name(i));
         }
 
-        m_original_assignment      = context->gpu_nic_assignment;
-        m_original_cuda_reg_md_map = context->reg_md_map[UCS_MEMORY_TYPE_CUDA];
-        m_context_state_saved      = true;
+        m_original_assignment = context->gpu_nic_assignment;
+        memcpy(m_original_reg_md_map, context->reg_md_map,
+               sizeof(m_original_reg_md_map));
+        m_context_state_saved = true;
 
         for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
             const ucp_tl_resource_desc_t *tl_rsc = &context->tl_rscs[rsc_index];
@@ -2859,6 +2864,38 @@ protected:
         ASSERT_LT(index, ucs_static_array_size(m_nics));
         set_mock_dev_type(sender().ucph(), nic_name(index),
                           UCT_DEVICE_TYPE_SHM);
+    }
+
+    /* Present the memory domain of the mock NICs as one that accesses memory
+     * without registering it, like tcp. All mock NICs are devices of the same
+     * memory domain. */
+    void set_unregistered_mock_md()
+    {
+        ucp_context_h context = sender().worker()->context;
+        ucp_rsc_index_t rsc_index;
+        ucp_md_index_t md_index;
+
+        /* Any mock NIC leads to the shared memory domain */
+        for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
+            if (context->tl_rscs[rsc_index].tl_rsc.sys_device == m_nics[0]) {
+                break;
+            }
+        }
+
+        ASSERT_LT(rsc_index, context->num_tls)
+                << "no transport resource on mock NIC " << nic_name(0);
+        md_index = context->tl_rscs[rsc_index].md_index;
+        m_original_md_flags.emplace_back(md_index,
+                                         context->tl_mds[md_index].attr.flags);
+
+        /* Without a memory handle requirement, zero-copy lanes only need
+         * access to the memory type, which the IB memory domain has for host
+         * memory */
+        context->tl_mds[md_index].attr.flags &= ~UCT_MD_FLAG_NEED_MEMH;
+        /* The memory domain registers no memory type */
+        for (auto &reg_md_map : context->reg_md_map) {
+            reg_md_map &= ~UCS_BIT(md_index);
+        }
     }
 
     const ucp_gpu_nic_sys_dev_bitmap_t *
@@ -3159,7 +3196,8 @@ private:
     };
     ucp_gpu_nic_assignment_t *m_assignment;
     ucp_gpu_nic_assignment_t *m_original_assignment;
-    ucp_md_map_t m_original_cuda_reg_md_map;
+    ucp_md_map_t m_original_reg_md_map[UCS_MEMORY_TYPE_LAST];
+    std::vector<std::pair<ucp_md_index_t, uint64_t>> m_original_md_flags;
     ucp_worker_cfg_index_t m_rkey_cfg_index;
     bool m_context_state_saved;
     ucs_sys_device_t m_absent_nic;
@@ -3386,6 +3424,16 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
 {
     install_assignment(mapped_gpu(), {nic(2)});
     expect_mtype_candidates(UCS_MEMORY_TYPE_CUDA, mapped_gpu(), {nic(2)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
+           unregistered_nics_are_not_restricted, "RNDV_THRESH=1",
+           "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K")
+{
+    set_unregistered_mock_md();
+    install_assignment(mapped_gpu(), {nic(2)});
+    expect_mtype_candidates(UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
+                            endpoint_nics());
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
