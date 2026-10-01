@@ -303,14 +303,6 @@ parse_mem_type_params(const char *opt_arg, ucx_perf_params_t *params)
         return status;
     }
 
-    if (params->send_mem_type == params->recv_mem_type) {
-        if (params->send_device_id == UCX_PERF_MEM_DEV_DEFAULT) {
-            params->send_device_id = params->recv_device_id;
-        } else if (params->recv_device_id == UCX_PERF_MEM_DEV_DEFAULT) {
-            params->recv_device_id = params->send_device_id;
-        }
-    }
-
     return UCS_OK;
 }
 

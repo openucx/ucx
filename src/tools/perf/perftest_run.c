@@ -150,6 +150,10 @@ static void print_header(struct perftest_context *ctx)
                ucx_perf_mem_alloc_name(&ctx->params.super, 1));
         printf("| Recv memory:  %-60s                               |\n",
                ucx_perf_mem_alloc_name(&ctx->params.super, 0));
+        if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_DEVICE) {
+            printf("| Device API:   %-60s                               |\n",
+                   "enabled");
+        }
         /* TODO: report the device index picked by default placement */
         if (ctx->params.super.send_device_id != UCX_PERF_MEM_DEV_DEFAULT) {
             printf("| Send device:  %-60d                               |\n",
