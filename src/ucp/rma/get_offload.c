@@ -164,9 +164,9 @@ ucp_proto_get_offload_zcopy_send_common(
 {
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
-    size_t offset      = req->send.state.dt_iter.offset;
-    const ucp_proto_multi_priv_t *mpriv;
+    size_t offset          = req->send.state.dt_iter.offset;
     uct_completion_t *comp = &req->send.state.uct_comp;
+    const ucp_proto_multi_priv_t *mpriv;
     ucp_rma_bw_frag_t *frag;
     uct_iov_t iov;
     ucs_status_t status;
@@ -217,7 +217,7 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        ucp_rma_bw_sample_start(req, mpriv);
+        ucp_rma_bw_sample_try_start(req, mpriv);
     }
 
     if (req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE) {
@@ -304,6 +304,6 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .probe          = ucp_proto_get_offload_zcopy_probe,
     .query          = ucp_proto_multi_query,
     .progress       = {ucp_proto_get_offload_zcopy_progress},
-    .abort          = ucp_rma_bw_abort,
+    .abort          = ucp_proto_request_zcopy_abort,
     .reset          = ucp_proto_get_offload_zcopy_reset
 };

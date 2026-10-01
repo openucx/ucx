@@ -10,10 +10,10 @@
 #include <ucp/core/ucp_request.h>
 
 /* The first measurement stage records completed payload throughput only. */
-#define UCP_RMA_BW_MAX_FRAGS      128
-#define UCP_RMA_BW_MAX_ACTIVE     4
-#define UCP_RMA_BW_NUM_LANES      2
-#define UCP_RMA_BW_MIN_LENGTH     (256 * UCS_KBYTE)
+#define UCP_RMA_BW_MAX_FRAGS       128
+#define UCP_RMA_BW_MAX_ACTIVE      4
+#define UCP_RMA_BW_SAMPLE_INTERVAL 1.0
+#define UCP_RMA_BW_MIN_LANE_LENGTH (128 * UCS_KBYTE)
 
 typedef struct ucp_rma_bw_sample ucp_rma_bw_sample_t;
 
@@ -37,13 +37,13 @@ struct ucp_rma_bw_sample {
     unsigned          num_frags;
     unsigned          pending;
     unsigned          invalid;
-    ucp_rma_bw_lane_t lanes[UCP_RMA_BW_NUM_LANES];
+    ucp_lane_index_t  num_lanes;
+    ucp_rma_bw_lane_t lanes[UCP_MAX_LANES];
     ucp_rma_bw_frag_t frags[UCP_RMA_BW_MAX_FRAGS];
 };
 
 void ucp_rma_bw_sample_complete(uct_completion_t *comp);
 void ucp_rma_bw_frag_complete(uct_completion_t *comp);
-void ucp_rma_bw_abort(ucp_request_t *req, ucs_status_t status);
 void ucp_rma_bw_sample_detach(ucp_request_t *req);
 
 #endif

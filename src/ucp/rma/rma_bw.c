@@ -13,26 +13,72 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_common.inl>
 
+void ucp_rma_bw_sample_start(ucp_request_t *req,
+                             const ucp_proto_multi_priv_t *mpriv)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+    ucp_rma_bw_sample_t *sample;
+    ucs_time_t now;
+    unsigned i;
+
+    if (ucs_likely(!worker->context->config.ext.rma_bw_measure) ||
+        (mpriv->num_lanes < 2) ||
+        (mpriv->num_lanes > UCP_MAX_LANES) ||
+        (req->send.state.dt_iter.length <
+         UCP_RMA_BW_MIN_LANE_LENGTH * mpriv->num_lanes)) {
+        return;
+    }
+
+    now = ucs_get_time();
+    if (now < worker->rma_bw_next_sample) {
+        return;
+    }
+
+    for (i = 0; i < UCP_RMA_BW_MAX_ACTIVE; ++i) {
+        sample = &worker->rma_bw_samples[i];
+        if (ucp_rma_bw_sample_is_free(sample)) {
+            break;
+        }
+    }
+    if (i == UCP_RMA_BW_MAX_ACTIVE) {
+        return;
+    }
+
+    memset(sample, 0, sizeof(*sample));
+    sample->req                = req;
+    sample->num_lanes          = mpriv->num_lanes;
+    req->send.rma.bw_sample    = sample;
+    req->flags                |= UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
+    worker->rma_bw_next_sample = now +
+                                 ucs_time_from_sec(UCP_RMA_BW_SAMPLE_INTERVAL);
+}
+
 void ucp_rma_bw_sample_complete(uct_completion_t *comp)
 {
     ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
                                           send.state.uct_comp);
     ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
-    ucp_rma_bw_lane_t *lane0    = &sample->lanes[0];
-    ucp_rma_bw_lane_t *lane1    = &sample->lanes[1];
-    int valid;
+    ucp_rma_bw_lane_t *lane;
+    unsigned i;
 
-    valid = (comp->status == UCS_OK) && !sample->invalid &&
-            (lane0->bytes != 0) && (lane1->bytes != 0) &&
-            (lane0->last_comp > lane0->first_post) &&
-            (lane1->last_comp > lane1->first_post) &&
-            (lane0->num_async != 0) && (lane1->num_async != 0);
-    if (valid) {
-        ucs_trace("rma bw sample req %p: lane0 %zu bytes / %.3f us, "
-                  "lane1 %zu bytes / %.3f us", req, lane0->bytes,
-                  ucs_time_to_sec(lane0->last_comp - lane0->first_post) * 1e6,
-                  lane1->bytes,
-                  ucs_time_to_sec(lane1->last_comp - lane1->first_post) * 1e6);
+    if ((comp->status == UCS_OK) && !sample->invalid) {
+        for (i = 0; i < sample->num_lanes; ++i) {
+            lane = &sample->lanes[i];
+            if ((lane->bytes == 0) || (lane->num_async == 0) ||
+                (lane->last_comp <= lane->first_post)) {
+                break;
+            }
+        }
+
+        if (i == sample->num_lanes) {
+            for (i = 0; i < sample->num_lanes; ++i) {
+                lane = &sample->lanes[i];
+                ucp_trace_req(req, "rma bw sample lane %u/%u: %zu bytes / "
+                              "%.3f us", i, sample->num_lanes, lane->bytes,
+                              ucs_time_to_sec(lane->last_comp -
+                                              lane->first_post) * 1e6);
+            }
+        }
     }
 
     req->flags             &= ~UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
@@ -57,16 +103,6 @@ void ucp_rma_bw_frag_complete(uct_completion_t *comp)
     }
 
     ucp_invoke_uct_completion(&sample->req->send.state.uct_comp, comp->status);
-}
-
-void ucp_rma_bw_abort(ucp_request_t *req, ucs_status_t status)
-{
-    ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
-
-    if (sample != NULL) {
-        sample->invalid = 1;
-    }
-    ucp_proto_request_zcopy_abort(req, status);
 }
 
 void ucp_rma_bw_sample_detach(ucp_request_t *req)

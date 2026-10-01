@@ -1750,24 +1750,29 @@ TEST(test_ucp_rma_bw_helpers, detach_pending)
     ucp_request_t req          = {};
     ucp_rma_bw_sample_t sample = {};
     ucp_rma_bw_frag_t *frag;
-    uct_completion_t *comp;
+    uct_completion_t *comps[3];
 
     req.flags                     = UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
     req.send.rma.bw_sample        = &sample;
-    req.send.state.uct_comp.count = 2;
+    req.send.state.uct_comp.count = 4;
     sample.req                    = &req;
+    sample.num_lanes              = 3;
 
-    comp = ucp_rma_bw_frag_start(&req, 0, &frag);
-    ucp_rma_bw_frag_posted(frag, 4096, UCS_INPROGRESS);
-    ucp_rma_bw_abort(&req, UCS_ERR_CANCELED);
+    for (unsigned lane = 0; lane < sample.num_lanes; ++lane) {
+        comps[lane] = ucp_rma_bw_frag_start(&req, lane, &frag);
+        ucp_rma_bw_frag_posted(frag, 4096, UCS_INPROGRESS);
+    }
+    ucp_proto_request_zcopy_abort(&req, UCS_ERR_CANCELED);
     ucp_rma_bw_sample_detach(&req);
 
     EXPECT_FALSE(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE);
     EXPECT_EQ(nullptr, req.send.rma.bw_sample);
     EXPECT_EQ(nullptr, sample.req);
-    EXPECT_TRUE(sample.invalid);
+    EXPECT_EQ(UCS_ERR_CANCELED, req.send.state.uct_comp.status);
     EXPECT_FALSE(ucp_rma_bw_sample_is_free(&sample));
 
-    comp->func(comp);
+    for (uct_completion_t *comp : comps) {
+        comp->func(comp);
+    }
     EXPECT_TRUE(ucp_rma_bw_sample_is_free(&sample));
 }

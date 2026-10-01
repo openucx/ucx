@@ -25,41 +25,16 @@ ucp_rma_bw_sample_get(ucp_request_t *req)
            req->send.rma.bw_sample : NULL;
 }
 
+void ucp_rma_bw_sample_start(ucp_request_t *req,
+                             const ucp_proto_multi_priv_t *mpriv);
+
 static UCS_F_ALWAYS_INLINE void
-ucp_rma_bw_sample_start(ucp_request_t *req,
-                        const ucp_proto_multi_priv_t *mpriv)
+ucp_rma_bw_sample_try_start(ucp_request_t *req,
+                            const ucp_proto_multi_priv_t *mpriv)
 {
-    ucp_worker_h worker = req->send.ep->worker;
-    ucp_rma_bw_sample_t *sample;
-    ucs_time_t now;
-    unsigned i;
-
-    if (ucs_likely(!worker->context->config.ext.rma_bw_measure) ||
-        (mpriv->num_lanes != UCP_RMA_BW_NUM_LANES) ||
-        (req->send.state.dt_iter.length < UCP_RMA_BW_MIN_LENGTH)) {
-        return;
+    if (ucs_unlikely(req->send.ep->worker->context->config.ext.rma_bw_measure)) {
+        ucp_rma_bw_sample_start(req, mpriv);
     }
-
-    now = ucs_get_time();
-    if (now < worker->rma_bw_next_sample) {
-        return;
-    }
-
-    for (i = 0; i < UCP_RMA_BW_MAX_ACTIVE; ++i) {
-        sample = &worker->rma_bw_samples[i];
-        if (ucp_rma_bw_sample_is_free(sample)) {
-            break;
-        }
-    }
-    if (i == UCP_RMA_BW_MAX_ACTIVE) {
-        return;
-    }
-
-    memset(sample, 0, sizeof(*sample));
-    sample->req                = req;
-    req->send.rma.bw_sample    = sample;
-    req->flags                |= UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
-    worker->rma_bw_next_sample = now + ucs_time_from_sec(1.0);
 }
 
 static UCS_F_ALWAYS_INLINE uct_completion_t *
@@ -74,6 +49,7 @@ ucp_rma_bw_frag_start(ucp_request_t *req, ucp_lane_index_t lane_idx,
         return &req->send.state.uct_comp;
     }
 
+    ucs_assert(lane_idx < sample->num_lanes);
     if (sample->num_frags == UCP_RMA_BW_MAX_FRAGS) {
         sample->invalid = 1;
         return &req->send.state.uct_comp;
