@@ -832,9 +832,16 @@ static int ucs_rcache_check_adj_size(ucs_pgt_addr_t start, ucs_pgt_addr_t end,
     return (end - start) >= (region_adj->super.end - region_adj->super.start);
 }
 
+static int ucs_rcache_can_merge_adj_region(ucs_rcache_t *rcache, void *arg,
+                                           int prot,
+                                           ucs_rcache_region_t *region)
+{
+    return (region->prot == prot) && rcache->params.ops->can_merge(arg, region);
+}
+
 static void ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
                                          ucs_pgt_addr_t start,
-                                         ucs_pgt_addr_t end,
+                                         ucs_pgt_addr_t end, int prot,
                                          ucs_list_link_t *list)
 {
     ucs_rcache_region_t *region_left  = NULL;
@@ -852,12 +859,14 @@ static void ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,
 
     if (pgt_left != NULL) {
         region_left    = ucs_derived_of(pgt_left, ucs_rcache_region_t);
-        can_merge_left = rcache->params.ops->can_merge(arg, region_left);
+        can_merge_left = ucs_rcache_can_merge_adj_region(rcache, arg, prot,
+                                                         region_left);
     }
 
     if (pgt_right != NULL) {
         region_right    = ucs_derived_of(pgt_right, ucs_rcache_region_t);
-        can_merge_right = rcache->params.ops->can_merge(arg, region_right);
+        can_merge_right = ucs_rcache_can_merge_adj_region(rcache, arg, prot,
+                                                          region_right);
     }
 
     /* Fill in a gap between two existing registrations */
@@ -941,7 +950,7 @@ ucs_rcache_check_neighbors(ucs_rcache_t *rcache, void *arg,
 
         if ((rcache->params.flags & UCS_RCACHE_FLAG_MERGE_ADJACENT) &&
             (ucs_list_is_empty(&region_list))) {
-            ucs_rcache_check_adj_regions(rcache, arg, *start, *end,
+            ucs_rcache_check_adj_regions(rcache, arg, *start, *end, *prot,
                                          &region_list);
         }
     } while (!ucs_list_is_empty(&region_list));
