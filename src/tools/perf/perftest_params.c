@@ -234,6 +234,9 @@ static ucs_status_t parse_perf_mem_allocator(char *opt_arg,
     const char *delim = ":";
     char *saveptr     = NULL;
     const ucx_perf_allocator_t *allocator;
+    ucs_memory_type_t resolved_mem_type;
+    int parsed_device_id;
+    ucs_status_t status;
     char *token;
 
     token = (opt_arg == NULL) ? NULL : strtok_r(opt_arg, delim, &saveptr);
@@ -253,23 +256,29 @@ static ucs_status_t parse_perf_mem_allocator(char *opt_arg,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    *mem_type = allocator->resolve_mem_type(allocator);
-    ucs_strncpy_safe(alloc_name, token, UCX_PERF_ALLOC_NAME_MAX);
+    resolved_mem_type = allocator->resolve_mem_type(allocator);
 
     token = strtok_r(NULL, delim, &saveptr);
     if (token == NULL) {
-        *device_id = UCX_PERF_MEM_DEV_DEFAULT;
-        return UCS_OK;
+        parsed_device_id = UCX_PERF_MEM_DEV_DEFAULT;
+    } else {
+        if ((resolved_mem_type == UCS_MEMORY_TYPE_HOST) ||
+            (resolved_mem_type == UCS_MEMORY_TYPE_RDMA)) {
+            ucs_error("device id is not supported for memory allocator \"%s\"",
+                      allocator->name);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        status = parse_int(token, &parsed_device_id, "device id", 0, INT_MAX);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
-    if ((*mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (*mem_type == UCS_MEMORY_TYPE_RDMA)) {
-        ucs_error("device id is not supported for memory allocator \"%s\"",
-                  allocator->name);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return parse_int(token, device_id, "device id", 0, INT_MAX);
+    *mem_type = resolved_mem_type;
+    ucs_strncpy_safe(alloc_name, allocator->name, UCX_PERF_ALLOC_NAME_MAX);
+    *device_id = parsed_device_id;
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -796,6 +805,13 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
 
     if (params->super.flags & UCX_PERF_TEST_FLAG_DEVICE) {
         mem_type = params->super.send_mem_type;
+        if (ucx_perf_mem_type_device_dispatchers[mem_type] == NULL) {
+            ucs_error("%sdevice API is not supported for %s", error_prefix,
+                      ucs_memory_type_names[mem_type]);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        mem_type = params->super.recv_mem_type;
         if (ucx_perf_mem_type_device_dispatchers[mem_type] == NULL) {
             ucs_error("%sdevice API is not supported for %s", error_prefix,
                       ucs_memory_type_names[mem_type]);

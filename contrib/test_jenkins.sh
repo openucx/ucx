@@ -172,6 +172,24 @@ run_loopback_app() {
 	wait ${pid} || true
 }
 
+expect_failure() {
+	local expected_error=$1
+	local output
+	shift
+
+	if output=$("$@" 2>&1); then
+		printf '%s\n' "$output"
+		log_error "Command unexpectedly succeeded: $*"
+		return 1
+	fi
+
+	if ! grep -qF "$expected_error" <<< "$output"; then
+		printf '%s\n' "$output"
+		log_error "Expected error not found: $expected_error"
+		return 1
+	fi
+}
+
 run_client_server_app() {
 	test_exe=$1
 	test_args=$2
@@ -607,6 +625,13 @@ run_ucx_perftest() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_short_ucp \
 				-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
+	if [ $with_mpi -ne 1 ]; then
+		expect_failure "device id is not supported for memory allocator" \
+			"$ucx_perftest" -t tag_lat -m host:0 -l
+		expect_failure "device API is not supported for host" \
+			"$ucx_perftest" -t ucp_put_lat -a -m host -l
+	fi
+
 	# IP ifaces
 	ip_ifaces=$(get_active_ip_ifaces)
 
@@ -690,11 +715,16 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory ===="
 
+		expect_failure "device API is not supported for host" \
+			"$ucx_perftest" -t ucp_put_lat -a -m cuda,host -l
+		expect_failure "cuda device index 2147483647 is invalid" \
+			"$ucx_perftest" -t tag_lat -m cuda:2147483647 -s 8 -l
+
 		if $ucx_perftest -h 2>&1 | grep -q "cuda-async"
 		then
 			echo "==== Running ucx_perf with cuda-async memory ===="
 			cuda_async_test_args="-t tag_lat -D contig,contig"
-			cuda_async_test_args+=" -m cuda-async,cuda-async -s 8 -n 10 -w 1"
+			cuda_async_test_args+=" -m cuda-async,cuda-async:0 -s 8 -n 10 -w 1"
 			run_client_server_app "$ucx_perftest" "$cuda_async_test_args" \
 					      "$(hostname)" 0 0
 		else
