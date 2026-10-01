@@ -343,8 +343,7 @@ class test_ucp_am_bcopy_status : public test_ucp_am {
 public:
     test_ucp_am_bcopy_status()
     {
-        modify_config("SELF_SEG_SIZE",
-                      ucs::to_string(get_variant_value(1)),
+        modify_config("SELF_SEG_SIZE", ucs::to_string(get_variant_value(1)),
                       SETENV_IF_NOT_EXIST);
         modify_config("ZCOPY_THRESH", "inf");
         modify_config("RNDV_THRESH", "inf");
@@ -357,7 +356,7 @@ public:
 
         /* Exercise packed lengths whose low byte aliases UCS errors. */
         for (int8_t low_byte = static_cast<int8_t>(UCS_OK);
-            low_byte >= static_cast<int8_t>(UCS_ERR_LAST); --low_byte) {
+             low_byte >= static_cast<int8_t>(UCS_ERR_LAST); --low_byte) {
             auto &variant = add_variant(variants, UCP_FEATURE_AM);
             add_variant_value(variant.values, 1, "proto_v1");
             len = base_len + static_cast<uint8_t>(low_byte);
@@ -370,8 +369,7 @@ public:
 UCS_TEST_P(test_ucp_am_bcopy_status, multi)
 {
     const size_t max_bcopy = get_variant_value(1);
-    std::vector<char> buf(2 * max_bcopy,
-                          static_cast<char>(2 * max_bcopy));
+    std::vector<char> buf(2 * max_bcopy, static_cast<char>(2 * max_bcopy));
 
     ASSERT_EQ(1, sizeof(ucs_status_t));
     ASSERT_EQ(max_bcopy,
