@@ -16,6 +16,10 @@ protected:
         ucs_status_t result;
         ucs::test::init();
 
+        if (RUNNING_ON_VALGRIND) {
+            UCS_TEST_SKIP_R("CUDA memory hooks may miss events under Valgrind");
+        }
+
         /* Avoid memory allocation in event callbacks */
         m_alloc_events.reserve(1000);
         m_free_events.reserve(1000);
