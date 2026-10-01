@@ -2867,7 +2867,16 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucp_context_gpu_nic_assignment_net_device_filter_init(context,
                                                           &net_device_filter);
     if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
-        ucs_error("no network devices can be used for gpu-nic assignment");
+        if (context->config.ext.gpu_nic_assignment_mode ==
+            UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+            ucs_diag("gpu-nic assignment is disabled: no assignable network "
+                     "devices");
+            return UCS_OK;
+        }
+
+        ucs_error("no assignable network devices for gpu-nic assignment mode "
+                  "%s, set UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
+                  ucp_gpu_nic_assignment_modes[mode]);
         return UCS_ERR_INVALID_PARAM;
     }
 
