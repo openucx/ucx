@@ -14,6 +14,11 @@ BEGIN_C_DECLS
 
 #define UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT 8
 
+/* CX-9 PCI identifiers */
+#define UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID 0x15b3
+#define UCS_TOPO_GROUPS_CX9_DEVICE_ID      0x1025
+#define UCS_TOPO_GROUPS_MLX5_VF_DEVICE_ID  0x101e
+
 
 /**
  * @ingroup UCS_RESOURCE
@@ -38,7 +43,9 @@ typedef struct {
     ucs_topo_group_element_array_t nics;
 } ucs_topo_group_t;
 
+
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_group_array_t, size_t, ucs_topo_group_t);
+
 
 /**
  * @ingroup UCS_RESOURCE

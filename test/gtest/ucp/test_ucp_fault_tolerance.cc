@@ -112,6 +112,14 @@ protected:
         }
     }
 
+    void cleanup() override {
+        test_ucp_memheap::cleanup();
+
+        m_probe_mock      = NULL;
+        m_probe_count     = 0;
+        m_held_probe_comp = NULL;
+    }
+
     void set_am_handler() {
         ucp_am_handler_param_t param;
         param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
@@ -804,6 +812,18 @@ protected:
         return UCS_ERR_ENDPOINT_TIMEOUT;
     }
 
+    static ucs_status_t recovery_probe_count(uct_ep_h ep, unsigned flags,
+                                             uct_completion_t *comp)
+    {
+        /* Keepalive passes no completion, recovery probes always do */
+        if (comp != NULL) {
+            ++m_probe_count;
+        }
+
+        return m_probe_mock->orig_func(&ep->iface->ops.ep_check, ep, flags,
+                                       comp);
+    }
+
     static ucs_status_t recovery_probe_hold(uct_ep_h ep, unsigned flags,
                                             uct_completion_t *comp)
     {
@@ -820,6 +840,8 @@ protected:
     {
         ucp_context_h context = worker->context;
         ucp_rsc_index_t rsc_index;
+
+        m_probe_mock = &mock;
 
         for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
             if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
@@ -882,6 +904,15 @@ protected:
     }
 
     static uct_completion_t *m_held_probe_comp;
+    static ucs::mock        *m_probe_mock;
+    static unsigned          m_probe_count;
+
+    void run_initiator_failure();
+    void run_target_failure();
+    void run_probe_gated_recovery();
+    void run_teardown_with_outstanding_probe();
+    void run_worker_flush_during_recovery();
+    void run_recovery_retries_exhausted_live_lanes();
 
 private:
     size_t m_initiator_err_count = 0;
@@ -890,64 +921,60 @@ private:
 };
 
 uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
+ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
+unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
+ * Disabled until token failover is complete. Enable with
+ * --gtest_also_run_disabled_tests. */
+class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
+public:
+    DISABLED_test_ucp_fault_tolerance_tf() {
+        modify_config("FAILOVER_MODE", "token");
+    }
+};
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_initiator_failure()
 {
-    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) && has_any_transport({"ud_v", "ud_x"})) {
-        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes leads to "
-                        "assertion failure in ud_ep_purge");
+    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) &&
+        has_any_transport({"ud_v", "ud_x"})) {
+        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes "
+                        "leads to assertion failure in ud_ep_purge");
     }
 
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_target_failure()
 {
     do_test(FAILURE_SIDE_TARGET);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_probe_gated_recovery()
 {
     skip_unless_rc_probe_gate();
 
-    bool probe_armed = false;
+    ucs::mock mock;
+    mock_recovery_probe(sender().worker(), mock, recovery_probe_count);
 
     test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
 
-    wait_for_cond([this, &probe_armed]() {
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-        ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
-        ucp_lane_index_t lane;
-
-        if (arg != NULL) {
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.func != NULL) {
-                    probe_armed = true;
-                    break;
-                }
-            }
-        }
-
+    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+    wait_for_cond([ep]() {
         return ucp_ep_get_failed_lanes(ep) == 0;
     }, [this]() {
         short_progress_loop();
     });
 
-    EXPECT_TRUE(probe_armed)
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep))
+            << "failed lanes are not recovered";
+    EXPECT_NE(0u, m_probe_count)
             << "RC p2p lane recovery completed without arming an aux probe";
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000")
+void test_ucp_fault_tolerance::run_teardown_with_outstanding_probe()
 {
     skip_unless_rc_probe_gate();
-
-    m_held_probe_comp = NULL;
 
     ucs::mock mock;
     mock_recovery_probe(sender().worker(), mock, recovery_probe_hold);
@@ -974,9 +1001,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
     }
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, worker_flush_during_recovery,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000",
-           "KEEPALIVE_INTERVAL=0.1s")
+void test_ucp_fault_tolerance::run_worker_flush_during_recovery()
 {
     skip_unless_rc_probe_gate();
 
@@ -1030,8 +1055,7 @@ UCS_TEST_P(test_ucp_fault_tolerance, worker_flush_during_recovery,
     }
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", "KEEPALIVE_INTERVAL=0.1s")
+void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
 {
     skip_unless_rc_probe_gate();
 
@@ -1060,3 +1084,34 @@ UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
     EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true))
             << "data did not flow on live lanes after recovery give-up";
 }
+
+#define UCP_FT_TEST(_fixture, _name, ...) \
+    UCS_TEST_P(_fixture, _name, __VA_ARGS__) \
+    { \
+        run_##_name(); \
+    }
+
+#define UCP_FT_TESTS(_fixture) \
+    UCP_FT_TEST(_fixture, initiator_failure, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, target_failure, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, probe_gated_recovery, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, teardown_with_outstanding_probe, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000") \
+    UCP_FT_TEST(_fixture, worker_flush_during_recovery, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000", \
+                "KEEPALIVE_INTERVAL=0.1s") \
+    UCP_FT_TEST(_fixture, recovery_retries_exhausted_live_lanes, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", \
+                "KEEPALIVE_INTERVAL=0.1s")
+
+UCP_FT_TESTS(test_ucp_fault_tolerance)
+UCP_FT_TESTS(DISABLED_test_ucp_fault_tolerance_tf)
+
+#undef UCP_FT_TEST
+#undef UCP_FT_TESTS
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+UCP_INSTANTIATE_TEST_CASE(DISABLED_test_ucp_fault_tolerance_tf)

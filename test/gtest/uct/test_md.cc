@@ -542,10 +542,16 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
             ASSERT_UCS_OK(status);
             EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
             if ((alloc_mem_type == UCS_MEMORY_TYPE_CUDA) ||
+                (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_HOST) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_DEVICE) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_MANAGED)) {
-                EXPECT_EQ(buffer_size, mem_attr.alloc_length);
+                /* ROCm HSA may round sizeInBytes up to a page */
+                if (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) {
+                    EXPECT_GE(mem_attr.alloc_length, buffer_size);
+                } else {
+                    EXPECT_EQ(buffer_size, mem_attr.alloc_length);
+                }
                 EXPECT_EQ(address, mem_attr.base_address);
             } else {
                 EXPECT_EQ(slice_length, mem_attr.alloc_length);
@@ -1276,6 +1282,31 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_dmabuf)
+
+class test_rocm_copy : public test_md {
+};
+
+UCS_TEST_P(test_rocm_copy, dmabuf_disable, "ROCM_COPY_DMABUF=no")
+{
+    if (!(md_attr().access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_ROCM)) ||
+        !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ROCM)) {
+        UCS_TEST_SKIP_R("ROCm memory is not supported");
+    }
+
+    const size_t size   = ucs_get_page_size();
+    const size_t offset = 128;
+    mem_buffer mem_buf(size, UCS_MEMORY_TYPE_ROCM);
+    uct_md_mem_attr_t mem_attr = {};
+    void *query_ptr            = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                          UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), query_ptr, size - offset, &mem_attr));
+    EXPECT_EQ(UCT_DMABUF_FD_INVALID, mem_attr.dmabuf_fd);
+    EXPECT_EQ(0ul, mem_attr.dmabuf_offset);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_rocm_copy, rocm_cpy)
 
 class test_cuda : public test_md
 {

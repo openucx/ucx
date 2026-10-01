@@ -105,13 +105,14 @@ size_t ucs_bitmap_bits_fns(const ucs_bitmap_word_t *bits, size_t num_words,
                            size_t start_index, size_t bit_count);
 
 
-/* Helper function to set all bitmap bits to a given value, avoiding a call to
- * memset() if the value is known to be 0, to workaround a compiler warning.
+/* Helper function to set all bitmap bits to a given value. An empty bitmap is
+ * skipped, since 'bits' may be NULL in that case, and memset() does not accept
+ * a NULL pointer even with a zero length.
  */
 static UCS_F_ALWAYS_INLINE void
 ucs_bitmap_bits_memset(ucs_bitmap_word_t *bits, int value, size_t num_words)
 {
-    if (__builtin_constant_p(num_words) && (num_words == 0)) {
+    if (num_words == 0) {
         return;
     }
 
