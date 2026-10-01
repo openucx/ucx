@@ -29,7 +29,7 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 
     CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus);
     status = ucx_perf_get_device_index(perf, group_index, num_gpus,
-                                       &gpu_index);
+                                       "cuda", &gpu_index);
     if (status != UCS_OK) {
         return status;
     }

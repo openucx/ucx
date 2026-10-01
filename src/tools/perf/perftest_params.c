@@ -1033,6 +1033,13 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
         goto err;
     }
 
+    if ((argc - optind) > 1) {
+        ucs_error("expected at most one server address argument, got %d",
+                  argc - optind);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
     if (optind < argc) {
         ctx->server_addr = argv[optind];
 

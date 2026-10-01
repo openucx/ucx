@@ -31,7 +31,7 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
     }
 
     status = ucx_perf_get_device_index(perf, group_index, num_gpus,
-                                       &gpu_index);
+                                       "rocm", &gpu_index);
     if (status != UCS_OK) {
         return status;
     }

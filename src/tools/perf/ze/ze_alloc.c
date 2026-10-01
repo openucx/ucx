@@ -118,7 +118,8 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
     }
 
     group_index = rte_call(perf, group_index);
-    status      = ucx_perf_get_device_index(perf, group_index, gpu_count, &i);
+    status      = ucx_perf_get_device_index(perf, group_index, gpu_count, "ze",
+                                            &i);
     if (status != UCS_OK) {
         return status;
     }
