@@ -1270,7 +1270,8 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 }
 
 static ucs_status_t
-uct_gdaki_get_cuda_sys_dev(int cuda_idx, ucs_sys_device_t *sys_dev_p)
+uct_gdaki_get_cuda_sys_dev_and_bus_id(int cuda_idx, ucs_sys_device_t *sys_dev_p,
+                                      ucs_sys_bus_id_t *bus_id_p)
 {
     ucs_status_t status;
     CUdevice cuda_dev;
@@ -1280,8 +1281,7 @@ uct_gdaki_get_cuda_sys_dev(int cuda_idx, ucs_sys_device_t *sys_dev_p)
         return status;
     }
 
-    *sys_dev_p = uct_cuda_get_sys_dev(cuda_dev);
-    return UCS_OK;
+    return uct_cuda_get_sys_dev_and_bus_id(cuda_dev, sys_dev_p, bus_id_p);
 }
 
 static ucs_status_t
@@ -1306,12 +1306,8 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
 
     cuda_gpu_count = 0;
     for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
-        status = uct_gdaki_get_cuda_sys_dev(cuda_idx, &sys_dev);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = ucs_topo_get_device_bus_id(sys_dev, &bus_id);
+        status = uct_gdaki_get_cuda_sys_dev_and_bus_id(cuda_idx, &sys_dev,
+                                                       &bus_id);
         if (status != UCS_OK) {
             return status;
         }
