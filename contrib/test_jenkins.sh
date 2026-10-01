@@ -694,7 +694,7 @@ run_ucx_perftest() {
 		then
 			echo "==== Running ucx_perf with cuda-async memory ===="
 			cuda_async_test_args="-t tag_lat -D contig,contig"
-			cuda_async_test_args+=" -m cuda-async,cuda-async -s 8 -n 10 -w 1"
+			cuda_async_test_args+=" -m cuda-async:0,cuda-async:0 -s 8 -n 10 -w 1"
 			run_client_server_app "$ucx_perftest" "$cuda_async_test_args" \
 					      "$(hostname)" 0 0
 		else
