@@ -517,6 +517,7 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         device->pci_id          = pci_id;
         device->user_value      = user_value;
         device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
+        device->flags           = 0;
         device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device->sibling_role    = UCS_TOPO_SIBLING_ROLE_NONE;
         device->sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -1120,6 +1121,51 @@ out_unlock:
 }
 
 ucs_status_t
+ucs_topo_sys_device_add_flags(ucs_sys_device_t sys_dev, unsigned flags)
+{
+    ucs_status_t status = UCS_OK;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("system device %d is unknown", sys_dev);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %u)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_unlock;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].flags |= flags;
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
+}
+
+unsigned ucs_topo_sys_device_get_flags(ucs_sys_device_t sys_dev)
+{
+    unsigned flags;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return 0;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        flags = ucs_topo_global_ctx.devices[sys_dev].flags;
+    } else {
+        flags = 0;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return flags;
+}
+
+ucs_status_t
 ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class)
 {
     if ((device_class <= UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
@@ -1446,14 +1492,16 @@ static void ucs_topo_release_devices()
     }
 }
 
-ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
+ucs_status_t
+ucs_topo_build_groups(const ucs_sys_device_bitmap_t *net_device_filter,
+                      ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
-                                         groups_p);
+                                         net_device_filter, groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return status;

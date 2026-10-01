@@ -74,6 +74,59 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
 
+class test_ucp_context_gpu_nic_assignment : public test_ucp_context {
+protected:
+    void check_no_assignable_nic(const char *mode, const char *tls,
+                                 ucs_status_t exp_status)
+    {
+        ucs::handle<ucp_config_t*> config;
+        ucp_context_h ucph;
+        ucs_status_t status;
+
+        UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                               ucp_config_read, NULL, NULL);
+        ASSERT_UCS_OK(ucp_config_modify(config.get(), "GPU_NIC_ASSIGNMENT_MODE",
+                                        mode));
+        ASSERT_UCS_OK(ucp_config_modify(config.get(), "TLS", tls));
+
+        {
+            const scoped_log_handler slh(hide_errors_logger);
+            status = ucp_init(&get_variant_ctx_params(), config.get(), &ucph);
+        }
+
+        EXPECT_EQ(exp_status, status);
+        if (status == UCS_OK) {
+            EXPECT_EQ(nullptr, ucph->gpu_nic_assignment);
+            ucp_cleanup(ucph);
+        }
+    }
+};
+
+/* shm has no network devices, and the tcp md has no UCT_MD_FLAG_REG, so
+ * neither provides a assignable NICs */
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, auto_mode_shm)
+{
+    check_no_assignable_nic("auto", "shm", UCS_OK);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, auto_mode_tcp)
+{
+    check_no_assignable_nic("auto", "tcp", UCS_OK);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_shm)
+{
+    check_no_assignable_nic("flip", "shm", UCS_ERR_INVALID_PARAM);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_tcp)
+{
+    check_no_assignable_nic("flip", "tcp", UCS_ERR_INVALID_PARAM);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context_gpu_nic_assignment, all, "all")
+
 class test_ucp_aliases : public test_ucp_context {
 };
 
