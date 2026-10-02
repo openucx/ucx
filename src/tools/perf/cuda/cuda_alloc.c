@@ -20,6 +20,7 @@
 
 static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
 {
+    ucs_status_t status;
     unsigned group_index;
     int num_gpus;
     int gpu_index;
@@ -27,19 +28,11 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
     group_index = rte_call(perf, group_index);
 
     CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaGetDeviceCount, &num_gpus);
-    if (num_gpus == 0) {
-        ucs_error("no cuda devices available");
-        return UCS_ERR_NO_DEVICE;
-    }
 
-    gpu_index = (group_index == 0) ? perf->params.recv_device.device_id :
-                                     perf->params.send_device.device_id;
-    if (gpu_index == UCX_PERF_MEM_DEV_DEFAULT) {
-        gpu_index = group_index % num_gpus;
-    } else if (gpu_index >= num_gpus) {
-        ucs_error("Illegal cuda device %d number of devices %d", gpu_index,
-                  num_gpus);
-        return UCS_ERR_NO_DEVICE;
+    status = ucx_perf_get_gpu_index(perf, group_index, num_gpus, "cuda",
+                                    &gpu_index);
+    if (status != UCS_OK) {
+        return status;
     }
 
     CUDA_CALL_RET(UCS_ERR_NO_DEVICE, cudaSetDevice, gpu_index);
