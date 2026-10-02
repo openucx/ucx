@@ -426,6 +426,8 @@ build_ze() {
 		null_ze_info=$(ZE_ENABLE_NULL_DRIVER=1 ZE_ENABLE_LOADER_DEBUG_TRACE=1 \
 			${ucx_inst}/bin/ucx_info -d)
 		check_ze_devices "${null_ze_info}" "null-driver"
+		run_perftest_device_id_smoke ze-device \
+			ZE_ENABLE_NULL_DRIVER=1 UCX_TLS=self,ze_copy
 	fi
 
 	make_clean distclean
