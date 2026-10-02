@@ -229,7 +229,7 @@ static void ucp_ep_deallocate(ucp_ep_h ep)
 {
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep->ext->uct_eps);
-    ucp_rma_bw_estimator_free(ep);
+    ucp_rma_bw_ep_state_cleanup(ep);
     ucs_free(ep->ext);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
@@ -279,7 +279,6 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->rma_bw_state                 = NULL;
-    ep->ext->rma_bw_generation            = 0;
     ep->ext->flush_sys_dev_map            = 0;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
@@ -5049,7 +5048,9 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
     ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
-    ++ep->ext->rma_bw_generation;
+    if (ep->ext->rma_bw_state != NULL) {
+        ++ep->ext->rma_bw_state->generation;
+    }
 }
 
 unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)

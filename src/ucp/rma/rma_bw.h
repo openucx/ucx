@@ -22,11 +22,19 @@ typedef enum {
 } ucp_rma_bw_dir_t;
 
 typedef enum {
+    UCP_RMA_BW_POST_NONE,
+    UCP_RMA_BW_POST_TRACK,
+    UCP_RMA_BW_POST_SAMPLE
+} ucp_rma_bw_post_mode_t;
+
+typedef enum {
     UCP_RMA_BW_REJECT_NONE,
     UCP_RMA_BW_REJECT_INCOMPLETE,
     UCP_RMA_BW_REJECT_UNSATURATED,
     UCP_RMA_BW_REJECT_GENERATION,
     UCP_RMA_BW_REJECT_RATE_LIMIT,
+    UCP_RMA_BW_REJECT_WARMUP,
+    UCP_RMA_BW_REJECT_WINDOW,
     UCP_RMA_BW_REJECT_LAST
 } ucp_rma_bw_reject_t;
 
@@ -41,6 +49,7 @@ typedef struct {
     size_t     bytes;
     ucs_time_t first_post;
     ucs_time_t last_comp;
+    uint64_t   posted_total;
     unsigned   num_frags;
     unsigned   num_async;
     unsigned   pending;
@@ -49,7 +58,11 @@ typedef struct {
 typedef struct {
     double           nominal;
     double           smoothed;
+    double           last_raw;
     ucs_time_t       last_update;
+    ucs_time_t       marker_time;
+    uint64_t         posted_total;
+    uint64_t         marker_posted;
     unsigned         samples;
     ucp_lane_index_t lane_id;
 } ucp_rma_bw_lane_estimate_t;
@@ -57,15 +70,15 @@ typedef struct {
 struct ucp_rma_bw_estimator {
     uint64_t                   epoch;
     uint32_t                   generation;
-    ucp_worker_cfg_index_t     cfg_index;
     ucp_lane_index_t           num_lanes;
-    ucp_rma_bw_dir_t          dir;
-    unsigned                  accepted;
-    unsigned                  rejected[UCP_RMA_BW_REJECT_LAST];
+    ucp_rma_bw_dir_t           dir;
+    unsigned                   accepted;
+    unsigned                   rejected[UCP_RMA_BW_REJECT_LAST];
     ucp_rma_bw_lane_estimate_t lanes[];
 };
 
 typedef struct ucp_rma_bw_ep_state {
+    uint32_t                generation;
     ucp_rma_bw_estimator_t *dirs[UCP_RMA_BW_DIR_LAST];
 } ucp_rma_bw_ep_state_t;
 
@@ -78,7 +91,6 @@ struct ucp_rma_bw_sample {
     ucp_lane_map_t         active_lanes;
     uint64_t               epoch;
     uint32_t               generation;
-    ucp_worker_cfg_index_t cfg_index;
     ucp_lane_index_t       num_lanes;
     ucp_rma_bw_dir_t       dir;
     ucp_lane_index_t       lane_ids[UCP_MAX_LANES];
@@ -91,15 +103,10 @@ void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
 void ucp_rma_bw_sample_complete(uct_completion_t *comp);
 void ucp_rma_bw_frag_complete(uct_completion_t *comp);
 void ucp_rma_bw_sample_detach(ucp_request_t *req);
-void ucp_rma_bw_estimator_free(ucp_ep_h ep);
+void ucp_rma_bw_ep_state_cleanup(ucp_ep_h ep);
 
 ucp_rma_bw_reject_t
 ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
                             const ucp_rma_bw_sample_t *sample, ucs_time_t now);
-int ucp_rma_bw_estimator_is_valid(const ucp_rma_bw_estimator_t *estimator,
-                                  ucp_rma_bw_dir_t dir, uint64_t epoch,
-                                  uint32_t generation,
-                                  ucp_worker_cfg_index_t cfg_index,
-                                  ucs_time_t now);
 
 #endif

@@ -33,6 +33,40 @@ ucp_rma_bw_sample_try_start(ucp_request_t *req,
     }
 }
 
+/* Count all accepted RMA zcopy bytes while measurement is enabled. A sampled
+ * fragment records its position in this per-EP lane stream. */
+static UCS_F_ALWAYS_INLINE uint64_t
+ucp_rma_bw_record_post(ucp_request_t *req, ucp_rma_bw_dir_t dir,
+                       ucp_lane_index_t lane_idx, ucp_lane_index_t lane_id,
+                       ucp_lane_index_t num_lanes, size_t bytes,
+                       ucs_status_t status)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucp_rma_bw_ep_state_t *state = ep->ext->rma_bw_state;
+    ucp_rma_bw_estimator_t *estimator;
+    ucp_rma_bw_lane_estimate_t *lane;
+
+    if (UCS_STATUS_IS_ERR(status) || (state == NULL)) {
+        return 0;
+    }
+
+    estimator = state->dirs[dir];
+    if ((estimator == NULL) || (estimator->num_lanes != num_lanes) ||
+        (estimator->epoch != ep->worker->epoch) ||
+        (estimator->generation != state->generation)) {
+        return 0;
+    }
+
+    ucs_assert(lane_idx < num_lanes);
+    lane = &estimator->lanes[lane_idx];
+    if (lane->lane_id != lane_id) {
+        return 0;
+    }
+
+    lane->posted_total += bytes;
+    return lane->posted_total;
+}
+
 static UCS_F_ALWAYS_INLINE uct_completion_t *
 ucp_rma_bw_frag_start(ucp_request_t *req, ucp_lane_index_t lane_idx,
                       ucp_rma_bw_frag_t **frag_p)

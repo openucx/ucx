@@ -7,6 +7,8 @@
 
 #include "test_ucp_memheap.h"
 
+#include <memory>
+
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
@@ -1747,9 +1749,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_bw, all, "all")
 
 TEST(test_ucp_rma_bw_helpers, detach_pending)
 {
-    ucp_request_t req          = {};
-    std::vector<ucp_rma_bw_sample_t> samples(1);
-    auto &sample = samples[0];
+    ucp_request_t req = {};
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample = *sample_ptr;
     ucp_rma_bw_frag_t *frag;
     uct_completion_t *comps[3];
 
@@ -1789,32 +1791,32 @@ TEST(test_ucp_rma_bw_helpers, estimator_three_lanes)
     std::vector<uint8_t> storage(sizeof(ucp_rma_bw_estimator_t) +
                                  count * sizeof(ucp_rma_bw_lane_estimate_t), 0);
     auto *estimator = reinterpret_cast<ucp_rma_bw_estimator_t *>(storage.data());
-    std::vector<ucp_rma_bw_sample_t> samples(1);
-    auto &sample = samples[0];
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample = *sample_ptr;
     const ucs_time_t second = ucs_time_from_sec(1.0);
     const double nominal     = 10.0 * UCS_MBYTE;
 
     estimator->num_lanes  = count;
     estimator->epoch      = 7;
     estimator->generation = 4;
-    estimator->cfg_index  = 3;
     estimator->dir        = UCP_RMA_BW_PUT;
     sample.num_lanes      = count;
     sample.epoch          = 7;
     sample.generation     = 4;
-    sample.cfg_index      = 3;
     sample.dir            = UCP_RMA_BW_PUT;
     sample.concurrent     = 1;
     for (unsigned i = 0; i < count; ++i) {
         auto *lane = &estimator->lanes[i];
-        lane->nominal      = nominal;
-        lane->smoothed     = nominal;
-        lane->lane_id      = i + 2;
-        sample.lane_ids[i] = i + 2;
-        sample.lanes[i].bytes       = (4u >> i) * UCS_MBYTE;
-        sample.lanes[i].first_post  = second;
-        sample.lanes[i].last_comp   = 2 * second;
-        sample.lanes[i].num_async   = 2;
+        lane->nominal                = nominal;
+        lane->smoothed               = nominal;
+        lane->marker_time            = second;
+        lane->lane_id                = i + 2;
+        sample.lane_ids[i]           = i + 2;
+        sample.lanes[i].bytes        = (4u >> i) * UCS_MBYTE;
+        sample.lanes[i].first_post   = second;
+        sample.lanes[i].last_comp    = 2 * second;
+        sample.lanes[i].num_async    = 2;
+        sample.lanes[i].posted_total = sample.lanes[i].bytes;
     }
 
     EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
@@ -1823,10 +1825,6 @@ TEST(test_ucp_rma_bw_helpers, estimator_three_lanes)
     EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[0].smoothed, 1.0);
     EXPECT_NEAR(7.6 * UCS_MBYTE, estimator->lanes[1].smoothed, 1.0);
     EXPECT_NEAR(7.3 * UCS_MBYTE, estimator->lanes[2].smoothed, 1.0);
-    EXPECT_TRUE(ucp_rma_bw_estimator_is_valid(estimator, UCP_RMA_BW_PUT, 7,
-                                               4, 3, 3 * second));
-    EXPECT_FALSE(ucp_rma_bw_estimator_is_valid(estimator, UCP_RMA_BW_GET, 7,
-                                                4, 3, 3 * second));
 
     EXPECT_EQ(UCP_RMA_BW_REJECT_RATE_LIMIT,
               ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
@@ -1834,25 +1832,23 @@ TEST(test_ucp_rma_bw_helpers, estimator_three_lanes)
 
     /* A very slow observation can only lower each EWMA by 27% per update. */
     for (unsigned i = 0; i < count; ++i) {
-        sample.lanes[i].bytes     = 256 * UCS_KBYTE;
-        sample.lanes[i].last_comp = 2 * second;
+        sample.lanes[i].bytes         = 256 * UCS_KBYTE;
+        sample.lanes[i].first_post    = 3 * second;
+        sample.lanes[i].last_comp     = 4 * second;
+        sample.lanes[i].posted_total += sample.lanes[i].bytes;
     }
     const double previous = estimator->lanes[0].smoothed;
     EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
               ucp_rma_bw_estimator_update(estimator, &sample, 4 * second));
     EXPECT_NEAR(0.73 * previous, estimator->lanes[0].smoothed, 1.0);
 
-    EXPECT_FALSE(ucp_rma_bw_estimator_is_valid(estimator, UCP_RMA_BW_PUT, 8,
-                                                4, 3, 4 * second));
-    EXPECT_FALSE(ucp_rma_bw_estimator_is_valid(estimator, UCP_RMA_BW_PUT, 7,
-                                                5, 3, 4 * second));
-    EXPECT_FALSE(ucp_rma_bw_estimator_is_valid(estimator, UCP_RMA_BW_PUT, 7,
-                                                4, 4, 4 * second));
-    EXPECT_FALSE(ucp_rma_bw_estimator_is_valid(
-            estimator, UCP_RMA_BW_PUT, 7, 4, 3,
-            4 * second + ucs_time_from_sec(UCP_RMA_BW_STALE_INTERVAL) +
-            second));
 
+    for (unsigned i = 0; i < count; ++i) {
+        sample.lanes[i].first_post = 4 * second +
+            ucs_time_from_sec(UCP_RMA_BW_STALE_INTERVAL);
+        sample.lanes[i].last_comp     = sample.lanes[i].first_post + second;
+        sample.lanes[i].posted_total += sample.lanes[i].bytes;
+    }
     EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
               ucp_rma_bw_estimator_update(
                       estimator, &sample,
@@ -1868,19 +1864,17 @@ TEST(test_ucp_rma_bw_helpers, estimator_rejects_whole_sample)
     std::vector<uint8_t> storage(sizeof(ucp_rma_bw_estimator_t) +
                                  count * sizeof(ucp_rma_bw_lane_estimate_t), 0);
     auto *estimator = reinterpret_cast<ucp_rma_bw_estimator_t *>(storage.data());
-    std::vector<ucp_rma_bw_sample_t> samples(1);
-    auto &sample = samples[0];
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample = *sample_ptr;
     const ucs_time_t second = ucs_time_from_sec(1.0);
 
     estimator->num_lanes  = count;
     estimator->epoch      = 9;
     estimator->generation = 4;
-    estimator->cfg_index  = 2;
     estimator->dir        = UCP_RMA_BW_GET;
     sample.num_lanes      = count;
     sample.epoch          = 9;
     sample.generation     = 4;
-    sample.cfg_index      = 2;
     sample.dir            = UCP_RMA_BW_GET;
     sample.concurrent     = 1;
     for (unsigned i = 0; i < count; ++i) {
@@ -1914,14 +1908,72 @@ TEST(test_ucp_rma_bw_helpers, estimator_rejects_whole_sample)
     sample.generation = 5;
     EXPECT_EQ(UCP_RMA_BW_REJECT_GENERATION,
               ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
+    sample.generation = 4;
+    for (unsigned i = 0; i < count; ++i) {
+        estimator->lanes[i].marker_time   = second;
+        estimator->lanes[i].marker_posted = UCS_MBYTE;
+        sample.lanes[i].posted_total      = UCS_MBYTE;
+    }
+    EXPECT_EQ(UCP_RMA_BW_REJECT_WINDOW,
+              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
     EXPECT_EQ(0u, estimator->accepted);
+}
+
+TEST(test_ucp_rma_bw_helpers, queued_request_uses_stream_rate)
+{
+    constexpr unsigned count = 2;
+    std::vector<uint8_t> storage(sizeof(ucp_rma_bw_estimator_t) +
+                                 count * sizeof(ucp_rma_bw_lane_estimate_t), 0);
+    auto *estimator = reinterpret_cast<ucp_rma_bw_estimator_t *>(storage.data());
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample = *sample_ptr;
+    const ucs_time_t second = ucs_time_from_sec(1.0);
+
+    estimator->num_lanes  = count;
+    estimator->epoch      = 1;
+    estimator->generation = 2;
+    estimator->dir        = UCP_RMA_BW_PUT;
+    sample.num_lanes      = count;
+    sample.epoch          = 1;
+    sample.generation     = 2;
+    sample.dir            = UCP_RMA_BW_PUT;
+    sample.concurrent     = 1;
+    for (unsigned i = 0; i < count; ++i) {
+        estimator->lanes[i].nominal    = 10 * UCS_MBYTE;
+        estimator->lanes[i].smoothed   = 10 * UCS_MBYTE;
+        estimator->lanes[i].lane_id    = i;
+        sample.lane_ids[i]             = i;
+        sample.lanes[i].bytes          = 8 * UCS_MBYTE;
+        sample.lanes[i].first_post     = second;
+        sample.lanes[i].last_comp      = 2 * second;
+        sample.lanes[i].num_async      = 1;
+    }
+
+    EXPECT_EQ(UCP_RMA_BW_REJECT_WARMUP,
+              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
+    EXPECT_EQ(0u, estimator->accepted);
+    EXPECT_EQ(2 * second, estimator->lanes[1].marker_time);
+
+    /* Sixteen requests, each posting 8 MiB per lane, complete in 16 s.
+     * The sampled second-lane request waits 16 s in the queue. */
+    for (unsigned i = 0; i < count; ++i) {
+        sample.lanes[i].posted_total = 16 * 8 * UCS_MBYTE;
+        sample.lanes[i].last_comp    = 18 * second;
+    }
+    sample.lanes[0].first_post = 17 * second;
+    sample.lanes[1].first_post = 2 * second;
+    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
+              ucp_rma_bw_estimator_update(estimator, &sample, 19 * second));
+    EXPECT_NEAR(8 * UCS_MBYTE, estimator->lanes[0].last_raw, 1.0);
+    EXPECT_NEAR(8 * UCS_MBYTE, estimator->lanes[1].last_raw, 1.0);
+    EXPECT_NEAR(9.4 * UCS_MBYTE, estimator->lanes[1].smoothed, 1.0);
 }
 
 TEST(test_ucp_rma_bw_helpers, fragment_cap)
 {
     ucp_request_t req          = {};
-    std::vector<ucp_rma_bw_sample_t> samples(1);
-    auto &sample = samples[0];
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample = *sample_ptr;
     ucp_rma_bw_frag_t *frag;
 
     req.flags              = UCP_REQUEST_FLAG_RMA_BW_SAMPLE;

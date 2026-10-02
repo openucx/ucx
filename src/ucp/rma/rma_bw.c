@@ -23,41 +23,13 @@ ucp_rma_bw_estimator_lane(ucp_rma_bw_estimator_t *estimator,
     return &estimator->lanes[lane_idx];
 }
 
-int ucp_rma_bw_estimator_is_valid(const ucp_rma_bw_estimator_t *estimator,
-                                  ucp_rma_bw_dir_t dir, uint64_t epoch,
-                                  uint32_t generation,
-                                  ucp_worker_cfg_index_t cfg_index,
-                                  ucs_time_t now)
-{
-    const ucp_rma_bw_lane_estimate_t *lane;
-    unsigned i;
-
-    if ((estimator == NULL) || (dir >= UCP_RMA_BW_DIR_LAST) ||
-        (estimator->dir != dir) || (estimator->epoch != epoch) ||
-        (estimator->generation != generation) ||
-        (estimator->cfg_index != cfg_index)) {
-        return 0;
-    }
-
-    for (i = 0; i < estimator->num_lanes; ++i) {
-        lane = &estimator->lanes[i];
-        if ((lane->nominal <= 0.0) || (lane->samples == 0) ||
-            (now < lane->last_update) ||
-            (now - lane->last_update >
-             ucs_time_from_sec(UCP_RMA_BW_STALE_INTERVAL))) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 ucp_rma_bw_reject_t
 ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
                             const ucp_rma_bw_sample_t *sample, ucs_time_t now)
 {
     ucp_rma_bw_lane_estimate_t *lane;
     ucp_rma_bw_reject_t reject = UCP_RMA_BW_REJECT_NONE;
+    int warmup = 0;
     unsigned i;
 
     if (sample->invalid) {
@@ -67,7 +39,6 @@ ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
 
     if ((sample->epoch != estimator->epoch) ||
         (sample->generation != estimator->generation) ||
-        (sample->cfg_index != estimator->cfg_index) ||
         (sample->num_lanes != estimator->num_lanes) ||
         (sample->dir != estimator->dir)) {
         reject = UCP_RMA_BW_REJECT_GENERATION;
@@ -103,16 +74,42 @@ ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
             reject = UCP_RMA_BW_REJECT_UNSATURATED;
             goto out;
         }
+
+        if (lane->marker_time == 0) {
+            warmup = 1;
+        } else if ((observation->posted_total <= lane->marker_posted) ||
+                   (observation->last_comp <= lane->marker_time)) {
+            reject = UCP_RMA_BW_REJECT_WINDOW;
+            goto out;
+        }
+    }
+
+    if (warmup) {
+        /* The first completed request sets a stream marker. Its queue wait
+         * cannot be separated from service time without a prior marker. */
+        for (i = 0; i < sample->num_lanes; ++i) {
+            lane                = ucp_rma_bw_estimator_lane(estimator, i);
+            lane->marker_posted = sample->lanes[i].posted_total;
+            lane->marker_time   = sample->lanes[i].last_comp;
+        }
+        reject = UCP_RMA_BW_REJECT_WARMUP;
+        goto out;
     }
 
     for (i = 0; i < sample->num_lanes; ++i) {
         const ucp_rma_bw_lane_t *observation = &sample->lanes[i];
-        double raw;
+        double request_rate, stream_rate, raw;
 
-        lane = ucp_rma_bw_estimator_lane(estimator, i);
-        raw  = observation->bytes /
-               ucs_time_to_sec(observation->last_comp -
-                               observation->first_post);
+        lane         = ucp_rma_bw_estimator_lane(estimator, i);
+        request_rate = observation->bytes /
+                       ucs_time_to_sec(observation->last_comp -
+                                       observation->first_post);
+        stream_rate  = (observation->posted_total - lane->marker_posted) /
+                       ucs_time_to_sec(observation->last_comp -
+                                       lane->marker_time);
+        /* The stream rate removes the old queue wait. An underfilled lane
+         * can complete this request faster than the aggregate stream rate. */
+        raw = ucs_max(request_rate, stream_rate);
         if ((lane->samples == 0) || (now < lane->last_update) ||
             (now - lane->last_update >
              ucs_time_from_sec(UCP_RMA_BW_STALE_INTERVAL))) {
@@ -120,10 +117,13 @@ ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
         }
 
         /* A single low observation can reduce the previous estimate by
-         * at most 90%; the EWMA uses the DOCA model's alpha of 0.3. */
-        lane->smoothed   = 0.7 * lane->smoothed +
-                           0.3 * ucs_max(raw, 0.1 * lane->smoothed);
-        lane->last_update = now;
+         * at most 27%; the EWMA uses the DOCA model's alpha of 0.3. */
+        lane->smoothed      = 0.7 * lane->smoothed +
+                              0.3 * ucs_max(raw, 0.1 * lane->smoothed);
+        lane->last_raw      = raw;
+        lane->last_update   = now;
+        lane->marker_posted = observation->posted_total;
+        lane->marker_time   = observation->last_comp;
         ++lane->samples;
     }
 
@@ -136,7 +136,8 @@ out:
     return reject;
 }
 
-static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id)
+static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id,
+                                ucp_rma_bw_dir_t dir)
 {
     ucp_worker_h worker = ep->worker;
     ucp_rsc_index_t rsc_index;
@@ -146,8 +147,11 @@ static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id)
 
     rsc_index            = ucp_ep_config(ep)->key.lanes[lane_id].rsc_index;
     wiface               = ucp_worker_iface(worker, rsc_index);
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_BANDWIDTH;
-    status               = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_BANDWIDTH;
+    perf_attr.operation  = (dir == UCP_RMA_BW_PUT) ? UCT_EP_OP_PUT_ZCOPY :
+                                                   UCT_EP_OP_GET_ZCOPY;
+    status               = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status == UCS_OK) {
         return ucp_tl_iface_bandwidth(worker->context, &perf_attr.bandwidth);
     }
@@ -193,31 +197,29 @@ ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
     }
 
     if ((estimator->epoch != ep->worker->epoch) ||
-        (estimator->generation != ep->ext->rma_bw_generation) ||
-        (estimator->cfg_index != ep->cfg_index)) {
+        (estimator->generation != state->generation)) {
         memset(estimator->lanes, 0,
                estimator->num_lanes * sizeof(estimator->lanes[0]));
         estimator->epoch      = ep->worker->epoch;
-        estimator->generation = ep->ext->rma_bw_generation;
-        estimator->cfg_index  = ep->cfg_index;
+        estimator->generation = state->generation;
     }
 
     for (i = 0; i < sample->num_lanes; ++i) {
         lane = ucp_rma_bw_estimator_lane(estimator, i);
         if ((lane->nominal == 0.0) ||
             (lane->lane_id != sample->lane_ids[i])) {
-            lane->nominal     = ucp_rma_bw_nominal(ep, sample->lane_ids[i]);
-            lane->smoothed    = lane->nominal;
-            lane->last_update = 0;
-            lane->samples     = 0;
-            lane->lane_id     = sample->lane_ids[i];
+            memset(lane, 0, sizeof(*lane));
+            lane->nominal  = ucp_rma_bw_nominal(ep, sample->lane_ids[i],
+                                             sample->dir);
+            lane->smoothed = lane->nominal;
+            lane->lane_id  = sample->lane_ids[i];
         }
     }
 
     return estimator;
 }
 
-void ucp_rma_bw_estimator_free(ucp_ep_h ep)
+void ucp_rma_bw_ep_state_cleanup(ucp_ep_h ep)
 {
     ucp_rma_bw_ep_state_t *state = ep->ext->rma_bw_state;
     unsigned dir;
@@ -230,6 +232,7 @@ void ucp_rma_bw_estimator_free(ucp_ep_h ep)
         ucs_free(state->dirs[dir]);
     }
     ucs_free(state);
+    ep->ext->rma_bw_state = NULL;
 }
 
 void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
@@ -267,11 +270,14 @@ void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
     sample->num_lanes  = num_lanes;
     sample->dir        = dir;
     sample->epoch      = worker->epoch;
-    sample->generation = req->send.ep->ext->rma_bw_generation;
-    sample->cfg_index  = req->send.ep->cfg_index;
     for (i = 0; i < num_lanes; ++i) {
         sample->lane_ids[i] = mpriv->lanes[i].super.lane;
     }
+    if (ucp_rma_bw_estimator_prepare(req->send.ep, sample) == NULL) {
+        sample->req = NULL;
+        return;
+    }
+    sample->generation = req->send.ep->ext->rma_bw_state->generation;
 
     req->send.rma.bw_sample    = sample;
     req->flags                |= UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
@@ -284,17 +290,17 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
     ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
                                           send.state.uct_comp);
     ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
+    ucp_rma_bw_ep_state_t *state = req->send.ep->ext->rma_bw_state;
     ucp_rma_bw_estimator_t *estimator;
     ucp_rma_bw_reject_t reject;
     ucs_time_t now;
     unsigned i;
 
     sample->invalid |= (comp->status != UCS_OK);
-    if ((sample->epoch != req->send.ep->worker->epoch) ||
-        (sample->generation != req->send.ep->ext->rma_bw_generation) ||
-        (sample->cfg_index != req->send.ep->cfg_index)) {
-        ucs_debug("ep %p req %p: rma bw sample rejected after EP change",
-                  req->send.ep, req);
+    if ((state == NULL) ||
+        (sample->epoch != req->send.ep->worker->epoch) ||
+        (sample->generation != state->generation)) {
+        ucp_trace_req(req, "rma bw sample rejected after EP change");
         goto out;
     }
 
@@ -304,10 +310,9 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
         reject = ucp_rma_bw_estimator_update(estimator, sample, now);
         if (reject == UCP_RMA_BW_REJECT_NONE) {
             for (i = 0; i < sample->num_lanes; ++i) {
-                ucs_debug("ep %p req %p: rma bw %s lane %u/%u ep_lane %u: "
-                              "%zu bytes / %.3f us, raw %.2f MB/s, "
-                              "nominal %.2f MB/s, ewma %.2f MB/s",
-                              req->send.ep, req,
+                ucp_trace_req(req, "rma bw %s lane %u/%u ep_lane %u: "
+                              "%zu bytes / %.3f us, request %.2f MB/s, "
+                              "effective %.2f MB/s, ewma %.2f MB/s",
                               sample->dir == UCP_RMA_BW_PUT ? "PUT" : "GET",
                               i, sample->num_lanes, sample->lane_ids[i],
                               sample->lanes[i].bytes,
@@ -317,18 +322,16 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
                               ucs_time_to_sec(sample->lanes[i].last_comp -
                                               sample->lanes[i].first_post) /
                               UCS_MBYTE,
-                              ucp_rma_bw_estimator_lane(estimator, i)->nominal /
+                              ucp_rma_bw_estimator_lane(estimator, i)->last_raw /
                               UCS_MBYTE,
                               ucp_rma_bw_estimator_lane(estimator, i)->smoothed /
                               UCS_MBYTE);
             }
         } else {
-            ucs_debug("ep %p req %p: rma bw %s sample rejected: reason %u, "
-                          "epoch %lu/%lu, cfg %u/%u",
-                          req->send.ep, req,
+            ucp_trace_req(req, "rma bw %s sample rejected: reason %u, "
+                          "epoch %lu/%lu",
                           sample->dir == UCP_RMA_BW_PUT ? "PUT" : "GET",
-                          reject, sample->epoch, req->send.ep->worker->epoch,
-                          sample->cfg_index, req->send.ep->cfg_index);
+                          reject, sample->epoch, req->send.ep->worker->epoch);
         }
     }
 
