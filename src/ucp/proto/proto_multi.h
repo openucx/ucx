@@ -194,7 +194,7 @@ ucs_sys_device_t
 ucp_proto_multi_get_owner_sys_dev(const ucp_proto_multi_init_params_t *params);
 
 
-const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
+const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         const ucp_proto_multi_init_params_t *params,
         ucs_sys_device_t owner_sys_dev);
 

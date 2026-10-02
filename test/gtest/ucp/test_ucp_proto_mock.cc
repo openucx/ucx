@@ -2898,7 +2898,7 @@ protected:
         }
     }
 
-    const ucp_gpu_nic_sys_dev_bitmap_t *
+    const ucs_sys_device_bitmap_t *
     resolve_assignment(ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
                        ucs_memory_type_t reg_mem_type,
                        ucs_sys_device_t reg_mem_sys_dev,
@@ -3289,7 +3289,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
             UCS_MEMORY_TYPE_CUDA, mapped_gpu(), UCS_MEMORY_TYPE_CUDA, unknown,
             true},
     };
-    const ucp_gpu_nic_sys_dev_bitmap_t *expected_bitmap;
+    const ucs_sys_device_bitmap_t *expected_bitmap;
     ucp_context_h context;
 
     install_assignment(mapped_gpu(), {nic(0)});

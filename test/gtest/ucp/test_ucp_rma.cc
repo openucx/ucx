@@ -486,7 +486,7 @@ private:
     bool is_buffer_gpu_assigned()
     {
         const ucp_context_h context = sender().ucph();
-        const ucp_gpu_nic_sys_dev_bitmap_t *bitmap;
+        const ucs_sys_device_bitmap_t *bitmap;
         ucp_memory_info_t mem_info;
 
         if (context->gpu_nic_assignment == nullptr) {
@@ -569,7 +569,7 @@ private:
     }
 
     static bool is_unassigned_nic(const uct_tl_resource_desc_t *tl_rsc,
-                                  const ucp_gpu_nic_sys_dev_bitmap_t *bitmap)
+                                  const ucs_sys_device_bitmap_t *bitmap)
     {
         return (tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
                !ucp_gpu_nic_bitmap_get(bitmap, tl_rsc->sys_device);
@@ -583,7 +583,7 @@ private:
         const ucp_ep_config_t *ep_config =
                 ucp_worker_ep_config(worker, proto_config->ep_cfg_index);
         const ucs_sys_device_t gpu_sys_dev = proto_config->select_param.sys_dev;
-        const ucp_gpu_nic_sys_dev_bitmap_t *bitmap;
+        const ucs_sys_device_bitmap_t *bitmap;
         const uct_tl_resource_desc_t *tl_rsc;
         ucp_proto_query_attr_t attr;
         ucp_lane_index_t lane;

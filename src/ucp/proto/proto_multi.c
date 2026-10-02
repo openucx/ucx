@@ -43,13 +43,13 @@ ucp_proto_multi_get_owner_sys_dev(const ucp_proto_multi_init_params_t *params)
                    params->super.super.select_param->sys_dev;
 }
 
-const ucp_gpu_nic_sys_dev_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
+const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         const ucp_proto_multi_init_params_t *params,
         ucs_sys_device_t owner_sys_dev)
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
-    const ucp_gpu_nic_sys_dev_bitmap_t *bitmap = NULL;
+    const ucs_sys_device_bitmap_t *bitmap      = NULL;
     const char *UCS_V_UNUSED owner_desc;
 
     if (context->gpu_nic_assignment == NULL) {
@@ -511,7 +511,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     ucp_context_h context                      = init_params->worker->context;
     ucp_lane_index_t num_filtered_lanes        = 0;
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
-    const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nic_bitmap;
+    const ucs_sys_device_bitmap_t *assigned_nic_bitmap;
     ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
