@@ -565,8 +565,6 @@ protected:
     void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
     {
         uct_ep_outstanding_purge_params_t purge_params = {};
-        std::vector<uint8_t>              tx_token;
-        std::vector<uint8_t>              rx_token;
 
         purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                                   UCT_EP_OUTSTANDING_FIELD_ARG;
@@ -574,9 +572,11 @@ protected:
         purge_params.arg        = ctx;
 
         if (with_rx_token) {
-            uct_iface_attr_v2_t tx_attr = {};
-            uct_iface_attr_v2_t rx_attr = {};
-            uct_ep_attr_t       ep_attr = {};
+            uct_iface_attr_v2_t  tx_attr = {};
+            uct_iface_attr_v2_t  rx_attr = {};
+            uct_ep_attr_t        ep_attr = {};
+            std::vector<uint8_t> tx_token;
+            std::vector<uint8_t> rx_token;
 
             tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
             ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
@@ -652,6 +652,34 @@ protected:
         EXPECT_EQ(0, ctx.comp.count);
     }
 
+    void test_am_short(bool with_rx_token)
+    {
+        const uct_iface_attr_t &attr = m_sender->iface_attr();
+        const size_t size            = ucs_min((size_t)64,
+                                               attr.cap.am.max_short);
+        std::vector<uint8_t> payload(size);
+
+        mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
+
+        purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+        ctx.send_buf  = payload.data();
+        ctx.send_len  = payload.size();
+
+        ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
+                                               am_handler, NULL, 0));
+
+        send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
+            return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER,
+                                   ctx.send_buf, ctx.send_len);
+        };
+        test_purge_outstanding(am_short, ctx, with_rx_token);
+
+        EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
+        EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
+        EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
+                                      ctx.num_ops_posted_after_flush);
+    }
+
     entity   *m_sender;
     entity   *m_receiver;
     unsigned m_err_count = 0;
@@ -663,56 +691,13 @@ const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    const uct_iface_attr_t &attr = m_sender->iface_attr();
-    const size_t size            = ucs_min((size_t)64, attr.cap.am.max_short);
-    std::vector<uint8_t> payload(size);
-    mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
-
-    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
-    ctx.send_buf  = payload.data();
-    ctx.send_len  = payload.size();
-
-    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
-                                           am_handler, NULL, 0));
-
-    send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
-        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER, ctx.send_buf,
-                               ctx.send_len);
-    };
-    test_purge_outstanding(am_short, ctx);
-
-    EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
-    EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
-    EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
-                                  ctx.num_ops_posted_after_flush);
+    test_am_short(true);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short_no_rx_token,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    const uct_iface_attr_t &attr = m_sender->iface_attr();
-    const size_t size            = ucs_min((size_t)64, attr.cap.am.max_short);
-    std::vector<uint8_t> payload(size);
-
-    mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
-
-    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
-    ctx.send_buf  = payload.data();
-    ctx.send_len  = payload.size();
-
-    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
-                                           am_handler, NULL, 0));
-
-    send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
-        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER, ctx.send_buf,
-                               ctx.send_len);
-    };
-    test_purge_outstanding(am_short, ctx, false);
-
-    EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
-    EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
-    EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
-                                  ctx.num_ops_posted_after_flush);
+    test_am_short(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_short,

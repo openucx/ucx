@@ -1347,12 +1347,6 @@ static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) &&
-        (params->rx_token == NULL)) {
-        ucs_error("rc mlx5: rx token is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_CB) ||
         (params->cb == NULL)) {
         ucs_error("rc mlx5: callback is not set or is NULL");
@@ -1454,7 +1448,12 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
                         num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
     if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
-        rx_token          = params->rx_token;
+        rx_token = params->rx_token;
+        if (rx_token == NULL) {
+            ucs_error("rc mlx5: rx token is NULL");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
         receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
         psn_diff          = (receiver_next_psn - first_failed_psn) &
                             UCT_IB_MLX5_PSN_MASK;
