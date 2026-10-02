@@ -210,4 +210,69 @@ public:
 };
 #endif
 
+#if CUDA_VERSION >= 11020
+class cuda_mempool_mem_buffer {
+public:
+    /* Device memory from a stream-ordered pool. @a handle_type is the pool's
+     * CUmemPoolProps::handleTypes, which fixes the requested handle type of the
+     * VMM allocations backing the pool. */
+    cuda_mempool_mem_buffer(size_t size,
+                            CUmemAllocationHandleType handle_type =
+                                    CU_MEM_HANDLE_TYPE_NONE) : m_size(size)
+    {
+        CUmemPoolProps props = {};
+        CUdevice device;
+
+        if (cuCtxGetDevice(&device) != CUDA_SUCCESS) {
+            UCS_TEST_ABORT("failed to get the device handle for the current "
+                           "context");
+        }
+
+        props.allocType     = CU_MEM_ALLOCATION_TYPE_PINNED;
+        props.handleTypes   = handle_type;
+        props.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        props.location.id   = device;
+
+        if (cuMemPoolCreate(&m_pool, &props) != CUDA_SUCCESS) {
+            UCS_TEST_SKIP_R("failed to create a CUDA memory pool");
+        }
+
+        if ((cuMemAllocFromPoolAsync(&m_ptr, m_size, m_pool, 0) !=
+             CUDA_SUCCESS) ||
+            (cuStreamSynchronize(0) != CUDA_SUCCESS)) {
+            cuMemPoolDestroy(m_pool);
+            m_pool = nullptr;
+            UCS_TEST_SKIP_R("failed to allocate from a CUDA memory pool");
+        }
+    }
+
+    ~cuda_mempool_mem_buffer()
+    {
+        if (m_ptr != 0) {
+            cuMemFreeAsync(m_ptr, 0);
+            cuStreamSynchronize(0);
+        }
+
+        if (m_pool != nullptr) {
+            cuMemPoolDestroy(m_pool);
+        }
+    }
+
+    void *ptr() const
+    {
+        return (void*)m_ptr;
+    }
+
+    size_t size() const
+    {
+        return m_size;
+    }
+
+private:
+    size_t m_size       = 0;
+    CUmemoryPool m_pool = nullptr;
+    CUdeviceptr m_ptr   = 0;
+};
+#endif
+
 #endif

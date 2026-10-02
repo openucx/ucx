@@ -16,6 +16,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_mm.inl>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/profile/profile.h>
 
 
@@ -60,6 +61,35 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 }
 
 
+/*
+ * The latency lane of a memory type endpoint is preferred, but its memory
+ * domain may require memory flags that this particular buffer does not have,
+ * for example gdr_copy cannot pin memory from the stream-ordered allocator.
+ * Use the bandwidth lane for such buffers instead of failing to register.
+ */
+static ucp_lane_index_t
+ucp_mem_type_ep_lane(ucp_worker_h worker, ucp_ep_h ep, const void *address,
+                     size_t length)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_md_index_t md_index        = ucp_ep_md_index(ep, key->rma_lanes[0]);
+    uint8_t required_mem_flags     =
+            worker->context->tl_mds[md_index].attr.required_mem_flags;
+    ucs_memory_info_t mem_info;
+
+    /* On a cache miss the flags are unknown, so keep the preferred lane
+     * rather than pessimizing every buffer */
+    if ((required_mem_flags == 0) || (key->rma_bw_lanes[0] == UCP_NULL_LANE) ||
+        (ucs_memtype_cache_lookup(address, length, &mem_info) != UCS_OK) ||
+        ucs_test_all_flags(mem_info.mem_flags, required_mem_flags)) {
+        return key->rma_lanes[0];
+    }
+
+    ucs_trace_req("buffer %p lacks mem_flags 0x%x, using bw lane of memtype "
+                  "ep %p", address, required_mem_flags, ep);
+    return key->rma_bw_lanes[0];
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
                       (worker, buffer, recv_data, recv_length, mem_type),
                       ucp_worker_h worker, void *buffer, const void *recv_data,
@@ -75,7 +105,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
+    lane     = ucp_mem_type_ep_lane(worker, ep, buffer, recv_length);
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
@@ -110,7 +140,7 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
+    lane     = ucp_mem_type_ep_lane(worker, ep, src, length);
     md_index = ucp_ep_md_index(ep, lane);
 
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,

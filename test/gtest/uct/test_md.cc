@@ -1423,6 +1423,13 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
     ASSERT_UCS_OK(register_mem());
 }
 
+/* Pinning goes through nvidia_p2p_get_pages, so memory that the peer memory
+ * driver cannot pin must never be offered to this domain */
+UCS_TEST_P(test_gdr_copy, gdr_copy_requires_peer_mem_pinnable)
+{
+    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE);
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
 
 #endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
