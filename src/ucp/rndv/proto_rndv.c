@@ -220,7 +220,6 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     const ucp_ep_config_t *ep_config    = &ucs_array_elem(&worker->ep_config,
                                                           ep_cfg_index);
     ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
-    ucp_proto_init_params_t remote_init_params;
     ucp_rkey_config_key_t rkey_config_key;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
@@ -229,24 +228,15 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 
     /* Construct remote key for remote protocol lookup according to the local
      * buffer properties (since remote side is expected to access the local
-     * buffer)
-     */
-    rkey_config_key.md_map       = ucp_proto_rndv_md_map_to_remote(params,
-                                                                   md_map);
-    rkey_config_key.ep_cfg_index = ep_cfg_index;
-    rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
-    rkey_config_key.mem_type     = params->super.reg_mem_info.type;
-    rkey_config_key.flags        = 0;
+     * buffer) */
+    rkey_config_key.md_map = ucp_proto_rndv_md_map_to_remote(params, md_map);
+    rkey_config_key.ep_cfg_index       = ep_cfg_index;
+    rkey_config_key.sys_dev            = params->super.reg_mem_info.sys_dev;
+    rkey_config_key.mem_type           = params->super.reg_mem_info.type;
     rkey_config_key.unreachable_md_map = 0;
 
-    remote_init_params                 = params->super.super;
-    remote_init_params.select_param    = remote_select_param;
-    remote_init_params.rkey_config_key = &rkey_config_key;
-    if (ucp_proto_rndv_shm_pipeline_force(&remote_init_params) ||
-        ucp_proto_rndv_shm_pipeline_force_rkey_ptr_mtype(
-                &remote_init_params)) {
-        rkey_config_key.flags |= UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION;
-    }
+    /* Keep the remote estimation separate from the local protocols */
+    rkey_config_key.flags = UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION;
 
     for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
         ucp_proto_common_get_lane_distance(&params->super.super, lane,
