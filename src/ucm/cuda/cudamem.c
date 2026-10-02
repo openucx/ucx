@@ -414,7 +414,7 @@ static ucs_status_t ucm_cudamem_install(int events)
         goto out;
     }
 
-    if (ucm_global_opts.cuda_hook_modes == 0) {
+    if (!(ucm_global_opts.cuda_hook_modes & UCM_GPU_HOOK_MODES_MASK)) {
         ucm_info("cuda memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;
