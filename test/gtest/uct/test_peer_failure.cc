@@ -565,6 +565,8 @@ protected:
     void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
     {
         uct_ep_outstanding_purge_params_t purge_params = {};
+        /* Lives until purge returns. The params keep a pointer into it. */
+        std::vector<uint8_t> rx_token;
 
         purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                                   UCT_EP_OUTSTANDING_FIELD_ARG;
@@ -576,7 +578,6 @@ protected:
             uct_iface_attr_v2_t  rx_attr = {};
             uct_ep_attr_t        ep_attr = {};
             std::vector<uint8_t> tx_token;
-            std::vector<uint8_t> rx_token;
 
             tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
             ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
