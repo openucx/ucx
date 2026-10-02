@@ -95,7 +95,7 @@ static void uct_rocm_ipc_cache_purge(uct_rocm_ipc_cache_t *cache)
 
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_fatal("failed to unmap addr:%p", region->mapped_addr);
+            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
         }
 
         ucs_free(region);
@@ -124,7 +124,7 @@ static void uct_rocm_ipc_cache_invalidate_regions(uct_rocm_ipc_cache_t *cache,
         }
 
         if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_fatal("failed to unmap addr:%p", region->mapped_addr);
+            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
         }
         ucs_free(region);
     }
@@ -171,7 +171,7 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
             }
 
             if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
-                ucs_fatal("failed to unmap addr:%p", region->mapped_addr);
+                ucs_warn("failed to unmap addr:%p", region->mapped_addr);
             }
 
             ucs_free(region);
@@ -180,8 +180,10 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
 
     hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL, mapped_addr);
     if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
-        ucs_fatal("%s: failed to open ipc mem handle. addr:%p len:%lu",
+        ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu",
                   cache->name, (void *)key->address, key->length);
+        status = UCS_ERR_INVALID_ADDR;
+        goto err;
     }
 
     /*create new cache entry */

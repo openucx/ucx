@@ -196,6 +196,8 @@ static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_ipc_ep_t),
+    .ep_check                 = (uct_ep_check_func_t)
+            ucs_empty_function_return_unsupported,
     .iface_flush              = uct_rocm_ipc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
