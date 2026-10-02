@@ -1313,26 +1313,29 @@ ucp_wireup_process_lanes_addr_request(
         const ucp_wireup_lane_token_t *tx_tokens,
         const ucp_unpacked_address_t *remote_address)
 {
-    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided;
+    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided, invalidated;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    /* Hold a token-capable lane before deriving next_rcv_psn. Hold keeps
-     * that endpoint, so the query still finds it. */
+    /* A peer token means that lane already failed remotely. Invalidate it
+     * and keep the transport endpoint on the lane until the error handler
+     * holds it. Deriving the RX token does not take the lane off. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
+    invalidated = 0;
     if (request_id != 0) {
-        ucp_ep_tf_hold_lanes(ep, lanes_info->provided_lane_map, request_id);
+        invalidated = ucp_ep_tf_invalidate_lanes(ep,
+                                                 lanes_info->provided_lane_map,
+                                                 0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens);
     }
 
-    /* Asymmetric failure: lanes the peer declared broken but we don't yet
-     * see as failed go through local failover first, so subsequent rebuild
-     * steps encounter proper failed stubs and the reply rides the new
-     * am_lane. Lanes held above are already failed and stay out of this set. */
-    peer_unaware = lanes_info->provided_lane_map & ~ucp_ep_get_failed_lanes(ep);
+    /* Lanes still up, and not waiting for the token error handler, take the
+     * software path. Invalidated lanes stay out of that discard. */
+    peer_unaware = lanes_info->provided_lane_map &
+                   ~ucp_ep_get_failed_lanes(ep) & ~invalidated;
     if (peer_unaware != 0) {
         ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
                   "asymmetric failure on lanes 0x%" PRIx64,
@@ -1367,6 +1370,60 @@ ucp_wireup_process_lanes_addr_request(
                                    lanes_info->provided_lane_map, peer_provided,
                                    request_id, rx_tokens);
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
+}
+
+static ucp_lane_map_t
+ucp_wireup_lanes_with_tokens(ucp_lane_map_t lane_map,
+                             const ucp_wireup_lane_token_t *tokens)
+{
+    ucp_lane_map_t lanes = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lane_map) {
+        if ((tokens[lane].token != NULL) && (tokens[lane].len > 0)) {
+            lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return lanes;
+}
+
+/* A token in the reply means the peer already failed that lane. Invalidate
+ * it and leave it on the lane until the error handler. Lanes that cannot
+ * carry a token are discarded on the software path. */
+static void
+ucp_wireup_invalidate_unaware_failed_lanes(
+        ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *lanes_info,
+        uint32_t request_id, const ucp_wireup_lane_token_t *tx_tokens,
+        const ucp_wireup_lane_token_t *rx_tokens)
+{
+    ucp_lane_map_t lanes, leftover, invalidated;
+    ucs_status_t status;
+
+    if (request_id == 0) {
+        return;
+    }
+
+    lanes = ucp_wireup_lanes_with_tokens(lanes_info->requested_lane_map,
+                                         rx_tokens) |
+            ucp_wireup_lanes_with_tokens(lanes_info->provided_lane_map,
+                                         tx_tokens);
+    lanes &= ~ucp_ep_get_failed_lanes(ep);
+    if (lanes == 0) {
+        return;
+    }
+
+    invalidated = ucp_ep_tf_invalidate_lanes(ep, lanes, request_id, 0);
+    leftover    = lanes & ~invalidated;
+    if (leftover == 0) {
+        return;
+    }
+
+    status = ucp_ep_failover_reconfig(ep, leftover, UCS_ERR_CONNECTION_RESET);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: failover after reply tokens failed: %s", ep,
+                 ucs_status_string(status));
+    }
 }
 
 static UCS_F_NOINLINE void
@@ -1598,6 +1655,9 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                               &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
         ucs_assert(lanes_info != NULL);
+        ucp_wireup_invalidate_unaware_failed_lanes(ep, lanes_info,
+                                                   request_id, tx_tokens,
+                                                   rx_tokens);
         ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
         ucp_wireup_process_lanes_addr_reply(worker, ep, msg, lanes_info,
                                             request_id, tx_tokens,

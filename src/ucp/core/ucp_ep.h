@@ -508,6 +508,9 @@ typedef struct ucp_ep_recovery_probe {
 
 enum {
     UCP_EP_TF_LANE_EMPTY = 0,
+    /* Peer reported this lane failed. The transport endpoint is invalidated
+     * and still on the lane; the error handler has not held it yet. */
+    UCP_EP_TF_LANE_INVALIDATED,
     UCP_EP_TF_LANE_HELD
 };
 
@@ -515,7 +518,8 @@ enum {
 /* Per-lane token-failover state. The UCT ep is kept until an RX token purges
  * its outstanding operations, or until the endpoint is fully failed and the
  * lane is canceled. request_id is the local REQUEST that published tx_token.
- * peer_id is the remote REQUEST answered with that same token. */
+ * peer_id is the remote REQUEST answered with that same token. An invalidated
+ * lane may already hold those ids and an RX token. */
 typedef struct ucp_ep_lane_tf {
     uct_ep_h               uct_ep;
     ucp_rsc_index_t        rsc_index;
@@ -1081,10 +1085,17 @@ ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
- * Snapshot lanes that are about to be discarded and remember @a peer_id, so
- * the reply can publish their TX tokens.
+ * Invalidate lanes a peer token reported as failed.
+ *
+ * The transport endpoint stays on the lane in @ref UCP_EP_TF_LANE_INVALIDATED
+ * until the error handler holds it. Non-zero @a request_id and @a peer_id are
+ * recorded. Already held lanes only record @a peer_id.
+ *
+ * @return Lanes left invalidated. Any other lane is not on the token path.
  */
-void ucp_ep_tf_hold_lanes(ucp_ep_h ep, ucp_lane_map_t lanes, uint32_t peer_id);
+ucp_lane_map_t
+ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                           uint32_t request_id, uint32_t peer_id);
 
 
 /**
