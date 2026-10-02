@@ -58,37 +58,13 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     return lane_perf->bandwidth * ratio;
 }
 
-static ucs_bus_id_bit_rep_t
-ucp_proto_multi_sys_dev_bus_id_key(ucs_sys_device_t sys_dev)
-{
-    ucs_sys_bus_id_t bus_id;
-
-    if (ucs_topo_get_device_bus_id(sys_dev, &bus_id) != UCS_OK) {
-        ucs_fatal("failed to get device bus id for sys_dev %d", sys_dev);
-    }
-
-    return ucs_topo_get_bus_id_bit_repr(&bus_id);
-}
-
 static int ucp_proto_multi_sys_dev_cmp(const void *pa, const void *pb,
                                        void *UCS_V_UNUSED arg)
 {
-    const ucs_sys_device_t a   = *(const ucs_sys_device_t*)pa;
-    const ucs_sys_device_t b   = *(const ucs_sys_device_t*)pb;
-    ucs_bus_id_bit_rep_t key_a = ucp_proto_multi_sys_dev_bus_id_key(a);
-    ucs_bus_id_bit_rep_t key_b = ucp_proto_multi_sys_dev_bus_id_key(b);
-    uintptr_t user_value_a, user_value_b;
+    ucs_sys_device_t sys_dev1 = *(const ucs_sys_device_t*)pa;
+    ucs_sys_device_t sys_dev2 = *(const ucs_sys_device_t*)pb;
 
-    /* Sort by topology identity so every rank on the node observes the same
-     * ordering regardless of local device discovery order. */
-    if (key_a != key_b) {
-        return (key_a > key_b) - (key_a < key_b);
-    }
-
-    user_value_a = ucs_topo_sys_device_get_user_value(a);
-    user_value_b = ucs_topo_sys_device_get_user_value(b);
-
-    return (user_value_a > user_value_b) - (user_value_a < user_value_b);
+    return ucs_topo_sys_device_cmp(sys_dev1, sys_dev2);
 }
 
 static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
