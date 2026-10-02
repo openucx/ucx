@@ -87,10 +87,10 @@ static ucs_config_field_t ucm_global_config_table[] = {
 
   {"DYNAMIC_MMAP_THRESH", "yes",
    "Enable dynamic mmap threshold: for every released block, the\n"
-   "mmap threshold is adjusted upward to the size of the size of\n"
-   "the block, and trim threshold is adjust to twice the size of\n"
+   "mmap threshold is adjusted upward to the size of the block,\n"
+   "and trim threshold is adjusted to twice the size of\n"
    "the dynamic mmap threshold.\n"
-   "Note: dynamic mmap threshold is disabled when running on valgrind.",
+   "Note: dynamic mmap threshold is disabled when running on Valgrind.",
    ucs_offsetof(ucm_global_config_t, enable_dynamic_mmap_thresh),
    UCS_CONFIG_TYPE_BOOL},
 
