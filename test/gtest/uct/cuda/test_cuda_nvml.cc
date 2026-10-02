@@ -18,7 +18,7 @@ UCS_TEST_F(test_cuda_nvml, device_get_field_values) {
                                           &device);
     EXPECT_EQ(status, UCS_OK);
 
-    nvmlFieldValue_t value;
+    nvmlFieldValue_t value = {};
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetFieldValues, device, 1,
                                      &value);
