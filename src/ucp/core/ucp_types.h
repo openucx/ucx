@@ -261,6 +261,9 @@ typedef enum {
      * across the N GPUs of the group.
      * The group's NICs are assigned to the following GPU indices in order:
      * 0, 1, ..., N-1, N-1, ..., 1, 0, 0, 1, ...
+     * This targets architectures where only some of the NICs share a PCIe
+     * switch with a local SSD, so that each GPU gets NICs both with and without
+     * direct SSD access.
      */
     UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
 

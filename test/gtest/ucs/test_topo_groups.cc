@@ -15,21 +15,14 @@ extern "C" {
 #include <random>
 
 
-static constexpr ucs_sys_pci_id_t pci_id_cx9 = {
-    UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID,
-    UCS_TOPO_GROUPS_CX9_DEVICE_ID,
-};
-
-
 class test_topo_groups : public ucs::test {
 protected:
     using physical_device = std::vector<ucs_sys_device_t>;
 
-    static constexpr int num_devices_per_gpu   = 2;
-    static constexpr int num_gpus_per_numa     = 2;
-    static constexpr int num_ports_per_nic     = 2;
-    static constexpr int num_cx9_nics_per_numa = 4;
-    static constexpr int num_nics_per_numa     = num_cx9_nics_per_numa + 1;
+    static constexpr int num_devices_per_gpu = 2;
+    static constexpr int num_gpus_per_numa   = 2;
+    static constexpr int num_ports_per_nic   = 2;
+    static constexpr int num_nics_per_numa   = 4;
 
     struct numa_devices {
         ucs_numa_node_t              numa_node;
@@ -59,10 +52,10 @@ protected:
         return bus_id;
     }
 
-    ucs_sys_device_t
-    add_device(const std::string &name, const ucs_sys_bus_id_t &bus_id,
-               ucs_topo_device_class_t device_class, ucs_numa_node_t numa_node,
-               const ucs_sys_pci_id_t *pci_id, uintptr_t user_value)
+    ucs_sys_device_t add_device(const std::string &name,
+                                const ucs_sys_bus_id_t &bus_id,
+                                ucs_topo_device_class_t device_class,
+                                ucs_numa_node_t numa_node, uintptr_t user_value)
     {
         ucs_topo_sys_device_info_t device = {};
         ucs_sys_device_t sys_dev;
@@ -78,10 +71,6 @@ protected:
         device.class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device.sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
         device.sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-
-        if (pci_id != nullptr) {
-            device.pci_id = *pci_id;
-        }
 
         sys_dev = static_cast<ucs_sys_device_t>(m_devices.size());
         m_devices.push_back(device);
@@ -145,9 +134,9 @@ protected:
                                           "." + std::to_string(device_idx);
                 uintptr_t const user_value = static_cast<uintptr_t>(device_idx);
 
-                gpu_devices.push_back(
-                        add_device(name, bus_id, UCS_TOPO_DEVICE_CLASS_ACC,
-                                   numa.numa_node, nullptr, user_value));
+                gpu_devices.push_back(add_device(name, bus_id,
+                                                 UCS_TOPO_DEVICE_CLASS_ACC,
+                                                 numa.numa_node, user_value));
             }
 
             numa.gpus.push_back(gpu_devices);
@@ -157,7 +146,6 @@ protected:
     void add_vera_rubin_nics(unsigned numa_idx, numa_devices &numa)
     {
         for (unsigned nic_idx = 0; nic_idx < num_nics_per_numa; ++nic_idx) {
-            const bool is_cx9 = nic_idx < num_cx9_nics_per_numa;
             const ucs_sys_bus_id_t slot_bus_id = generate_bus_id();
             physical_device nic_ports;
 
@@ -172,19 +160,13 @@ protected:
                 ucs_sys_bus_id_t port_bus_id = slot_bus_id;
                 port_bus_id.function         = static_cast<uint8_t>(port_idx);
 
-                const ucs_sys_device_t sys_dev = add_device(
-                        name, port_bus_id, UCS_TOPO_DEVICE_CLASS_NET,
-                        numa.numa_node, is_cx9 ? &pci_id_cx9 : nullptr,
-                        UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-
-                if (is_cx9) {
-                    nic_ports.push_back(sys_dev);
-                }
+                nic_ports.push_back(
+                        add_device(name, port_bus_id, UCS_TOPO_DEVICE_CLASS_NET,
+                                   numa.numa_node,
+                                   UCS_SYS_DEVICE_USER_VALUE_EMPTY));
             }
 
-            if (is_cx9) {
-                numa.nics.push_back(nic_ports);
-            }
+            numa.nics.push_back(nic_ports);
         }
     }
 
@@ -205,12 +187,23 @@ protected:
         return expected_result;
     }
 
-    ucs_status_t build()
+    ucs_status_t
+    build(const ucs_sys_device_bitmap_t *net_device_filter = nullptr)
     {
         return ucs_topo_build_groups_inner(m_devices.data(),
                                            static_cast<unsigned>(
                                                    m_devices.size()),
-                                           &m_groups);
+                                           net_device_filter, &m_groups);
+    }
+
+    void expect_groups(const std::vector<numa_devices> &expected_groups)
+    {
+        ASSERT_EQ(expected_groups.size(), ucs_array_length(&m_groups));
+
+        for (size_t i = 0; i < expected_groups.size(); ++i) {
+            expect_group(ucs_array_elem(&m_groups, i), expected_groups[i].gpus,
+                         expected_groups[i].nics);
+        }
     }
 
     void expect_group(const ucs_topo_group_t &group,
@@ -257,13 +250,37 @@ UCS_TEST_F(test_topo_groups, vera_groups_by_numa) {
     const std::vector<numa_devices> expected_groups = add_vera_rubin_devices();
 
     ASSERT_UCS_OK(build());
+    expect_groups(expected_groups);
+}
 
-    ASSERT_EQ(expected_groups.size(), ucs_array_length(&m_groups));
+UCS_TEST_F(test_topo_groups, net_device_filter) {
+    std::vector<numa_devices> expected_groups = add_vera_rubin_devices();
+    ucs_sys_device_bitmap_t net_device_filter;
 
-    for (size_t i = 0; i < expected_groups.size(); ++i) {
-        expect_group(ucs_array_elem(&m_groups, i), expected_groups[i].gpus,
-                     expected_groups[i].nics);
+    /* Include all network devices in the filter */
+    UCS_STATIC_BITMAP_RESET_ALL(&net_device_filter);
+    for (const auto &group : expected_groups) {
+        for (const physical_device &nic : group.nics) {
+            for (const ucs_sys_device_t sys_dev : nic) {
+                UCS_STATIC_BITMAP_SET(&net_device_filter, sys_dev);
+            }
+        }
     }
+
+    /* Filter out all ports of a NIC */
+    auto &group0_nics = expected_groups[0].nics;
+    for (const ucs_sys_device_t sys_dev : group0_nics[1]) {
+        UCS_STATIC_BITMAP_RESET(&net_device_filter, sys_dev);
+    }
+    group0_nics.erase(group0_nics.begin() + 1);
+
+    /* Filter out one port of a NIC, the NIC keeps its other port */
+    physical_device &partial_nic = expected_groups[1].nics[0];
+    UCS_STATIC_BITMAP_RESET(&net_device_filter, partial_nic.back());
+    partial_nic.pop_back();
+
+    ASSERT_UCS_OK(build(&net_device_filter));
+    expect_groups(expected_groups);
 }
 
 UCS_TEST_F(test_topo_groups, undefined_numa_elements_are_skipped) {
@@ -271,18 +288,17 @@ UCS_TEST_F(test_topo_groups, undefined_numa_elements_are_skipped) {
     ucs_numa_node_t numa_node    = 0;
     ucs_sys_device_t gpu_sys_dev = add_device("gpu", generate_bus_id(),
                                               UCS_TOPO_DEVICE_CLASS_ACC,
-                                              numa_node, nullptr, 0);
+                                              numa_node, 0);
     ucs_sys_device_t nic_sys_dev = add_device("nic", generate_bus_id(),
                                               UCS_TOPO_DEVICE_CLASS_NET,
-                                              numa_node, &pci_id_cx9,
+                                              numa_node,
                                               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
 
     /* Add devices with undefined numa node */
     add_device("undefined_gpu", generate_bus_id(), UCS_TOPO_DEVICE_CLASS_ACC,
-               UCS_NUMA_NODE_UNDEFINED, nullptr, 0);
+               UCS_NUMA_NODE_UNDEFINED, 0);
     add_device("undefined_nic", generate_bus_id(), UCS_TOPO_DEVICE_CLASS_NET,
-               UCS_NUMA_NODE_UNDEFINED, &pci_id_cx9,
-               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+               UCS_NUMA_NODE_UNDEFINED, UCS_SYS_DEVICE_USER_VALUE_EMPTY);
 
     ASSERT_UCS_OK(build());
     ASSERT_EQ(1, ucs_array_length(&m_groups));
@@ -298,11 +314,9 @@ UCS_TEST_F(test_topo_groups, nic_only_group) {
 
     const ucs_sys_device_t port1 = add_device("nic.1", port1_bus_id,
                                               UCS_TOPO_DEVICE_CLASS_NET, 0,
-                                              &pci_id_cx9,
                                               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
     const ucs_sys_device_t port0 = add_device("nic.0", port0_bus_id,
                                               UCS_TOPO_DEVICE_CLASS_NET, 0,
-                                              &pci_id_cx9,
                                               UCS_SYS_DEVICE_USER_VALUE_EMPTY);
 
 

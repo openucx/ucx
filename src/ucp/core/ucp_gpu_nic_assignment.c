@@ -57,7 +57,7 @@ ucp_gpu_nic_assignment_get_gpu_idx(ucp_gpu_nic_assignment_mode_t mode,
 }
 
 static void
-ucp_gpu_nic_bitmap_add_nic(ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap,
+ucp_gpu_nic_bitmap_add_nic(ucs_sys_device_bitmap_t *nic_sys_dev_bitmap,
                            const ucs_topo_group_element_t *nic)
 {
     const ucs_sys_device_t *nic_sys_dev;
@@ -72,7 +72,7 @@ ucp_gpu_nic_bitmap_add_nic(ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap,
     }
 }
 
-const ucp_gpu_nic_sys_dev_bitmap_t *
+const ucs_sys_device_bitmap_t *
 ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
                               ucs_sys_device_t gpu_sys_dev)
 {
@@ -135,12 +135,12 @@ static void
 ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
                                const ucs_topo_group_t *group,
                                const ucs_topo_group_element_t *gpu,
-                               ucp_gpu_nic_sys_dev_bitmap_t *assigned_nics)
+                               ucs_sys_device_bitmap_t *assigned_nics)
 {
     UCS_STRING_BUFFER_ONSTACK(gpu_strb, 128);
     UCP_GPU_NIC_STRING_BUFFERS_ONSTACK(nic_strbs, 256);
     char bdf_name[UCS_SYS_BDF_NAME_MAX];
-    const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap;
+    const ucs_sys_device_bitmap_t *nic_sys_dev_bitmap;
     const ucs_topo_group_element_t *nic;
 
     ucs_assert((gpu->num_sys_devs > 0) &&
@@ -182,7 +182,7 @@ ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
 
 static void ucp_gpu_nic_assignment_log_unassigned_nics(
         const ucs_topo_groups_t *groups,
-        const ucp_gpu_nic_sys_dev_bitmap_t *assigned_nics)
+        const ucs_sys_device_bitmap_t *assigned_nics)
 {
     UCP_GPU_NIC_STRING_BUFFERS_ONSTACK(nic_strbs, 256);
     const ucs_topo_group_element_t *nic;
@@ -211,8 +211,7 @@ static void
 ucp_gpu_nic_assignment_log(const ucp_gpu_nic_assignment_t *assignment,
                            const ucs_topo_groups_t *groups)
 {
-    ucp_gpu_nic_sys_dev_bitmap_t assigned_nics =
-            UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    ucs_sys_device_bitmap_t assigned_nics = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     const ucs_topo_group_element_t *gpu;
     const ucs_topo_group_t *group;
 
@@ -331,13 +330,13 @@ ucp_gpu_nic_assignment_add_nic_to_gpu(ucp_gpu_nic_assignment_t *assignment,
                                       const ucs_topo_group_element_t *gpu,
                                       const ucs_topo_group_element_t *nic)
 {
-    ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap;
+    ucs_sys_device_bitmap_t *nic_sys_dev_bitmap;
 
     ucs_assert((gpu->num_sys_devs > 0) &&
                (gpu->sys_devs[0] != UCS_SYS_DEVICE_ID_UNKNOWN));
 
     nic_sys_dev_bitmap = ucs_const_cast(
-            ucp_gpu_nic_sys_dev_bitmap_t*,
+            ucs_sys_device_bitmap_t*,
             ucp_gpu_nic_assignment_lookup(assignment, gpu->sys_devs[0]));
     ucs_assert(nic_sys_dev_bitmap != NULL);
 
@@ -404,7 +403,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
     return UCS_OK;
 }
 
-int ucp_gpu_nic_bitmap_get(const ucp_gpu_nic_sys_dev_bitmap_t *bitmap,
+int ucp_gpu_nic_bitmap_get(const ucs_sys_device_bitmap_t *bitmap,
                            ucs_sys_device_t net_sys_dev)
 {
     ucs_assert(bitmap != NULL);
