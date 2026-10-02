@@ -114,7 +114,10 @@ enum {
     /* EP is on EP PTR map. */
     UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9),
     /* EP has some operations done without flush */
-    UCT_TCP_EP_FLAG_NEED_FLUSH         = UCS_BIT(10)
+    UCT_TCP_EP_FLAG_NEED_FLUSH         = UCS_BIT(10),
+    /* Operations on the EP were canceled by uct_ep_flush(UCT_FLUSH_FLAG_CANCEL),
+     * PUT data which arrives from the peer must not be written anymore */
+    UCT_TCP_EP_FLAG_CANCELED           = UCS_BIT(11)
 };
 
 
