@@ -488,7 +488,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.am.max_iov;
         break;
     case UCX_PERF_CMD_PUT:
-        if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        if (params->flags & UCX_PERF_TEST_FLAG_DEVICE) {
             min_size = 0;
             max_size = 0;
             max_iov  = 0;
@@ -955,7 +955,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         ucp_params->features |= UCP_FEATURE_AM;
     }
 
-    if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+    if (params->flags & UCX_PERF_TEST_FLAG_DEVICE) {
         ucp_params->features |= UCP_FEATURE_DEVICE;
     }
 

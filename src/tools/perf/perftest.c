@@ -170,8 +170,6 @@ static int safe_recv(int sock, void *data, size_t size,
 ucs_status_t init_test_params(perftest_params_t *params)
 {
     static const struct sockaddr_storage empty_addr = {};
-    static const ucx_perf_accel_dev_t default_dev   =
-                            {UCS_MEMORY_TYPE_LAST, UCX_PERF_MEM_DEV_DEFAULT};
 
     memset(params, 0, sizeof(*params));
     params->super.api                 = UCX_PERF_API_LAST;
@@ -199,8 +197,8 @@ ucs_status_t init_test_params(perftest_params_t *params)
                      UCX_PERF_ALLOC_NAME_MAX);
     ucs_strncpy_safe(params->super.recv_mem_alloc_name, "host",
                      UCX_PERF_ALLOC_NAME_MAX);
-    params->super.send_device         = default_dev;
-    params->super.recv_device         = default_dev;
+    params->super.send_device_id      = UCX_PERF_MEM_DEV_DEFAULT;
+    params->super.recv_device_id      = UCX_PERF_MEM_DEV_DEFAULT;
     params->super.device_level        = UCS_DEVICE_LEVEL_THREAD;
     params->super.msg_size_cnt        = 1;
     params->super.iov_stride          = 0;
