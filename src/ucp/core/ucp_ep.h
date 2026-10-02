@@ -1119,11 +1119,11 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
  * Purge held lanes in @a lanes whose stored RX token matches @a request_id.
  *
  * A reply matches the lane's own request_id. An ACK matches peer_id.
- * @a from_ack selects which one. The UCT endpoint is destroyed after a
- * successful purge.
+ * @a from_ack selects which one. After a successful purge the UCT endpoint
+ * is destroyed and the lane hold is released.
  */
 void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
-                           uint32_t request_id, int from_ack);
+                                       uint32_t request_id, int from_ack);
 
 
 /**

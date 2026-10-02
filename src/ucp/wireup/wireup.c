@@ -1400,11 +1400,7 @@ ucp_wireup_process_lanes_addr_reply(
 
     if (!ucp_wireup_ep_supports_tokens(ep)) {
         /* The ACK exists only to carry tokens, and a peer which does not add
-         * the trailer would not know the message type either. The reply may
-         * still have stored an RX token for our held lanes. */
-        ucp_ep_tf_lanes_purge_outstanding(ep,
-                                          lanes_info->requested_lane_map,
-                                          request_id, 0);
+         * the trailer would not know the message type either */
         return;
     }
 

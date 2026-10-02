@@ -2732,6 +2732,21 @@ static void ucp_ep_tf_free_tokens(ucp_ep_lane_tf_t *tf)
     tf->rx_len   = 0;
 }
 
+static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
+{
+    tf->uct_ep     = NULL;
+    tf->state      = UCP_EP_TF_LANE_EMPTY;
+    tf->rsc_index  = UCP_NULL_RESOURCE;
+    tf->request_id = 0;
+    tf->peer_id    = 0;
+    ucp_ep_tf_free_tokens(tf);
+    if (tf->deactivate_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        ucp_ep_config_deactivate_worker_ifaces(ep->worker,
+                                               tf->deactivate_cfg_index);
+        tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    }
+}
+
 static void
 ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
 {
@@ -2759,13 +2774,18 @@ ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
     /* TODO: re-schedule the operation via shared pending queue */
 }
 
-/* Undelivered operations are reported here. Keeping them for replay is left
- * to a later change. */
+/* Undelivered operations are reported here. Replay is a later change. UCT
+ * puts a zcopy completion in op_info and does not invoke it when the
+ * operation is canceled, so complete it here. */
 static void
 ucp_ep_tf_purge_replay_cb(const uct_ep_op_info_t *op_info, void *arg)
 {
-    ucs_error("ep %p: replaying purged operation %p is not implemented", arg,
-              op_info);
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) != 0) {
+        ucp_invoke_uct_completion(op_info->comp, UCS_ERR_CANCELED);
+    }
+
+    ucs_diag("ep %p: replaying purged operation %p is not implemented", arg,
+             op_info);
 }
 
 /* Resolve this lane's outstanding operations. Pending requests are appended
@@ -2798,7 +2818,7 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
 }
 
 void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
-                           uint32_t request_id, int from_ack)
+                                       uint32_t request_id, int from_ack)
 {
     uct_ep_outstanding_purge_params_t params;
     ucp_ep_lane_tf_t *tf;
@@ -2832,7 +2852,7 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
         }
 
         uct_ep_destroy(tf->uct_ep);
-        tf->uct_ep = NULL;
+        ucp_ep_tf_lane_release(ep, tf);
     }
 }
 
@@ -2853,13 +2873,7 @@ static void ucp_ep_tf_cleanup(ucp_ep_h ep)
         }
 
         ucp_ep_tf_purge_cancel(ep, lane, tf);
-        tf->state = UCP_EP_TF_LANE_EMPTY;
-        ucp_ep_tf_free_tokens(tf);
-        if (tf->deactivate_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
-            ucp_ep_config_deactivate_worker_ifaces(ep->worker,
-                                                   tf->deactivate_cfg_index);
-            tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-        }
+        ucp_ep_tf_lane_release(ep, tf);
     }
 
     /* Every held lane is done, so pending requests can follow outstanding. */
