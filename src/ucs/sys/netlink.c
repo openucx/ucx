@@ -27,6 +27,7 @@
 
 typedef struct {
     const struct sockaddr *sa_remote;
+    uint32_t               table_id;
     int                    if_index;
     int                    netmask_len;
 } ucs_netlink_route_info_t;
@@ -34,6 +35,7 @@ typedef struct {
 
 typedef struct {
     struct sockaddr_storage dest;
+    uint32_t                table_id;
     uint8_t                 subnet_prefix_len;
     uint8_t                 route_type;
 } ucs_netlink_route_entry_t;
@@ -175,7 +177,8 @@ out:
 
 static ucs_status_t
 ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr, size_t rtm_dst_len)
+                           const void **dst_in_addr, uint32_t *table_id_p,
+                           size_t rtm_dst_len)
 {
     *if_index_p  = -1;
     *dst_in_addr = NULL;
@@ -185,6 +188,8 @@ ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
             *if_index_p = *((const int *)RTA_DATA(rta));
         } else if (rta->rta_type == RTA_DST) {
             *dst_in_addr = RTA_DATA(rta);
+        } else if (rta->rta_type == RTA_TABLE) {
+            *table_id_p = *((const uint32_t *)RTA_DATA(rta));
         }
     }
 
@@ -202,6 +207,7 @@ static ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
     const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    uint32_t table_id = rt_msg->rtm_table;
     const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
     ucs_netlink_rt_rules_t *iface_rules;
@@ -210,7 +216,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
     int khret;
 
     if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr,
+                                   &iface_index, &dst_in_addr, &table_id,
                                    rt_msg->rtm_dst_len) != UCS_OK) {
         return UCS_INPROGRESS;
     }
@@ -245,6 +251,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 
     new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
     new_rule->route_type        = rt_msg->rtm_type;
+    new_rule->table_id          = table_id;
 
     return UCS_INPROGRESS;
 }
@@ -252,7 +259,7 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 static int
 ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
                                           ucs_netlink_rt_rules_t *iface_rules,
-                                          uint8_t route_type)
+                                          uint8_t route_type, uint32_t table_id)
 {
     int found_netmask_len = -1;
     ucs_netlink_route_entry_t *curr_entry;
@@ -260,6 +267,11 @@ ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
     ucs_array_for_each(curr_entry, iface_rules) {
         if ((route_type != RTN_UNSPEC) &&
             (curr_entry->route_type != route_type)) {
+            continue;
+        }
+
+        if ((table_id != RT_TABLE_UNSPEC) &&
+            (curr_entry->table_id != table_id)) {
             continue;
         }
 
@@ -276,10 +288,11 @@ ucs_netlink_lookup_in_iface_rules_by_type(const struct sockaddr *sa_remote,
 
 static int
 ucs_netlink_lookup_in_iface_rules(const struct sockaddr *sa_remote,
-                                  ucs_netlink_rt_rules_t *iface_rules)
+                                  ucs_netlink_rt_rules_t *iface_rules,
+                                  uint32_t table_id)
 {
     return ucs_netlink_lookup_in_iface_rules_by_type(sa_remote, iface_rules,
-                                                     RTN_UNSPEC);
+                                                     RTN_UNSPEC, table_id);
 }
 
 static void ucs_netlink_init_routing_table_cache(void)
@@ -316,17 +329,19 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
 
     iface_rules       = &kh_val(&ucs_netlink_routing_table_cache, iter);
     info->netmask_len = ucs_netlink_lookup_in_iface_rules(info->sa_remote,
-                                                          iface_rules);
+                                                          iface_rules,
+                                                          info->table_id);
 }
 
-static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
+static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote,
+                                       uint32_t table_id)
 {
     int max_netmask_len = -1;
     ucs_netlink_rt_rules_t iface_rules;
 
     kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
-        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
-                                                                 &iface_rules);
+        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(
+                sa_remote, &iface_rules, table_id);
         if (curr_netmask_len > max_netmask_len) {
             max_netmask_len = curr_netmask_len;
         }
@@ -335,12 +350,15 @@ static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
     return max_netmask_len;
 }
 
-int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
-                             int *netmask_len_p)
+static int ucs_netlink_route_exists_by_table(int if_index,
+                                             const struct sockaddr *sa_remote,
+                                             uint32_t table_id,
+                                             int *netmask_len_p)
 {
     ucs_netlink_route_info_t info = {
         .if_index    = if_index,
         .sa_remote   = sa_remote,
+        .table_id    = table_id,
         .netmask_len = -1
     };
 
@@ -351,6 +369,13 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
     }
 
     return (info.netmask_len > -1);
+}
+
+int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
+                             int *netmask_len_p)
+{
+    return ucs_netlink_route_exists_by_table(
+            if_index, sa_remote, RT_TABLE_UNSPEC, netmask_len_p);
 }
 
 int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
@@ -364,7 +389,7 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
 
     kh_foreach(&ucs_netlink_routing_table_cache, if_index, iface_rules, {
         int curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
-                sa_remote, &iface_rules, RTN_LOCAL);
+                sa_remote, &iface_rules, RTN_LOCAL, RT_TABLE_UNSPEC);
         if (curr_netmask_len > best_netmask_len) {
             best_netmask_len = curr_netmask_len;
             best_if_index    = if_index;
@@ -374,14 +399,17 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
     return best_if_index;
 }
 
-int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
-                              ucs_netlink_route_check_t route_check)
+int ucs_netlink_route_matches_by_table(int if_index,
+                                       const struct sockaddr *sa_remote,
+                                       ucs_netlink_route_check_t route_check,
+                                       uint32_t table_id)
 {
     int netmask_len;
 
     /* If there is no route to the destination through this interface, not even
      * a default route, return 0. */
-    if (!ucs_netlink_route_exists(if_index, sa_remote, &netmask_len)) {
+    if (!ucs_netlink_route_exists_by_table(if_index, sa_remote,
+                                           table_id, &netmask_len)) {
         return 0;
     }
 
@@ -394,5 +422,89 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
     /* Accept the route if it is the best match. In relaxed mode, this check is
      * reached only for a default route, so the default is accepted only when
      * no interface has a more specific route. */
-    return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
+    return (ucs_netlink_max_netmask_len(sa_remote, table_id) == netmask_len);
+}
+
+int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
+                              ucs_netlink_route_check_t route_check)
+{
+    return ucs_netlink_route_matches_by_table(
+            if_index, sa_remote, route_check, RT_TABLE_UNSPEC);
+}
+
+static uint32_t ucs_netlink_get_vrf_table_id(const struct rtattr *slave_rta)
+{
+    const struct rtattr *rta = RTA_DATA(slave_rta);
+    int attr_len             = RTA_PAYLOAD(slave_rta);
+
+    for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+        if (rta->rta_type == IFLA_VRF_PORT_TABLE) {
+            return *((const uint32_t *)RTA_DATA(rta));
+        }
+    }
+
+    return RT_TABLE_UNSPEC;
+}
+
+static int ucs_netlink_is_vrf_slave(const struct rtattr *link_info_rta,
+                                    uint32_t *table_id_p)
+{
+    const struct rtattr *rta       = RTA_DATA(link_info_rta);
+    int attr_len                   = RTA_PAYLOAD(link_info_rta);
+    const struct rtattr *slave_rta = NULL;
+    int is_vrf_slave               = 0;
+
+    for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+        if (rta->rta_type == IFLA_INFO_SLAVE_KIND) {
+            is_vrf_slave = (0 == strcmp((const char *)RTA_DATA(rta), "vrf"));
+        } else if (rta->rta_type == IFLA_INFO_SLAVE_DATA) {
+            slave_rta = rta;
+        }
+    }
+
+    if (is_vrf_slave && (slave_rta != NULL)) {
+        *table_id_p = ucs_netlink_get_vrf_table_id(slave_rta);
+    }
+
+    return is_vrf_slave;
+}
+
+static ucs_status_t
+ucs_netlink_parse_vrf_master_info_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    ucs_netlink_vrf_info_t *vrf_info_p = (ucs_netlink_vrf_info_t *)arg;
+    const struct ifinfomsg *ifm        = NLMSG_DATA(nlh);
+    const struct rtattr *rta           = IFLA_RTA(ifm);
+    int attr_len                       = IFLA_PAYLOAD(nlh);
+    uint32_t master_if_index           = 0;
+    unsigned is_vrf_slave              = 0;
+
+    for (; RTA_OK(rta, attr_len); rta = RTA_NEXT(rta, attr_len)) {
+        if (rta->rta_type == IFLA_MASTER) {
+            master_if_index = *((const uint32_t *)RTA_DATA(rta));
+        } else if (rta->rta_type == IFLA_LINKINFO) {
+            is_vrf_slave = ucs_netlink_is_vrf_slave(rta, &vrf_info_p->table_id);
+        }
+    }
+
+    vrf_info_p->master_if_index = is_vrf_slave ? master_if_index : 0;
+    return UCS_OK;
+}
+
+ucs_status_t
+ucs_netlink_get_vrf_master_info(unsigned if_index,
+                                ucs_netlink_vrf_info_t *vrf_info_p)
+{
+    struct ifinfomsg ifm = {
+        .ifi_family = AF_UNSPEC,
+        .ifi_index  = if_index
+    };
+
+    vrf_info_p->master_if_index = 0;
+    vrf_info_p->table_id        = RT_TABLE_UNSPEC;
+    vrf_info_p->master_name[0]  = '\0';
+
+    return ucs_netlink_send_request(
+            NETLINK_ROUTE, RTM_GETLINK, 0, &ifm, sizeof(ifm),
+            ucs_netlink_parse_vrf_master_info_cb, vrf_info_p);
 }

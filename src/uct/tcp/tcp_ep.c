@@ -644,7 +644,16 @@ static ucs_status_t uct_tcp_ep_bind_src_iface(uct_tcp_ep_t *ep)
 
     suppress_error = (iface->config.ep_bind_src_addr != UCS_YES);
     log_level      = suppress_error ? UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
-    status         = uct_tcp_iface_check_rp_filter(iface, log_level);
+    if (iface->vrf_info.master_if_index > 0) {
+        status = ucs_socket_setopt(ep->fd, SOL_SOCKET, SO_BINDTODEVICE,
+                                   iface->vrf_info.master_name,
+                                   strlen(iface->vrf_info.master_name) + 1);
+        if (!suppress_error && (status != UCS_OK)) {
+            return status;
+        }
+    }
+
+    status = uct_tcp_iface_check_rp_filter(iface, log_level);
     if (!suppress_error && (status != UCS_OK)) {
         return status;
     }

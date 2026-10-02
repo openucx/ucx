@@ -861,6 +861,8 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
 {
     uct_tcp_sockcm_t *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(cep);
     uct_cm_base_ep_t *cm_ep      = &cep->super;
+    ucs_netlink_vrf_info_t vrf_info;
+    char *bind_device;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     const struct sockaddr *server_addr;
     ucs_async_context_t *async_ctx;
@@ -896,6 +898,16 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     }
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR) {
+        bind_device = uct_tcp_sockaddr_get_bind_device(
+                params->local_sockaddr->addr, &vrf_info);
+        if (bind_device != NULL) {
+            status = ucs_socket_setopt(cep->fd, SOL_SOCKET, SO_BINDTODEVICE,
+                                       bind_device, strlen(bind_device) + 1);
+            if (status != UCS_OK) {
+                goto err_close_socket;
+            }
+        }
+
         ret = bind(cep->fd, (const struct sockaddr *)params->local_sockaddr->addr,
                    params->local_sockaddr->addrlen);
         if (ret < 0) {

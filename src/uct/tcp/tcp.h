@@ -18,6 +18,7 @@
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/event_set.h>
 #include <ucs/sys/iovec.h>
+#include <ucs/sys/netlink.h>
 
 #include <net/if.h>
 
@@ -430,6 +431,8 @@ typedef struct uct_tcp_iface {
         size_t                    sndbuf;            /* SO_SNDBUF */
         size_t                    rcvbuf;            /* SO_RCVBUF */
     } sockopt;
+
+    ucs_netlink_vrf_info_t        vrf_info;          /* Associated VRF info */
 } uct_tcp_iface_t;
 
 
