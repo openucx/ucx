@@ -878,7 +878,7 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
-    status = ucp_wireup_ep_create(ep, &uct_ep);
+    status = ucp_wireup_ep_create(ep, 1, &uct_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -1851,7 +1851,9 @@ ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
         return UCS_ERR_NO_PROGRESS;
     }
 
-    status = ucp_wireup_ep_create(ep, &wireup_ep_uct);
+    /* The stub wireup endpoint which is vailing for recovery should not block
+     * worker flush. */
+    status = ucp_wireup_ep_create(ep, 0, &wireup_ep_uct);
     if (status != UCS_OK) {
         return status;
     }

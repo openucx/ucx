@@ -1545,7 +1545,7 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
              * lanes directly connected to iface without wireup EP */
             (ucp_ep_config(ep)->p2p_lanes &&
              ep->worker->context->config.ext.proto_request_reset)) {
-            status = ucp_wireup_ep_create(ep, &wireup_ep);
+            status = ucp_wireup_ep_create(ep, 1, &wireup_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
                 return status;
@@ -1586,7 +1586,7 @@ ucp_wireup_connect_lane_to_ep(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_status_t status;
 
     if (ucp_ep_get_lane(ep, lane) == NULL) {
-        status = ucp_wireup_ep_create(ep, &uct_ep);
+        status = ucp_wireup_ep_create(ep, 1, &uct_ep);
         if (status != UCS_OK) {
             /* coverity[leaked_storage] */
             return status;
@@ -2030,7 +2030,7 @@ ucp_wireup_replace_ordered_lane(ucp_ep_h ep, ucp_ep_config_key_t *key,
         }
 
         if (new_wireup_lane != UCP_NULL_LANE) {
-            status = ucp_wireup_ep_create(ep, &uct_ep);
+            status = ucp_wireup_ep_create(ep, 1, &uct_ep);
             if (status != UCS_OK) {
                 return status;
             }
@@ -2483,7 +2483,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 
     ucs_trace("ep %p: connect lane %d to remote peer with wireup ep", ep, lane);
 
-    status = ucp_wireup_ep_create(ep, &wireup_ep);
+    status = ucp_wireup_ep_create(ep, 1, &wireup_ep);
     if (status != UCS_OK) {
         goto err;
     }
