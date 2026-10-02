@@ -106,6 +106,8 @@ static void ucp_ep_recovery_arg_free(ucp_ep_h ep);
 static void ucp_ep_tf_cleanup(ucp_ep_h ep);
 static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg);
 static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane);
+static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                     uint32_t request_id);
 static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
@@ -2287,9 +2289,11 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
         ep->ext->recovery_arg->request_id = 1;
     }
 
+    ucp_ep_tf_set_request_id(ep, recovery_lanes,
+                             ep->ext->recovery_arg->request_id);
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST, 0,
                                    recovery_lanes,
-                                   ep->ext->recovery_arg->request_id);
+                                   ep->ext->recovery_arg->request_id, NULL);
     return 1;
 }
 
@@ -2523,6 +2527,189 @@ static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane)
     return &ep->ext->recovery_arg->tf[lane];
 }
 
+static int
+ucp_ep_tf_tx_published(const ucp_ep_lane_tf_t *tf, uint32_t request_id)
+{
+    return (request_id != 0) &&
+           ((tf->request_id == request_id) || (tf->peer_id == request_id));
+}
+
+static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                     uint32_t request_id)
+{
+    ucp_ep_lane_tf_t *tf;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD)) {
+            continue;
+        }
+
+        tf->request_id = request_id;
+    }
+}
+
+static ucp_worker_iface_t *
+ucp_ep_tf_lane_wiface(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+    ucp_rsc_index_t rsc_index;
+
+    if ((tf != NULL) && (tf->state == UCP_EP_TF_LANE_HELD) &&
+        (tf->rsc_index != UCP_NULL_RESOURCE)) {
+        rsc_index = tf->rsc_index;
+    } else {
+        rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    }
+
+    return ucp_worker_iface(ep->worker, rsc_index);
+}
+
+void ucp_ep_tf_hold_lanes(ucp_ep_h ep, ucp_lane_map_t lanes, uint32_t peer_id)
+{
+    ucp_lane_index_t lane;
+    ucp_ep_lane_tf_t *tf;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf != NULL) && (tf->state == UCP_EP_TF_LANE_HELD)) {
+            tf->peer_id = peer_id;
+            continue;
+        }
+
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep) ||
+            ucp_wireup_ep_test(uct_ep)) {
+            continue;
+        }
+
+        /* Claim fails closed for lanes that cannot carry a token. Detach
+         * failure puts the ep back for the software discard that follows. */
+        status = ucp_ep_tf_hold(ep, lane, uct_ep);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        tf = ucp_ep_tf_get(ep, lane);
+        ucs_assert(tf != NULL);
+        tf->peer_id = peer_id;
+    }
+}
+
+uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
+                         uint32_t request_id, const void **token_p)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+        (tf->tx_token == NULL) || (tf->tx_len == 0) ||
+        !ucp_ep_tf_tx_published(tf, request_id)) {
+        *token_p = NULL;
+        return 0;
+    }
+
+    *token_p = tf->tx_token;
+    return tf->tx_len;
+}
+
+ucs_status_t
+ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
+                    uint8_t tx_len, void **rx_token_p, uint8_t *rx_len_p)
+{
+    ucp_worker_iface_t *wiface;
+    uct_iface_attr_v2_t attr;
+    ucp_ep_lane_tf_t *tf;
+    ucs_status_t status;
+    size_t rx_len;
+    void *buf;
+
+    *rx_token_p = NULL;
+    *rx_len_p   = 0;
+
+    /* Only a held lane still has a transport endpoint to query. */
+    tf = ucp_ep_tf_get(ep, lane);
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    wiface = ucp_ep_tf_lane_wiface(ep, lane);
+    if ((tx_token == NULL) || (tx_len == 0) || (wiface == NULL) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||
+        !(wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
+        (wiface->attr_v2.tx_token_length != tx_len) ||
+        (wiface->attr_v2.rx_token_length == 0) ||
+        (wiface->attr_v2.rx_token_length > UINT8_MAX)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    rx_len = wiface->attr_v2.rx_token_length;
+    buf    = ucs_malloc(rx_len, "ucp_tf_derived_rx");
+    if (buf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memset(&attr, 0, sizeof(attr));
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                      UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+    attr.tx_token   = tx_token;
+    attr.rx_token   = buf;
+    status          = uct_iface_query_v2(wiface->iface, &attr);
+    if (status != UCS_OK) {
+        ucs_free(buf);
+        return status;
+    }
+
+    *rx_token_p = buf;
+    *rx_len_p   = (uint8_t)rx_len;
+    return UCS_OK;
+}
+
+void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
+                       int from_ack, const void *token, uint8_t len)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+    ucp_worker_iface_t *wiface;
+    uint32_t expect;
+    void *buf;
+
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+        (token == NULL) || (len == 0)) {
+        return;
+    }
+
+    expect = from_ack ? tf->peer_id : tf->request_id;
+    if ((request_id == 0) || (request_id != expect)) {
+        ucs_debug("ep %p: lane %d: rx token id 0x%x does not match 0x%x", ep,
+                  lane, request_id, expect);
+        return;
+    }
+
+    wiface = ucp_ep_tf_lane_wiface(ep, lane);
+    if ((wiface == NULL) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||
+        (wiface->attr_v2.rx_token_length != len)) {
+        ucs_debug("ep %p: lane %d: drop rx token of length %u", ep, lane, len);
+        return;
+    }
+
+    buf = ucs_malloc(len, "ucp_tf_rx_token");
+    if (buf == NULL) {
+        ucs_error("ep %p: lane %d: failed to store rx token", ep, lane);
+        return;
+    }
+
+    memcpy(buf, token, len);
+    ucs_free(tf->rx_token);
+    tf->rx_token = buf;
+    tf->rx_len   = len;
+    ucs_debug("ep %p: lane %d: stored rx token length %u request_id 0x%x", ep,
+              lane, len, request_id);
+}
+
 static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
 {
     ucp_lane_index_t lane;
@@ -2530,6 +2717,7 @@ static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
     ucs_queue_head_init(&arg->tf_pending_q);
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         arg->tf[lane].deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+        arg->tf[lane].rsc_index            = UCP_NULL_RESOURCE;
         arg->tf[lane].state                = UCP_EP_TF_LANE_EMPTY;
     }
 }
@@ -2537,7 +2725,11 @@ static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
 static void ucp_ep_tf_free_tokens(ucp_ep_lane_tf_t *tf)
 {
     ucs_free(tf->tx_token);
+    ucs_free(tf->rx_token);
     tf->tx_token = NULL;
+    tf->rx_token = NULL;
+    tf->tx_len   = 0;
+    tf->rx_len   = 0;
 }
 
 static void
@@ -2660,7 +2852,12 @@ ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     }
 
     tx_len = wiface->attr_v2.tx_token_length;
-    buf    = ucs_malloc(tx_len, "ucp_tf_tx_token");
+    if ((tx_len == 0) || (tx_len > UINT8_MAX)) {
+        /* The trailer stores one uint8_t length per lane */
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    buf = ucs_malloc(tx_len, "ucp_tf_tx_token");
     if (buf == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -2683,9 +2880,11 @@ ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     tf = &ep->ext->recovery_arg->tf[lane];
     ucs_assert(tf->state == UCP_EP_TF_LANE_EMPTY);
 
-    tf->uct_ep   = uct_ep;
-    tf->tx_token = buf;
-    tf->state    = UCP_EP_TF_LANE_HELD;
+    tf->uct_ep    = uct_ep;
+    tf->rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    tf->tx_token  = buf;
+    tf->tx_len    = (uint8_t)tx_len;
+    tf->state     = UCP_EP_TF_LANE_HELD;
     ucs_debug("ep %p: hold lane %d uct_ep %p tx_token_len %zu", ep, lane,
               uct_ep, tx_len);
     return UCS_OK;
@@ -2706,8 +2905,11 @@ static ucs_status_t ucp_ep_tf_detach(ucp_ep_h ep, ucp_lane_index_t lane)
     if (status != UCS_OK) {
         /* Last AM lane, or the new endpoint config could not be created.
          * Leave the UCT ep on the lane for software discard. */
-        tf->uct_ep = NULL;
-        tf->state  = UCP_EP_TF_LANE_EMPTY;
+        tf->uct_ep     = NULL;
+        tf->state      = UCP_EP_TF_LANE_EMPTY;
+        tf->rsc_index  = UCP_NULL_RESOURCE;
+        tf->request_id = 0;
+        tf->peer_id    = 0;
         ucp_ep_tf_free_tokens(tf);
         return status;
     }
