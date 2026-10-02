@@ -352,6 +352,7 @@ public:
     static const uint64_t SEND_SEED       = 0xa1a1a1a1a1a1a1a1ul;
     static const uint64_t RECV_SEED       = 0xb2b2b2b2b2b2b2b2ul;
     static const uint8_t AM_SHORT_ID      = 3;
+    static const uint8_t AM_BCOPY_ID      = 4;
     static const uint64_t AM_SHORT_HEADER = 0x0123456789abcdefull;
 
     void init() override
@@ -455,6 +456,9 @@ protected:
         case UCT_EP_OP_AM_SHORT:
             validate_am_short(info, ctx);
             return;
+        case UCT_EP_OP_AM_BCOPY:
+            validate_am_bcopy(info, ctx);
+            return;
         case UCT_EP_OP_PUT_SHORT:
         case UCT_EP_OP_PUT_BCOPY:
         case UCT_EP_OP_PUT_ZCOPY:
@@ -479,6 +483,25 @@ protected:
         EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
         EXPECT_EQ(AM_SHORT_ID, info->am.am_id);
         EXPECT_EQ(AM_SHORT_HEADER, info->am.header.value);
+        ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
+        ASSERT_NE(nullptr, info->am.payload.data.buffer);
+        mem_buffer::pattern_check(info->am.payload.data.buffer,
+                                  info->am.payload.data.length, SEND_SEED);
+        ++ctx->num_ops_purged;
+    }
+
+    void validate_am_bcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint16_t required_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
+        ASSERT_TRUE(ucs_test_all_flags(info->am.field_mask, required_fields));
+        EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        EXPECT_EQ(AM_BCOPY_ID, info->am.am_id);
+        EXPECT_EQ(0u, info->am.flags);
         ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
         ASSERT_NE(nullptr, info->am.payload.data.buffer);
         mem_buffer::pattern_check(info->am.payload.data.buffer,
@@ -651,6 +674,7 @@ protected:
 };
 
 const uint8_t test_uct_purge_outstanding::AM_SHORT_ID;
+const uint8_t test_uct_purge_outstanding::AM_BCOPY_ID;
 const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
@@ -673,6 +697,40 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                                ctx.send_len);
     };
     test_purge_outstanding(am_short, ctx);
+
+    EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
+    EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
+    EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
+                                  ctx.num_ops_posted_after_flush);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size = ucs_min((size_t)4096, attr.cap.am.max_bcopy);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+
+    purge_ctx ctx = {this, UCT_EP_OP_AM_BCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.send_buf  = sendbuf.ptr();
+    ctx.send_len  = size;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_BCOPY_ID,
+                                           am_handler, NULL, 0));
+
+    send_func_t am_bcopy = [&](uct_ep_h ep, uct_completion_t*) {
+        ssize_t packed_len;
+
+        packed_len = uct_ep_am_bcopy(ep, AM_BCOPY_ID, mapped_buffer::pack,
+                                     &sendbuf, 0);
+        if (packed_len >= 0) {
+            EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
+            return UCS_OK;
+        }
+
+        return (ucs_status_t)packed_len;
+    };
+    test_purge_outstanding(am_bcopy, ctx);
 
     EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
     EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
