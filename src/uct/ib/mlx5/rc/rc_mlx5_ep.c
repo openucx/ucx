@@ -1347,13 +1347,6 @@ static ucs_status_t uct_rc_mlx5_ep_outstanding_purge_check_params(
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN)) {
-        ucs_error("rc mlx5: rx token is not set");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    ucs_assert(params->rx_token != NULL);
-
     if (!(params->field_mask & UCT_EP_OUTSTANDING_FIELD_CB) ||
         (params->cb == NULL)) {
         ucs_error("rc mlx5: callback is not set or is NULL");
@@ -1452,18 +1445,31 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
             &iface->super.super, txwq, start_pi, end_pi);
 
-    rx_token          = params->rx_token;
-    receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
-    first_failed_psn  = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
-                         num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
-    psn_diff = (receiver_next_psn - first_failed_psn) &
-               UCT_IB_MLX5_PSN_MASK;
-    if (psn_diff > num_outstanding_packets) {
-        return UCS_ERR_INVALID_PARAM;
+    first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
+                        num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
+    if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
+        rx_token = params->rx_token;
+        if (rx_token == NULL) {
+            ucs_error("rc mlx5: rx token is NULL");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
+        psn_diff          = (receiver_next_psn - first_failed_psn) &
+                            UCT_IB_MLX5_PSN_MASK;
+        if (psn_diff > num_outstanding_packets) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        delivered = 1;
+    } else {
+        /* No peer receive position: every outstanding operation is
+         * undelivered. */
+        receiver_next_psn = 0;
+        delivered         = 0;
     }
 
     wqe_first_psn = first_failed_psn;
-    delivered     = 1;
     for (pi = start_pi; pi != end_pi;
          pi = uct_ib_mlx5_txwq_next_wqe_index(pi, wqe_size)) {
         ctrl        = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
