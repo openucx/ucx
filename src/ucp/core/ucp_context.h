@@ -230,6 +230,8 @@ typedef struct ucp_context_config {
     int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
+    /** Sample completed multi-rail RMA zcopy operations */
+    int                                    rma_bw_measure;
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */

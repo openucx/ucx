@@ -71,6 +71,8 @@ noinst_HEADERS = \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rma/rma_bw.h \
+	rma/rma_bw.inl \
 	rma/rma_rndv.h \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
@@ -149,6 +151,7 @@ libucp_la_SOURCES = \
 	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
+	rma/rma_bw.c \
 	rma/rma_rndv.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \

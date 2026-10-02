@@ -64,6 +64,7 @@ typedef uint16_t                     ucp_worker_cfg_index_t;
 
 /* Forward declarations */
 typedef struct ucp_request            ucp_request_t;
+typedef struct ucp_rma_bw_sample      ucp_rma_bw_sample_t;
 typedef struct ucp_recv_desc          ucp_recv_desc_t;
 typedef struct ucp_address_iface_attr ucp_address_iface_attr_t;
 typedef struct ucp_address_entry      ucp_address_entry_t;
