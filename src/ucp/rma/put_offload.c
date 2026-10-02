@@ -307,7 +307,8 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        ucp_rma_bw_sample_try_start(req, mpriv->num_lanes);
+        ucp_rma_bw_sample_try_start(req, mpriv->num_lanes,
+                                    UCP_RMA_BW_PUT);
     }
 
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE)) {

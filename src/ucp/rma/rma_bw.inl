@@ -25,10 +25,11 @@ ucp_rma_bw_sample_get(ucp_request_t *req)
 
 static UCS_F_ALWAYS_INLINE void
 ucp_rma_bw_sample_try_start(ucp_request_t *req,
-                            ucp_lane_index_t num_lanes)
+                            ucp_lane_index_t num_lanes,
+                            ucp_rma_bw_dir_t dir)
 {
     if (ucs_unlikely(req->send.ep->worker->context->config.ext.rma_bw_measure)) {
-        ucp_rma_bw_sample_start(req, num_lanes);
+        ucp_rma_bw_sample_start(req, num_lanes, dir);
     }
 }
 
@@ -82,6 +83,10 @@ ucp_rma_bw_frag_posted(ucp_rma_bw_frag_t *frag, size_t bytes,
     ++lane->num_frags;
     if (ucs_likely(status == UCS_INPROGRESS)) {
         ++lane->num_async;
+        ++lane->pending;
+        sample->active_lanes |= UCS_BIT(frag->lane_idx);
+        sample->concurrent |=
+                (sample->active_lanes == UCS_MASK(sample->num_lanes));
         ++sample->num_frags;
         ++sample->pending;
         return;

@@ -607,6 +607,8 @@ typedef struct ucp_ep_ext {
      * structure. TODO allocate this array dynamically.
      */
     uct_ep_h                     *uct_eps;
+    struct ucp_rma_bw_ep_state   *rma_bw_state;
+    uint32_t                     rma_bw_generation;
 
 
     /**
