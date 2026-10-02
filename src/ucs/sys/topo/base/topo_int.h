@@ -46,6 +46,30 @@ typedef struct {
     ucs_sys_device_t        sibling_sys_dev;
 } ucs_topo_sys_device_info_t;
 
+
+/**
+ * Compare two system devices by their topology identity.
+ *
+ * The topology lock must be held by the caller.
+ */
+int ucs_topo_sys_device_cmp_nolock(ucs_sys_device_t sys_dev1,
+                                   ucs_sys_device_t sys_dev2);
+
+
+/**
+ * Convert a PCI bus id to its canonical sysfs path.
+ *
+ * @param [in]  bus_id  Device PCI bus id.
+ * @param [out] path    Filled with the resolved sysfs path. Must have room
+ *                      for at least PATH_MAX bytes.
+ * @param [in]  max     Size of @a path in bytes.
+ *
+ * @return UCS_OK on success, or an error status otherwise.
+ */
+ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
+                                           char *path, size_t max);
+
+
 END_C_DECLS
 
 #endif
