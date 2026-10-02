@@ -2522,3 +2522,28 @@ UCS_TEST_F(test_ucp_wireup_token_section, skip_truncated) {
               ucp_wireup_skip_token_section(THREE_LANES, &section[0],
                                             section.size() - 1, &consumed));
 }
+
+/* lengths[] follows set-bit order, not lane index. 0, 3, 5 must not be
+ * stored in slots 0, 1, 2. */
+UCS_TEST_F(test_ucp_wireup_token_section, read_lanes) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    ucp_wireup_lane_token_t slots[UCP_MAX_LANES] = {};
+    const uint8_t *tokens;
+    size_t consumed;
+
+    section.push_back(0xff);
+    ASSERT_UCS_OK(ucp_wireup_read_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed,
+                                                slots));
+    EXPECT_EQ(section.size() - 1, consumed);
+
+    tokens = &section[3];
+    EXPECT_EQ(4, slots[0].len);
+    EXPECT_EQ(tokens, static_cast<const uint8_t*>(slots[0].token));
+    EXPECT_EQ(0, slots[3].len);
+    EXPECT_EQ(nullptr, slots[3].token);
+    EXPECT_EQ(7, slots[5].len);
+    EXPECT_EQ(tokens + 4, static_cast<const uint8_t*>(slots[5].token));
+    EXPECT_EQ(0, slots[1].len);
+    EXPECT_EQ(nullptr, slots[1].token);
+}

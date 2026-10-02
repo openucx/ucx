@@ -313,7 +313,14 @@ void ucp_wireup_send_lanes_addr_msg(
         const ucp_wireup_lane_token_t *rx_tokens);
 
 
-/* Size of one token section (gtest feeds it crafted buffers). */
+/* Parse one token section into per-lane slots. @a slots may be NULL to only
+ * measure the section, which is what @ref ucp_wireup_skip_token_section does.
+ * gtest feeds both helpers crafted buffers. */
+ucs_status_t
+ucp_wireup_read_token_section(ucp_lane_map_t lane_map, const void *section,
+                              size_t avail, size_t *consumed_p,
+                              ucp_wireup_lane_token_t *slots);
+
 ucs_status_t
 ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
                               size_t avail, size_t *consumed_p);

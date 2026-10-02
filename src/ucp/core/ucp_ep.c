@@ -2617,8 +2617,9 @@ ucs_status_t
 ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
                     uint8_t tx_len, void **rx_token_p, uint8_t *rx_len_p)
 {
-    ucp_worker_iface_t *wiface = ucp_ep_tf_lane_wiface(ep, lane);
+    ucp_worker_iface_t *wiface;
     uct_iface_attr_v2_t attr;
+    ucp_ep_lane_tf_t *tf;
     ucs_status_t status;
     size_t rx_len;
     void *buf;
@@ -2626,6 +2627,13 @@ ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
     *rx_token_p = NULL;
     *rx_len_p   = 0;
 
+    /* Only a held lane still has a transport endpoint to query. */
+    tf = ucp_ep_tf_get(ep, lane);
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    wiface = ucp_ep_tf_lane_wiface(ep, lane);
     if ((tx_token == NULL) || (tx_len == 0) || (wiface == NULL) ||
         !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) ||
         !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||

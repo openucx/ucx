@@ -319,7 +319,11 @@ ucp_wireup_rx_section_bytes(ucp_lane_map_t lane_map,
     }
 
     ucs_for_each_bit(lane, lane_map) {
-        nbytes += rx_tokens[lane].len;
+        /* Same condition as ucp_wireup_write_token_section(): a NULL token is
+         * written as a zero length, so it must not add to the reserved size. */
+        if (rx_tokens[lane].token != NULL) {
+            nbytes += rx_tokens[lane].len;
+        }
     }
 
     return nbytes;
@@ -1208,7 +1212,7 @@ void ucp_wireup_send_lanes_addr_msg(ucp_ep_h ep, uint8_t msg_type,
     }
 }
 
-static ucs_status_t
+ucs_status_t
 ucp_wireup_read_token_section(ucp_lane_map_t lane_map, const void *section,
                               size_t avail, size_t *consumed_p,
                               ucp_wireup_lane_token_t *slots)
@@ -1315,13 +1319,13 @@ ucp_wireup_process_lanes_addr_request(
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    /* The request's TX tokens name our QPs. Derive next_rcv_psn and snapshot
-     * our own TX tokens before failover discards those endpoints. */
+    /* Hold a token-capable lane before deriving next_rcv_psn. Hold keeps
+     * that endpoint, so the query still finds it. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
     if (request_id != 0) {
+        ucp_ep_tf_hold_lanes(ep, lanes_info->provided_lane_map, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens);
-        ucp_ep_tf_hold_lanes(ep, lanes_info->provided_lane_map, request_id);
     }
 
     /* Asymmetric failure: lanes the peer declared broken but we don't yet
@@ -1426,6 +1430,7 @@ ucp_wireup_parse_lanes_addr(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
                             ucp_wireup_lane_token_t *rx_tokens,
                             const void **address_p)
 {
+    ucp_lane_index_t num_lanes = ucp_ep_num_lanes(ep);
     const ucp_wireup_msg_tokens_info_t *tokens_info;
     const ucp_wireup_msg_lanes_info_t *lanes_info;
     size_t remain, consumed;
@@ -1444,6 +1449,18 @@ ucp_wireup_parse_lanes_addr(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
     remain        = length - sizeof(*msg) - sizeof(*lanes_info);
     *lanes_info_p = lanes_info;
     *request_id_p = 0;
+
+    /* A bit past this endpoint indexes ep->ext->uct_eps, which is NULL while
+     * the endpoint has at most UCP_MAX_FAST_PATH_LANES lanes. */
+    if (((lanes_info->requested_lane_map & ~UCS_MASK(num_lanes)) != 0) ||
+        ((lanes_info->provided_lane_map & ~UCS_MASK(num_lanes)) != 0)) {
+        ucs_warn("ep %p: dropping %s with a lane map outside the endpoint "
+                 "(requested 0x%" PRIx64 " provided 0x%" PRIx64 " lanes %u)",
+                 ep, ucp_wireup_msg_str(msg->type),
+                 (uint64_t)lanes_info->requested_lane_map,
+                 (uint64_t)lanes_info->provided_lane_map, num_lanes);
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     if (!ucp_wireup_ep_supports_tokens(ep)) {
         /* The peer adds no token trailer, the addresses follow the lanes info
