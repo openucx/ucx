@@ -588,8 +588,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"RMA_BW_MEASURE", "n",
    "Sample completed payload throughput of multi-lane PUT/GET zcopy operations. "
-   "This experimental option records measurements but does not change lane "
-   "weights.",
+   "This experimental option estimates per-endpoint, per-direction lane "
+   "completion throughput but does not change lane weights.",
    ucs_offsetof(ucp_context_config_t, rma_bw_measure), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
