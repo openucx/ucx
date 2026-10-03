@@ -50,6 +50,28 @@ static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
     return (nlh->nlmsg_type == NLMSG_DONE);
 }
 
+/*
+ * Return 1 if the received datagram ends the reply, i.e. any message in it is
+ * NLMSG_DONE or NLMSG_ERROR (an error also ends a dump). The kernel may put
+ * NLMSG_DONE in the same datagram as the last data messages (some kernels do
+ * so for IPv6 route dumps), so every message must be checked, not only the
+ * first one.
+ */
+static int ucs_netlink_is_reply_end(const void *msg, size_t msg_len)
+{
+    const struct nlmsghdr *nlh;
+
+    for (nlh = (const struct nlmsghdr *)msg; NLMSG_OK(nlh, msg_len);
+         nlh = NLMSG_NEXT(nlh, msg_len)) {
+        if ((nlh->nlmsg_type == NLMSG_DONE) ||
+            (nlh->nlmsg_type == NLMSG_ERROR)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static ucs_status_t ucs_netlink_socket_init(int *fd_p, int protocol)
 {
     struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
@@ -164,7 +186,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         }
 
         status   = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
-        msg_done = ucs_netlink_is_msg_done((const struct nlmsghdr *)recv_msg);
+        msg_done = ucs_netlink_is_reply_end(recv_msg, recv_msg_len);
         ucs_free(recv_msg);
     } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
 
