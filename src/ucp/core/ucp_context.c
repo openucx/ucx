@@ -654,6 +654,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
    "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "Only protocol lanes are restricted, not the NICs the memory is\n"
+   "registered on, which UCX_MAX_HCA_PER_GPU controls independently.\n"
+   "The first Active Message lane is not restricted.\n"
+   "UCX_SINGLE_NET_DEVICE=y is not supported while an assignment is active.\n"
    "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
    "address are assigned together (e.g. MLOPart partitions of a GPU).\n"
    "NICs without memory registration and DPUs are skipped during assignment.\n"
@@ -2953,6 +2957,25 @@ ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
     ucs_free(assignment);
 }
 
+static ucs_status_t
+ucp_context_gpu_nic_assignment_check_config(ucp_context_h context)
+{
+    const char *conflict;
+
+    if (!context->config.ext.proto_enable) {
+        conflict = "UCX_PROTO_ENABLE=n";
+    } else if (context->config.ext.proto_use_single_net_device) {
+        conflict = "UCX_SINGLE_NET_DEVICE=y";
+    } else {
+        return UCS_OK;
+    }
+
+    ucs_error("%s is not supported with the gpu-nic assignment, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
+              conflict);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -2999,6 +3022,13 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     status = ucp_context_gpu_nic_assignment_init(context);
     if (status != UCS_OK) {
         goto err_free_res;
+    }
+
+    if (context->gpu_nic_assignment != NULL) {
+        status = ucp_context_gpu_nic_assignment_check_config(context);
+        if (status != UCS_OK) {
+            goto err_cleanup_gpu_nic_assignment;
+        }
     }
 
     context->uuid             = ucs_generate_uuid((uintptr_t)context);

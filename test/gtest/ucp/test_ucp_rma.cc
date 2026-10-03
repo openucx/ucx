@@ -431,6 +431,296 @@ UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
 
 
+static const char *gpu_nic_assignment_modes[] = {"flip", "round_robin",
+                                                 "shared"};
+
+class test_ucp_rma_gpu_nic : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_rma_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_assignment_modes)),
+                           gpu_nic_assignment_modes);
+    }
+
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
+        modify_config("GPU_NIC_ASSIGNMENT_MODE",
+                      gpu_nic_assignment_modes[get_variant_value(1)]);
+        /* Enough lanes to use every NIC assigned to a GPU */
+        modify_config("MAX_RMA_LANES", "8");
+        modify_config("MAX_RNDV_LANES", "8");
+        /* Count protocol selections, which expect_assigned_lanes() checks */
+        modify_config("PROTO_INFO", "used");
+        test_ucp_rma::init();
+    }
+
+protected:
+    static void get_rma_variants(std::vector<ucp_test_variant> &variants)
+    {
+        /* The base flags stay clear: flush worker, no user memory handle */
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    void test_cuda_mem_types(send_func_t send_func,
+                             const std::string &proto_name,
+                             size_t max_size = 16 * UCS_MBYTE)
+    {
+        if (!is_buffer_gpu_assigned()) {
+            UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
+        }
+
+        /* The assignment follows the local buffer, so it must be CUDA */
+        test_message_sizes(send_func, 128, max_size, UCS_MEMORY_TYPE_CUDA,
+                           UCS_MEMORY_TYPE_CUDA, 0);
+        expect_assigned_lanes(proto_name);
+    }
+
+private:
+    /* Check that the GPU the test buffers are allocated on has assigned NICs.
+     * With 'flip' and 'round_robin', a GPU may be left without any. */
+    bool is_buffer_gpu_assigned()
+    {
+        const ucp_context_h context = sender().ucph();
+        const ucs_sys_device_bitmap_t *bitmap;
+        ucp_memory_info_t mem_info;
+
+        if (context->gpu_nic_assignment == nullptr) {
+            return false;
+        }
+
+        std::unique_ptr<mem_buffer> buffer(
+                create_mem_buffer(64, UCS_MEMORY_TYPE_CUDA));
+        ucp_memory_detect(context, buffer->ptr(), buffer->size(), &mem_info);
+
+        bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                               mem_info.sys_dev);
+        return (bitmap != nullptr) && !UCS_STATIC_BITMAP_IS_ZERO(*bitmap);
+    }
+
+    /* Check that the protocol moved data, and only over the NICs assigned to
+     * the GPU of the buffer it moved */
+    void expect_assigned_lanes(const std::string &proto_name)
+    {
+        unsigned num_used       = 0;
+        unsigned num_restricted = 0;
+        ucp_ep_config_t *ep_config;
+        ucp_rkey_config_t **rkey_config_p;
+        ucp_worker_h worker;
+
+        for (auto iter = entities().begin(); iter != entities().end(); ++iter) {
+            worker = (*iter)->worker();
+            ucs_array_for_each(ep_config, &worker->ep_config) {
+                expect_assigned_lanes(worker, &ep_config->proto_select,
+                                      proto_name, num_used, num_restricted);
+            }
+
+            ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+                expect_assigned_lanes(worker, &(*rkey_config_p)->proto_select,
+                                      proto_name, num_used, num_restricted);
+            }
+        }
+
+        ASSERT_GT(num_used, 0u) << proto_name << " was not used";
+        if (num_restricted == 0) {
+            UCS_TEST_SKIP_R("the assignment keeps every bandwidth nic of the "
+                            "endpoints");
+        }
+    }
+
+    void expect_assigned_lanes(ucp_worker_h worker,
+                               const ucp_proto_select_t *proto_select,
+                               const std::string &proto_name,
+                               unsigned &num_used, unsigned &num_restricted)
+    {
+        const ucp_proto_threshold_elem_t *thresh;
+        size_t range_start;
+        khiter_t khiter;
+
+        for (khiter = kh_begin(proto_select->hash);
+             khiter != kh_end(proto_select->hash); ++khiter) {
+            if (!kh_exist(proto_select->hash, khiter)) {
+                continue;
+            }
+
+            thresh      = kh_val(proto_select->hash, khiter).thresholds;
+            range_start = 0;
+            do {
+                if ((thresh->proto_config.selections > 0) &&
+                    (proto_name == thresh->proto_config.proto->name)) {
+                    expect_assigned_lanes(worker, &thresh->proto_config,
+                                          range_start, num_restricted);
+                    ++num_used;
+                }
+                range_start = thresh->max_msg_length + 1;
+            } while ((thresh++)->max_msg_length < SIZE_MAX);
+        }
+    }
+
+    static const uct_tl_resource_desc_t *
+    lane_tl_rsc(ucp_context_h context, const ucp_ep_config_t *ep_config,
+                ucp_lane_index_t lane)
+    {
+        return &context->tl_rscs[ep_config->key.lanes[lane].rsc_index].tl_rsc;
+    }
+
+    static bool is_unassigned_nic(const uct_tl_resource_desc_t *tl_rsc,
+                                  const ucs_sys_device_bitmap_t *bitmap)
+    {
+        return (tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
+               !ucp_gpu_nic_bitmap_get(bitmap, tl_rsc->sys_device);
+    }
+
+    void expect_assigned_lanes(ucp_worker_h worker,
+                               const ucp_proto_config_t *proto_config,
+                               size_t msg_length, unsigned &num_restricted)
+    {
+        const ucp_context_h context = worker->context;
+        const ucp_ep_config_t *ep_config =
+                ucp_worker_ep_config(worker, proto_config->ep_cfg_index);
+        const ucs_sys_device_t gpu_sys_dev = proto_config->select_param.sys_dev;
+        const ucs_sys_device_bitmap_t *bitmap;
+        const uct_tl_resource_desc_t *tl_rsc;
+        ucp_proto_query_attr_t attr;
+        ucp_lane_index_t lane;
+
+        bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                               gpu_sys_dev);
+        ASSERT_NE(nullptr, bitmap)
+                << proto_config->proto->name << " buffer sys_dev "
+                << static_cast<int>(gpu_sys_dev);
+
+        ucp_proto_config_query(worker, proto_config, msg_length, &attr);
+        ucs_for_each_bit(lane, attr.lane_map) {
+            tl_rsc = lane_tl_rsc(context, ep_config, lane);
+            EXPECT_FALSE(is_unassigned_nic(tl_rsc, bitmap))
+                    << proto_config->proto->name << " lane "
+                    << static_cast<int>(lane) << " on unassigned "
+                    << tl_rsc->dev_name;
+        }
+
+        /* Without a bandwidth lane on an unassigned NIC, the check above
+         * passes even if the protocol ignores the assignment */
+        for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+            if ((ep_config->key.lanes[lane].lane_types &
+                 UCS_BIT(UCP_LANE_TYPE_RMA_BW)) &&
+                is_unassigned_nic(lane_tl_rsc(context, ep_config, lane),
+                                  bitmap)) {
+                ++num_restricted;
+                break;
+            }
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, put_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b),
+                        "put/offload/zcopy");
+}
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, get_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b),
+                        "get/zcopy");
+}
+
+/* Network lanes only, since the assignment restricts only NIC lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_gpu_nic, rcx_cuda, "rc_x,cuda_copy")
+
+
+static const char *gpu_nic_rndv_schemes[] = {"put_zcopy", "put_ppln"};
+
+/* Run the RMA rendezvous protocols by the RTR flow: the side receiving the data
+ * sends RTR, and the other side writes the data by rndv/put/zcopy, or by
+ * rndv/put/mtype from host staging fragments. */
+class test_ucp_rma_rndv_gpu_nic : public test_ucp_rma_gpu_nic {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
+                           UCS_MASK(
+                                   ucs_static_array_size(gpu_nic_rndv_schemes)),
+                           gpu_nic_rndv_schemes);
+    }
+
+    test_ucp_rma_rndv_gpu_nic()
+    {
+        /* The RMA rendezvous put/get protocols are a fallback of the direct
+         * zcopy protocols; keep only the rendezvous ones so they are always
+         * selected. */
+        modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
+    }
+
+    void init() override
+    {
+        modify_config("RNDV_SCHEME",
+                      gpu_nic_rndv_schemes[get_variant_value(2)]);
+        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+            modify_config("RNDV_FRAG_MEM_TYPES", "host");
+            modify_config("RNDV_FRAG_SIZE", "host:512K");
+        }
+
+        test_ucp_rma_gpu_nic::init();
+    }
+
+protected:
+    static constexpr int RNDV_SCHEME_PUT_PPLN = 1;
+    static constexpr size_t PPLN_FRAG_SIZE    = 512 * UCS_KBYTE;
+
+    bool has_cuda_net_md()
+    {
+        const ucp_context_h context = sender().ucph();
+        const ucp_tl_resource_desc_t *rsc;
+
+        ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+            if ((rsc->tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) &&
+                (context->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
+                 UCS_BIT(rsc->md_index))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void test_rtr_flow(send_func_t send_func)
+    {
+        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+            /* Larger messages fall back to the zero-copy protocols */
+            test_cuda_mem_types(send_func, "rndv/put/mtype", PPLN_FRAG_SIZE);
+            return;
+        }
+
+        /* Includes registration by dmabuf, which the MD attributes miss */
+        if (!has_cuda_net_md()) {
+            UCS_TEST_SKIP_R(
+                    "no network memory domain can register CUDA memory");
+        }
+
+        test_cuda_mem_types(send_func, "rndv/put/zcopy");
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, put_blocking)
+{
+    test_rtr_flow(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, get_blocking)
+{
+    test_rtr_flow(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic, rcx_cuda,
+                              "rc_x,cuda_copy")
+
+
 class test_ucp_rma_rndv : public test_ucp_rma {
 public:
     static constexpr size_t SIZE = 512 * UCS_KBYTE;
