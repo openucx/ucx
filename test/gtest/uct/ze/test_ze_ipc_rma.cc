@@ -10,6 +10,7 @@ extern "C" {
 #include <uct/ze/ze_ipc/ze_ipc_md.h>
 }
 
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <sys/socket.h>
@@ -250,11 +251,44 @@ protected:
         }
     };
 
+    /* Holds every free fd below a limit, so the next fd opened lands above */
+    struct fd_fillers {
+        std::vector<int> fds;
+
+        ~fd_fillers()
+        {
+            release();
+        }
+
+        void occupy_below(int limit)
+        {
+            int fd;
+
+            while ((fd = open("/dev/null", O_RDONLY | O_CLOEXEC)) < limit) {
+                ASSERT_GE(fd, 0) << "open(/dev/null) failed: "
+                                 << strerror(errno);
+                fds.push_back(fd);
+            }
+
+            close(fd);
+        }
+
+        void release()
+        {
+            for (int fd : fds) {
+                close(fd);
+            }
+            fds.clear();
+        }
+    };
+
     static const char *PEER_FD_ENV;
     static const int PEER_FD         = 3;
     static const int TIMEOUT_MS      = 60000;
     static const unsigned NUM_ROUNDS = 3;
     static const size_t LENGTH       = UCS_MBYTE;
+    /* Above any fd the importer opens on its own */
+    static const int MIN_EXPORT_FD   = 256;
 
     static uint64_t put_seed(unsigned round)
     {
@@ -427,16 +461,51 @@ protected:
         EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
     }
 
-    void run_exporter(bool other_device)
+    /* The transport opens a pidfd and then takes the exporter's fd, each into
+     * the lowest free fd. Leaving only export_fd - 1 and export_fd free below
+     * export_fd makes it receive the exporter's fd under the number that
+     * zeMemGetIpcHandle returned to the exporter */
+    static void force_fd_collision(const uct_ze_ipc_key_t *key,
+                                   fd_fillers &fillers)
+    {
+        ASSERT_GE(key->export_fd, MIN_EXPORT_FD);
+        ASSERT_NO_FATAL_FAILURE(fillers.occupy_below(key->export_fd - 1));
+        ASSERT_EQ(-1, fcntl(key->export_fd - 1, F_GETFD));
+        ASSERT_EQ(-1, fcntl(key->export_fd, F_GETFD));
+    }
+
+    /* With the collision forced, the fix leaves the importer's copy of the
+     * exporter's fd at export_fd - 1, the lowest fd it can move it to */
+    static void check_fd_moved(const uct_ze_ipc_key_t *key)
+    {
+        std::string path = "/proc/self/fd/" +
+                           ucs::to_string(key->export_fd - 1);
+        char target[256];
+        ssize_t len;
+
+        len = readlink(path.c_str(), target, sizeof(target) - 1);
+        ASSERT_GE(len, 0) << path << ": " << strerror(errno);
+        target[len] = '\0';
+        EXPECT_NE(nullptr, strstr(target, "dmabuf"))
+                << path << " -> " << target;
+    }
+
+    void run_exporter(bool other_device, bool collide_fd)
     {
         entity *e = uct_test::create_entity(0);
         m_entities.push_back(e);
+
+        fd_fillers fillers;
+        if (collide_fd) {
+            ASSERT_NO_FATAL_FAILURE(fillers.occupy_below(MIN_EXPORT_FD));
+        }
 
         mapped_buffer buffer(LENGTH, 0, *e, 0, UCS_MEMORY_TYPE_ZE_DEVICE);
         std::vector<char> info;
         peer_process peer;
         int status;
 
+        fillers.release();
         ASSERT_NO_FATAL_FAILURE(pack_exporter_info(*e, buffer, info));
         ASSERT_NO_FATAL_FAILURE(start_importer(peer));
         if (other_device) {
@@ -458,7 +527,7 @@ protected:
                 << "importer exit status " << status;
     }
 
-    void run_importer(int fd)
+    void run_importer(int fd, bool collide_fd)
     {
         std::vector<char> info(UCS_KBYTE * 4);
         uct_iface_is_reachable_params_t params = {};
@@ -514,12 +583,26 @@ protected:
 
         mapped_buffer sendbuf(LENGTH, 0, *e, 0, UCS_MEMORY_TYPE_ZE_DEVICE);
         mapped_buffer recvbuf(LENGTH, 0, *e, 0, UCS_MEMORY_TYPE_ZE_DEVICE);
+        fd_fillers fillers;
 
         for (unsigned round = 0; round < NUM_ROUNDS; ++round) {
+            bool collide = collide_fd && (round == 0);
+
             sendbuf.pattern_fill(put_seed(round));
+            if (collide) {
+                ASSERT_NO_FATAL_FAILURE(force_fd_collision(
+                        (const uct_ze_ipc_key_t*)rkey.rkey, fillers));
+            }
+
             ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(ep, sendbuf.iov(), 1,
                                                          hdr.address, rkey.rkey,
                                                          NULL));
+            if (collide) {
+                ASSERT_NO_FATAL_FAILURE(check_fd_moved(
+                        (const uct_ze_ipc_key_t*)rkey.rkey));
+            }
+
+            fillers.release();
             e->flush();
             send_op(fd, MSG_PUT_DONE, round);
 
@@ -535,19 +618,20 @@ protected:
         send_op(fd, MSG_DONE, NUM_ROUNDS);
     }
 
-    void test_put_get(bool other_device = false)
+    void test_put_get(bool other_device = false, bool collide_fd = false)
     {
         const char *peer_fd = getenv(PEER_FD_ENV);
 
         if (peer_fd == NULL) {
-            run_exporter(other_device);
+            run_exporter(other_device, collide_fd);
         } else {
-            run_importer(atoi(peer_fd));
+            run_importer(atoi(peer_fd), collide_fd);
         }
     }
 };
 
 const char *test_ze_ipc_rma_xproc::PEER_FD_ENV = "UCT_ZE_IPC_TEST_PEER_FD";
+const int test_ze_ipc_rma_xproc::MIN_EXPORT_FD;
 
 
 UCS_TEST_P(test_ze_ipc_rma_xproc, put_get)
@@ -567,6 +651,11 @@ UCS_TEST_P(test_ze_ipc_rma_xproc, put_get_after_other_device_access)
     }
 
     test_put_get(true);
+}
+
+UCS_TEST_P(test_ze_ipc_rma_xproc, put_get_importer_fd_equals_export_fd)
+{
+    test_put_get(false, true);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ze_ipc_rma_xproc, ze_ipc)

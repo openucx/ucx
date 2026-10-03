@@ -121,6 +121,7 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
         return UCS_ERR_IO_ERROR;
     }
 
+    key->export_fd              = *(int*)key->ipc_handle.data;
     *(int*)key->ipc_handle.data = fd;
 
     key->pid              = getpid();

@@ -43,6 +43,9 @@ typedef struct uct_ze_ipc_key {
                                                distinguishes processes that
                                                reuse a PID */
     pid_t               pid; /**< Remote process ID (for cache) */
+    int                 export_fd; /**< fd zeMemGetIpcHandle returned in the
+                                        remote process, before the handle
+                                        was repacked with a dup */
     uintptr_t           address; /**< Base address of the allocation */
     size_t              length; /**< Size of the allocation */
 } uct_ze_ipc_key_t;

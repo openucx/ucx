@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/datastruct/khash.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 
@@ -187,7 +188,7 @@ static ucs_status_t uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
                                               void **mapped_addr, int *dup_fd)
 {
     ze_ipc_mem_handle_t local_handle;
-    int remote_fd;
+    int remote_fd, fd;
     ze_result_t ret;
 
     /* Extract fd from IPC handle */
@@ -208,6 +209,23 @@ static ucs_status_t uct_ze_ipc_open_memhandle(uct_ze_ipc_key_t *key,
                       key->pid);
             return UCS_ERR_IO_ERROR;
         }
+
+        /* zeMemOpenIpcHandle takes a handle whose fd equals the exporter's
+         * original fd as unmodified and fetches that fd number from the
+         * exporter, where it is already closed or reused */
+        if (*dup_fd == key->export_fd) {
+            fd = fcntl(*dup_fd, F_DUPFD_CLOEXEC, 0);
+            if (fd < 0) {
+                ucs_error("failed to duplicate fd %d: %m", *dup_fd);
+            }
+
+            close(*dup_fd);
+            *dup_fd = fd;
+            if (fd < 0) {
+                return UCS_ERR_IO_ERROR;
+            }
+        }
+
         /* Update handle with local fd */
         *(int*)local_handle.data = *dup_fd;
     } else {
