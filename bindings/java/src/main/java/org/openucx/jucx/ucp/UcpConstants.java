@@ -86,6 +86,7 @@ public class UcpConstants {
     static long UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
     static long UCP_EP_PARAM_FIELD_CONN_REQUEST;
     static long UCP_EP_PARAM_FIELD_NAME;
+    static long UCP_EP_PARAM_FIELD_EP_TRAFFIC_CLASS;
 
     /**
      * UCP error handling mode.
