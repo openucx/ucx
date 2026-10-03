@@ -8,6 +8,7 @@
 #define UCP_RMA_BW_INL_
 
 #include "rma_bw.h"
+#include <ucp/core/ucp_worker.inl>
 
 /* A detached request keeps its slot until every UCT fragment completes. */
 static UCS_F_ALWAYS_INLINE int
@@ -29,6 +30,7 @@ ucp_rma_bw_sample_try_start(ucp_request_t *req,
                             ucp_rma_bw_dir_t dir)
 {
     if (ucs_unlikely(req->send.ep->worker->context->config.ext.rma_bw_measure)) {
+        req->flags |= UCP_REQUEST_FLAG_RMA_BW_TRACK;
         ucp_rma_bw_sample_start(req, num_lanes, dir);
     }
 }
@@ -42,7 +44,7 @@ ucp_rma_bw_record_post(ucp_request_t *req, ucp_rma_bw_dir_t dir,
                        ucs_status_t status)
 {
     ucp_ep_h ep = req->send.ep;
-    ucp_rma_bw_ep_state_t *state = ep->ext->rma_bw_state;
+    ucp_rma_bw_ep_state_t *state = ucp_worker_rma_bw_state_get(ep);
     ucp_rma_bw_estimator_t *estimator;
     ucp_rma_bw_lane_estimate_t *lane;
 

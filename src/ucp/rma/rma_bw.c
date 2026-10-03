@@ -113,7 +113,7 @@ ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
 }
 
 static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id,
-                                ucp_rma_bw_dir_t dir)
+                                 ucp_rma_bw_dir_t dir)
 {
     ucp_worker_h worker = ep->worker;
     ucp_rsc_index_t rsc_index;
@@ -129,8 +129,8 @@ static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id,
     wiface               = ucp_worker_iface(worker, rsc_index);
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                            UCT_PERF_ATTR_FIELD_BANDWIDTH;
-    perf_attr.operation  = (dir == UCP_RMA_BW_PUT) ? UCT_EP_OP_PUT_ZCOPY :
-                                                   UCT_EP_OP_GET_ZCOPY;
+    perf_attr.operation  = (dir == UCP_RMA_BW_PUT) ?
+                           UCT_EP_OP_PUT_ZCOPY : UCT_EP_OP_GET_ZCOPY;
     status               = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status == UCS_OK) {
         return ucp_tl_iface_bandwidth(worker->context, &perf_attr.bandwidth);
@@ -142,9 +142,12 @@ static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id,
 static ucp_rma_bw_estimator_t *
 ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
 {
-    ucp_rma_bw_ep_state_t *state = ep->ext->rma_bw_state;
+    ucp_rma_bw_ep_state_t *state = ucp_worker_rma_bw_state_get(ep);
     ucp_rma_bw_estimator_t *estimator;
     ucp_rma_bw_lane_estimate_t *lane;
+    kh_ucp_worker_rma_bw_t *hash;
+    khiter_t it;
+    int ret;
     size_t size;
     unsigned i;
 
@@ -153,7 +156,15 @@ ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
         if (state == NULL) {
             return NULL;
         }
-        ep->ext->rma_bw_state = state;
+        hash = &ep->worker->rma_bw_hash;
+        it = kh_put(ucp_worker_rma_bw, hash, ep, &ret);
+        if (ret == UCS_KH_PUT_FAILED) {
+            ucs_free(state);
+            return NULL;
+        }
+        ucs_assert((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                   (ret == UCS_KH_PUT_BUCKET_CLEAR));
+        kh_value(hash, it) = state;
     }
 
     estimator = state->dirs[sample->dir];
@@ -189,7 +200,7 @@ ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
             (lane->lane_id != sample->lane_ids[i])) {
             memset(lane, 0, sizeof(*lane));
             lane->nominal  = ucp_rma_bw_nominal(ep, sample->lane_ids[i],
-                                             sample->dir);
+                                                sample->dir);
             lane->smoothed = lane->nominal;
             lane->lane_id  = sample->lane_ids[i];
         }
@@ -200,18 +211,21 @@ ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
 
 void ucp_rma_bw_ep_state_cleanup(ucp_ep_h ep)
 {
-    ucp_rma_bw_ep_state_t *state = ep->ext->rma_bw_state;
+    kh_ucp_worker_rma_bw_t *hash = &ep->worker->rma_bw_hash;
+    khiter_t it                 = kh_get(ucp_worker_rma_bw, hash, ep);
+    ucp_rma_bw_ep_state_t *state;
     unsigned dir;
 
-    if (state == NULL) {
+    if (it == kh_end(hash)) {
         return;
     }
 
+    state = kh_value(hash, it);
+    kh_del(ucp_worker_rma_bw, hash, it);
     for (dir = 0; dir < UCP_RMA_BW_DIR_LAST; ++dir) {
         ucs_free(state->dirs[dir]);
     }
     ucs_free(state);
-    ep->ext->rma_bw_state = NULL;
 }
 
 void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
@@ -220,6 +234,7 @@ void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
     ucp_worker_h worker = req->send.ep->worker;
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucp_rma_bw_sample_t *sample;
+    ucp_rma_bw_estimator_t *estimator;
     ucs_time_t now;
     unsigned i;
 
@@ -252,11 +267,12 @@ void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
     for (i = 0; i < num_lanes; ++i) {
         sample->lane_ids[i] = mpriv->lanes[i].super.lane;
     }
-    if (ucp_rma_bw_estimator_prepare(req->send.ep, sample) == NULL) {
+    estimator = ucp_rma_bw_estimator_prepare(req->send.ep, sample);
+    if (estimator == NULL) {
         sample->req = NULL;
         return;
     }
-    sample->generation = req->send.ep->ext->rma_bw_state->generation;
+    sample->generation = estimator->generation;
 
     req->send.rma.bw_sample    = sample;
     req->flags                |= UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
@@ -264,12 +280,28 @@ void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,
                                  ucs_time_from_sec(UCP_RMA_BW_SAMPLE_INTERVAL);
 }
 
+static const char *ucp_rma_bw_reject_name(ucp_rma_bw_reject_t reject)
+{
+    static const char *names[] = {
+        [UCP_RMA_BW_REJECT_NONE]        = "none",
+        [UCP_RMA_BW_REJECT_INCOMPLETE]  = "incomplete",
+        [UCP_RMA_BW_REJECT_UNSATURATED] = "unsaturated",
+        [UCP_RMA_BW_REJECT_GENERATION]  = "generation",
+        [UCP_RMA_BW_REJECT_RATE_LIMIT]  = "rate_limit",
+        [UCP_RMA_BW_REJECT_WARMUP]      = "warmup",
+        [UCP_RMA_BW_REJECT_WINDOW]      = "window"
+    };
+
+    ucs_assert(reject < ucs_static_array_size(names));
+    return names[reject];
+}
+
 void ucp_rma_bw_sample_complete(uct_completion_t *comp)
 {
     ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
                                           send.state.uct_comp);
     ucp_rma_bw_sample_t *sample = ucp_rma_bw_sample_get(req);
-    ucp_rma_bw_ep_state_t *state = req->send.ep->ext->rma_bw_state;
+    ucp_rma_bw_ep_state_t *state = ucp_worker_rma_bw_state_get(req->send.ep);
     ucp_rma_bw_estimator_t *estimator;
     ucp_rma_bw_reject_t reject;
     ucs_time_t now;
@@ -297,10 +329,11 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
                               estimator->lanes[i].smoothed / UCS_MBYTE);
             }
         } else {
-            ucp_trace_req(req, "rma bw %s sample rejected: reason %u, "
+            ucp_trace_req(req, "rma bw %s sample rejected: reason %s, "
                           "epoch %lu/%lu",
                           sample->dir == UCP_RMA_BW_PUT ? "PUT" : "GET",
-                          reject, sample->epoch, req->send.ep->worker->epoch);
+                          ucp_rma_bw_reject_name(reject), sample->epoch,
+                          req->send.ep->worker->epoch);
         }
     }
 

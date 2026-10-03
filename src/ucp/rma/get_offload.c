@@ -253,7 +253,7 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
                 ucp_rma_bw_sample_complete);
     }
 
-    if (ucs_unlikely(req->send.ep->worker->context->config.ext.rma_bw_measure)) {
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_RMA_BW_TRACK)) {
         /* coverity[tainted_data_downcast] */
         return ucp_proto_multi_zcopy_progress(
                 req, mpriv, ucp_proto_multi_rma_init_func,

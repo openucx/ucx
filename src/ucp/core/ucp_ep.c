@@ -278,7 +278,6 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->unflushed_lanes              = 0;
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
-    ep->ext->rma_bw_state                 = NULL;
     ep->ext->flush_sys_dev_map            = 0;
 
     UCS_STATIC_ASSERT(sizeof(ep->ext->ep_match) >=
@@ -5048,8 +5047,12 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
     ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
-    if (ep->ext->rma_bw_state != NULL) {
-        ++ep->ext->rma_bw_state->generation;
+    if (ucs_unlikely(ep->worker->context->config.ext.rma_bw_measure)) {
+        ucp_rma_bw_ep_state_t *state = ucp_worker_rma_bw_state_get(ep);
+
+        if (state != NULL) {
+            ++state->generation;
+        }
     }
 }
 
