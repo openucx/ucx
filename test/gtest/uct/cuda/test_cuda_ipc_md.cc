@@ -320,6 +320,39 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
 }
 
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_accessibility)
+{
+    int num_devices, can_access, accessible, device_index;
+    CUdevice local_device, remote_device;
+    CUuuid remote_uuid;
+    bool checked = false;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetCount(&num_devices));
+    if (num_devices < 2) {
+        UCS_TEST_SKIP_R("test requires at least two CUDA devices");
+    }
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&local_device, 0));
+    for (device_index = 1; device_index < num_devices; ++device_index) {
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&remote_device, device_index));
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetUuid(&remote_uuid, remote_device));
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuDeviceCanAccessPeer(&can_access, local_device,
+                                        remote_device));
+
+        accessible = uct_cuda_ipc_nvml_peer_accessible(local_device,
+                                                        &remote_uuid);
+        if (accessible != UCS_TRY) {
+            EXPECT_EQ(can_access ? UCS_YES : UCS_NO, accessible);
+            checked = true;
+        }
+    }
+
+    if (!checked) {
+        UCS_TEST_SKIP_R("NVML peer accessibility is unavailable");
+    }
+}
+
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
