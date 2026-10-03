@@ -83,10 +83,9 @@ err:
  * last data messages (some kernels do so for IPv6 route dumps), so keep
  * walking the datagram after parse_cb completes.
  */
-static ucs_status_t
-ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg,
-                      int *reply_end_p)
+static ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                                          ucs_netlink_parse_cb_t parse_cb,
+                                          void *arg, int *reply_end_p)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
@@ -127,25 +126,26 @@ ucs_status_t ucs_netlink_recv_response(int fd, unsigned short nlmsg_flags,
     /* get message size */
     do {
         recv_msg_len = 0;
-        status = ucs_socket_recv_nb(fd, NULL, MSG_PEEK | MSG_TRUNC,
-                                    &recv_msg_len);
+        status       = ucs_socket_recv_nb(fd, NULL, MSG_PEEK | MSG_TRUNC,
+                                          &recv_msg_len);
         if (status != UCS_OK) {
-            ucs_error("failed to get netlink message size %d (%s)",
-                    status, ucs_status_string(status));
+            ucs_error("failed to get netlink message size %d (%s)", status,
+                      ucs_status_string(status));
             return status;
         }
 
         recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
         if (recv_msg == NULL) {
             ucs_error("failed to allocate a buffer for netlink receive message"
-                      " of size %zu", recv_msg_len);
+                      " of size %zu",
+                      recv_msg_len);
             return UCS_ERR_NO_MEMORY;
         }
 
         status = ucs_socket_recv(fd, recv_msg, recv_msg_len);
         if (status != UCS_OK) {
-            ucs_error("failed to receive netlink message on fd=%d: %s",
-                    fd, ucs_status_string(status));
+            ucs_error("failed to receive netlink message on fd=%d: %s", fd,
+                      ucs_status_string(status));
             ucs_free(recv_msg);
             return status;
         }

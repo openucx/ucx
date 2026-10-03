@@ -41,8 +41,7 @@ protected:
         ucs::test::cleanup();
     }
 
-    static void
-    add_msg(datagram_t &datagram, uint16_t type, uint32_t seq = 1)
+    static void add_msg(datagram_t &datagram, uint16_t type, uint32_t seq = 1)
     {
         size_t payload_len = (type == NLMSG_ERROR) ? sizeof(struct nlmsgerr) :
                                                      sizeof(struct rtmsg);
@@ -90,21 +89,22 @@ protected:
         return UCS_INPROGRESS;
     }
 
-    static ucs_status_t parse_one_route_cb(const struct nlmsghdr *nlh, void *arg)
+    static ucs_status_t
+    parse_one_route_cb(const struct nlmsghdr *nlh, void *arg)
     {
         count_routes_cb(nlh, arg);
         return UCS_OK;
     }
 
     /*
-     * Receive a dump response, then check that the receiver stopped at its
-     * end. A datagram of the next response is queued behind the tested one,
-     * so a receiver that misses the end of the dump consumes it instead of
+     * Receive a response, then check that the receiver stopped at its end.
+     * A datagram of the next response is queued behind the tested one, so a
+     * receiver that misses the end of the response consumes it instead of
      * blocking forever.
      */
     ucs_status_t
-    recv_dump(unsigned *num_routes_p,
-              ucs_netlink_parse_cb_t parse_cb = count_routes_cb)
+    recv_response(unsigned short nlmsg_flags, unsigned *num_routes_p,
+                  ucs_netlink_parse_cb_t parse_cb = count_routes_cb)
     {
         datagram_t next_response;
         struct nlmsghdr nlh = {};
@@ -114,8 +114,8 @@ protected:
         send_datagram(next_response);
 
         *num_routes_p = 0;
-        status        = ucs_netlink_recv_response(m_fds[0], NLM_F_DUMP,
-                                                  parse_cb, num_routes_p);
+        status = ucs_netlink_recv_response(m_fds[0], nlmsg_flags, parse_cb,
+                                           num_routes_p);
 
         EXPECT_EQ((ssize_t)sizeof(nlh),
                   recv(m_fds[0], &nlh, sizeof(nlh), MSG_DONTWAIT))
@@ -137,7 +137,7 @@ UCS_TEST_F(test_netlink, done_in_separate_datagram) {
     send_datagram(routes(3));
     send_datagram(done);
 
-    EXPECT_UCS_OK(recv_dump(&num_routes));
+    EXPECT_UCS_OK(recv_response(NLM_F_DUMP, &num_routes));
     EXPECT_EQ(3u, num_routes);
 }
 
@@ -150,7 +150,7 @@ UCS_TEST_F(test_netlink, done_after_last_route) {
     send_datagram(routes(3));
     send_datagram(last);
 
-    EXPECT_UCS_OK(recv_dump(&num_routes));
+    EXPECT_UCS_OK(recv_response(NLM_F_DUMP, &num_routes));
     EXPECT_EQ(5u, num_routes);
 }
 
@@ -163,7 +163,7 @@ UCS_TEST_F(test_netlink, done_after_parse_complete) {
     add_msg(last, NLMSG_DONE);
     send_datagram(last);
 
-    EXPECT_UCS_OK(recv_dump(&num_routes, parse_one_route_cb));
+    EXPECT_UCS_OK(recv_response(NLM_F_DUMP, &num_routes, parse_one_route_cb));
     EXPECT_EQ(1u, num_routes);
 }
 
@@ -177,7 +177,18 @@ UCS_TEST_F(test_netlink, error_ends_dump) {
 
     {
         scoped_log_handler slh(hide_errors_logger);
-        EXPECT_EQ(UCS_ERR_IO_ERROR, recv_dump(&num_routes));
+        EXPECT_EQ(UCS_ERR_IO_ERROR, recv_response(NLM_F_DUMP, &num_routes));
     }
     EXPECT_EQ(3u, num_routes);
+}
+
+UCS_TEST_F(test_netlink, non_dump_reads_one_datagram) {
+    unsigned num_routes;
+
+    /* The reply to a non-dump request is a single datagram, without
+     * NLMSG_DONE */
+    send_datagram(routes(1));
+
+    EXPECT_UCS_OK(recv_response(0, &num_routes));
+    EXPECT_EQ(1u, num_routes);
 }
