@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,10 +7,15 @@
 #include "ucp_test.h"
 #include <common/mem_buffer.h>
 
+#include <cstring>
+#include <vector>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_worker.h>
+#include <ucp/dt/dt.h>
 }
 
 
@@ -181,3 +186,58 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda, all, "all")
+
+/*
+ * Async CUDA allocations are not REGISTRABLE, so gdr_copy cannot pin them.
+ * Pack/unpack via the CUDA mem-type endpoint must fall back from a preferred
+ * gdr_copy RMA lane to cuda_copy.
+ */
+class test_ucp_mem_type_pack_non_reg : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_AM);
+    }
+
+protected:
+    static constexpr size_t BUF_SIZE = 65536;
+    static constexpr uint64_t SEED   = 0xdeadbeefcafebabeull;
+};
+
+UCS_TEST_P(test_ucp_mem_type_pack_non_reg, pack_unpack)
+{
+    std::vector<uint8_t> host_buf(BUF_SIZE);
+    ucs_memory_type_t buf_mem_type;
+    ucp_memory_info_t mem_info;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    if (sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA] == NULL) {
+        UCS_TEST_SKIP_R("no CUDA mem type endpoint");
+    }
+
+    scoped_async_cuda_buffer src(BUF_SIZE);
+    scoped_async_cuda_buffer dst(BUF_SIZE);
+
+    ucp_memory_detect(sender().ucph(), src.ptr(), BUF_SIZE, &mem_info);
+    if (mem_info.flags & UCS_MEM_FLAG_REGISTRABLE) {
+        UCS_TEST_SKIP_R("CUDA async memory is registrable");
+    }
+
+    buf_mem_type = static_cast<ucs_memory_type_t>(mem_info.type);
+    mem_buffer::pattern_fill(src.ptr(), BUF_SIZE, SEED, buf_mem_type);
+    mem_buffer::pattern_fill(dst.ptr(), BUF_SIZE, 0, buf_mem_type);
+    memset(host_buf.data(), 0, BUF_SIZE);
+
+    ucp_mem_type_pack(sender().worker(), host_buf.data(), src.ptr(), BUF_SIZE,
+                      UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::pattern_check(host_buf.data(), BUF_SIZE, SEED);
+
+    ucp_mem_type_unpack(sender().worker(), dst.ptr(), host_buf.data(), BUF_SIZE,
+                        UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::pattern_check(dst.ptr(), BUF_SIZE, SEED, buf_mem_type);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_pack_non_reg, all, "all")
