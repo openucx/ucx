@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
 
+#include <fcntl.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -68,6 +69,7 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
     unsigned long proc_create_time;
     ze_result_t ret;
     ucs_status_t status;
+    int fd;
 
     /* Get memory allocation properties to verify this is ZE device memory */
     ret = zeMemGetAllocProperties(md->ze_context, address, &props, NULL);
@@ -100,6 +102,26 @@ static ucs_status_t uct_ze_ipc_pack_key(uct_ze_ipc_md_t *md, void *address,
         ucs_error("failed to get IPC handle for %p", address);
         return status;
     }
+
+    /* Peers get our own duplicate of the fd and the handle goes back at once:
+     * while a handle is held, the driver may close its fd when another device
+     * accesses the allocation, and then close that fd number again on put */
+    fd = fcntl(*(int*)key->ipc_handle.data, F_DUPFD_CLOEXEC, 0);
+    if (fd < 0) {
+        ucs_error("failed to duplicate IPC handle fd %d for %p: %m",
+                  *(int*)key->ipc_handle.data, address);
+    }
+
+    ret = zeMemPutIpcHandle(md->ze_context, key->ipc_handle);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_warn("zeMemPutIpcHandle failed with error 0x%x", ret);
+    }
+
+    if (fd < 0) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *(int*)key->ipc_handle.data = fd;
 
     key->pid              = getpid();
     key->address          = (uintptr_t)base_address;
@@ -144,19 +166,12 @@ uct_ze_ipc_mem_reg(uct_md_h uct_md, void *address, size_t length,
 static ucs_status_t
 uct_ze_ipc_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 {
-    uct_ze_ipc_md_t *md = ucs_derived_of(uct_md, uct_ze_ipc_md_t);
     uct_ze_ipc_key_t *key;
-    ze_result_t ret;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     key = params->memh;
-
-    ret = zeMemPutIpcHandle(md->ze_context, key->ipc_handle);
-    if (ret != ZE_RESULT_SUCCESS) {
-        ucs_warn("zeMemPutIpcHandle failed with error 0x%x", ret);
-    }
-
+    close(*(int*)key->ipc_handle.data);
     ucs_free(key);
     return UCS_OK;
 }

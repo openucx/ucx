@@ -316,7 +316,35 @@ protected:
         ASSERT_GT(peer.pid, 0) << "fork() failed: " << strerror(errno);
     }
 
-    void run_exporter()
+    /* The driver closes the fd of an outstanding IPC handle when a device
+     * other than the allocation's accesses the buffer */
+    static void fill_from_other_device(const mapped_buffer &buffer)
+    {
+        ze_context_desc_t context_desc     = {};
+        ze_command_queue_desc_t queue_desc = {};
+        ze_command_list_handle_t cmdlist;
+        ze_context_handle_t context;
+        uint8_t value = 0;
+
+        context_desc.stype = ZE_STRUCTURE_TYPE_CONTEXT_DESC;
+        queue_desc.stype   = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC;
+        queue_desc.mode    = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+
+        ASSERT_EQ(ZE_RESULT_SUCCESS, zeContextCreate(uct_ze_base_get_driver(),
+                                                     &context_desc, &context));
+        ASSERT_EQ(ZE_RESULT_SUCCESS,
+                  zeCommandListCreateImmediate(context,
+                                               uct_ze_base_get_device(1),
+                                               &queue_desc, &cmdlist));
+        EXPECT_EQ(ZE_RESULT_SUCCESS,
+                  zeCommandListAppendMemoryFill(cmdlist, buffer.ptr(), &value,
+                                                sizeof(value), buffer.length(),
+                                                NULL, 0, NULL));
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zeCommandListDestroy(cmdlist));
+        EXPECT_EQ(ZE_RESULT_SUCCESS, zeContextDestroy(context));
+    }
+
+    void run_exporter(bool other_device)
     {
         entity *e = uct_test::create_entity(0);
         m_entities.push_back(e);
@@ -328,6 +356,9 @@ protected:
 
         ASSERT_NO_FATAL_FAILURE(pack_exporter_info(*e, buffer, info));
         ASSERT_NO_FATAL_FAILURE(start_importer(peer));
+        if (other_device) {
+            ASSERT_NO_FATAL_FAILURE(fill_from_other_device(buffer));
+        }
         send_msg(peer.fd, info.data(), info.size());
 
         for (unsigned round = 0; round < NUM_ROUNDS; ++round) {
@@ -421,12 +452,12 @@ protected:
         send_op(fd, MSG_DONE, NUM_ROUNDS);
     }
 
-    void test_put_get()
+    void test_put_get(bool other_device = false)
     {
         const char *peer_fd = getenv(PEER_FD_ENV);
 
         if (peer_fd == NULL) {
-            run_exporter();
+            run_exporter(other_device);
         } else {
             run_importer(atoi(peer_fd));
         }
@@ -444,6 +475,15 @@ UCS_TEST_P(test_ze_ipc_rma_xproc, put_get)
 UCS_TEST_P(test_ze_ipc_rma_xproc, put_get_no_cache, "ZE_IPC_ENABLE_CACHE=n")
 {
     test_put_get();
+}
+
+UCS_TEST_P(test_ze_ipc_rma_xproc, put_get_after_other_device_access)
+{
+    if (uct_ze_base_get_num_devices() < 2) {
+        UCS_TEST_SKIP_R("needs two Level Zero devices");
+    }
+
+    test_put_get(true);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_ze_ipc_rma_xproc, ze_ipc)
