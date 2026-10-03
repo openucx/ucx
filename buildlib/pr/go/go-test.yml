@@ -13,6 +13,7 @@ jobs:
 
     steps:
     - checkout: self
+      submodules: true
       fetchDepth: 100
       clean: true
       displayName: Checkout
