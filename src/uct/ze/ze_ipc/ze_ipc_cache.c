@@ -22,9 +22,8 @@
 
 typedef struct uct_ze_ipc_cache_hash_key {
     pid_t               pid;
-    uint32_t            _pad; /* Ensure 8-byte alignment for ze_context */
     ze_context_handle_t ze_context;
-} UCS_S_PACKED uct_ze_ipc_cache_hash_key_t;
+} uct_ze_ipc_cache_hash_key_t;
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -278,7 +277,6 @@ uct_ze_ipc_get_remote_cache(pid_t pid, ze_context_handle_t ze_context,
 
     key.ze_context = ze_context;
     key.pid        = pid;
-    key._pad       = 0;
 
     khiter = kh_put(ze_ipc_rem_cache, &uct_ze_ipc_remote_cache.hash, key,
                     &khret);

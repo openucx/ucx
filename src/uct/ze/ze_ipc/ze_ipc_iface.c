@@ -252,80 +252,169 @@ void uct_ze_ipc_free_event(uct_ze_ipc_iface_t *iface,
     ucs_spin_unlock(&iface->event_lock);
 }
 
-static unsigned uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
+/* Completes events in posting order, so that a flush marker completes only
+ * after the completions of the copies posted before it. An event leaves the
+ * queue only after its completion runs, so a completion that posts on the same
+ * command list does not find the queue empty and add it to the active queue
+ * a second time */
+static unsigned
+uct_ze_ipc_progress_event_queue(uct_ze_ipc_iface_t *iface,
+                                ucs_queue_head_t *event_queue,
+                                unsigned max_events)
 {
-    uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
+    unsigned count = 0;
     uct_ze_ipc_event_desc_t *event_desc;
-    uct_ze_ipc_queue_desc_t *q_desc;
-    ucs_queue_iter_t iter;
-    unsigned count    = 0;
-    unsigned max_poll = iface->config.max_poll;
+    ucs_status_t status;
     ze_result_t ret;
 
-    /* Early exit if no active queues */
-    if (ucs_queue_is_empty(&iface->active_queue)) {
-        return 0;
-    }
-
-    /*
-     * Progress all active command list queues
-     * Similar to CUDA IPC's uct_cuda_base_progress_event_queue
-     */
-    ucs_queue_for_each_extract(q_desc, &iface->active_queue, queue, 1) {
-        ucs_queue_for_each_safe(event_desc, iter, &q_desc->event_queue, queue) {
-            /* Check if we've reached max_poll limit */
-            if (count >= max_poll) {
-                /* Put queue back and exit */
-                ucs_queue_push(&iface->active_queue, &q_desc->queue);
-                return count;
-            }
-
+    while ((count < max_events) && !ucs_queue_is_empty(event_queue)) {
+        event_desc = ucs_queue_head_elem_non_empty(event_queue,
+                                                   uct_ze_ipc_event_desc_t,
+                                                   queue);
+        if (event_desc->event == NULL) {
+            /* A flush marker is done once it reaches the head */
+            ret = ZE_RESULT_SUCCESS;
+        } else {
             ret = zeEventQueryStatus(event_desc->event);
             if (ret == ZE_RESULT_NOT_READY) {
-                continue;
+                break;
             }
+
             if (ret != ZE_RESULT_SUCCESS) {
                 ucs_error("zeEventQueryStatus failed with error 0x%x", ret);
             }
-
-            ucs_queue_del_iter(&q_desc->event_queue, iter);
-
-            /* Unmap IPC handle using cache */
-            if (event_desc->mapped_addr != NULL) {
-                ucs_status_t status;
-                status = uct_ze_ipc_unmap_memhandle(event_desc->pid,
-                                                    event_desc->address,
-                                                    event_desc->mapped_addr,
-                                                    iface->ze_context,
-                                                    event_desc->dup_fd,
-                                                    iface->config.enable_cache);
-                if (status != UCS_OK) {
-                    ucs_warn("failed to unmap IPC handle addr:%p",
-                             event_desc->mapped_addr);
-                }
-            }
-
-            /* Invoke completion callback */
-            if (event_desc->comp != NULL) {
-                uct_invoke_completion(event_desc->comp,
-                                      (ret == ZE_RESULT_SUCCESS) ?
-                                              UCS_OK :
-                                              UCS_ERR_IO_ERROR);
-            }
-
-            uct_ze_ipc_free_event(iface, event_desc);
-            ucs_free(event_desc);
-
-            count++;
         }
 
-        /* If queue still has events, put it back to active queue */
-        if (!ucs_queue_is_empty(&q_desc->event_queue)) {
-            ucs_queue_push(&iface->active_queue, &q_desc->queue);
+        /* Unmap IPC handle using cache */
+        if (event_desc->mapped_addr != NULL) {
+            status = uct_ze_ipc_unmap_memhandle(event_desc->pid,
+                                                event_desc->address,
+                                                event_desc->mapped_addr,
+                                                iface->ze_context,
+                                                event_desc->dup_fd,
+                                                iface->config.enable_cache);
+            if (status != UCS_OK) {
+                ucs_warn("failed to unmap IPC handle addr:%p",
+                         event_desc->mapped_addr);
+            }
+        }
+
+        if (event_desc->comp != NULL) {
+            uct_invoke_completion(event_desc->comp,
+                                  (ret == ZE_RESULT_SUCCESS) ?
+                                          UCS_OK :
+                                          UCS_ERR_IO_ERROR);
+        }
+
+        ucs_queue_pull_non_empty(event_queue);
+        if (event_desc->event != NULL) {
+            uct_ze_ipc_free_event(iface, event_desc);
+        }
+
+        ucs_free(event_desc);
+        count++;
+    }
+
+    return count;
+}
+
+static unsigned uct_ze_ipc_iface_progress(uct_iface_h tl_iface)
+{
+    uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
+    unsigned max_poll         = iface->config.max_poll;
+    unsigned count            = 0;
+    uct_ze_ipc_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
+
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        count += uct_ze_ipc_progress_event_queue(iface, &q_desc->event_queue,
+                                                 max_poll - count);
+        if (ucs_queue_is_empty(&q_desc->event_queue)) {
+            ucs_queue_del_iter(&iface->active_queue, iter);
         }
     }
 
     return count;
+}
+
+
+static void uct_ze_ipc_flush_desc_complete(uct_completion_t *self)
+{
+    uct_ze_ipc_flush_desc_t *flush_desc =
+            ucs_container_of(self, uct_ze_ipc_flush_desc_t, super);
+
+    uct_invoke_completion(flush_desc->comp, self->status);
+    ucs_free(flush_desc);
+}
+
+
+/* A marker queued behind the events of each active command list reaches the
+ * head of its queue only after those events complete, and the last marker to
+ * get there completes the flush */
+static ucs_status_t
+uct_ze_ipc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                               uct_ze_ipc_iface_t);
+    uct_ze_ipc_event_desc_t *markers[UCT_ZE_IPC_MAX_PEERS];
+    uct_ze_ipc_flush_desc_t *flush_desc;
+    uct_ze_ipc_queue_desc_t *q_desc;
+    unsigned i, num_markers;
+
+    if (ucs_queue_is_empty(&iface->active_queue)) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    if (comp == NULL) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_INPROGRESS;
+    }
+
+    flush_desc = ucs_malloc(sizeof(*flush_desc), "uct_ze_ipc_flush_desc_t");
+    if (flush_desc == NULL) {
+        ucs_error("failed to allocate flush descriptor");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    num_markers = 0;
+    ucs_queue_for_each(q_desc, &iface->active_queue, queue) {
+        ucs_assert(num_markers < UCT_ZE_IPC_MAX_PEERS);
+        markers[num_markers] = ucs_malloc(sizeof(*markers[num_markers]),
+                                          "uct_ze_ipc_flush_marker");
+        if (markers[num_markers] == NULL) {
+            ucs_error("failed to allocate flush marker");
+            goto err_free_markers;
+        }
+
+        ++num_markers;
+    }
+
+    flush_desc->super.func   = uct_ze_ipc_flush_desc_complete;
+    flush_desc->super.count  = num_markers;
+    flush_desc->super.status = UCS_OK;
+    flush_desc->comp         = comp;
+
+    i = 0;
+    ucs_queue_for_each(q_desc, &iface->active_queue, queue) {
+        markers[i]->event       = NULL;
+        markers[i]->event_pool  = NULL;
+        markers[i]->mapped_addr = NULL;
+        markers[i]->comp        = &flush_desc->super;
+        ucs_queue_push(&q_desc->event_queue, &markers[i]->queue);
+        ++i;
+    }
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
+
+err_free_markers:
+    for (i = 0; i < num_markers; ++i) {
+        ucs_free(markers[i]);
+    }
+
+    ucs_free(flush_desc);
+    return UCS_ERR_NO_MEMORY;
 }
 
 
@@ -334,6 +423,10 @@ static ucs_status_t uct_ze_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 {
     uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_ze_ipc_iface_t);
     unsigned i;
+
+    if (comp != NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     /* Check if all command list queues are empty */
     for (i = 0; i < iface->num_cmd_lists; i++) {
@@ -354,7 +447,7 @@ static uct_iface_ops_t uct_ze_ipc_iface_ops = {
     .ep_put_zcopy   = uct_ze_ipc_ep_put_zcopy,
     .ep_pending_add = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
     .ep_pending_purge = (uct_ep_pending_purge_func_t)ucs_empty_function,
-    .ep_flush         = uct_base_ep_flush,
+    .ep_flush         = uct_ze_ipc_ep_flush,
     .ep_fence         = uct_base_ep_fence,
     .ep_check    = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
     .ep_create   = UCS_CLASS_NEW_FUNC_NAME(uct_ze_ipc_ep_t),
@@ -692,6 +785,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
 static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
 {
     uct_ze_ipc_event_desc_t *event_desc;
+    uct_ze_ipc_flush_desc_t *flush_desc;
     unsigned i;
 
     uct_base_iface_progress_disable(&self->super.super,
@@ -711,6 +805,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_ipc_iface_t)
             }
             if (event_desc->event != NULL) {
                 zeEventDestroy(event_desc->event);
+            } else {
+                /* A flush still pending at close is dropped without
+                 * completing it */
+                flush_desc = ucs_container_of(event_desc->comp,
+                                              uct_ze_ipc_flush_desc_t, super);
+                if (--flush_desc->super.count == 0) {
+                    ucs_free(flush_desc);
+                }
             }
             if (event_desc->event_pool != NULL) {
                 zeEventPoolDestroy(event_desc->event_pool);

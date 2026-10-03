@@ -119,7 +119,6 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uct_iov_t *iov,
 {
     uct_ze_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                uct_ze_ipc_iface_t);
-    uct_ze_ipc_ep_t *ep       = ucs_derived_of(tl_ep, uct_ze_ipc_ep_t);
     uct_ze_ipc_key_t *key     = (uct_ze_ipc_key_t*)rkey;
     uct_ze_ipc_event_desc_t *event_desc;
     uct_ze_ipc_queue_desc_t *q_desc;
@@ -165,7 +164,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uct_iov_t *iov,
     event_desc = ucs_malloc(sizeof(*event_desc), "uct_ze_ipc_event_desc_t");
     if (event_desc == NULL) {
         ucs_error("failed to allocate event descriptor");
-        uct_ze_ipc_unmap_memhandle(ep->remote_pid, key->address, mapped_addr,
+        uct_ze_ipc_unmap_memhandle(key->pid, key->address, mapped_addr,
                                    iface->ze_context, local_fd,
                                    iface->config.enable_cache);
         return UCS_ERR_NO_MEMORY;
@@ -174,7 +173,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uct_iov_t *iov,
     status = uct_ze_ipc_alloc_event(iface, event_desc);
     if (status != UCS_OK) {
         ucs_free(event_desc);
-        uct_ze_ipc_unmap_memhandle(ep->remote_pid, key->address, mapped_addr,
+        uct_ze_ipc_unmap_memhandle(key->pid, key->address, mapped_addr,
                                    iface->ze_context, local_fd,
                                    iface->config.enable_cache);
         return status;
@@ -182,7 +181,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uct_iov_t *iov,
 
     /* Store information for cache-based cleanup and event tracking */
     event_desc->dup_fd      = local_fd;
-    event_desc->pid         = ep->remote_pid;
+    event_desc->pid         = key->pid;
     event_desc->address     = key->address;
 
     /* Set up source and destination based on direction */
@@ -244,7 +243,7 @@ uct_ze_ipc_post_copy(uct_ep_h tl_ep, uint64_t remote_addr, const uct_iov_t *iov,
 err_cleanup:
     uct_ze_ipc_free_event(iface, event_desc);
     ucs_free(event_desc);
-    uct_ze_ipc_unmap_memhandle(ep->remote_pid, key->address, mapped_addr,
+    uct_ze_ipc_unmap_memhandle(key->pid, key->address, mapped_addr,
                                iface->ze_context, local_fd,
                                iface->config.enable_cache);
     return UCS_ERR_IO_ERROR;

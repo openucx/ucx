@@ -341,17 +341,7 @@ endif # HAVE_HIP
 if HAVE_ZE
 gtest_SOURCES += \
 	ucm/ze_hooks.cc \
-	uct/ze/test_ze.cc
-gtest_CPPFLAGS += \
-	$(ZE_CPPFLAGS)
-gtest_LDFLAGS += \
-	$(ZE_LDFLAGS)
-gtest_LDADD += \
-	$(ZE_LIBS)
-endif
-
-if HAVE_ZE
-gtest_SOURCES += \
+	uct/ze/test_ze.cc \
 	uct/ze/test_ze_base.cc \
 	uct/ze/test_ze_ipc_md.cc \
 	uct/ze/test_ze_ipc_cache.cc \
@@ -359,8 +349,9 @@ gtest_SOURCES += \
 	uct/ze/test_ze_copy_md.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(ZE_LDFLAGS)
 gtest_LDADD += \
-	$(ZE_LDFLAGS) \
 	$(ZE_LIBS) \
 	$(top_builddir)/src/uct/ze/libuct_ze.la
 endif

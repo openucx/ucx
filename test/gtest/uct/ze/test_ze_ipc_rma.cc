@@ -37,6 +37,23 @@ protected:
         m_sender->connect(0, *m_receiver, 0);
     }
 
+    struct flush_comp {
+        uct_completion_t super;
+        uct_completion_t *copy_comp;
+        int              copies_left;
+    };
+
+    static void copy_done(uct_completion_t *self)
+    {
+    }
+
+    static void flush_done(uct_completion_t *self)
+    {
+        flush_comp *comp = ucs_container_of(self, flush_comp, super);
+
+        comp->copies_left = comp->copy_comp->count;
+    }
+
     entity *m_sender;
     entity *m_receiver;
 
@@ -75,6 +92,72 @@ UCS_TEST_P(test_ze_ipc_rma, get_zcopy)
                                                  sendbuf.rkey(), NULL));
     m_sender->flush();
     recvbuf.pattern_check(SEED1);
+}
+
+UCS_TEST_P(test_ze_ipc_rma, ep_flush_waits_for_copies)
+{
+    static const unsigned num_copies = 8;
+    static const size_t length       = UCS_MBYTE;
+
+    mapped_buffer sendbuf(length * num_copies, SEED1, *m_sender, 0,
+                          UCS_MEMORY_TYPE_ZE_DEVICE);
+    mapped_buffer recvbuf(length * num_copies, SEED2, *m_receiver, 0,
+                          UCS_MEMORY_TYPE_ZE_DEVICE);
+    uct_completion_t copy_comp = {copy_done, (int)num_copies, UCS_OK};
+    flush_comp flush           = {{flush_done, 1, UCS_OK}, &copy_comp, -1};
+    uct_iov_t iov              = *sendbuf.iov();
+
+    iov.length = length;
+    for (unsigned i = 0; i < num_copies; ++i) {
+        iov.buffer = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), i * length);
+        ASSERT_EQ(UCS_INPROGRESS,
+                  uct_ep_put_zcopy(m_sender->ep(0), &iov, 1,
+                                   recvbuf.addr() + (i * length),
+                                   recvbuf.rkey(), &copy_comp));
+    }
+
+    /* Nothing has progressed the copies yet */
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_flush(m_sender->ep(0), 0, &flush.super));
+    wait_for_value(&flush.super.count, 0, true);
+    ASSERT_EQ(0, flush.super.count);
+
+    EXPECT_EQ(UCS_OK, flush.super.status);
+    EXPECT_EQ(0, flush.copies_left);
+    EXPECT_EQ(UCS_OK, copy_comp.status);
+    recvbuf.pattern_check(SEED1);
+}
+
+UCS_TEST_P(test_ze_ipc_rma, ep_flush_pending_at_close, "ZE_IPC_MAX_POLL=1")
+{
+    static const size_t length = 4096;
+    uct_completion_t copy_comp = {copy_done, 1, UCS_OK};
+    flush_comp flush           = {{flush_done, 1, UCS_OK}, &copy_comp, -1};
+
+    {
+        mapped_buffer sendbuf(length, SEED1, *m_sender, 0,
+                              UCS_MEMORY_TYPE_ZE_DEVICE);
+        mapped_buffer recvbuf(length, SEED2, *m_receiver, 0,
+                              UCS_MEMORY_TYPE_ZE_DEVICE);
+
+        ASSERT_EQ(UCS_INPROGRESS,
+                  uct_ep_put_zcopy(m_sender->ep(0), sendbuf.iov(), 1,
+                                   recvbuf.addr(), recvbuf.rkey(),
+                                   &copy_comp));
+        ASSERT_EQ(UCS_INPROGRESS,
+                  uct_ep_flush(m_sender->ep(0), 0, &flush.super));
+
+        /* With MAX_POLL=1 a progress call completes at most one event, so the
+         * flush marker is still queued when the copy completes */
+        test_base::wait_for_value(&copy_comp.count, 0,
+                                  [this]() { progress(); });
+        ASSERT_EQ(0, copy_comp.count);
+    }
+
+    EXPECT_EQ(1, flush.super.count);
+    m_sender->destroy_eps();
+    m_entities.remove(m_sender);
+    EXPECT_EQ(1, flush.super.count);
 }
 
 UCS_TEST_P(test_ze_ipc_rma, put_zcopy_rejects_multi_iov)

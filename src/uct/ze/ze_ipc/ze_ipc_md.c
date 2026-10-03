@@ -242,6 +242,10 @@ uct_ze_ipc_md_open(uct_component_h component, const char *md_name,
                 ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)
                 ucs_empty_function_return_unsupported,
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)
+                ucs_empty_function_return_unsupported,
+        .mem_elem_release   = (uct_md_mem_elem_release_func_t)
+                ucs_empty_function,
     };
     uct_ze_ipc_md_config_t *config = ucs_derived_of(uct_md_config,
                                                     uct_ze_ipc_md_config_t);

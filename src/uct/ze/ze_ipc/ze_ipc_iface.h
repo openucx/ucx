@@ -76,6 +76,12 @@ typedef struct uct_ze_ipc_event_desc {
 } uct_ze_ipc_event_desc_t;
 
 
+typedef struct uct_ze_ipc_flush_desc {
+    uct_completion_t super; /* counts the flush markers still queued */
+    uct_completion_t *comp; /* user completion of the flush */
+} uct_ze_ipc_flush_desc_t;
+
+
 /**
  * Allocate an event from the shared event pool, or from a private one-event
  * pool when the shared pool is exhausted
