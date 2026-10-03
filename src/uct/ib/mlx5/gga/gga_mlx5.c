@@ -470,7 +470,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_gga_mlx5_ep_t)
     uct_rc_iface_remove_qp(&iface->super, self->super.tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(md, &self->super.tx.wq.super);
     uct_ib_mlx5_qp_mmio_cleanup(&self->super.tx.wq.super, self->super.tx.wq.reg);
-    ucs_list_del(&self->super.super.list);
     uct_rc_iface_add_cq_credits(&iface->super, outstanding - wqe_count);
 }
 
@@ -773,19 +772,19 @@ static UCS_CLASS_INIT_FUNC(uct_gga_mlx5_iface_t,
     uct_gga_mlx5_iface_config_t *config =
             ucs_derived_of(tl_config, uct_gga_mlx5_iface_config_t);
     uct_ib_mlx5_md_t *md                = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
-    uct_ib_iface_init_attr_t init_attr  = {};
+    uct_rc_iface_init_attr_t init_attr  = {};
     ucs_status_t status;
     uct_ib_mlx5_dp_ordering_t dp_ordering;
 
-    init_attr.xport_hdr_len         = UCT_IB_RETH_LEN;
-    init_attr.qp_type               = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
-    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
-                                                   max_qp_rd_atom);
-    init_attr.tx_moderation         = config->super.tx_cq_moderation;
-    init_attr.dev_name              = params->mode.device.dev_name;
-    dp_ordering                     = ucs_min(md->dp_ordering_cap_devx.rc,
-                                              UCT_IB_MLX5_DP_ORDERING_OOO_RW);
+    init_attr.super.xport_hdr_len         = UCT_IB_RETH_LEN;
+    init_attr.super.qp_type               = IBV_QPT_RC;
+    init_attr.super.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.super.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
+                                                         max_qp_rd_atom);
+    init_attr.super.tx_moderation         = config->super.tx_cq_moderation;
+    init_attr.super.dev_name              = params->mode.device.dev_name;
+    dp_ordering = ucs_min(md->dp_ordering_cap_devx.rc,
+                          UCT_IB_MLX5_DP_ORDERING_OOO_RW);
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super, dp_ordering, 0,
                                               &config->rc_mlx5_common, "gga");

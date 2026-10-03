@@ -572,28 +572,32 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_rc_iface_common_config_t *config,
-                    const uct_ib_iface_init_attr_t *init_attr)
+                    const uct_rc_iface_init_attr_t *init_attr)
 {
     uct_ib_md_t *md      = ucs_derived_of(tl_md, uct_ib_md_t);
     uct_ib_device_t *dev = &md->dev;
     uint32_t max_ib_msg_size;
+    unsigned fc_max_wnd_size;
     ucs_status_t status;
     unsigned tx_cq_size;
     ucs_mpool_params_t mp_params;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, tl_md,
-                              worker, params, &config->super, init_attr);
+                              worker, params, &config->super,
+                              &init_attr->super);
 
-    tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
+    tx_cq_size                  = uct_ib_cq_size(&self->super,
+                                                 &init_attr->super,
                                                  UCT_IB_DIR_TX);
     /* Prevent title CQE overwriting */
     self->tx.cq_available       = uct_rc_iface_tx_cq_capacity(tx_cq_size);
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
+    self->config.srq_disable    = init_attr->srq_disable;
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
-    self->config.tx_moderation  = init_attr->tx_moderation;
+    self->config.tx_moderation  = init_attr->super.tx_moderation;
     self->config.tx_poll_always = config->tx.poll_always;
     self->config.tx_cq_len      = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
@@ -620,7 +624,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 
     self->config.ece = config->ece;
 
-    status = uct_rc_iface_init_max_rd_atomic(self, config, init_attr);
+    status = uct_rc_iface_init_max_rd_atomic(self, config, &init_attr->super);
     if (status != UCS_OK) {
         goto err;
     }
@@ -703,7 +707,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
 
     /* Create mempool for pending requests */
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = ucs_max(init_attr->fc_req_size,
+    mp_params.elem_size       = ucs_max(init_attr->super.fc_req_size,
                                         sizeof(uct_rc_pending_req_t));
     mp_params.alignment       = 1;
     mp_params.elems_per_chunk = 128;
@@ -720,8 +724,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
          * Then FC window size is the same for all endpoints as well.
          * TODO: Make wnd size to be a property of the particular interface.
          * We could distribute it via rc address then.*/
+        fc_max_wnd_size             = (init_attr->fc_max_wnd_size != 0) ?
+                                      init_attr->fc_max_wnd_size :
+                                      config->super.rx.queue_len;
         self->config.fc_wnd_size    = ucs_min(config->fc.wnd_size,
-                                              config->super.rx.queue_len);
+                                              fc_max_wnd_size);
         self->config.fc_hard_thresh = ucs_max((int)(self->config.fc_wnd_size *
                                               config->fc.hard_thresh), 1);
     } else {
@@ -753,9 +760,11 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
     uct_rc_iface_t *iface                      = cleanup_ctx->iface;
     uct_rc_iface_ops_t *ops;
 
-    uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         cleanup_ctx->qp_num);
+    if (!iface->config.srq_disable) {
+        uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
+                                             IBV_EVENT_QP_LAST_WQE_REACHED,
+                                             cleanup_ctx->qp_num);
+    }
 
     ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
     ops->cleanup_qp(cleanup_ctx);
@@ -810,11 +819,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
-                            unsigned max_send_wr, struct ibv_srq *srq)
+                            unsigned max_send_wr, unsigned max_recv_wr,
+                            struct ibv_srq *srq)
 {
     attr->srq                        = srq;
     attr->cap.max_send_wr            = max_send_wr;
-    attr->cap.max_recv_wr            = 0;
+    attr->cap.max_recv_wr            = max_recv_wr;
     attr->cap.max_send_sge           = iface->config.tx_min_sge;
     attr->cap.max_recv_sge           = 1;
     attr->cap.max_inline_data        = iface->config.tx_min_inline;
@@ -826,9 +836,9 @@ void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     uct_ib_qp_attr_t *attr, unsigned max_send_wr,
-                                    struct ibv_srq *srq)
+                                    unsigned max_recv_wr, struct ibv_srq *srq)
 {
-    uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
+    uct_rc_iface_fill_attr(iface, attr, max_send_wr, max_recv_wr, srq);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);
 }
