@@ -371,6 +371,7 @@ stages:
         demands: ucx_gpu -equals yes
         test_perf: 1
         container: ubuntu2404_doca31_gpunetio
+        prebuild: yes
     - template: tests.yml
       parameters:
         name: new
@@ -528,6 +529,7 @@ stages:
         test_perf: 0
         container: centos8_cuda11_asan
         asan_check: yes
+        prebuild: yes
     - template: tests.yml
       parameters:
         name: new
