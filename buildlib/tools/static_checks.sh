@@ -16,7 +16,7 @@ echo "##vso[task.setvariable variable=report_dir]$report_dir"
 export PATH="`csclng --print-path-to-wrap`:`cscppc --print-path-to-wrap`:`cswrap --print-path-to-wrap`:$PATH"
 export CSCLNG_ADD_OPTS="-Xanalyzer:-analyzer-output=html:-o:$report_dir"
 set -o pipefail
-make -j`nproc` |& tee $report_dir/compile.log
+make -j${NPROC} |& tee $report_dir/compile.log
 set +o pipefail
 
 cs_errors="cs.err"
