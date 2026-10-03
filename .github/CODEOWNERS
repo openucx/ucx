@@ -1,0 +1,24 @@
+#
+# Copyright (c) Intel Corporation, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+
+# Default owners
+* @openucx/ucx-maintainers
+
+# ROCm
+/config/m4/rocm.m4            @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/src/ucm/rocm/                @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/src/uct/rocm/                @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/src/tools/perf/rocm/         @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/test/gtest/ucm/rocm_hooks.cc @edgargabriel @mshanthagit @openucx/ucx-maintainers
+/test/gtest/uct/rocm/         @edgargabriel @mshanthagit @openucx/ucx-maintainers
+
+# Level Zero (ZE)
+/config/m4/ze.m4            @yafshar @j-xiong @openucx/ucx-maintainers
+/src/ucm/ze/                @yafshar @j-xiong @openucx/ucx-maintainers
+/src/uct/ze/                @yafshar @j-xiong @openucx/ucx-maintainers
+/src/tools/perf/ze/         @yafshar @j-xiong @openucx/ucx-maintainers
+/test/gtest/ucm/ze_hooks.cc @yafshar @j-xiong @openucx/ucx-maintainers
