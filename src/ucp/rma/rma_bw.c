@@ -16,71 +16,55 @@
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_multi.h>
 
-static ucp_rma_bw_lane_estimate_t *
-ucp_rma_bw_estimator_lane(ucp_rma_bw_estimator_t *estimator,
-                          unsigned lane_idx)
-{
-    return &estimator->lanes[lane_idx];
-}
-
 ucp_rma_bw_reject_t
 ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
                             const ucp_rma_bw_sample_t *sample, ucs_time_t now)
 {
     ucp_rma_bw_lane_estimate_t *lane;
-    ucp_rma_bw_reject_t reject = UCP_RMA_BW_REJECT_NONE;
     int warmup = 0;
     unsigned i;
 
     if (sample->invalid) {
-        reject = UCP_RMA_BW_REJECT_INCOMPLETE;
-        goto out;
+        return UCP_RMA_BW_REJECT_INCOMPLETE;
     }
 
     if ((sample->epoch != estimator->epoch) ||
         (sample->generation != estimator->generation) ||
-        (sample->num_lanes != estimator->num_lanes) ||
-        (sample->dir != estimator->dir)) {
-        reject = UCP_RMA_BW_REJECT_GENERATION;
-        goto out;
+        (sample->num_lanes != estimator->num_lanes)) {
+        return UCP_RMA_BW_REJECT_GENERATION;
     }
 
-    lane = ucp_rma_bw_estimator_lane(estimator, 0);
+    lane = &estimator->lanes[0];
     if ((lane->samples > 0) && (now >= lane->last_update) &&
         (now - lane->last_update <
          ucs_time_from_sec(UCP_RMA_BW_SAMPLE_INTERVAL))) {
-        reject = UCP_RMA_BW_REJECT_RATE_LIMIT;
-        goto out;
+        return UCP_RMA_BW_REJECT_RATE_LIMIT;
     }
 
     /* Validate the whole transfer before modifying any lane estimate. */
     if (!sample->concurrent) {
-        reject = UCP_RMA_BW_REJECT_UNSATURATED;
-        goto out;
+        return UCP_RMA_BW_REJECT_UNSATURATED;
     }
     for (i = 0; i < sample->num_lanes; ++i) {
         const ucp_rma_bw_lane_t *observation = &sample->lanes[i];
 
-        lane = ucp_rma_bw_estimator_lane(estimator, i);
+        lane = &estimator->lanes[i];
         if ((lane->lane_id != sample->lane_ids[i]) ||
             (lane->nominal <= 0.0)) {
-            reject = UCP_RMA_BW_REJECT_GENERATION;
-            goto out;
+            return UCP_RMA_BW_REJECT_GENERATION;
         }
 
         if ((observation->bytes < UCP_RMA_BW_MIN_LANE_LENGTH) ||
             (observation->num_async == 0) ||
             (observation->last_comp <= observation->first_post)) {
-            reject = UCP_RMA_BW_REJECT_UNSATURATED;
-            goto out;
+            return UCP_RMA_BW_REJECT_UNSATURATED;
         }
 
         if (lane->marker_time == 0) {
             warmup = 1;
         } else if ((observation->posted_total <= lane->marker_posted) ||
                    (observation->last_comp <= lane->marker_time)) {
-            reject = UCP_RMA_BW_REJECT_WINDOW;
-            goto out;
+            return UCP_RMA_BW_REJECT_WINDOW;
         }
     }
 
@@ -88,19 +72,18 @@ ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
         /* The first completed request sets a stream marker. Its queue wait
          * cannot be separated from service time without a prior marker. */
         for (i = 0; i < sample->num_lanes; ++i) {
-            lane                = ucp_rma_bw_estimator_lane(estimator, i);
+            lane                = &estimator->lanes[i];
             lane->marker_posted = sample->lanes[i].posted_total;
             lane->marker_time   = sample->lanes[i].last_comp;
         }
-        reject = UCP_RMA_BW_REJECT_WARMUP;
-        goto out;
+        return UCP_RMA_BW_REJECT_WARMUP;
     }
 
     for (i = 0; i < sample->num_lanes; ++i) {
         const ucp_rma_bw_lane_t *observation = &sample->lanes[i];
         double request_rate, stream_rate, raw;
 
-        lane         = ucp_rma_bw_estimator_lane(estimator, i);
+        lane         = &estimator->lanes[i];
         request_rate = observation->bytes /
                        ucs_time_to_sec(observation->last_comp -
                                        observation->first_post);
@@ -120,20 +103,13 @@ ucp_rma_bw_estimator_update(ucp_rma_bw_estimator_t *estimator,
          * at most 27%; the EWMA uses the DOCA model's alpha of 0.3. */
         lane->smoothed      = 0.7 * lane->smoothed +
                               0.3 * ucs_max(raw, 0.1 * lane->smoothed);
-        lane->last_raw      = raw;
         lane->last_update   = now;
         lane->marker_posted = observation->posted_total;
         lane->marker_time   = observation->last_comp;
         ++lane->samples;
     }
 
-    ++estimator->accepted;
-
-out:
-    if (reject != UCP_RMA_BW_REJECT_NONE) {
-        ++estimator->rejected[reject];
-    }
-    return reject;
+    return UCP_RMA_BW_REJECT_NONE;
 }
 
 static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id,
@@ -144,6 +120,10 @@ static double ucp_rma_bw_nominal(ucp_ep_h ep, ucp_lane_index_t lane_id,
     ucp_worker_iface_t *wiface;
     uct_perf_attr_t perf_attr;
     ucs_status_t status;
+
+    if (lane_id >= ucp_ep_config(ep)->key.num_lanes) {
+        return 0.0;
+    }
 
     rsc_index            = ucp_ep_config(ep)->key.lanes[lane_id].rsc_index;
     wiface               = ucp_worker_iface(worker, rsc_index);
@@ -192,7 +172,6 @@ ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
         }
 
         estimator->num_lanes     = sample->num_lanes;
-        estimator->dir           = sample->dir;
         state->dirs[sample->dir] = estimator;
     }
 
@@ -205,7 +184,7 @@ ucp_rma_bw_estimator_prepare(ucp_ep_h ep, const ucp_rma_bw_sample_t *sample)
     }
 
     for (i = 0; i < sample->num_lanes; ++i) {
-        lane = ucp_rma_bw_estimator_lane(estimator, i);
+        lane = &estimator->lanes[i];
         if ((lane->nominal == 0.0) ||
             (lane->lane_id != sample->lane_ids[i])) {
             memset(lane, 0, sizeof(*lane));
@@ -311,21 +290,11 @@ void ucp_rma_bw_sample_complete(uct_completion_t *comp)
         if (reject == UCP_RMA_BW_REJECT_NONE) {
             for (i = 0; i < sample->num_lanes; ++i) {
                 ucp_trace_req(req, "rma bw %s lane %u/%u ep_lane %u: "
-                              "%zu bytes / %.3f us, request %.2f MB/s, "
-                              "effective %.2f MB/s, ewma %.2f MB/s",
+                              "%zu bytes, ewma %.2f MB/s",
                               sample->dir == UCP_RMA_BW_PUT ? "PUT" : "GET",
                               i, sample->num_lanes, sample->lane_ids[i],
                               sample->lanes[i].bytes,
-                              ucs_time_to_sec(sample->lanes[i].last_comp -
-                                              sample->lanes[i].first_post) * 1e6,
-                              sample->lanes[i].bytes /
-                              ucs_time_to_sec(sample->lanes[i].last_comp -
-                                              sample->lanes[i].first_post) /
-                              UCS_MBYTE,
-                              ucp_rma_bw_estimator_lane(estimator, i)->last_raw /
-                              UCS_MBYTE,
-                              ucp_rma_bw_estimator_lane(estimator, i)->smoothed /
-                              UCS_MBYTE);
+                              estimator->lanes[i].smoothed / UCS_MBYTE);
             }
         } else {
             ucp_trace_req(req, "rma bw %s sample rejected: reason %u, "

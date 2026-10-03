@@ -34,8 +34,7 @@ typedef enum {
     UCP_RMA_BW_REJECT_GENERATION,
     UCP_RMA_BW_REJECT_RATE_LIMIT,
     UCP_RMA_BW_REJECT_WARMUP,
-    UCP_RMA_BW_REJECT_WINDOW,
-    UCP_RMA_BW_REJECT_LAST
+    UCP_RMA_BW_REJECT_WINDOW
 } ucp_rma_bw_reject_t;
 
 typedef struct {
@@ -58,7 +57,6 @@ typedef struct {
 typedef struct {
     double           nominal;
     double           smoothed;
-    double           last_raw;
     ucs_time_t       last_update;
     ucs_time_t       marker_time;
     uint64_t         posted_total;
@@ -71,9 +69,6 @@ struct ucp_rma_bw_estimator {
     uint64_t                   epoch;
     uint32_t                   generation;
     ucp_lane_index_t           num_lanes;
-    ucp_rma_bw_dir_t           dir;
-    unsigned                   accepted;
-    unsigned                   rejected[UCP_RMA_BW_REJECT_LAST];
     ucp_rma_bw_lane_estimate_t lanes[];
 };
 
