@@ -1,0 +1,19 @@
+#
+# UCP scatter-gather list (SGL) datatype tests
+#
+
+# host -> host
+sgl_put_lat_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -n 10000
+sgl_put_bw_HH    -t ucp_put_bw  -D sgl -m host,host -s 1024,1024,1024,1024 -n 10000
+
+# cuda -> cuda
+sgl_put_lat_DD   -t ucp_put_lat -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -n 10000
+sgl_put_bw_DD    -t ucp_put_bw  -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -n 10000
+
+# host -> cuda
+sgl_put_lat_HD   -t ucp_put_lat -D sgl -m host,cuda -s 1024,1024,1024,1024 -n 10000
+sgl_put_bw_HD    -t ucp_put_bw  -D sgl -m host,cuda -s 1024,1024,1024,1024 -n 10000
+
+# cuda -> host
+sgl_put_lat_DH   -t ucp_put_lat -D sgl -m cuda,host -s 1024,1024,1024,1024 -n 10000
+sgl_put_bw_DH    -t ucp_put_bw  -D sgl -m cuda,host -s 1024,1024,1024,1024 -n 10000
