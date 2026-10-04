@@ -218,4 +218,75 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h device_ep,
     return *status;
 }
 
+template<ucs_device_level_t level>
+static __global__ void
+uct_flush_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *mem_elem,
+                 uint64_t rva, uint64_t add, unsigned num_ops,
+                 ucs_status_t *status_p)
+{
+    if (is_op_enabled(level)) {
+        ucs_status_t status;
+        unsigned i;
+
+        for (i = 0; i < num_ops; i++) {
+            status = uct_device_ep_atomic_add<level>(ep, mem_elem, add, rva, 0,
+                                                     0, nullptr);
+            if (UCS_STATUS_IS_ERR(status)) {
+                *status_p = status;
+                return;
+            }
+        }
+
+        status = uct_device_ep_flush<level>(ep, UCT_DEVICE_FLAG_PUSH);
+        while (status == UCS_INPROGRESS) {
+            uct_device_ep_progress<level>(ep);
+            status = uct_device_ep_flush<level>(ep, 0);
+        }
+        *status_p = status;
+    }
+}
+
+ucs_status_t launch_uct_flush(uct_device_ep_h device_ep,
+                              const uct_device_mem_elem_t *mem_elem,
+                              uint64_t rva, uint64_t add, unsigned num_ops,
+                              ucs_device_level_t level, unsigned num_threads,
+                              unsigned num_blocks)
+{
+    device_result_ptr<ucs_status_t> status = UCS_ERR_NOT_IMPLEMENTED;
+    cudaError_t st;
+
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        uct_flush_kernel<UCS_DEVICE_LEVEL_THREAD>
+                <<<num_blocks, num_threads>>>(device_ep, mem_elem, rva, add,
+                                              num_ops, status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
+        uct_flush_kernel<UCS_DEVICE_LEVEL_WARP>
+                <<<num_blocks, num_threads>>>(device_ep, mem_elem, rva, add,
+                                              num_ops, status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_BLOCK:
+        uct_flush_kernel<UCS_DEVICE_LEVEL_BLOCK>
+                <<<num_blocks, num_threads>>>(device_ep, mem_elem, rva, add,
+                                              num_ops, status.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_GRID:
+        uct_flush_kernel<UCS_DEVICE_LEVEL_GRID>
+                <<<num_blocks, num_threads>>>(device_ep, mem_elem, rva, add,
+                                              num_ops, status.device_ptr());
+        break;
+    default:
+        throw std::runtime_error("Unsupported level");
+    }
+
+    st = cudaGetLastError();
+    if (st != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(st));
+    }
+
+    synchronize();
+    return *status;
+}
+
 } // namespace cuda_uct

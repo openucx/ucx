@@ -22,6 +22,10 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
                                uct_device_mem_elem_t *mem_elem, uint64_t rva,
                                uint64_t add);
 
+ucs_status_t launch_uct_flush(uct_device_ep_h ep,
+                              uct_device_mem_elem_t *mem_elem, uint64_t rva,
+                              uint64_t add, unsigned num_ops);
+
 }; // namespace ucx_cuda
 
 #endif

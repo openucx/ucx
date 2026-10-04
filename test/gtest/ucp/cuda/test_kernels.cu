@@ -130,21 +130,26 @@ ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
     device_request<level> req(shared_reqs);
 
     ucp_device_request_t *req_ptr = params.with_request ? req.ptr() : nullptr;
-    uint64_t flags                = params.with_no_delay ?
-                                                UCT_DEVICE_FLAG_NODELAY : 0;
+    uint64_t flags    = params.with_no_delay ? UCT_DEVICE_FLAG_NODELAY : 0;
+    size_t loop_iters = params.use_flush ? params.num_iters :
+                                           params.num_iters - 1;
 
-    for (size_t i = 0; i < params.num_iters - 1; i++) {
+    for (size_t i = 0; i < loop_iters; i++) {
         status = ucp_test_kernel_do_operation<level>(params, flags, req_ptr);
         if (status != UCS_OK) {
             return;
         }
     }
 
-    // Last iteration must use no-delay flag and request, to be able to wait
-    // properly for completion. Alternatively, we could add a device flush
-    // function to the API.
-    status = ucp_test_kernel_do_operation<level>(params, UCT_DEVICE_FLAG_NODELAY,
-                                                 req.ptr());
+    if (params.use_flush) {
+        status = ucp_device_flush<level>(params.remote_mem_list,
+                                         UCT_DEVICE_FLAG_PUSH);
+    } else {
+        // Last iteration must use no-delay flag, to force execution
+        status = ucp_test_kernel_do_operation<level>(params,
+                                                     UCT_DEVICE_FLAG_NODELAY,
+                                                     req.ptr());
+    }
 }
 
 template<ucs_device_level_t level>
