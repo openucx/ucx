@@ -585,44 +585,52 @@ protected:
         return UCS_OK;
     }
 
-    void purge_outstanding(purge_ctx *ctx)
+    void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
     {
         uct_ep_outstanding_purge_params_t purge_params = {};
-        uct_iface_attr_v2_t               tx_attr      = {};
-        uct_iface_attr_v2_t               rx_attr      = {};
-        uct_ep_attr_t                     ep_attr      = {};
+        /* Lives until purge returns. The params keep a pointer into it. */
+        std::vector<uint8_t> rx_token;
 
-        tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
-        ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
-
-        rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
-        ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
-
-        std::vector<uint8_t> tx_token(tx_attr.tx_token_length);
-        std::vector<uint8_t> rx_token(rx_attr.rx_token_length);
-
-        ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
-        ep_attr.tx_token   = tx_token.data();
-        ASSERT_UCS_OK(uct_ep_query(m_sender->ep(0), &ep_attr));
-
-        rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
-                             UCT_IFACE_ATTR_FIELD_RX_TOKEN;
-        rx_attr.tx_token   = tx_token.data();
-        rx_attr.rx_token   = rx_token.data();
-        ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
-
-        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
-                                  UCT_EP_OUTSTANDING_FIELD_CB |
+        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                                   UCT_EP_OUTSTANDING_FIELD_ARG;
-        purge_params.rx_token   = rx_token.data();
         purge_params.cb         = purge_cb;
         purge_params.arg        = ctx;
+
+        if (with_rx_token) {
+            uct_iface_attr_v2_t  tx_attr = {};
+            uct_iface_attr_v2_t  rx_attr = {};
+            uct_ep_attr_t        ep_attr = {};
+            std::vector<uint8_t> tx_token;
+
+            tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
+            ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
+
+            rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
+            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+
+            tx_token.resize(tx_attr.tx_token_length);
+            rx_token.resize(rx_attr.rx_token_length);
+
+            ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+            ep_attr.tx_token   = tx_token.data();
+            ASSERT_UCS_OK(uct_ep_query(m_sender->ep(0), &ep_attr));
+
+            rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                 UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+            rx_attr.tx_token   = tx_token.data();
+            rx_attr.rx_token   = rx_token.data();
+            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+
+            purge_params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
+            purge_params.rx_token    = rx_token.data();
+        }
+
         ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0),
                                                &purge_params));
     }
 
-    void test_purge_outstanding(const send_func_t &send_func,
-                                purge_ctx &ctx)
+    void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx,
+                                bool with_rx_token = true)
     {
         static constexpr uint32_t NUM_MSG_BEFORE_INVALIDATE = 2;
         uct_ep_invalidate_params_t invalidate_params = {};
@@ -651,7 +659,7 @@ protected:
 
         num_outstanding = ctx.comp.count;
         num_completions = ctx.num_completions;
-        purge_outstanding(&ctx);
+        purge_outstanding(&ctx, with_rx_token);
 
         EXPECT_GT(ctx.num_ops_purged, 0u);
         EXPECT_LE(ctx.num_ops_purged, num_posted);
@@ -668,6 +676,34 @@ protected:
         EXPECT_EQ(0, ctx.comp.count);
     }
 
+    void test_am_short(bool with_rx_token)
+    {
+        const uct_iface_attr_t &attr = m_sender->iface_attr();
+        const size_t size            = ucs_min((size_t)64,
+                                               attr.cap.am.max_short);
+        std::vector<uint8_t> payload(size);
+
+        mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
+
+        purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+        ctx.send_buf  = payload.data();
+        ctx.send_len  = payload.size();
+
+        ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
+                                               am_handler, NULL, 0));
+
+        send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
+            return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER,
+                                   ctx.send_buf, ctx.send_len);
+        };
+        test_purge_outstanding(am_short, ctx, with_rx_token);
+
+        EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
+        EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
+        EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
+                                      ctx.num_ops_posted_after_flush);
+    }
+
     entity   *m_sender;
     entity   *m_receiver;
     unsigned m_err_count = 0;
@@ -680,28 +716,13 @@ const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
-    const uct_iface_attr_t &attr = m_sender->iface_attr();
-    const size_t size            = ucs_min((size_t)64, attr.cap.am.max_short);
-    std::vector<uint8_t> payload(size);
-    mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
+    test_am_short(true);
+}
 
-    purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
-    ctx.send_buf  = payload.data();
-    ctx.send_len  = payload.size();
-
-    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
-                                           am_handler, NULL, 0));
-
-    send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
-        return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER, ctx.send_buf,
-                               ctx.send_len);
-    };
-    test_purge_outstanding(am_short, ctx);
-
-    EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
-    EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
-    EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
-                                  ctx.num_ops_posted_after_flush);
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short_no_rx_token,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_am_short(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_bcopy,
