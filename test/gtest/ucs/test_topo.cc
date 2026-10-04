@@ -308,6 +308,50 @@ UCS_TEST_F(test_topo, pci_id_invalid_sys_dev) {
     EXPECT_EQ(UCS_SYS_PCI_ID_VALUE_UNDEFINED, pci_id.device);
 }
 
+UCS_TEST_F(test_topo, device_flags) {
+    const unsigned num_devices = ucs_topo_num_devices();
+    ucs_sys_device_t sys_dev, other_sys_dev;
+    ucs_sys_bus_id_t bus_id;
+
+    bus_id.domain   = 0xf1a6;
+    bus_id.bus      = 0x01;
+    bus_id.slot     = 0x1f;
+    bus_id.function = 0;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev));
+    bus_id.function = 1;
+    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id, &other_sys_dev));
+
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(sys_dev));
+
+    ASSERT_UCS_OK(
+            ucs_topo_sys_device_add_flags(sys_dev, UCS_TOPO_DEVICE_FLAG_DPU));
+    EXPECT_EQ(static_cast<unsigned>(UCS_TOPO_DEVICE_FLAG_DPU),
+              ucs_topo_sys_device_get_flags(sys_dev));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(other_sys_dev));
+
+    /* Adding no flags keeps the existing ones */
+    ASSERT_UCS_OK(ucs_topo_sys_device_add_flags(sys_dev, 0));
+    EXPECT_EQ(static_cast<unsigned>(UCS_TOPO_DEVICE_FLAG_DPU),
+              ucs_topo_sys_device_get_flags(sys_dev));
+
+    ASSERT_LT(num_devices + 2, UCS_SYS_DEVICE_ID_UNKNOWN);
+    const auto invalid_sys_dev = static_cast<ucs_sys_device_t>(num_devices + 2);
+
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(UCS_SYS_DEVICE_ID_UNKNOWN));
+    EXPECT_EQ(0u, ucs_topo_sys_device_get_flags(invalid_sys_dev));
+
+    {
+        const scoped_log_handler slh(hide_errors_logger);
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_add_flags(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                UCS_TOPO_DEVICE_FLAG_DPU));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_topo_sys_device_add_flags(invalid_sys_dev,
+                                                UCS_TOPO_DEVICE_FLAG_DPU));
+    }
+}
+
 UCS_TEST_F(test_topo, find_device_by_bus_id_and_user_value) {
     static const uintptr_t user_value1 = 17;
     static const uintptr_t user_value2 = 42;

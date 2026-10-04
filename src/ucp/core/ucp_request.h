@@ -70,13 +70,21 @@ enum {
     UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
     UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
-    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED  = UCS_BIT(30),
-    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED = UCS_BIT(31)
+    UCP_REQUEST_FLAG_RMA_BW_SAMPLE         = UCS_BIT(30),
+    UCP_REQUEST_FLAG_RNDV_MTYPE_FC         = UCS_BIT(31)
 };
 
-#define UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK \
-    (UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED | \
-     UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED)
+
+/**
+ * State of a rndv mtype request throttled by the fragment flow control.
+ * Valid only while UCP_REQUEST_FLAG_RNDV_MTYPE_FC is set.
+ */
+enum {
+    /* Waiting in the worker-level pending queue */
+    UCP_REQUEST_RNDV_MTYPE_FC_QUEUED,
+    /* Dequeued, a retry is scheduled from the progress loop */
+    UCP_REQUEST_RNDV_MTYPE_FC_RESCHED
+};
 
 
 /**
@@ -256,10 +264,14 @@ struct ucp_request {
                     uint64_t   remote_addr; /* Remote address */
                     ucp_rkey_h rkey; /* Remote memory key */
 
-                    struct {
-                        const uint64_t   *remote_addrs;
-                        ucp_rkey_h const *rkeys;
-                    } sgl;
+                    union {
+                        struct {
+                            const uint64_t   *remote_addrs;
+                            ucp_rkey_h const *rkeys;
+                        } sgl;
+                        /* Used only by sampled contiguous PUT/GET zcopy */
+                        ucp_rma_bw_sample_t *bw_sample;
+                    };
                 } rma;
 
                 struct {
@@ -350,6 +362,8 @@ struct ucp_request {
                                 struct {
                                     /* Element in worker-level pending queue */
                                     ucs_queue_elem_t queue_elem;
+                                    /* UCP_REQUEST_RNDV_MTYPE_FC_* state */
+                                    uint8_t          state;
                                 } fc;
 
                                 /* Used by rndv/rkey_ptr */

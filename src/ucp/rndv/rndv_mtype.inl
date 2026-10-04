@@ -69,11 +69,10 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_worker_h worker)
         pending_req = ucs_queue_pull_elem_non_empty(
                 &worker->rndv_mtype_fc.pending_q[q_index], ucp_request_t,
                 send.rndv.fc.queue_elem);
-        ucs_assert((pending_req->flags &
-                    UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK) ==
-                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED);
-        pending_req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
-        pending_req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED;
+        ucs_assert(pending_req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
+        ucs_assert(pending_req->send.rndv.fc.state ==
+                   UCP_REQUEST_RNDV_MTYPE_FC_QUEUED);
+        pending_req->send.rndv.fc.state = UCP_REQUEST_RNDV_MTYPE_FC_RESCHED;
         ucp_trace_req(pending_req, "mtype_fc: dequeue %s",
                       (q_index == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get");
         ucs_callbackq_add_oneshot(&worker->uct->progress_q, pending_req->send.ep,
@@ -95,11 +94,13 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     ucp_worker_h worker = ep->worker;
     /* A rescheduled request owns the wakeup of a fragment which was released
      * back to the mpool, and must pass it on if it does not consume one. */
-    int owns_wakeup     = !!(req->flags &
-                             UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
+    int owns_wakeup     = (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC) &&
+                          (req->send.rndv.fc.state ==
+                           UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
     ucs_status_t status;
 
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED));
+    /* A queued request is retried only after being rescheduled */
+    ucs_assert(owns_wakeup || !(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC));
     if (owns_wakeup) {
         ucp_proto_rndv_mtype_fc_leave(req);
     }
@@ -126,10 +127,11 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                   ucs_memory_type_names[frag_mem_type],
                   frag_sys_dev);
     UCP_WORKER_STAT_RNDV(worker, MTYPE_FC_THROTTLED, 1);
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK));
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC));
     /* The EP list link aliases send.state fields used once initialized */
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
-    req->flags |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED;
+    req->flags            |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC;
+    req->send.rndv.fc.state = UCP_REQUEST_RNDV_MTYPE_FC_QUEUED;
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                    &req->send.rndv.fc.queue_elem);
     ucs_hlist_add_tail(&ep->ext->rndv_mtype_fc_reqs,
@@ -262,17 +264,21 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
     int owns_wakeup;
 
     ucs_assert(fc_op < UCP_WORKER_RNDV_FC_OP_LAST);
-    ucs_assert(!ucs_test_all_flags(req->flags,
-                                   UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK));
 
-    if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_QUEUED) {
+    if (!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC)) {
+        return;
+    }
+
+    if (req->send.rndv.fc.state == UCP_REQUEST_RNDV_MTYPE_FC_QUEUED) {
         ucp_trace_req(req, "mtype_fc: remove aborted request from queue");
         /* O(n) for a single request; endpoint purge and reconfiguration
          * dequeue all requests of the endpoint in one pass instead */
         ucs_queue_remove(&worker->rndv_mtype_fc.pending_q[fc_op],
                          &req->send.rndv.fc.queue_elem);
         owns_wakeup = 0;
-    } else if (req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED) {
+    } else {
+        ucs_assert(req->send.rndv.fc.state ==
+                   UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
         ucp_trace_req(req, "mtype_fc: remove aborted reschedule callback");
         /* No-op if the callback was already dispatched and the retry is in
          * progress. */
@@ -280,8 +286,6 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
                                      ucp_proto_rndv_mtype_fc_reschedule_pred,
                                      req);
         owns_wakeup = 1;
-    } else {
-        return;
     }
 
     ucp_proto_rndv_mtype_fc_leave(req);

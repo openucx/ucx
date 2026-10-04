@@ -7,6 +7,8 @@
 #ifndef UCP_GPU_NIC_ASSIGNMENT_H_
 #define UCP_GPU_NIC_ASSIGNMENT_H_
 
+#include "ucp_types.h"
+
 #include <ucs/datastruct/static_bitmap.h>
 #include <ucs/sys/topo/base/topo_groups.h>
 
@@ -19,51 +21,26 @@ BEGIN_C_DECLS
 #define UCP_GPU_NIC_BITMAP_INDEX_INVALID UCS_SYS_DEVICE_ID_COUNT
 
 
-typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
-        ucp_gpu_nic_sys_dev_bitmap_t;
-
-
-typedef struct {
+struct ucp_gpu_nic_assignment {
     /* NIC sys_dev bitmaps referenced by bitmap_idx_by_gpu_sys_dev. */
-    ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmaps;
+    ucs_sys_device_bitmap_t      *nic_sys_dev_bitmaps;
 
     /* Number of entries in nic_sys_dev_bitmaps. */
     size_t                       num_bitmaps;
 
     /* Maps each GPU sys_dev to a nic_sys_dev_bitmaps index, or INVALID. */
     uint8_t bitmap_idx_by_gpu_sys_dev[UCS_SYS_DEVICE_ID_COUNT];
-} ucp_gpu_nic_assignment_t;
-
-
-typedef enum {
-    /**
-     * Assign each NIC, with all of its ports, going forward and then backward
-     * across the GPUs.
-     * The group's NICs are assigned to the following GPU indices in order:
-     * 0, 1, ..., num_gpus-1, num_gpus-1, ..., 1, 0, 0, 1, ...
-     */
-    UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-
-    /**
-     * Assign each NIC, with all of its ports, to GPUs repeatedly in ascending
-     * order.
-     * The group's NICs are assigned to the following GPU indices in order:
-     * 0, 1, ..., num_gpus-1, 0, 1, ..., num_gpus-1, 0, 1, ...
-     */
-    UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-
-    UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST
-} ucp_gpu_nic_assignment_policy_t;
+};
 
 
 /**
  * Build GPU-to-NIC assignments from topology groups.
  *
- * @note The groups must be disjoint: each sys_dev may appear in at most one 
+ * @note The groups must be disjoint: each sys_dev may appear in at most one
  *       topology group.
  *
  * @param [in]  groups        Topology groups to build assignments from.
- * @param [in]  policy        Assignment policy.
+ * @param [in]  mode          Assignment mode: flip, round-robin or shared.
  * @param [out] assignment_p  Completed assignment. Updated only on success.
  *
  * @return UCS_OK on success, or an error status if assignment construction
@@ -71,7 +48,7 @@ typedef enum {
  */
 ucs_status_t
 ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
-                             ucp_gpu_nic_assignment_policy_t policy,
+                             ucp_gpu_nic_assignment_mode_t mode,
                              ucp_gpu_nic_assignment_t *assignment_p);
 
 
@@ -85,7 +62,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
  *         has no assigned NICs. Returns NULL if @a gpu_sys_dev is unknown or
  *         is not represented in the assignment.
  */
-const ucp_gpu_nic_sys_dev_bitmap_t *
+const ucs_sys_device_bitmap_t *
 ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
                               ucs_sys_device_t gpu_sys_dev);
 
@@ -99,7 +76,7 @@ ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
  * @return Nonzero if @a net_sys_dev is present in @a bitmap, or zero if the
  *         system device is unknown or the bit is not set.
  */
-int ucp_gpu_nic_bitmap_get(const ucp_gpu_nic_sys_dev_bitmap_t *bitmap,
+int ucp_gpu_nic_bitmap_get(const ucs_sys_device_bitmap_t *bitmap,
                            ucs_sys_device_t net_sys_dev);
 
 

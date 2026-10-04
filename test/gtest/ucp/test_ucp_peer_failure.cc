@@ -786,13 +786,14 @@ protected:
     static void setup_progress_mock(ucp_worker_h worker, ucs::mock &mock)
     {
         ucp_ep_config_t *ep_config;
+        ucp_rkey_config_t **rkey_config_p;
+
         ucs_array_for_each(ep_config, &worker->ep_config) {
             setup_progress_mock(ep_config->proto_select, mock);
         }
 
-        ucp_rkey_config_t *rkey_config;
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            setup_progress_mock(rkey_config->proto_select, mock);
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            setup_progress_mock((*rkey_config_p)->proto_select, mock);
         }
     }
 

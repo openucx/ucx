@@ -33,6 +33,13 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
 };
 
+static const char *uct_ib_mlx5_bf_copy_modes[] = {
+    [UCT_IB_MLX5_BF_COPY_MODE_AUTO]    = "auto",
+    [UCT_IB_MLX5_BF_COPY_MODE_GENERIC] = "generic",
+    [UCT_IB_MLX5_BF_COPY_MODE_ST64B]   = "st64b",
+    [UCT_IB_MLX5_BF_COPY_MODE_LAST]    = NULL
+};
+
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
 #if HAVE_IBV_DM
     {"DM_SIZE", "2k",
@@ -54,6 +61,15 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      " auto       - Select best according to worker thread mode.",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
+
+    {"BF_COPY_MODE", "auto",
+     "How to copy WQE building blocks to BlueFlame MMIO register. One of "
+     "the following:\n"
+     " auto    - Select best according to runtime CPU capabilities.\n"
+     " generic - Use portable scalar stores.\n"
+     " st64b   - Use AArch64 ST64B store, fail if LS64 is not supported.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, bf_copy_mode),
+     UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_bf_copy_modes)},
 
     {"AR_ENABLE", "auto",
      "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
@@ -377,7 +393,7 @@ err:
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
-    struct ibv_ah      *ah;
+    uct_ib_ah_entry_t  *ah_entry;
     uct_ib_address_t   *ib_addr;
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
@@ -399,13 +415,14 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     }
 
     ah_attr.is_global = iface->config.force_global_addr;
-    status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
+    status = uct_ib_iface_ah_get(iface, &ah_attr, "compact AV check",
+                                 &ah_entry);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_ib_mlx5_get_av(ah, &mlx5_av);
-    uct_ib_iface_release_ah(iface, ah);
+    uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+    uct_ib_iface_ah_put(iface, ah_entry);
 
     /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
      * the device supports compact address vector. */
@@ -782,8 +799,46 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
+                              uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
+{
+    ucs_assert(bf_copy_mode < UCT_IB_MLX5_BF_COPY_MODE_LAST);
+
+#if UCT_IB_MLX5_HAVE_ST64B
+    txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_GENERIC) {
+        return UCS_OK;
+    }
+
+    if (ucs_cpu_has_flag(UCS_CPU_FLAG_LS64)) {
+        txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_ST64B;
+        return UCS_OK;
+    }
+
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
+                  "not report LS64 support");
+        return UCS_ERR_UNSUPPORTED;
+    }
+#else
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+#if defined(__aarch64__)
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
+                  "without assembler support for ST64B");
+#else
+        ucs_error("mlx5 BlueFlame ST64B copy is supported only on AArch64");
+#endif
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                                   uct_ib_mlx5_bf_copy_mode_t bf_copy_mode,
                                    uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
@@ -813,6 +868,11 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     status = uct_ib_mlx5_get_mmio_mode(worker, cfg_mmio_mode,
                                        txwq->super.verbs.rd->td == NULL,
                                        qp_info.dv.bf.size, &mmio_mode);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_txwq_init_bf_copy(txwq, bf_copy_mode);
     if (status != UCS_OK) {
         return status;
     }

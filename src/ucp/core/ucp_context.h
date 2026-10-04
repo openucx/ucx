@@ -191,6 +191,8 @@ typedef struct ucp_context_config {
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
+    /** Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints */
+    ucp_failover_mode_t                    failover_mode;
     /** Time period between dynamic transport switching rounds */
     ucs_time_t                             dynamic_tl_switch_interval;
     /** Number of usage tracker rounds performed for each progress operation */
@@ -230,6 +232,8 @@ typedef struct ucp_context_config {
     int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
+    /** Sample completed multi-rail RMA zcopy operations */
+    int                                    rma_bw_measure;
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */
@@ -257,6 +261,8 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** GPU-to-NIC assignment mode */
+    ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
@@ -449,6 +455,9 @@ typedef struct ucp_context {
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
+
+    /* GPU-to-NIC assignment, set to NULL when not in use */
+    ucp_gpu_nic_assignment_t      *gpu_nic_assignment;
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;

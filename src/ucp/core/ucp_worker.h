@@ -268,6 +268,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
 struct ucp_worker_iface {
     uct_iface_h                   iface;         /* UCT interface */
     uct_iface_attr_t              attr;          /* UCT interface attributes */
+    uct_iface_attr_v2_t           attr_v2;       /* UCT interface v2 attributes */
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
@@ -299,7 +300,7 @@ UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
 /* rkey configuration storage */
-UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t*);
 
 
 /**
@@ -327,6 +328,8 @@ typedef struct ucp_worker {
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
+    ucp_rma_bw_sample_t              *rma_bw_samples;     /* Sample pool */
+    ucs_time_t                       rma_bw_next_sample; /* Next sample admission */
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;

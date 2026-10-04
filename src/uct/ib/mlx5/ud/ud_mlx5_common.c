@@ -40,7 +40,7 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
                          struct mlx5_grh_av *grh_av, int *is_global)
 {
     ucs_status_t        status;
-    struct ibv_ah      *ah;
+    uct_ib_ah_entry_t  *ah_entry;
     struct mlx5_wqe_av  mlx5_av;
     struct ibv_ah_attr  ah_attr;
     enum ibv_mtu        path_mtu;
@@ -51,14 +51,14 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
         return status;
     }
 
-    status = uct_ib_iface_create_ah(iface, &ah_attr, usage, &ah);
+    status = uct_ib_iface_ah_get(iface, &ah_attr, usage, &ah_entry);
     if (status != UCS_OK) {
         return status;
     }
     *is_global = ah_attr.is_global;
 
-    uct_ib_mlx5_get_av(ah, &mlx5_av);
-    uct_ib_iface_release_ah(iface, ah);
+    uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+    uct_ib_iface_ah_put(iface, ah_entry);
 
     base_av->stat_rate_sl = mlx5_av_base(&mlx5_av)->stat_rate_sl;
     base_av->fl_mlid      = mlx5_av_base(&mlx5_av)->fl_mlid;

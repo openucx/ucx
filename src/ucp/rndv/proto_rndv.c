@@ -20,18 +20,18 @@ void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
 
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK);
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
     ucs_hlist_del(&ep->ext->rndv_mtype_fc_reqs,
                   &req->send.state.rndv_fc_ep_list);
-    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK;
+    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC;
 }
 
 unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 {
     ucp_request_t *req = arg;
 
-    ucs_assert((req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC_STATE_MASK) ==
-               UCP_REQUEST_FLAG_RNDV_MTYPE_FC_RESCHED);
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
+    ucs_assert(req->send.rndv.fc.state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
     /* Keep the request in RESCHED state, so that if it is aborted before
      * ucp_proto_rndv_mtype_request_init() retries the allocation, the wakeup
      * is passed to the next waiter rather than dropped. */
@@ -391,7 +391,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     ucs_trace("rndv select remote protocols rkey_config->md_map=0x%" PRIx64,
               rkey_config_key.md_map);
 
-    rkey_config   = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+    rkey_config   = ucp_worker_rkey_config(worker, rkey_cfg_index);
     *remote_proto = ucp_proto_select_lookup_slow(worker,
                                                  &rkey_config->proto_select, 1,
                                                  ep_cfg_index, rkey_cfg_index,
