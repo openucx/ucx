@@ -1564,6 +1564,14 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     wiface->port_speed = ucp_worker_iface_port_speed(wiface);
 
+    if ((wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_EP) &&
+        (wiface->attr.ctl_device < UCP_MAX_SYS_DEVICES)) {
+        UCP_THREAD_CS_ENTER(&context->mt_lock);
+        context->device_md_map[wiface->attr.ctl_device] |=
+                UCS_BIT(resource->md_index);
+        UCP_THREAD_CS_EXIT(&context->mt_lock);
+    }
+
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
               tl_id, wiface->iface, UCT_TL_RESOURCE_DESC_ARG(&resource->tl_rsc),
               worker);

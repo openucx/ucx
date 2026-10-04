@@ -431,6 +431,10 @@ typedef struct ucp_context {
     /* Map of MDs that support dmabuf registration */
     ucp_md_map_t                  dmabuf_reg_md_map;
 
+    /* Map of memory domains which have device-capable interfaces controlled
+     * by each system device (GPU), filled when worker interfaces are opened */
+    ucp_md_map_t                  device_md_map[UCP_MAX_SYS_DEVICES];
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */

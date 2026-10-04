@@ -1465,4 +1465,47 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
     mem_buffer::set_device(orig_dev);
 }
 
+/* Device transports reach GPU memory only through the memory domains of the
+ * interfaces controlled by that GPU, so a registration limit must not drop
+ * them. */
+UCS_TEST_P(test_ucp_mmap_max_hca, limit_keeps_device_mds)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA is not supported");
+    }
+
+    modify_config("MAX_HCA_PER_GPU", "1");
+    entity *e         = create_entity();
+    ucp_context_h ctx = e->ucph();
+
+    const size_t size = 4096;
+    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = ptr;
+    params.length     = size;
+
+    ucp_mem_h memh;
+    ASSERT_UCS_OK(ucp_mem_map(ctx, &params, &memh));
+
+    ucp_md_map_t device_md_map = 0;
+    if (memh->sys_dev < UCP_MAX_SYS_DEVICES) {
+        device_md_map = ctx->device_md_map[memh->sys_dev];
+    }
+    ucp_md_map_t registered = memh->md_map & device_md_map;
+
+    ASSERT_UCS_OK(ucp_mem_unmap(ctx, memh));
+    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+
+    if (device_md_map == 0) {
+        UCS_TEST_SKIP_R("no device transport interfaces for the buffer GPU");
+    }
+
+    EXPECT_EQ(device_md_map, registered)
+            << "device MDs 0x" << std::hex << device_md_map
+            << " registered 0x" << registered;
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")

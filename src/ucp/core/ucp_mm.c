@@ -897,6 +897,13 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
     selected      = ucp_context_select_reg_mds(context, policy_md_map,
                                                memh->sys_dev);
 
+    /* Device transports reach the memory only through the memory domains of
+     * the interfaces controlled by its GPU, so keep those regardless of their
+     * distance ranking */
+    if (memh->sys_dev < UCP_MAX_SYS_DEVICES) {
+        selected |= policy_md_map & context->device_md_map[memh->sys_dev];
+    }
+
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
         UCS_STRING_BUFFER_ONSTACK(strb, 256);
         ucs_for_each_bit(md_index, selected) {
