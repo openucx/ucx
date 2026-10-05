@@ -905,7 +905,7 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     }
 
     ep->ext->unflushed_lanes = 0;
-    ep->ext->fenced_lanes    = 0;
+    ep->ext->fenced_lane     = UCP_NULL_LANE;
     ep->ext->fence_seq       = ep->worker->fence_seq;
     return UCS_OK;
 }

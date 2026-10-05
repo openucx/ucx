@@ -174,8 +174,8 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
     tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
 
     if (ucs_unlikely(ucp_ep_rma_is_fence_required(ep) ||
-                     (ep->ext->fenced_lanes &
-                      ~UCS_BIT(rkey_config->put_short.lane)))) {
+                     ucp_ep_rma_is_strong_fence_required(
+                             ep, UCS_BIT(rkey_config->put_short.lane)))) {
         /* TODO: check support for fence in fast path short */
         return UCS_ERR_NO_RESOURCE;
     }
