@@ -523,7 +523,6 @@ enum {
  * lane may already hold those ids and an RX token. */
 typedef struct ucp_ep_lane_tf {
     uct_ep_h               uct_ep;
-    ucp_rsc_index_t        rsc_index;
     void                   *tx_token;
     void                   *rx_token;
     ucp_worker_cfg_index_t deactivate_cfg_index;

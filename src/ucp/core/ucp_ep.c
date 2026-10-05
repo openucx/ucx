@@ -2550,22 +2550,6 @@ static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
     }
 }
 
-static ucp_worker_iface_t *
-ucp_ep_tf_lane_wiface(ucp_ep_h ep, ucp_lane_index_t lane)
-{
-    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
-    ucp_rsc_index_t rsc_index;
-
-    if ((tf != NULL) && (tf->state == UCP_EP_TF_LANE_HELD) &&
-        (tf->rsc_index != UCP_NULL_RESOURCE)) {
-        rsc_index = tf->rsc_index;
-    } else {
-        rsc_index = ucp_ep_get_rsc_index(ep, lane);
-    }
-
-    return ucp_worker_iface(ep->worker, rsc_index);
-}
-
 static int ucp_ep_tf_exchange_open(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
@@ -2685,8 +2669,7 @@ ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
             continue;
         }
 
-        tf->state     = UCP_EP_TF_LANE_INVALIDATED;
-        tf->rsc_index = ucp_ep_get_rsc_index(ep, lane);
+        tf->state = UCP_EP_TF_LANE_INVALIDATED;
         ucp_ep_tf_note_ids(tf, request_id, peer_id);
         invalidated |= UCS_BIT(lane);
         ucs_debug("ep %p: invalidated lane %d uct_ep %p", ep, lane, uct_ep);
@@ -2729,7 +2712,7 @@ ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    wiface = ucp_ep_tf_lane_wiface(ep, lane);
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
     if ((tx_token == NULL) || (tx_len == 0) || (wiface == NULL) ||
         !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) ||
         !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||
@@ -2781,7 +2764,7 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
         return;
     }
 
-    wiface = ucp_ep_tf_lane_wiface(ep, lane);
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
     if ((wiface == NULL) ||
         !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||
         (wiface->attr_v2.rx_token_length != len)) {
@@ -2810,7 +2793,6 @@ static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
     ucs_queue_head_init(&arg->tf_pending_q);
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         arg->tf[lane].deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-        arg->tf[lane].rsc_index            = UCP_NULL_RESOURCE;
         arg->tf[lane].state                = UCP_EP_TF_LANE_EMPTY;
     }
 }
@@ -2829,7 +2811,6 @@ static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
 {
     tf->uct_ep     = NULL;
     tf->state      = UCP_EP_TF_LANE_EMPTY;
-    tf->rsc_index  = UCP_NULL_RESOURCE;
     tf->request_id = 0;
     tf->peer_id    = 0;
     ucp_ep_tf_free_tokens(tf);
@@ -3036,11 +3017,10 @@ ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     ucs_assert((tf->state == UCP_EP_TF_LANE_EMPTY) ||
                (tf->state == UCP_EP_TF_LANE_INVALIDATED));
 
-    tf->uct_ep    = uct_ep;
-    tf->rsc_index = ucp_ep_get_rsc_index(ep, lane);
-    tf->tx_token  = buf;
-    tf->tx_len    = (uint8_t)tx_len;
-    tf->state     = UCP_EP_TF_LANE_HELD;
+    tf->uct_ep   = uct_ep;
+    tf->tx_token = buf;
+    tf->tx_len   = (uint8_t)tx_len;
+    tf->state    = UCP_EP_TF_LANE_HELD;
     ucs_debug("ep %p: hold lane %d uct_ep %p tx_token_len %zu", ep, lane,
               uct_ep, tx_len);
     return UCS_OK;
@@ -3063,7 +3043,6 @@ static ucs_status_t ucp_ep_tf_detach(ucp_ep_h ep, ucp_lane_index_t lane)
          * Leave the UCT ep on the lane for software discard. */
         tf->uct_ep     = NULL;
         tf->state      = UCP_EP_TF_LANE_EMPTY;
-        tf->rsc_index  = UCP_NULL_RESOURCE;
         tf->request_id = 0;
         tf->peer_id    = 0;
         ucp_ep_tf_free_tokens(tf);
