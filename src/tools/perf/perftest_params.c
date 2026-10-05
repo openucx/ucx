@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -21,6 +21,7 @@ const struct option TEST_PARAMS_ARGS_LONG[] =
 {
     {"daemon-local",  required_argument, 0, 'g'},
     {"daemon-remote", required_argument, 0, 'G'},
+    {"device-api",    no_argument,       0, 'a'},
     {0, 0, 0, 0}
 };
 
@@ -72,10 +73,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
                api_names[test->api], test->desc);
     }
     printf("\n");
-    printf("     -a <send-device-type[:dev-id]>[,<recv-device-type[:dev-id]>]\n");
-    printf("                    Accelerator device type and device id to use for running the test.\n");
-    printf("                    device id is optional, it corresponds to the index of\n");
-    printf("                    the device in the list of available devices\n");
+    printf("     -a, --device-api\n");
+    printf("                    run the test from the accelerator selected by -m,\n");
+    printf("                    using the device API\n");
     printf("     -L <level>     device cooperation level for gdaki (thread)\n");
     printf("                    thread - thread level\n");
     printf("                    warp   - warp level\n");
@@ -93,9 +93,12 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
     printf("                    compact form example: \"-s 1024:16 expands to [1024, ..., 1024] with 16 elements\n");
-    printf("     -m <send memory>[,<recv memory>]\n");
+    printf("     -m <send memory>[:<dev-id>][,<recv memory>[:<dev-id>]]\n");
     printf("                    memory allocator for sender and receiver "
            "(host)\n");
+    printf("                    dev id is optional, it corresponds to the index of\n");
+    printf("                    the device in the list of available devices\n");
+    printf("                    and is supported only by accelerator allocators\n");
     print_memory_allocator_usage();
     printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
@@ -224,150 +227,88 @@ static ucs_status_t parse_int(const char *opt_arg, int *value, const char *desc,
     return UCS_OK;
 }
 
-static ucs_status_t parse_mem_type(const char *opt_arg,
-                                   ucs_memory_type_t *mem_type)
-{
-    ucs_memory_type_t it;
-
-    if (opt_arg == NULL) {
-        ucs_error("memory type string is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    ucs_memory_type_for_each(it) {
-        if (!strcmp(opt_arg, ucs_memory_type_names[it])) {
-            *mem_type = it;
-            return UCS_OK;
-        }
-    }
-
-    ucs_error("unsupported memory type: \"%s\"", opt_arg);
-    return UCS_ERR_INVALID_PARAM;
-}
-
-static ucs_status_t parse_perf_mem_allocator(const char *opt_arg,
+static ucs_status_t parse_perf_mem_allocator(char *opt_arg,
                                              ucs_memory_type_t *mem_type,
-                                             char *alloc_name)
-{
-    const ucx_perf_allocator_t *allocator;
-
-    if (opt_arg == NULL) {
-        ucs_error("memory allocator string is NULL");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (strlen(opt_arg) >= UCX_PERF_ALLOC_NAME_MAX) {
-        ucs_error("memory allocator name is too long: \"%s\"", opt_arg);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    allocator = ucx_perf_allocator_by_name(opt_arg);
-    if (allocator != NULL) {
-        *mem_type = allocator->resolve_mem_type(allocator);
-        ucs_strncpy_safe(alloc_name, opt_arg, UCX_PERF_ALLOC_NAME_MAX);
-        return UCS_OK;
-    }
-
-    ucs_error("unsupported memory allocator: \"%s\"", opt_arg);
-    return UCS_ERR_INVALID_PARAM;
-}
-
-static ucs_status_t
-parse_accel_device(char *opt_arg, ucx_perf_accel_dev_t *dev)
+                                             char *alloc_name, int *device_id)
 {
     const char *delim = ":";
-    char *saveptr = NULL;
-    char *token;
+    char *saveptr     = NULL;
+    const ucx_perf_allocator_t *allocator;
+    ucs_memory_type_t resolved_mem_type;
+    int parsed_device_id;
     ucs_status_t status;
-    ucs_memory_type_t mem_type;
-    int device_id;
+    char *token;
 
-    if (opt_arg == NULL) {
-        ucs_error("mem type param is NULL");
+    token = (opt_arg == NULL) ? NULL : strtok_r(opt_arg, delim, &saveptr);
+    if (token == NULL) {
+        ucs_error("memory allocator string is empty");
         return UCS_ERR_INVALID_PARAM;
     }
 
-    token  = strtok_r(opt_arg, delim, &saveptr);
-    status = parse_mem_type(token, &mem_type);
-    if (status != UCS_OK) {
-        return status;
+    if (strlen(token) >= UCX_PERF_ALLOC_NAME_MAX) {
+        ucs_error("memory allocator name is too long: \"%s\"", token);
+        return UCS_ERR_INVALID_PARAM;
     }
 
+    allocator = ucx_perf_allocator_by_name(token);
+    if (allocator == NULL) {
+        ucs_error("unsupported memory allocator: \"%s\"", token);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    resolved_mem_type = allocator->resolve_mem_type(allocator);
+
     token = strtok_r(NULL, delim, &saveptr);
-    if (NULL == token) {
-        device_id = UCX_PERF_MEM_DEV_DEFAULT;
+    if (token == NULL) {
+        parsed_device_id = UCX_PERF_MEM_DEV_DEFAULT;
     } else {
-        status = parse_int(token, &device_id, "device id", 0, INT_MAX);
+        if (!(allocator->flags & UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID)) {
+            ucs_error("device id is not supported for memory allocator \"%s\"",
+                      allocator->name);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        status = parse_int(token, &parsed_device_id, "device id", 0, INT_MAX);
         if (status != UCS_OK) {
             return status;
         }
     }
 
-    dev->mem_type  = mem_type;
-    dev->device_id = device_id;
+    *mem_type = resolved_mem_type;
+    ucs_strncpy_safe(alloc_name, allocator->name, UCX_PERF_ALLOC_NAME_MAX);
+    *device_id = parsed_device_id;
     return UCS_OK;
 }
 
-static ucs_status_t parse_mem_type_params(const char *opt_arg,
-                                          ucs_memory_type_t *send_mem_type,
-                                          ucs_memory_type_t *recv_mem_type,
-                                          char *send_alloc_name,
-                                          char *recv_alloc_name)
+static ucs_status_t
+parse_mem_type_params(const char *opt_arg, ucx_perf_params_t *params)
 {
     const char *delim = ",";
     char *token       = strtok((char*)opt_arg, delim);
     ucs_status_t status;
 
-    status = parse_perf_mem_allocator(token, send_mem_type, send_alloc_name);
+    status = parse_perf_mem_allocator(token, &params->send_mem_type,
+                                      params->send_mem_alloc_name,
+                                      &params->send_device_id);
     if (status != UCS_OK) {
         return status;
     }
 
     token = strtok(NULL, delim);
-    if (NULL == token) {
-        *recv_mem_type = *send_mem_type;
-        ucs_strncpy_safe(recv_alloc_name, send_alloc_name,
+    if (token == NULL) {
+        params->recv_mem_type = params->send_mem_type;
+        ucs_strncpy_safe(params->recv_mem_alloc_name,
+                         params->send_mem_alloc_name,
                          UCX_PERF_ALLOC_NAME_MAX);
-        return UCS_OK;
-    } else {
-        return parse_perf_mem_allocator(token, recv_mem_type, recv_alloc_name);
-    }
-}
-
-static ucs_status_t parse_accel_device_params(const char *opt_arg,
-                                              ucx_perf_accel_dev_t *send_device,
-                                              ucx_perf_accel_dev_t *recv_device)
-{
-    const char *delim = ",";
-    char *saveptr = NULL;
-    char *token, *arg;
-    ucs_status_t status;
-
-    arg = ucs_alloca(strlen(opt_arg) + 1);
-    strcpy(arg, opt_arg);
-    token  = strtok_r(arg, delim, &saveptr);
-    status = parse_accel_device(token, send_device);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    token = strtok_r(NULL, delim, &saveptr);
-    if (NULL == token) {
-        *recv_device = *send_device;
+        params->recv_device_id = params->send_device_id;
         return UCS_OK;
     }
 
-    status = parse_accel_device(token, recv_device);
+    status = parse_perf_mem_allocator(token, &params->recv_mem_type,
+                                      params->recv_mem_alloc_name,
+                                      &params->recv_device_id);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (send_device->mem_type == recv_device->mem_type) {
-        if (send_device->device_id == UCX_PERF_MEM_DEV_DEFAULT) {
-            send_device->device_id = recv_device->device_id;
-        } else if (recv_device->device_id == UCX_PERF_MEM_DEV_DEFAULT) {
-            recv_device->device_id = send_device->device_id;
-        }
     }
 
     return UCS_OK;
@@ -818,13 +759,10 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
             return UCS_ERR_INVALID_PARAM;
         }
     case 'm':
-        return parse_mem_type_params(opt_arg, &params->super.send_mem_type,
-                                     &params->super.recv_mem_type,
-                                     params->super.send_mem_alloc_name,
-                                     params->super.recv_mem_alloc_name);
+        return parse_mem_type_params(opt_arg, &params->super);
     case 'a':
-        return parse_accel_device_params(opt_arg, &params->super.send_device,
-                                         &params->super.recv_device);
+        params->super.flags |= UCX_PERF_TEST_FLAG_DEVICE;
+        return UCS_OK;
     case 'L':
         return parse_device_level(opt_arg, &params->super.device_level);
     case 'F':
@@ -847,9 +785,22 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     }
 }
 
+static ucs_status_t
+validate_device_mem_type(ucs_memory_type_t mem_type, const char *error_prefix)
+{
+    if (ucx_perf_mem_type_device_dispatchers[mem_type] == NULL) {
+        ucs_error("%sdevice API is not supported for %s", error_prefix,
+                  ucs_memory_type_names[mem_type]);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t adjust_test_params(perftest_params_t *params,
                                 const char *error_prefix)
 {
+    ucs_status_t status;
     test_type_t *test;
 
     if (params->test_id == TEST_ID_UNDEFINED) {
@@ -863,7 +814,28 @@ ucs_status_t adjust_test_params(perftest_params_t *params,
         params->super.max_outstanding = test->window_size;
     }
 
-    if (params->super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+    if ((params->super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (params->super.send_device_id != UCX_PERF_MEM_DEV_DEFAULT) &&
+        (params->super.recv_device_id != UCX_PERF_MEM_DEV_DEFAULT) &&
+        (params->super.send_device_id != params->super.recv_device_id)) {
+        ucs_error("%ssend and receive device ids must match in loopback mode",
+                  error_prefix);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->super.flags & UCX_PERF_TEST_FLAG_DEVICE) {
+        status = validate_device_mem_type(params->super.send_mem_type,
+                                          error_prefix);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = validate_device_mem_type(params->super.recv_mem_type,
+                                          error_prefix);
+        if (status != UCS_OK) {
+            return status;
+        }
+
         /* TODO: Add getter function for thread count */
         params->super.device_thread_count = params->super.thread_count;
         params->super.thread_count        = 1;
@@ -1092,6 +1064,13 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     if ((ctx->mpi != 0) && (ctx->mad_port != NULL)) {
         ucs_error("conflicting arguments: cannot use MPI and IB RTE at the "
                   "same time (mpirun and -K)");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    if ((argc - optind) > 1) {
+        ucs_error("expected at most one server address argument, got %d",
+                  argc - optind);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
