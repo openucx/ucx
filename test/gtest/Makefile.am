@@ -193,6 +193,7 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
+	ucs/test_interval_map.cc \
 	ucs/test_interval_tree.cc \
 	ucs/test_rbtree.cc \
     ucs/test_lru.cc \
@@ -340,13 +341,19 @@ endif # HAVE_HIP
 if HAVE_ZE
 gtest_SOURCES += \
 	ucm/ze_hooks.cc \
-	uct/ze/test_ze.cc
+	uct/ze/test_ze.cc \
+	uct/ze/test_ze_base.cc \
+	uct/ze/test_ze_ipc_md.cc \
+	uct/ze/test_ze_ipc_cache.cc \
+	uct/ze/test_ze_ipc_rma.cc \
+	uct/ze/test_ze_copy_md.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)
 gtest_LDFLAGS += \
 	$(ZE_LDFLAGS)
 gtest_LDADD += \
-	$(ZE_LIBS)
+	$(ZE_LIBS) \
+	$(top_builddir)/src/uct/ze/libuct_ze.la
 endif
 
 noinst_HEADERS = \

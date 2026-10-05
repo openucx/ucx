@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -476,8 +476,9 @@ struct ucp_ep_config {
     /* Bitmap of preregistration for am_bw lanes */
     ucp_md_map_t                  am_bw_prereg_md_map;
 
-    /* Bitmap of lanes selected by the protocols */
-    ucp_lane_map_t                proto_lane_map;
+    /* Bitmap of lanes whose iface is activated while this configuration is
+     * used: the lanes selected by the protocols, and the AM lane */
+    ucp_lane_map_t                active_lane_map;
 
     /* EP initialization flags from @ref ucp_ep_init_flags_t */
     unsigned                      proto_init_flags;
@@ -507,6 +508,30 @@ typedef struct ucp_ep_recovery_probe {
 
 
 enum {
+    UCP_EP_TF_LANE_EMPTY = 0,
+    UCP_EP_TF_LANE_HELD
+};
+
+
+/* Per-lane token-failover state. The UCT ep is kept until an RX token purges
+ * its outstanding operations, or until the endpoint is fully failed and the
+ * lane is canceled. request_id is the local REQUEST that published tx_token.
+ * peer_id is the remote REQUEST answered with that same token. */
+typedef struct ucp_ep_lane_tf {
+    uct_ep_h               uct_ep;
+    ucp_rsc_index_t        rsc_index;
+    void                   *tx_token;
+    void                   *rx_token;
+    ucp_worker_cfg_index_t deactivate_cfg_index;
+    uint32_t               request_id;
+    uint32_t               peer_id;
+    uint8_t                tx_len;
+    uint8_t                rx_len;
+    uint8_t                state;
+} ucp_ep_lane_tf_t;
+
+
+enum {
     UCP_EP_RECOVERY_STATE_IDLE,
     UCP_EP_RECOVERY_STATE_WAIT_REPLY,
     UCP_EP_RECOVERY_STATE_PROBING,
@@ -520,11 +545,15 @@ typedef struct ucp_ep_recovery_arg {
     unsigned                retries_left;
     uint8_t                 state;
     /* Generation of the LANES_ADDR exchange, pre-incremented by every request
-     * and echoed by the peer in its answers. Only carried on the wire for now,
-     * the follow-up patch matches it against the tokens of an answer to tell
-     * apart the round they belong to */
+     * and echoed by the peer. Copied into held lanes as request_id before the
+     * request is sent. */
     uint32_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+    ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
+    /* Pending requests from held lanes, replayed after all of their
+     * outstanding operations are resolved,
+     * outstanding re-posts also go here */
+    ucs_queue_head_t        tf_pending_q;
 } ucp_ep_recovery_arg_t;
 
 
@@ -1037,6 +1066,54 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Snapshot the TX token of a QUERY_TOKEN lane, replace that lane with the
+ * failed stub, and keep the UCT ep until an RX token arrives or the endpoint
+ * is fully failed.
+ *
+ * @return UCS_OK when the stub is installed and the UCT ep is held. Any other
+ *         status means the caller must use the software discard path. On
+ *         failure the UCT ep stays on the lane.
+ */
+ucs_status_t
+ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
+
+
+/**
+ * Snapshot lanes that are about to be discarded and remember @a peer_id, so
+ * the reply can publish their TX tokens.
+ */
+void ucp_ep_tf_hold_lanes(ucp_ep_h ep, ucp_lane_map_t lanes, uint32_t peer_id);
+
+
+/**
+ * TX token length to publish on a message with @a request_id, or 0 when this
+ * lane did not publish its snapshot for that id. @a token_p is set to the
+ * snapshot.
+ */
+uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
+                         uint32_t request_id, const void **token_p);
+
+
+/**
+ * Derive an RX token from a peer TX token while the local UCT ep still exists.
+ * The returned buffer is allocated and owned by the caller.
+ */
+ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
+                                 const void *tx_token, uint8_t tx_len,
+                                 void **rx_token_p, uint8_t *rx_len_p);
+
+
+/**
+ * Store a copy of an RX token on a held lane.
+ *
+ * A reply matches the lane's own request_id. An ACK matches peer_id, the
+ * request this lane answered. @a from_ack selects which one.
+ */
+void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
+                       int from_ack, const void *token, uint8_t len);
 
 
 /**
