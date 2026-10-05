@@ -307,6 +307,19 @@ typedef struct ucp_wireup_lane_token {
  * indexed by lane; NULL sends an empty one. The TX section is the snapshotted
  * token of each provided lane that was published for @a request_id.
  */
+/**
+ * Send EP_REMOVED message to the remote endpoint connected to @a ep, either to
+ * notify that @a ep is being closed, or to acknowledge such a notification.
+ */
+ucs_status_t ucp_wireup_send_ep_removed_msg(ucp_ep_h ep);
+
+
+/**
+ * @return Whether EP_REMOVED message can be sent to the remote endpoint
+ *         connected to @a ep.
+ */
+int ucp_wireup_can_send_ep_removed_msg(ucp_ep_h ep);
+
 void ucp_wireup_send_lanes_addr_msg(
         ucp_ep_h ep, uint8_t msg_type, ucp_lane_map_t requested_lane_map,
         ucp_lane_map_t provided_lane_map, uint32_t request_id,

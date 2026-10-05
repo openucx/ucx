@@ -509,6 +509,16 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, resolve_remote_ep_id),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
+  {"EP_CLOSE_NEGOTIATE", "auto",
+   "Negotiate closing an endpoint, which is connected by worker address, with\n"
+   "the peer: the peer is notified about the close and acknowledges it before\n"
+   "the endpoint resources are released, so the peer releases its endpoint as\n"
+   "well. The peer endpoint is reported to its error handler with 'connection\n"
+   "reset' status. 'auto' means enabling it only for endpoints with error\n"
+   "handling (peer failure or failover mode).",
+   ucs_offsetof(ucp_context_config_t, ep_close_negotiate),
+   UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
   {"PROTO_INDIRECT_ID", "auto",
    "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
    "A value of 'auto' means to enable only if error handling is enabled on the\n"

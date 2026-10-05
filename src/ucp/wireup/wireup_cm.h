@@ -57,9 +57,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
 void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep);
 
-ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep,
-                                           const ucp_request_param_t *param);
-
 void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep);
 
 size_t ucp_cm_sa_data_length(ucp_object_version_t sa_data_version);

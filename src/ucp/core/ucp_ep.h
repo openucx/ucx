@@ -568,13 +568,8 @@ typedef struct ucp_ep_ext {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    union {
-        ucp_request_t             *close_req;    /* Close protocol request */
-        ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
-                                                    United with close request since:
-                                                    1) recovery is not supported for connected to sockaddr EPs
-                                                    2) it does not make sense to recover lanes during close protocol */
-    };
+    ucp_request_t                 *close_req;    /* Close protocol request */
+    ucp_ep_recovery_arg_t         *recovery_arg; /* Lanes recovery state */
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */

@@ -271,6 +271,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->remote_ep_id                 = UCS_PTR_MAP_KEY_INVALID;
     ep->ext->err_cb                       = NULL;
     ep->ext->close_req                    = NULL;
+    ep->ext->recovery_arg                 = NULL;
 #if UCS_ENABLE_ASSERT
     ep->ext->ka_last_round                = 0;
 #endif
@@ -556,7 +557,7 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ep->ext->ep_list);
-    if (!ucp_ep_has_cm_lane(ep) && (ep->ext->recovery_arg != NULL)) {
+    if (ep->ext->recovery_arg != NULL) {
         ucp_ep_recovery_arg_free(ep);
     }
 
@@ -3118,6 +3119,103 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
     ep->ext->close_req = request;
 }
 
+static ucp_request_t *
+ucp_ep_close_request_get(ucp_ep_h ep, const ucp_request_param_t *param)
+{
+    ucp_request_t *request = ucp_request_get_param(ep->worker, param,
+                                                   {return NULL;});
+
+    if (request == NULL) {
+        ucs_error("failed to allocate close request for ep %p", ep);
+        return NULL;
+    }
+
+    request->status               = UCS_OK;
+    request->flags                = 0;
+    request->send.ep              = ep;
+    request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
+
+    ucp_request_set_send_callback_param(param, request, send);
+
+    return request;
+}
+
+/* Return whether closing @a ep has to be negotiated with the peer: the peer is
+ * notified by EP_REMOVED message and acknowledges it, so both endpoints are
+ * destroyed and release their resources */
+static int ucp_ep_close_negotiate_check(ucp_ep_h ep)
+{
+    ucs_on_off_auto_value_t negotiate =
+            ep->worker->context->config.ext.ep_close_negotiate;
+
+    if ((negotiate == UCS_CONFIG_OFF) ||
+        ((negotiate == UCS_CONFIG_AUTO) &&
+         !ucp_ep_config_err_handling_enabled(ep))) {
+        return 0;
+    }
+
+    /* Only an endpoint connected by worker address, which has a connected
+     * remote endpoint, is kept after close */
+    if (ucp_ep_has_cm_lane(ep) || (ep->flags & UCP_EP_FLAG_FAILED) ||
+        !(ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
+        !(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
+                       UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
+        return 0;
+    }
+
+    /* The peer has to acknowledge EP_REMOVED from its own peer endpoint,
+     * which is not supported by legacy versions */
+    return (ucp_ep_config(ep)->key.dst_version > UCP_RELEASE_LEGACY) &&
+           ucp_wireup_can_send_ep_removed_msg(ep);
+}
+
+/* Notify the peer that @a ep is being closed, and set @a close_req to be
+ * completed when the peer acknowledges it. If sending fails, @a close_req is
+ * not set and the endpoint failure is already scheduled. */
+static ucs_status_t ucp_ep_close_notify_peer(ucp_ep_h ep,
+                                             ucp_request_t *close_req,
+                                             const char *debug_msg)
+{
+    ucs_status_t status;
+
+    /* Set the close request before sending the message, since a loopback
+     * transport delivers the message, which is also the acknowledgement in
+     * this case, synchronously */
+    ucp_ep_set_close_request(ep, close_req, debug_msg);
+
+    status = ucp_wireup_send_ep_removed_msg(ep);
+    if (status != UCS_OK) {
+        ucs_assert(ep->ext->close_req == close_req);
+        ep->ext->close_req = NULL;
+    }
+
+    return status;
+}
+
+/* Lanes of @a ep are flushed: notify the peer and return a request, which is
+ * completed when the peer acknowledges the close */
+static ucs_status_ptr_t
+ucp_ep_close_negotiate(ucp_ep_h ep, const ucp_request_param_t *param)
+{
+    ucp_request_t *close_req;
+    ucs_status_t status;
+
+    close_req = ucp_ep_close_request_get(ep, param);
+    if (close_req == NULL) {
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    status = ucp_ep_close_notify_peer(ep, close_req, "close");
+    if (status != UCS_OK) {
+        /* Fallback to one-sided close */
+        ucp_request_put_param(param, close_req);
+        ucp_ep_disconnected(ep, 0);
+        return UCS_STATUS_PTR(UCS_OK);
+    }
+
+    return close_req + 1;
+}
+
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
@@ -3158,6 +3256,13 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
             UCS_ASYNC_UNBLOCK(async);
             return;
         }
+    } else if ((req->status == UCS_OK) && ucp_ep_close_negotiate_check(ep) &&
+               (ucp_ep_close_notify_peer(ep, req, "close flushed callback") ==
+                UCS_OK)) {
+        /* Wait for the acknowledgement from the peer to destroy the endpoint
+         * and complete the request */
+        UCS_ASYNC_UNBLOCK(async);
+        return;
     }
     UCS_ASYNC_UNBLOCK(async);
 
@@ -3212,13 +3317,16 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
             if (ucp_ep_is_cm_local_connected(ep)) {
                 /* lanes already flushed, start disconnect on CM lane */
                 ucp_ep_cm_disconnect_cm_lane(ep);
-                close_req = ucp_ep_cm_close_request_get(ep, param);
+                close_req = ucp_ep_close_request_get(ep, param);
                 if (close_req != NULL) {
                     request = close_req + 1;
                     ucp_ep_set_close_request(ep, close_req, "close");
                 } else {
                     request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                 }
+            } else if ((UCS_PTR_STATUS(request) == UCS_OK) &&
+                       ucp_ep_close_negotiate_check(ep)) {
+                request = ucp_ep_close_negotiate(ep, param);
             } else {
                 ucp_ep_disconnected(ep, 0);
             }

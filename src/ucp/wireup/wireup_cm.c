@@ -1548,25 +1548,6 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     }
 }
 
-ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep, const ucp_request_param_t *param)
-{
-    ucp_request_t *request = ucp_request_get_param(ep->worker, param, {return NULL;});
-
-    if (request == NULL) {
-        ucs_error("failed to allocate close request for ep %p", ep);
-        return NULL;
-    }
-
-    request->status  = UCS_OK;
-    request->flags   = 0;
-    request->send.ep = ep;
-    request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
-
-    ucp_request_set_send_callback_param(param, request, send);
-
-    return request;
-}
-
 static int ucp_cm_progress_remove_filter(const ucs_callbackq_elem_t *elem,
                                          void *arg)
 {

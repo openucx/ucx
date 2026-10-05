@@ -1035,6 +1035,241 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
 
+/* Negotiated close of endpoints connected by worker address: the peer is
+ * notified about the close and acknowledges it, so both sides release their
+ * endpoints instead of keeping them until the worker is destroyed */
+class test_ucp_wireup_close_negotiate : public test_ucp_wireup_errh_peer {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | NO_EP_MATCH, "tag,no_ep_match");
+    }
+
+    test_ucp_wireup_close_negotiate() : m_err_count(0), m_err_status(UCS_OK)
+    {
+        /* Detect a destroyed peer quickly when the close is not acknowledged.
+         * These settings are unused by some transports, so do not warn. */
+        configure_peer_failure_settings();
+        m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", "3s"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_WARN_UNUSED_ENV_VARS",
+                                               "n"));
+    }
+
+    virtual ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t params = test_ucp_wireup_errh_peer::get_ep_params();
+        params.err_handler.cb  = err_cb;
+        params.err_handler.arg = reinterpret_cast<void*>(this);
+        return params;
+    }
+
+    /* Unlike the parent class, loopback is tested: the endpoint is connected
+     * to itself, so the close notification is also its acknowledgement */
+    virtual void init() {
+        test_ucp_wireup::init();
+    }
+
+protected:
+    static unsigned num_eps(const entity &e) {
+        return e.worker()->num_all_eps;
+    }
+
+    void wait_num_eps(const entity &e, unsigned count) {
+        wait_for_value(&e.worker()->num_all_eps, count);
+        EXPECT_EQ(count, num_eps(e));
+    }
+
+    void connect_send_recv() {
+        sender().connect(&receiver(), get_ep_params());
+        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+    }
+
+    void connect_send_recv_2sided() {
+        connect_send_recv();
+        receiver().connect(&sender(), get_ep_params());
+        send_recv(receiver().ep(), sender().worker(), sender().ep(), 1, 1);
+    }
+
+    static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        test_ucp_wireup_close_negotiate *self =
+                reinterpret_cast<test_ucp_wireup_close_negotiate*>(arg);
+
+        ++self->m_err_count;
+        self->m_err_status = status;
+    }
+
+    volatile unsigned m_err_count;
+    ucs_status_t      m_err_status;
+};
+
+/* Plain close releases the local endpoint and the passive endpoint created by
+ * wireup on the peer */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, one_sided)
+{
+    connect_send_recv();
+    EXPECT_EQ(1u, num_eps(sender()));
+    EXPECT_EQ(1u, num_eps(receiver()));
+
+    disconnect(sender());
+
+    wait_num_eps(sender(), 0);
+    wait_num_eps(receiver(), 0);
+    EXPECT_EQ(0u, m_err_count);
+}
+
+/* Closing one side of a two-sided connection reports the peer endpoint as
+ * failed with connection reset, and a forced close releases it */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, two_sided)
+{
+    skip_loopback();
+    connect_send_recv_2sided();
+
+    disconnect(sender());
+
+    if (get_variant_value() & NO_EP_MATCH) {
+        /* Without endpoint matching, each side has an independent pair of
+         * endpoints, so the second pair is closed by the receiver */
+        wait_num_eps(sender(), 1);
+        wait_num_eps(receiver(), 1);
+        EXPECT_EQ(0u, m_err_count);
+        disconnect(receiver());
+    } else {
+        wait_num_eps(sender(), 0);
+        wait_for_value(&m_err_count, 1u);
+        EXPECT_EQ(1u, m_err_count);
+        EXPECT_EQ(UCS_ERR_CONNECTION_RESET, m_err_status);
+        EXPECT_EQ(1u, num_eps(receiver()));
+        disconnect(receiver(), true);
+    }
+
+    wait_num_eps(sender(), 0);
+    wait_num_eps(receiver(), 0);
+}
+
+/* Both sides close at the same time: each notification is also the
+ * acknowledgement for the peer */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, simultaneous)
+{
+    skip_loopback();
+    connect_send_recv_2sided();
+
+    void *sreq = ep_close_nbx(sender().revoke_ep(), 0);
+    void *rreq = ep_close_nbx(receiver().revoke_ep(), 0);
+    EXPECT_FALSE(UCS_PTR_IS_ERR(sreq));
+    EXPECT_FALSE(UCS_PTR_IS_ERR(rreq));
+    ASSERT_UCS_OK(request_wait(sreq));
+    ASSERT_UCS_OK(request_wait(rreq));
+
+    wait_num_eps(sender(), 0);
+    wait_num_eps(receiver(), 0);
+    EXPECT_EQ(0u, m_err_count);
+}
+
+/* Repeated connect/disconnect cycles do not accumulate endpoints */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, stress_connect_disconnect)
+{
+    const int count = ucs_max(10, 100 / ucs::test_time_multiplier());
+
+    for (int i = 0; i < count; ++i) {
+        connect_send_recv();
+        disconnect(sender());
+        wait_num_eps(sender(), 0);
+        wait_num_eps(receiver(), 0);
+    }
+
+    EXPECT_EQ(0u, m_err_count);
+}
+
+/* The peer is destroyed without acknowledging the close: the close completes
+ * when keepalive or the transport detects the peer failure */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, peer_destroyed,
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf")
+{
+    skip_loopback();
+    if (has_transport("shm")) {
+        UCS_TEST_SKIP_R("a shared memory peer in the same process is alive");
+    }
+
+    connect_send_recv();
+    if (ucp_ep_config(sender().ep())->key.keepalive_lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no keepalive lane");
+    }
+
+    /* Progress the peer only until the close notification is sent, so the
+     * peer never acknowledges it. The close flush may need the peer, e.g. to
+     * complete pending wireup messages. */
+    ucp_ep_h ep         = sender().revoke_ep();
+    void *req           = ep_close_nbx(ep, 0);
+    ucs_time_t deadline = ucs::get_deadline(10.0);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(req));
+    while (!is_request_completed(req) && (ep->ext->close_req == NULL) &&
+           (ucs_get_time() < deadline)) {
+        sender().progress();
+        if (ep->ext->close_req == NULL) {
+            receiver().progress();
+        }
+    }
+    EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(req));
+    ASSERT_TRUE(ep->ext->close_req != NULL) << "close is not negotiated";
+
+    receiver().cleanup();
+
+    while ((ucp_request_check_status(req) == UCS_INPROGRESS) &&
+           (ucs_get_time() < deadline)) {
+        sender().progress();
+    }
+    EXPECT_EQ(UCS_OK, ucp_request_check_status(req));
+    ucp_request_free(req);
+
+    while ((num_eps(sender()) != 0) && (ucs_get_time() < deadline)) {
+        sender().progress();
+    }
+    EXPECT_EQ(0u, num_eps(sender()));
+}
+
+/* Without negotiation, both sides keep the endpoints after one-sided close */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, knob_off, "EP_CLOSE_NEGOTIATE=n")
+{
+    connect_send_recv();
+    disconnect(sender());
+
+    short_progress_loop();
+    EXPECT_EQ(1u, num_eps(sender()));
+    EXPECT_EQ(1u, num_eps(receiver()));
+    EXPECT_EQ(0u, m_err_count);
+}
+
+/* Without error handling, the close is not negotiated by default, so the peer
+ * is not notified and keeps its endpoint, if wireup created one */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, err_mode_none)
+{
+    skip_loopback();
+    sender().connect(&receiver(), test_ucp_wireup::get_ep_params());
+    send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+    flush_worker(sender());
+
+    unsigned receiver_num_eps = num_eps(receiver());
+    disconnect(sender());
+
+    short_progress_loop();
+    EXPECT_EQ(receiver_num_eps, num_eps(receiver()));
+}
+
+/* The negotiation can be forced for endpoints without error handling */
+UCS_TEST_P(test_ucp_wireup_close_negotiate, err_mode_none_knob_on,
+           "EP_CLOSE_NEGOTIATE=y")
+{
+    sender().connect(&receiver(), test_ucp_wireup::get_ep_params());
+    send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+    disconnect(sender());
+
+    wait_num_eps(sender(), 0);
+    wait_num_eps(receiver(), 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_close_negotiate)
+
 class test_ucp_wireup_fallback : public test_ucp_wireup {
 public:
     test_ucp_wireup_fallback() {

@@ -96,9 +96,12 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     ucp_lane_index_t lane, fallback_lane;
 
     if ((msg_type == UCP_WIREUP_MSG_ACK) ||
+        (msg_type == UCP_WIREUP_MSG_EP_REMOVED) ||
         ucp_wireup_msg_is_lanes_addr(msg_type)) {
         /* Post-failover, wireup_msg_lane may itself be failed - prefer the
-         * re-selected operable AM lane. */
+         * re-selected operable AM lane. After wireup, wireup_msg_lane may not
+         * support active messages by itself, since it was used through an
+         * auxiliary transport. */
         lane          = ep_config->key.am_lane;
         fallback_lane = ep_config->key.wireup_msg_lane;
     } else {
@@ -491,6 +494,32 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
 {
     return ucp_wireup_msg_send_full(ep, type, tl_bitmap, lanes2remote, 0, 0, 0,
                                     NULL);
+}
+
+ucs_status_t ucp_wireup_send_ep_removed_msg(ucp_ep_h ep)
+{
+    return ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_EP_REMOVED,
+                               &ucp_tl_bitmap_min, NULL);
+}
+
+int ucp_wireup_can_send_ep_removed_msg(ucp_ep_h ep)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+
+    if ((key->am_lane == UCP_NULL_LANE) &&
+        (key->wireup_msg_lane == UCP_NULL_LANE)) {
+        return 0;
+    }
+
+    /* After wireup, the message is sent by the lane itself and not through an
+     * auxiliary transport, so the lane must support active messages */
+    lane      = ucp_wireup_get_msg_lane(ep, UCP_WIREUP_MSG_EP_REMOVED);
+    rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    return (rsc_index != UCP_NULL_RESOURCE) &&
+           (ucp_worker_iface(ep->worker, rsc_index)->attr.cap.flags &
+            UCT_IFACE_FLAG_AM_BCOPY);
 }
 
 static ucp_tl_bitmap_t
@@ -1129,6 +1158,119 @@ out_delete_ep:
     ucp_ep_delete(reply_ep);
 }
 
+/* The endpoint is flushed after EP_REMOVED from the peer endpoint was
+ * processed: either the peer acknowledged our close, or the peer endpoint is
+ * gone and the endpoint cannot be used anymore */
+static void ucp_wireup_ep_removed_done(ucp_ep_h ep)
+{
+    ucp_request_t *close_req;
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* The failure flow completes the close request, if there is one */
+        return;
+    }
+
+    if ((ep->flags & UCP_EP_FLAG_CLOSED) && (ep->ext->close_req != NULL) &&
+        !(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
+                       UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
+        /* Detach the close request, so a subsequent failure would not complete
+         * it again, then destroy the endpoint and complete the request */
+        close_req          = ep->ext->close_req;
+        ep->ext->close_req = NULL;
+        ucs_debug("ep %p: close acknowledged by peer, completing request %p",
+                  ep, close_req);
+        ucp_ep_register_disconnect_progress(close_req);
+        return;
+    }
+
+    ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+}
+
+static void ucp_wireup_ep_removed_flushed(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+
+    ucs_debug("ep %p: flush after ep_removed (req %p) completed with status %s",
+              ep, req, ucs_status_string(req->status));
+    ucp_request_complete_send(req, req->status);
+    ucp_wireup_ep_removed_done(ep);
+}
+
+/* EP_REMOVED is received either from a temporary endpoint of the peer, as a
+ * reply to EP_CHECK when the peer endpoint does not exist anymore, or from the
+ * peer endpoint itself, which is being closed or acknowledges our close */
+static void
+ucp_wireup_process_ep_removed(ucp_worker_h worker, ucp_ep_h ep,
+                              const ucp_wireup_msg_t *msg,
+                              const ucp_unpacked_address_t *remote_address)
+{
+    ucs_status_ptr_t req;
+    ucs_status_t status;
+
+    ucs_debug("ep %p: got ep_removed from ep id 0x%" PRIx64 " flags 0x%x", ep,
+              msg->src_ep_id, ep->flags);
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Lanes are already discarded, the peer detects it by the transport */
+        return;
+    }
+
+    if (ucp_ep_has_cm_lane(ep) || !(ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
+        (ucp_ep_remote_id(ep) != msg->src_ep_id)) {
+        /* Not from the remote endpoint we are connected to, so the remote
+         * endpoint is gone */
+        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+        return;
+    }
+
+    if (ep->flags & UCP_EP_FLAG_CLOSED) {
+        if (!(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
+                           UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
+            /* The peer already acknowledged our close */
+            ucs_debug("ep %p: ignoring duplicate ep_removed", ep);
+            return;
+        }
+
+        if (ep->ext->close_req != NULL) {
+            /* This is the acknowledgement of our close: the peer endpoint is
+             * not connected anymore, so the endpoint can be destroyed once the
+             * local flush completes */
+            ucp_ep_update_flags(ep, 0,
+                                UCP_EP_FLAG_REMOTE_CONNECTED |
+                                UCP_EP_FLAG_CONNECT_REQ_QUEUED);
+            goto out_flush;
+        }
+
+        /* Else: the close flush is still in progress, and it would notify the
+         * peer when completed, so acknowledge like a connected endpoint */
+    }
+
+    if (((remote_address->uuid != worker->uuid) ||
+         (msg->src_ep_id != ucp_ep_local_id(ep))) &&
+        ucp_wireup_can_send_ep_removed_msg(ep)) {
+        /* Acknowledge, so the peer could release its endpoint. If the endpoint
+         * is connected to itself, the message is the acknowledgement. Endpoint
+         * IDs are unique only within a worker, so compare the worker too. If
+         * the message cannot be sent, the peer relies on keepalive. */
+        status = ucp_wireup_send_ep_removed_msg(ep);
+        if (status != UCS_OK) {
+            /* The endpoint failure is already scheduled */
+            return;
+        }
+    }
+
+out_flush:
+    /* Make sure our pending wireup messages are sent before the endpoint is
+     * destroyed or its lanes are discarded */
+    req = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
+                                &ucp_request_null_param, NULL,
+                                ucp_wireup_ep_removed_flushed, "ep_removed",
+                                UCT_FLUSH_FLAG_LOCAL);
+    if (!UCS_PTR_IS_PTR(req)) {
+        ucp_wireup_ep_removed_done(ep);
+    }
+}
+
 static UCS_F_NOINLINE
 void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
                             const ucp_wireup_msg_t *msg)
@@ -1588,7 +1730,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
-        ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+        ucp_wireup_process_ep_removed(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REQUEST) {
         ucs_assert(lanes_info != NULL);
         ucp_wireup_process_lanes_addr_request(worker, ep, msg, lanes_info,

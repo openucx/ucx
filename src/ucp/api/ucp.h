@@ -2845,6 +2845,11 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  *                                completed at any point in time. A request
  *                                handle is returned to the application in order
  *                                to track progress of the endpoint closure.
+ *
+ * @note Unless @ref UCP_EP_CLOSE_FLAG_FORCE is set, closing an endpoint with
+ * error handling enabled is negotiated with the peer: the peer endpoint is
+ * failed with @ref UCS_ERR_CONNECTION_RESET, and the close completes once the
+ * peer acknowledges it.
  */
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep,
                                   const ucp_request_param_t *param);

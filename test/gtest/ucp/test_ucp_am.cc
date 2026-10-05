@@ -1387,10 +1387,14 @@ protected:
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
-        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                    UCP_EP_PARAM_FIELD_ERR_HANDLER;
         /* The error handling requirement is needed since we need to take care of
          * a case when a receiver tries to fetch data on a closed EP */
         ep_params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        ep_params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                            ucs_empty_function);
+        ep_params.err_handler.arg = NULL;
         return ep_params;
     }
 
@@ -1721,8 +1725,12 @@ public:
     {
         ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
 
-        ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-        ep_params.err_mode    = get_err_mode();
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                    UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        ep_params.err_mode        = get_err_mode();
+        ep_params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                            ucs_empty_function);
+        ep_params.err_handler.arg = NULL;
         return ep_params;
     }
 
@@ -2248,8 +2256,12 @@ protected:
     virtual ucp_ep_params_t get_ep_params() override
     {
         ucp_ep_params_t ep_params = test_ucp_am_nbx_rndv::get_ep_params();
-        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                    UCP_EP_PARAM_FIELD_ERR_HANDLER;
         ep_params.err_mode        = get_err_mode();
+        ep_params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                            ucs_empty_function);
+        ep_params.err_handler.arg = NULL;
         return ep_params;
     }
 
