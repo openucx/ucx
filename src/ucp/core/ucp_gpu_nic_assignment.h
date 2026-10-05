@@ -37,27 +37,6 @@ struct ucp_gpu_nic_assignment {
 };
 
 
-typedef enum {
-    /**
-     * Assign each NIC, with all of its ports, going forward and then backward
-     * across the GPUs.
-     * The group's NICs are assigned to the following GPU indices in order:
-     * 0, 1, ..., num_gpus-1, num_gpus-1, ..., 1, 0, 0, 1, ...
-     */
-    UCP_GPU_NIC_ASSIGNMENT_POLICY_FLIP,
-
-    /**
-     * Assign each NIC, with all of its ports, to GPUs repeatedly in ascending
-     * order.
-     * The group's NICs are assigned to the following GPU indices in order:
-     * 0, 1, ..., num_gpus-1, 0, 1, ..., num_gpus-1, 0, 1, ...
-     */
-    UCP_GPU_NIC_ASSIGNMENT_POLICY_ROUND_ROBIN,
-
-    UCP_GPU_NIC_ASSIGNMENT_POLICY_LAST
-} ucp_gpu_nic_assignment_policy_t;
-
-
 /**
  * Build GPU-to-NIC assignments from topology groups.
  *
@@ -65,7 +44,7 @@ typedef enum {
  *       topology group.
  *
  * @param [in]  groups        Topology groups to build assignments from.
- * @param [in]  policy        Assignment policy.
+ * @param [in]  mode          Assignment mode: flip, round-robin or shared.
  * @param [out] assignment_p  Completed assignment. Updated only on success.
  *
  * @return UCS_OK on success, or an error status if assignment construction
@@ -73,7 +52,7 @@ typedef enum {
  */
 ucs_status_t
 ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
-                             ucp_gpu_nic_assignment_policy_t policy,
+                             ucp_gpu_nic_assignment_mode_t mode,
                              ucp_gpu_nic_assignment_t *assignment_p);
 
 
