@@ -533,7 +533,8 @@ struct uct_ib_mlx5_cmd_hca_cap_2_bits {
     uint8_t    log_conn_track_granularity[0x5];
     uint8_t    reserved_at_d0[0x3];
     uint8_t    log_conn_track_max_alloc[0x5];
-    uint8_t    reserved_at_d8[0x3];
+    uint8_t    multiplane[0x1];
+    uint8_t    reserved_at_d9[0x2];
     uint8_t    log_max_conn_track_offload[0x5];
 
     uint8_t    cross_vhca_object_to_object_supported[0x20];

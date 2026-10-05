@@ -124,7 +124,12 @@ enum {
                                                                of arm_ifaces list, so
                                                                it needs to be armed
                                                                in ucp_worker_arm(). */
-    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
+    UCP_WORKER_IFACE_FLAG_ACTIVATE_ARM_BUSY = UCS_BIT(2), /**< When tried to arm the interface
+                                                               for activation events, the interface
+                                                               is already busy, so need to keep
+                                                               checking events for it in the
+                                                               main progress loop. */
+    UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(3)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
 };
@@ -262,6 +267,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_ep_config_arr_t, unsigned, ucp_ep_config_t);
 struct ucp_worker_iface {
     uct_iface_h                   iface;         /* UCT interface */
     uct_iface_attr_t              attr;          /* UCT interface attributes */
+    uct_iface_attr_v2_t           attr_v2;       /* UCT interface v2 attributes */
     ucp_worker_h                  worker;        /* The parent worker */
     ucs_list_link_t               arm_list;      /* Element in arm_ifaces list */
     ucp_rsc_index_t               rsc_index;     /* Resource index */
@@ -293,7 +299,7 @@ UCS_PTR_MAP_TYPE(ep, 1);
 UCS_PTR_MAP_TYPE(request, 0);
 
 /* rkey configuration storage */
-UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t);
+UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t*);
 
 
 /**
@@ -308,6 +314,8 @@ typedef struct ucp_worker {
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
+    ucp_rma_bw_sample_t              *rma_bw_samples;     /* Sample pool */
+    ucs_time_t                       rma_bw_next_sample; /* Next sample admission */
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
@@ -325,6 +333,7 @@ typedef struct ucp_worker {
     int                              eventfd;             /* Event fd to support signal() calls */
     unsigned                         uct_events;          /* UCT arm events */
     ucs_list_link_t                  arm_ifaces;          /* List of interfaces to arm */
+    int                              arm_block_count;     /* If >0, ucp_worker_arm() should return UCS_ERR_BUSY */
 
     void                             *user_data;          /* User-defined data */
     ucs_strided_alloc_t              ep_alloc;            /* Endpoint allocator */
@@ -441,7 +450,8 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_signal_internal(ucp_worker_h worker);
 
-void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
+void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags,
+                               const char *reason);
 
 int ucp_worker_iface_is_activated(const ucp_worker_iface_t *wiface);
 

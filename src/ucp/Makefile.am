@@ -28,6 +28,7 @@ noinst_HEADERS = \
 	am/ucp_am.inl \
 	core/ucp_am.h \
 	core/ucp_context.h \
+	core/ucp_gpu_nic_assignment.h \
 	core/ucp_tl_info.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
@@ -70,6 +71,8 @@ noinst_HEADERS = \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rma/rma_bw.h \
+	rma/rma_bw.inl \
 	rma/rma_rndv.h \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
@@ -110,6 +113,7 @@ libucp_la_SOURCES = \
 	am/eager_multi.c \
 	am/rndv.c \
 	core/ucp_context.c \
+	core/ucp_gpu_nic_assignment.c \
 	core/ucp_tl_info.c \
 	core/ucp_am.c \
 	core/ucp_ep.c \
@@ -147,6 +151,7 @@ libucp_la_SOURCES = \
 	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
+	rma/rma_bw.c \
 	rma/rma_rndv.c \
 	rma/rma_send.c \
 	rma/rma_sw.c \

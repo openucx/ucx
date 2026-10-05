@@ -13,6 +13,11 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_worker.inl>
+#include <ucp/proto/proto.h>
+#include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 }
@@ -23,12 +28,21 @@ extern "C" {
 class test_ucp_fault_tolerance : public test_ucp_memheap {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        static constexpr unsigned msg_size_variants[] = {
+            TEST_MSG_SIZE_SMALL, TEST_MSG_SIZE_MEDIUM, TEST_MSG_SIZE_LARGE
+        };
+
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT,
                                op_name(TEST_OP_PUT));
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT | TEST_OP_FLUSH));
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET,
-                               op_name(TEST_OP_GET));
+
+        for (unsigned msg_size_variant : msg_size_variants) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA,
+                                   TEST_OP_GET | msg_size_variant,
+                                   op_name(TEST_OP_GET | msg_size_variant));
+        }
+
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET | TEST_OP_FLUSH,
                                op_name(TEST_OP_GET | TEST_OP_FLUSH));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
@@ -68,8 +82,16 @@ protected:
         TEST_OP_GET              = UCS_BIT(1),
         TEST_OP_AM               = UCS_BIT(2),
         TEST_OP_FLUSH            = UCS_BIT(3),
-        TEST_OP_ALL_LANES_FAILED = UCS_BIT(4)
+        TEST_OP_ALL_LANES_FAILED = UCS_BIT(4),
+        TEST_MSG_SIZE_SMALL      = UCS_BIT(5),
+        TEST_MSG_SIZE_MEDIUM     = UCS_BIT(6),
+        TEST_MSG_SIZE_LARGE      = UCS_BIT(7)
     };
+
+    /* Must stay below cap.get.min_zcopy, so GET cannot use zcopy */
+    static constexpr size_t SMALL_MSG_SIZE  = 1;
+    static constexpr size_t MEDIUM_MSG_SIZE = UCS_KBYTE;
+    static constexpr size_t LARGE_MSG_SIZE  = 100 * UCS_MBYTE;
 
     void init() override {
         if (get_variant_value() & TEST_OP_ALL_LANES_FAILED) {
@@ -88,6 +110,14 @@ protected:
         if (get_variant_value() & TEST_OP_AM) {
             set_am_handler();
         }
+    }
+
+    void cleanup() override {
+        test_ucp_memheap::cleanup();
+
+        m_probe_mock      = NULL;
+        m_probe_count     = 0;
+        m_held_probe_comp = NULL;
     }
 
     void set_am_handler() {
@@ -224,7 +254,112 @@ protected:
 
         std::vector<ucp_lane_index_t> lanes(tmp_lanes.begin(), tmp_lanes.end());
         shuffle_lanes(lanes, lane_type_str);
+        check_proto_coverage(op_mask);
         return lanes;
+    }
+
+    void dump_proto_select_elem(ucp_worker_cfg_index_t rkey_cfg_index,
+                                const ucp_proto_select_param_t *select_param,
+                                const ucp_proto_select_elem_t *select_elem) {
+        ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+        char *line;
+
+        ucp_proto_select_elem_info(sender().worker(),
+                                   sender().ep(0, INJECTED_EP_INDEX)->cfg_index,
+                                   rkey_cfg_index, select_param, select_elem, 1,
+                                   0, &strb);
+        ucs_string_buffer_for_each_token(line, &strb, "\n") {
+            UCS_TEST_MESSAGE << line;
+        }
+        ucs_string_buffer_cleanup(&strb);
+    }
+
+    /**
+     * Walk the selected message size ranges of 'op_id' and verify that every
+     * range is served by a real protocol. A range left to the 'reconfig' stub
+     * protocol can never be completed on this endpoint configuration.
+     */
+    void check_op_proto_coverage(ucp_operation_id_t op_id,
+                                 ucp_proto_select_t *proto_select,
+                                 ucp_worker_cfg_index_t rkey_cfg_index) {
+        ucp_worker_h worker = sender().worker();
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        ucp_proto_query_attr_t query_attr;
+        ucp_memory_info_t mem_info;
+        size_t range_start;
+        bool gap_found;
+
+        ucp_memory_info_set_host(&mem_info);
+        ucp_proto_select_param_init(&select_param, op_id, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+        select_elem = ucp_proto_select_lookup_slow(
+                worker, proto_select, 0,
+                sender().ep(0, INJECTED_EP_INDEX)->cfg_index, rkey_cfg_index,
+                &select_param);
+        if (select_elem == nullptr) {
+            ADD_FAILURE() << ucp_operation_names[op_id]
+                          << ": protocol selection is not initialized";
+            return;
+        }
+
+        gap_found   = false;
+        range_start = 0;
+        do {
+            if (!ucp_proto_select_elem_query(worker, select_elem, range_start,
+                                             &query_attr)) {
+                ADD_FAILURE() << ucp_operation_names[op_id]
+                              << ": no protocol for message sizes "
+                              << range_start << ".."
+                              << query_attr.max_msg_length;
+                gap_found = true;
+            }
+
+            range_start = query_attr.max_msg_length + 1;
+        } while (query_attr.max_msg_length != SIZE_MAX);
+
+        if (gap_found) {
+            dump_proto_select_elem(rkey_cfg_index, &select_param, select_elem);
+        }
+    }
+
+    /**
+     * Verify that the operations exercised by the current variant have no
+     * message size range without a protocol.
+     */
+    void check_proto_coverage(unsigned op_mask) {
+        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+        ucp_worker_cfg_index_t rkey_cfg_index;
+        ucp_proto_select_t *proto_select;
+
+        if (op_mask & TEST_OP_AM) {
+            check_op_proto_coverage(UCP_OP_ID_AM_SEND,
+                                    &ucp_ep_config(ep)->proto_select,
+                                    UCP_WORKER_CFG_INDEX_NULL);
+        }
+
+        if (!(op_mask & (TEST_OP_PUT | TEST_OP_GET))) {
+            return;
+        }
+
+        /* RMA protocols are selected per remote key configuration */
+        mapped_buffer rbuf(1, receiver());
+        ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+
+        proto_select = ucp_proto_select_get(sender().worker(), ep->cfg_index,
+                                            rkey->cfg_index, &rkey_cfg_index);
+        ASSERT_NE(nullptr, proto_select) << "no rkey protocol selection";
+
+        if (op_mask & TEST_OP_PUT) {
+            check_op_proto_coverage(UCP_OP_ID_PUT, proto_select,
+                                    rkey_cfg_index);
+        }
+
+        if (op_mask & TEST_OP_GET) {
+            check_op_proto_coverage(UCP_OP_ID_GET, proto_select,
+                                    rkey_cfg_index);
+        }
     }
 
     /**
@@ -513,8 +648,19 @@ protected:
         test_recovery(op_mask);
     }
 protected:
-    static size_t rma_msg_size() {
-        return ucs::limit_buffer_size((100 * UCS_MBYTE) / ucs::test_time_multiplier());
+    size_t rma_msg_size() const {
+        const unsigned op_mask = get_variant_value();
+
+        if (op_mask & TEST_MSG_SIZE_SMALL) {
+            return SMALL_MSG_SIZE;
+        }
+
+        if (op_mask & TEST_MSG_SIZE_MEDIUM) {
+            return ucs::limit_buffer_size(MEDIUM_MSG_SIZE);
+        }
+
+        return ucs::limit_buffer_size(LARGE_MSG_SIZE /
+                                      ucs::test_time_multiplier());
     }
 
     static size_t am_msg_size() {
@@ -543,6 +689,18 @@ protected:
 
         if (op_mask & TEST_OP_ALL_LANES_FAILED) {
             name += "ALL_LANES_FAILED|";
+        }
+
+        if (op_mask & TEST_MSG_SIZE_SMALL) {
+            name += "MSG_SMALL|";
+        }
+
+        if (op_mask & TEST_MSG_SIZE_MEDIUM) {
+            name += "MSG_MEDIUM|";
+        }
+
+        if (op_mask & TEST_MSG_SIZE_LARGE) {
+            name += "MSG_LARGE|";
         }
 
         if (!name.empty()) {
@@ -654,6 +812,18 @@ protected:
         return UCS_ERR_ENDPOINT_TIMEOUT;
     }
 
+    static ucs_status_t recovery_probe_count(uct_ep_h ep, unsigned flags,
+                                             uct_completion_t *comp)
+    {
+        /* Keepalive passes no completion, recovery probes always do */
+        if (comp != NULL) {
+            ++m_probe_count;
+        }
+
+        return m_probe_mock->orig_func(&ep->iface->ops.ep_check, ep, flags,
+                                       comp);
+    }
+
     static ucs_status_t recovery_probe_hold(uct_ep_h ep, unsigned flags,
                                             uct_completion_t *comp)
     {
@@ -670,6 +840,8 @@ protected:
     {
         ucp_context_h context = worker->context;
         ucp_rsc_index_t rsc_index;
+
+        m_probe_mock = &mock;
 
         for (rsc_index = 0; rsc_index < context->num_tls; ++rsc_index) {
             if (!UCS_STATIC_BITMAP_GET(context->tl_bitmap, rsc_index)) {
@@ -732,6 +904,15 @@ protected:
     }
 
     static uct_completion_t *m_held_probe_comp;
+    static ucs::mock        *m_probe_mock;
+    static unsigned          m_probe_count;
+
+    void run_initiator_failure();
+    void run_target_failure();
+    void run_probe_gated_recovery();
+    void run_teardown_with_outstanding_probe();
+    void run_worker_flush_during_recovery();
+    void run_recovery_retries_exhausted_live_lanes();
 
 private:
     size_t m_initiator_err_count = 0;
@@ -740,64 +921,60 @@ private:
 };
 
 uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
+ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
+unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
+ * Disabled until token failover is complete. Enable with
+ * --gtest_also_run_disabled_tests. */
+class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
+public:
+    DISABLED_test_ucp_fault_tolerance_tf() {
+        modify_config("FAILOVER_MODE", "token");
+    }
+};
 
-UCS_TEST_P(test_ucp_fault_tolerance, initiator_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_initiator_failure()
 {
-    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) && has_any_transport({"ud_v", "ud_x"})) {
-        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes leads to "
-                        "assertion failure in ud_ep_purge");
+    if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) &&
+        has_any_transport({"ud_v", "ud_x"})) {
+        UCS_TEST_SKIP_R("UD transport BUG: local error injection on all lanes "
+                        "leads to assertion failure in ud_ep_purge");
     }
 
     do_test(FAILURE_SIDE_INITIATOR);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, target_failure, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_target_failure()
 {
     do_test(FAILURE_SIDE_TARGET);
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, probe_gated_recovery, "MAX_EAGER_LANES=8",
-           "RECOVERY_RETRIES=100")
+void test_ucp_fault_tolerance::run_probe_gated_recovery()
 {
     skip_unless_rc_probe_gate();
 
-    bool probe_armed = false;
+    ucs::mock mock;
+    mock_recovery_probe(sender().worker(), mock, recovery_probe_count);
 
     test_am_with_injected_failure(FAILURE_SIDE_TARGET, TEST_OP_AM);
 
-    wait_for_cond([this, &probe_armed]() {
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-        ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
-        ucp_lane_index_t lane;
-
-        if (arg != NULL) {
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-                if (arg->probe[lane].comp.func != NULL) {
-                    probe_armed = true;
-                    break;
-                }
-            }
-        }
-
+    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+    wait_for_cond([ep]() {
         return ucp_ep_get_failed_lanes(ep) == 0;
     }, [this]() {
         short_progress_loop();
     });
 
-    EXPECT_TRUE(probe_armed)
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep))
+            << "failed lanes are not recovered";
+    EXPECT_NE(0u, m_probe_count)
             << "RC p2p lane recovery completed without arming an aux probe";
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000")
+void test_ucp_fault_tolerance::run_teardown_with_outstanding_probe()
 {
     skip_unless_rc_probe_gate();
-
-    m_held_probe_comp = NULL;
 
     ucs::mock mock;
     mock_recovery_probe(sender().worker(), mock, recovery_probe_hold);
@@ -824,8 +1001,61 @@ UCS_TEST_P(test_ucp_fault_tolerance, teardown_with_outstanding_probe,
     }
 }
 
-UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
-           "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", "KEEPALIVE_INTERVAL=0.1s")
+void test_ucp_fault_tolerance::run_worker_flush_during_recovery()
+{
+    skip_unless_rc_probe_gate();
+
+    m_held_probe_comp = NULL;
+
+    ucs::mock mock;
+    mock_recovery_probe(sender().worker(), mock, recovery_probe_hold);
+
+    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_AM);
+
+    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+    if (ucp_ep_get_failed_lanes(ep) == 0) {
+        UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
+    }
+
+    ASSERT_TRUE(wait_for_recovery_probe_in_flight(ep, ucs::get_deadline(5.0)))
+            << "could not catch an aux recovery probe in flight";
+
+    void *flush_req = sender().flush_worker_nb(0);
+    ASSERT_FALSE(UCS_PTR_IS_ERR(flush_req))
+            << "worker flush failed: "
+            << ucs_status_string(UCS_PTR_STATUS(flush_req));
+
+    ucs_status_t flush_status = UCS_PTR_STATUS(flush_req);
+    ucs_time_t deadline       = ucs::get_deadline(1.0);
+    while (UCS_PTR_IS_PTR(flush_req) && (flush_status == UCS_INPROGRESS) &&
+           (ucs_get_time() < deadline)) {
+        short_progress_loop();
+        flush_status = ucp_request_check_status(flush_req);
+    }
+
+    /*
+     * Close the endpoint and release the held probe before checking the
+     * result, so the test can clean up even when the regression leaves
+     * worker flush incomplete.
+     */
+    void *close_req = sender().disconnect_nb(0, INJECTED_EP_INDEX,
+                                             UCP_EP_CLOSE_FLAG_FORCE);
+    mock_invoke_completion(UCS_ERR_CANCELED);
+    ASSERT_FALSE(UCS_PTR_IS_ERR(close_req))
+            << "disconnect failed: "
+            << ucs_status_string(UCS_PTR_STATUS(close_req));
+    if (UCS_PTR_IS_PTR(close_req)) {
+        EXPECT_EQ(UCS_OK, request_wait(close_req));
+    }
+
+    EXPECT_EQ(UCS_OK, flush_status)
+            << "idle recovery wireup endpoint blocked worker flush";
+    if (UCS_PTR_IS_PTR(flush_req)) {
+        EXPECT_EQ(UCS_OK, request_wait(flush_req));
+    }
+}
+
+void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
 {
     skip_unless_rc_probe_gate();
 
@@ -854,3 +1084,34 @@ UCS_TEST_P(test_ucp_fault_tolerance, recovery_retries_exhausted_live_lanes,
     EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true))
             << "data did not flow on live lanes after recovery give-up";
 }
+
+#define UCP_FT_TEST(_fixture, _name, ...) \
+    UCS_TEST_P(_fixture, _name, __VA_ARGS__) \
+    { \
+        run_##_name(); \
+    }
+
+#define UCP_FT_TESTS(_fixture) \
+    UCP_FT_TEST(_fixture, initiator_failure, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, target_failure, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, probe_gated_recovery, "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
+    UCP_FT_TEST(_fixture, teardown_with_outstanding_probe, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000") \
+    UCP_FT_TEST(_fixture, worker_flush_during_recovery, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000", \
+                "KEEPALIVE_INTERVAL=0.1s") \
+    UCP_FT_TEST(_fixture, recovery_retries_exhausted_live_lanes, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", \
+                "KEEPALIVE_INTERVAL=0.1s")
+
+UCP_FT_TESTS(test_ucp_fault_tolerance)
+UCP_FT_TESTS(DISABLED_test_ucp_fault_tolerance_tf)
+
+#undef UCP_FT_TEST
+#undef UCP_FT_TESTS
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
+UCP_INSTANTIATE_TEST_CASE(DISABLED_test_ucp_fault_tolerance_tf)

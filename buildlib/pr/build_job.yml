@@ -102,6 +102,10 @@ jobs:
           tencentos44:
             CONTAINER: tencentos44
             build_mode: short
+          ubuntu2404_ze:
+            CONTAINER: ubuntu2404_ze
+            build_mode: ze
+            require_ze: yes
       # ICC/PGI matrix
       ${{ if contains(parameters.name, 'icc_pgi') }}:
         matrix:
@@ -153,3 +157,7 @@ jobs:
           BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
           build_mode: $(build_mode)
           test_static: $(test_static)
+          require_ze: $(require_ze)
+          # Intentionally unset by the default no-GPU ZE CI lane. Set this as
+          # a pipeline variable for manual Intel GPU validation runs.
+          require_real_ze: $(require_real_ze)

@@ -9,9 +9,13 @@
 
 ## Current
 ### Features:
+#### ROCM
+ * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
 #### RDMA CORE (IB, ROCE, etc.)
  * UCX_IB_PCI_RELAXED_ORDERING=yes now requires all memory keys to use relaxed ordering and omits strict-order companion keys; the former "only" value is removed
 ### Bugfixes:
+#### ROCM
+ * Fixed dmabuf base address and offset for interior ROCm pointers
 
 ## 1.22.0 (August 2, 2026)
 ### Features:

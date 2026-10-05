@@ -114,10 +114,10 @@ uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     if (ucs_unlikely(!uct_ud_ep_is_connected_and_no_pending(ep) ||
                      uct_ud_ep_no_window(ep) ||
                      uct_ud_iface_has_pending_async_ev(iface))) {
-        ucs_trace_poll("iface=%p ep=%p (%d->%d) no ep resources (psn=%u max_psn=%u)",
-                       iface, ep, ep->ep_id, ep->dest_ep_id,
-                       (unsigned)ep->tx.psn,
-                       (unsigned)ep->tx.max_psn);
+        ucs_trace_poll("iface=%p " UCT_UD_EP_TO_DEST_FMT
+                       " no ep resources (psn=%u max_psn=%u)",
+                       iface, UCT_UD_EP_TO_DEST_ARG(ep),
+                       (unsigned)ep->tx.psn, (unsigned)ep->tx.max_psn);
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
         return NULL;
     }

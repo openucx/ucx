@@ -164,6 +164,22 @@ public:
         EXPECT_EQ(3, ep(m_e1)->tx.acked_psn);
     }
 
+    uct_ud_ep_t *find_private_ep(entity *e, uint32_t dest_ep_id) {
+        unsigned index;
+        void *elem;
+
+        ucs_ptr_array_for_each(elem, index, &iface(e)->eps) {
+            uct_ud_ep_t *ud_ep = static_cast<uct_ud_ep_t*>(elem);
+
+            if ((ud_ep->flags & UCT_UD_EP_FLAG_PRIVATE) &&
+                (ud_ep->dest_ep_id == dest_ep_id)) {
+                return ud_ep;
+            }
+        }
+
+        return NULL;
+    }
+
 
     static volatile uint32_t     rx_ack_count;
     static volatile uint32_t     rx_drop_count;
@@ -884,6 +900,102 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     EXPECT_EQ(1U, ud_ep->ep_id);
 }
 
+/* Delayed CREP must not affect an endpoint which reused its ep_id */
+UCS_TEST_P(test_ud, stale_crep_on_reused_ep_id, "UD_LINGER_TIMEOUT=1s") {
+    entity *e3 = uct_test::create_entity(0);
+    m_entities.push_back(e3);
+
+    /* Hold the old CREP and keep the new connection in progress. */
+    iface(m_e2)->tx.available = 0;
+    iface(e3)->tx.available   = 0;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    short_progress_loop();
+
+    uint32_t ep_id    = ep(m_e1)->ep_id;
+    uint32_t ep_index = uct_ud_ep_id_to_index(ep_id);
+    m_e1->destroy_ep(0);
+    wait_for_ep_destroyed(iface(m_e1), ep_index);
+
+    m_e1->connect_to_iface(0, *e3);
+    ASSERT_EQ(ep_index, uct_ud_ep_id_to_index(ep(m_e1)->ep_id));
+    ASSERT_NE(ep_id, ep(m_e1)->ep_id);
+
+    /* Deliver the old CREP to the endpoint which reused its ep_id. */
+    iface(m_e2)->tx.available = 128;
+    short_progress_loop();
+
+    EXPECT_EQ(UCT_UD_EP_NULL_ID, ep(m_e1)->dest_ep_id);
+    EXPECT_EQ(UCT_UD_INITIAL_PSN - 1, ep(m_e1)->tx.acked_psn);
+    EXPECT_FALSE(ucs_queue_is_empty(&ep(m_e1)->tx.window));
+}
+
+/* Stale private endpoint must be released after its peer is gone, so that it is
+ * not reused by a connection which is matched by the same conn_sn. */
+UCS_TEST_P(test_ud, stale_private_ep_reuse, "UD_LINGER_TIMEOUT=1s",
+           "UD_TIMEOUT=3s") {
+    void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    flush();
+
+    /* m_e2 has a private endpoint which is connected to the endpoint of m_e1 */
+    uint32_t old_id         = ep(m_e1)->ep_id;
+    uct_ud_ep_t *private_ep = find_private_ep(m_e2, old_id);
+    ASSERT_TRUE(private_ep != NULL);
+
+    uint32_t private_index = uct_ud_ep_id_to_index(private_ep->ep_id);
+    m_e1->destroy_ep(0);
+
+    /* The second connection makes m_e2 hold 2 private endpoints, where the
+     * stale one is matched by the next conn_sn of m_e2 */
+    m_e1->connect_to_iface(0, *m_e2);
+    flush();
+    ASSERT_NE(old_id, ep(m_e1)->ep_id);
+
+    wait_for_ep_destroyed(iface(m_e1), uct_ud_ep_id_to_index(old_id));
+
+    /* The peer of the stale private endpoint is gone, so it must be released */
+    wait_for_ep_destroyed(iface(m_e2), private_index);
+    EXPECT_FALSE(ucs_ptr_array_lookup(&iface(m_e2)->eps, private_index, ud_ep));
+
+    /* The private endpoint of the live connection must be kept */
+    EXPECT_TRUE(find_private_ep(m_e2, ep(m_e1)->ep_id) != NULL);
+
+    m_e2->connect_to_iface(0, *m_e1);
+    flush();
+
+    EXPECT_NE(UCT_UD_EP_NULL_ID, ep(m_e2)->dest_ep_id);
+    EXPECT_NE(old_id, ep(m_e2)->dest_ep_id);
+}
+
+/* Private endpoint must be kept as long as its peer is alive. */
+UCS_TEST_P(test_ud, private_ep_keepalive, "UD_TIMEOUT=3s") {
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(5);
+    void *ud_ep GTEST_ATTRIBUTE_UNUSED_;
+
+    m_e1->connect_to_iface(0, *m_e2);
+    flush();
+
+    uct_ud_ep_t *private_ep = find_private_ep(m_e2, ep(m_e1)->ep_id);
+    ASSERT_TRUE(private_ep != NULL);
+
+    uint32_t private_index = uct_ud_ep_id_to_index(private_ep->ep_id);
+
+    /* Stay idle for several peer timeouts, the peer is alive and must be
+     * detected as such */
+    while (ucs_get_time() < deadline) {
+        short_progress_loop();
+    }
+
+    ASSERT_TRUE(ucs_ptr_array_lookup(&iface(m_e2)->eps, private_index, ud_ep));
+    EXPECT_EQ(ep(m_e1)->ep_id, private_ep->dest_ep_id);
+
+    /* The connection is still usable */
+    EXPECT_UCS_OK(tx(m_e1));
+    flush();
+}
+
 #if UCT_UD_EP_DEBUG_HOOKS
 /* Simulate loss of ctl packets during simultaneous CREQs.
  * Use-case: CREQ and CREP packets from m_e2 to m_e1 are lost.
@@ -919,6 +1031,139 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 #endif
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
+
+
+class test_ud_verbs_is_connected : public ud_base_test {
+};
+
+UCS_TEST_P(test_ud_verbs_is_connected, mismatched_device_addr)
+{
+    uct_ep_is_connected_params_t params = {0};
+    uct_iface_attr_t attr;
+    std::string dev_addr, iface_addr;
+
+    connect();
+
+    ASSERT_UCS_OK(uct_iface_query(m_e2->iface(), &attr));
+    dev_addr.resize(attr.device_addr_len);
+    iface_addr.resize(attr.iface_addr_len);
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_e2->iface(), (uct_device_addr_t*)dev_addr.data()));
+    ASSERT_UCS_OK(uct_iface_get_address(m_e2->iface(),
+                                        (uct_iface_addr_t*)iface_addr.data()));
+
+    params.field_mask = UCT_EP_IS_CONNECTED_FIELD_DEVICE_ADDR |
+                        UCT_EP_IS_CONNECTED_FIELD_IFACE_ADDR;
+    params.device_addr = (uct_device_addr_t*)dev_addr.data();
+    params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
+    params.ep_addr = (uct_ep_addr_t*)iface_addr.data();
+
+    EXPECT_TRUE(uct_ep_is_connected(m_e1->ep(0), &params));
+
+    /* Flip the LID/GID byte, keep dest_qpn the same */
+    ((uint8_t*)dev_addr.data())[1] ^= 1;
+
+    EXPECT_FALSE(uct_ep_is_connected(m_e1->ep(0), &params));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_ud_verbs_is_connected, ud_verbs)
+
+
+class test_ud_verbs_ah_cache : public ud_base_test {
+public:
+    uct_ib_device_t *dev()
+    {
+        return uct_ib_iface_device(ucs_derived_of(m_e1->iface(),
+                                                   uct_ib_iface_t));
+    }
+
+    /* ah_attr that ep(m_e1, 0) resolves to once connect() runs */
+    ucs_status_t peer_ah_attr(struct ibv_ah_attr *ah_attr)
+    {
+        uct_ib_iface_t *ib_iface = ucs_derived_of(m_e1->iface(),
+                                                  uct_ib_iface_t);
+        std::string dev_addr;
+        uct_iface_attr_t attr;
+        enum ibv_mtu path_mtu;
+        ucs_status_t status;
+
+        status = uct_iface_query(m_e2->iface(), &attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        dev_addr.resize(attr.device_addr_len);
+        status = uct_iface_get_device_address(
+                m_e2->iface(), (uct_device_addr_t*)dev_addr.data());
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        return uct_ib_iface_fill_ah_attr_from_addr(
+                ib_iface, (uct_ib_address_t*)dev_addr.data(), 0, ah_attr,
+                &path_mtu);
+    }
+};
+
+UCS_TEST_P(test_ud_verbs_ah_cache, ep_churn_does_not_leak_ah_refs,
+           "IB_AH_CACHE_TTL=60m", "UD_LINGER_TIMEOUT=10ms")
+{
+    static const int churn_count = 20;
+    uct_ib_iface_t *ib_iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+    struct ibv_ah_attr ah_attr;
+    uct_ib_ah_entry_t *entry;
+    khint_t hash_size_before;
+    int refcount_before;
+    uct_ep_params_t ep_params;
+    std::string dev_addr, iface_addr;
+    uct_iface_attr_t attr;
+
+    connect();
+
+    ASSERT_UCS_OK(peer_ah_attr(&ah_attr));
+    ASSERT_UCS_OK(uct_ib_iface_ah_get(ib_iface, &ah_attr, "test", &entry));
+    hash_size_before = kh_size(&dev()->ah_hash);
+    uct_ib_iface_ah_put(ib_iface, entry); /* drop our own probing ref */
+    refcount_before = entry->refcount;
+
+    ASSERT_UCS_OK(uct_iface_query(m_e2->iface(), &attr));
+    dev_addr.resize(attr.device_addr_len);
+    iface_addr.resize(attr.iface_addr_len);
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_e2->iface(), (uct_device_addr_t*)dev_addr.data()));
+    ASSERT_UCS_OK(uct_iface_get_address(m_e2->iface(),
+                                        (uct_iface_addr_t*)iface_addr.data()));
+
+    ep_params.field_mask  = UCT_EP_PARAM_FIELD_IFACE |
+                            UCT_EP_PARAM_FIELD_DEV_ADDR |
+                            UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                            UCT_EP_PARAM_FIELD_PATH_INDEX;
+    ep_params.iface       = m_e1->iface();
+    ep_params.dev_addr    = (uct_device_addr_t*)dev_addr.data();
+    ep_params.iface_addr  = (uct_iface_addr_t*)iface_addr.data();
+    ep_params.path_index  = 0;
+
+    for (int i = 0; i < churn_count; ++i) {
+        uct_ep_h churn_ep;
+
+        ASSERT_UCS_OK(uct_ep_create(&ep_params, &churn_ep));
+        uct_ep_destroy(churn_ep);
+    }
+
+    /* Each churned ep lingers (disconnected, but not yet freed) and keeps
+     * holding its AH reference until its linger timeout fires; the AH is
+     * only released once every ep has actually been torn down. */
+    wait_for_cond([&]() {
+        return (kh_size(&dev()->ah_hash) == hash_size_before) &&
+               (entry->refcount == refcount_before);
+    }, [this]() { short_progress_loop(); });
+
+    EXPECT_EQ(hash_size_before, kh_size(&dev()->ah_hash));
+    EXPECT_EQ(refcount_before, entry->refcount);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_ud_verbs_ah_cache, ud_verbs)
+
 
 #if UCT_UD_EP_DEBUG_HOOKS
 class test_ud_stale_ack : public test_ud {

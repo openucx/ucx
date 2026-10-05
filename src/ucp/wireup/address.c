@@ -1853,12 +1853,15 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             }
 
             ucp_address_trace(unpack_flags,
-                              "unpack addr[%d] : sysdev %d paths %d eps %u"
-                              " tl_flags 0x%" PRIx64 " bw %.2f/nMBs"
+                              "unpack addr[%d] : %s md[%d] sysdev %d paths %d"
+                              " eps %u tl_flags 0x%" PRIx64 " bw %.2f/nMBs"
                               " ovh %.0fns lat_ovh %.0fns dev_priority %d"
                               " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
                               "/0x%" PRIx64,
-                              (int)(address - address_list), address->sys_dev,
+                              (int)(address - address_list),
+                              ucp_find_tl_name_by_csum(worker->context,
+                                                       address->tl_name_csum),
+                              address->md_index, address->sys_dev,
                               address->dev_num_paths, address->num_ep_addrs,
                               address->iface_attr.flags,
                               address->iface_attr.bandwidth / UCS_MBYTE,

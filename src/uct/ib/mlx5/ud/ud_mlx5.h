@@ -37,6 +37,7 @@ typedef struct {
     struct {
         uct_ib_mlx5_txwq_t              wq;
         uct_ib_mlx5_mmio_mode_t         mmio_mode;
+        uct_ib_mlx5_bf_copy_mode_t      bf_copy_mode;
     } tx;
     struct {
         uct_ib_mlx5_rxwq_t              wq;
@@ -60,4 +61,3 @@ uct_ud_mlx5_tx_moderation(uct_ud_mlx5_iface_t *iface, uint8_t ce_se)
 }
 
 #endif
-
