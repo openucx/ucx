@@ -3275,7 +3275,9 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, resolve_assignment_owner)
     const resolver_case cases[]    = {
         {"application GPU", UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
             UCS_MEMORY_TYPE_CUDA, mapped_gpu(), true},
-        {"unregistered buffer", UCS_MEMORY_TYPE_CUDA, mapped_gpu(),
+        {"unregistered buffer uses the application owner", UCS_MEMORY_TYPE_CUDA,
+            mapped_gpu(), UCS_MEMORY_TYPE_UNKNOWN, unknown, true},
+        {"unregistered host buffer", UCS_MEMORY_TYPE_HOST, unknown,
             UCS_MEMORY_TYPE_UNKNOWN, unknown, false},
         {"managed CUDA located on the GPU", UCS_MEMORY_TYPE_CUDA_MANAGED,
             mapped_gpu(), UCS_MEMORY_TYPE_CUDA_MANAGED, mapped_gpu(), true},
@@ -3479,6 +3481,15 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
                             UCS_SYS_DEVICE_ID_UNKNOWN, {nic(2)});
 }
 
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_cuda,
+           bcopy_uses_application_assignment)
+{
+    install_assignment(mapped_gpu(), {nic(2)});
+    expect_protocol_candidates(UCP_OP_ID_PUT, UCS_MEMORY_TYPE_CUDA,
+                               UCP_DATATYPE_CONTIG, mapped_gpu(), 1,
+                               "put/offload/bcopy", {nic(2)});
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_cuda, rcx_gpu,
                               "rc_x,cuda,rocm")
 
@@ -3486,9 +3497,12 @@ static const struct {
     ucp_operation_id_t op_id;
     const char         *name;
 } gpu_nic_am_bw_protocols[] = {{UCP_OP_ID_TAG_SEND, "egr/multi/zcopy"},
+                               {UCP_OP_ID_TAG_SEND, "egr/multi/bcopy"},
                                {UCP_OP_ID_AM_SEND, "am/egr/multi/zcopy"},
                                {UCP_OP_ID_AM_SEND, "am/egr/multi/zcopy/psn"},
-                               {UCP_OP_ID_RNDV_SEND, "rndv/am/zcopy"}};
+                               {UCP_OP_ID_AM_SEND, "am/egr/multi/bcopy"},
+                               {UCP_OP_ID_RNDV_SEND, "rndv/am/zcopy"},
+                               {UCP_OP_ID_RNDV_SEND, "rndv/am/bcopy"}};
 
 /* Eager protocols need a CUDA memory type endpoint for the receiver copy */
 class test_ucp_proto_mock_rcx_gpu_nic_am_bw :

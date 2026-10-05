@@ -43,6 +43,20 @@ ucp_proto_multi_get_owner_sys_dev(const ucp_proto_multi_init_params_t *params)
                    params->super.super.select_param->sys_dev;
 }
 
+static ucs_memory_type_t
+ucp_proto_multi_get_owner_mem_type(const ucp_proto_multi_init_params_t *params)
+{
+    ucs_memory_type_t reg_mem_type = params->super.reg_mem_info.type;
+
+    /* The memory type of the registered buffer is the staging buffer's if any,
+     * otherwise the application buffer's.
+     * Only unregistered buffers have no memory type, so fall back to the
+     * application buffer's memory type. */
+    return (reg_mem_type != UCS_MEMORY_TYPE_UNKNOWN) ?
+                   reg_mem_type :
+                   (ucs_memory_type_t)params->super.super.select_param->mem_type;
+}
+
 const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
         const ucp_proto_multi_init_params_t *params,
         ucs_sys_device_t owner_sys_dev)
@@ -59,12 +73,6 @@ const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
 
     if (!ucp_proto_multi_lane_type_is_assignable(params->middle.lane_type)) {
         owner_desc = "no RMA_BW or AM_BW lanes";
-        goto out;
-    }
-
-    if (params->super.reg_mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) {
-        /* Buffer is not registered (e.g. bcopy), so it has no NIC affinity. */
-        owner_desc = "unregistered buffer";
         goto out;
     }
 
@@ -514,6 +522,7 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
     const ucs_sys_device_bitmap_t *assigned_nic_bitmap;
     ucp_lane_index_t i, lane, num_removed_lanes;
+    ucs_memory_type_t mem_type;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
     ucp_rsc_index_t rsc_index;
@@ -524,6 +533,8 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
     if (assigned_nic_bitmap == NULL) {
         return UCS_OK;
     }
+
+    mem_type = ucp_proto_multi_get_owner_mem_type(params);
 
     /* Classify before compaction because index zero has the first-lane role. */
     for (i = 0; i < num_lanes; ++i) {
@@ -553,11 +564,11 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
          * (e.g. tcp lanes are kept). */
         rsc_index = ucp_proto_common_get_rsc_index(init_params, lane);
         md_index  = context->tl_rscs[rsc_index].md_index;
-        if (!UCS_BIT_GET(context->reg_md_map[params->super.reg_mem_info.type],
-                         md_index)) {
-            ucs_trace("assignment keeps lane %d: md %s cannot register the "
-                      "buffer",
-                      lane, context->tl_mds[md_index].rsc.md_name);
+        if (!UCS_BIT_GET(context->reg_md_map[mem_type], md_index)) {
+            ucs_trace("assignment keeps lane %d: md %s cannot register %s "
+                      "memory",
+                      lane, context->tl_mds[md_index].rsc.md_name,
+                      ucs_memory_type_names[mem_type]);
             lanes[num_filtered_lanes++] = lane;
             ++num_bulk_lanes_kept;
             continue;
