@@ -22,3 +22,4 @@
 /src/uct/ze/                @yafshar @j-xiong @openucx/ucx-maintainers
 /src/tools/perf/ze/         @yafshar @j-xiong @openucx/ucx-maintainers
 /test/gtest/ucm/ze_hooks.cc @yafshar @j-xiong @openucx/ucx-maintainers
+/test/gtest/uct/ze/         @yafshar @j-xiong @openucx/ucx-maintainers
