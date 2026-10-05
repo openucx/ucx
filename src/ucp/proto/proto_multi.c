@@ -974,6 +974,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                          fixed_first_lane, num_lanes,
                                                          lanes);
 
+    /* Keep the device-ordinal tie-break with an active assignment too: with
+     * flip or round_robin each GPU has exclusive NICs, so the tie-break is a
+     * no-op, and with shared it spreads the GPUs over their shared NICs */
     req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
 
     ucs_trace(
