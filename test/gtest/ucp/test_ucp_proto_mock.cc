@@ -2805,6 +2805,15 @@ protected:
     void install_assignment(ucs_sys_device_t gpu_sys_dev,
                             const sys_dev_set_t &assigned_nics)
     {
+        install_assignment({gpu_sys_dev}, assigned_nics,
+                           UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP);
+    }
+
+    /* Build the assignment of a single topology group */
+    void install_assignment(const std::vector<ucs_sys_device_t> &gpus,
+                            const sys_dev_set_t &nics,
+                            ucp_gpu_nic_assignment_mode_t mode)
+    {
         ucs_topo_groups_t groups;
         ucs_topo_group_t *group;
         ucs_topo_group_element_t *gpu;
@@ -2822,13 +2831,15 @@ protected:
                                  FAIL() << "failed to append topology group");
         ucs_topo_init_group(group);
 
-        gpu = ucs_array_append(&group->gpus,
-                               FAIL() << "failed to append topology GPU");
-        memset(gpu, 0, sizeof(*gpu));
-        gpu->sys_devs[0]  = gpu_sys_dev;
-        gpu->num_sys_devs = 1;
+        for (auto gpu_sys_dev : gpus) {
+            gpu = ucs_array_append(&group->gpus,
+                                   FAIL() << "failed to append topology GPU");
+            memset(gpu, 0, sizeof(*gpu));
+            gpu->sys_devs[0]  = gpu_sys_dev;
+            gpu->num_sys_devs = 1;
+        }
 
-        for (auto nic_sys_dev : assigned_nics) {
+        for (auto nic_sys_dev : nics) {
             nic = ucs_array_append(&group->nics,
                                    FAIL() << "failed to append topology NIC");
             memset(nic, 0, sizeof(*nic));
@@ -2840,9 +2851,7 @@ protected:
                 ucs_malloc(sizeof(*assignment), "mock gpu-nic assignment"));
         ASSERT_NE(nullptr, assignment);
 
-        status = ucp_gpu_nic_assignment_build(&groups,
-                                              UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
-                                              assignment);
+        status = ucp_gpu_nic_assignment_build(&groups, mode, assignment);
         if (status != UCS_OK) {
             ucs_free(assignment);
         }
@@ -2858,8 +2867,8 @@ protected:
         m_bandwidth[nic_name(index)] = bandwidth;
     }
 
-    /* Present a mock NIC as an intra-node device, like cuda_ipc */
-    void set_intra_node_device(unsigned index)
+    /* Present a mock NIC as a non-network device, e.g. shared memory */
+    void set_non_net_device(unsigned index)
     {
         ASSERT_LT(index, ucs_static_array_size(m_nics));
         set_mock_dev_type(sender().ucph(), nic_name(index),
@@ -3333,23 +3342,26 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, host_memory_keeps_all_lanes)
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
            partial_assignment_uses_available_nic)
 {
+    /* absent_nic() has no transport resource, which does not happen in
+     * practice since the assignment is built only from the NICs allowed by
+     * UCX_NET_DEVICES and UCX_TLS */
     install_assignment(mapped_gpu(), {nic(2), absent_nic()});
 
     expect_direct_candidates(mapped_gpu(), {nic(2)});
 }
 
-UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, assignment_keeps_intra_node_lanes)
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, assignment_keeps_non_net_lanes)
 {
-    set_intra_node_device(2);
+    set_non_net_device(2);
     install_assignment(mapped_gpu(), {nic(0)});
 
     expect_direct_candidates(mapped_gpu(), {nic(0), nic(2)});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
-           empty_assignment_keeps_intra_node_lanes)
+           empty_assignment_keeps_non_net_lanes)
 {
-    set_intra_node_device(2);
+    set_non_net_device(2);
     install_assignment(mapped_gpu(), {});
 
     expect_direct_candidates(mapped_gpu(), {nic(2)});
@@ -3366,6 +3378,23 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
 
     install_assignment(gpu, {nic(0), nic(1)});
     expect_direct_candidates(gpu, {nic(1)});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, shared_assignment_spreads_gpus,
+           "MAX_RMA_RAILS=1")
+{
+    /* Both GPUs are assigned the same NICs, so only the device ordinal
+     * separates them. The mock GPUs have consecutive BDF ordinals, and the
+     * tie-break picks the NIC at the ordinal modulo the number of NICs. */
+    const unsigned ordinal  = ucs_topo_sys_device_get_bdf_class_ordinal(
+            m_gpus[0]);
+    const unsigned num_nics = endpoint_nics().size();
+
+    install_assignment({m_gpus[0], m_gpus[1]}, endpoint_nics(),
+                       UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED);
+
+    expect_direct_candidates(m_gpus[0], {nic(ordinal % num_nics)});
+    expect_direct_candidates(m_gpus[1], {nic((ordinal + 1) % num_nics)});
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
@@ -3458,6 +3487,7 @@ static const struct {
     const char         *name;
 } gpu_nic_am_bw_protocols[] = {{UCP_OP_ID_TAG_SEND, "egr/multi/zcopy"},
                                {UCP_OP_ID_AM_SEND, "am/egr/multi/zcopy"},
+                               {UCP_OP_ID_AM_SEND, "am/egr/multi/zcopy/psn"},
                                {UCP_OP_ID_RNDV_SEND, "rndv/am/zcopy"}};
 
 /* Eager protocols need a CUDA memory type endpoint for the receiver copy */
@@ -3535,6 +3565,32 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_bw,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_am_bw, rcx_gpu,
+                              "rc_x,cuda,rocm")
+
+/* With a single eager lane wireup creates no AM_BW lanes, so the AM lane is
+ * the protocol's only lane */
+class test_ucp_proto_mock_rcx_gpu_nic_am_only :
+    public test_ucp_proto_mock_rcx_gpu_nic_am_bw {
+public:
+    test_ucp_proto_mock_rcx_gpu_nic_am_only()
+    {
+        modify_config("MAX_EAGER_LANES", "1");
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic_am_only,
+           unassigned_am_lane_keeps_am_protocols, "RNDV_THRESH=1")
+{
+    /* Assign a NIC other than the AM lane's, and leave no AM_BW lane that
+     * could replace it */
+    install_assignment(mapped_gpu(), {non_am_lane_nic()});
+
+    /* The protocols stay selectable, and the whole message goes over the
+     * unassigned AM lane */
+    expect_am_protocol_candidates(mapped_gpu(), {am_lane_nic()});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_gpu_nic_am_only, rcx_gpu,
                               "rc_x,cuda,rocm")
 
 class test_ucp_proto_mock_rcx_single_net_dev :
