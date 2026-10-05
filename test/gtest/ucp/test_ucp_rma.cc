@@ -5,6 +5,7 @@
 * See file LICENSE for terms.
 */
 
+#include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_memheap.h"
 
 extern "C" {
@@ -430,10 +431,9 @@ UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
 
 
-static const char *gpu_nic_assignment_modes[] = {"flip", "round_robin",
-                                                 "shared"};
-
-class test_ucp_rma_gpu_nic : public test_ucp_rma {
+class test_ucp_rma_gpu_nic :
+    protected gpu_nic_assignment_checks,
+    public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -470,150 +470,14 @@ protected:
                              const std::string &proto_name,
                              size_t max_size = 16 * UCS_MBYTE)
     {
-        if (!is_buffer_gpu_assigned()) {
+        if (!is_buffer_gpu_assigned(sender().ucph())) {
             UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
         }
 
         /* The assignment follows the local buffer, so it must be CUDA */
         test_message_sizes(send_func, 128, max_size, UCS_MEMORY_TYPE_CUDA,
                            UCS_MEMORY_TYPE_CUDA, 0);
-        expect_assigned_lanes(proto_name);
-    }
-
-private:
-    /* Check that the GPU the test buffers are allocated on has assigned NICs.
-     * With 'flip' and 'round_robin', a GPU may be left without any. */
-    bool is_buffer_gpu_assigned()
-    {
-        const ucp_context_h context = sender().ucph();
-        const ucs_sys_device_bitmap_t *bitmap;
-        ucp_memory_info_t mem_info;
-
-        if (context->gpu_nic_assignment == nullptr) {
-            return false;
-        }
-
-        std::unique_ptr<mem_buffer> buffer(
-                create_mem_buffer(64, UCS_MEMORY_TYPE_CUDA));
-        ucp_memory_detect(context, buffer->ptr(), buffer->size(), &mem_info);
-
-        bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
-                                               mem_info.sys_dev);
-        return (bitmap != nullptr) && !UCS_STATIC_BITMAP_IS_ZERO(*bitmap);
-    }
-
-    /* Check that the protocol moved data, and only over the NICs assigned to
-     * the GPU of the buffer it moved */
-    void expect_assigned_lanes(const std::string &proto_name)
-    {
-        unsigned num_used       = 0;
-        unsigned num_restricted = 0;
-        ucp_ep_config_t *ep_config;
-        ucp_rkey_config_t **rkey_config_p;
-        ucp_worker_h worker;
-
-        for (auto iter = entities().begin(); iter != entities().end(); ++iter) {
-            worker = (*iter)->worker();
-            ucs_array_for_each(ep_config, &worker->ep_config) {
-                expect_assigned_lanes(worker, &ep_config->proto_select,
-                                      proto_name, num_used, num_restricted);
-            }
-
-            ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
-                expect_assigned_lanes(worker, &(*rkey_config_p)->proto_select,
-                                      proto_name, num_used, num_restricted);
-            }
-        }
-
-        ASSERT_GT(num_used, 0u) << proto_name << " was not used";
-        if (num_restricted == 0) {
-            UCS_TEST_SKIP_R("the assignment keeps every bandwidth nic of the "
-                            "endpoints");
-        }
-    }
-
-    void expect_assigned_lanes(ucp_worker_h worker,
-                               const ucp_proto_select_t *proto_select,
-                               const std::string &proto_name,
-                               unsigned &num_used, unsigned &num_restricted)
-    {
-        const ucp_proto_threshold_elem_t *thresh;
-        size_t range_start;
-        khiter_t khiter;
-
-        for (khiter = kh_begin(proto_select->hash);
-             khiter != kh_end(proto_select->hash); ++khiter) {
-            if (!kh_exist(proto_select->hash, khiter)) {
-                continue;
-            }
-
-            thresh      = kh_val(proto_select->hash, khiter).thresholds;
-            range_start = 0;
-            do {
-                if ((thresh->proto_config.selections > 0) &&
-                    (proto_name == thresh->proto_config.proto->name)) {
-                    expect_assigned_lanes(worker, &thresh->proto_config,
-                                          range_start, num_restricted);
-                    ++num_used;
-                }
-                range_start = thresh->max_msg_length + 1;
-            } while ((thresh++)->max_msg_length < SIZE_MAX);
-        }
-    }
-
-    static const uct_tl_resource_desc_t *
-    lane_tl_rsc(ucp_context_h context, const ucp_ep_config_t *ep_config,
-                ucp_lane_index_t lane)
-    {
-        return &context->tl_rscs[ep_config->key.lanes[lane].rsc_index].tl_rsc;
-    }
-
-    static bool is_unassigned_nic(const uct_tl_resource_desc_t *tl_rsc,
-                                  const ucs_sys_device_bitmap_t *bitmap)
-    {
-        return (tl_rsc->dev_type == UCT_DEVICE_TYPE_NET) &&
-               !ucp_gpu_nic_bitmap_get(bitmap, tl_rsc->sys_device);
-    }
-
-    void expect_assigned_lanes(ucp_worker_h worker,
-                               const ucp_proto_config_t *proto_config,
-                               size_t msg_length, unsigned &num_restricted)
-    {
-        const ucp_context_h context = worker->context;
-        const ucp_ep_config_t *ep_config =
-                ucp_worker_ep_config(worker, proto_config->ep_cfg_index);
-        const ucs_sys_device_t gpu_sys_dev = proto_config->select_param.sys_dev;
-        const ucs_sys_device_bitmap_t *bitmap;
-        const uct_tl_resource_desc_t *tl_rsc;
-        ucp_proto_query_attr_t attr;
-        ucp_lane_index_t lane;
-
-        bitmap = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
-                                               gpu_sys_dev);
-        ASSERT_NE(nullptr, bitmap)
-                << proto_config->proto->name << " buffer sys_dev "
-                << static_cast<int>(gpu_sys_dev);
-
-        ucp_proto_config_query(worker, proto_config, msg_length, &attr);
-        ucs_for_each_bit(lane, attr.lane_map) {
-            tl_rsc = lane_tl_rsc(context, ep_config, lane);
-            EXPECT_FALSE(is_unassigned_nic(tl_rsc, bitmap))
-                    << proto_config->proto->name << " lane "
-                    << static_cast<int>(lane) << " on unassigned "
-                    << tl_rsc->dev_name;
-        }
-
-        /* Without a bandwidth lane on an unassigned NIC, the check above
-         * passes even if the protocol ignores the assignment */
-        for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
-            if ((ep_config->key.lanes[lane].lane_types &
-                 UCS_BIT(UCP_LANE_TYPE_RMA_BW)) &&
-                is_unassigned_nic(lane_tl_rsc(context, ep_config, lane),
-                                  bitmap)) {
-                ++num_restricted;
-                break;
-            }
-        }
+        expect_assigned_lanes(entities(), proto_name);
     }
 };
 

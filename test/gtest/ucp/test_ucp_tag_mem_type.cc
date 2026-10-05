@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,6 +7,7 @@
 #include <common/test.h>
 #include <common/mem_buffer.h>
 
+#include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_tag.h"
 #include "ucp_datatype.h"
 
@@ -316,10 +317,9 @@ UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_tag_mem_type);
 
 
-static const char *gpu_nic_assignment_modes[] = {"flip", "round_robin",
-                                                 "shared"};
-
-class test_ucp_tag_mem_type_gpu_nic : public test_ucp_tag_mem_type {
+class test_ucp_tag_mem_type_gpu_nic :
+    protected gpu_nic_assignment_checks,
+    public test_ucp_tag_mem_type {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -347,14 +347,16 @@ public:
         /* Enough lanes to use every NIC assigned to a GPU */
         modify_config("MAX_EAGER_LANES", "4");
         modify_config("MAX_RNDV_LANES", "8");
+        /* Count protocol selections, which expect_assigned_lanes() checks */
+        modify_config("PROTO_INFO", "used");
         test_ucp_tag::init();
     }
 
 protected:
     void test_xfer_sizes(const std::vector<size_t> &sizes)
     {
-        if (sender().ucph()->gpu_nic_assignment == nullptr) {
-            UCS_TEST_SKIP_R("no gpu-nic assignment on this host");
+        if (!is_buffer_gpu_assigned(sender().ucph())) {
+            UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
         }
 
         ucs::detail::message_stream ms("INFO");
@@ -369,12 +371,16 @@ protected:
 
 UCS_TEST_P(test_ucp_tag_mem_type_gpu_nic, eager, "RNDV_THRESH=inf")
 {
+    /* The lanes are not checked, since the eager protocols keep the first AM
+     * lane even on an unassigned NIC */
     test_xfer_sizes({1, 1024, 64 * UCS_KBYTE, UCS_MBYTE + 4});
 }
 
-UCS_TEST_P(test_ucp_tag_mem_type_gpu_nic, rndv, "RNDV_THRESH=0")
+UCS_TEST_P(test_ucp_tag_mem_type_gpu_nic, rndv, "RNDV_THRESH=0",
+           "RNDV_SCHEME=get_zcopy")
 {
     test_xfer_sizes({1, 64 * UCS_KBYTE, UCS_MBYTE + 4, 4 * UCS_MBYTE});
+    expect_assigned_lanes(entities(), "rndv/get/zcopy");
 }
 
 /* Network lanes only, since the assignment restricts only NIC lanes */
