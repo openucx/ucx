@@ -784,13 +784,14 @@ protected:
     static void setup_progress_mock(ucp_worker_h worker, ucs::mock &mock)
     {
         ucp_ep_config_t *ep_config;
+        ucp_rkey_config_t **rkey_config_p;
+
         ucs_array_for_each(ep_config, &worker->ep_config) {
             setup_progress_mock(ep_config->proto_select, mock);
         }
 
-        ucp_rkey_config_t *rkey_config;
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            setup_progress_mock(rkey_config->proto_select, mock);
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            setup_progress_mock((*rkey_config_p)->proto_select, mock);
         }
     }
 
@@ -1013,8 +1014,11 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
     rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }
 
+/* Use host staging so this test still selects rndv/put/mtype when CUDA
+ * fragments are unreachable from the network lane. The user buffer remains
+ * CUDA. */
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
-           "RNDV_FRAG_SIZE=host:8K,cuda:8K")
+           "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K")
 {
     rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }

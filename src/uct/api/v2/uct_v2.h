@@ -1119,7 +1119,7 @@ typedef struct {
  * @brief  Memory domain capability flags.
  */
 typedef enum {
-    UCT_MD_FLAG_V2_FIRST       = UCT_MD_FLAG_LAST,
+    UCT_MD_FLAG_V2_FIRST         = UCT_MD_FLAG_LAST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1127,7 +1127,7 @@ typedef enum {
      * key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
-    UCT_MD_FLAG_INVALIDATE_RMA = UCT_MD_FLAG_V2_FIRST,
+    UCT_MD_FLAG_INVALIDATE_RMA   = UCT_MD_FLAG_V2_FIRST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1135,12 +1135,13 @@ typedef enum {
      * packed key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO = UCS_BIT(12),
+    UCT_MD_FLAG_INVALIDATE_AMO   = UCS_BIT(12),
 
     /**
-     * Memory domain performs memory type related copy operations.
+     * Memory domain supports interfaces that perform inter-process memory type
+     * copy operations.
      */
-    UCT_MD_FLAG_MEMTYPE_COPY   = UCS_BIT(13)
+    UCT_MD_FLAG_IPC_MEMTYPE_COPY = UCS_BIT(13)
 } uct_md_flags_v2_t;
 
 
@@ -1590,15 +1591,28 @@ ucs_status_t uct_rkey_unpack_v2(uct_component_h component,
  * @ingroup UCT_MD
  * @brief Pack a memh and rkey into a device memory element structure.
  *
- * @param [in]  md           Memory domain.
- * @param [in]  memh         Memory handle to pack (can be NULL).
- * @param [in]  rkey         Remote key to pack (can be UCT_INVALID_RKEY).
- * @param [out] mem_elem     Filled with the packed memh and rkey.
+ * @param [in]  md                Memory domain.
+ * @param [in]  memh              Memory handle to pack (can be NULL).
+ * @param [in]  rkey              Remote key to pack (can be UCT_INVALID_RKEY).
+ * @param [out] mem_elem          Filled with the packed memh and rkey.
+ * @param [out] release_handle_p  Handle for releasing resources allocated
+ *                                during packing.
  *
  * @return UCS_OK on success or error code in case of failure.
  */
 ucs_status_t uct_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
-                                  uct_device_mem_elem_t *mem_elem);
+                                  uct_device_mem_elem_t *mem_elem,
+                                  void **release_handle_p);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Release resources allocated by @ref uct_md_mem_elem_pack.
+ *
+ * @param [in] md              Memory domain.
+ * @param [in] release_handle  Handle for releasing resources.
+ */
+void uct_md_mem_elem_release(uct_md_h md, void *release_handle);
 
 
 /**
@@ -1903,6 +1917,10 @@ typedef struct uct_ep_op_info {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback invoked for each undelivered outstanding operation.
+ *
+ * @param [in] op_info  Descriptor of the undelivered operation. The descriptor
+ *                      is valid only for the duration of the callback.
+ * @param [in] arg      User-defined argument.
  */
 typedef void (*uct_ep_outstanding_purge_callback_t)(
         const uct_ep_op_info_t *op_info, void *arg);
@@ -1927,12 +1945,14 @@ typedef enum {
 typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
-     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB are required. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. If @ref
+     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, every outstanding
+     *  operation is treated as undelivered. */
     uint64_t                            field_mask;
 
     /**
      * Opaque RX token received from the remote peer.
+     * Valid when @ref UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is set.
      */
     const void                          *rx_token;
 
@@ -1953,6 +1973,14 @@ typedef struct {
  *
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
+ *
+ * @note This routine should be called only after the error handler for @a ep
+ *       returns @ref UCS_INPROGRESS. It can be used only if the interface
+ *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ *
+ * @note If @ref UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, @a cb may also
+ *       be invoked for operations the peer already received. Reposting those
+ *       operations can duplicate data.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,

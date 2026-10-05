@@ -197,7 +197,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, single_transport_multi_device) {
               "| tcp       | ibs2 (mlx5_0)      |       1 | am, rma_bw |\n"
               "|           | ens10f0            |       1 | rma_bw     |\n"
               "|           | ibs7f0 (mlx5_1)    |       1 | rma_bw     |\n"
-              "+-----------+--------------------+---------+------------+\n",
+              "+-----------+--------------------+---------+------------+",
               render(context.get(), key, 0));
     /* clang-format on */
 }
@@ -256,7 +256,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, multi_transport) {
         "|           | mlx5_1:1           |       2 | rma_bw            |\n"
         "+-----------+--------------------+---------+-------------------+\n"
         "| self      | memory             |       1 | am, rma, rkey_ptr |\n"
-        "+-----------+--------------------+---------+-------------------+\n",
+        "+-----------+--------------------+---------+-------------------+",
         render(context.get(), key, 1));
     /* clang-format on */
 }
@@ -278,7 +278,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, lane_types_and_count) {
               "| Transport | Device (Sys. dev.) | # Lanes | Lane Types   |\n"
               "+-----------+--------------------+---------+--------------+\n"
               "| tcp       | eth0               |       3 | am, rma, amo |\n"
-              "+-----------+--------------------+---------+--------------+\n",
+              "+-----------+--------------------+---------+--------------+",
               render(context.get(), key, 0));
     /* clang-format on */
 }
@@ -300,7 +300,7 @@ UCS_TEST_F(test_ucp_wireup_lane_info, cm_lane) {
               "| cm        | cm                 |       1 | cm         |\n"
               "+-----------+--------------------+---------+------------+\n"
               "| tcp       | eth0               |       1 | am         |\n"
-              "+-----------+--------------------+---------+------------+\n",
+              "+-----------+--------------------+---------+------------+",
               render(context.get(), key, 0));
     /* clang-format on */
 }

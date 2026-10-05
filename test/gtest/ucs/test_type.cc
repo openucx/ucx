@@ -149,7 +149,7 @@ protected:
 
     void sleep()
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     void measure_one(int iter_count, int thread_count, int writers,
@@ -307,6 +307,51 @@ UCS_TEST_F(test_rwlock, shared_state) {
                 ucs_rw_spinlock_write_unlock(&lock);
             },
             "shared_state");
+    ucs_rw_spinlock_cleanup(&lock);
+}
+
+UCS_TEST_F(test_rwlock, publish) {
+    /* One writer and two readers looping in parallel. The writer stores seq
+     * then payload and readers load payload then seq. Seeing the new payload
+     * is allowed only if seq was stored too.
+     */
+    const int niters       = 10000000;
+    ucs_rw_spinlock_t lock = UCS_RWLOCK_STATIC_INITIALIZER;
+    int seq                = 0;
+    int payload            = 0;
+    std::vector<std::thread> threads;
+
+    threads.reserve(3);
+    threads.emplace_back([&]() {
+        for (int n = 0; n < niters; ++n) {
+            ucs_rw_spinlock_write_lock(&lock);
+            seq++;
+            ucs_compiler_fence();
+            payload = seq;
+            ucs_rw_spinlock_write_unlock(&lock);
+        }
+    });
+    for (int i = 0; i < 2; ++i) {
+        threads.emplace_back([&]() {
+            for (int n = 0; n < niters; ++n) {
+                ucs_rw_spinlock_read_lock(&lock);
+                int p = payload;
+                ucs_compiler_fence();
+                int s = seq;
+                ucs_rw_spinlock_read_unlock(&lock);
+
+                EXPECT_EQ(s, p);
+                EXPECT_LE(s, niters);
+            }
+        });
+    }
+
+    for (auto &t : threads) {
+        t.join();
+    }
+
+    EXPECT_EQ(niters, seq);
+    EXPECT_EQ(niters, payload);
     ucs_rw_spinlock_cleanup(&lock);
 }
 

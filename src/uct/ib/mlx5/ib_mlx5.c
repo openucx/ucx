@@ -20,6 +20,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <stdio.h>
 #include <string.h>
 
 
@@ -30,6 +31,13 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_DB_LOCK]    = "db_lock",
     [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto",
     [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
+};
+
+static const char *uct_ib_mlx5_bf_copy_modes[] = {
+    [UCT_IB_MLX5_BF_COPY_MODE_AUTO]    = "auto",
+    [UCT_IB_MLX5_BF_COPY_MODE_GENERIC] = "generic",
+    [UCT_IB_MLX5_BF_COPY_MODE_ST64B]   = "st64b",
+    [UCT_IB_MLX5_BF_COPY_MODE_LAST]    = NULL
 };
 
 ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
@@ -53,6 +61,15 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      " auto       - Select best according to worker thread mode.",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
+
+    {"BF_COPY_MODE", "auto",
+     "How to copy WQE building blocks to BlueFlame MMIO register. One of "
+     "the following:\n"
+     " auto    - Select best according to runtime CPU capabilities.\n"
+     " generic - Use portable scalar stores.\n"
+     " st64b   - Use AArch64 ST64B store, fail if LS64 is not supported.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, bf_copy_mode),
+     UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_bf_copy_modes)},
 
     {"AR_ENABLE", "auto",
      "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
@@ -376,7 +393,7 @@ err:
 ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 {
     struct mlx5_wqe_av  mlx5_av;
-    struct ibv_ah      *ah;
+    uct_ib_ah_entry_t  *ah_entry;
     uct_ib_address_t   *ib_addr;
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
@@ -398,12 +415,14 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     }
 
     ah_attr.is_global = iface->config.force_global_addr;
-    status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
+    status = uct_ib_iface_ah_get(iface, &ah_attr, "compact AV check",
+                                 &ah_entry);
     if (status != UCS_OK) {
         return status;
     }
 
-    uct_ib_mlx5_get_av(ah, &mlx5_av);
+    uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+    uct_ib_iface_ah_put(iface, ah_entry);
 
     /* copy MLX5_EXTENDED_UD_AV from the driver, if the flag is not present then
      * the device supports compact address vector. */
@@ -693,12 +712,16 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
-    txwq->curr       = txwq->qstart;
-    txwq->sw_pi      = 0;
-    txwq->prev_sw_pi = UINT16_MAX;
+    txwq->curr           = txwq->qstart;
+    txwq->sw_pi          = 0;
+    txwq->prev_sw_pi     = UINT16_MAX;
+    txwq->next_wqe_psn   = 0;
+    txwq->hw_ci          = UINT16_MAX;
+    txwq->ft_ci          = UINT16_MAX;
+    txwq->path_mtu_mask  = 0;
+    txwq->path_mtu_shift = 0;
 #if UCS_ENABLE_ASSERT
-    txwq->hw_ci      = 0xFFFF;
-    txwq->flags      = 0;
+    txwq->flags          = 0;
 #endif
     uct_ib_fence_info_init(&txwq->fi);
 }
@@ -712,6 +735,16 @@ void uct_ib_mlx5_init_wq_buf(uct_ib_mlx5_txwq_t *txwq)
     uct_ib_mlx5_set_ctrl_qpn_ds(uct_ib_mlx5_txwq_get_wqe(txwq, 0xffff), 0, 1);
 }
 
+static void
+uct_ib_mlx5_txwq_vfs_show_next_wqe_psn(void *obj, ucs_string_buffer_t *strb,
+                                       void *arg_ptr, uint64_t arg_u64)
+{
+    uct_ib_mlx5_txwq_t *txwq = arg_ptr;
+
+    ucs_string_buffer_appendf(
+            strb, "%u\n", uct_ib_mlx5_txwq_get_next_wqe_psn(txwq));
+}
+
 void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
 {
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
@@ -721,6 +754,9 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "sw_pi");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
                             &txwq->prev_sw_pi, UCS_VFS_TYPE_U16, "prev_sw_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj,
+                            uct_ib_mlx5_txwq_vfs_show_next_wqe_psn, txwq, 0,
+                            "next_wqe_psn");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qstart,
                             UCS_VFS_TYPE_POINTER, "qstart");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qend,
@@ -729,10 +765,10 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
                             UCS_VFS_TYPE_U16, "bb_max");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->sig_pi,
                             UCS_VFS_TYPE_U16, "sig_pi");
-#if UCS_ENABLE_ASSERT
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->ft_ci,
+                            UCS_VFS_TYPE_U16, "ft_ci");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->hw_ci,
                             UCS_VFS_TYPE_U16, "hw_ci");
-#endif
 }
 
 ucs_status_t
@@ -763,8 +799,46 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
+                              uct_ib_mlx5_bf_copy_mode_t bf_copy_mode)
+{
+    ucs_assert(bf_copy_mode < UCT_IB_MLX5_BF_COPY_MODE_LAST);
+
+#if UCT_IB_MLX5_HAVE_ST64B
+    txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_GENERIC;
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_GENERIC) {
+        return UCS_OK;
+    }
+
+    if (ucs_cpu_has_flag(UCS_CPU_FLAG_LS64)) {
+        txwq->bf_copy_mode = UCT_IB_MLX5_BF_COPY_MODE_ST64B;
+        return UCS_OK;
+    }
+
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but CPU does "
+                  "not report LS64 support");
+        return UCS_ERR_UNSUPPORTED;
+    }
+#else
+    if (bf_copy_mode == UCT_IB_MLX5_BF_COPY_MODE_ST64B) {
+#if defined(__aarch64__)
+        ucs_error("mlx5 BlueFlame ST64B copy was requested but UCX was built "
+                  "without assembler support for ST64B");
+#else
+        ucs_error("mlx5 BlueFlame ST64B copy is supported only on AArch64");
+#endif
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                                   uct_ib_mlx5_bf_copy_mode_t bf_copy_mode,
                                    uct_ib_mlx5_txwq_t *txwq,
                                    struct ibv_qp *verbs_qp)
 {
@@ -794,6 +868,11 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     status = uct_ib_mlx5_get_mmio_mode(worker, cfg_mmio_mode,
                                        txwq->super.verbs.rd->td == NULL,
                                        qp_info.dv.bf.size, &mmio_mode);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_mlx5_txwq_init_bf_copy(txwq, bf_copy_mode);
     if (status != UCS_OK) {
         return status;
     }
@@ -840,6 +919,43 @@ void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
     return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
 }
 
+size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    uint8_t ds = ntohl(ctrl->qpn_ds) & UINT8_MAX;
+
+    ucs_assertv_always(
+            (ds > 0) &&
+            ((ds * UCT_IB_MLX5_WQE_SEG_SIZE) <=
+             UCT_IB_MLX5_MAX_SEND_WQE_SIZE),
+            "ds=%u", ds);
+    return ds * UCT_IB_MLX5_WQE_SEG_SIZE;
+}
+
+uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size)
+{
+    return index + ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+}
+
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl)
+{
+    return ctrl->opmod_idx_opcode >> 24;
+}
+
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, void *dst,
+                                const void *src, size_t length)
+{
+    size_t copy_len = ucs_min(length, UCS_PTR_BYTE_DIFF(src, txwq->qend));
+
+    ucs_assert((src >= (const void*)txwq->qstart) &&
+               (src <= (const void*)txwq->qend));
+
+    memcpy(dst, src, copy_len);
+    if (copy_len < length) {
+        memcpy(UCS_PTR_BYTE_OFFSET(dst, copy_len), txwq->qstart,
+               length - copy_len);
+    }
+}
+
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
                                           uint16_t outstanding)
 {
@@ -855,8 +971,8 @@ uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
     ucs_assert(pi == txwq->hw_ci);
     do {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
-        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
-        pi      += (wqe_size + MLX5_SEND_WQE_BB - 1) / MLX5_SEND_WQE_BB;
+        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
+        pi       = uct_ib_mlx5_txwq_next_wqe_index(pi, wqe_size);
         ++count;
     } while (pi != txwq->sw_pi);
 
@@ -1043,6 +1159,22 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length)
 {
     return ucs_roundup_pow2_or0(tx_qp_length * UCT_IB_MLX5_MAX_BB);
+}
+
+int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
+                                        unsigned min_release,
+                                        unsigned min_build)
+{
+    unsigned release, build;
+
+    ucs_assert(fw_ver != NULL);
+
+    if (sscanf(fw_ver, "%*u.%u.%u", &release, &build) != 2) {
+        return 0;
+    }
+
+    return (release > min_release) ||
+           ((release == min_release) && (build >= min_build));
 }
 
 /* Keep the function as a separate to test SL selection */

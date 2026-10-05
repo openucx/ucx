@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2024-2026, NVIDIA CORPORATION. All rights reserved.
  *
  * See file LICENSE for terms.
  */
@@ -11,9 +11,38 @@
 #include <uct/ib/efa/base/ib_efa.h>
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
+#include <ucs/sys/string.h>
 
 
 static uct_ib_md_ops_t uct_ib_efa_md_ops;
+
+static ucs_status_t uct_ib_efa_md_check_pci_vendor(struct ibv_device *ibv_device)
+{
+    const char *dev_name = ibv_get_device_name(ibv_device);
+    ucs_sys_pci_id_t pci_id;
+    const char *sysfs_path;
+    ucs_status_t status;
+    char *path_buffer;
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    sysfs_path = ucs_topo_resolve_sysfs_path(ibv_device->ibdev_path,
+                                             path_buffer);
+    pci_id     = ucs_topo_get_sysfs_pci_id(dev_name, sysfs_path);
+    ucs_free(path_buffer);
+
+    if (uct_ib_efadv_pci_vendor_match(&pci_id)) {
+        return UCS_OK;
+    }
+
+    ucs_debug("%s: pci id " UCS_SYS_PCI_ID_FMT " is not EFA", dev_name,
+              UCS_SYS_PCI_ID_ARG(&pci_id));
+    return UCS_ERR_UNSUPPORTED;
+}
 
 static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
                                        const uct_ib_md_config_t *md_config,
@@ -25,6 +54,12 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     struct efadv_device_attr attr;
     ucs_status_t status;
     int ret;
+
+    /* Avoid expensive calls when device is not Amazon */
+    status = uct_ib_efa_md_check_pci_vendor(ibv_device);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
@@ -109,7 +144,8 @@ static uct_ib_md_ops_t uct_ib_efa_md_ops = {
         .mkey_pack          = uct_ib_verbs_mkey_pack,
         .mem_attach         =(uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
-        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+        .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+        .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
     },
     .open = uct_ib_efa_md_open,
 };

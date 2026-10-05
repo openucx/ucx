@@ -157,7 +157,7 @@ UCS_TEST_F(test_ucp_tl_info, single_transport) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+------------+-----------+-----------+------------------------------------------------------------+\n",
+        "+------------+-----------+-----------+------------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -192,7 +192,7 @@ UCS_TEST_F(test_ucp_tl_info, device_line_wrap) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+---------+-----------+------------+--------------------------------------------------------------+\n",
+        "+---------+-----------+------------+--------------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -223,7 +223,7 @@ UCS_TEST_F(test_ucp_tl_info, unavailable_components) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+---------------+-----------+-----------+---------------------------------------------------------+\n",
+        "+---------------+-----------+-----------+---------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -264,7 +264,7 @@ UCS_TEST_F(test_ucp_tl_info, multiple_groups) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+------------+-----------+------------+-----------------------------------------------------------+\n",
+        "+------------+-----------+------------+-----------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -309,7 +309,7 @@ UCS_TEST_F(test_ucp_tl_info, device_with_system_device) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+---------+-----------+------------+--------------------------------------------------------------+\n",
+        "+---------+-----------+------------+--------------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -347,7 +347,7 @@ UCS_TEST_F(test_ucp_tl_info, device_name_matches_system_device) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+---------+-----------+------------+--------------------------------------------------------------+\n",
+        "+---------+-----------+------------+--------------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -376,7 +376,7 @@ UCS_TEST_F(test_ucp_tl_info, transport_transport_disabled) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+---------+-----------+------------+--------------------------------------------------------------+\n",
+        "+---------+-----------+------------+--------------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 
@@ -414,7 +414,7 @@ UCS_TEST_F(test_ucp_tl_info, sorted_output) {
         "| Legend: + = enabled, - = disabled                                                               |\n"
         "| All of the available transports are listed, some may be disabled or unsupported on your system. |\n"
         "| All of the visible devices are listed per transport, some may be disabled.                      |\n"
-        "+------------+-----------+------------+-----------------------------------------------------------+\n",
+        "+------------+-----------+------------+-----------------------------------------------------------+",
         render(context, &rscs));
     /* clang-format on */
 

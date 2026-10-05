@@ -532,6 +532,7 @@ uct_gga_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return status;
     }
 
+    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
     ep->super.super.atomic_mr_offset = 0;
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
     ep->super.super.flush_rkey       =
@@ -895,7 +896,8 @@ static uct_md_ops_t uct_mlx5_gga_md_ops = {
     .mkey_pack          = uct_ib_mlx5_gga_mkey_pack,
     .mem_attach         = uct_ib_mlx5_gga_mem_attach,
     .detect_memory_type = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported,
-    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
 };
 
 static ucs_status_t

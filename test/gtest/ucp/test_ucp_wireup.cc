@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -758,6 +758,33 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
     for (unsigned i = 0; i < count; ++i) {
         send_recv(sender().ep(0, i), receiver().worker(), receiver().ep(), 8, 1);
     }
+}
+
+/* The wireup ACK is sent on the AM lane before any protocol selects it, so its
+ * iface has to be progressed already during wireup, without waiting for a data
+ * operation to be issued. */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
+                     !is_proto_enabled())
+{
+    sender().connect(&receiver(), get_ep_params());
+
+    ucp_ep_h ep                 = sender().ep();
+    const ucp_lane_index_t lane = ucp_ep_get_am_lane(ep);
+    if (lane == UCP_NULL_LANE) {
+        /* RMA variants over transports which need no AM emulation */
+        UCS_TEST_SKIP_R("endpoint has no AM lane");
+    }
+
+    /* Only the AM lane aliasing the CM lane has no resource, which cannot
+     * happen when connecting by worker address */
+    const ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    ASSERT_NE(UCP_NULL_RESOURCE, rsc_index);
+
+    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
+    ASSERT_TRUE(ucp_worker_iface_is_activated(wiface));
+
+    flush_worker(sender());
+    disconnect(sender());
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
@@ -2206,7 +2233,7 @@ public:
         has_cm  = ucp_ep_init_flags_has_cm(ep_init_flags);
 
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             return 0;
         }
@@ -2459,3 +2486,91 @@ UCS_TEST_P(test_ucp_reconfig_connect_remote, put_canceled)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_reconfig_connect_remote, tcp, "tcp")
+
+
+/* The token sections of a LANES_ADDR message are parsed before the addresses,
+ * so a malformed section must be rejected rather than shift the addresses. */
+class test_ucp_wireup_token_section : public ucs::test {
+protected:
+    /* One length byte per lane, followed by the tokens themselves */
+    static std::vector<uint8_t>
+    make_section(const std::vector<uint8_t> &lengths)
+    {
+        std::vector<uint8_t> section(lengths);
+
+        for (std::vector<uint8_t>::const_iterator it = lengths.begin();
+             it != lengths.end(); ++it) {
+            section.insert(section.end(), *it, 0xab);
+        }
+
+        return section;
+    }
+
+    static const ucp_lane_map_t THREE_LANES;
+};
+
+const ucp_lane_map_t test_ucp_wireup_token_section::THREE_LANES =
+        UCS_BIT(0) | UCS_BIT(3) | UCS_BIT(5);
+
+UCS_TEST_F(test_ucp_wireup_token_section, skip) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    size_t consumed;
+
+    /* The address follows the section, so extra bytes must be left alone */
+    section.push_back(0xff);
+
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed));
+    EXPECT_EQ(section.size() - 1, consumed);
+
+    /* Without lanes there is no section at all */
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(0, &section[0], section.size(),
+                                                &consumed));
+    EXPECT_EQ(0ul, consumed);
+
+    /* Empty tokens: one zero length per lane, which is what the wire carries
+     * until tokens are exchanged */
+    section = make_section({0, 0, 0});
+    section.push_back(0xff);
+    ASSERT_UCS_OK(ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed));
+    EXPECT_EQ(3ul, consumed);
+}
+
+UCS_TEST_F(test_ucp_wireup_token_section, skip_truncated) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    size_t consumed;
+
+    /* Cut in the length array, and then in the tokens themselves */
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED,
+              ucp_wireup_skip_token_section(THREE_LANES, &section[0], 2,
+                                            &consumed));
+    EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED,
+              ucp_wireup_skip_token_section(THREE_LANES, &section[0],
+                                            section.size() - 1, &consumed));
+}
+
+/* lengths[] follows set-bit order, not lane index. 0, 3, 5 must not be
+ * stored in slots 0, 1, 2. */
+UCS_TEST_F(test_ucp_wireup_token_section, read_lanes) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    ucp_wireup_lane_token_t slots[UCP_MAX_LANES] = {};
+    const uint8_t *tokens;
+    size_t consumed;
+
+    section.push_back(0xff);
+    ASSERT_UCS_OK(ucp_wireup_read_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed,
+                                                slots));
+    EXPECT_EQ(section.size() - 1, consumed);
+
+    tokens = &section[3];
+    EXPECT_EQ(4, slots[0].len);
+    EXPECT_EQ(tokens, static_cast<const uint8_t*>(slots[0].token));
+    EXPECT_EQ(0, slots[3].len);
+    EXPECT_EQ(nullptr, slots[3].token);
+    EXPECT_EQ(7, slots[5].len);
+    EXPECT_EQ(tokens + 4, static_cast<const uint8_t*>(slots[5].token));
+    EXPECT_EQ(0, slots[1].len);
+    EXPECT_EQ(nullptr, slots[1].token);
+}

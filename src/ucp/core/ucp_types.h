@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -43,6 +43,7 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 #define UCP_MAX_LANES_LEGACY         16
 #define UCP_MAX_LANES                64
 #define UCP_MAX_FAST_PATH_LANES      5
+#define UCP_MAX_FAST_PATH_LANES_MASK UCS_MASK(UCP_MAX_FAST_PATH_LANES)
 
 #define UCP_NULL_LANE                ((ucp_lane_index_t)-1)
 typedef uint8_t                      ucp_lane_index_t;
@@ -63,6 +64,7 @@ typedef uint16_t                     ucp_worker_cfg_index_t;
 
 /* Forward declarations */
 typedef struct ucp_request            ucp_request_t;
+typedef struct ucp_rma_bw_sample      ucp_rma_bw_sample_t;
 typedef struct ucp_recv_desc          ucp_recv_desc_t;
 typedef struct ucp_address_iface_attr ucp_address_iface_attr_t;
 typedef struct ucp_address_entry      ucp_address_entry_t;
@@ -77,6 +79,7 @@ typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
 typedef struct ucp_rkey_config_key    ucp_rkey_config_key_t;
 typedef struct ucp_proto              ucp_proto_t;
 typedef struct ucp_mem_desc           ucp_mem_desc_t;
+typedef struct ucp_gpu_nic_assignment ucp_gpu_nic_assignment_t;
 
 
 /**
@@ -230,6 +233,54 @@ typedef enum {
     UCP_FENCE_MODE_EP_BASED, /* Use EP-based fence mode */
     UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;
+
+
+/**
+ * Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints.
+ */
+typedef enum {
+    UCP_FAILOVER_MODE_AUTO,  /* Automatic recovery protocol selection */
+    UCP_FAILOVER_MODE_SW,    /* Force software PSN recovery */
+    UCP_FAILOVER_MODE_TOKEN, /* Token based failover and recovery;
+                              * disable unsupported transports */
+    UCP_FAILOVER_MODE_LAST
+} ucp_failover_mode_t;
+
+
+/**
+ * GPU-to-NIC assignment mode.
+ */
+typedef enum {
+    /** Use flip on hardware with a known GPU-NIC topology, otherwise off */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO,
+
+    /** Do not assign NICs to GPUs, select lanes from all NICs */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_OFF,
+
+    /**
+     * Assign each NIC, with all of its ports, going forward and then backward
+     * across the N GPUs of the group.
+     * The group's NICs are assigned to the following GPU indices in order:
+     * 0, 1, ..., N-1, N-1, ..., 1, 0, 0, 1, ...
+     * This targets architectures where only some of the NICs share a PCIe
+     * switch with a local SSD, so that each GPU gets NICs both with and without
+     * direct SSD access.
+     */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+
+    /**
+     * Assign each NIC, with all of its ports, to the N GPUs of the group
+     * repeatedly in ascending order.
+     * The group's NICs are assigned to the following GPU indices in order:
+     * 0, 1, ..., N-1, 0, 1, ..., N-1, 0, 1, ...
+     */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+
+    /** Assign every NIC, with all of its ports, to every GPU in the group */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED,
+
+    UCP_GPU_NIC_ASSIGNMENT_MODE_LAST
+} ucp_gpu_nic_assignment_mode_t;
 
 
 /**

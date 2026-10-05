@@ -156,8 +156,10 @@ static void print_header(struct perftest_context *ctx)
         printf("| API:          %-60s                               |\n", test_api_str);
         printf("| Test:         %-60s                               |\n", test->desc);
         printf("| Data layout:  %-60s                               |\n", test_data_str);
-        printf("| Send memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
-        printf("| Recv memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
+        printf("| Send memory:  %-60s                               |\n",
+               ucx_perf_mem_alloc_name(&ctx->params.super, 1));
+        printf("| Recv memory:  %-60s                               |\n",
+               ucx_perf_mem_alloc_name(&ctx->params.super, 0));
         if (ctx->params.super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
             get_accel_device_str(&ctx->params.super.send_device, mem_dev_str, sizeof(mem_dev_str));
             printf("| Send device:  %-60s                               |\n", mem_dev_str);

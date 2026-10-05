@@ -461,7 +461,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 }
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_err_in_use,
+                                    int backlog, int silent_bind,
                                     int reuse_addr, int *listen_fd)
 {
     int so_reuse_optval = 1;
@@ -493,7 +493,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
 
     ret = bind(fd, saddr, socklen);
     if (ret < 0) {
-        if ((errno == EADDRINUSE) && silent_err_in_use) {
+        if ((errno == EADDRINUSE) && silent_bind) {
             bind_log_level = UCS_LOG_LEVEL_DEBUG;
         } else {
             bind_log_level = UCS_LOG_LEVEL_ERROR;

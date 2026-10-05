@@ -195,6 +195,10 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.uct.am_hdr_size     = 8;
     params->super.send_mem_type       = UCS_MEMORY_TYPE_HOST;
     params->super.recv_mem_type       = UCS_MEMORY_TYPE_HOST;
+    ucs_strncpy_safe(params->super.send_mem_alloc_name, "host",
+                     UCX_PERF_ALLOC_NAME_MAX);
+    ucs_strncpy_safe(params->super.recv_mem_alloc_name, "host",
+                     UCX_PERF_ALLOC_NAME_MAX);
     params->super.send_device         = default_dev;
     params->super.recv_device         = default_dev;
     params->super.device_level        = UCS_DEVICE_LEVEL_THREAD;
@@ -244,7 +248,12 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
 {
 #if _OPENMP
 #  pragma omp barrier
-#  pragma omp master
+/* The 'master' construct is deprecated since OpenMP 5.1 */
+#  if _OPENMP >= 202011
+#    pragma omp masked
+#  else
+#    pragma omp master
+#  endif
 #endif
   {
     sock_rte_group_t *group = rte_group;
@@ -578,7 +587,12 @@ static void mpi_rte_barrier(void *rte_group, void (*progress)(void *arg),
 
 #pragma omp barrier
 
-#pragma omp master
+/* The 'master' construct is deprecated since OpenMP 5.1 */
+#if _OPENMP >= 202011
+#  pragma omp masked
+#else
+#  pragma omp master
+#endif
   {
     /*
      * Naive non-blocking barrier implementation over send/recv, to call user

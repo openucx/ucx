@@ -662,7 +662,7 @@ static ssize_t ucp_memh_do_pack(ucp_mem_h memh, uint64_t flags, int rkey_compat,
 {
     ucp_memory_info_t mem_info;
     ucs_status_t status;
-    ucs_sys_dev_distance_t sys_dev_distances[UCS_SYS_DEVICE_ID_MAX] = {};
+    ucs_sys_dev_distance_t sys_dev_distances[UCS_SYS_DEVICE_ID_COUNT] = {};
     ucs_sys_dev_distance_t *sys_distance;
     ucs_sys_device_t ep_sys_dev;
 
@@ -810,7 +810,7 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
 {
     const void *p                 = buffer;
     ucp_sys_dev_map_t sys_dev_map = 0;
-    ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_MAX];
+    ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_COUNT];
     ucs_sys_device_t sys_dev;
     ucp_lane_index_t lane;
     char buf[128];
@@ -1278,8 +1278,8 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 ucs_string_buffer_t *strb)
 {
-    const ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
-                                                           rkey_cfg_index);
+    const ucp_rkey_config_t *rkey_config =
+            ucp_worker_rkey_config(worker, rkey_cfg_index);
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
     ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
