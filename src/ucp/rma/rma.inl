@@ -169,13 +169,27 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     /* Apply a fence if EP's sequence is behind worker's */
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
         if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
-            status = UCS_OK;
+            /* No earlier operation to order */
+            ep->ext->fence_seq    = ep->worker->fence_seq;
+            ep->ext->fenced_lanes = 0;
+            status                = UCS_OK;
         } else if (ucs_likely(
             ucs_is_pow2_or_zero(ep->ext->unflushed_lanes | lane_map))) {
             status = ucp_ep_fence_weak(ep);
+            if (status == UCS_OK) {
+                /* The fence orders all earlier operations on this single
+                 * lane, so later operations on it need no further fence */
+                ep->ext->fence_seq    = ep->worker->fence_seq;
+                ep->ext->fenced_lanes = ep->ext->unflushed_lanes;
+            }
         } else {
             status = ucp_ep_fence_strong(ep);
         }
+    } else if (ucs_unlikely(lane_map & ~ep->ext->fenced_lanes) &&
+               (ep->ext->fenced_lanes != 0)) {
+        /* A weak fence does not order earlier operations on the fenced lane
+         * with operations on another lane */
+        status = ucp_ep_fence_strong(ep);
     } else {
         status = UCS_OK;
     }

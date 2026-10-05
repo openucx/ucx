@@ -607,6 +607,9 @@ typedef struct ucp_ep_ext {
 
     ucp_lane_map_t                unflushed_lanes; /* Bitmap of lanes which have
                                                       unflushed operations */
+    ucp_lane_map_t                fenced_lanes;    /* Lanes ordered by a weak
+                                                      fence since the last
+                                                      strong fence */
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
 

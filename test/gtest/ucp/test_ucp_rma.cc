@@ -955,6 +955,25 @@ public:
          * iterations.
          */
         sender().ep()->ext->unflushed_lanes = 0;
+        sender().ep()->ext->fenced_lanes    = 0;
+    }
+
+    void do_rma_op_with_fence_applied_once(op_type_t op, void *sbuf,
+                                           size_t size, void *target,
+                                           ucp_rkey_h rkey)
+    {
+        do_rma_op_with_fence(op, sbuf, size, target, rkey);
+        flush_worker(sender());
+
+        /* Applying the fence satisfies it, so later operations on the
+         * endpoint must not apply it again */
+        EXPECT_EQ(worker_fence_seq(), ep_fence_seq());
+
+        do_rma_op(op, sbuf, size, target, rkey);
+        flush_worker(sender());
+        EXPECT_EQ(worker_fence_seq(), ep_fence_seq());
+
+        flush_sender_cleanup();
     }
 
     void do_rma_op_with_fence_before(op_type_t op, void *sbuf, size_t size,
@@ -997,6 +1016,27 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_get) {
 UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
     test_ep_based_fence_common(
         OP_ATOMIC, &test_ucp_ep_based_fence::do_rma_op_with_fence_before);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_applied_once_put)
+{
+    test_ep_based_fence_common(
+            OP_PUT,
+            &test_ucp_ep_based_fence::do_rma_op_with_fence_applied_once);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_applied_once_get)
+{
+    test_ep_based_fence_common(
+            OP_GET,
+            &test_ucp_ep_based_fence::do_rma_op_with_fence_applied_once);
+}
+
+UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_applied_once_atomic)
+{
+    test_ep_based_fence_common(
+            OP_ATOMIC,
+            &test_ucp_ep_based_fence::do_rma_op_with_fence_applied_once);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
