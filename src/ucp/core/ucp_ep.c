@@ -2849,20 +2849,6 @@ ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
     /* TODO: re-schedule the operation via shared pending queue */
 }
 
-/* Undelivered operations are reported here. Replay is a later change. UCT
- * puts a zcopy completion in op_info and does not invoke it when the
- * operation is canceled, so complete it here. */
-static void
-ucp_ep_tf_purge_replay_cb(const uct_ep_op_info_t *op_info, void *arg)
-{
-    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) != 0) {
-        ucp_invoke_uct_completion(op_info->comp, UCS_ERR_CANCELED);
-    }
-
-    ucs_diag("ep %p: replaying purged operation %p is not implemented", arg,
-             op_info);
-}
-
 /* Resolve this lane's outstanding operations. Pending requests are appended
  * to the shared queue and drained after every held lane. Without an RX
  * token, destroy cancels outstanding work. */
@@ -2917,8 +2903,8 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
                             UCT_EP_OUTSTANDING_FIELD_CB |
                             UCT_EP_OUTSTANDING_FIELD_ARG;
         params.rx_token   = tf->rx_token;
-        params.cb         = ucp_ep_tf_purge_replay_cb;
-        params.arg        = ep;
+        params.cb         = ucp_ep_tf_outstanding_purge_cb;
+        params.arg        = UCS_STATUS_PTR(UCS_ERR_CANCELED);
         status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
         if (status != UCS_OK) {
             ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
