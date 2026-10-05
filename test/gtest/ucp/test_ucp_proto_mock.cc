@@ -3382,23 +3382,20 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic,
-           rndv_remote_estimate_ignores_local_assignment, "RNDV_THRESH=1",
+           rndv_remote_estimate_uses_local_assignment, "RNDV_THRESH=1",
            "RNDV_SCHEME=get_zcopy")
 {
     const ucp_proto_config_t *remote_config;
     ucp_proto_query_attr_t attr;
 
     install_assignment(mapped_gpu(), {nic(2)});
-
-    /* The remote estimate keeps all lanes, because the local assignment
-     * does not apply to the remote protocol */
     remote_config = am_rndv_remote_proto_config(UCS_MEMORY_TYPE_CUDA,
                                                 mapped_gpu());
     ASSERT_NE(nullptr, remote_config);
     EXPECT_STREQ("rndv/get/zcopy", remote_config->proto->name);
 
     ucp_proto_config_query(sender().worker(), remote_config, UCS_MBYTE, &attr);
-    EXPECT_EQ(endpoint_nics(), lane_map_sys_devs(attr.lane_map));
+    EXPECT_EQ(sys_dev_set_t{nic(2)}, lane_map_sys_devs(attr.lane_map));
 }
 
 UCS_TEST_P(test_ucp_proto_mock_rcx_gpu_nic, full_assignment_keeps_all_lanes)

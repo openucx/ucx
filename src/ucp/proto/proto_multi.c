@@ -29,15 +29,6 @@ static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
            (lane_type == UCP_LANE_TYPE_AM_BW);
 }
 
-/* The protocol runs on the peer, and is initialized only to estimate it */
-static int
-ucp_proto_multi_is_remote_estimation(const ucp_proto_init_params_t *params)
-{
-    return (params->rkey_config_key != NULL) &&
-           (params->rkey_config_key->flags &
-            UCP_RKEY_CONFIG_FLAG_PROTO_ESTIMATION);
-}
-
 ucs_sys_device_t
 ucp_proto_multi_get_owner_sys_dev(const ucp_proto_multi_init_params_t *params)
 {
@@ -68,13 +59,6 @@ const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
 
     if (!ucp_proto_multi_lane_type_is_assignable(params->middle.lane_type)) {
         owner_desc = "no RMA_BW or AM_BW lanes";
-        goto out;
-    }
-
-    if (ucp_proto_multi_is_remote_estimation(init_params)) {
-        /* The estimated protocol runs on the peer, so the local assignment
-         * does not apply */
-        owner_desc = "remote protocol estimation";
         goto out;
     }
 
@@ -525,11 +509,10 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
 {
     const ucp_proto_init_params_t *init_params = &params->super.super;
     ucp_context_h context                      = init_params->worker->context;
-    ucp_lane_index_t num_lanes                 = *num_lanes_p;
     ucp_lane_index_t num_filtered_lanes        = 0;
     ucp_lane_index_t num_bulk_lanes_kept       = 0;
     const ucs_sys_device_bitmap_t *assigned_nic_bitmap;
-    ucp_lane_index_t i, lane, num_removed_lanes;
+    ucp_lane_index_t i, lane;
     ucp_lane_type_t lane_type;
     ucs_sys_device_t lane_sys_dev;
     ucp_rsc_index_t rsc_index;
@@ -541,7 +524,8 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         return UCS_OK;
     }
 
-    for (i = 0; i < num_lanes; ++i) {
+    /* Classify before compaction because index zero has the first-lane role. */
+    for (i = 0; i < *num_lanes_p; ++i) {
         lane      = lanes[i];
         lane_type = (i == 0) ? params->first.lane_type :
                                params->middle.lane_type;
@@ -593,19 +577,18 @@ static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
         ++num_bulk_lanes_kept;
     }
 
-    num_removed_lanes = num_lanes - num_filtered_lanes;
-
-    /* Drop the protocol if the assignment removed all its bulk lanes */
-    if ((num_removed_lanes > 0) && (num_bulk_lanes_kept == 0)) {
+    /* Drop the protocol only if the assignment removed all its bulk lanes */
+    if ((num_bulk_lanes_kept == 0) && (num_filtered_lanes < *num_lanes_p)) {
         ucs_debug("proto %s: no lane matches the assignment of gpu %s "
                   "(sys_dev %d), dropping %u lanes",
                   ucp_proto_id_field(init_params->proto_id, name),
                   ucs_topo_sys_device_get_name(gpu_sys_dev), gpu_sys_dev,
-                  num_lanes);
+                  *num_lanes_p);
         return UCS_ERR_NO_ELEM;
     }
 
-    ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes, num_lanes);
+    ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes,
+              *num_lanes_p);
     *num_lanes_p = num_filtered_lanes;
     return UCS_OK;
 }
