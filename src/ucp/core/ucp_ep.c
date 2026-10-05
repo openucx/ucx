@@ -2597,6 +2597,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
         return 0;
     }
 
+    /* The trailer stores one uint8_t length per lane. */
     tx_len = wiface->attr_v2.tx_token_length;
     return (tx_len > 0) && (tx_len <= UINT8_MAX);
 }
@@ -2969,29 +2970,13 @@ ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     size_t tx_len;
     void *buf;
 
-    if ((ep->worker->context->config.ext.failover_mode ==
-         UCP_FAILOVER_MODE_SW) ||
-        (ep->flags & UCP_EP_FLAG_FAILED) ||
-        !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
-        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
-        (ucp_ep_config(ep)->key.dst_version <
-         UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION) ||
-        (ucp_ep_get_lane(ep, lane) != uct_ep)) {
+    if (!ucp_ep_tf_lane_supported(ep, lane, uct_ep)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
-    if ((wiface == NULL) ||
-        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) ||
-        !(wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
+    ucs_assert(wiface != NULL);
     tx_len = wiface->attr_v2.tx_token_length;
-    if ((tx_len == 0) || (tx_len > UINT8_MAX)) {
-        /* The trailer stores one uint8_t length per lane */
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     buf = ucs_malloc(tx_len, "ucp_tf_tx_token");
     if (buf == NULL) {
