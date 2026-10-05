@@ -1,6 +1,6 @@
 #!/bin/bash -eExl
 #
-# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # See file LICENSE for terms.
 #
