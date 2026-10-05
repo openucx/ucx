@@ -681,6 +681,22 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     EXPECT_EQ(0, rnr_val);
 }
 
+#ifdef HAVE_MLX5_DV
+UCS_TEST_F(test_uct_ib_utils, fw_ver_release_at_least) {
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.48.1000", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("82.48.1000", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("32.48.1000", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.49.1", 48, 1000));
+    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.48.1001", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.44.1036", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.48.999", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.47.1026", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("0.0.0.0", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("bogus", 48, 1000));
+    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("", 48, 1000));
+}
+#endif
+
 
 #if HAVE_DEVX
 class test_uct_ib_sl_utils : public test_uct_ib_utils {
