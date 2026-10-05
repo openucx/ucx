@@ -4,8 +4,8 @@ parameters:
 steps:
   - bash: |
       set -eE -o pipefail
-      SHA_After=$(echo $(Build.SourceVersionMessage) | awk '{print $2}')
-      SHA_Before=$(echo $(Build.SourceVersionMessage) | awk '{print $4}')
+      SHA_After=$(echo "$(Build.SourceVersionMessage)" | awk '{print $2}')
+      SHA_Before=$(echo "$(Build.SourceVersionMessage)" | awk '{print $4}')
 
       module=""
       perfxParams=""
