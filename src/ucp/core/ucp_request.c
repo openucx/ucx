@@ -391,6 +391,15 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_ep_h ep)
         lane = key->rma_bw_lanes[i];
 
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
+            /* Same-worker PEER selection may include MDs without RMA
+             * invalidation, while capable MDs still need it. */
+            if ((key->flags & UCP_EP_CONFIG_KEY_FLAG_SELF) &&
+                (key->err_mode == UCP_ERR_HANDLING_MODE_PEER) &&
+                !(ucp_ep_md_attr(ep, lane)->flags &
+                  UCT_MD_FLAG_INVALIDATE_RMA)) {
+                continue;
+            }
+
             ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
                        UCT_IFACE_FLAG_GET_ZCOPY);
             ucs_assert(ucp_ep_md_attr(ep, lane)->flags &
