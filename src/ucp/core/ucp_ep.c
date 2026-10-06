@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -103,6 +103,11 @@ static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
 static void ucp_ep_recovery_arg_free(ucp_ep_h ep);
+static void ucp_ep_tf_cleanup(ucp_ep_h ep);
+static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg);
+static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane);
+static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                     uint32_t request_id);
 static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
@@ -875,7 +880,7 @@ static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
-    status = ucp_wireup_ep_create(ep, &uct_ep);
+    status = ucp_wireup_ep_create(ep, 1, &uct_ep);
     if (status != UCS_OK) {
         return status;
     }
@@ -1444,11 +1449,11 @@ ucp_ep_config_activate_worker_ifaces(ucp_worker_h worker,
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
 
-    ucs_trace("activate wifaces worker %p ep config %u ep count %u", worker,
+    ucs_debug("activate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     if (ep_config->ep_count++ == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
-                                         ep_config->proto_lane_map,
+                                         ep_config->active_lane_map,
                                          ucp_worker_iface_progress_ep);
     }
 }
@@ -1464,14 +1469,14 @@ ucp_ep_config_deactivate_worker_ifaces(ucp_worker_h worker,
     }
 
     ep_config = ucp_worker_ep_config(worker, cfg_index);
-    ucs_trace("deactivate wifaces worker %p ep config %u ep count %u", worker,
+    ucs_debug("deactivate wifaces worker %p ep config %u ep count %u", worker,
               cfg_index, ep_config->ep_count);
     ucs_assertv(ep_config->ep_count > 0, "worker %p ep config %u", worker,
                 cfg_index);
 
     if (--ep_config->ep_count == 0) {
         ucp_wiface_process_for_each_lane(worker, ep_config,
-                                         ep_config->proto_lane_map,
+                                         ep_config->active_lane_map,
                                          ucp_worker_iface_unprogress_ep);
     }
 }
@@ -1481,7 +1486,7 @@ ucp_ep_config_reactivate_worker_ifaces(ucp_worker_h worker,
                                        ucp_worker_cfg_index_t old_cfg_index,
                                        ucp_worker_cfg_index_t new_cfg_index)
 {
-    ucs_trace("worker %p: reactivating interfaces deactivate cfg_index %u "
+    ucs_debug("worker %p: reactivating interfaces deactivate cfg_index %u "
               "activate cfg_index %u", worker, old_cfg_index, new_cfg_index);
 
     if (old_cfg_index == new_cfg_index) {
@@ -1635,9 +1640,11 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
     ++ucp_ep->worker->counters.ep_failures;
 
     /* The EP is unrecoverable - discard ALL lanes, including those already
-     * marked UCP_LANE_TYPE_FAILED. */
+     * marked UCP_LANE_TYPE_FAILED. A held lane has no RX token here, so
+     * cancel it instead of purging outstanding work. */
     ucp_ep_discard_lanes(ucp_ep, UCS_MASK(ucp_ep_num_lanes(ucp_ep)), status,
                          ucp_ep->cfg_index);
+    ucp_ep_tf_cleanup(ucp_ep);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
@@ -1656,12 +1663,11 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
             log_level = ucp_ep_config_err_handling_enabled(ucp_ep) ?
                     UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DIAG;
 
-            ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
             ucs_log(log_level,
-                    "ep %p: error '%s' on %s will not be handled"
+                    UCP_EP_LANE_FMT ": error '%s' will not be handled"
                     " since no error callback is installed",
-                    ucp_ep, ucs_status_string(status),
-                    ucs_string_buffer_cstr(&lane_info_strb));
+                    UCP_EP_LANE_ARG(ucp_ep, lane, &lane_info_strb),
+                    ucs_status_string(status));
             return UCS_ERR_UNSUPPORTED;
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
@@ -1847,7 +1853,9 @@ ucp_ep_recovery_install_wireup_ep(ucp_ep_h ep, ucp_lane_index_t lane)
         return UCS_ERR_NO_PROGRESS;
     }
 
-    status = ucp_wireup_ep_create(ep, &wireup_ep_uct);
+    /* The stub wireup endpoint which is vailing for recovery should not block
+     * worker flush. */
+    status = ucp_wireup_ep_create(ep, 0, &wireup_ep_uct);
     if (status != UCS_OK) {
         return status;
     }
@@ -2045,6 +2053,7 @@ static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
 {
     ucs_assert(ep->ext->recovery_arg != NULL);
     ucp_ep_refcount_assert(ep, probe, ==, 0);
+    ucp_ep_tf_cleanup(ep);
     ucs_free(ep->ext->recovery_arg);
     ep->ext->recovery_arg = NULL;
 }
@@ -2274,8 +2283,17 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep)
     ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
               " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
 
-    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST,
-                                   failed_lanes, recovery_lanes);
+    /* A request answers no other message, so requested_lane_map is empty. */
+    if (++ep->ext->recovery_arg->request_id == 0) {
+        /* 0 is the no-trailer sentinel on the wire */
+        ep->ext->recovery_arg->request_id = 1;
+    }
+
+    ucp_ep_tf_set_request_id(ep, recovery_lanes,
+                             ep->ext->recovery_arg->request_id);
+    ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REQUEST, 0,
+                                   recovery_lanes,
+                                   ep->ext->recovery_arg->request_id, NULL);
     return 1;
 }
 
@@ -2292,7 +2310,8 @@ static int ucp_ep_recovery_lane_is_ready(ucp_ep_h ep, ucp_lane_index_t lane)
 
     wireup_ep = ucp_wireup_ep(uct_ep);
     /* proxy already swapped for the real transport EP or it's ready for for that */
-    return (wireup_ep == NULL) || !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+    return (wireup_ep == NULL) ||
+           !!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
 }
 
 static ucp_lane_map_t
@@ -2334,6 +2353,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
         }
 
         ep->ext->recovery_arg = arg;
+        ucp_ep_tf_arg_init(arg);
     }
 
     /* Reset counter by new event. */
@@ -2371,7 +2391,9 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     }
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
-        /* Endpoint was declared fully failed elsewhere; nothing more to do. */
+        /* No RX token is coming. Cancel held lanes. Destroy completes
+         * their outstanding operations. */
+        ucp_ep_tf_cleanup(ep);
         ret = 1;
         goto done;
     }
@@ -2380,7 +2402,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* Recovery completed between rounds, the ep operates normally */
+        /* Recovery completed between rounds, the ep operates normally. */
         ucs_assert(ep->ext->recovery_arg == NULL);
         goto done;
     }
@@ -2438,8 +2460,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
             wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
             ucs_assert((wireup_ep != NULL) && (wireup_ep->aux_ep != NULL));
             status = ucp_ep_recovery_arm_probe(ep, lane, wireup_ep->aux_ep);
-            if ((status == UCS_INPROGRESS) ||
-                (status == UCS_ERR_NO_RESOURCE)) {
+            if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
                 ret = 1;
                 goto done;
             }
@@ -2482,7 +2503,8 @@ exhausted:
         ret = 1;
     } else {
         ucs_diag("ep %p: recovery retries exhausted, giving up on "
-                    "failed lanes 0x%" PRIx64, ep, (uint64_t)failed);
+                 "failed lanes 0x%" PRIx64,
+                 ep, (uint64_t)failed);
         ucp_ep_discard_lanes(ep, failed, UCS_ERR_ENDPOINT_TIMEOUT,
                              ep->cfg_index);
         ucp_ep_recovery_arg_free(ep);
@@ -2492,6 +2514,539 @@ exhausted:
 done:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return ret;
+}
+
+static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    if (!ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
+        (ep->ext->recovery_arg == NULL) || (lane >= UCP_MAX_LANES)) {
+        return NULL;
+    }
+
+    return &ep->ext->recovery_arg->tf[lane];
+}
+
+static int
+ucp_ep_tf_tx_published(const ucp_ep_lane_tf_t *tf, uint32_t request_id)
+{
+    return (request_id != 0) &&
+           ((tf->request_id == request_id) || (tf->peer_id == request_id));
+}
+
+static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                     uint32_t request_id)
+{
+    ucp_ep_lane_tf_t *tf;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD)) {
+            continue;
+        }
+
+        tf->request_id = request_id;
+    }
+}
+
+static int ucp_ep_tf_exchange_open(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+
+    return (tf != NULL) &&
+           ((tf->state == UCP_EP_TF_LANE_HELD) ||
+            (tf->state == UCP_EP_TF_LANE_INVALIDATED));
+}
+
+static void ucp_ep_tf_note_ids(ucp_ep_lane_tf_t *tf, uint32_t request_id,
+                                uint32_t peer_id)
+{
+    if ((tf->request_id == 0) && (request_id != 0)) {
+        tf->request_id = request_id;
+    }
+
+    if (peer_id != 0) {
+        tf->peer_id = peer_id;
+    }
+}
+
+/* A lane can enter the token path only when a later hold would accept it.
+ * Anything else stays on the software discard path. */
+static int
+ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
+{
+    ucp_worker_iface_t *wiface;
+    size_t tx_len;
+
+    if ((ep->worker->context->config.ext.failover_mode ==
+         UCP_FAILOVER_MODE_SW) ||
+        (ep->flags & UCP_EP_FLAG_FAILED) ||
+        !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
+        (ucp_ep_config(ep)->key.dst_version <
+         UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION) ||
+        (ucp_ep_get_lane(ep, lane) != uct_ep)) {
+        return 0;
+    }
+
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+    if ((wiface == NULL) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) ||
+        !(wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+        return 0;
+    }
+
+    /* The trailer stores one uint8_t length per lane. */
+    tx_len = wiface->attr_v2.tx_token_length;
+    return (tx_len > 0) && (tx_len <= UINT8_MAX);
+}
+
+static ucs_status_t ucp_ep_invalidate_lane(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lane);
+    uct_ep_invalidate_params_t params;
+    ucs_status_t status;
+
+    memset(&params, 0, sizeof(params));
+    status = uct_ep_invalidate(uct_ep, &params);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: lane %d: invalidate failed: %s", ep, lane,
+                  ucs_status_string(status));
+    }
+
+    return status;
+}
+
+ucp_lane_map_t
+ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                           uint32_t request_id, uint32_t peer_id)
+{
+    int have_arg               = (ep->ext->recovery_arg != NULL);
+    ucp_lane_map_t invalidated = 0;
+    ucp_lane_index_t lane;
+    ucp_ep_lane_tf_t *tf;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf != NULL) && (tf->state == UCP_EP_TF_LANE_HELD)) {
+            if (peer_id != 0) {
+                tf->peer_id = peer_id;
+            }
+            continue;
+        }
+
+        if ((tf != NULL) && (tf->state == UCP_EP_TF_LANE_INVALIDATED)) {
+            ucp_ep_tf_note_ids(tf, request_id, peer_id);
+            invalidated |= UCS_BIT(lane);
+            continue;
+        }
+
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep) ||
+            ucp_wireup_ep_test(uct_ep) ||
+            !ucp_ep_tf_lane_supported(ep, lane, uct_ep)) {
+            continue;
+        }
+
+        if (!have_arg) {
+            status = ucp_ep_recovery_arm(ep);
+            if ((status != UCS_OK) || (ep->ext->recovery_arg == NULL)) {
+                continue;
+            }
+
+            have_arg = 1;
+        }
+
+        tf = ucp_ep_tf_get(ep, lane);
+        if (tf == NULL) {
+            continue;
+        }
+
+        status = ucp_ep_invalidate_lane(ep, lane);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        tf->state = UCP_EP_TF_LANE_INVALIDATED;
+        ucp_ep_tf_note_ids(tf, request_id, peer_id);
+        invalidated |= UCS_BIT(lane);
+        ucs_debug("ep %p: invalidated lane %d uct_ep %p", ep, lane, uct_ep);
+    }
+
+    return invalidated;
+}
+
+uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
+                         uint32_t request_id, const void **token_p)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+        (tf->tx_token == NULL) || (tf->tx_len == 0) ||
+        !ucp_ep_tf_tx_published(tf, request_id)) {
+        *token_p = NULL;
+        return 0;
+    }
+
+    *token_p = tf->tx_token;
+    return tf->tx_len;
+}
+
+ucs_status_t
+ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
+                    uint8_t tx_len, void **rx_token_p, uint8_t *rx_len_p)
+{
+    ucp_worker_iface_t *wiface;
+    uct_iface_attr_v2_t attr;
+    ucs_status_t status;
+    size_t rx_len;
+    void *buf;
+
+    *rx_token_p = NULL;
+    *rx_len_p   = 0;
+
+    /* Held, or invalidated until the error handler holds the lane. */
+    if (!ucp_ep_tf_exchange_open(ep, lane)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+    if ((tx_token == NULL) || (tx_len == 0) || (wiface == NULL) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||
+        !(wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN) ||
+        (wiface->attr_v2.tx_token_length != tx_len) ||
+        (wiface->attr_v2.rx_token_length == 0) ||
+        (wiface->attr_v2.rx_token_length > UINT8_MAX)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    rx_len = wiface->attr_v2.rx_token_length;
+    buf    = ucs_malloc(rx_len, "ucp_tf_derived_rx");
+    if (buf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memset(&attr, 0, sizeof(attr));
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                      UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+    attr.tx_token   = tx_token;
+    attr.rx_token   = buf;
+    status          = uct_iface_query_v2(wiface->iface, &attr);
+    if (status != UCS_OK) {
+        ucs_free(buf);
+        return status;
+    }
+
+    *rx_token_p = buf;
+    *rx_len_p   = (uint8_t)rx_len;
+    return UCS_OK;
+}
+
+void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
+                       int from_ack, const void *token, uint8_t len)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+    ucp_worker_iface_t *wiface;
+    uint32_t expect;
+    void *buf;
+
+    if (!ucp_ep_tf_exchange_open(ep, lane) || (token == NULL) || (len == 0)) {
+        return;
+    }
+
+    expect = from_ack ? tf->peer_id : tf->request_id;
+    if ((request_id == 0) || (request_id != expect)) {
+        ucs_debug("ep %p: lane %d: rx token id 0x%x does not match 0x%x", ep,
+                  lane, request_id, expect);
+        return;
+    }
+
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+    if ((wiface == NULL) ||
+        !(wiface->attr_v2.field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH) ||
+        (wiface->attr_v2.rx_token_length != len)) {
+        ucs_debug("ep %p: lane %d: drop rx token of length %u", ep, lane, len);
+        return;
+    }
+
+    buf = ucs_malloc(len, "ucp_tf_rx_token");
+    if (buf == NULL) {
+        ucs_error("ep %p: lane %d: failed to store rx token", ep, lane);
+        return;
+    }
+
+    memcpy(buf, token, len);
+    ucs_free(tf->rx_token);
+    tf->rx_token = buf;
+    tf->rx_len   = len;
+    ucs_debug("ep %p: lane %d: stored rx token length %u request_id 0x%x", ep,
+              lane, len, request_id);
+}
+
+static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
+{
+    ucp_lane_index_t lane;
+
+    ucs_queue_head_init(&arg->tf_pending_q);
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        arg->tf[lane].deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+        arg->tf[lane].state                = UCP_EP_TF_LANE_EMPTY;
+    }
+}
+
+static void ucp_ep_tf_free_tokens(ucp_ep_lane_tf_t *tf)
+{
+    ucs_free(tf->tx_token);
+    ucs_free(tf->rx_token);
+    tf->tx_token = NULL;
+    tf->rx_token = NULL;
+    tf->tx_len   = 0;
+    tf->rx_len   = 0;
+}
+
+static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
+{
+    tf->uct_ep     = NULL;
+    tf->state      = UCP_EP_TF_LANE_EMPTY;
+    tf->request_id = 0;
+    tf->peer_id    = 0;
+    ucp_ep_tf_free_tokens(tf);
+    if (tf->deactivate_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        ucp_ep_config_deactivate_worker_ifaces(ep->worker,
+                                               tf->deactivate_cfg_index);
+        tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    }
+}
+
+static void
+ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
+{
+    uct_pending_req_t *uct_req;
+
+    while (!ucs_queue_is_empty(pending_q)) {
+        uct_req = ucs_queue_pull_elem_non_empty(pending_q, uct_pending_req_t,
+                                                priv);
+        ucp_ep_err_pending_purge(uct_req, UCS_STATUS_PTR(status));
+    }
+}
+
+/* User completion of an undelivered zcopy. Short and bcopy have no completion;
+ * reposting those from op_info belongs with the code that fills the token. */
+static void
+ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
+{
+    ucs_status_t status = UCS_PTR_STATUS(arg);
+
+    if ((status != UCS_OK) &&
+        (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
+        ucp_invoke_uct_completion(op_info->comp, status);
+    }
+
+    /* TODO: re-schedule the operation via shared pending queue */
+}
+
+/* Resolve this lane's outstanding operations. Pending requests are appended
+ * to the shared queue and drained after every held lane. Without an RX
+ * token, destroy cancels outstanding work. */
+static void
+ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
+{
+    uct_ep_outstanding_purge_params_t params;
+    ucs_status_t status;
+
+    if (tf->uct_ep == NULL) {
+        return;
+    }
+
+    uct_ep_pending_purge(tf->uct_ep, ucp_request_purge_enqueue_cb,
+                         &ep->ext->recovery_arg->tf_pending_q);
+    params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
+                        UCT_EP_OUTSTANDING_FIELD_ARG;
+    params.cb         = ucp_ep_tf_outstanding_purge_cb;
+    params.arg        = UCS_STATUS_PTR(UCS_ERR_CANCELED);
+    status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
+    if (status != UCS_OK) {
+        ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
+                    lane, ucs_status_string(status));
+    }
+
+    uct_ep_destroy(tf->uct_ep);
+    tf->uct_ep = NULL;
+}
+
+void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                       uint32_t request_id, int from_ack)
+{
+    uct_ep_outstanding_purge_params_t params;
+    ucp_ep_lane_tf_t *tf;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    uint32_t expect;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+            (tf->uct_ep == NULL) || (tf->rx_token == NULL)) {
+            continue;
+        }
+
+        expect = from_ack ? tf->peer_id : tf->request_id;
+        if ((request_id == 0) || (request_id != expect)) {
+            continue;
+        }
+
+        params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
+                            UCT_EP_OUTSTANDING_FIELD_CB |
+                            UCT_EP_OUTSTANDING_FIELD_ARG;
+        params.rx_token   = tf->rx_token;
+        params.cb         = ucp_ep_tf_outstanding_purge_cb;
+        params.arg        = UCS_STATUS_PTR(UCS_ERR_CANCELED);
+        status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
+        if (status != UCS_OK) {
+            ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
+                      lane, ucs_status_string(status));
+            continue;
+        }
+
+        uct_ep_destroy(tf->uct_ep);
+        ucp_ep_tf_lane_release(ep, tf);
+    }
+}
+
+static void ucp_ep_tf_cleanup(ucp_ep_h ep)
+{
+    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_ep_lane_tf_t *tf;
+    ucp_lane_index_t lane;
+
+    if ((arg == NULL) || ucp_ep_has_cm_lane(ep)) {
+        return;
+    }
+
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        tf = &arg->tf[lane];
+        if ((tf->uct_ep == NULL) && (tf->state == UCP_EP_TF_LANE_EMPTY)) {
+            continue;
+        }
+
+        ucp_ep_tf_purge_cancel(ep, lane, tf);
+        ucp_ep_tf_lane_release(ep, tf);
+    }
+
+    /* Every held lane is done, so pending requests can follow outstanding. */
+    if ((ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) ||
+        !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER)) {
+        ucp_ep_tf_abort_pending(&arg->tf_pending_q, UCS_ERR_CANCELED);
+    } else {
+        ucp_wireup_replay_pending_requests(ep, &arg->tf_pending_q);
+    }
+}
+
+static ucs_status_t
+ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
+{
+    ucp_worker_iface_t *wiface;
+    ucp_ep_lane_tf_t *tf;
+    uct_ep_attr_t ep_attr;
+    ucs_status_t status;
+    size_t tx_len;
+    void *buf;
+
+    if (!ucp_ep_tf_lane_supported(ep, lane, uct_ep)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    wiface = ucp_worker_iface(ep->worker, ucp_ep_get_rsc_index(ep, lane));
+    ucs_assert(wiface != NULL);
+    tx_len = wiface->attr_v2.tx_token_length;
+
+    buf = ucs_malloc(tx_len, "ucp_tf_tx_token");
+    if (buf == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    memset(&ep_attr, 0, sizeof(ep_attr));
+    ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+    ep_attr.tx_token   = buf;
+    status             = uct_ep_query(uct_ep, &ep_attr);
+    if (status != UCS_OK) {
+        ucs_free(buf);
+        return status;
+    }
+
+    status = ucp_ep_recovery_arm(ep);
+    if ((status != UCS_OK) || (ep->ext->recovery_arg == NULL)) {
+        ucs_free(buf);
+        return (status != UCS_OK) ? status : UCS_ERR_UNSUPPORTED;
+    }
+
+    tf = &ep->ext->recovery_arg->tf[lane];
+    ucs_assert((tf->state == UCP_EP_TF_LANE_EMPTY) ||
+               (tf->state == UCP_EP_TF_LANE_INVALIDATED));
+
+    tf->uct_ep   = uct_ep;
+    tf->tx_token = buf;
+    tf->tx_len   = (uint8_t)tx_len;
+    tf->state    = UCP_EP_TF_LANE_HELD;
+    ucs_debug("ep %p: hold lane %d uct_ep %p tx_token_len %zu", ep, lane,
+              uct_ep, tx_len);
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_ep_tf_detach(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_worker_cfg_index_t old_cfg_index = ep->cfg_index;
+    ucp_ep_lane_tf_t *tf                 = ucp_ep_tf_get(ep, lane);
+    ucs_status_t status;
+
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+        (tf->uct_ep != ucp_ep_get_lane(ep, lane))) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = ucp_ep_reconfig_internal(ep, UCS_BIT(lane));
+    if (status != UCS_OK) {
+        /* Last AM lane, or the new endpoint config could not be created.
+         * Leave the UCT ep on the lane for software discard. */
+        tf->uct_ep     = NULL;
+        tf->state      = UCP_EP_TF_LANE_EMPTY;
+        tf->request_id = 0;
+        tf->peer_id    = 0;
+        ucp_ep_tf_free_tokens(tf);
+        return status;
+    }
+
+    if (old_cfg_index != ep->cfg_index) {
+        ucp_ep_config_activate_worker_ifaces(ep->worker, ep->cfg_index);
+        tf->deactivate_cfg_index = old_cfg_index;
+    } else {
+        tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    }
+
+    /* Keep pending requests off this endpoint. They are replayed after
+     * outstanding operations of every held lane are resolved. */
+    uct_ep_pending_purge(tf->uct_ep, ucp_request_purge_enqueue_cb,
+                         &ep->ext->recovery_arg->tf_pending_q);
+    ucp_failed_tl_iface_get();
+    ucp_ep_set_lane(ep, lane, &ucp_failed_tl_ep_discard_arg.failed_ep);
+    ucs_debug("ep %p: detached lane %d uct_ep %p", ep, lane, tf->uct_ep);
+    return UCS_OK;
+}
+
+ucs_status_t ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
+{
+    ucs_status_t status;
+
+    status = ucp_ep_tf_claim(ep, lane, uct_ep);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucp_ep_tf_detach(ep, lane);
 }
 
 ucs_status_t
@@ -3767,9 +4322,12 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     &config->tag.rndv.am_thresh);
 
             /* Max Eager short has to be set after Zcopy and RNDV thresholds */
-            ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
-                                             config->tag.eager.max_short,
-                                             context->num_mem_type_detect_mds);
+            if (!context->config.ext.proto_enable) {
+                ucp_ep_config_set_memtype_thresh(
+                        &config->tag.offload.max_eager_short,
+                        config->tag.eager.max_short,
+                        context->num_mem_type_detect_mds);
+            }
         }
     }
 
@@ -3778,6 +4336,15 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         lane        = config->key.am_lane;
         rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
+            /* The wireup ACK is sent on the AM lane before any protocol selects
+             * that lane, so its iface has to be progressed already during
+             * wireup. Account for it like a lane selected by the protocols, so
+             * that it is activated while at least one endpoint uses this
+             * configuration. */
+            if (context->config.ext.proto_enable) {
+                config->active_lane_map |= UCS_BIT(lane);
+            }
+
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
             md_attr    = &context->tl_mds[config->md_index[lane]].attr;
             ucp_ep_config_init_attrs(worker, rsc_index, &config->am,
@@ -3825,7 +4392,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     iface_attr->cap.am.max_short, sizeof(ucp_am_hdr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+            if (!context->config.ext.proto_enable &&
+                (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV)) {
                 ucp_ep_config_set_memtype_thresh(
                         &config->am_u.max_eager_short, am_max_eager_short,
                         context->num_mem_type_detect_mds);
@@ -3850,9 +4418,12 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 config->tag.rndv.rma_thresh = config->rndv.rma_thresh;
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
-                ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
-                                                 config->tag.eager.max_short,
-                                                 context->num_mem_type_detect_mds);
+                if (!context->config.ext.proto_enable) {
+                    ucp_ep_config_set_memtype_thresh(
+                            &config->tag.max_eager_short,
+                            config->tag.eager.max_short,
+                            context->num_mem_type_detect_mds);
+                }
             }
 
             /* Calculate max short threshold for UCP AM short reply protocol */
@@ -3862,7 +4433,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
-            if (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV) {
+            if (!context->config.ext.proto_enable &&
+                (iface_attr->cap.am.max_iov >= UCP_AM_SEND_SHORT_MIN_IOV)) {
                 ucp_ep_config_set_memtype_thresh(
                         &config->am_u.max_reply_eager_short, am_max_eager_short,
                         context->num_mem_type_detect_mds);
@@ -4325,24 +4897,25 @@ void ucp_ep_get_tl_bitmap(const ucp_ep_config_key_t *key,
     }
 }
 
-void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                              ucs_string_buffer_t *lane_info_strb)
+const char *ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_string_buffer_t *lane_info_strb)
 {
-    ucp_rsc_index_t rsc_index;
-    uct_tl_resource_desc_t *tl_rsc;
+    ucs_string_buffer_reset(lane_info_strb);
 
     if (lane == UCP_NULL_LANE) {
-        ucs_string_buffer_appendf(lane_info_strb, "NULL lane");
+        ucs_string_buffer_appendf(lane_info_strb, "no lane");
     } else if (lane == ucp_ep_get_cm_lane(ucp_ep)) {
-        ucs_string_buffer_appendf(lane_info_strb, "CM lane");
+        ucs_string_buffer_appendf(lane_info_strb, "lane[%d] cm", lane);
     } else {
-        rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
-        tl_rsc    = &ucp_ep->worker->context->tl_rscs[rsc_index].tl_rsc;
-
         ucs_string_buffer_appendf(lane_info_strb,
-                                  UCT_TL_RESOURCE_DESC_FMT,
-                                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+                                  "lane[%d] " UCT_TL_RESOURCE_DESC_FMT ".%d",
+                                  lane,
+                                  UCT_TL_RESOURCE_DESC_ARG(
+                                          ucp_ep_get_tl_rsc(ucp_ep, lane)),
+                                  ucp_ep_get_path_index(ucp_ep, lane));
     }
+
+    return ucs_string_buffer_cstr(lane_info_strb);
 }
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
@@ -4740,8 +5313,8 @@ ucp_ep_select_short_init(ucp_worker_h worker, ucp_worker_cfg_index_t cfg_index,
     max_eager_short->memtype_on  = proto_short.max_length_host_mem;
 }
 
-static void ucp_ep_config_proto_init(ucp_worker_h worker,
-                                     ucp_worker_cfg_index_t cfg_index)
+void ucp_ep_config_proto_short_lazy_init(ucp_worker_h worker,
+                                         ucp_worker_cfg_index_t cfg_index)
 {
     ucp_ep_config_t *ep_config = ucp_worker_ep_config(worker, cfg_index);
     ucp_ep_config_key_t *key   = &ep_config->key;
@@ -4749,13 +5322,11 @@ static void ucp_ep_config_proto_init(ucp_worker_h worker,
     ucp_lane_index_t tag_exp_lane;
     unsigned tag_proto_flags;
 
-    /* Do protocol init once per EP config and only for protov2 */
-    if ((!worker->context->config.ext.proto_enable) ||
-        (ep_config->proto_init_flags & UCP_EP_PROTO_INITIALIZED)) {
+    if (ep_config->proto_init_flags & UCP_EP_PROTO_SHORT_INITIALIZED) {
         return;
     }
 
-    ep_config->proto_init_flags |= UCP_EP_PROTO_INITIALIZED;
+    ep_config->proto_init_flags |= UCP_EP_PROTO_SHORT_INITIALIZED;
 
     if (ucp_ep_config_key_has_tag_lane(key)) {
         tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
@@ -4793,7 +5364,6 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
     ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
-    ucp_ep_config_proto_init(ep->worker, cfg_index);
 }
 
 unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)

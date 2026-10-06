@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -24,6 +24,12 @@
 
 
 #define UCP_MAX_IOV                16UL
+
+
+/* Print an ep lane, using a caller-provided string buffer as scratch space */
+#define UCP_EP_LANE_FMT "ep %p: %s"
+#define UCP_EP_LANE_ARG(_ep, _lane, _strb) \
+    (_ep), ucp_ep_get_lane_info_str(_ep, _lane, _strb)
 
 
 /* Endpoint flags type */
@@ -367,8 +373,8 @@ KHASH_DECLARE(ucp_ep_peer_mem_hash, uint64_t, ucp_ep_peer_mem_data_t);
 
 
 typedef enum {
-    /* Protocol initialization was done */
-    UCP_EP_PROTO_INITIALIZED = UCS_BIT(0),
+    /* Protocol short-circuit path initialization was done */
+    UCP_EP_PROTO_SHORT_INITIALIZED = UCS_BIT(0),
 } ucp_ep_init_flags_t;
 
 
@@ -470,8 +476,9 @@ struct ucp_ep_config {
     /* Bitmap of preregistration for am_bw lanes */
     ucp_md_map_t                  am_bw_prereg_md_map;
 
-    /* Bitmap of lanes selected by the protocols */
-    ucp_lane_map_t                proto_lane_map;
+    /* Bitmap of lanes whose iface is activated while this configuration is
+     * used: the lanes selected by the protocols, and the AM lane */
+    ucp_lane_map_t                active_lane_map;
 
     /* EP initialization flags from @ref ucp_ep_init_flags_t */
     unsigned                      proto_init_flags;
@@ -501,6 +508,33 @@ typedef struct ucp_ep_recovery_probe {
 
 
 enum {
+    UCP_EP_TF_LANE_EMPTY = 0,
+    /* Peer reported this lane failed. The transport endpoint is invalidated
+     * and still on the lane; the error handler has not held it yet. */
+    UCP_EP_TF_LANE_INVALIDATED,
+    UCP_EP_TF_LANE_HELD
+};
+
+
+/* Per-lane token-failover state. The UCT ep is kept until an RX token purges
+ * its outstanding operations, or until the endpoint is fully failed and the
+ * lane is canceled. request_id is the local REQUEST that published tx_token.
+ * peer_id is the remote REQUEST answered with that same token. An invalidated
+ * lane may already hold those ids and an RX token. */
+typedef struct ucp_ep_lane_tf {
+    uct_ep_h               uct_ep;
+    void                   *tx_token;
+    void                   *rx_token;
+    ucp_worker_cfg_index_t deactivate_cfg_index;
+    uint32_t               request_id;
+    uint32_t               peer_id;
+    uint8_t                tx_len;
+    uint8_t                rx_len;
+    uint8_t                state;
+} ucp_ep_lane_tf_t;
+
+
+enum {
     UCP_EP_RECOVERY_STATE_IDLE,
     UCP_EP_RECOVERY_STATE_WAIT_REPLY,
     UCP_EP_RECOVERY_STATE_PROBING,
@@ -513,7 +547,16 @@ typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
     uint8_t                 state;
+    /* Generation of the LANES_ADDR exchange, pre-incremented by every request
+     * and echoed by the peer. Copied into held lanes as request_id before the
+     * request is sent. */
+    uint32_t                request_id;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
+    ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
+    /* Pending requests from held lanes, replayed after all of their
+     * outstanding operations are resolved,
+     * outstanding re-posts also go here */
+    ucs_queue_head_t        tf_pending_q;
 } ucp_ep_recovery_arg_t;
 
 
@@ -789,6 +832,9 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key);
 
+void ucp_ep_config_proto_short_lazy_init(ucp_worker_h worker,
+                                         ucp_worker_cfg_index_t cfg_index);
+
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
 int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
@@ -860,8 +906,8 @@ size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_context_h context,
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
 
-void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                              ucs_string_buffer_t *lane_info_strb);
+const char *ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                     ucs_string_buffer_t *lane_info_strb);
 
 void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
                                      ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
@@ -1023,6 +1069,72 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
  * Arm (or re-arm) failed-lane recovery for an endpoint.
  */
 ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
+
+
+/**
+ * Snapshot the TX token of a QUERY_TOKEN lane, replace that lane with the
+ * failed stub, and keep the UCT ep until an RX token arrives or the endpoint
+ * is fully failed.
+ *
+ * @return UCS_OK when the stub is installed and the UCT ep is held. Any other
+ *         status means the caller must use the software discard path. On
+ *         failure the UCT ep stays on the lane.
+ */
+ucs_status_t
+ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
+
+
+/**
+ * Invalidate lanes a peer token reported as failed.
+ *
+ * The transport endpoint stays on the lane in @ref UCP_EP_TF_LANE_INVALIDATED
+ * until the error handler holds it. Non-zero @a request_id and @a peer_id are
+ * recorded. Already held lanes only record @a peer_id.
+ *
+ * @return Lanes left invalidated. Any other lane is not on the token path.
+ */
+ucp_lane_map_t
+ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                           uint32_t request_id, uint32_t peer_id);
+
+
+/**
+ * TX token length to publish on a message with @a request_id, or 0 when this
+ * lane did not publish its snapshot for that id. @a token_p is set to the
+ * snapshot.
+ */
+uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
+                         uint32_t request_id, const void **token_p);
+
+
+/**
+ * Derive an RX token from a peer TX token while the local UCT ep still exists.
+ * The returned buffer is allocated and owned by the caller.
+ */
+ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
+                                 const void *tx_token, uint8_t tx_len,
+                                 void **rx_token_p, uint8_t *rx_len_p);
+
+
+/**
+ * Store a copy of an RX token on a held lane.
+ *
+ * A reply matches the lane's own request_id. An ACK matches peer_id, the
+ * request this lane answered. @a from_ack selects which one.
+ */
+void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
+                       int from_ack, const void *token, uint8_t len);
+
+
+/**
+ * Purge held lanes in @a lanes whose stored RX token matches @a request_id.
+ *
+ * A reply matches the lane's own request_id. An ACK matches peer_id.
+ * @a from_ack selects which one. After a successful purge the UCT endpoint
+ * is destroyed and the lane hold is released.
+ */
+void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                       uint32_t request_id, int from_ack);
 
 
 /**

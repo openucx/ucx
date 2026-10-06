@@ -555,7 +555,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         }
 
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : disabled to avoid memory type copies",
@@ -2888,8 +2888,17 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].path_index   = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);
 
-        ucs_trace("ep %p: construct lane %d to addr_index %d", ep, lane,
-                  select_ctx->lane_descs[lane].addr_index);
+        rsc_index = select_ctx->lane_descs[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            ucs_trace("ep %p: construct lane %d cm", ep, lane);
+        } else {
+            ucs_trace("ep %p: construct lane %d " UCT_TL_RESOURCE_DESC_FMT
+                      ".%d to addr_index %d", ep, lane,
+                      UCT_TL_RESOURCE_DESC_ARG(
+                              &context->tl_rscs[rsc_index].tl_rsc),
+                      key->lanes[lane].path_index,
+                      select_ctx->lane_descs[lane].addr_index);
+        }
 
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_CM)) {
             ucs_assert(key->cm_lane == UCP_NULL_LANE);
@@ -2999,6 +3008,26 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                                                 key);
 }
 
+static void ucp_wireup_filter_token_tls(ucp_worker_h worker,
+                                        const ucp_tl_bitmap_t *tl_bitmap_in,
+                                        ucp_tl_bitmap_t *tl_bitmap_out)
+{
+    ucp_rsc_index_t rsc_index;
+
+    memset(tl_bitmap_out, 0, sizeof(*tl_bitmap_out));
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap_in) {
+        if (ucp_worker_iface_get_attr_v2(worker, rsc_index)->cap.flags &
+            UCT_IFACE_FLAG_V2_QUERY_TOKEN) {
+            UCS_STATIC_BITMAP_SET(tl_bitmap_out, rsc_index);
+            continue;
+        }
+
+        ucs_trace(UCT_TL_RESOURCE_DESC_FMT " : disabled, no token query",
+                  UCT_TL_RESOURCE_DESC_ARG(
+                          &worker->context->tl_rscs[rsc_index].tl_rsc));
+    }
+}
+
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         ucp_tl_bitmap_t tl_bitmap,
@@ -3008,13 +3037,22 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 {
     ucp_worker_h worker                = ep->worker;
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap_filtered;
     /* TODO: remove initialization after all ucp_wireup_add_X_lanes functions
        will support specifying a reason */
     ucp_wireup_select_context_t select_ctx;
     ucp_wireup_select_params_t select_params;
     ucs_status_t status;
 
-    UCS_STATIC_BITMAP_AND_INPLACE(&scalable_tl_bitmap, tl_bitmap);
+    if ((key->err_mode == UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        (worker->context->config.ext.failover_mode ==
+         UCP_FAILOVER_MODE_TOKEN)) {
+        ucp_wireup_filter_token_tls(worker, &tl_bitmap, &tl_bitmap_filtered);
+    } else {
+        tl_bitmap_filtered = tl_bitmap;
+    }
+
+    UCS_STATIC_BITMAP_AND_INPLACE(&scalable_tl_bitmap, tl_bitmap_filtered);
 
     if (!UCS_STATIC_BITMAP_IS_ZERO(scalable_tl_bitmap)) {
         ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
@@ -3031,7 +3069,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                  remote_address, tl_bitmap, show_error);
+                                  remote_address, tl_bitmap_filtered,
+                                  show_error);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      &select_ctx);
     if (status != UCS_OK) {

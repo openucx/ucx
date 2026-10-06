@@ -24,6 +24,12 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              ucs_log_level_t log_level);
 
 
+void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
+                          void *qend, int max_sge, int dump_qp,
+                          uct_log_data_dump_func_t packet_dump_cb,
+                          char *buffer, size_t max, uct_ib_log_sge_t *log_sge);
+
+
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           uct_ib_iface_t *iface, void *wqe, void *qstart,
                           void *qend, int max_sge, uct_ib_log_sge_t *log_sge,

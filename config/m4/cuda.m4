@@ -252,6 +252,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AC_CHECK_DECLS([CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED],
                         [], [], [[#include <cuda.h>]])
 
+         AC_CHECK_DECLS([CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN],
+                        [], [], [[#include <cuda.h>]])
+
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
          LIBS="$save_LIBS"

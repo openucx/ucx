@@ -93,6 +93,7 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "                             'd' - DC version 1 (Connect-IB, ConnectX-4)\n"
      "                             'D' - DC version 2 (ConnectX-5 and above)\n"
      "                             'a' - Compact address vector support\n"
+     "                             'b' - DPU device (e.g. BlueField)\n"
      "  <priority>  - (optional) device priority, integer.\n"
      "\n"
      "Example: The value '0x02c9:4115:ConnectX4:5d' would specify a device named ConnectX-4\n"
@@ -205,12 +206,11 @@ ucs_config_field_t uct_ib_md_config_table[] = {
     {"DIRECT_NIC", "y", "Use Direct NIC functionality for GPU memory access",
      ucs_offsetof(uct_ib_md_config_t, ext.direct_nic), UCS_CONFIG_TYPE_BOOL},
 
-    {"AH_CACHE_TTL", "inf",
-     "Address handle (AH) cache: 0 disables it, inf keeps it enabled. No\n"
-     "other values are allowed. Only affects mlx5 transports; other\n"
-     "transports always use the cache.",
-     ucs_offsetof(uct_ib_md_config_t, ah_cache_ttl),
-     UCS_CONFIG_TYPE_TIME_UNITS},
+    {"AH_CACHE_TTL", "1s",
+     "How long a cached address handle can be reused for before it is\n"
+     "re-queried. Set to inf to never re-query cached address handles, or\n"
+     "to 0 to disable the address handle cache entirely.",
+     ucs_offsetof(uct_ib_md_config_t, ah_cache_ttl), UCS_CONFIG_TYPE_TIME_UNITS},
 
     {NULL}
 };
@@ -1025,6 +1025,8 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
                     spec->flags |= UCT_IB_DEVICE_FLAG_DC_V2;
                 } else if (*p == 'a') {
                     spec->flags |= UCT_IB_DEVICE_FLAG_AV;
+                } else if (*p == 'b') {
+                    spec->flags |= UCT_IB_DEVICE_FLAG_DPU;
                 } else {
                     ucs_error("invalid device flag: '%c'", *p);
                     free(flags_str);
@@ -1328,7 +1330,7 @@ static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
     struct ibv_mr *mr;
 
     mr = ibv_reg_dmabuf_mr(md->pd, 0, ucs_get_page_size(), 0, bad_fd,
-                           UCT_IB_MEM_ACCESS_FLAGS);
+                           md->dev.mr_access_flags);
     if (mr != NULL) {
         ibv_dereg_mr(mr);
         /* dmabuf is supported */
@@ -1407,14 +1409,15 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         goto err_release_stats;
     }
 
-    if ((md_config->ah_cache_ttl != 0) &&
-        (md_config->ah_cache_ttl != UCS_TIME_INFINITY)) {
-        ucs_error("UCX_IB_AH_CACHE_TTL must be 0 or inf");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err_cleanup_device;
-    }
-
     md->dev.ah_cache_ttl = md_config->ah_cache_ttl;
+
+    /* TODO: Detect DPU VFs, which share the generic mlx5 VF PCI id, by the
+     * board PSID (board_id) */
+    if ((md->dev.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+        (uct_ib_device_spec(&md->dev)->flags & UCT_IB_DEVICE_FLAG_DPU)) {
+        ucs_topo_sys_device_add_flags(md->dev.sys_dev,
+                                      UCS_TOPO_DEVICE_FLAG_DPU);
+    }
 
     if (strlen(md_config->subnet_prefix) > 0) {
         status = uct_ib_md_parse_subnet_prefix(md_config->subnet_prefix,

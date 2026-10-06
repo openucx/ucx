@@ -32,6 +32,7 @@ typedef struct {
     ucs_sys_pci_id_t        pci_id;
     uintptr_t               user_value;
     ucs_topo_device_class_t device_class;
+    unsigned                flags; /* ucs_topo_device_flags_t */
 
     /* Cached rank of the device's BDF within its class, or
      * UCS_SYS_DEVICE_ORDINAL_INVALID if not yet computed.
@@ -45,6 +46,28 @@ typedef struct {
     /* MEM role: matched DEV. DEV role: one representative matched MEM. */
     ucs_sys_device_t        sibling_sys_dev;
 } ucs_topo_sys_device_info_t;
+
+
+/**
+ * Compare two system device information entries by their topology identity.
+ */
+int ucs_topo_sys_device_info_cmp(const ucs_topo_sys_device_info_t *device1,
+                                 const ucs_topo_sys_device_info_t *device2);
+
+
+/**
+ * Convert a PCI bus id to its canonical sysfs path.
+ *
+ * @param [in]  bus_id  Device PCI bus id.
+ * @param [out] path    Filled with the resolved sysfs path. Must have room
+ *                      for at least PATH_MAX bytes.
+ * @param [in]  max     Size of @a path in bytes.
+ *
+ * @return UCS_OK on success, or an error status otherwise.
+ */
+ucs_status_t ucs_topo_bus_id_to_sysfs_path(const ucs_sys_bus_id_t *bus_id,
+                                           char *path, size_t max);
+
 
 END_C_DECLS
 
