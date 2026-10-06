@@ -56,6 +56,7 @@ static const char *ucp_request_flag_names[] = {
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_FLUSH)]            = "rndv_flush",
     [ucs_ilog2(UCP_REQUEST_FLAG_RNDV_START_FLUSH)]      = "rndv_start_flush",
     [ucs_ilog2(UCP_REQUEST_FLAG_RMA_BW_SAMPLE)]         = "rma_bw_sample",
+    [ucs_ilog2(UCP_REQUEST_FLAG_RMA_BW_TRACK)]          = "rma_bw_track",
 };
 
 static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
