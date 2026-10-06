@@ -1135,16 +1135,24 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .obj_cleanup   = (ucs_mpool_obj_cleanup_func_t)ucs_empty_function
 };
 
+static const char *ucp_rndv_frag_mpool_names[] = {
+    [UCP_WORKER_RNDV_FRAG_POOL_SHARED]   = "ucp_rndv_frags",
+    [UCP_WORKER_RNDV_FRAG_POOL_RESERVED] = "ucp_rndv_frags_reserved"
+};
+
 ucs_status_t
 ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
-                   ucs_sys_device_t sys_dev, ucp_mem_desc_t **mdesc_p)
+                   ucs_sys_device_t sys_dev, unsigned pool,
+                   ucp_mem_desc_t **mdesc_p)
 {
+    ucp_context_h context = worker->context;
     ucp_rndv_mpool_priv_t *mpriv;
     ucp_mem_desc_t *mdesc;
     ucp_worker_mpool_key_t key;
     ucs_status_t status;
     unsigned num_frags;
     unsigned max_elems;
+    unsigned shared_elems;
     ucs_mpool_t *mpool;
     khiter_t khiter;
     int khret;
@@ -1152,11 +1160,30 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
 
     key.sys_dev  = sys_dev;
     key.mem_type = mem_type;
+    key.pool     = pool;
 
     khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash, key);
     if (ucs_likely(khiter != kh_end(&worker->mpool_hash))) {
         mpool = &kh_val(&worker->mpool_hash, khiter);
         goto out_mp_get;
+    }
+
+    /* The shared pool is for all operations, the reserved pool is for PUT/GET
+     * only. Without a limit, or without a reserve, there is no reserved
+     * pool. */
+    max_elems    = context->config.ext.proto_enable ?
+                           ucp_proto_rndv_frag_max_elems(context,
+                                                         key.mem_type) :
+                           UINT_MAX;
+    shared_elems = ucp_proto_rndv_frag_shared_elems(context, max_elems);
+    if (pool == UCP_WORKER_RNDV_FRAG_POOL_SHARED) {
+        max_elems = shared_elems;
+    } else {
+        ucs_assert(pool == UCP_WORKER_RNDV_FRAG_POOL_RESERVED);
+        max_elems -= shared_elems;
+        if (max_elems == 0) {
+            return UCS_ERR_NO_RESOURCE;
+        }
     }
 
     khiter = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash, key, &khret);
@@ -1168,11 +1195,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
 
     mpool     = &kh_value(&worker->mpool_hash, khiter);
-    num_frags = worker->context->config.ext.rndv_num_frags[key.mem_type];
-    max_elems = worker->context->config.ext.proto_enable ?
-                        ucp_proto_rndv_frag_max_elems(worker->context,
-                                                      key.mem_type) :
-                        UINT_MAX;
+    num_frags = context->config.ext.rndv_num_frags[key.mem_type];
 
     ucs_mpool_params_reset(&mp_params);
     mp_params.priv_size       = sizeof(ucp_rndv_mpool_priv_t);
@@ -1182,7 +1205,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mp_params.elems_per_chunk = ucs_min(num_frags, max_elems);
     mp_params.max_elems       = max_elems;
     mp_params.ops             = &ucp_frag_mpool_ops;
-    mp_params.name            = "ucp_rndv_frags";
+    mp_params.name            = ucp_rndv_frag_mpool_names[pool];
     status = ucs_mpool_init(&mp_params, mpool);
     if (status != UCS_OK) {
         kh_del(ucp_worker_mpool_hash, &worker->mpool_hash, khiter);
@@ -1193,6 +1216,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mpriv->worker   = worker;
     mpriv->mem_type = key.mem_type;
     mpriv->sys_dev  = sys_dev;
+    mpriv->pool     = pool;
 
 out_mp_get:
     mdesc = ucp_worker_mpool_get(mpool);
@@ -1232,7 +1256,8 @@ static void ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
     }
 
     status = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc);
+                                UCS_SYS_DEVICE_ID_UNKNOWN,
+                                UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_fatal("failed to allocate fragment memory desc: %s",
                   ucs_status_string(status));
@@ -1411,7 +1436,9 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
 
         /* allocate fragment recv buffer desc*/
         status = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc);
+                                    UCS_SYS_DEVICE_ID_UNKNOWN,
+                                    UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+                                    &mdesc);
         if (status != UCS_OK) {
             ucs_fatal("failed to allocate fragment memory buffer: %s",
                       ucs_status_string(status));

@@ -863,6 +863,21 @@ unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
     return ucs_min(max_frags, UINT_MAX);
 }
 
+unsigned ucp_proto_rndv_frag_shared_elems(ucp_context_h context,
+                                          unsigned max_elems)
+{
+    const double ratio = context->config.ext.rndv_frag_rtr_ratio;
+    unsigned shared;
+
+    /* A reserve needs at least two fragments: one to keep and one to share */
+    if ((max_elems == UINT_MAX) || (ratio >= 1.0) || (max_elems < 2)) {
+        return max_elems;
+    }
+
+    shared = ucs_min((unsigned)(max_elems * ratio), max_elems - 1);
+    return ucs_max(shared, 1);
+}
+
 ucs_status_t
 ucp_proto_rndv_ack_init(const ucp_proto_common_init_params_t *init_params,
                         const char *name, double overhead,

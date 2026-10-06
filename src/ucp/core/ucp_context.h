@@ -132,6 +132,8 @@ typedef struct ucp_context_config {
     int                                    rndv_errh_ppln_enable;
     /** Maximum memory for concurrent rndv fragments per worker (bytes) */
     size_t                                 rndv_frag_worker_max_mem;
+    /** Fraction of rndv_frag_worker_max_mem which RTR fragments may use */
+    double                                 rndv_frag_rtr_ratio;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;

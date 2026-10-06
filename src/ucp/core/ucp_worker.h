@@ -224,10 +224,24 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
+/**
+ * Rendezvous fragment pools of a memory type and device. RTR requests use
+ * only the shared pool, while PUT/GET requests use the reserved pool first.
+ * This keeps fragments for PUT/GET: an RTR fragment is released only when
+ * the peer's data arrives, and the peer needs a fragment of its own to send
+ * it, so RTR fragments on both peers could otherwise wait for each other.
+ */
+typedef enum {
+    UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+    UCP_WORKER_RNDV_FRAG_POOL_RESERVED
+} ucp_worker_rndv_frag_pool_t;
+
+
 typedef struct ucp_worker_mpool_key {
     ucs_memory_type_t mem_type;  /* memory type of the buffer pool */
     ucs_sys_device_t  sys_dev;   /* identifier for the device,
                                     UINT_MAX for default device */
+    uint8_t           pool;      /* UCP_WORKER_RNDV_FRAG_POOL_* */
 } ucp_worker_mpool_key_t;
 
 

@@ -46,7 +46,8 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
 
 /**
  * Reschedule a pending throttled request after a fragment is released back to
- * the mpool.  Dequeue priority: PUT/GET > RTR.
+ * the mpool, from the first @a num_queues queues.  Dequeue priority:
+ * PUT/GET > RTR.
  *
  * Priority rationale:
  * PUT/GET - Completing a PUT or GET frees a staging buffer, reducing memory
@@ -55,13 +56,16 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
  *           memory pressure.
  */
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_worker_h worker)
+ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_worker_h worker,
+                                           unsigned num_queues)
 {
     ucp_request_t *pending_req;
     unsigned q_index;
 
+    ucs_assert(num_queues <= UCP_WORKER_RNDV_FC_OP_LAST);
+
     /* Dequeue from highest-priority non-empty queue (PUT/GET before RTR) */
-    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
+    for (q_index = 0; q_index < num_queues; q_index++) {
         if (ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[q_index])) {
             continue;
         }
@@ -82,6 +86,16 @@ ucp_proto_rndv_mtype_fc_reschedule_pending(ucp_worker_h worker)
         ucp_worker_signal_internal(worker);
         return;
     }
+}
+
+/* Whether a reserved fragment pool can exist, see ucp_rndv_mpool_get() */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_mtype_frag_has_reserve(ucp_context_h context)
+{
+    const size_t max_mem = context->config.ext.rndv_frag_worker_max_mem;
+
+    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO) &&
+           (context->config.ext.rndv_frag_rtr_ratio < 1.0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -106,22 +120,37 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
     }
 
     req->send.rndv.mdesc = NULL;
-    status               = ucp_rndv_mpool_get(worker, frag_mem_type,
-                                              frag_sys_dev,
-                                              &req->send.rndv.mdesc);
+    status               = UCS_ERR_NO_RESOURCE;
+
+    /* PUT/GET take from the reserved pool first, so that the shared pool
+     * stays available for RTR as long as possible */
+    if ((fc_op != UCP_WORKER_RNDV_FC_OP_RTR) &&
+        ucp_proto_rndv_mtype_frag_has_reserve(worker->context)) {
+        status = ucp_rndv_mpool_get(worker, frag_mem_type, frag_sys_dev,
+                                    UCP_WORKER_RNDV_FRAG_POOL_RESERVED,
+                                    &req->send.rndv.mdesc);
+    }
+
+    if (status == UCS_ERR_NO_RESOURCE) {
+        status = ucp_rndv_mpool_get(worker, frag_mem_type, frag_sys_dev,
+                                    UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+                                    &req->send.rndv.mdesc);
+    }
+
     if (status != UCS_ERR_NO_RESOURCE) {
         if ((status != UCS_OK) && owns_wakeup) {
             /* The caller aborts the request, so the wakeup would be lost. */
-            ucp_proto_rndv_mtype_fc_reschedule_pending(worker);
+            ucp_proto_rndv_mtype_fc_reschedule_pending(
+                                    worker, UCP_WORKER_RNDV_FC_OP_LAST);
         }
 
         return status;
     }
 
-    /* Mpool quota exhausted - throttle by queuing the request in the
-     * appropriate pending queue ordered by priority. */
+    /* Quota exhausted - throttle by queuing the request in the appropriate
+     * pending queue ordered by priority. */
     ucp_trace_req(req,
-                  "mtype_fc: mpool exhausted, queue %s mem_type %s "
+                  "mtype_fc: quota exhausted, queue %s mem_type %s "
                   "sys_dev %u",
                   (fc_op == UCP_WORKER_RNDV_FC_OP_RTR) ? "rtr" : "put/get",
                   ucs_memory_type_names[frag_mem_type],
@@ -294,7 +323,8 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
         /* A fragment was already released on behalf of this request, so pass
          * the wakeup to the next waiter rather than dropping it, otherwise the
          * remaining waiters could stall while the fragment is free. */
-        ucp_proto_rndv_mtype_fc_reschedule_pending(worker);
+        ucp_proto_rndv_mtype_fc_reschedule_pending(worker,
+                                                   UCP_WORKER_RNDV_FC_OP_LAST);
     }
 }
 
@@ -306,11 +336,19 @@ ucp_proto_rndv_mtype_fc_cancel(ucp_request_t *req, unsigned fc_op)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_mtype_mdesc_release(ucp_request_t *req)
 {
-    ucp_worker_h worker = req->send.ep->worker;
+    ucp_worker_h worker          = req->send.ep->worker;
+    ucp_mem_desc_t *mdesc        = req->send.rndv.mdesc;
+    ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(ucs_mpool_obj_owner(mdesc));
+    unsigned num_queues;
 
-    ucs_mpool_put_inline(req->send.rndv.mdesc);
+    /* Only PUT/GET requests can use a fragment of the reserved pool */
+    num_queues = (mpriv->pool == UCP_WORKER_RNDV_FRAG_POOL_RESERVED) ?
+                                           (UCP_WORKER_RNDV_FC_OP_PUT + 1) :
+                                           UCP_WORKER_RNDV_FC_OP_LAST;
+
+    ucs_mpool_put_inline(mdesc);
     req->send.rndv.mdesc = NULL;
-    ucp_proto_rndv_mtype_fc_reschedule_pending(worker);
+    ucp_proto_rndv_mtype_fc_reschedule_pending(worker, num_queues);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

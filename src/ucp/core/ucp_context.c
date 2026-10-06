@@ -425,9 +425,20 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "each fragment memory type, and per device when available. It is\n"
    "converted to a fragment count using RNDV_FRAG_SIZE. When the limit is\n"
    "reached, further fragment requests are queued until fragments are\n"
-   "released",
+   "released. See also RNDV_FRAG_RTR_RATIO",
    ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem),
    UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_FRAG_RTR_RATIO", "0.8",
+   "Fraction of RNDV_FRAG_WORKER_MAX_MEM which fragments posted to receive\n"
+   "data (RTR) may use at once, in the range (0, 1]. The rest is kept for\n"
+   "the put/get operations which move the data, so that they can always\n"
+   "make progress: an RTR fragment is released only when the peer's data\n"
+   "arrives, and the peer needs a fragment of its own to send it. A value\n"
+   "of 1 keeps nothing, which is safe only for a worker that never moves\n"
+   "rendezvous data through staging fragments",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_rtr_ratio),
+   UCS_CONFIG_TYPE_POS_DOUBLE},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -2697,6 +2708,14 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.recovery_retries == 0) {
         ucs_error("UCX_RECOVERY_RETRIES value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
+    if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.rndv_frag_rtr_ratio) ||
+        !(context->config.ext.rndv_frag_rtr_ratio <= 1.0)) {
+        ucs_error("UCX_RNDV_FRAG_RTR_RATIO value %g is not in the range "
+                  "(0, 1]", context->config.ext.rndv_frag_rtr_ratio);
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }

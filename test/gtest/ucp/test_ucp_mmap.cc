@@ -1019,14 +1019,23 @@ rndv_mpool_chunk_alloc_fail(ucs_mpool_t*, size_t*, void**)
     return UCS_ERR_NO_MEMORY;
 }
 
+static ucs_status_t rndv_mpool_get(ucp_worker_h worker,
+                                   ucs_memory_type_t mem_type, unsigned pool,
+                                   ucp_mem_desc_t **mdesc_p)
+{
+    return ucp_rndv_mpool_get(worker, mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                              pool, mdesc_p);
+}
+
 UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 {
     ucp_worker_h worker = sender().worker();
     for (auto mem_type : mem_buffer::supported_mem_types()) {
         ucp_mem_desc_t *mdesc;
 
-        ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, mem_type,
-                                         UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc));
+        ASSERT_UCS_OK(rndv_mpool_get(worker, mem_type,
+                                     UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+                                     &mdesc));
         ASSERT_NE(nullptr, mdesc);
         EXPECT_EQ(mdesc->memh, mdesc->memh->parent);
         ucs_mpool_put(mdesc);
@@ -1036,23 +1045,56 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 UCS_TEST_SKIP_COND_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
                      (get_variant_value() == VARIANT_PROTO_DISABLE),
                      "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
-                     "RNDV_FRAG_WORKER_MAX_MEM=8K")
+                     "RNDV_FRAG_WORKER_MAX_MEM=8K", "RNDV_FRAG_RTR_RATIO=1")
 {
     ucp_mem_desc_t *mdesc1;
     ucp_mem_desc_t *mdesc2;
     ucp_mem_desc_t *mdesc3;
     ucp_worker_h worker = sender().worker();
 
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc1));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc2));
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-              ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                 UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3));
+              rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                             UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc3));
 
     ucs_mpool_put(mdesc2);
     ucs_mpool_put(mdesc1);
+}
+
+/* 4 fragments: 3 in the shared pool for any operation, 1 kept in the
+ * reserved pool for PUT/GET */
+UCS_TEST_SKIP_COND_P(test_ucp_mmap, rndv_mpool_rtr_ratio,
+                     (get_variant_value() == VARIANT_PROTO_DISABLE),
+                     "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:4",
+                     "RNDV_FRAG_WORKER_MAX_MEM=16K", "RNDV_FRAG_RTR_RATIO=0.8")
+{
+    ucp_worker_h worker = sender().worker();
+    std::vector<ucp_mem_desc_t*> shared(3);
+    ucp_mem_desc_t *reserved;
+    ucp_mem_desc_t *mdesc;
+
+    for (auto &m : shared) {
+        ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                     UCP_WORKER_RNDV_FRAG_POOL_SHARED, &m));
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                             UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_RESERVED,
+                                 &reserved));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                             UCP_WORKER_RNDV_FRAG_POOL_RESERVED, &mdesc));
+
+    ucs_mpool_put(reserved);
+    for (auto m : shared) {
+        ucs_mpool_put(m);
+    }
 }
 
 UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_disabled_with_proto_v1,
@@ -1064,12 +1106,12 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_disabled_with_proto_v1,
     ucp_mem_desc_t *mdesc3;
     ucp_worker_h worker = sender().worker();
 
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc1));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc2));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc3));
 
     ucs_mpool_put(mdesc3);
     ucs_mpool_put(mdesc2);
@@ -1089,13 +1131,14 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_allocation_failure,
     const ucs_mpool_ops_t *orig_ops;
     ucs_status_t status;
 
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc1));
-    ASSERT_UCS_OK(ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                     UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc2));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc1));
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc2));
 
     key.mem_type          = UCS_MEMORY_TYPE_HOST;
     key.sys_dev           = UCS_SYS_DEVICE_ID_UNKNOWN;
+    key.pool              = UCP_WORKER_RNDV_FRAG_POOL_SHARED;
     const khiter_t khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash,
                                    key);
     ASSERT_NE(kh_end(&worker->mpool_hash), khiter);
@@ -1110,8 +1153,8 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_allocation_failure,
     mpool->data->ops     = &fail_ops;
     {
         scoped_log_handler slh(hide_errors_logger);
-        status = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN, &mdesc3);
+        status = rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc3);
     }
     mpool->data->ops = orig_ops;
 

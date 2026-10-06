@@ -200,6 +200,11 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req);
 unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
                                        ucs_memory_type_t frag_mem_type);
 
+/* Number of fragments out of @a max_elems in the shared pool, which is
+ * UCX_RNDV_FRAG_RTR_RATIO of them; the rest go to the reserved pool. */
+unsigned ucp_proto_rndv_frag_shared_elems(ucp_context_h context,
+                                          unsigned max_elems);
+
 unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg);
 
 int ucp_proto_rndv_mtype_fc_reschedule_filter(
