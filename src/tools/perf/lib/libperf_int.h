@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 *
@@ -79,8 +79,13 @@ typedef void (*ucx_perf_memcpy_func_t)(void *dst,
 
 typedef void *(*ucx_perf_memset_func_t)(void *dst, int value, size_t count);
 
+enum {
+    UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID = UCS_BIT(0)
+};
+
 struct ucx_perf_allocator {
     const char                       *name;
+    unsigned                         flags;
     ucs_memory_type_t                default_mem_type;
     ucx_perf_init_func_t             init;
     ucx_perf_uct_alloc_func_t        uct_alloc;
@@ -335,6 +340,44 @@ ucx_perf_mem_alloc_name(const ucx_perf_params_t *params, int is_send)
 
     mem_type = is_send ? params->send_mem_type : params->recv_mem_type;
     return ucs_memory_type_names[mem_type];
+}
+
+static inline ucs_status_t
+ucx_perf_get_device_index(const ucx_perf_context_t *perf,
+                          unsigned group_index, unsigned device_count,
+                          const char *device_type,
+                          unsigned *device_index_p)
+{
+    int device_id;
+
+    if (perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+        device_id = perf->params.recv_device_id;
+        if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
+            device_id = perf->params.send_device_id;
+        }
+    } else {
+        device_id = (group_index == 0) ? perf->params.recv_device_id :
+                                         perf->params.send_device_id;
+    }
+
+    if (device_count == 0) {
+        ucs_error("no %s devices available", device_type);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
+        *device_index_p = group_index % device_count;
+        return UCS_OK;
+    }
+
+    if ((device_id < 0) || ((unsigned)device_id >= device_count)) {
+        ucs_error("%s device index %d is invalid for %u available devices",
+                  device_type, device_id, device_count);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *device_index_p = device_id;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)

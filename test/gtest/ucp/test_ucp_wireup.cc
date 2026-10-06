@@ -1382,15 +1382,17 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, peer_destroyed,
     EXPECT_EQ(0u, num_eps(sender()));
 }
 
-/* Without negotiation, both sides keep the endpoints after one-sided close */
+/* Without negotiation, remote-connected endpoints are kept after close. */
 UCS_TEST_P(test_ucp_wireup_close_negotiate, knob_off, "EP_CLOSE_NEGOTIATE=n")
 {
+    const unsigned expected_num_eps = is_loopback() ? 0 : 1;
+
     connect_send_recv();
     disconnect(sender());
 
     short_progress_loop();
-    EXPECT_EQ(1u, num_eps(sender()));
-    EXPECT_EQ(1u, num_eps(receiver()));
+    EXPECT_EQ(expected_num_eps, num_eps(sender()));
+    EXPECT_EQ(expected_num_eps, num_eps(receiver()));
     EXPECT_EQ(0u, m_err_count);
 }
 
@@ -1409,6 +1411,8 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, destroy_async_flush,
 
 UCS_TEST_P(test_ucp_wireup_close_negotiate, old_peer, "EP_CLOSE_NEGOTIATE=y")
 {
+    const unsigned expected_num_eps = is_loopback() ? 0 : 1;
+
     connect_send_recv();
     ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
     unsigned dst_version    = key.dst_version;
@@ -1418,14 +1422,15 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, old_peer, "EP_CLOSE_NEGOTIATE=y")
     key.dst_version = dst_version;
 
     short_progress_loop();
-    EXPECT_EQ(1u, num_eps(sender()));
-    EXPECT_EQ(1u, num_eps(receiver()));
+    EXPECT_EQ(expected_num_eps, num_eps(sender()));
+    EXPECT_EQ(expected_num_eps, num_eps(receiver()));
     EXPECT_EQ(0u, m_err_count);
 }
 
 UCS_TEST_P(test_ucp_wireup_close_negotiate, direct_request_ids,
            "PROTO_INDIRECT_ID=n", "EP_CLOSE_NEGOTIATE=y", "RNDV_THRESH=0")
 {
+    skip_loopback();
     connect_send_recv();
     std::vector<void*> reqs;
     send_nb(sender().ep(), 1, 1, reqs);
@@ -1602,6 +1607,52 @@ UCS_TEST_P(test_ucp_wireup_close_wakeup, deferred_ack, "KEEPALIVE_INTERVAL=inf",
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_close_wakeup)
+
+class test_ucp_wireup_errh_peer_self : public test_ucp_wireup_errh_peer
+{
+public:
+    void init() override {
+        test_ucp_wireup::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
+{
+    ucp_ep_params_t ep_params = get_ep_params();
+    ucp_address_t *address;
+    ucp_ep_h ep;
+    size_t address_length;
+    ucs_status_t status;
+
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "self",
+                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE));
+
+    status = ucp_worker_get_address(receiver().worker(), &address,
+                                    &address_length);
+    ASSERT_UCS_OK(status);
+
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(sender().worker(), &ep_params, &ep);
+    }
+
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_UCS_OK(status);
+
+    const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+    EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
+    EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
+    EXPECT_GT(key.num_lanes, 0);
+    for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+        EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, lane)->tl_name);
+    }
+
+    disconnect(ep);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_errh_peer_self, self, "self")
 
 class test_ucp_wireup_fallback : public test_ucp_wireup {
 public:
