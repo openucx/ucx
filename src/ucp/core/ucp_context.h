@@ -198,6 +198,9 @@ typedef struct ucp_context_config {
     /** Defines whether resolving remote endpoint ID is required or not when
      *  creating a local endpoint */
     ucs_on_off_auto_value_t                resolve_remote_ep_id;
+    /** Negotiate closing an endpoint connected by worker address with the
+     *  peer, so that both sides release the endpoint resources */
+    ucs_on_off_auto_value_t                ep_close_negotiate;
     /** Enable indirect IDs to object pointers in wire protocols */
     ucs_on_off_auto_value_t                proto_indirect_id;
     /** Bitmap of memory types whose allocations are registered fully */

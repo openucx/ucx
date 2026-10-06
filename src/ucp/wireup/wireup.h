@@ -66,6 +66,10 @@ enum {
 #define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
+/* Minimal peer release version which acknowledges EP_REMOVED from its peer. */
+#define UCP_WIREUP_EP_REMOVED_ACK_MIN_DST_VERSION 24
+
+
 /**
  * Calculates a score of a potential transport. Used both for the primary
  * selection score and for the tiebreak score.
@@ -298,6 +302,26 @@ typedef struct ucp_wireup_lane_token {
     const void *token;
     uint8_t     len;
 } ucp_wireup_lane_token_t;
+
+
+/**
+ * Send EP_REMOVED message to the remote endpoint connected to @a ep, either to
+ * notify that @a ep is being closed, or to acknowledge such a notification.
+ */
+ucs_status_t ucp_wireup_send_ep_removed_msg(ucp_ep_h ep);
+
+
+/**
+ * @return Whether EP_REMOVED message can be sent to the remote endpoint
+ *         connected to @a ep.
+ */
+int ucp_wireup_can_send_ep_removed_msg(ucp_ep_h ep);
+
+
+/**
+ * Check whether a deferred EP_REMOVED callback belongs to the endpoint @a arg.
+ */
+int ucp_wireup_ep_removed_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
 
 /**
