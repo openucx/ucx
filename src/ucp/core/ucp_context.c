@@ -2867,6 +2867,26 @@ static void ucp_context_gpu_nic_assignment_net_device_filter_init(
     }
 }
 
+static ucs_status_t
+ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
+                                            ucp_gpu_nic_assignment_mode_t mode)
+{
+    const char *conflict;
+
+    if (!context->config.ext.proto_enable) {
+        conflict = "UCX_PROTO_ENABLE=n";
+    } else if (context->config.ext.proto_use_single_net_device) {
+        conflict = "UCX_SINGLE_NET_DEVICE=y";
+    } else {
+        return UCS_OK;
+    }
+
+    ucs_error("%s is not supported by gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
+              conflict, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -2920,6 +2940,13 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
         goto out_release_groups;
     }
 
+    /* Checked after every case that skips the assignment, so a conflict is
+     * reported only when the assignment is about to be built */
+    status = ucp_context_gpu_nic_assignment_check_config(context, mode);
+    if (status != UCS_OK) {
+        goto out_release_groups;
+    }
+
     assignment = ucs_malloc(sizeof(*assignment), "ucp gpu-nic assignment");
     if (assignment == NULL) {
         ucs_error("failed to allocate gpu-nic assignment");
@@ -2949,25 +2976,6 @@ ucp_context_gpu_nic_assignment_cleanup(ucp_gpu_nic_assignment_t *assignment)
 
     ucp_gpu_nic_assignment_release(assignment);
     ucs_free(assignment);
-}
-
-static ucs_status_t
-ucp_context_gpu_nic_assignment_check_config(ucp_context_h context)
-{
-    const char *conflict;
-
-    if (!context->config.ext.proto_enable) {
-        conflict = "UCX_PROTO_ENABLE=n";
-    } else if (context->config.ext.proto_use_single_net_device) {
-        conflict = "UCX_SINGLE_NET_DEVICE=y";
-    } else {
-        return UCS_OK;
-    }
-
-    ucs_error("%s is not supported with the gpu-nic assignment, set "
-              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
-              conflict);
-    return UCS_ERR_INVALID_PARAM;
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
@@ -3016,13 +3024,6 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     status = ucp_context_gpu_nic_assignment_init(context);
     if (status != UCS_OK) {
         goto err_free_res;
-    }
-
-    if (context->gpu_nic_assignment != NULL) {
-        status = ucp_context_gpu_nic_assignment_check_config(context);
-        if (status != UCS_OK) {
-            goto err_cleanup_gpu_nic_assignment;
-        }
     }
 
     context->uuid             = ucs_generate_uuid((uintptr_t)context);
