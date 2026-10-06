@@ -375,6 +375,7 @@ noinst_HEADERS = \
 	uct/test_md.h \
 	uct/test_peer_failure.h \
 	\
+	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h \
