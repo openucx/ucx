@@ -257,7 +257,9 @@ ucp_proto_put_offload_zcopy_send_common(
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
     uct_completion_t *comp = &req->send.state.uct_comp;
+    const ucp_proto_multi_priv_t *mpriv;
     ucp_rma_bw_frag_t *frag = NULL;
+    uint64_t posted_total;
     uct_iov_t iov;
     ucs_status_t status;
 
@@ -274,9 +276,7 @@ ucp_proto_put_offload_zcopy_send_common(
         ucp_rma_bw_frag_posted(frag, iov.length, status);
     }
     if (mode != UCP_RMA_BW_POST_NONE) {
-        const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
-        uint64_t posted_total;
-
+        mpriv        = req->send.proto_config->priv;
         posted_total = ucp_rma_bw_record_post(
                 req, UCP_RMA_BW_PUT, req->send.multi_lane_idx,
                 lpriv->super.lane, mpriv->num_lanes, iov.length, status);

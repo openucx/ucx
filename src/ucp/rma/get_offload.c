@@ -166,8 +166,8 @@ ucp_proto_get_offload_zcopy_send_common(
                                               lpriv->super.rkey_index);
     size_t offset          = req->send.state.dt_iter.offset;
     uct_completion_t *comp = &req->send.state.uct_comp;
-    const ucp_proto_multi_priv_t *mpriv;
     ucp_rma_bw_frag_t *frag = NULL;
+    const ucp_proto_multi_priv_t *mpriv;
     uct_iov_t iov;
     ucs_status_t status;
 
