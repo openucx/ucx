@@ -11,6 +11,8 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_worker.h>
+#include <ucp/dt/dt.h>
 }
 
 
@@ -181,3 +183,94 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda, all, "all")
+
+/*
+ * Stream-ordered CUDA memory is not peer memory pinnable, so gdr_copy cannot
+ * register it. Pack/unpack through the CUDA memory type endpoint has to fall
+ * back from the preferred gdr_copy lane to cuda_copy.
+ */
+class test_ucp_mem_type_non_pinnable : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_AM);
+    }
+
+    virtual void init() override
+    {
+        /* Type the stream-ordered allocations as plain CUDA memory, so they
+         * reach the CUDA memory type endpoint where gdr_copy is selected */
+        modify_config("CUDA_COPY_ASYNC_MEM_TYPE", "cuda", SETENV_IF_NOT_EXIST);
+        ucp_test::init();
+    }
+
+protected:
+    static constexpr size_t BUF_SIZE = 65536;
+    static constexpr uint64_t SEED   = 0xdeadbeefcafebabeull;
+
+    /* The datatype iterator passes the resolved memory flags, while the
+     * protocols which do not carry them pass NULL */
+    void test_pack_unpack(int pass_mem_info)
+    {
+        std::vector<uint8_t> host_buf(BUF_SIZE);
+        ucp_memory_info_t mem_info;
+
+        if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+        }
+
+        if (sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA] == NULL) {
+            UCS_TEST_SKIP_R("no CUDA mem type endpoint");
+        }
+
+        mem_buffer src(BUF_SIZE, UCS_MEMORY_TYPE_CUDA,
+                       mem_buffer::alloc_mode::ASYNC);
+        mem_buffer dst(BUF_SIZE, UCS_MEMORY_TYPE_CUDA,
+                       mem_buffer::alloc_mode::ASYNC);
+
+        ucp_memory_detect(sender().ucph(), src.ptr(), BUF_SIZE, &mem_info);
+        if (mem_info.flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE) {
+            UCS_TEST_SKIP_R("CUDA async memory is peer memory pinnable");
+        }
+
+        ASSERT_EQ(UCS_MEMORY_TYPE_CUDA, mem_info.type);
+
+        const ucp_memory_info_t *mem_info_arg = pass_mem_info ? &mem_info :
+                                                                NULL;
+
+        mem_buffer::pattern_fill(src.ptr(), BUF_SIZE, SEED,
+                                 UCS_MEMORY_TYPE_CUDA);
+        mem_buffer::pattern_fill(dst.ptr(), BUF_SIZE, 0, UCS_MEMORY_TYPE_CUDA);
+
+        ucp_mem_type_pack(sender().worker(), host_buf.data(), src.ptr(),
+                          BUF_SIZE, UCS_MEMORY_TYPE_CUDA, mem_info_arg);
+        mem_buffer::pattern_check(host_buf.data(), BUF_SIZE, SEED);
+
+        ucp_mem_type_unpack(sender().worker(), dst.ptr(), host_buf.data(),
+                            BUF_SIZE, UCS_MEMORY_TYPE_CUDA, mem_info_arg);
+        mem_buffer::pattern_check(dst.ptr(), BUF_SIZE, SEED,
+                                  UCS_MEMORY_TYPE_CUDA);
+    }
+};
+
+UCS_TEST_P(test_ucp_mem_type_non_pinnable, pack_unpack_resolved_flags)
+{
+    test_pack_unpack(1);
+}
+
+/* Without the flags the lane is picked by a memtype cache lookup, a quiet
+ * registration attempt on the preferred lane, and detection as a last resort */
+UCS_TEST_P(test_ucp_mem_type_non_pinnable, pack_unpack_unknown_flags)
+{
+    test_pack_unpack(0);
+}
+
+/* The memtype cache is the first source of flags, make sure the fallback also
+ * holds when it cannot answer */
+UCS_TEST_P(test_ucp_mem_type_non_pinnable, pack_unpack_no_memtype_cache,
+           "MEMTYPE_CACHE=n")
+{
+    test_pack_unpack(0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_non_pinnable, all, "all")

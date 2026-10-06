@@ -285,7 +285,8 @@ static ucs_status_t ucp_device_mem_list_export_handle(
         return status;
     }
 
-    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type);
+    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type,
+                        NULL);
     return UCS_OK;
 }
 
@@ -901,7 +902,7 @@ ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
     ucp_dt_contig_unpack(worker, counter_ptr, &counter_value,
-                         sizeof(counter_value), mem_type,
+                         sizeof(counter_value), mem_type, NULL,
                          sizeof(counter_value));
     return UCS_OK;
 }
@@ -916,6 +917,7 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
     mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
                                            params);
     ucp_dt_contig_pack(worker, &counter_value, counter_ptr,
-                       sizeof(counter_value), mem_type, sizeof(counter_value));
+                       sizeof(counter_value), mem_type, NULL,
+                       sizeof(counter_value));
     return counter_value;
 }

@@ -1376,20 +1376,36 @@ UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
 class test_gdr_copy : public test_md {
 protected:
+    static constexpr size_t REG_SIZE = 65536;
+
     ucs_status_t register_mem()
     {
-        constexpr size_t size = 65536;
-        void *address         = NULL;
+        void *address = NULL;
         uct_mem_h memh;
         ucs_status_t status;
 
-        alloc_memory(&address, size, NULL, UCS_MEMORY_TYPE_CUDA);
-        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
+        alloc_memory(&address, REG_SIZE, NULL, UCS_MEMORY_TYPE_CUDA);
+        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, REG_SIZE, &memh);
         if (status == UCS_OK) {
             (void)uct_md_mem_dereg(md(), memh);
         }
 
         free_memory(address, UCS_MEMORY_TYPE_CUDA);
+        return status;
+    }
+
+    ucs_status_t register_async_mem()
+    {
+        mem_buffer buffer(REG_SIZE, UCS_MEMORY_TYPE_CUDA,
+                          mem_buffer::alloc_mode::ASYNC);
+        uct_mem_h memh;
+        ucs_status_t status;
+
+        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, buffer.ptr(), REG_SIZE, &memh);
+        if (status == UCS_OK) {
+            (void)uct_md_mem_dereg(md(), memh);
+        }
+
         return status;
     }
 };
@@ -1421,6 +1437,24 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE=try")
 {
     ASSERT_UCS_OK(register_mem());
+}
+
+/* Pinning goes through nvidia_p2p_get_pages, so memory without device pages
+ * must never be offered to this memory domain */
+UCS_TEST_P(test_gdr_copy, gdr_copy_requires_peer_mem_pinnable)
+{
+    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE);
+}
+
+/* The reason for the requirement above: stream-ordered memory is only
+ * compatible with dma_buf mappings, so the pin itself fails */
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_async_cuda_fail,
+                     !check_caps(UCT_MD_FLAG_REG) ||
+                             !mem_buffer::is_async_supported(
+                                     UCS_MEMORY_TYPE_CUDA))
+{
+    scoped_log_handler slh(wrap_errors_logger);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, register_async_mem());
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)

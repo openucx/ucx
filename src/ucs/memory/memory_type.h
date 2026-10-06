@@ -61,7 +61,14 @@ typedef enum ucs_mem_flags {
      * Memory can be accessed for inter-process memory type copy by a peer on
      * a different node.
      */
-    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1)
+    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1),
+
+    /**
+     * Memory can be pinned by the GPU peer memory driver. Memory localized
+     * to a GPU locality domain is never placed as GDR-capable, and
+     * stream-ordered allocations are only compatible with dma_buf mappings.
+     */
+    UCS_MEM_FLAG_PEER_MEM_PINNABLE       = UCS_BIT(2)
 } ucs_mem_flags_t;
 
 

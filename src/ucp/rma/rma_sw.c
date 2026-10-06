@@ -80,7 +80,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     UCP_WORKER_GET_EP_BY_ID(&ep, worker, puth->ep_id, return UCS_OK,
                             "SW PUT request");
     ucp_dt_contig_unpack(worker, (void*)puth->address, puth + 1,
-                         length - sizeof(*puth), puth->mem_type,
+                         length - sizeof(*puth), puth->mem_type, NULL,
                          length - sizeof(*puth));
     ucp_rma_sw_send_cmpl(ep);
     return UCS_OK;
@@ -115,7 +115,7 @@ static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
     hdr->offset = req->send.state.dt_iter.offset;
     ucp_dt_contig_pack(req->send.ep->worker, hdr + 1,
                        (char*)req->send.buffer + hdr->offset, length,
-                       req->send.mem_type, req->send.length);
+                       req->send.mem_type, NULL, req->send.length);
 
     return sizeof(*hdr) + length;
 }

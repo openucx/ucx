@@ -275,7 +275,8 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
     }
 
     ucp_dt_contig_unpack(req->recv.worker, UCS_PTR_BYTE_OFFSET(buffer, offset),
-                         data, length, req->recv.dt_iter.mem_info.type, length);
+                         data, length, req->recv.dt_iter.mem_info.type,
+                         &req->recv.dt_iter.mem_info, length);
     req->status = UCS_OK;
 
 out:

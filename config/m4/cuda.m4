@@ -255,6 +255,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AC_CHECK_DECLS([CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN],
                         [], [], [[#include <cuda.h>]])
 
+         AC_CHECK_DECLS([CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE],
+                        [], [], [[#include <cuda.h>]])
+
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
          LIBS="$save_LIBS"
