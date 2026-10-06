@@ -527,6 +527,10 @@ public:
         if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
             modify_config("RNDV_FRAG_MEM_TYPES", "host");
             modify_config("RNDV_FRAG_SIZE", "host:512K");
+
+            /* TODO: Remove when rndv/put/mtype implements reset. CI exports
+             * UCX_PROTO_REQUEST_RESET=y, which restarts its pending requests */
+            modify_config("PROTO_REQUEST_RESET", "n");
         }
 
         test_ucp_rma_gpu_nic::init();
