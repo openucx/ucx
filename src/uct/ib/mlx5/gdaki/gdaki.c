@@ -1454,7 +1454,7 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
     ucs_status_t status;
     int ibdev_index, ibdev_count, score_index;
-    int num_gpu_reachable_ibdevs, num_gpu_selected_ibdevs;
+    unsigned long num_gpu_reachable_ibdevs, num_gpu_selected_ibdevs;
     unsigned gpu_count, gpu_index;
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
@@ -1549,7 +1549,8 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     for (gpu_index = 0; gpu_index < gpu_count; gpu_index++) {
         /* Update PCI distance in IB device scores */
         num_gpu_reachable_ibdevs = 0;
-        for (score_index = 0; score_index < num_sys_active_ibdevs; score_index++) {
+        for (score_index = 0; score_index < num_sys_active_ibdevs;
+             score_index++) {
             ibdesc = &dmat[scores[score_index].ibdev_index];
             scores[score_index].reachable = ucs_topo_is_reachable(
                     ibdesc->sys_dev, gpus[gpu_index].sys_dev);
@@ -1567,12 +1568,9 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         }
 
         if (num_gpu_reachable_ibdevs == 0) {
-            ucs_debug("GPU %04x:%02x:%02x.%u has no reachable active IB "
-                      "devices for GDA",
-                      (unsigned)gpus[gpu_index].bus_id.domain,
-                      (unsigned)gpus[gpu_index].bus_id.bus,
-                      (unsigned)gpus[gpu_index].bus_id.slot,
-                      (unsigned)gpus[gpu_index].bus_id.function);
+            ucs_debug("GPU " UCS_SYS_BUS_ID_FMT
+                      " has no reachable active IB devices for GDA",
+                      UCS_SYS_BUS_ID_ARG(&gpus[gpu_index].bus_id));
             continue;
         }
 
@@ -1580,13 +1578,11 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         ucs_qsort_r(scores, num_sys_active_ibdevs, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
 
-        num_gpu_selected_ibdevs = ucs_min((int)ib_per_cuda, num_gpu_reachable_ibdevs);
+        num_gpu_selected_ibdevs = ucs_min(ib_per_cuda,
+                                          num_gpu_reachable_ibdevs);
 
-        /* At this point there are num_gpu_reachable_ibdevs reachable
-           IB devices for this GPU, num_gpu_selected_ibdevs is clamped
-           to that value, and they were sorted to the beginning of the
-           scores array; therefore the loop only iterates over the IB
-           devices that are reachable for this GPU. */
+        /* Reachable devices are sorted first, so the loop selects only
+         * devices reachable from this GPU */
         for (score_index = 0; score_index < num_gpu_selected_ibdevs;
              score_index++) {
             ucs_assert(scores[score_index].reachable);
