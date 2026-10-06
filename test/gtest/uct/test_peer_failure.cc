@@ -557,9 +557,15 @@ protected:
         test_uct_purge_outstanding *self =
                 static_cast<test_uct_purge_outstanding*>(arg);
 
-        EXPECT_EQ(self->m_sender->ep(0), ep);
         EXPECT_TRUE(UCS_STATUS_IS_ERR(status));
-        ++self->m_err_count;
+        if ((self->m_receiver != NULL) && (self->m_receiver->num_eps() > 0) &&
+            (ep == self->m_receiver->ep(0))) {
+            ++self->m_receiver_err_count;
+            return UCS_INPROGRESS;
+        }
+
+        EXPECT_EQ(self->m_sender->ep(0), ep);
+        ++self->m_sender_err_count;
         return UCS_INPROGRESS;
     }
 
@@ -570,6 +576,14 @@ protected:
         ASSERT_TRUE(info != NULL);
 
         ctx->self->validate_op(info, ctx);
+    }
+
+    static void purge_count_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
+
+        ASSERT_TRUE(info != NULL);
+        ++ctx->num_ops_purged;
     }
 
     static void completion_cb(uct_completion_t *comp)
@@ -585,7 +599,9 @@ protected:
         return UCS_OK;
     }
 
-    void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
+    void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true,
+                           uct_ep_outstanding_purge_callback_t cb = purge_cb,
+                           uct_ep_h ep = NULL)
     {
         uct_ep_outstanding_purge_params_t purge_params = {};
         /* Lives until purge returns. The params keep a pointer into it. */
@@ -593,7 +609,7 @@ protected:
 
         purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                                   UCT_EP_OUTSTANDING_FIELD_ARG;
-        purge_params.cb         = purge_cb;
+        purge_params.cb         = cb;
         purge_params.arg        = ctx;
 
         if (with_rx_token) {
@@ -625,8 +641,11 @@ protected:
             purge_params.rx_token    = rx_token.data();
         }
 
-        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0),
-                                               &purge_params));
+        if (ep == NULL) {
+            ep = m_sender->ep(0);
+        }
+
+        ASSERT_UCS_OK(uct_ep_outstanding_purge(ep, &purge_params));
     }
 
     void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx,
@@ -654,8 +673,8 @@ protected:
                 m_sender->ep(0), &ctx.comp, send_func);
         num_posted += ctx.num_ops_posted_after_flush;
 
-        wait_for_flag(&m_err_count);
-        ASSERT_EQ(1u, m_err_count);
+        wait_for_flag(&m_sender_err_count);
+        ASSERT_EQ(1u, m_sender_err_count);
 
         num_outstanding = ctx.comp.count;
         num_completions = ctx.num_completions;
@@ -674,6 +693,39 @@ protected:
 
         flush();
         EXPECT_EQ(0, ctx.comp.count);
+    }
+
+    void test_purge_before_error(const send_func_t &send_func, purge_ctx &ctx)
+    {
+        uct_ep_invalidate_params_t invalidate_params = {};
+        purge_ctx receiver_ctx                       = {};
+        ucs_status_t status;
+
+        /* Peer sends and invalidates. This side sent nothing, so it gets
+         * no error completion and has to purge on its own. */
+        status = post_op(m_sender->ep(0), &ctx.comp, send_func);
+        ASSERT_EQ(UCS_INPROGRESS, status);
+
+        flush();
+        EXPECT_EQ(1u, ctx.num_completions);
+        EXPECT_EQ(0, ctx.comp.count);
+
+        ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
+
+        receiver_ctx.self = this;
+        purge_outstanding(&receiver_ctx, false, purge_count_cb,
+                          m_receiver->ep(0));
+        EXPECT_EQ(0u, receiver_ctx.num_ops_purged);
+        EXPECT_EQ(0u, m_receiver_err_count);
+
+        short_progress_loop(100, m_receiver);
+        EXPECT_EQ(0u, m_receiver_err_count);
+        EXPECT_EQ(0u, receiver_ctx.num_ops_purged);
+
+        purge_outstanding(&receiver_ctx, false, purge_count_cb,
+                          m_receiver->ep(0));
+        EXPECT_EQ(0u, receiver_ctx.num_ops_purged);
+        EXPECT_EQ(0u, m_receiver_err_count);
     }
 
     void test_am_short(bool with_rx_token)
@@ -706,7 +758,8 @@ protected:
 
     entity   *m_sender;
     entity   *m_receiver;
-    unsigned m_err_count = 0;
+    unsigned m_sender_err_count   = 0;
+    unsigned m_receiver_err_count = 0;
 };
 
 const uint8_t test_uct_purge_outstanding::AM_SHORT_ID;
@@ -829,6 +882,30 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
     };
 
     test_purge_outstanding(put_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy_before_error,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size            = ucs_max(attr.cap.put.min_zcopy,
+                                           ucs_min((size_t)4096,
+                                                   attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx = {this, UCT_EP_OP_PUT_ZCOPY, {completion_cb, 0, UCS_OK}};
+
+    send_func_t put_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(),
+                                comp);
+    };
+
+    test_purge_before_error(put_zcopy, ctx);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)

@@ -1457,6 +1457,17 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_mlx5_base_ep_t *ep,
     }
 }
 
+void uct_rc_mlx5_ep_save_ft_ci(uct_rc_mlx5_base_ep_t *ep)
+{
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+
+    /* Save last completed WQE. TX QP resources are reserved until purge. */
+    txwq->ft_ci = txwq->prev_sw_pi - (txwq->bb_max -
+                                      uct_rc_txqp_available(&ep->super.txqp));
+    ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, txwq->ft_ci,
+              txwq->sw_pi);
+}
+
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
@@ -1482,17 +1493,41 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     callback_arg = (params->field_mask & UCT_EP_OUTSTANDING_FIELD_ARG) ?
                    params->arg : NULL;
 
-    ucs_assertv_always(ep->err_handler_inprogress,
-                       "ep %p is not in deferred error handling", ep);
+    if (!ep->err_handler_inprogress) {
+        /* Flush cancel completes outstanding operations on the error
+         * completion. Walking those WQEs would report them again. */
+        if (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) {
+            return UCS_OK;
+        }
+
+        status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
+                                             &ep->tx.wq.super, IBV_QPS_ERR);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucs_arbiter_group_purge(&iface->super.tx.arbiter, &ep->super.arb_group,
+                                uct_rc_ep_arbiter_purge_internal_cb, NULL);
+        uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
+        uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
+        uct_rc_mlx5_ep_save_ft_ci(ep);
+
+        /* Suppress further completions including err callback. */
+        ep->super.flags           |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+        ep->err_handler_inprogress = 1;
+    }
 
     end_pi   = txwq->sw_pi;
     ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
 
-    ucs_assertv_always(start_pi != end_pi,
-                       "ep %p qp 0x%x unexpected empty outstanding queue", ep,
-                       txwq->super.qp_num);
+    /* An idle queue has nothing to complete. Close the deferred range. */
+    if (start_pi == end_pi) {
+        uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
+        txwq->ft_ci = txwq->prev_sw_pi;
+        return UCS_OK;
+    }
 
     num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
             &iface->super.super, txwq, start_pi, end_pi);
