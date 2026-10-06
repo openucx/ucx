@@ -1208,6 +1208,8 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
     mp_params.name            = ucp_rndv_frag_mpool_names[pool];
     status = ucs_mpool_init(&mp_params, mpool);
     if (status != UCS_OK) {
+        /* Callers retry on UCS_ERR_NO_RESOURCE, meaning quota exhaustion */
+        ucs_assert(status != UCS_ERR_NO_RESOURCE);
         kh_del(ucp_worker_mpool_hash, &worker->mpool_hash, khiter);
         goto err;
     }
