@@ -44,6 +44,69 @@ static const void *ucp_proto_select_init_priv_buf(
     return &ucs_array_elem(&proto_init->priv_buf, proto->priv_offset);
 }
 
+/* Print the protocols which are disabled on the current message size range */
+static void ucp_proto_select_trace_disabled(
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *disabled_proto_mask)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
+    const ucp_proto_init_elem_t *proto;
+    unsigned proto_idx;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE) ||
+        ucs_dynamic_bitmap_is_zero(disabled_proto_mask)) {
+        return;
+    }
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, disabled_proto_mask) {
+        proto = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        ucs_string_buffer_appendf(&strb, "%s,",
+                                  ucp_proto_id_field(proto->proto_id, name));
+    }
+
+    ucs_string_buffer_rtrim(&strb, ",");
+    ucs_trace("disabled: %s", ucs_string_buffer_cstr(&strb));
+}
+
+/*
+ * Disables the protocols which are a fallback for a protocol available on the
+ * current message size range.
+ */
+static void ucp_proto_select_disable_fallback(
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *proto_mask,
+        ucs_dynamic_bitmap_t *disabled_proto_mask)
+{
+    const ucp_proto_init_elem_t *proto;
+    unsigned overridden_classes, proto_class, fallback_class;
+    unsigned proto_idx;
+
+    overridden_classes = 0;
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto          = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        proto_class    = ucp_proto_id_field(proto->proto_id, proto_class);
+        fallback_class = ucp_proto_id_field(proto->proto_id, fallback_class);
+        ucs_assertv((proto_class & fallback_class) == 0,
+                    "%s: proto_class 0x%x overlaps fallback_class 0x%x",
+                    ucp_proto_id_field(proto->proto_id, name), proto_class,
+                    fallback_class);
+
+        if (ucs_dynamic_bitmap_get(disabled_proto_mask, proto_idx)) {
+            continue;
+        }
+
+        overridden_classes |= fallback_class;
+    }
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto       = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        proto_class = ucp_proto_id_field(proto->proto_id, proto_class);
+        if (proto_class & overridden_classes) {
+            ucs_dynamic_bitmap_set(disabled_proto_mask, proto_idx);
+        }
+    }
+}
+
 /*
  * Fills 'proto_mask' and 'perf_list' with candidate protocols for the next
  * range, and sets *max_length_p to the end of that range.
@@ -140,19 +203,24 @@ static ucs_status_t ucp_proto_thresholds_next_range(
                   proto->cfg_priority, max_prio_proto_name, max_cfg_priority);
     }
 
-    /* Remove disabled protocols. 'disabled_proto_mask' must be contained in
-     * 'valid_proto_mask'. */
+    /* If all protocols were disabled, we couldn't have any configured protocol
+     * (because that protocol would be enabled). In this case we allow using
+     * disabled protocols as well.
+     */
     if (ucs_dynamic_bitmap_is_equal(proto_mask, &disabled_proto_mask)) {
-        /* If all protocols were disabled, we couldn't have any configured
-         * protocol (because that protocol would be enabled). In this case we
-         * allow using disabled protocols as well.
-         */
         ucs_assert(max_cfg_priority == 0);
-    } else {
-        ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
-                                       ucs_dynamic_bitmap_num_bits(proto_mask));
-        ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
+        ucs_dynamic_bitmap_reset_all(&disabled_proto_mask);
     }
+
+    ucp_proto_select_disable_fallback(proto_init, proto_mask,
+                                      &disabled_proto_mask);
+    ucp_proto_select_trace_disabled(proto_init, &disabled_proto_mask);
+
+    /* Remove disabled protocols. 'disabled_proto_mask' is contained in
+     * 'proto_mask', and the fallback rule never disables all protocols. */
+    ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
+                                   ucs_dynamic_bitmap_num_bits(proto_mask));
+    ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
     ucs_assert(!ucs_dynamic_bitmap_is_zero(proto_mask));
 
     /* Add data to perf_list */
