@@ -1461,11 +1461,25 @@ void uct_rc_mlx5_ep_save_ft_ci(uct_rc_mlx5_base_ep_t *ep)
 {
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
 
-    /* Save last completed WQE. TX QP resources are reserved until purge. */
+    /* Last completed WQE among credits already applied. */
     txwq->ft_ci = txwq->prev_sw_pi - (txwq->bb_max -
                                       uct_rc_txqp_available(&ep->super.txqp));
     ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, txwq->ft_ci,
               txwq->sw_pi);
+}
+
+static void uct_rc_mlx5_ep_purge_finish_tx(uct_rc_mlx5_base_ep_t *ep)
+{
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+
+    /* The deferred error completion skipped this update. A live purge leaves
+     * credits for the completion poll, so an earlier success is applied
+     * before the error completion. */
+    if (ep->err_handler_inprogress) {
+        uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
+    }
+
+    txwq->ft_ci = txwq->prev_sw_pi;
 }
 
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
@@ -1500,21 +1514,33 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             return UCS_OK;
         }
 
-        status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
-                                             &ep->tx.wq.super, IBV_QPS_ERR);
-        if (status != UCS_OK) {
-            return status;
+        /* The transmit range is closed after the operations are reported. */
+        if ((ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) &&
+            (txwq->ft_ci == txwq->prev_sw_pi)) {
+            return UCS_OK;
         }
 
-        ucs_arbiter_group_purge(&iface->super.tx.arbiter, &ep->super.arb_group,
-                                uct_rc_ep_arbiter_purge_internal_cb, NULL);
-        uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
-        uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
-        uct_rc_mlx5_ep_save_ft_ci(ep);
+        if (!(ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED)) {
+            status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
+                                                 &ep->tx.wq.super,
+                                                 IBV_QPS_ERR);
+            if (status != UCS_OK) {
+                return status;
+            }
 
-        /* Suppress further completions including err callback. */
-        ep->super.flags           |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-        ep->err_handler_inprogress = 1;
+            ucs_arbiter_group_purge(&iface->super.tx.arbiter,
+                                    &ep->super.arb_group,
+                                    uct_rc_ep_arbiter_purge_internal_cb, NULL);
+            uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED,
+                                          0);
+            uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
+
+            /* Suppress the error handler. The completion poll releases
+             * credits in completion order. */
+            ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+        }
+
+        uct_rc_mlx5_ep_save_ft_ci(ep);
     }
 
     end_pi   = txwq->sw_pi;
@@ -1522,10 +1548,9 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
 
-    /* An idle queue has nothing to complete. Close the deferred range. */
+    /* An idle queue has nothing to report. */
     if (start_pi == end_pi) {
-        uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
-        txwq->ft_ci = txwq->prev_sw_pi;
+        uct_rc_mlx5_ep_purge_finish_tx(ep);
         return UCS_OK;
     }
 
@@ -1592,8 +1617,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
-    uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
-    txwq->ft_ci = txwq->prev_sw_pi;
+    uct_rc_mlx5_ep_purge_finish_tx(ep);
     return UCS_OK;
 }
 

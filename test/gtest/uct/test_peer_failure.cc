@@ -8,6 +8,7 @@
 
 #include "test_peer_failure.h"
 
+#include <cstring>
 #include <functional>
 
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
@@ -606,11 +607,22 @@ protected:
         uct_ep_outstanding_purge_params_t purge_params = {};
         /* Lives until purge returns. The params keep a pointer into it. */
         std::vector<uint8_t> rx_token;
+        entity *tx_entity = m_sender;
+        entity *rx_entity = m_receiver;
 
         purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                                   UCT_EP_OUTSTANDING_FIELD_ARG;
         purge_params.cb         = cb;
         purge_params.arg        = ctx;
+
+        if (ep == NULL) {
+            ep = m_sender->ep(0);
+        } else if ((m_receiver != NULL) && (m_receiver->num_eps() > 0) &&
+                   (ep == m_receiver->ep(0))) {
+            /* Token belongs to the peer of the endpoint being purged. */
+            tx_entity = m_receiver;
+            rx_entity = m_sender;
+        }
 
         if (with_rx_token) {
             uct_iface_attr_v2_t  tx_attr = {};
@@ -619,30 +631,26 @@ protected:
             std::vector<uint8_t> tx_token;
 
             tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
-            ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
+            ASSERT_UCS_OK(uct_iface_query_v2(tx_entity->iface(), &tx_attr));
 
             rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
-            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+            ASSERT_UCS_OK(uct_iface_query_v2(rx_entity->iface(), &rx_attr));
 
             tx_token.resize(tx_attr.tx_token_length);
             rx_token.resize(rx_attr.rx_token_length);
 
             ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
             ep_attr.tx_token   = tx_token.data();
-            ASSERT_UCS_OK(uct_ep_query(m_sender->ep(0), &ep_attr));
+            ASSERT_UCS_OK(uct_ep_query(tx_entity->ep(0), &ep_attr));
 
             rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
                                  UCT_IFACE_ATTR_FIELD_RX_TOKEN;
             rx_attr.tx_token   = tx_token.data();
             rx_attr.rx_token   = rx_token.data();
-            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+            ASSERT_UCS_OK(uct_iface_query_v2(rx_entity->iface(), &rx_attr));
 
             purge_params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
             purge_params.rx_token    = rx_token.data();
-        }
-
-        if (ep == NULL) {
-            ep = m_sender->ep(0);
         }
 
         ASSERT_UCS_OK(uct_ep_outstanding_purge(ep, &purge_params));
@@ -695,36 +703,78 @@ protected:
         EXPECT_EQ(0, ctx.comp.count);
     }
 
-    void test_purge_before_error(const send_func_t &send_func, purge_ctx &ctx)
+    void test_purge_before_error(const send_func_t &sender_send,
+                                 const send_func_t &receiver_send,
+                                 purge_ctx &sender_ctx, void *remote_base,
+                                 size_t stride)
     {
         uct_ep_invalidate_params_t invalidate_params = {};
         purge_ctx receiver_ctx                       = {};
+        std::vector<uint8_t> expect(stride);
+        ucs_time_t deadline;
         ucs_status_t status;
+        unsigned i;
 
-        /* Peer sends and invalidates. This side sent nothing, so it gets
-         * no error completion and has to purge on its own. */
-        status = post_op(m_sender->ep(0), &ctx.comp, send_func);
+        mem_buffer::pattern_fill(expect.data(), expect.size(), SEND_SEED);
+        receiver_ctx.self        = this;
+        receiver_ctx.comp.func   = completion_cb;
+        receiver_ctx.comp.count  = 0;
+        receiver_ctx.comp.status = UCS_OK;
+
+        /* Two sends complete at the peer before this side polls them. A
+         * third is posted after the peer is invalidated, so the receive
+         * position marks only the first two as delivered. */
+        for (i = 0; i < 2; ++i) {
+            status = post_op(m_receiver->ep(0), &receiver_ctx.comp,
+                             receiver_send);
+            ASSERT_EQ(UCS_INPROGRESS, status);
+        }
+
+        status = post_op(m_sender->ep(0), &sender_ctx.comp, sender_send);
         ASSERT_EQ(UCS_INPROGRESS, status);
 
-        flush();
-        EXPECT_EQ(1u, ctx.num_completions);
-        EXPECT_EQ(0, ctx.comp.count);
+        deadline = ucs::get_deadline();
+        while ((sender_ctx.num_completions == 0) ||
+               (memcmp(remote_base, expect.data(), stride) != 0) ||
+               (memcmp(UCS_PTR_BYTE_OFFSET(remote_base, stride), expect.data(),
+                       stride) != 0)) {
+            if (ucs_get_time() >= deadline) {
+                break;
+            }
+
+            /* Do not progress the purging side: its completions must stay
+             * on the queue across outstanding purge. */
+            short_progress_loop(1, m_sender);
+        }
+
+        EXPECT_EQ(1u, sender_ctx.num_completions);
+        EXPECT_EQ(0, sender_ctx.comp.count);
+        ASSERT_EQ(0, memcmp(remote_base, expect.data(), stride));
+        ASSERT_EQ(0, memcmp(UCS_PTR_BYTE_OFFSET(remote_base, stride),
+                            expect.data(), stride));
 
         ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
 
-        receiver_ctx.self = this;
-        purge_outstanding(&receiver_ctx, false, purge_count_cb,
+        status = post_op(m_receiver->ep(0), &receiver_ctx.comp, receiver_send);
+        ASSERT_EQ(UCS_INPROGRESS, status);
+
+        purge_outstanding(&receiver_ctx, true, purge_count_cb,
                           m_receiver->ep(0));
-        EXPECT_EQ(0u, receiver_ctx.num_ops_purged);
+        /* Delivered ops share the completion with the undelivered one, so
+         * the completion stays pending. */
+        EXPECT_EQ(1u, receiver_ctx.num_ops_purged);
+        EXPECT_EQ(0u, receiver_ctx.num_completions);
+        EXPECT_EQ(1, receiver_ctx.comp.count);
         EXPECT_EQ(0u, m_receiver_err_count);
 
         short_progress_loop(100, m_receiver);
         EXPECT_EQ(0u, m_receiver_err_count);
-        EXPECT_EQ(0u, receiver_ctx.num_ops_purged);
+        EXPECT_EQ(1u, receiver_ctx.num_ops_purged);
+        EXPECT_EQ(0u, receiver_ctx.num_completions);
 
-        purge_outstanding(&receiver_ctx, false, purge_count_cb,
+        purge_outstanding(&receiver_ctx, true, purge_count_cb,
                           m_receiver->ep(0));
-        EXPECT_EQ(0u, receiver_ctx.num_ops_purged);
+        EXPECT_EQ(1u, receiver_ctx.num_ops_purged);
         EXPECT_EQ(0u, m_receiver_err_count);
     }
 
@@ -894,9 +944,19 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy_before_error,
                                                    attr.cap.put.max_zcopy));
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
     mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+    mapped_buffer back_sendbuf(size, SEND_SEED, *m_receiver);
+    mapped_buffer back_recvbuf(size * 2, RECV_SEED, *m_sender);
+    uct_iov_t back_iov;
+    unsigned slot = 0;
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                             sendbuf.memh(), num_iov);
+
+    back_iov.buffer = back_sendbuf.ptr();
+    back_iov.length = back_sendbuf.length();
+    back_iov.memh   = back_sendbuf.memh();
+    back_iov.stride = 0;
+    back_iov.count  = 1;
 
     purge_ctx ctx = {this, UCT_EP_OP_PUT_ZCOPY, {completion_cb, 0, UCS_OK}};
 
@@ -904,8 +964,19 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy_before_error,
         return uct_ep_put_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(),
                                 comp);
     };
+    send_func_t back_put = [&](uct_ep_h ep, uct_completion_t *comp) {
+        uint64_t remote_addr = back_recvbuf.addr();
 
-    test_purge_before_error(put_zcopy, ctx);
+        if (slot < 2) {
+            remote_addr += slot * size;
+        }
+        ++slot;
+
+        return uct_ep_put_zcopy(ep, &back_iov, 1, remote_addr,
+                                back_recvbuf.rkey(), comp);
+    };
+
+    test_purge_before_error(put_zcopy, back_put, ctx, back_recvbuf.ptr(), size);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
