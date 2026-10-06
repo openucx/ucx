@@ -110,7 +110,7 @@ enum {
                                                         while merging pending queues */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    /* 11 bit is vacant for a flag */
+    UCP_EP_FLAG_CLOSE_SYNC             = UCS_BIT(11),/* Synchronous close */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or

@@ -208,7 +208,11 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         }
 
         ucs_diag("failed to send wireup: %s", ucs_status_string(status));
-        ucp_ep_set_lanes_failed_schedule(ep, UCS_BIT(req->send.lane), status);
+        /* EP_REMOVED is not replayed after failover, so failing only its lane
+         * could leave close waiting forever for an acknowledgement. */
+        ucp_ep_set_lanes_failed_schedule(
+                ep, (req->send.wireup.msg_hdr.type == UCP_WIREUP_MSG_EP_REMOVED) ?
+                    0 : UCS_BIT(req->send.lane), status);
 
         status = UCS_OK;
         goto out_free_req;
@@ -1161,7 +1165,7 @@ out_delete_ep:
 /* The endpoint is flushed after EP_REMOVED from the peer endpoint was
  * processed: either the peer acknowledged our close, or the peer endpoint is
  * gone and the endpoint cannot be used anymore */
-static void ucp_wireup_ep_removed_done(ucp_ep_h ep)
+static void ucp_wireup_ep_removed_done(ucp_ep_h ep, ucs_status_t status)
 {
     ucp_request_t *close_req;
 
@@ -1170,7 +1174,9 @@ static void ucp_wireup_ep_removed_done(ucp_ep_h ep)
         return;
     }
 
-    if ((ep->flags & UCP_EP_FLAG_CLOSED) && (ep->ext->close_req != NULL) &&
+    if ((status == UCS_OK) &&
+        ucs_hlist_is_empty(&ep->ext->proto_reqs) &&
+        (ep->flags & UCP_EP_FLAG_CLOSED) && (ep->ext->close_req != NULL) &&
         !(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
                        UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
         /* Detach the close request, so a subsequent failure would not complete
@@ -1183,17 +1189,44 @@ static void ucp_wireup_ep_removed_done(ucp_ep_h ep)
         return;
     }
 
-    ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+    ucp_ep_set_lanes_failed_schedule(ep, 0, (status == UCS_OK) ?
+                                    UCS_ERR_CONNECTION_RESET : status);
 }
 
 static void ucp_wireup_ep_removed_flushed(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep         = req->send.ep;
+    ucs_status_t status = req->status;
 
     ucs_debug("ep %p: flush after ep_removed (req %p) completed with status %s",
               ep, req, ucs_status_string(req->status));
     ucp_request_complete_send(req, req->status);
-    ucp_wireup_ep_removed_done(ep);
+    ucp_wireup_ep_removed_done(ep, status);
+}
+
+static unsigned ucp_wireup_ep_removed_progress(void *arg)
+{
+    ucp_ep_h ep                = arg;
+    ucs_async_context_t *async = &ep->worker->async;
+    ucs_status_ptr_t req;
+
+    UCS_ASYNC_BLOCK(async);
+    if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
+        req = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
+                                    &ucp_request_null_param, NULL,
+                                    ucp_wireup_ep_removed_flushed, "ep_removed",
+                                    UCT_FLUSH_FLAG_LOCAL);
+        if (!UCS_PTR_IS_PTR(req)) {
+            ucp_wireup_ep_removed_done(ep, UCS_PTR_STATUS(req));
+        }
+    }
+    UCS_ASYNC_UNBLOCK(async);
+    return 1;
+}
+
+int ucp_wireup_ep_removed_cb_pred(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    return (elem->cb == ucp_wireup_ep_removed_progress) && (elem->arg == arg);
 }
 
 /* EP_REMOVED is received either from a temporary endpoint of the peer, as a
@@ -1204,8 +1237,8 @@ ucp_wireup_process_ep_removed(ucp_worker_h worker, ucp_ep_h ep,
                               const ucp_wireup_msg_t *msg,
                               const ucp_unpacked_address_t *remote_address)
 {
-    ucs_status_ptr_t req;
     ucs_status_t status;
+    int is_loopback;
 
     ucs_debug("ep %p: got ep_removed from ep id 0x%" PRIx64 " flags 0x%x", ep,
               msg->src_ep_id, ep->flags);
@@ -1223,9 +1256,11 @@ ucp_wireup_process_ep_removed(ucp_worker_h worker, ucp_ep_h ep,
         return;
     }
 
+    is_loopback = (remote_address->uuid == worker->uuid) &&
+                  (msg->src_ep_id == ucp_ep_local_id(ep));
     if (ep->flags & UCP_EP_FLAG_CLOSED) {
         if (!(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
-                           UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
+                           UCP_EP_FLAG_CONNECT_REQ_QUEUED)) && !is_loopback) {
             /* The peer already acknowledged our close */
             ucs_debug("ep %p: ignoring duplicate ep_removed", ep);
             return;
@@ -1245,9 +1280,7 @@ ucp_wireup_process_ep_removed(ucp_worker_h worker, ucp_ep_h ep,
          * peer when completed, so acknowledge like a connected endpoint */
     }
 
-    if (((remote_address->uuid != worker->uuid) ||
-         (msg->src_ep_id != ucp_ep_local_id(ep))) &&
-        ucp_wireup_can_send_ep_removed_msg(ep)) {
+    if (!is_loopback && ucp_wireup_can_send_ep_removed_msg(ep)) {
         /* Acknowledge, so the peer could release its endpoint. If the endpoint
          * is connected to itself, the message is the acknowledgement. Endpoint
          * IDs are unique only within a worker, so compare the worker too. If
@@ -1262,13 +1295,9 @@ ucp_wireup_process_ep_removed(ucp_worker_h worker, ucp_ep_h ep,
 out_flush:
     /* Make sure our pending wireup messages are sent before the endpoint is
      * destroyed or its lanes are discarded */
-    req = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
-                                &ucp_request_null_param, NULL,
-                                ucp_wireup_ep_removed_flushed, "ep_removed",
-                                UCT_FLUSH_FLAG_LOCAL);
-    if (!UCS_PTR_IS_PTR(req)) {
-        ucp_wireup_ep_removed_done(ep);
-    }
+    ucs_callbackq_add_oneshot(&worker->uct->progress_q, ep,
+                              ucp_wireup_ep_removed_progress, ep);
+    ucp_worker_signal_internal(worker);
 }
 
 static UCS_F_NOINLINE

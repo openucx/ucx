@@ -204,6 +204,13 @@ static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_local_id(ucp_ep_h ep)
     return ep->ext->local_ep_id;
 }
 
+static inline int ucp_ep_is_loopback(ucp_ep_h ep)
+{
+    return (ucp_ep_config(ep)->key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF) &&
+           (ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
+           (ucp_ep_remote_id(ep) == ucp_ep_local_id(ep));
+}
+
 /*
  * Make sure we have a valid dest_ep_ptr value, so protocols which require a
  * reply from remote side could be used.

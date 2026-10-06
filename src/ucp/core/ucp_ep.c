@@ -103,6 +103,8 @@ static ucs_status_t ucp_ep_failed_op(uct_ep_h ep);
 static ssize_t ucp_ep_failed_bc_op(uct_ep_h ep);
 static void ucp_ep_failed_destroy(uct_ep_h ep);
 static void ucp_ep_recovery_arg_free(ucp_ep_h ep);
+static unsigned ucp_ep_close_wait_progress(void *arg);
+static void ucp_ep_close_flushed_callback(ucp_request_t *req);
 static void ucp_ep_tf_cleanup(ucp_ep_h ep);
 static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg);
 static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane);
@@ -317,7 +319,8 @@ static int ucp_ep_shall_use_indirect_id(ucp_context_h context,
     return !(ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) &&
            ((context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
             ((context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
-             (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER_MASK)));
+             ((ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER_MASK) ||
+              (context->config.ext.ep_close_negotiate == UCS_CONFIG_ON))));
 }
 
 void ucp_ep_peer_mem_destroy(ucp_context_h context,
@@ -471,7 +474,8 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
     ucp_ep_h ep = (ucp_ep_h)arg;
     ucp_request_t *req;
 
-    if (elem->cb != ucp_ep_local_disconnect_progress) {
+    if ((elem->cb != ucp_ep_local_disconnect_progress) &&
+        (elem->cb != ucp_ep_close_wait_progress)) {
         return 0;
     }
 
@@ -484,7 +488,8 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
      * because reply UCP EP created for sending WIREUP_MSG/EP_REMOVED message is
      * not exposed to a user */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
-    ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
+    ucs_assert((elem->cb == ucp_ep_close_wait_progress) ||
+               (req->send.uct.func == ucp_ep_flush_progress_pending));
 
     ucp_request_complete_send(req, req->status);
     return 1;
@@ -527,6 +532,7 @@ static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (ucp_wireup_msg_ack_cb_pred(elem, arg) ||
+        ucp_wireup_ep_removed_cb_pred(elem, arg) ||
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
@@ -2836,7 +2842,7 @@ ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
 
     if ((ep->worker->context->config.ext.failover_mode ==
          UCP_FAILOVER_MODE_SW) ||
-        (ep->flags & UCP_EP_FLAG_FAILED) ||
+        (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
         (ucp_ep_config(ep)->key.dst_version <
@@ -2988,7 +2994,9 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         return;
     }
 
-    if (ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
+    /* Close notifications are not replayed after lane recovery. */
+    if (!(ucp_ep->flags & UCP_EP_FLAG_CLOSED) &&
+        ucp_ep_err_mode_eq(ucp_ep, UCP_ERR_HANDLING_MODE_FAILOVER) &&
         /* TODO refactor this to mark all lanes as failed */
         (lanes != 0) &&
          /* sockaddr is not supported for failover mode */
@@ -3154,29 +3162,36 @@ static int ucp_ep_close_negotiate_check(ucp_ep_h ep)
         return 0;
     }
 
-    /* Only an endpoint connected by worker address, which has a connected
-     * remote endpoint, is kept after close */
-    if (ucp_ep_has_cm_lane(ep) || (ep->flags & UCP_EP_FLAG_FAILED) ||
+    /* A loopback endpoint can have protocol requests without wireup flags. */
+    if (ucp_ep_has_cm_lane(ep) ||
+        (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSE_SYNC)) ||
         !(ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
-        !(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
-                       UCP_EP_FLAG_CONNECT_REQ_QUEUED))) {
+        !ucp_ep_use_indirect_id(ep) ||
+        (!(ep->flags & (UCP_EP_FLAG_REMOTE_CONNECTED |
+                        UCP_EP_FLAG_CONNECT_REQ_QUEUED)) &&
+         !ucp_ep_is_loopback(ep))) {
         return 0;
     }
 
-    /* The peer has to acknowledge EP_REMOVED from its own peer endpoint,
-     * which is not supported by legacy versions */
-    return (ucp_ep_config(ep)->key.dst_version > UCP_RELEASE_LEGACY) &&
+    /* Older peers process EP_REMOVED without acknowledging it. */
+    return (ucp_ep_config(ep)->key.dst_version >=
+            UCP_WIREUP_EP_REMOVED_ACK_MIN_DST_VERSION) &&
            ucp_wireup_can_send_ep_removed_msg(ep);
 }
 
-/* Notify the peer that @a ep is being closed, and set @a close_req to be
- * completed when the peer acknowledges it. If sending fails, @a close_req is
- * not set and the endpoint failure is already scheduled. */
+/* Wait for protocol requests before notifying the peer, then complete
+ * @a close_req when the peer acknowledges the close. */
 static ucs_status_t ucp_ep_close_notify_peer(ucp_ep_h ep,
                                              ucp_request_t *close_req,
                                              const char *debug_msg)
 {
     ucs_status_t status;
+
+    if (!ucs_hlist_is_empty(&ep->ext->proto_reqs)) {
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_close_wait_progress, close_req);
+        return UCS_OK;
+    }
 
     /* Set the close request before sending the message, since a loopback
      * transport delivers the message, which is also the acknowledgement in
@@ -3227,6 +3242,45 @@ void ucp_ep_register_disconnect_progress(ucp_request_t *req)
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
     ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                               ucp_ep_local_disconnect_progress, req);
+}
+
+static void ucp_ep_close_wait_flushed(ucp_request_t *req)
+{
+    ucp_request_t *close_req = ucp_request_get_super(req);
+
+    close_req->status = req->status;
+    ucp_request_complete_send(req, req->status);
+    ucp_ep_close_flushed_callback(close_req);
+}
+
+static unsigned ucp_ep_close_wait_progress(void *arg)
+{
+    ucp_request_t *close_req    = arg;
+    ucp_ep_h ep                = close_req->send.ep;
+    ucs_async_context_t *async = &ep->worker->async;
+    ucs_status_ptr_t req;
+    unsigned count            = 1;
+
+    UCS_ASYNC_BLOCK(async);
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+        ucp_ep_register_disconnect_progress(close_req);
+    } else if (!ucs_hlist_is_empty(&ep->ext->proto_reqs)) {
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_close_wait_progress, close_req);
+        count = 0;
+    } else {
+        req = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
+                                    &ucp_request_null_param, close_req,
+                                    ucp_ep_close_wait_flushed, "close drain",
+                                    UCT_FLUSH_FLAG_LOCAL);
+        if (!UCS_PTR_IS_PTR(req)) {
+            close_req->status = UCS_PTR_STATUS(req);
+            ucp_ep_close_flushed_callback(close_req);
+        }
+    }
+    UCS_ASYNC_UNBLOCK(async);
+    return count;
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
@@ -3352,7 +3406,10 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSE_SYNC, 0);
     request = ucp_disconnect_nb(ep);
+    UCS_ASYNC_UNBLOCK(&worker->async);
     if (request == NULL) {
         goto out;
     } else if (UCS_PTR_IS_ERR(request)) {

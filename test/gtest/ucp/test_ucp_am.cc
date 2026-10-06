@@ -2374,9 +2374,17 @@ public:
     ucp_ep_params_t get_ep_params() override
     {
         ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
-        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                    UCP_EP_PARAM_FIELD_ERR_HANDLER;
         ep_params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+        ep_params.err_handler.cb  = err_cb;
+        ep_params.err_handler.arg = NULL;
         return ep_params;
+    }
+
+    static void err_cb(void *, ucp_ep_h, ucs_status_t status)
+    {
+        EXPECT_EQ(UCS_ERR_CONNECTION_RESET, status);
     }
 
     ucs_status_t am_data_handler(const void *header, size_t header_length,

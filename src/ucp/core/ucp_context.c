@@ -515,14 +515,15 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "the endpoint resources are released, so the peer releases its endpoint as\n"
    "well. The peer endpoint is reported to its error handler with 'connection\n"
    "reset' status. 'auto' means enabling it only for endpoints with error\n"
-   "handling (peer failure or failover mode).",
+   "handling (peer failure or failover mode). Requires peer support and\n"
+   "indirect protocol IDs; PROTO_INDIRECT_ID=n disables negotiation.",
    ucs_offsetof(ucp_context_config_t, ep_close_negotiate),
    UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {"PROTO_INDIRECT_ID", "auto",
    "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
-   "A value of 'auto' means to enable only if error handling is enabled on the\n"
-   "endpoint.",
+   "A value of 'auto' means to enable if error handling is enabled on the\n"
+   "endpoint or EP_CLOSE_NEGOTIATE=y.",
    ucs_offsetof(ucp_context_config_t, proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {"RNDV_PUT_FORCE_FLUSH", "n",

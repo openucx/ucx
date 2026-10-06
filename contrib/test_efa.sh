@@ -109,6 +109,8 @@ run_gtests() {
     IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_peer_failure.*"
     IBMOCK_FILTER="$IBMOCK_FILTER:srd/test_ucp_perf.envelope/*"
     IBMOCK_FILTER="$IBMOCK_FILTER:*test_ucp_am_psn*:*test_ucp_fault_tolerance*"
+    # ibmock does not report errors for destroyed remote QPs.
+    IBMOCK_FILTER+=":srd/test_ucp_wireup_close_negotiate.peer_destroyed*"
 
     # Try the faster approach before valgrind
     make -C contrib/test/gtest test \

@@ -22,6 +22,7 @@ extern "C" {
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/sys/math.h>
+#include <uct/base/uct_iface.h>
 }
 
 class test_ucp_wireup : public ucp_test {
@@ -1091,6 +1092,73 @@ protected:
         send_recv(receiver().ep(), sender().worker(), sender().ep(), 1, 1);
     }
 
+    void test_destroy(uct_ep_flush_func_t flush) {
+        skip_loopback();
+        connect_send_recv();
+        flush_worker(sender());
+        flush_worker(receiver());
+
+        ucs::mock mock;
+        m_flush_count      = 0;
+        m_ep_removed_count = 0;
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(sender().ep());
+             ++lane) {
+            uct_ep_h ep = ucp_ep_get_lane(sender().ep(), lane);
+            mock.setup(&ep->iface->ops.ep_flush, flush);
+        }
+
+        mock.setup(&ucp_ep_get_am_uct_ep(sender().ep())->iface->ops.ep_am_bcopy,
+                   count_ep_removed);
+        ucp_ep_destroy(sender().revoke_ep());
+
+        EXPECT_GT(m_flush_count, 0u);
+        EXPECT_EQ(0u, m_ep_removed_count);
+        EXPECT_EQ(1u, num_eps(sender()));
+        EXPECT_EQ(1u, num_eps(receiver()));
+        EXPECT_EQ(0u, m_err_count);
+    }
+
+    void test_unmatched_rndv(const ucp_ep_params_t &params) {
+        sender().connect(&receiver(), params);
+        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+        std::vector<void*> reqs;
+        send_nb(sender().ep(), 1, 1, reqs);
+        ASSERT_EQ(1u, reqs.size());
+
+        void *close_req = ep_close_nbx(sender().revoke_ep(), 0);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(close_req));
+        short_progress_loop();
+        EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(reqs[0]));
+        EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(close_req));
+
+        recv_b(receiver().worker(), NULL, 1, 1);
+        ASSERT_UCS_OK(requests_wait(reqs));
+        ASSERT_UCS_OK(request_wait(close_req));
+        wait_num_eps(sender(), 0);
+        wait_num_eps(receiver(), 0);
+        EXPECT_EQ(0u, m_err_count);
+    }
+
+    void deliver_ep_removed(ucp_ep_h ep) {
+        void *address;
+        size_t address_size;
+        ASSERT_UCS_OK(ucp_address_pack(receiver().worker(), NULL,
+                                       &ucp_tl_bitmap_min,
+                                       UCP_ADDRESS_PACK_FLAGS_ALL,
+                                       address_version(), NULL, UINT_MAX,
+                                       &address_size, &address));
+        std::vector<char> buffer(sizeof(ucp_wireup_msg_t) + address_size, 0);
+        ucp_wireup_msg_t *msg = (ucp_wireup_msg_t*)buffer.data();
+        msg->type            = UCP_WIREUP_MSG_EP_REMOVED;
+        msg->src_ep_id       = ucp_ep_remote_id(ep);
+        msg->dst_ep_id       = ucp_ep_local_id(ep);
+        memcpy(msg + 1, address, address_size);
+        ucs_free(address);
+        ASSERT_UCS_OK(ucp_am_handlers[UCP_AM_ID_WIREUP]->cb(sender().worker(),
+                                                          msg, buffer.size(),
+                                                          0));
+    }
+
     static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         test_ucp_wireup_close_negotiate *self =
                 reinterpret_cast<test_ucp_wireup_close_negotiate*>(arg);
@@ -1099,9 +1167,52 @@ protected:
         self->m_err_status = status;
     }
 
+    static ucs_status_t count_flush(uct_ep_h, unsigned, uct_completion_t*) {
+        ++m_flush_count;
+        return UCS_OK;
+    }
+
+    static unsigned complete_flush(void *arg) {
+        uct_invoke_completion(static_cast<uct_completion_t*>(arg), UCS_OK);
+        return 1;
+    }
+
+    static ucs_status_t defer_flush(uct_ep_h, unsigned, uct_completion_t *comp)
+    {
+        ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
+                                              send.state.uct_comp);
+
+        ++m_flush_count;
+        ucs_callbackq_add_oneshot(&req->send.ep->worker->uct->progress_q, comp,
+                                  complete_flush, comp);
+        return UCS_INPROGRESS;
+    }
+
+    static ssize_t count_ep_removed(uct_ep_h, uint8_t id, uct_pack_callback_t,
+                                   void*, unsigned) {
+        EXPECT_EQ(UCP_AM_ID_WIREUP, id);
+        ++m_ep_removed_count;
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+    static ssize_t fail_am_bcopy(uct_ep_h, uint8_t, uct_pack_callback_t,
+                                void*, unsigned) {
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
+    static ssize_t drop_am_bcopy(uct_ep_h, uint8_t, uct_pack_callback_t,
+                                void*, unsigned) {
+        return 0;
+    }
+
+    static unsigned   m_flush_count;
+    static unsigned   m_ep_removed_count;
     volatile unsigned m_err_count;
     ucs_status_t      m_err_status;
 };
+
+unsigned test_ucp_wireup_close_negotiate::m_flush_count      = 0;
+unsigned test_ucp_wireup_close_negotiate::m_ep_removed_count = 0;
 
 /* Plain close releases the local endpoint and the passive endpoint created by
  * wireup on the peer */
@@ -1116,6 +1227,46 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, one_sided)
     wait_num_eps(sender(), 0);
     wait_num_eps(receiver(), 0);
     EXPECT_EQ(0u, m_err_count);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, unmatched_rndv, "RNDV_THRESH=0")
+{
+    test_unmatched_rndv(get_ep_params());
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, unmatched_rndv_err_mode_none,
+           "RNDV_THRESH=0", "EP_CLOSE_NEGOTIATE=y")
+{
+    test_unmatched_rndv(test_ucp_wireup::get_ep_params());
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, unmatched_rndv_error, "RNDV_THRESH=0")
+{
+    skip_loopback();
+    connect_send_recv();
+    std::vector<void*> reqs;
+    send_nb(sender().ep(), 1, 1, reqs);
+    ASSERT_EQ(1u, reqs.size());
+
+    ucp_ep_h ep     = sender().revoke_ep();
+    void *close_req = ep_close_nbx(ep, 0);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(close_req));
+    short_progress_loop();
+    EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(reqs[0]));
+    EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(close_req));
+
+    ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        EXPECT_EQ(UCS_ERR_CONNECTION_RESET, requests_wait(reqs));
+    }
+    ASSERT_UCS_OK(request_wait(close_req));
+    wait_num_eps(sender(), 0);
+    EXPECT_EQ(0u, m_err_count);
+
+    /* The unexpected RTS cannot be matched after its sender failed. */
+    scoped_log_handler slh(wrap_warns_logger);
+    receiver().cleanup();
 }
 
 /* Closing one side of a two-sided connection reports the peer endpoint as
@@ -1196,9 +1347,11 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, peer_destroyed,
         UCS_TEST_SKIP_R("no keepalive lane");
     }
 
-    /* Progress the peer only until the close notification is sent, so the
-     * peer never acknowledges it. The close flush may need the peer, e.g. to
-     * complete pending wireup messages. */
+    /* Drop the notification so an async peer cannot acknowledge the close. */
+    flush_worker(sender());
+    ucs::mock mock;
+    mock.setup(&ucp_ep_get_am_uct_ep(sender().ep())->iface->ops.ep_am_bcopy,
+               drop_am_bcopy);
     ucp_ep_h ep         = sender().revoke_ep();
     void *req           = ep_close_nbx(ep, 0);
     ucs_time_t deadline = ucs::get_deadline(10.0);
@@ -1212,6 +1365,7 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, peer_destroyed,
     }
     EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(req));
     ASSERT_TRUE(ep->ext->close_req != NULL) << "close is not negotiated";
+    mock.cleanup();
 
     receiver().cleanup();
 
@@ -1238,6 +1392,137 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, knob_off, "EP_CLOSE_NEGOTIATE=n")
     EXPECT_EQ(1u, num_eps(sender()));
     EXPECT_EQ(1u, num_eps(receiver()));
     EXPECT_EQ(0u, m_err_count);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, destroy, "EP_CLOSE_NEGOTIATE=y",
+           "KEEPALIVE_INTERVAL=inf", "RESOLVE_REMOTE_EP_ID=y")
+{
+    test_destroy(count_flush);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, destroy_async_flush,
+           "EP_CLOSE_NEGOTIATE=y", "KEEPALIVE_INTERVAL=inf",
+           "RESOLVE_REMOTE_EP_ID=y")
+{
+    test_destroy(defer_flush);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, old_peer, "EP_CLOSE_NEGOTIATE=y")
+{
+    connect_send_recv();
+    ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    unsigned dst_version    = key.dst_version;
+
+    key.dst_version = UCP_WIREUP_EP_REMOVED_ACK_MIN_DST_VERSION - 1;
+    disconnect(sender());
+    key.dst_version = dst_version;
+
+    short_progress_loop();
+    EXPECT_EQ(1u, num_eps(sender()));
+    EXPECT_EQ(1u, num_eps(receiver()));
+    EXPECT_EQ(0u, m_err_count);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, direct_request_ids,
+           "PROTO_INDIRECT_ID=n", "EP_CLOSE_NEGOTIATE=y", "RNDV_THRESH=0")
+{
+    connect_send_recv();
+    std::vector<void*> reqs;
+    send_nb(sender().ep(), 1, 1, reqs);
+    ASSERT_EQ(1u, reqs.size());
+    disconnect(sender());
+    short_progress_loop();
+    EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(reqs[0]));
+    EXPECT_EQ(1u, num_eps(sender()));
+    EXPECT_EQ(1u, num_eps(receiver()));
+    recv_b(receiver().worker(), NULL, 1, 1);
+    ASSERT_UCS_OK(requests_wait(reqs));
+    EXPECT_EQ(0u, m_err_count);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, ep_removed_deferred)
+{
+    skip_loopback();
+    connect_send_recv();
+    flush_worker(sender());
+    flush_worker(receiver());
+
+    /* An async wireup handler must not allocate a flush request. */
+    ucs::mock mock;
+    m_flush_count = 0;
+    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(sender().ep());
+         ++lane) {
+        mock.setup(&ucp_ep_get_lane(sender().ep(), lane)->iface->ops.ep_flush,
+                   count_flush);
+    }
+    deliver_ep_removed(sender().ep());
+    EXPECT_EQ(0u, m_flush_count);
+    mock.cleanup();
+
+    wait_for_value(&m_err_count, 1u);
+    EXPECT_EQ(UCS_ERR_CONNECTION_RESET, m_err_status);
+    disconnect(sender(), true);
+    wait_num_eps(sender(), 0);
+    wait_num_eps(receiver(), 0);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, ep_removed_force_close)
+{
+    skip_loopback();
+    connect_send_recv();
+    flush_worker(sender());
+    flush_worker(receiver());
+    deliver_ep_removed(sender().ep());
+    disconnect(sender(), true);
+    short_progress_loop();
+    wait_num_eps(sender(), 0);
+    wait_num_eps(receiver(), 0);
+    EXPECT_EQ(0u, m_err_count);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, notification_error,
+           "MAX_EAGER_RAILS=2")
+{
+    skip_loopback();
+    ucp_ep_params_t params = get_ep_params();
+    params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+    sender().connect(&receiver(), params);
+    flush_worker(sender());
+
+    scoped_log_handler slh(wrap_errors_logger);
+    ucs::mock mock;
+    uct_ep_h uct_ep = ucp_ep_get_am_uct_ep(sender().ep());
+    mock.setup(&uct_ep->iface->ops.ep_am_bcopy, fail_am_bcopy);
+    void *req = ep_close_nbx(sender().revoke_ep(), 0);
+    EXPECT_FALSE(UCS_PTR_IS_ERR(req));
+    ASSERT_UCS_OK(request_wait(req));
+    mock.cleanup();
+    wait_num_eps(sender(), 0);
+}
+
+UCS_TEST_P(test_ucp_wireup_close_negotiate, notification_lane_error,
+           "MAX_EAGER_RAILS=2")
+{
+    skip_loopback();
+    ucp_ep_params_t params = get_ep_params();
+    params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+    sender().connect(&receiver(), params);
+    flush_worker(sender());
+
+    ucp_ep_h ep = sender().revoke_ep();
+    ucs::mock mock;
+    /* Lose the notification, then fail its lane while close awaits an ACK. */
+    mock.setup(&ucp_ep_get_am_uct_ep(ep)->iface->ops.ep_am_bcopy,
+               drop_am_bcopy);
+    void *req = ep_close_nbx(ep, 0);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(req));
+    ASSERT_TRUE(ep->ext->close_req != NULL);
+    mock.cleanup();
+    ucp_ep_set_lanes_failed_schedule(ep,
+                                    UCS_BIT(ucp_ep_config(ep)->key.am_lane),
+                                    UCS_ERR_CONNECTION_RESET);
+    ASSERT_UCS_OK(request_wait(req));
+    wait_num_eps(sender(), 0);
 }
 
 /* Without error handling, the close is not negotiated by default, so the peer
@@ -1269,6 +1554,54 @@ UCS_TEST_P(test_ucp_wireup_close_negotiate, err_mode_none_knob_on,
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_close_negotiate)
+
+class test_ucp_wireup_close_wakeup : public test_ucp_wireup_close_negotiate {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP,
+                               TEST_TAG, "tag,wakeup");
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_close_wakeup, deferred_ack, "KEEPALIVE_INTERVAL=inf",
+           "RESOLVE_REMOTE_EP_ID=y")
+{
+    skip_loopback();
+    connect_send_recv();
+    flush_worker(sender());
+    flush_worker(receiver());
+    short_progress_loop();
+
+    ucs::mock mock;
+    mock.setup(&ucp_ep_get_am_uct_ep(sender().ep())->iface->ops.ep_am_bcopy,
+               drop_am_bcopy);
+    ucp_ep_h ep = sender().revoke_ep();
+    void *req   = ep_close_nbx(ep, 0);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(req));
+    ucs_time_t deadline = ucs::get_deadline();
+    while (!is_request_completed(req) &&
+           (ep->ext->close_req == NULL) &&
+           (ucs_get_time() < deadline)) {
+        progress();
+    }
+    ASSERT_FALSE(is_request_completed(req));
+    ASSERT_TRUE(ep->ext->close_req != NULL);
+    mock.cleanup();
+    deliver_ep_removed(ep);
+
+    /* Consume the async notification before progressing its deferred flush. */
+    EXPECT_EQ(UCS_ERR_BUSY, ucp_worker_arm(sender().worker()));
+    while (ucp_worker_progress(sender().worker()) &&
+           (ucs_get_time() < deadline)) {
+    }
+
+    /* A zero progress result must not strand the final disconnect callback. */
+    EXPECT_EQ(UCS_OK, ucp_request_check_status(req));
+    ASSERT_UCS_OK(request_wait(req));
+    wait_num_eps(sender(), 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_close_wakeup)
 
 class test_ucp_wireup_fallback : public test_ucp_wireup {
 public:

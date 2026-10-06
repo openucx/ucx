@@ -66,6 +66,10 @@ enum {
 #define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
+/* Minimal peer release version which acknowledges EP_REMOVED from its peer. */
+#define UCP_WIREUP_EP_REMOVED_ACK_MIN_DST_VERSION 24
+
+
 /**
  * Calculates a score of a potential transport. Used both for the primary
  * selection score and for the tiebreak score.
@@ -301,13 +305,6 @@ typedef struct ucp_wireup_lane_token {
 
 
 /**
- * Send a LANES_ADDR_REQUEST/REPLY/ACK wireup message over the AM lane, packing
- * addresses for the lanes in @a provided_lane_map. @a request_id identifies the
- * exchange and is echoed by the peer. @a rx_tokens supplies the RX section,
- * indexed by lane; NULL sends an empty one. The TX section is the snapshotted
- * token of each provided lane that was published for @a request_id.
- */
-/**
  * Send EP_REMOVED message to the remote endpoint connected to @a ep, either to
  * notify that @a ep is being closed, or to acknowledge such a notification.
  */
@@ -320,6 +317,20 @@ ucs_status_t ucp_wireup_send_ep_removed_msg(ucp_ep_h ep);
  */
 int ucp_wireup_can_send_ep_removed_msg(ucp_ep_h ep);
 
+
+/**
+ * Check whether a deferred EP_REMOVED callback belongs to the endpoint @a arg.
+ */
+int ucp_wireup_ep_removed_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
+
+
+/**
+ * Send a LANES_ADDR_REQUEST/REPLY/ACK wireup message over the AM lane, packing
+ * addresses for the lanes in @a provided_lane_map. @a request_id identifies the
+ * exchange and is echoed by the peer. @a rx_tokens supplies the RX section,
+ * indexed by lane; NULL sends an empty one. The TX section is the snapshotted
+ * token of each provided lane that was published for @a request_id.
+ */
 void ucp_wireup_send_lanes_addr_msg(
         ucp_ep_h ep, uint8_t msg_type, ucp_lane_map_t requested_lane_map,
         ucp_lane_map_t provided_lane_map, uint32_t request_id,

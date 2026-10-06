@@ -356,7 +356,11 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_track_ep_usage(ucp_request_t *req)
     { \
         UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, \
                                 ##__VA_ARGS__); \
-        if (ucs_unlikely((*(_ep_p))->flags & UCP_EP_FLAG_CLOSED)) { \
+        /* Let outstanding loopback protocols finish while close drains them. */ \
+        if (ucs_unlikely((*(_ep_p))->flags & UCP_EP_FLAG_CLOSED) && \
+            (((*(_ep_p))->flags & UCP_EP_FLAG_FAILED) || \
+             !ucp_ep_is_loopback(*(_ep_p)) || \
+             ucs_hlist_is_empty(&(*(_ep_p))->ext->proto_reqs))) { \
             ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was already closed" \
                            " ep %p, drop " _fmt_str, \
                            _worker, _ep_id, *(_ep_p), ##__VA_ARGS__); \
