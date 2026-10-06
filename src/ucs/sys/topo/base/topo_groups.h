@@ -9,15 +9,11 @@
 
 #include <ucs/sys/topo/base/topo_int.h>
 #include <ucs/datastruct/array.h>
+#include <ucs/datastruct/static_bitmap.h>
 
 BEGIN_C_DECLS
 
 #define UCS_TOPO_MAX_SYS_DEVS_PER_ELEMENT 8
-
-/* CX-9 PCI identifiers */
-#define UCS_TOPO_GROUPS_MELLANOX_VENDOR_ID 0x15b3
-#define UCS_TOPO_GROUPS_CX9_DEVICE_ID      0x1025
-#define UCS_TOPO_GROUPS_MLX5_VF_DEVICE_ID  0x101e
 
 
 /**
@@ -55,17 +51,28 @@ typedef ucs_topo_group_array_t ucs_topo_groups_t;
 
 
 /**
+ * @ingroup UCS_RESOURCE
+ * Bitmap of system devices.
+ */
+typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT) ucs_sys_device_bitmap_t;
+
+
+/**
  * Build system topology groups.
  *
  * The caller takes ownership of the returned group data and must release it
  * with @ref ucs_topo_release_groups.
  *
- * @param [out] groups_p  Initialized topology groups.
+ * @param [in]  net_device_filter  Network devices to include in the groups,
+ *                                 or NULL to include all network devices.
+ * @param [out] groups_p           Initialized topology groups.
  *
  * @return UCS_OK on success, or an error status if topology group
  *         initialization failed.
  */
-ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p);
+ucs_status_t
+ucs_topo_build_groups(const ucs_sys_device_bitmap_t *net_device_filter,
+                      ucs_topo_groups_t *groups_p);
 
 
 /**
@@ -95,16 +102,20 @@ void ucs_topo_release_group(ucs_topo_group_t *group);
 /**
  * Build system topology groups (internal function).
  *
- * @param [in]  devices      Array of registered system devices.
- * @param [in]  num_devices  Number of elements in @a devices.
- * @param [out] groups_p     Initialized topology groups.
+ * @param [in]  devices            Array of registered system devices.
+ * @param [in]  num_devices        Number of elements in @a devices.
+ * @param [in]  net_device_filter  Network devices to include in the groups,
+ *                                 or NULL to include all network devices.
+ * @param [out] groups_p           Initialized topology groups.
  *
  * @return UCS_OK on success, or an error status if topology group
  *         initialization failed.
  */
 ucs_status_t
 ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
-                            unsigned num_devices, ucs_topo_groups_t *groups_p);
+                            unsigned num_devices,
+                            const ucs_sys_device_bitmap_t *net_device_filter,
+                            ucs_topo_groups_t *groups_p);
 
 END_C_DECLS
 

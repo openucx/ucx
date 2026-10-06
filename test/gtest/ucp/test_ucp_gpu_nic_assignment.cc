@@ -140,7 +140,7 @@ protected:
     {
         for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
             size_t gpu_device_idx = 0;
-            const ucp_gpu_nic_sys_dev_bitmap_t *expected_bitmap =
+            const ucs_sys_device_bitmap_t *expected_bitmap =
                     ucp_gpu_nic_assignment_lookup(&m_assignment,
                                                   gpu_sys_dev(config, gpu_idx,
                                                               gpu_device_idx));
@@ -149,7 +149,7 @@ protected:
             /* Devices under the same GPU share the exact assignment bitmap. */
             for (gpu_device_idx = 1; gpu_device_idx < config.num_gpu_devices;
                  ++gpu_device_idx) {
-                const ucp_gpu_nic_sys_dev_bitmap_t *actual_bitmap =
+                const ucs_sys_device_bitmap_t *actual_bitmap =
                         ucp_gpu_nic_assignment_lookup(
                                 &m_assignment,
                                 gpu_sys_dev(config, gpu_idx, gpu_device_idx));
@@ -179,7 +179,7 @@ protected:
             expected_port_counts[expected_owner] += config.num_nic_ports;
 
             for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
-                const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap =
+                const ucs_sys_device_bitmap_t *nic_sys_dev_bitmap =
                         ucp_gpu_nic_assignment_lookup(&m_assignment,
                                                       gpu_sys_dev(config,
                                                                   gpu_idx, 0));
@@ -215,7 +215,7 @@ protected:
 
         /* Verify each GPU has the expected number of assigned ports. */
         for (size_t gpu_idx = 0; gpu_idx < config.num_gpus(); ++gpu_idx) {
-            const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap =
+            const ucs_sys_device_bitmap_t *nic_sys_dev_bitmap =
                     ucp_gpu_nic_assignment_lookup(&m_assignment,
                                                   gpu_sys_dev(config, gpu_idx,
                                                               0));
@@ -238,7 +238,7 @@ protected:
                  ++local_idx) {
                 const size_t gpu_idx = (group_idx * config.num_gpus_per_group) +
                                        local_idx;
-                const ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmap =
+                const ucs_sys_device_bitmap_t *nic_sys_dev_bitmap =
                         ucp_gpu_nic_assignment_lookup(&m_assignment,
                                                       gpu_sys_dev(config,
                                                                   gpu_idx, 0));
