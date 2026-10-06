@@ -69,7 +69,8 @@ enum {
     UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL    = UCS_BIT(26),
     UCP_REQUEST_FLAG_RNDV_GET_REQ          = UCS_BIT(27),
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
-    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29)
+    UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
+    UCP_REQUEST_FLAG_RMA_BW_SAMPLE         = UCS_BIT(30)
 };
 
 
@@ -245,10 +246,14 @@ struct ucp_request {
                     uint64_t   remote_addr; /* Remote address */
                     ucp_rkey_h rkey; /* Remote memory key */
 
-                    struct {
-                        const uint64_t   *remote_addrs;
-                        ucp_rkey_h const *rkeys;
-                    } sgl;
+                    union {
+                        struct {
+                            const uint64_t   *remote_addrs;
+                            ucp_rkey_h const *rkeys;
+                        } sgl;
+                        /* Used only by sampled contiguous PUT/GET zcopy */
+                        ucp_rma_bw_sample_t *bw_sample;
+                    };
                 } rma;
 
                 struct {

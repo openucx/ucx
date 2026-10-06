@@ -17,6 +17,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
+#include <ucp/rma/rma_bw.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
@@ -2890,6 +2891,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_tag_match_cleanup;
     }
 
+    if (context->config.ext.rma_bw_measure) {
+        worker->rma_bw_samples = ucs_calloc(UCP_RMA_BW_MAX_ACTIVE,
+                                            sizeof(*worker->rma_bw_samples),
+                                            "rma_bw_samples");
+        if (worker->rma_bw_samples == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_am_cleanup;
+        }
+    }
+
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
 
@@ -2916,6 +2927,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     return UCS_OK;
 
 err_am_cleanup:
+    ucs_free(worker->rma_bw_samples);
     ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
@@ -3192,6 +3204,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
+    ucs_free(worker->rma_bw_samples);
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);

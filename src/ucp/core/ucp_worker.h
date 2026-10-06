@@ -314,6 +314,8 @@ typedef struct ucp_worker {
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
+    ucp_rma_bw_sample_t              *rma_bw_samples;     /* Sample pool */
+    ucs_time_t                       rma_bw_next_sample; /* Next sample admission */
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
