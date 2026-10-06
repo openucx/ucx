@@ -3405,11 +3405,12 @@ void ucp_ep_destroy(ucp_ep_h ep)
     ucs_status_ptr_t *request;
     ucs_status_t status;
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     UCS_ASYNC_BLOCK(&worker->async);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSE_SYNC, 0);
-    request = ucp_disconnect_nb(ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+    request = ucp_disconnect_nb(ep);
     if (request == NULL) {
         goto out;
     } else if (UCS_PTR_IS_ERR(request)) {
