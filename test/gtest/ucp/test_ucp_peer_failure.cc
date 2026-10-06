@@ -1013,8 +1013,11 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype)
     rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }
 
+/* Use host staging so this test still selects rndv/put/mtype when CUDA
+ * fragments are unreachable from the network lane. The user buffer remains
+ * CUDA. */
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
-           "RNDV_FRAG_SIZE=host:8K,cuda:8K")
+           "RNDV_FRAG_MEM_TYPES=host", "RNDV_FRAG_SIZE=host:8K")
 {
     rndv_progress_failure_test(rndv_mode::put_ppln, true);
 }
