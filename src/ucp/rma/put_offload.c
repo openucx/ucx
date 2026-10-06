@@ -245,8 +245,7 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
     .reset    = ucp_proto_request_bcopy_reset
 };
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_put_offload_zcopy_send_common(
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_put_offload_zcopy_send_common(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_rma_bw_post_mode_t mode)
 {
@@ -267,6 +266,7 @@ ucp_proto_put_offload_zcopy_send_common(
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
+
     if (mode == UCP_RMA_BW_POST_SAMPLE) {
         comp = ucp_rma_bw_frag_start(req, req->send.multi_lane_idx, &frag);
     }
@@ -275,11 +275,14 @@ ucp_proto_put_offload_zcopy_send_common(
     if (mode == UCP_RMA_BW_POST_SAMPLE) {
         ucp_rma_bw_frag_posted(frag, iov.length, status);
     }
+
     if (mode != UCP_RMA_BW_POST_NONE) {
         mpriv        = req->send.proto_config->priv;
-        posted_total = ucp_rma_bw_record_post(
-                req, UCP_RMA_BW_PUT, req->send.multi_lane_idx,
-                lpriv->super.lane, mpriv->num_lanes, iov.length, status);
+        posted_total = ucp_rma_bw_record_post(req, UCP_RMA_BW_PUT,
+                                              req->send.multi_lane_idx,
+                                              lpriv->super.lane,
+                                              mpriv->num_lanes, iov.length,
+                                              status);
         if ((mode == UCP_RMA_BW_POST_SAMPLE) && (frag != NULL) &&
             !UCS_STATUS_IS_ERR(status)) {
             frag->sample->lanes[frag->lane_idx].posted_total = posted_total;
@@ -300,8 +303,8 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                       ucp_datatype_iter_t *next_iter,
                                       ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_put_offload_zcopy_send_common(
-            req, lpriv, next_iter, UCP_RMA_BW_POST_NONE);
+    return ucp_proto_put_offload_zcopy_send_common(req, lpriv, next_iter,
+                                                   UCP_RMA_BW_POST_NONE);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -309,8 +312,8 @@ ucp_proto_put_offload_zcopy_tracked_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_put_offload_zcopy_send_common(
-            req, lpriv, next_iter, UCP_RMA_BW_POST_TRACK);
+    return ucp_proto_put_offload_zcopy_send_common(req, lpriv, next_iter,
+                                                   UCP_RMA_BW_POST_TRACK);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -318,8 +321,8 @@ ucp_proto_put_offload_zcopy_sampled_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter, ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_put_offload_zcopy_send_common(
-            req, lpriv, next_iter, UCP_RMA_BW_POST_SAMPLE);
+    return ucp_proto_put_offload_zcopy_send_common(req, lpriv, next_iter,
+                                                   UCP_RMA_BW_POST_SAMPLE);
 }
 
 static ucs_status_t
@@ -330,8 +333,7 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        ucp_rma_bw_sample_try_start(req, mpriv->num_lanes,
-                                    UCP_RMA_BW_PUT);
+        ucp_rma_bw_sample_try_start(req, mpriv->num_lanes, UCP_RMA_BW_PUT);
     }
 
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE)) {

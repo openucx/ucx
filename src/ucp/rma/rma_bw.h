@@ -73,24 +73,24 @@ struct ucp_rma_bw_estimator {
 };
 
 typedef struct ucp_rma_bw_ep_state {
-    uint32_t                generation;
+    uint32_t               generation;
     ucp_rma_bw_estimator_t *dirs[UCP_RMA_BW_DIR_LAST];
 } ucp_rma_bw_ep_state_t;
 
 struct ucp_rma_bw_sample {
-    ucp_request_t          *req;
-    unsigned               num_frags;
-    unsigned               pending;
-    unsigned               invalid;
-    unsigned               concurrent;
-    ucp_lane_map_t         active_lanes;
-    uint64_t               epoch;
-    uint32_t               generation;
-    ucp_lane_index_t       num_lanes;
-    ucp_rma_bw_dir_t       dir;
-    ucp_lane_index_t       lane_ids[UCP_MAX_LANES];
-    ucp_rma_bw_lane_t      lanes[UCP_MAX_LANES];
-    ucp_rma_bw_frag_t      frags[UCP_RMA_BW_MAX_FRAGS];
+    ucp_request_t     *req;
+    unsigned          num_frags;
+    unsigned          pending;
+    unsigned          invalid;
+    unsigned          concurrent;
+    ucp_lane_map_t    active_lanes;
+    uint64_t          epoch;
+    uint32_t          generation;
+    ucp_lane_index_t  num_lanes;
+    ucp_rma_bw_dir_t  dir;
+    ucp_lane_index_t  lane_ids[UCP_MAX_LANES];
+    ucp_rma_bw_lane_t lanes[UCP_MAX_LANES];
+    ucp_rma_bw_frag_t frags[UCP_RMA_BW_MAX_FRAGS];
 };
 
 void ucp_rma_bw_sample_start(ucp_request_t *req, ucp_lane_index_t num_lanes,

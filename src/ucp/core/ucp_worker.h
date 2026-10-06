@@ -378,7 +378,7 @@ typedef struct ucp_worker {
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
     kh_ucp_worker_remote_flush_t     remote_flush_hash;
-    kh_ucp_worker_rma_bw_t          rma_bw_hash;
+    kh_ucp_worker_rma_bw_t           rma_bw_hash;
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 
