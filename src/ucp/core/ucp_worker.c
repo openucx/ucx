@@ -2291,9 +2291,8 @@ out:
     return UCS_OK;
 }
 
-static void
-ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
-                                ucp_rkey_config_key_t *key)
+static void ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
+                                            const ucp_rkey_config_key_t *key)
 {
     ucs_string_buffer_appendf(
             log_strb,
@@ -2312,6 +2311,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     const ucp_ep_config_t *ep_config = &ucs_array_elem(&worker->ep_config,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t **rkey_config_p;
+    unsigned dump_idx;
     ucp_rkey_config_t *rkey_config;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2330,15 +2331,14 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         /* Dump all rkey config keys */
         ucs_string_buffer_init(&log_strb);
 
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            ucs_string_buffer_appendf(
-                    &log_strb, "rkey [%ld]: ",
-                    rkey_config - ucs_array_begin(&worker->rkey_config));
-            ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        ucs_array_for_each_index(rkey_config_p, dump_idx,
+                                 &worker->rkey_config) {
+            ucs_string_buffer_appendf(&log_strb, "rkey [%u]: ", dump_idx);
+            ucp_worker_dump_rkey_config_key(&log_strb, &(*rkey_config_p)->key);
         }
 
         ucs_string_buffer_appendf(&log_strb, "rkey key new: ");
-        ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        ucp_worker_dump_rkey_config_key(&log_strb, key);
 
         ucs_debug("%s", ucs_string_buffer_cstr(&log_strb));
         ucs_string_buffer_cleanup(&log_strb);
@@ -2351,11 +2351,12 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                (lanes_distance != NULL));
 
     /* Initialize rkey configuration */
-    rkey_cfg_index      = ucs_array_length(&worker->rkey_config);
-    rkey_config         = ucp_worker_config_array_append(
-                                  worker, &worker->rkey_config,
-                                  status = UCS_ERR_NO_MEMORY;
-                                  goto err;);
+    rkey_cfg_index = ucs_array_length(&worker->rkey_config);
+    rkey_config    = ucs_malloc(sizeof(*rkey_config), "rkey_config");
+    if (rkey_config == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     rkey_config->key = *key;
 
@@ -2370,6 +2371,11 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                   ucs_topo_distance_str(&rkey_config->lanes_distance[lane], buf,
                                         sizeof(buf)));
     }
+
+    rkey_config_p = ucp_worker_config_array_append(worker, &worker->rkey_config,
+                                                   status = UCS_ERR_NO_MEMORY;
+                                                   goto err_free_rkey_config;);
+    *rkey_config_p = rkey_config;
 
     /* Save key-to-index lookup */
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
@@ -2407,6 +2413,8 @@ err_kh_del:
     kh_del(ucp_worker_rkey_config, &worker->rkey_config_hash, khiter);
 err_pop_rkey_config:
     ucs_array_pop_back(&worker->rkey_config);
+err_free_rkey_config:
+    ucs_free(rkey_config);
 err:
     return status;
 }
@@ -2425,29 +2433,30 @@ static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 static void ucp_worker_trace_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
-    ucp_rkey_config_t *rkey_config;
+    ucp_rkey_config_t **rkey_config_p;
 
     ucs_array_for_each(ep_config, &worker->ep_config) {
         ucp_proto_select_trace(worker, &ep_config->proto_select);
     }
 
-    ucs_array_for_each(rkey_config, &worker->rkey_config) {
-        ucp_proto_select_trace(worker, &rkey_config->proto_select);
+    ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+        ucp_proto_select_trace(worker, &(*rkey_config_p)->proto_select);
     }
 }
 
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
-    ucp_rkey_config_t *rkey_config;
+    ucp_rkey_config_t **rkey_config_p;
 
     ucs_array_for_each(ep_config, &worker->ep_config) {
         ucp_ep_config_cleanup(worker, ep_config);
     }
     ucs_array_cleanup_dynamic(&worker->ep_config);
 
-    ucs_array_for_each(rkey_config, &worker->rkey_config) {
-        ucp_proto_select_cleanup(&rkey_config->proto_select);
+    ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+        ucp_proto_select_cleanup(&(*rkey_config_p)->proto_select);
+        ucs_free(*rkey_config_p);
     }
     ucs_array_cleanup_dynamic(&worker->rkey_config);
 }
