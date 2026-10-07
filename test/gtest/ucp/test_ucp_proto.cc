@@ -996,6 +996,9 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
                                          UCP_DATATYPE_CONTIG, buffer_size, 1,
                                          &dt_iter, &sg_count, &param));
 
+    ASSERT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
+    ASSERT_EQ(0, dt_iter.mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
+    ASSERT_EQ(UCS_MEMORY_TYPE_CUDA_MANAGED, dt_iter.mem_info.type);
     mem_type = static_cast<ucs_memory_type_t>(dt_iter.mem_info.type);
     if (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
@@ -1021,6 +1024,33 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     EXPECT_EQ(static_cast<ucp_md_map_t>(0),
               dt_iter.type.contig.memh->md_map & hca_md_map);
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_explicit_cuda,
+           "CUDA_COPY_ASYNC_MEM_TYPE?=cuda")
+{
+    constexpr size_t buffer_size = 8192;
+    ucp_request_param_t param     = {};
+    ucp_datatype_iter_t dt_iter;
+    uint8_t sg_count;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    scoped_async_cuda_buffer buffer(buffer_size);
+
+    ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), buffer_size,
+                                         UCP_DATATYPE_CONTIG, buffer_size, 1,
+                                         &dt_iter, &sg_count, &param));
+
+    EXPECT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
+    EXPECT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, dt_iter.mem_info.type);
+
+    if (dt_iter.type.contig.memh != NULL) {
+        ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
+    }
 }
 
 /* Remove the GET zcopy protocol, which replaces GET/RNDV on registrable

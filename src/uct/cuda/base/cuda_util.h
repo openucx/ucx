@@ -89,6 +89,18 @@ ucs_sys_device_t uct_cuda_get_sys_dev(CUdevice cuda_device);
  */
 ucs_status_t uct_cuda_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev);
+
+
+/**
+ * Query the CUDA driver API version.
+ *
+ * @param [out] version_p CUDA driver API version, for example 13050 for 13.5.
+ *
+ * @return UCS_OK on success, or an error code otherwise.
+ */
+ucs_status_t uct_cuda_driver_get_version(int *version_p);
+
+
 /**
  * Get the CUDA device from the system device.
  *

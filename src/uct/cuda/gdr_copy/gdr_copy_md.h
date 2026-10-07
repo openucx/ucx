@@ -13,6 +13,18 @@
 extern uct_component_t uct_gdr_copy_component;
 
 
+static inline int
+uct_gdr_copy_cuda_async_supported(int runtime_major, int runtime_minor,
+                                  int using_dmabuf, int driver_version)
+{
+    int runtime_supported = (runtime_major > 2) ||
+                            ((runtime_major == 2) && (runtime_minor >= 6));
+
+    return runtime_supported && using_dmabuf &&
+           (driver_version >= 13050);
+}
+
+
 /**
  * @brief gdr_copy MD descriptor
  */
@@ -23,6 +35,7 @@ typedef struct {
     ucs_rcache_t      *rcache;           /**< Registration cache */
     uint32_t          pin_gdr_flags;     /**< First gdr_pin_buffer_v2 flags (0 if v2 absent) */
     int               pin_pcie_fallback; /**< If nonzero, retry pin with default flags on failure */
+    int               cuda_async_supported; /**< Async CUDA copy is supported */
 } uct_gdr_copy_md_t;
 
 

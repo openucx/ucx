@@ -61,7 +61,12 @@ typedef enum ucs_mem_flags {
      * Memory can be accessed for inter-process memory type copy by a peer on
      * a different node.
      */
-    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1)
+    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1),
+
+    /**
+     * Memory originates from a CUDA stream-ordered allocation.
+     */
+    UCS_MEM_FLAG_CUDA_ASYNC              = UCS_BIT(2)
 } ucs_mem_flags_t;
 
 
