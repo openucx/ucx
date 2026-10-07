@@ -600,15 +600,16 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_peer_mem_pinnable,
 
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
 /* Localized memory belongs to a single GPU locality domain, which the driver
- * never places as GDR-capable, so the peer memory driver cannot pin it even
- * though it stays registrable. This is the case reported in #11708. */
+ * never places as GDR-capable, so the peer memory driver cannot pin it.
+ * Registrability is not asserted, as it depends on whether the platform can
+ * export a dma_buf fd for such memory. */
 UCS_TEST_P(test_mem_alloc_device, localized_mem_not_peer_mem_pinnable,
            "CUDA_COPY_REG_WHOLE_ALLOC=off")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_localized_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_registrable_pinnable(buffer.ptr(), size, 1, 0);
+    query_peer_mem_pinnable(buffer.ptr(), size, 0);
 }
 #endif
 

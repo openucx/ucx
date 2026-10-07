@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -258,15 +258,15 @@ UCS_TEST_P(test_ucp_mem_type_non_pinnable, pack_unpack_resolved_flags)
     test_pack_unpack(1);
 }
 
-/* Without the flags the lane is picked by a memtype cache lookup, a quiet
- * registration attempt on the preferred lane, and detection as a last resort */
+/* Without the flags from the caller, they are resolved from the buffer address
+ * on the first lane whose memory domain requires them */
 UCS_TEST_P(test_ucp_mem_type_non_pinnable, pack_unpack_unknown_flags)
 {
     test_pack_unpack(0);
 }
 
-/* The memtype cache is the first source of flags, make sure the fallback also
- * holds when it cannot answer */
+/* Resolving the flags hits the memtype cache first, make sure the slow path
+ * also reports them when the cache is disabled */
 UCS_TEST_P(test_ucp_mem_type_non_pinnable, pack_unpack_no_memtype_cache,
            "MEMTYPE_CACHE=n")
 {
