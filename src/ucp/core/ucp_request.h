@@ -423,6 +423,11 @@ struct ucp_request {
                     /* Atomic reply data */
                     ucp_atomic_reply_t data;
                 } atomic_reply;
+
+                struct {
+                    uct_ep_op_info_t info;    /* Owned operation */
+                    void             *buffer; /* Payload or IOV copy */
+                } repost;
             };
 
             union {
