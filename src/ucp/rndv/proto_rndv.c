@@ -1074,7 +1074,7 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                              ucp_proto_rndv_rtr_req_send_complete);
     req->send.buffer              = (void*)(uintptr_t)rtr_req->address;
     req->send.length              = rtr->size;
-    req->send.mem_type            = rtr_req->mem_type;
+    req->send.mem_type            = mem_info.type;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
     req->send.rndv.rkey           = NULL;
     req->send.rndv.remote_address = rtr_req->address;
