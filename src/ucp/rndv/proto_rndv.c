@@ -1059,15 +1059,14 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                                  const ucp_rndv_rtr_req_hdr_t *rtr_req)
 {
     const ucp_rndv_rtr_hdr_t *rtr = &rtr_req->super;
-    ucp_memory_info_t mem_info    = {
-        .type    = rtr_req->mem_type,
-        .sys_dev = rtr_req->sys_dev
-    };
-    ucp_memory_info_t local_mem_info;
+    ucp_memory_info_t mem_info;
 
     ucp_memory_detect(ep->worker->context, (void*)(uintptr_t)rtr_req->address,
-                      rtr->size, &local_mem_info);
-    mem_info.flags = local_mem_info.flags;
+                      rtr->size, &mem_info);
+    ucs_assertv(mem_info.type == rtr_req->mem_type,
+                "detected mem_type=%s rtr_req=%s",
+                ucs_memory_type_names[mem_info.type],
+                ucs_memory_type_names[rtr_req->mem_type]);
 
     ucp_proto_request_send_init(req, ep,
                                 UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL);
