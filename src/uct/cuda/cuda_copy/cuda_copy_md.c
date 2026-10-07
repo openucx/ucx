@@ -927,7 +927,7 @@ static int uct_cuda_copy_md_is_mempool(const void *address)
  * memory is never placed that way, as it belongs to a single GPU locality
  * domain, and memory pools are only compatible with dma_buf mappings. */
 static int
-uct_cuda_copy_md_is_peer_mem_pinnable(const void *address, int is_localized)
+uct_cuda_copy_md_is_pinnable(const void *address, int is_localized)
 {
     return !is_localized && !uct_cuda_copy_md_is_mempool(address);
 }
@@ -946,9 +946,8 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
         mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
     }
 
-    if (uct_cuda_copy_md_is_peer_mem_pinnable(mem_info->base_address,
-                                              is_localized)) {
-        mem_flags |= UCS_MEM_FLAG_PEER_MEM_PINNABLE;
+    if (uct_cuda_copy_md_is_pinnable(mem_info->base_address, is_localized)) {
+        mem_flags |= UCS_MEM_FLAG_PINNABLE;
     }
 
     return mem_flags | uct_cuda_copy_md_detect_memtype_copy_flags(mem_info);

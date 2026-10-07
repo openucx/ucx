@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 }
 
@@ -185,7 +186,7 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda, all, "all")
 
 /*
- * Stream-ordered CUDA memory is not peer memory pinnable, so gdr_copy cannot
+ * Stream-ordered CUDA memory is not pinnable, so gdr_copy cannot
  * register it. Pack/unpack through the CUDA memory type endpoint has to fall
  * back from the preferred gdr_copy lane to cuda_copy.
  */
@@ -214,13 +215,23 @@ protected:
     {
         std::vector<uint8_t> host_buf(BUF_SIZE);
         ucp_memory_info_t mem_info;
+        ucp_ep_h mem_type_ep;
 
         if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
             UCS_TEST_SKIP_R("CUDA async allocation is not supported");
         }
 
-        if (sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA] == NULL) {
+        mem_type_ep = sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+        if (mem_type_ep == NULL) {
             UCS_TEST_SKIP_R("no CUDA mem type endpoint");
+        }
+
+        /* Without a preferred lane which demands memory flags, pack/unpack has
+         * nothing to fall back from */
+        ucp_lane_index_t lane = ucp_ep_config(mem_type_ep)->key.rma_lanes[0];
+        if ((lane == UCP_NULL_LANE) ||
+            (ucp_ep_md_attr(mem_type_ep, lane)->required_mem_flags == 0)) {
+            UCS_TEST_SKIP_R("first CUDA mem type lane requires no memory flags");
         }
 
         mem_buffer src(BUF_SIZE, UCS_MEMORY_TYPE_CUDA,
@@ -229,8 +240,8 @@ protected:
                        mem_buffer::alloc_mode::ASYNC);
 
         ucp_memory_detect(sender().ucph(), src.ptr(), BUF_SIZE, &mem_info);
-        if (mem_info.flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE) {
-            UCS_TEST_SKIP_R("CUDA async memory is peer memory pinnable");
+        if (mem_info.flags & UCS_MEM_FLAG_PINNABLE) {
+            UCS_TEST_SKIP_R("CUDA async memory is pinnable");
         }
 
         ASSERT_EQ(UCS_MEMORY_TYPE_CUDA, mem_info.type);

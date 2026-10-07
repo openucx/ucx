@@ -68,8 +68,8 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
  * if no lane is compatible.
  */
 static ucp_lane_index_t
-ucp_mem_type_ep_lane(ucp_ep_h ep, void *address, size_t length,
-                     const ucp_memory_info_t *mem_info)
+ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
+                          const ucp_memory_info_t *mem_info)
 {
     ucp_context_h context          = ep->worker->context;
     const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
@@ -80,7 +80,7 @@ ucp_mem_type_ep_lane(ucp_ep_h ep, void *address, size_t length,
 
     for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
         lane    = key->rma_lanes[i];
-        md_attr = &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
+        md_attr = ucp_ep_md_attr(ep, lane);
         if (md_attr->required_mem_flags == 0) {
             return lane;
         }
@@ -98,6 +98,10 @@ ucp_mem_type_ep_lane(ucp_ep_h ep, void *address, size_t length,
                                md_attr->required_mem_flags)) {
             return lane;
         }
+
+        /* TODO: Also take the memory flags into account in the protocol
+         * performance estimation, as they are already part of the selection
+         * key. Performance model here diverges from the lane actually used. */
     }
 
     return UCP_NULL_LANE;
@@ -115,7 +119,8 @@ ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
                       ucp_lane_index_t *lane_p,
                       ucp_mtype_pack_context_t *pack_context)
 {
-    ucp_lane_index_t lane = ucp_mem_type_ep_lane(ep, address, length, mem_info);
+    ucp_lane_index_t lane = ucp_mem_type_ep_find_lane(ep, address, length,
+                                                      mem_info);
 
     if (lane == UCP_NULL_LANE) {
         ucs_error("no mem type lane can register %s buffer %p length %zu",

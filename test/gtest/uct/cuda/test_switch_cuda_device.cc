@@ -378,27 +378,25 @@ protected:
         return static_cast<ucs_mem_flags_t>(mem_attr.mem_flags);
     }
 
-    void query_peer_mem_pinnable(void *address, size_t size, int expected)
+    void query_pinnable(void *address, size_t size, int expected)
     {
-        EXPECT_EQ(expected, !!(query_mem_flags(address, size) &
-                               UCS_MEM_FLAG_PEER_MEM_PINNABLE));
+        EXPECT_EQ(expected,
+                  !!(query_mem_flags(address, size) & UCS_MEM_FLAG_PINNABLE));
     }
 
-    /* Peer memory pinnability is orthogonal to registrability, so check both */
+    /* Pinnability is orthogonal to registrability, so check both */
     void query_registrable_pinnable(void *address, size_t size,
-                                    int exp_registrable,
-                                    int exp_peer_mem_pinnable)
+                                    int exp_registrable, int exp_pinnable)
     {
         ucs_mem_flags_t mem_flags = query_mem_flags(address, size);
 
         EXPECT_EQ(exp_registrable, !!(mem_flags & UCS_MEM_FLAG_REGISTRABLE));
-        EXPECT_EQ(exp_peer_mem_pinnable,
-                  !!(mem_flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE));
+        EXPECT_EQ(exp_pinnable, !!(mem_flags & UCS_MEM_FLAG_PINNABLE));
     }
 
     /* Stream-ordered memory from the default pool, as allocated by
      * 'cudaMallocAsync' */
-    void test_mem_pool_not_peer_mem_pinnable()
+    void test_mem_pool_not_pinnable()
     {
         constexpr size_t size = 4 * UCS_MBYTE;
 
@@ -409,7 +407,7 @@ protected:
         mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA,
                           mem_buffer::alloc_mode::ASYNC);
 
-        query_peer_mem_pinnable(buffer.ptr(), size, 0);
+        query_pinnable(buffer.ptr(), size, 0);
     }
 
     void test_async_managed_mem_pool_registrable()
@@ -561,7 +559,7 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_gpu_pref_loc,
 }
 
 /* Plain device memory has device pages, so the peer memory driver can pin it */
-UCS_TEST_P(test_mem_alloc_device, legacy_mem_peer_mem_pinnable)
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_pinnable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
@@ -573,7 +571,7 @@ UCS_TEST_P(test_mem_alloc_device, legacy_mem_peer_mem_pinnable)
 /* Stream-ordered memory is only compatible with dma_buf mappings, so the peer
  * memory driver cannot pin it, even when an exportable pool makes it
  * registrable. This is the combination gdr_copy has to reject. */
-UCS_TEST_P(test_mem_alloc_device, exportable_mem_pool_not_peer_mem_pinnable,
+UCS_TEST_P(test_mem_alloc_device, exportable_mem_pool_not_pinnable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=try")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
@@ -584,18 +582,18 @@ UCS_TEST_P(test_mem_alloc_device, exportable_mem_pool_not_peer_mem_pinnable,
 #endif
 
 /* Pinning does not become possible for the default, non-exportable pool */
-UCS_TEST_P(test_mem_alloc_device, mem_pool_not_peer_mem_pinnable,
+UCS_TEST_P(test_mem_alloc_device, mem_pool_not_pinnable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
-    test_mem_pool_not_peer_mem_pinnable();
+    test_mem_pool_not_pinnable();
 }
 
 /* The default typing of stream-ordered memory as managed must not report it as
  * pinnable either */
-UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_peer_mem_pinnable,
+UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_pinnable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda-managed")
 {
-    test_mem_pool_not_peer_mem_pinnable();
+    test_mem_pool_not_pinnable();
 }
 
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
@@ -603,13 +601,13 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_peer_mem_pinnable,
  * never places as GDR-capable, so the peer memory driver cannot pin it.
  * Registrability is not asserted, as it depends on whether the platform can
  * export a dma_buf fd for such memory. */
-UCS_TEST_P(test_mem_alloc_device, localized_mem_not_peer_mem_pinnable,
+UCS_TEST_P(test_mem_alloc_device, localized_mem_not_pinnable,
            "CUDA_COPY_REG_WHOLE_ALLOC=off")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_localized_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_peer_mem_pinnable(buffer.ptr(), size, 0);
+    query_pinnable(buffer.ptr(), size, 0);
 }
 #endif
 

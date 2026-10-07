@@ -1441,9 +1441,9 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
 
 /* Pinning goes through nvidia_p2p_get_pages, so memory without device pages
  * must never be offered to this memory domain */
-UCS_TEST_P(test_gdr_copy, gdr_copy_requires_peer_mem_pinnable)
+UCS_TEST_P(test_gdr_copy, gdr_copy_requires_pinnable)
 {
-    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_PEER_MEM_PINNABLE);
+    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_PINNABLE);
 }
 
 /* The reason for the requirement above: stream-ordered memory is only

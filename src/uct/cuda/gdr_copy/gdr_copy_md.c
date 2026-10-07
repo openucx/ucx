@@ -124,7 +124,7 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     /* Pinning goes through nvidia_p2p_get_pages, which the driver refuses
      * for memory it did not place as GDR-capable, such as memory localized to
      * a GPU locality domain, or memory pools */
-    md_attr->required_mem_flags = UCS_MEM_FLAG_PEER_MEM_PINNABLE;
+    md_attr->required_mem_flags = UCS_MEM_FLAG_PINNABLE;
 
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {
