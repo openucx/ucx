@@ -18,11 +18,7 @@
 
 void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
-
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
-    ucs_hlist_del(&ep->ext->rndv_mtype_fc_reqs,
-                  &req->send.state.rndv_fc_ep_list);
     req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC;
 }
 
@@ -51,10 +47,30 @@ int ucp_proto_rndv_mtype_fc_reschedule_filter(
     return 1;
 }
 
-/* Move all queued requests of the endpoint out of the worker pending queues
- * and out of the flow-control state into @a reqs, in a single pass. Requests
- * which were already woken up are not queued and stay on the endpoint list. */
-static void
+static int
+ucp_proto_rndv_mtype_fc_resched_collect(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
+{
+    ucs_queue_head_t *reqs = arg;
+    ucp_request_t *req;
+
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    req = elem->arg;
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
+    ucs_assert(req->send.rndv.fc.state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
+    return 1;
+}
+
+/* Move all throttled requests of the endpoint into @a reqs. Queued requests
+ * are removed from the worker pending queues and leave the flow-control state.
+ * Woken-up requests have their reschedule callback removed, but stay in the
+ * flow-control state, so that aborting or resetting them passes their wakeup
+ * to the next waiter. Returns nonzero if any request was found. */
+static int
 ucp_proto_rndv_mtype_fc_ep_dequeue(ucp_ep_h ep, ucs_queue_head_t *reqs)
 {
     ucp_worker_h worker = ep->worker;
@@ -76,29 +92,25 @@ ucp_proto_rndv_mtype_fc_ep_dequeue(ucp_ep_h ep, ucs_queue_head_t *reqs)
             ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
         }
     }
+
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_proto_rndv_mtype_fc_resched_collect,
+                                 reqs);
+    return !ucs_queue_is_empty(reqs);
 }
 
 void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
 {
-    ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
     ucs_queue_head_t reqs;
     ucp_request_t *req;
 
-    ucs_queue_head_init(&reqs);
-    ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs);
-    ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
-        ucp_proto_request_abort(req, status);
-    }
-
     /* Aborting a woken-up request may wake up another request of this ep,
      * which is then aborted on a later iteration */
-    while (!ucs_hlist_is_empty(fc_reqs)) {
-        req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                  send.state.rndv_fc_ep_list);
-        ucp_proto_request_abort(req, status);
-        ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
-                   (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                        send.state.rndv_fc_ep_list) != req));
+    ucs_queue_head_init(&reqs);
+    while (ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs)) {
+        ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+            ucp_proto_request_abort(req, status);
+        }
     }
 }
 
@@ -122,25 +134,16 @@ ucp_proto_rndv_mtype_fc_extract_one(ucp_request_t *req,
 void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
                                         ucs_queue_head_t *replay_queue)
 {
-    ucs_hlist_head_t *fc_reqs = &ep->ext->rndv_mtype_fc_reqs;
     ucs_queue_head_t reqs;
     ucp_request_t *req;
 
-    ucs_queue_head_init(&reqs);
-    ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs);
-    ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
-        ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
-    }
-
     /* Resetting a woken-up request may wake up another request of this ep,
      * which is then extracted on a later iteration */
-    while (!ucs_hlist_is_empty(fc_reqs)) {
-        req = ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                  send.state.rndv_fc_ep_list);
-        ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
-        ucs_assert(ucs_hlist_is_empty(fc_reqs) ||
-                   (ucs_hlist_head_elem(fc_reqs, ucp_request_t,
-                                        send.state.rndv_fc_ep_list) != req));
+    ucs_queue_head_init(&reqs);
+    while (ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs)) {
+        ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+            ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
+        }
     }
 }
 

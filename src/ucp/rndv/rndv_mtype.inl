@@ -157,14 +157,10 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
                   frag_sys_dev);
     UCP_WORKER_STAT_RNDV(worker, MTYPE_FC_THROTTLED, 1);
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC));
-    /* The EP list link aliases send.state fields used once initialized */
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
     req->flags            |= UCP_REQUEST_FLAG_RNDV_MTYPE_FC;
     req->send.rndv.fc.state = UCP_REQUEST_RNDV_MTYPE_FC_QUEUED;
     ucs_queue_push(&worker->rndv_mtype_fc.pending_q[fc_op],
                    &req->send.rndv.fc.queue_elem);
-    ucs_hlist_add_tail(&ep->ext->rndv_mtype_fc_reqs,
-                       &req->send.state.rndv_fc_ep_list);
 
     return UCS_ERR_NO_RESOURCE;
 }
