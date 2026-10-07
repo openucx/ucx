@@ -1085,17 +1085,37 @@ ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
- * Invalidate lanes a peer token reported as failed.
+ * Mark lanes a remote token reported as failed.
  *
- * The transport endpoint stays on the lane in @ref UCP_EP_TF_LANE_INVALIDATED
- * until the error handler holds it. Non-zero @a request_id and @a peer_id are
- * recorded. Already held lanes only record @a peer_id.
+ * The transport endpoint stays on the lane in
+ * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_retire_unaware_lanes
+ * purges it. Non-zero @a request_id and @a peer_id are recorded. Already held
+ * lanes only record @a peer_id.
  *
  * @return Lanes left invalidated. Any other lane is not on the token path.
  */
 ucp_lane_map_t
 ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                            uint32_t request_id, uint32_t peer_id);
+
+
+/**
+ * Purge invalidated lanes and take their UCT endpoints off the lanes.
+ *
+ * Each retired endpoint is returned in @a retired and is not stored on the
+ * lane. The lane is marked failed and points at the failed stub. The caller
+ * destroys the returned endpoints with @ref ucp_ep_tf_destroy_retired_lanes
+ * after any token derive that still needs the queue pair.
+ */
+void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                    uct_ep_h retired[]);
+
+
+/**
+ * Destroy endpoints returned by @ref ucp_ep_tf_retire_unaware_lanes and drop
+ * their token state.
+ */
+void ucp_ep_tf_destroy_retired_lanes(ucp_ep_h ep, uct_ep_h retired[]);
 
 
 /**

@@ -1315,14 +1315,16 @@ ucp_wireup_process_lanes_addr_request(
 {
     ucp_lane_map_t peer_unaware, to_rebuild, peer_provided, invalidated;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
+    uct_ep_h retired[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
     /* A peer token means that lane already failed remotely. Invalidate it
-     * and keep the transport endpoint on the lane until the error handler
-     * holds it. Deriving the RX token does not take the lane off. */
+     * without waiting for an error completion, then purge and destroy it so
+     * the reply can carry a rebuilt address. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
+    memset(retired, 0, sizeof(retired));
     invalidated = 0;
     if (request_id != 0) {
         invalidated = ucp_ep_tf_invalidate_lanes(ep,
@@ -1330,6 +1332,8 @@ ucp_wireup_process_lanes_addr_request(
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens);
+        ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
+        ucp_ep_tf_destroy_retired_lanes(ep, retired);
     }
 
     /* Lanes still up, and not waiting for the token error handler, take the
@@ -1388,14 +1392,15 @@ ucp_wireup_lanes_with_tokens(ucp_lane_map_t lane_map,
     return lanes;
 }
 
-/* A token in the reply means the peer already failed that lane. Invalidate
- * it and leave it on the lane until the error handler. Lanes that cannot
+/* A token in the reply means the remote side already failed that lane.
+ * Invalidate it, purge it, and take it off the lane. The queue pair stays
+ * alive in @a retired until the caller derives tokens. Lanes that cannot
  * carry a token are discarded on the software path. */
 static void
 ucp_wireup_invalidate_unaware_failed_lanes(
         ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *lanes_info,
         uint32_t request_id, const ucp_wireup_lane_token_t *tx_tokens,
-        const ucp_wireup_lane_token_t *rx_tokens)
+        const ucp_wireup_lane_token_t *rx_tokens, uct_ep_h retired[])
 {
     ucp_lane_map_t lanes, leftover, invalidated;
     ucs_status_t status;
@@ -1414,6 +1419,8 @@ ucp_wireup_invalidate_unaware_failed_lanes(
     }
 
     invalidated = ucp_ep_tf_invalidate_lanes(ep, lanes, request_id, 0);
+    /* Keep the queue pairs until the reply handler derives RX tokens. */
+    ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
     leftover    = lanes & ~invalidated;
     if (leftover == 0) {
         return;
@@ -1591,6 +1598,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     const ucp_wireup_msg_lanes_info_t *lanes_info = NULL;
     ucp_wireup_lane_token_t tx_tokens[UCP_MAX_LANES];
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
+    uct_ep_h retired[UCP_MAX_LANES];
     const void *address_ptr;
     ucp_unpacked_address_t remote_address;
     ucs_status_t status;
@@ -1655,13 +1663,15 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                               &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
         ucs_assert(lanes_info != NULL);
+        memset(retired, 0, sizeof(retired));
         ucp_wireup_invalidate_unaware_failed_lanes(ep, lanes_info,
                                                    request_id, tx_tokens,
-                                                   rx_tokens);
+                                                   rx_tokens, retired);
         ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
         ucp_wireup_process_lanes_addr_reply(worker, ep, msg, lanes_info,
                                             request_id, tx_tokens,
                                             &remote_address);
+        ucp_ep_tf_destroy_retired_lanes(ep, retired);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_ACK) {
         ucs_assert(lanes_info != NULL);
         ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 1, rx_tokens);
