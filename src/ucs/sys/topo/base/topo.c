@@ -319,6 +319,61 @@ unsigned ucs_topo_num_devices()
     return num_devices;
 }
 
+/* Must be called with the topology lock held */
+static ucs_topo_sys_device_info_t *
+ucs_topo_get_sys_device_nolock(ucs_sys_device_t sys_dev)
+{
+    ucs_assert(ucs_spinlock_is_held(&ucs_topo_global_ctx.lock));
+
+    /* UCS_SYS_DEVICE_ID_UNKNOWN is never a valid index, so it returns NULL */
+    UCS_STATIC_ASSERT(UCS_SYS_DEVICE_ID_UNKNOWN >= UCS_SYS_DEVICE_ID_COUNT);
+
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        return NULL;
+    }
+
+    return &ucs_topo_global_ctx.devices[sys_dev];
+}
+
+/* Must be called with the topology lock held */
+static ucs_status_t
+ucs_topo_get_sys_device_checked_nolock(ucs_sys_device_t sys_dev,
+                                       ucs_topo_sys_device_info_t **device_p)
+{
+    ucs_topo_sys_device_info_t *device = NULL;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("system device is unknown");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    device = ucs_topo_get_sys_device_nolock(sys_dev);
+    if (device == NULL) {
+        ucs_error("system device %u is invalid (num_devices=%u)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *device_p = device;
+    return UCS_OK;
+}
+
+/* Read a device field under the topology lock, or return a default value */
+#define UCS_TOPO_SYS_DEVICE_GET_FIELD(_sys_dev, _field, _default) \
+    ({ \
+        ucs_field_type(ucs_topo_sys_device_info_t, _field) \
+                _get_value = (_default); \
+        const ucs_topo_sys_device_info_t *_get_device; \
+        \
+        ucs_spin_lock(&ucs_topo_global_ctx.lock); \
+        _get_device = ucs_topo_get_sys_device_nolock(_sys_dev); \
+        if (_get_device != NULL) { \
+            _get_value = _get_device->_field; \
+        } \
+        ucs_spin_unlock(&ucs_topo_global_ctx.lock); \
+        _get_value; \
+    })
+
 static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
                                 char *str, size_t max)
 {
@@ -579,15 +634,16 @@ ucs_topo_find_device_by_bus_id_and_user_value(const ucs_sys_bus_id_t *bus_id,
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
                                         ucs_sys_bus_id_t *bus_id)
 {
+    const ucs_topo_sys_device_info_t *device;
     ucs_status_t status;
 
-    /* Read num_devices and device entry under the topology update lock. */
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        status = UCS_ERR_NO_ELEM;
-    } else {
-        *bus_id = ucs_topo_global_ctx.devices[sys_dev].bus_id;
+    device = ucs_topo_get_sys_device_nolock(sys_dev);
+    if (device != NULL) {
+        *bus_id = device->bus_id;
         status  = UCS_OK;
+    } else {
+        status = UCS_ERR_NO_ELEM;
     }
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
@@ -597,14 +653,20 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 static ucs_status_t
 ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
 {
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        return UCS_ERR_INVALID_PARAM;
+    ucs_topo_sys_device_info_t *device = NULL;
+    ucs_status_t status;
+
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    return ucs_topo_bus_id_to_sysfs_path(
-            &ucs_topo_global_ctx.devices[sys_dev].bus_id, path, max);
+    status = ucs_topo_bus_id_to_sysfs_path(&device->bus_id, path, max);
+    if (status != UCS_OK) {
+        ucs_debug("failed to get sysfs path for %s", device->name);
+    }
+
+    return status;
 }
 
 static int ucs_topo_is_sys_root(const char *path)
@@ -677,8 +739,6 @@ ucs_topo_get_common_path(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2,
 
     status = ucs_topo_sys_dev_to_sysfs_path(sys_dev1, *path1, PATH_MAX);
     if (status != UCS_OK) {
-        ucs_debug("failed to get sysfs path for %s",
-                  ucs_topo_sys_device_get_name(sys_dev1));
         goto err_free_path1;
     }
 
@@ -689,8 +749,6 @@ ucs_topo_get_common_path(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2,
 
     status = ucs_topo_sys_dev_to_sysfs_path(sys_dev2, *path2, PATH_MAX);
     if (status != UCS_OK) {
-        ucs_debug("failed to get sysfs path for %s",
-                  ucs_topo_sys_device_get_name(sys_dev2));
         goto err_free_path2;
     }
 
@@ -757,8 +815,10 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
                             ucs_sys_device_t sys_dev2,
                             ucs_sys_dev_distance_t *distance)
 {
+    ucs_topo_sys_device_info_t *device1, *device2;
     ucs_sys_device_t sys_dev_aux1, sys_dev_aux2;
     ucs_topo_sibling_role_t role1, role2;
+    ucs_status_t status;
 
     /* If one of the devices is unknown, we assume near topology */
     if ((sys_dev1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
@@ -766,16 +826,26 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
         return ucs_topo_get_distance_default(sys_dev1, sys_dev2, distance);
     }
 
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev1, &device1);
+    if (status != UCS_OK) {
+        goto out_unlock;
+    }
+
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev2, &device2);
+    if (status != UCS_OK) {
+        goto out_unlock;
+    }
+
+    sys_dev_aux1 = device1->sys_dev_aux;
+    role1        = device1->sibling_role;
+    sys_dev_aux2 = device2->sys_dev_aux;
+    role2        = device2->sibling_role;
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
     distance->bandwidth = 0;
     distance->latency   = UCS_INFINITY;
     ucs_topo_update_distance_sysfs(sys_dev1, sys_dev2, distance);
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    sys_dev_aux1 = ucs_topo_global_ctx.devices[sys_dev1].sys_dev_aux;
-    role1        = ucs_topo_global_ctx.devices[sys_dev1].sibling_role;
-    sys_dev_aux2 = ucs_topo_global_ctx.devices[sys_dev2].sys_dev_aux;
-    role2        = ucs_topo_global_ctx.devices[sys_dev2].sibling_role;
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     if ((role1 == UCS_TOPO_SIBLING_ROLE_DEV) &&
         (role2 == UCS_TOPO_SIBLING_ROLE_MEM)) {
@@ -786,12 +856,17 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
     }
 
     return UCS_OK;
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
 }
 
 /* Non-transitive memory and reachablity checks */
 int
 ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
 {
+    const ucs_topo_sys_device_info_t *device, *device_mem;
     int result;
 
     if ((sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
@@ -800,25 +875,19 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    result =
-            (sys_dev >= ucs_topo_global_ctx.num_devices) ||
-            (sys_dev_mem >= ucs_topo_global_ctx.num_devices) ||
-            /*
-             * Memory device was never matched with a sibling, it does not
-             * mandate an auxiliary path.
-             */
-            (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-             UCS_SYS_DEVICE_ID_UNKNOWN) ||
-            /* The device itself never uses auxiliary path */
-            (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
-             UCS_TOPO_SIBLING_ROLE_DEV) ||
-            /*
-             * MPS MLOParts create multiple MEM aliases for one DEV. Each MEM
-             * alias records its matched DEV; the DEV stores only one
-             * representative MEM sibling.
-             */
-            (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-             sys_dev);
+    device     = ucs_topo_get_sys_device_nolock(sys_dev);
+    device_mem = ucs_topo_get_sys_device_nolock(sys_dev_mem);
+
+    result = (device == NULL) || (device_mem == NULL) ||
+             /* Memory device was never matched with a sibling, it does not
+              * mandate an auxiliary path. */
+             (device_mem->sibling_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+             /* The device itself never uses auxiliary path */
+             (device->sibling_role != UCS_TOPO_SIBLING_ROLE_DEV) ||
+             /* MPS MLOParts create multiple MEM aliases for one DEV. Each MEM
+              * alias records its matched DEV; the DEV stores only one
+              * representative MEM sibling. */
+             (device_mem->sibling_sys_dev == sys_dev);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -826,25 +895,29 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
 
 int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
 {
+    const ucs_topo_sys_device_info_t *device, *device_mem;
     int is_sibling;
     ucs_topo_sibling_role_t UCS_V_UNUSED role_dev;
     ucs_topo_sibling_role_t UCS_V_UNUSED role_dev_mem;
 
+    if ((sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (sys_dev_mem == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
+    }
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    is_sibling = (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-                 (sys_dev < ucs_topo_global_ctx.num_devices) &&
-                 (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
-                 (sys_dev_mem < ucs_topo_global_ctx.num_devices) &&
+    device     = ucs_topo_get_sys_device_nolock(sys_dev);
+    device_mem = ucs_topo_get_sys_device_nolock(sys_dev_mem);
+    is_sibling = (device != NULL) && (device_mem != NULL) &&
                  /*
                   * MLOPart allows multiple MEM devices to point at one DEV, so
                   * the MEM-side sibling is the canonical relationship.
                   */
-                 (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-                  sys_dev);
+                 (device_mem->sibling_sys_dev == sys_dev);
 
     if (is_sibling) {
-        role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
-        role_dev_mem = ucs_topo_global_ctx.devices[sys_dev_mem].sibling_role;
+        role_dev     = device->sibling_role;
+        role_dev_mem = device_mem->sibling_role;
         ucs_assertv((role_dev == UCS_TOPO_SIBLING_ROLE_DEV) &&
                     (role_dev_mem == UCS_TOPO_SIBLING_ROLE_MEM),
                     "sys_dev=%u sys_dev_mem=%u"
@@ -1000,18 +1073,21 @@ out_unknown:
 const char *
 ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
 {
+    const ucs_topo_sys_device_info_t *device;
+
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_UNKNOWN, max);
-    } else {
-        ucs_spin_lock(&ucs_topo_global_ctx.lock);
-        if (sys_dev < ucs_topo_global_ctx.num_devices) {
-            ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
-                                buffer, max);
-        } else {
-            ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_INVALID, max);
-        }
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        return buffer;
     }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    device = ucs_topo_get_sys_device_nolock(sys_dev);
+    if (device != NULL) {
+        ucs_topo_bus_id_str(&device->bus_id, 0, buffer, max);
+    } else {
+        ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_INVALID, max);
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return buffer;
 }
@@ -1043,55 +1119,42 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev)
 ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
                                           const char *name, unsigned priority)
 {
+    ucs_topo_sys_device_info_t *device;
+    ucs_status_t status;
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-        return UCS_ERR_INVALID_PARAM;
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
+        goto out_unlock;
     }
 
-    if (priority > ucs_topo_global_ctx.devices[sys_dev].name_priority) {
-        ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
-        ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
-                                                               "sys_dev_name");
-        ucs_topo_global_ctx.devices[sys_dev].name_priority = priority;
+    if (priority > device->name_priority) {
+        ucs_free(device->name);
+        device->name          = ucs_strdup(name, "sys_dev_name");
+        device->name_priority = priority;
     }
+
+out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return UCS_OK;
+    return status;
 }
 
 const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
 {
-    const char *name;
-
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        name = UCS_TOPO_DEVICE_NAME_UNKNOWN;
-    } else {
-        ucs_spin_lock(&ucs_topo_global_ctx.lock);
-        if (sys_dev < ucs_topo_global_ctx.num_devices) {
-            name = ucs_topo_global_ctx.devices[sys_dev].name;
-        } else {
-            name = UCS_TOPO_DEVICE_NAME_INVALID;
-        }
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        return UCS_TOPO_DEVICE_NAME_UNKNOWN;
     }
 
-    return name;
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, name,
+                                         UCS_TOPO_DEVICE_NAME_INVALID);
 }
 
 ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
                                            ucs_topo_device_class_t device_class)
 {
-    ucs_status_t status = UCS_OK;
+    ucs_topo_sys_device_info_t *device;
+    ucs_status_t status;
     unsigned d;
-
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_error("system device %d is unknown", sys_dev);
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     if (device_class >= UCS_TOPO_DEVICE_CLASS_LAST) {
         ucs_error("invalid device class %u", device_class);
@@ -1099,15 +1162,12 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %u)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
         goto out_unlock;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].device_class = device_class;
+    device->device_class = device_class;
 
     /* Invalidate all cached ordinals */
     for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
@@ -1123,23 +1183,16 @@ out_unlock:
 ucs_status_t
 ucs_topo_sys_device_add_flags(ucs_sys_device_t sys_dev, unsigned flags)
 {
-    ucs_status_t status = UCS_OK;
-
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_error("system device %d is unknown", sys_dev);
-        return UCS_ERR_INVALID_PARAM;
-    }
+    ucs_topo_sys_device_info_t *device;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %u)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
         goto out_unlock;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].flags |= flags;
+    device->flags |= flags;
 
 out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -1148,21 +1201,7 @@ out_unlock:
 
 unsigned ucs_topo_sys_device_get_flags(ucs_sys_device_t sys_dev)
 {
-    unsigned flags;
-
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return 0;
-    }
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev < ucs_topo_global_ctx.num_devices) {
-        flags = ucs_topo_global_ctx.devices[sys_dev].flags;
-    } else {
-        flags = 0;
-    }
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return flags;
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, flags, 0);
 }
 
 ucs_status_t
@@ -1190,22 +1229,19 @@ ucs_topo_device_class_is_incomplete_nolock(ucs_topo_device_class_t device_class)
 
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
+    ucs_topo_sys_device_info_t *device;
     ucs_topo_device_class_t device_class;
     ucs_bus_id_bit_rep_t ref_key, key;
     unsigned ordinal, d, prev_d;
 
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_SYS_DEVICE_ORDINAL_INVALID;
-    }
-
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+    device = ucs_topo_get_sys_device_nolock(sys_dev);
+    if (device == NULL) {
         ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
         goto out_unlock;
     }
 
-    device_class = ucs_topo_global_ctx.devices[sys_dev].device_class;
+    device_class = device->device_class;
     if ((device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
         ucs_topo_device_class_is_incomplete_nolock(device_class)) {
         ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
@@ -1213,15 +1249,14 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
     }
 
     /* Return cached value if available */
-    ordinal = ucs_topo_global_ctx.devices[sys_dev].class_ordinal;
+    ordinal = device->class_ordinal;
     if (ordinal != UCS_SYS_DEVICE_ORDINAL_INVALID) {
         goto out_unlock;
     }
 
     /* The ordinal is the rank of the device's bus id (BDF) among all unique
      * BDFs of the same class. */
-    ref_key = ucs_topo_get_bus_id_bit_repr(
-            &ucs_topo_global_ctx.devices[sys_dev].bus_id);
+    ref_key = ucs_topo_get_bus_id_bit_repr(&device->bus_id);
     ordinal = 0;
     for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
         if (ucs_topo_global_ctx.devices[d].device_class != device_class) {
@@ -1249,7 +1284,7 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
         }
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].class_ordinal = ordinal;
+    device->class_ordinal = ordinal;
 
 out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -1258,58 +1293,31 @@ out_unlock:
 
 ucs_numa_node_t ucs_topo_sys_device_get_numa_node(ucs_sys_device_t sys_dev)
 {
-    int numa_node;
-
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_NUMA_NODE_UNDEFINED;
-    }
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev < ucs_topo_global_ctx.num_devices) {
-        numa_node = ucs_topo_global_ctx.devices[sys_dev].numa_node;
-    } else {
-        numa_node = UCS_NUMA_NODE_UNDEFINED;
-    }
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return numa_node;
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, numa_node,
+                                         UCS_NUMA_NODE_UNDEFINED);
 }
 
 ucs_sys_pci_id_t ucs_topo_sys_device_get_pci_id(ucs_sys_device_t sys_dev)
 {
-    ucs_sys_pci_id_t pci_id;
-
-    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
-        return UCS_SYS_PCI_ID_UNDEFINED;
-    }
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev < ucs_topo_global_ctx.num_devices) {
-        pci_id = ucs_topo_global_ctx.devices[sys_dev].pci_id;
-    } else {
-        pci_id = UCS_SYS_PCI_ID_UNDEFINED;
-    }
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return pci_id;
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, pci_id,
+                                         UCS_SYS_PCI_ID_UNDEFINED);
 }
 
 ucs_status_t ucs_topo_sys_device_set_numa_node(ucs_sys_device_t sys_dev,
                                                ucs_numa_node_t numa_node)
 {
-    ucs_status_t status = UCS_OK;
+    ucs_topo_sys_device_info_t *device;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
+        goto out_unlock;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].numa_node = numa_node;
+    device->numa_node = numa_node;
 
-out:
+out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return status;
 }
@@ -1384,19 +1392,17 @@ static int ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
 /* Memory device supports auxiliary path if a sibling is found */
 ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 {
+    ucs_topo_sys_device_info_t *device;
     ucs_sys_device_t dev;
     ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
+        goto out_unlock;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].sibling_role =
-            UCS_TOPO_SIBLING_ROLE_MEM;
+    device->sibling_role = UCS_TOPO_SIBLING_ROLE_MEM;
 
     for (dev = 0; dev < ucs_topo_global_ctx.num_devices; dev++) {
         if (ucs_topo_sys_device_sibling_match(dev, sys_dev)) {
@@ -1404,9 +1410,7 @@ ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
         }
     }
 
-    status = UCS_OK;
-
-out:
+out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return status;
 }
@@ -1414,59 +1418,41 @@ out:
 ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
                                                  ucs_sys_device_t sys_dev_aux)
 {
+    ucs_topo_sys_device_info_t *device;
     ucs_sys_device_t dev;
     ucs_status_t status;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out;
+    status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
+    if (status != UCS_OK) {
+        goto out_unlock;
     }
 
-    ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux = sys_dev_aux;
-    ucs_topo_global_ctx.devices[sys_dev].sibling_role =
-            UCS_TOPO_SIBLING_ROLE_DEV;
+    device->sys_dev_aux  = sys_dev_aux;
+    device->sibling_role = UCS_TOPO_SIBLING_ROLE_DEV;
 
     /* Try to match the device with all existing memory aliases. */
     for (dev = 0; dev < ucs_topo_global_ctx.num_devices; ++dev) {
         ucs_topo_sys_device_sibling_match(sys_dev, dev);
     }
 
-    status = UCS_OK;
-
-out:
+out_unlock:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     return status;
 }
 
 int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev)
 {
-    int result;
+    ucs_sys_device_t sibling_sys_dev = UCS_TOPO_SYS_DEVICE_GET_FIELD(
+            sys_dev, sibling_sys_dev, UCS_SYS_DEVICE_ID_UNKNOWN);
 
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    result = (sys_dev < ucs_topo_global_ctx.num_devices) &&
-             (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev !=
-              UCS_SYS_DEVICE_ID_UNKNOWN);
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return result;
+    return sibling_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 uintptr_t ucs_topo_sys_device_get_user_value(ucs_sys_device_t sys_dev)
 {
-    uintptr_t user_value;
-
-    ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        user_value = UCS_SYS_DEVICE_USER_VALUE_EMPTY;
-    } else {
-        user_value = ucs_topo_global_ctx.devices[sys_dev].user_value;
-    }
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-
-    return user_value;
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, user_value,
+                                         UCS_SYS_DEVICE_USER_VALUE_EMPTY);
 }
 
 void ucs_topo_print_info(FILE *stream)
