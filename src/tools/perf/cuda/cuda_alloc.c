@@ -227,6 +227,9 @@ ucx_perf_cuda_copy_config_get(const char *name, char *value, size_t max)
     }
 
     uct_release_component_list(components);
+    if (status == UCS_ERR_NO_ELEM) {
+        ucs_debug("cuda_cpy component not found, cannot get %s", name);
+    }
     return status;
 }
 
