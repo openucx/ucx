@@ -156,8 +156,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
 
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci + count);
-        ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
-                                   &ep->super.arb_group);
+        uct_rc_ep_schedule_pending(&iface->super, &ep->super);
         uct_rc_verbs_update_tx_res(&iface->super, ep, count);
         ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
                              NULL);
