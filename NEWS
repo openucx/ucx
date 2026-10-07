@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### UCP
+ * Purge unaware fault-tolerance lanes before the address reply rebuild
 #### ROCM
  * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
 #### RDMA CORE (IB, ROCE, etc.)
