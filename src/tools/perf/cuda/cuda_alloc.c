@@ -15,6 +15,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/ptr_arith.h>
+#include <ucs/type/init_once.h>
 
 #include <string.h>
 
@@ -233,36 +234,32 @@ ucx_perf_cuda_copy_config_get(const char *name, char *value, size_t max)
 /* Resolve async allocation memory type from UCX_CUDA_COPY_ASYNC_MEM_TYPE. */
 static ucs_memory_type_t ucx_perf_cuda_async_configured_mem_type(void)
 {
-    static int initialized                   = 0;
+    static ucs_init_once_t init_once         = UCS_INIT_ONCE_INITIALIZER;
     static ucs_memory_type_t cached_mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
     char value[64];
     ucs_memory_type_t mem_type;
 
-    if (initialized) {
-        return cached_mem_type;
-    }
-
-    initialized = 1;
-
-    if (ucx_perf_cuda_copy_config_get("ASYNC_MEM_TYPE", value,
-                                      sizeof(value)) != UCS_OK) {
-        return cached_mem_type;
-    }
-
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
-        if (strcmp(value, ucs_memory_type_names[mem_type])) {
-            continue;
+    UCS_INIT_ONCE(&init_once) {
+        if (ucx_perf_cuda_copy_config_get("ASYNC_MEM_TYPE", value,
+                                          sizeof(value)) != UCS_OK) {
+            continue; /* jump out of INIT_ONCE section */
         }
 
-        if ((mem_type == UCS_MEMORY_TYPE_CUDA) ||
-            (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
-            cached_mem_type = mem_type;
-        } else {
-            ucs_warn("wrong memory type for async memory allocations: "
-                     "\"%s\"; cuda-managed will be used instead",
-                     value);
+        for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+            if (strcmp(value, ucs_memory_type_names[mem_type])) {
+                continue;
+            }
+
+            if ((mem_type == UCS_MEMORY_TYPE_CUDA) ||
+                (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+                cached_mem_type = mem_type;
+            } else {
+                ucs_warn("wrong memory type for async memory allocations: "
+                         "\"%s\"; cuda-managed will be used instead",
+                         value);
+            }
+            break;
         }
-        break;
     }
 
     return cached_mem_type;
@@ -358,21 +355,17 @@ static void ucx_perf_cuda_async_uct_free(const ucx_perf_context_t *perf,
  * localized buffers. */
 static int ucx_perf_cuda_localized_fabric_enabled(void)
 {
-    static int initialized = 0;
-    static int enabled     = 0;
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static int enabled               = 0;
     int enable_fabric;
     char value[16];
 
-    if (initialized) {
-        return enabled;
-    }
-
-    initialized = 1;
-
-    if ((ucx_perf_cuda_copy_config_get("ENABLE_FABRIC", value,
-                                       sizeof(value)) == UCS_OK) &&
-        ucs_config_sscanf_ternary(value, &enable_fabric, NULL)) {
-        enabled = (enable_fabric == UCS_YES);
+    UCS_INIT_ONCE(&init_once) {
+        if ((ucx_perf_cuda_copy_config_get("ENABLE_FABRIC", value,
+                                           sizeof(value)) == UCS_OK) &&
+            ucs_config_sscanf_ternary(value, &enable_fabric, NULL)) {
+            enabled = (enable_fabric == UCS_YES);
+        }
     }
 
     return enabled;
@@ -435,13 +428,13 @@ static ucs_status_t ucx_perf_cuda_localized_mem_alloc(
                   alloc_length, &access_desc, 1);
 
     if (fabric) {
+        status = UCS_ERR_UNSUPPORTED;
         CUDA_DRV_CALL(goto err_unmap, UCS_LOG_LEVEL_ERROR,
                       cuPointerGetAttribute, &allowed_types,
                       CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES, dptr);
         if (!(allowed_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
             ucs_error("localized memory at %p of size %zu does not have "
                       "fabric handle type", (void*)dptr, alloc_length);
-            status = UCS_ERR_UNSUPPORTED;
             goto err_unmap;
         }
     }
