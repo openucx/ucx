@@ -3315,10 +3315,9 @@ public:
         return false;
     }
 
-    void client_connect_disconnect()
+    void client_connect_disconnect(bool communicate)
     {
         /* Check state before connection establishment */
-        EXPECT_FALSE(is_any_interface_activated(receiver()));
         int receiver_ep_count = receiver().get_num_eps();
 
         /* Connect sender and receiver */
@@ -3330,16 +3329,21 @@ public:
         /* Check state after connection establishment */
         EXPECT_EQ(0, sender().get_err_num());
         EXPECT_TRUE(is_any_interface_activated(sender()));
-        EXPECT_TRUE(is_any_interface_activated(receiver()));
+
+        /* Check state after communication */
+        if (communicate) {
+            for (int i = 0; i < 10; ++i) {
+                send_recv(sender(), receiver(), SEND_RECV_TAG, false,
+                          cb_type());
+                progress();
+            }
+            EXPECT_TRUE(is_any_interface_activated(receiver()));
+        }
 
         one_sided_disconnect(sender());
         one_sided_disconnect(receiver(), 0, receiver_ep_count);
 
-        EXPECT_FALSE(is_any_interface_activated(receiver()));
         receiver().reset_err_num();
-
-        /* TODO: check why receiver interfaces are not deactivated on one-sided
-         * client disconnect */
     }
 };
 
@@ -3347,8 +3351,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_iface_activate, iface_activate_count,
                      !is_proto_enabled())
 {
     listen(cb_type());
-    client_connect_disconnect();
-    client_connect_disconnect();
+    EXPECT_FALSE(is_any_interface_activated(receiver()));
+
+    client_connect_disconnect(false);
+    client_connect_disconnect(false);
+    EXPECT_FALSE(is_any_interface_activated(receiver()));
+
+    client_connect_disconnect(true);
+
+    /* Receiver stays activated to progress incoming messages */
+    EXPECT_TRUE(is_any_interface_activated(receiver()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_iface_activate, tcp, "tcp")
