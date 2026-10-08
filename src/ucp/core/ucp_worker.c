@@ -1217,7 +1217,7 @@ ucp_worker_select_best_ifaces(ucp_worker_h worker, ucp_tl_bitmap_t *tl_bitmap_p)
 static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
-    ucp_rsc_index_t tl_id, iface_id;
+    ucp_rsc_iter_t tl_id, iface_id;
     ucp_worker_iface_t *wiface;
     ucp_tl_bitmap_t ctx_tl_bitmap, tl_bitmap;
     unsigned num_ifaces;
@@ -1821,7 +1821,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_unpacked_address_t dummy_addr = {};
     ucp_tl_resource_desc_t *rsc, *best_rsc;
     uct_iface_attr_t *iface_attr;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_iter_t rsc_index;
     ucp_rsc_index_t iface_id;
     uint64_t iface_cap_flags;
     double score, best_score;
@@ -3230,7 +3230,7 @@ ucp_worker_address_pack(ucp_worker_h worker, uint32_t address_flags,
     ucp_context_h context = worker->context;
     unsigned flags        = ucp_worker_default_address_pack_flags(worker);
     ucp_tl_bitmap_t tl_bitmap;
-    ucp_rsc_index_t tl_id;
+    ucp_rsc_iter_t tl_id;
     const uct_iface_attr_t *iface_attr;
 
     /* Make sure that UUID is packed to the address intended for the user,

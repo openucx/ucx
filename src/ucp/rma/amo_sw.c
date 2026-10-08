@@ -223,7 +223,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_rsc_index_t amo_rsc_idx      = UCS_STATIC_BITMAP_FFS(worker->atomic_tls);
+    ucp_rsc_index_t amo_rsc_idx =
+            UCS_STATIC_BITMAP_IS_ZERO(worker->atomic_tls) ?
+                    UCP_NULL_RESOURCE :
+                    UCS_STATIC_BITMAP_FFS(worker->atomic_tls);
     ucp_request_t *req;
     ucp_ep_h ep;
 
@@ -232,7 +235,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
      */
     UCP_WORKER_GET_EP_BY_ID(&ep, worker, atomicreqh->req.ep_id, return UCS_OK,
                             "SW AMO request");
-    if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
+    if (ucs_unlikely((amo_rsc_idx != UCP_NULL_RESOURCE) &&
                      (ucp_worker_iface_get_attr(worker,
                                                 amo_rsc_idx)->cap.flags &
                       UCT_IFACE_FLAG_ATOMIC_DEVICE))) {

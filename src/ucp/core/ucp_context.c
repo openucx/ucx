@@ -859,7 +859,8 @@ const char *ucp_feature_str[] = {
 };
 
 
-const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
+const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX, UINT64_MAX,
+                                            UINT64_MAX}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
@@ -1607,7 +1608,7 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
                               const ucp_tl_bitmap_t *tl_bitmap, char *str,
                               size_t max_str_len)
 {
-    ucp_rsc_index_t i;
+    ucp_rsc_iter_t i;
     char *p, *endp;
 
     p    = str;
@@ -1764,7 +1765,7 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
 {
     ucp_tl_bitmap_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
     ucp_tl_bitmap_t cm_cmpts_bitmap_safe;
-    ucp_rsc_index_t cmpt_idx, cm_idx;
+    ucp_rsc_iter_t cmpt_idx, cm_idx;
 
     memset(&context->config.cm_cmpt_idxs, UCP_NULL_RESOURCE, UCP_MAX_RESOURCES);
     context->config.num_cm_cmpts = 0;
@@ -3277,7 +3278,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
     uint64_t dmabuf_mem_types = 0;
     const uct_md_attr_v2_t *md_attr;
     ucs_memory_type_t mem_type;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_iter_t rsc_index;
     ucp_md_index_t md_index;
     uint64_t mem_types;
 
@@ -3309,7 +3310,7 @@ void
 ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
                           ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_rsc_index_t tl_idx;
+    ucp_rsc_iter_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
@@ -3325,7 +3326,7 @@ void
 ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
                               ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_rsc_index_t tl_idx;
+    ucp_rsc_iter_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
     UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -268,6 +268,35 @@ UCS_TEST_F(test_static_bitmap, test_for_each_bit_single_word) {
     EXPECT_EQ(0, bits[0]);
     EXPECT_EQ(25, bits[1]);
     EXPECT_EQ(104, bits[2]);
+}
+
+/* 255 bits round up to 4 words, with the last word is only partly used */
+UCS_TEST_F(test_static_bitmap, test_for_each_bit_partial_last_word) {
+    ucs_static_bitmap_s(255) bitmap;
+    std::vector<unsigned> bits;
+    unsigned bit_index;
+
+    /* Ends at once, leaving the rounded-up size in bit_index, which is why
+     * the index type must be able to hold it */
+    UCS_STATIC_BITMAP_RESET_ALL(&bitmap);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(bit_index, &bitmap) {
+        bits.push_back(bit_index);
+    }
+    EXPECT_TRUE(bits.empty());
+    EXPECT_EQ(256u, bit_index);
+
+    /* First word, third word, and the highest valid bit in the partial word */
+    UCS_STATIC_BITMAP_SET(&bitmap, 0);
+    UCS_STATIC_BITMAP_SET(&bitmap, 128);
+    UCS_STATIC_BITMAP_SET(&bitmap, 254);
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(bit_index, &bitmap) {
+        bits.push_back(bit_index);
+    }
+
+    EXPECT_EQ(3u, bits.size());
+    EXPECT_EQ(0u, bits[0]);
+    EXPECT_EQ(128u, bits[1]);
+    EXPECT_EQ(254u, bits[2]);
 }
 
 UCS_TEST_F(test_static_bitmap, test_compose) {

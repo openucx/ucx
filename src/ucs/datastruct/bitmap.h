@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -64,6 +64,13 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
                 (_src_num_words));
 
 
+/* Iterate over set bits, after evaluating the expression _check once */
+#define _UCS_BITMAP_BITS_FOR_EACH_BIT(_check, _bit_index, _bits, _num_words) \
+    for ((_check), _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
+         _bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD; \
+         _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, _bit_index + 1))
+
+
 /**
  * Helper macro to iterate over all set (1) bits of a given bitmap.
  *
@@ -72,9 +79,7 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
  * @param _num_words Number of words in the bitmap.
  */
 #define UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words) \
-    for (_bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
-         _bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD; \
-         _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, _bit_index + 1))
+    _UCS_BITMAP_BITS_FOR_EACH_BIT((void)0, _bit_index, _bits, _num_words)
 
 
 /**

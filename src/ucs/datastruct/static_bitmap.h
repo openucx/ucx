@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2023-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -361,15 +361,33 @@ BEGIN_C_DECLS
                                         UCS_PP_UNIQUE_ID)
 
 
+/* Whether _bit_index, even if signed, can hold the bitmap size, which the bit
+   iteration assigns to it when no more bits are set */
+#define UCS_STATIC_BITMAP_INDEX_FITS(_bit_index, _bitmap) \
+    (((UCS_STATIC_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD) >> \
+      ((sizeof(_bit_index) * 8) - 1)) == 0)
+
+
+/* Fail the build if _bit_index is too narrow. A plain sizeof expression rather
+   than UCS_STATIC_ASSERT, since cppcheck loses track of the loop index
+   assignment after a statement expression */
+#define UCS_STATIC_BITMAP_CHECK_INDEX_TYPE(_bit_index, _bitmap) \
+    ((void)sizeof( \
+            char[UCS_STATIC_BITMAP_INDEX_FITS(_bit_index, _bitmap) ? 1 : -1]))
+
+
 /*
  * Iterate over all set (1) bits of a given bitmap.
  *
  * @param _bit_index   Bit index (global offset - relative to the whole bitmap).
+ *                     Its type must be able to hold the bitmap size.
  * @param _bitmap_ptr  Iterate over bits of this bitmap.
  */
 #define UCS_STATIC_BITMAP_FOR_EACH_BIT(_bit_index, _bitmap_ptr) \
-    UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, (_bitmap_ptr)->bits, \
-                                 UCS_STATIC_BITMAP_NUM_WORDS(*(_bitmap_ptr)))
+    _UCS_BITMAP_BITS_FOR_EACH_BIT( \
+            UCS_STATIC_BITMAP_CHECK_INDEX_TYPE(_bit_index, *(_bitmap_ptr)), \
+            _bit_index, (_bitmap_ptr)->bits, \
+            UCS_STATIC_BITMAP_NUM_WORDS(*(_bitmap_ptr)))
 
 END_C_DECLS
 

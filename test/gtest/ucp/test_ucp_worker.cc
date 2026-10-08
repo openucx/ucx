@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -852,7 +852,7 @@ protected:
     {
         ucp_worker_h worker   = sender().worker();
         ucp_context_h context = worker->context;
-        ucp_rsc_index_t tl_id;
+        ucp_rsc_iter_t tl_id;
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
             const auto &resource   = context->tl_rscs[tl_id].tl_rsc;
@@ -879,7 +879,7 @@ protected:
         ucp_worker_attr_t worker_attr{};
         ucp_unpacked_address_t unpacked_address{};
         ucp_tl_bitmap_t tl_bitmap;
-        ucp_rsc_index_t tl_id;
+        ucp_rsc_iter_t tl_id;
         ucs_status_t status;
 
         ucp_context_dev_tl_bitmap(context, address_device_name.c_str(),
@@ -1074,7 +1074,7 @@ public:
     }
 
     void verify_seg_size(ucp_worker_h worker) const {
-        ucp_rsc_index_t tl_id;
+        ucp_rsc_iter_t tl_id;
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
             ucp_worker_iface_t *wiface = ucp_worker_iface(worker, tl_id);
