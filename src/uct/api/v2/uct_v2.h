@@ -1979,6 +1979,9 @@ typedef struct {
  *       used after the error handler returns @ref UCS_INPROGRESS. The
  *       interface must support @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  *
+ * @note The pending queue of @a ep must be empty. Remove posted requests
+ *       with @ref uct_ep_pending_purge.
+ *
  * @note If @ref UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, @a cb may also
  *       be invoked for operations the peer already received. Reposting those
  *       operations can duplicate data.
