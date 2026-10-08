@@ -50,6 +50,7 @@ AS_IF([test "x$with_gdrcopy" != "xno"],
 
         AS_IF([test "x$gdrcopy_happy" = "xyes"],
             [
+                AC_DEFINE([HAVE_GDR_COPY], 1, [GDRCopy support])
                 AC_SUBST(GDR_COPY_CPPFLAGS, "-I$ucx_check_gdrcopy_dir/include/ ")
                 AC_SUBST(GDR_COPY_LIBS, "-lgdrapi")
 

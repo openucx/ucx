@@ -67,25 +67,34 @@ uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
 #endif
 }
 
-
 static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
 {
 #if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
     typedef int (*uct_gdr_get_attribute_func_t)(gdr_t, gdr_attr_t, int*);
     uct_gdr_get_attribute_func_t get_attribute;
+    Dl_info lib_info, attr_info;
     void *dl_handle;
     int using_dmabuf;
     int ret;
 
-    dl_handle = dlopen("libgdrapi.so.2", RTLD_LAZY | RTLD_NOLOAD);
+    /* Use the same GDRCopy runtime that created gdr_ctx. */
+    if (dladdr(gdr_open, &lib_info) == 0) {
+        ucs_debug("could not locate loaded GDRCopy runtime");
+        return 0;
+    }
+
+    dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
     if (dl_handle == NULL) {
-        ucs_debug("could not find loaded libgdrapi.so.2: %s", dlerror());
+        ucs_debug("could not open loaded GDRCopy runtime %s: %s",
+                  lib_info.dli_fname, dlerror());
         return 0;
     }
 
     get_attribute = (uct_gdr_get_attribute_func_t)dlsym(dl_handle,
                                                          "gdr_get_attribute");
-    if (get_attribute == NULL) {
+    if ((get_attribute == NULL) ||
+        (dladdr(get_attribute, &attr_info) == 0) ||
+        (attr_info.dli_fbase != lib_info.dli_fbase)) {
         ucs_debug("loaded GDRCopy runtime has no gdr_get_attribute symbol");
         dlclose(dl_handle);
         return 0;
@@ -103,7 +112,6 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
     return 0;
 #endif
 }
-
 
 static int uct_gdr_copy_cuda_async_detect(gdr_t gdr_ctx)
 {

@@ -10,6 +10,10 @@
 #include "gdrapi.h"
 
 
+/* CUDA 13.5 fixes DMA-BUF CPU mapping of async allocations. */
+#define UCT_GDR_COPY_CUDA_ASYNC_MIN_DRIVER_VERSION 13050
+
+
 extern uct_component_t uct_gdr_copy_component;
 
 
@@ -21,7 +25,7 @@ uct_gdr_copy_cuda_async_supported(int runtime_major, int runtime_minor,
                             ((runtime_major == 2) && (runtime_minor >= 6));
 
     return runtime_supported && using_dmabuf &&
-           (driver_version >= 13050);
+           (driver_version >= UCT_GDR_COPY_CUDA_ASYNC_MIN_DRIVER_VERSION);
 }
 
 

@@ -37,7 +37,6 @@ ucs_status_t uct_cuda_driver_get_version(int *version_p)
     return UCT_CUDADRV_FUNC_LOG_DEBUG(cuDriverGetVersion(version_p));
 }
 
-
 ucs_status_t uct_cuda_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {

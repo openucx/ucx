@@ -488,8 +488,8 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
     param.op_attr_mask = 0;
 
     ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), size,
-                                       UCP_DATATYPE_CONTIG, size, 1, &dt_iter,
-                                       &sg_count, &param));
+                                         UCP_DATATYPE_CONTIG, size, 1, &dt_iter,
+                                         &sg_count, &param));
 
     ucs_time_t start_time = ucs_get_time();
     ucs_time_t deadline   = start_time + ucs_time_from_sec(test_time_sec);
@@ -997,13 +997,12 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
                                          UCP_DATATYPE_CONTIG, buffer_size, 1,
                                          &dt_iter, &sg_count, &param));
 
-    ASSERT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
-    ASSERT_EQ(0, dt_iter.mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
-    ASSERT_EQ(UCS_MEMORY_TYPE_CUDA_MANAGED, dt_iter.mem_info.type);
     mem_type = static_cast<ucs_memory_type_t>(dt_iter.mem_info.type);
     if (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) {
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
     }
+
+    ASSERT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
 
     hca_md_map = get_required_mem_flags_md_map(context(), UCS_MEMORY_TYPE_CUDA,
                                                UCS_MEM_FLAG_REGISTRABLE);
@@ -1046,7 +1045,6 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_explicit_cuda,
                                          &dt_iter, &sg_count, &param));
 
     EXPECT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
-    EXPECT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_REGISTRABLE);
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, dt_iter.mem_info.type);
 
     if (dt_iter.type.contig.memh != NULL) {

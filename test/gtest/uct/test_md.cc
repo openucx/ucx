@@ -25,7 +25,7 @@ extern "C" {
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif
-#if HAVE_GDR_COPY
+#if HAVE_CUDA && HAVE_GDR_COPY
 #include <uct/cuda/gdr_copy/gdr_copy_md.h>
 #include <uct/cuda/base/cuda_util.h>
 #endif
@@ -1377,7 +1377,7 @@ UCS_TEST_P(test_cuda, sparse_regions)
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
-#if HAVE_DECL_GDR_PIN_BUFFER_V2
+#if HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2
 
 class test_gdr_copy : public test_md {
 protected:
@@ -1520,4 +1520,4 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_support,
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
 
-#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
+#endif /* HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2 */
