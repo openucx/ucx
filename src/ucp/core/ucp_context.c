@@ -629,6 +629,10 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
    "for a GPU's memory to the NICs assigned to that GPU.\n"
+   "Only protocol lanes are restricted, not the NICs the memory is\n"
+   "registered on, which UCX_MAX_HCA_PER_GPU controls independently.\n"
+   "The first Active Message lane is not restricted.\n"
+   "UCX_SINGLE_NET_DEVICE=y is not supported while an assignment is active.\n"
    "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
    "address are assigned together (e.g. MLOPart partitions of a GPU).\n"
    "NICs without memory registration and DPUs are skipped during assignment.\n"
@@ -2837,6 +2841,26 @@ static void ucp_context_gpu_nic_assignment_net_device_filter_init(
     }
 }
 
+static ucs_status_t
+ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
+                                            ucp_gpu_nic_assignment_mode_t mode)
+{
+    const char *conflict;
+
+    if (!context->config.ext.proto_enable) {
+        conflict = "UCX_PROTO_ENABLE=n";
+    } else if (context->config.ext.proto_use_single_net_device) {
+        conflict = "UCX_SINGLE_NET_DEVICE=y";
+    } else {
+        return UCS_OK;
+    }
+
+    ucs_error("%s is not supported by gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
+              conflict, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -2887,6 +2911,13 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 
     if (ucs_array_is_empty(&groups)) {
         ucs_diag("topology groups are empty, skipping gpu-nic assignment");
+        goto out_release_groups;
+    }
+
+    /* Checked after every case that skips the assignment, so a conflict is
+     * reported only when the assignment is about to be built */
+    status = ucp_context_gpu_nic_assignment_check_config(context, mode);
+    if (status != UCS_OK) {
         goto out_release_groups;
     }
 
