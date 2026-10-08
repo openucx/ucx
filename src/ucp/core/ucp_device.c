@@ -223,48 +223,6 @@ static size_t ucp_device_get_num_lanes(
     return num_lanes ? num_lanes : nolkey_num_lanes;
 }
 
-static ucs_status_t ucp_device_local_mem_list_validate_reg_mds(
-        ucp_worker_h worker,
-        const ucp_device_mem_list_params_t *params,
-        const ucp_tl_bitmap_t *tl_bitmap)
-{
-    const ucp_device_mem_list_elem_t *element = params->elements;
-    ucp_md_map_t required_md_map              = 0;
-    ucp_md_map_t missing_md_map;
-    ucp_md_index_t md_index;
-    ucp_rsc_index_t tl_id;
-    ucp_mem_h memh;
-    size_t i;
-
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
-        required_md_map |=
-                UCS_BIT(worker->context->tl_rscs[tl_id].md_index);
-    }
-
-    for (i = 0; i < params->num_elements; i++) {
-        memh = UCS_PARAM_VALUE(UCP_DEVICE_MEM_LIST_ELEM_FIELD, element, memh,
-                               MEMH, NULL);
-        missing_md_map = required_md_map & ~memh->md_map;
-        ucs_for_each_bit(md_index, required_md_map & memh->md_map) {
-            if (memh->uct[md_index] == UCT_MEM_HANDLE_NULL) {
-                missing_md_map |= UCS_BIT(md_index);
-            }
-        }
-
-        if (missing_md_map) {
-            ucs_debug("element=%zu memh=%p is missing registrations: "
-                      "required_md_map=0x%" PRIx64 " "
-                      "missing_md_map=0x%" PRIx64,
-                      i, memh, required_md_map, missing_md_map);
-            return UCS_ERR_NO_DEVICE;
-        }
-
-        element = UCS_PTR_BYTE_OFFSET(element, params->element_size);
-    }
-
-    return UCS_OK;
-}
-
 static ucs_status_t ucp_device_local_mem_list_element_pack(
         const ucp_worker_h worker, const ucp_worker_iface_t *wiface,
         const ucp_device_mem_list_elem_t *element,
@@ -354,12 +312,6 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
         return UCS_ERR_NO_DEVICE;
     }
 
-    status = ucp_device_local_mem_list_validate_reg_mds(
-            worker, params, &tl_bitmap[UCP_DEVICE_TL_TYPE_LKEY]);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     uct_elem_size = sizeof(uct_device_local_mem_elem_t) +
                     (sizeof(uct_device_mem_elem_t) * num_lanes);
     handle_size   = (uct_elem_size * params->num_elements) + sizeof(*handle);
@@ -384,11 +336,6 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
                                                             mem_type,
                                                             tl_element);
             if (status != UCS_OK) {
-                if (status != UCS_ERR_NO_DEVICE) {
-                    ucs_error("failed to pack local mem list element for "
-                              "element=%zu",
-                              i);
-                }
                 goto out;
             }
 
@@ -513,9 +460,10 @@ static ucp_lane_index_t ucp_device_ep_find_lane(const ucp_ep_h ep, ucp_rsc_index
     return UCP_NULL_LANE;
 }
 
-static int ucp_device_ep_check_lanes(ucp_ep_h ep, ucp_rkey_h rkey,
+static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
                                      const ucp_tl_bitmap_t *tl_bitmap)
 {
+    ucp_ep_h ep                      = elem->ep;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t lane;
@@ -533,7 +481,7 @@ static int ucp_device_ep_check_lanes(ucp_ep_h ep, ucp_rkey_h rkey,
 
         dst_md_index = ep_config->key.lanes[lane].dst_md_index;
         if ((dst_md_index == UCP_NULL_RESOURCE) ||
-            !(rkey->md_map & UCS_BIT(dst_md_index))) {
+            !(elem->rkey->md_map & UCS_BIT(dst_md_index))) {
             return 0;
         }
     }
@@ -699,8 +647,7 @@ static ucs_status_t ucp_device_remote_mem_list_create_handle(
         if (!UCP_DEVICE_MEM_ELEMENT_IS_GAP(ucp_element)) {
             for (tl_type = UCP_DEVICE_TL_TYPE_FIRST;
                  tl_type < UCP_DEVICE_TL_TYPE_LAST; tl_type++) {
-                if (ucp_device_ep_check_lanes(ucp_element->ep,
-                                              ucp_element->rkey,
+                if (ucp_device_ep_check_lanes(ucp_element,
                                               &tl_bitmap[tl_type])) {
                     break;
                 }
