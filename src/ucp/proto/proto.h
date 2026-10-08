@@ -86,6 +86,19 @@ enum {
 
 
 /**
+ * Protocol classes, used to prioritize protocols which implement the same
+ * operation by a different data path. A class must not be a fallback, directly
+ * or indirectly, of a protocol which belongs to it. Classes are matched within
+ * a single selection key, which has one operation, so protocols of different
+ * operations can share the same class.
+ */
+enum {
+    /* RMA by a rendezvous protocol rather than a direct data path */
+    UCP_PROTO_CLASS_RMA_RNDV = UCS_BIT(0)
+};
+
+
+/**
  * Parameters for protocol initialization function
  */
 typedef struct {
@@ -201,6 +214,15 @@ struct ucp_proto {
     const char               *name; /* Protocol name */
     const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
+
+    /* Bitmap of UCP_PROTO_CLASS_xxx classes this protocol belongs to */
+    unsigned                 proto_class;
+
+    /* Bitmap of UCP_PROTO_CLASS_xxx classes which are a fallback for this
+     * protocol. Protocols of these classes are not selected on message sizes
+     * where this protocol is available.
+     */
+    unsigned                 fallback_class;
 
     /* Bitmap of UCS_BIT(UCP_DATATYPE_xxx) classes this protocol supports.
      * Probe is skipped for any other dt_class. Must be non-zero.

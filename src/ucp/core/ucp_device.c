@@ -548,6 +548,15 @@ static ucs_status_t ucp_device_remote_mem_list_element_pack(
     }
 
     uct_ep = ucp_ep_get_lane(ep, lane);
+    if (ucp_wireup_ep_test(uct_ep)) {
+        /*
+         * UCP_EP_FLAG_REMOTE_CONNECTED is set before ucp_wireup_eps_progress()
+         * installs the real transport endpoints, so the lane can still be a
+         * proxy here. Let the caller retry with progress.
+         */
+        return UCS_ERR_NOT_CONNECTED;
+    }
+
     status = uct_ep_get_device_ep(uct_ep, &device_ep);
     if (status != UCS_OK) {
         ucs_error("failed to get device_ep for lane=%u", lane);
