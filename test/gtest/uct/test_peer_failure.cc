@@ -537,8 +537,8 @@ protected:
         EXPECT_EQ(0u, info->am.flags);
 
         ASSERT_EQ(ctx->am_header_length, info->am.header.zcopy.length);
-        EXPECT_EQ(0, memcmp(ctx->am_header, info->am.header.zcopy.buffer,
-                            ctx->am_header_length));
+        mem_buffer::pattern_check(info->am.header.zcopy.buffer,
+                                  info->am.header.zcopy.length, AM_ZCOPY_SEED);
 
         ASSERT_EQ(ctx->iovcnt, info->am.payload.zcopy.iovcnt);
         for (size_t i = 0; i < ctx->iovcnt; ++i) {
