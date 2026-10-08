@@ -374,7 +374,10 @@ typedef enum {
     UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(0),
 
     /** Endpoint address length */
-    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1)
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1),
+
+    /** QoS level */
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_QOS_LEVEL          = UCS_BIT(2)
 } uct_ep_connect_to_ep_param_field_t;
 
 
@@ -729,6 +732,22 @@ typedef struct uct_ep_connect_to_ep_params {
      * default minimal length according to the address buffer contents.
      */
     size_t                        ep_addr_length;
+
+    /**
+     * Quality of service level of this endpoint, where 0 is the highest
+     * priority and larger values denote lower priority. The transport maps
+     * this abstract level to the prioritization mechanism provided by the
+     * underlying fabric.
+     *
+     * The number of levels a transport can distinguish is limited. Levels
+     * which exceed that number are mapped to the lowest priority available,
+     * and transports which do not support prioritization ignore this value.
+     *
+     * This setting is optional. To enable it, the corresponding @ref
+     * UCT_EP_CONNECT_TO_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must
+     * be set.
+     */
+    uint8_t                       qos_level;
 } uct_ep_connect_to_ep_params_t;
 
 
