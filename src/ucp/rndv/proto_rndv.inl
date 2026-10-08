@@ -583,4 +583,27 @@ ucp_proto_rndv_recv_complete(ucp_request_t *req)
     return ucp_proto_rndv_recv_complete_status(req, rreq->status);
 }
 
+/* Detect the local buffer at a peer-provided address, and check it against the
+ * peer-provided mem_type and sys_dev when known */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_memory_detect(ucp_context_h context, uint64_t address,
+                             size_t length,
+                             ucs_memory_type_t UCS_V_UNUSED mem_type,
+                             ucs_sys_device_t UCS_V_UNUSED sys_dev,
+                             ucp_memory_info_t *mem_info)
+{
+    ucp_memory_detect(context, (void*)(uintptr_t)address, length, mem_info);
+
+    ucs_assertv(mem_info->type == mem_type,
+                "detected mem_type=%s doesn't match peer provided mem_type=%s",
+                ucs_memory_type_names[mem_info->type],
+                ucs_memory_type_names[mem_type]);
+
+    ucs_assertv((sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+                        (sys_dev == mem_info->sys_dev),
+                "detected sys_dev=%s doesn't match peer provided sys_dev=%s",
+                ucs_topo_sys_device_get_name(mem_info->sys_dev),
+                ucs_topo_sys_device_get_name(sys_dev));
+}
+
 #endif
