@@ -1206,16 +1206,17 @@ static void uct_rc_mlx5_op_callback_data_fill_iov(
 }
 
 static void uct_rc_mlx5_op_info_fill_rma_zcopy(
-        uct_ep_operation_t operation, const uct_ib_mlx5_txwq_t *txwq,
-        uct_rc_iface_send_op_t *op, const struct mlx5_wqe_raddr_seg *raddr,
+        const uct_ib_mlx5_txwq_t *txwq, uct_ep_operation_t ep_operation,
+        uct_rc_iface_send_op_t *rc_send_op,
+        const struct mlx5_wqe_raddr_seg *raddr,
         const struct mlx5_wqe_data_seg *dptr, size_t num_dseg,
         uct_rc_mlx5_op_callback_data_t *callback_data, uct_ep_op_info_t *info)
 {
     info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION |
                        UCT_EP_OP_INFO_FIELD_RMA;
-    info->operation  = operation;
+    info->operation  = ep_operation;
 
-    uct_rc_mlx5_op_info_fill_user_comp(op, info);
+    uct_rc_mlx5_op_info_fill_user_comp(rc_send_op, info);
     uct_rc_mlx5_op_info_fill_rma_raddr(raddr, info);
 
     if (num_dseg == 0) {
@@ -1240,7 +1241,7 @@ uct_rc_mlx5_op_info_fill_put_non_payload(uct_rc_iface_send_op_t *op,
     }
 
     if (uct_rc_mlx5_send_op_is_put_zcopy(op)) {
-        uct_rc_mlx5_op_info_fill_rma_zcopy(UCT_EP_OP_PUT_ZCOPY, txwq, op, raddr,
+        uct_rc_mlx5_op_info_fill_rma_zcopy(txwq, UCT_EP_OP_PUT_ZCOPY, op, raddr,
                                            NULL, 0, NULL, info);
         return;
     }
@@ -1289,7 +1290,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_put(
     }
 
     if ((op == NULL) || uct_rc_mlx5_send_op_is_put_zcopy(op)) {
-        uct_rc_mlx5_op_info_fill_rma_zcopy(UCT_EP_OP_PUT_ZCOPY, txwq, op, raddr,
+        uct_rc_mlx5_op_info_fill_rma_zcopy(txwq, UCT_EP_OP_PUT_ZCOPY, op, raddr,
                                            dptr, num_dseg, callback_data, info);
         return UCS_OK;
     }
@@ -1355,7 +1356,7 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
                            "rc mlx5: read wqe without data segment, "
                            "wqe_size %zu",
                            wqe_size);
-        uct_rc_mlx5_op_info_fill_rma_zcopy(UCT_EP_OP_GET_ZCOPY, txwq, op, raddr,
+        uct_rc_mlx5_op_info_fill_rma_zcopy(txwq, UCT_EP_OP_GET_ZCOPY, op, raddr,
                                            dptr, num_dseg, callback_data, info);
         return UCS_OK;
     }
