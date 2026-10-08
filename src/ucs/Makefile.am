@@ -3,6 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 # Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -96,12 +97,14 @@ noinst_HEADERS = \
 	arch/ppc64/cpu.h \
 	arch/rv64/cpu.h \
 	arch/x86_64/cpu.h \
+	arch/x86_64/cpu_nt_avx2.inl \
 	arch/cpu.h \
 	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
 	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
+	datastruct/interval_map.h \
 	datastruct/interval_tree.h \
     datastruct/lru.h \
 	datastruct/mpmc.h \
@@ -109,6 +112,7 @@ noinst_HEADERS = \
 	datastruct/mpool_set.inl \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
+	datastruct/rbtree.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/conn_match.h \
@@ -133,6 +137,8 @@ noinst_HEADERS = \
 	sys/module.h \
 	sys/module_int.h \
 	sys/sys.h \
+	sys/topo/base/topo_int.h \
+	sys/topo/base/topo_groups.h \
 	sys/iovec.h \
 	sys/iovec.inl \
 	sys/ptr_arith.h \
@@ -177,6 +183,7 @@ libucs_la_SOURCES = \
 	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
+	datastruct/interval_map.c \
 	datastruct/interval_tree.c \
 	datastruct/lru.c \
 	datastruct/mpmc.c \
@@ -186,6 +193,7 @@ libucs_la_SOURCES = \
 	datastruct/piecewise_func.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
+	datastruct/rbtree.c \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \
@@ -213,6 +221,7 @@ libucs_la_SOURCES = \
 	sys/lib.c \
 	sys/sock.c \
 	sys/topo/base/topo.c \
+	sys/topo/base/topo_groups.c \
 	sys/stubs.c \
 	sys/netlink.c \
 	sys/uid.c \

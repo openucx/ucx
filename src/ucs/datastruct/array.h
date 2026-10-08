@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -454,6 +454,18 @@ ucs_array_old_buffer_set_null(void **old_buffer_p)
 #define ucs_array_for_each(_elem, _array) \
     ucs_carray_for_each(_elem, ucs_array_begin(_array), \
                         ucs_array_length(_array))
+
+
+/**
+ * Iterate over array elements and track the current index
+ *
+ * @param _elem    Pointer variable to the current array element
+ * @param _idx     Variable containing the current array index
+ * @param _array   Array to iterate over
+ */
+#define ucs_array_for_each_index(_elem, _idx, _array) \
+    ucs_carray_for_each_index(_elem, _idx, ucs_array_begin(_array), \
+                              ucs_array_length(_array))
 
 
 /* Internal helper function */

@@ -4,6 +4,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
 * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -159,6 +160,7 @@ protected:
 
         bool is_caps_supported(uint64_t required_flags);
         bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        bool check_caps_v2(uint64_t required_flags);
         bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
         bool check_atomics(uint64_t required_ops, atomic_mode mode);
 
@@ -396,6 +398,7 @@ protected:
 
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_caps_v2(uint64_t required_flags);
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
@@ -508,6 +511,8 @@ protected:
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
 
+#define UCT_TEST_ZE_MEM_TYPE_TLS ze_copy
+
 #define UCT_TEST_NO_GPU_MEM_TYPE_TLS \
     UCT_TEST_NO_SELF_TLS, \
     self
@@ -582,6 +587,16 @@ protected:
  */
 #define UCT_INSTANTIATE_CUDA_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_CUDA_MEM_TYPE_TLS)
+
+
+/**
+ * Instantiate the parametrized test case for ZE copy transport.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_ZE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, \
+                   UCT_TEST_ZE_MEM_TYPE_TLS)
 
 
 /**

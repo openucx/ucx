@@ -131,6 +131,7 @@ gtest_SOURCES = \
 	uct/test_uct_iface.cc \
 	uct/test_uct_perf.cc \
 	uct/v2/test_uct_query.cc \
+	uct/v2/test_uct_sgl.cc \
 	uct/test_zcopy_comp.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
@@ -148,6 +149,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_fault_tolerance.cc \
 	ucp/test_ucp_atomic.cc \
+	ucp/test_ucp_gpu_nic_assignment.cc \
 	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_tls.cc \
 	ucp/test_ucp_memheap.cc \
@@ -191,7 +193,9 @@ gtest_SOURCES = \
 	ucs/test_datatype.cc \
 	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
+	ucs/test_interval_map.cc \
 	ucs/test_interval_tree.cc \
+	ucs/test_rbtree.cc \
     ucs/test_lru.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
@@ -208,6 +212,7 @@ gtest_SOURCES = \
 	ucs/test_string.cc \
 	ucs/test_sys.cc \
 	ucs/test_topo.cc \
+	ucs/test_topo_groups.cc \
 	ucs/test_sock.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
@@ -261,7 +266,6 @@ gtest_SOURCES += \
 endif
 if HAVE_MLX5_DV
 gtest_SOURCES += \
-	uct/ib/test_ib_mlx5_ext.cc \
 	uct/ib/test_cqe_zipping.cc
 endif
 if HAVE_EFA
@@ -306,28 +310,50 @@ endif
 
 if HAVE_HIP
 if HAVE_GNUXX11
+HIPCC_EXTRA_FLAGS = \
+	$(HIP_CPPFLAGS) \
+	-DHAVE_ROCM=1 \
+	-I$(top_builddir) \
+	-I$(top_srcdir)/test \
+	-I$(top_srcdir)/test/gtest
+include $(top_srcdir)/config/hip.am
+
 gtest_SOURCES += \
-	ucm/rocm_hooks.cc
+	ucm/rocm_hooks.cc \
+	uct/rocm/test_kernels_uct.hip \
+	uct/rocm/test_rocm_ipc_device.hip \
+	uct/rocm/test_rocm_signal.cc
+
 gtest_CPPFLAGS += \
-	$(HIP_CPPFLAGS)
+	$(HIP_CPPFLAGS) \
+	$(ROCM_CPPFLAGS)
 gtest_CXXFLAGS += \
 	$(HIP_CXXFLAGS)
 gtest_LDADD += \
 	$(HIP_LDFLAGS) \
 	$(HIP_LIBS) \
+	$(ROCM_LDFLAGS) \
+	$(ROCM_LIBS) \
 	$(top_builddir)/src/uct/rocm/libuct_rocm.la
-endif
-endif
+endif # HAVE_GNUXX11
+endif # HAVE_HIP
 
 if HAVE_ZE
 gtest_SOURCES += \
-	ucm/ze_hooks.cc
+	ucm/ze_hooks.cc \
+	uct/ze/test_ze.cc \
+	uct/ze/test_ze_base.cc \
+	uct/ze/test_ze_ipc_md.cc \
+	uct/ze/test_ze_ipc_cache.cc \
+	uct/ze/test_ze_ipc_rma.cc \
+	uct/ze/test_ze_copy_md.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)
 gtest_LDFLAGS += \
 	$(ZE_LDFLAGS)
 gtest_LDADD += \
-	$(ZE_LIBS)
+	$(ZE_LIBS) \
+	$(top_builddir)/src/uct/ze/libuct_ze.la
 endif
 
 noinst_HEADERS = \
@@ -335,6 +361,8 @@ noinst_HEADERS = \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
+	\
+	ucs/rbtree_check.h \
 	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \
@@ -347,6 +375,7 @@ noinst_HEADERS = \
 	uct/test_md.h \
 	uct/test_peer_failure.h \
 	\
+	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h \

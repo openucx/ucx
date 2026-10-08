@@ -159,6 +159,14 @@ void test_ucp_device::get_test_variants(std::vector<ucp_test_variant> &variants)
 
 void test_ucp_device::init()
 {
+    if (has_transport("cuda_ipc")) {
+        if (rx_mem_type() == UCS_MEMORY_TYPE_HOST) {
+            UCS_TEST_SKIP_R("cuda_ipc has no device endpoint for host memory");
+        }
+
+        modify_config("CUDA_IPC_ENABLE_SAME_PROCESS", "y", SETENV_IF_NOT_EXIST);
+    }
+
     ucp_test::init();
     sender().connect(&receiver(), get_ep_params());
     if (!is_loopback()) {
@@ -536,6 +544,7 @@ UCS_TEST_P(test_ucp_device, get_remote_mem_list_length)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, rc_gda, "rc,rc_gda")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_device, cuda_ipc, "rc,cuda_ipc")
 
 
 class test_ucp_device_cuda : public test_ucp_device {

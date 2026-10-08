@@ -8,6 +8,7 @@
 
 #include <ucs/async/async.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/config/global_opts.h>
@@ -699,7 +700,9 @@ uint16_t get_port() {
     return port;
 }
 
-mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
+mmap_fixed_address::mmap_fixed_address(size_t length) :
+    m_length(ucs_align_up(length, ucs_get_page_size()))
+{
     m_ptr = mmap(NULL, m_length, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (m_ptr == MAP_FAILED) {
@@ -707,9 +710,34 @@ mmap_fixed_address::mmap_fixed_address(size_t length) : m_length(length) {
     }
 }
 
-mmap_fixed_address::~mmap_fixed_address() {
-    if (m_ptr != NULL) {
-        munmap(m_ptr, m_length);
+void mmap_fixed_address::mark_unmapped(void *address, size_t length)
+{
+    if (length > 0) {
+        m_holes[address] = length;
+    }
+}
+
+mmap_fixed_address::~mmap_fixed_address()
+{
+    void *start, *end;
+
+    if (m_ptr == nullptr) {
+        return;
+    }
+
+    /* Unmap mapped spans between holes; skip holes that may have been reused */
+    start = m_ptr;
+    end   = UCS_PTR_BYTE_OFFSET(m_ptr, m_length);
+    for (const auto &hole : m_holes) {
+        if (hole.first > start) {
+            munmap(start, UCS_PTR_BYTE_DIFF(start, hole.first));
+        }
+
+        start = UCS_PTR_BYTE_OFFSET(hole.first, hole.second);
+    }
+
+    if (end > start) {
+        munmap(start, UCS_PTR_BYTE_DIFF(start, end));
     }
 }
 

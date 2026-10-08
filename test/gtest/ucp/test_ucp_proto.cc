@@ -59,11 +59,11 @@ protected:
     static size_t count_rkey_configs_with_flag(ucp_worker_h worker,
                                                 uint8_t flag)
     {
+        ucp_rkey_config_t **rkey_config_p;
         size_t count = 0;
-        ucp_rkey_config_t *rkey_config;
 
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            count += !!(rkey_config->key.flags & flag);
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            count += !!((*rkey_config_p)->key.flags & flag);
         }
 
         return count;
@@ -176,7 +176,7 @@ protected:
             return nullptr;
         }
         auto proto_select =
-                &ucs_array_elem(&worker()->rkey_config, rkey_cfg_index).proto_select;
+                &ucp_worker_rkey_config(worker(), rkey_cfg_index)->proto_select;
 
         ucp_proto_select_param_init(
                 &select_param, UCP_OP_ID_RNDV_RECV, 0,
@@ -244,8 +244,8 @@ protected:
             return nullptr;
         }
 
-        proto_select = &ucs_array_elem(&worker()->rkey_config,
-                                       rkey_cfg_index).proto_select;
+        proto_select =
+                &ucp_worker_rkey_config(worker(), rkey_cfg_index)->proto_select;
         ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_SEND, 0,
                                     rndv_op_flag, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
@@ -343,7 +343,7 @@ protected:
             return nullptr;
         }
         proto_select =
-                &ucs_array_elem(&worker()->rkey_config, rkey_cfg_index).proto_select;
+                &ucp_worker_rkey_config(worker(), rkey_cfg_index)->proto_select;
         ucp_proto_select_param_init(&select_param, op_id, 0, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
         select_elem = ucp_proto_select_lookup_slow(
@@ -386,8 +386,9 @@ protected:
         }
 
         key.param    = remote_proto_config->select_param;
-        proto_select = &ucs_array_elem(&worker()->rkey_config,
-                                       remote_proto_config->rkey_cfg_index).proto_select;
+        proto_select = &ucp_worker_rkey_config(
+                                worker(), remote_proto_config->rkey_cfg_index)
+                                ->proto_select;
         EXPECT_NE(kh_end(proto_select->hash),
                   kh_get(ucp_proto_select_hash, proto_select->hash, key.u64));
     }
@@ -526,6 +527,29 @@ test_ucp_proto::create_rkey_config_key(ucp_md_map_t md_map)
     return rkey_config_key;
 }
 
+UCS_TEST_P(test_ucp_proto, rkey_config_stable_after_growth)
+{
+    ucp_rkey_config_key_t key = create_rkey_config_key(0);
+    ucp_worker_cfg_index_t first_index, cfg_index;
+    ucp_rkey_config_t **old_buffer;
+    ucp_rkey_config_t *first_config;
+
+    key.ep_cfg_index = sender().ep()->cfg_index;
+    ASSERT_UCS_OK(
+            ucp_worker_rkey_config_get(worker(), &key, NULL, &first_index));
+    first_config = ucp_worker_rkey_config(worker(), first_index);
+    old_buffer   = ucs_array_begin(&worker()->rkey_config);
+
+    /* Grow past the initial reserve using the production path only */
+    for (key.md_map = 1; key.md_map <= 64; ++key.md_map) {
+        ASSERT_UCS_OK(
+                ucp_worker_rkey_config_get(worker(), &key, NULL, &cfg_index));
+    }
+
+    ASSERT_NE(old_buffer, ucs_array_begin(&worker()->rkey_config));
+    EXPECT_EQ(first_config, ucp_worker_rkey_config(worker(), first_index));
+}
+
 UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
@@ -556,6 +580,33 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     EXPECT_NE(nullptr, select_elem);
 
     ucp_ep_print_info(sender().ep(), stdout);
+}
+
+UCS_TEST_P(test_ucp_proto, ep_config_proto_init_on_send)
+{
+    static constexpr ucp_tag_t tag = 0xdeadbeef;
+    ucp_request_param_t param      = {};
+    uint64_t send_data             = 0x0123456789abcdef;
+    uint64_t recv_data             = 0;
+    ucp_ep_config_t *ep_config;
+    void *send_req, *recv_req;
+
+    recv_req = ucp_tag_recv_nbx(receiver().worker(), &recv_data,
+                                sizeof(recv_data), tag, UINT64_MAX, &param);
+
+    ep_config = &ucs_array_elem(&worker()->ep_config, sender().ep()->cfg_index);
+    EXPECT_FALSE(ep_config->proto_init_flags &
+                 UCP_EP_PROTO_SHORT_INITIALIZED);
+
+    /* No protocol can be cached while the initialization flag is clear */
+    send_req = ucp_tag_send_nbx(sender().ep(), &send_data, sizeof(send_data),
+                                tag, &param);
+
+    /* Expect short-circuit path initialization to be done after first send */
+    EXPECT_TRUE(ep_config->proto_init_flags & UCP_EP_PROTO_SHORT_INITIALIZED);
+
+    ASSERT_UCS_OK(requests_wait({send_req, recv_req}));
+    EXPECT_EQ(send_data, recv_data);
 }
 
 UCS_TEST_P(test_ucp_proto, rkey_config) {
@@ -972,9 +1023,11 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
 }
 
+/* Remove the GET zcopy protocol, which replaces GET/RNDV on registrable
+ * memory, so that GET/RNDV is always selected */
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
            cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",
-           "RNDV_SCHEME=get_zcopy", "RMA_PPLN_ENABLE=y")
+           "RNDV_SCHEME=get_zcopy", "PROTOS=^get/zcopy")
 {
     /* Keep the real CUDA allocation small, but inspect a large protocol range
      * where RMA GET/RNDV is selected. */

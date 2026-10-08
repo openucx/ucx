@@ -18,10 +18,10 @@ jobs:
           set -eE
           source ./buildlib/tools/codestyle.sh
 
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
-          range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+          base_revision=$(git rev-parse "$(Build.SourceVersion)^1")
+          head_revision=$(git rev-parse "$(Build.SourceVersion)^2")
 
-          codestyle_check_commit_title "$range"
+          codestyle_check_commit_title "$base_revision..$head_revision"
           if [[ $? -ne 0 ]]
           then
               url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
@@ -85,11 +85,10 @@ jobs:
       - bash: |
           set -eEx
 
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
-          range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+          base_revision=$(git rev-parse "$(Build.SourceVersion)^1")
+          head_revision=$(git rev-parse "$(Build.SourceVersion)^2")
 
-          echo "Looking for missing AUTHORS on commit range ${range}"
-          ./contrib/authors_update.sh "$range"
+          ./contrib/authors_update.sh "$base_revision..$head_revision"
           git diff --exit-code
         displayName: AUTHORS file check
 

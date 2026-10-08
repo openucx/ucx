@@ -11,6 +11,7 @@
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
 extern "C" {
+#include <ucs/datastruct/ptr_array.h>
 #include <uct/ib/ud/base/ud_ep.h>
 #include <uct/ib/ud/base/ud_iface.h>
 }
@@ -45,6 +46,8 @@ public:
     void set_tx_win(entity *e, uct_ud_psn_t size);
 
     void disable_async(entity *e);
+
+    void wait_for_ep_destroyed(uct_ud_iface_t *iface, uint32_t ep_id);
 
     virtual void
     short_progress_loop(double delta_ms = 10.0, entity *e = NULL) const;

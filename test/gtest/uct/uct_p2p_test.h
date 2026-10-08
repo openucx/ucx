@@ -51,6 +51,7 @@ protected:
 
     virtual void test_xfer(send_func_t send, size_t length, unsigned flags,
                            ucs_memory_type_t mem_type);
+    bool is_md_mem_type_supported(ucs_memory_type_t mem_type, unsigned flags);
     void test_xfer_multi(send_func_t send, size_t min_length, size_t max_length,
                          unsigned flags);
     void test_xfer_multi_mem_type(send_func_t send, size_t min_length, size_t max_length,
