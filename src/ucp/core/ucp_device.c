@@ -235,8 +235,8 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
             continue;
         }
 
+        md_index = context->tl_rscs[tl_id].md_index;
         if (wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_LKEY) {
-            md_index = context->tl_rscs[tl_id].md_index;
             if (!(reg_md_map & UCS_BIT(md_index))) {
                 continue;
             }
