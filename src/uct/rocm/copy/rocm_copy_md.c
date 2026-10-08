@@ -449,11 +449,13 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
     if (md_config->enable_rcache != UCS_NO) {
         ucs_rcache_set_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_rocm_copy_rcache_region_t);
-        rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
+        rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED |
+                                           UCM_EVENT_MEM_TYPE_FREE;
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_rocm_copy_rcache_ops;
         rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
+        rcache_params.flags             |= UCS_RCACHE_FLAG_UNMAP_DEREG;
 
         status = ucs_rcache_create(&rcache_params, "rocm_copy", NULL, &md->rcache);
         if (status == UCS_OK) {

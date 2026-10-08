@@ -36,6 +36,9 @@ typedef struct uct_rocm_copy_cache {
     /* protects the page table */
     pthread_rwlock_t lock;
 
+    /* Page directories released under the lock, freed outside of it */
+    ucs_list_link_t  garbage;
+
     /* Name */
     char            *name;
 } uct_rocm_copy_cache_t;

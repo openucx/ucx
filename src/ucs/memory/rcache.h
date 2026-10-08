@@ -62,6 +62,9 @@ enum {
     UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
     UCS_RCACHE_FLAG_SYNC_EVENTS   = UCS_BIT(2), /**< Synchronize memory events handling */
     UCS_RCACHE_FLAG_NEED_LRU_LOCK = UCS_BIT(3), /**< rcache not protected by other lock */
+    UCS_RCACHE_FLAG_UNMAP_DEREG   = UCS_BIT(4), /**< Deregister unused regions from
+                                                     the unmap event, before the
+                                                     memory is unmapped */
 };
 
 /*

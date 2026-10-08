@@ -43,6 +43,9 @@ enum {
      * list. This is used when region put is done in the context of memory
      * event callback. */
     UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC    = UCS_BIT(1),
+    /* With ADD_TO_GC, deregister the memory now and defer only the release of
+     * the region */
+    UCS_RCACHE_REGION_PUT_FLAG_DEREG        = UCS_BIT(4),
 #if UCS_ENABLE_ASSERT
     /* Region is expected to reach a reference count of 0 and be destroyed */
     UCS_RCACHE_REGION_PUT_FLAG_MUST_DESTROY = UCS_BIT(2),
@@ -453,6 +456,14 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
     }
 
     if (flags & UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC) {
+        if ((flags & UCS_RCACHE_REGION_PUT_FLAG_DEREG) &&
+            (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED)) {
+            UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_DEREGS, 1);
+            rcache->params.ops->mem_dereg(rcache->params.context, rcache,
+                                          region);
+            region->flags &= ~UCS_RCACHE_REGION_FLAG_REGISTERED;
+        }
+
         /* Put the region on garbage collection list */
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK));
         ucs_spin_lock(&rcache->lock);
@@ -590,6 +601,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
                                          ucm_event_t *event, void *arg)
 {
     ucs_rcache_t *rcache = arg;
+    unsigned put_flags   = UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC;
     ucs_pgt_addr_t start, end;
     size_t old_tree_size;
     ucs_status_t status;
@@ -614,6 +626,10 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
 
     ucs_trace_func("%s: event vm_unmapped 0x%lx..0x%lx", rcache->name, start, end);
 
+    if (rcache->params.flags & UCS_RCACHE_FLAG_UNMAP_DEREG) {
+        put_flags |= UCS_RCACHE_REGION_PUT_FLAG_DEREG;
+    }
+
     /*
      * Try to lock the page table and invalidate the region immediately.
      * This way we avoid queuing endless events on the invalidation tree when
@@ -622,11 +638,10 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     if (!(rcache->params.flags & UCS_RCACHE_FLAG_SYNC_EVENTS) &&
         ucs_rw_spinlock_write_trylock(&rcache->pgt_lock)) {
         /* coverity[double_lock] */
-        ucs_rcache_invalidate_range(rcache, start, end,
-                                    UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);
+        ucs_rcache_invalidate_range(rcache, start, end, put_flags);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAPS, 1);
         /* coverity[double_lock] */
-        ucs_rcache_check_inv_queue(rcache, UCS_RCACHE_REGION_PUT_FLAG_ADD_TO_GC);
+        ucs_rcache_check_inv_queue(rcache, put_flags);
         /* coverity[double_unlock] */
         ucs_rw_spinlock_write_unlock(&rcache->pgt_lock);
         return;
