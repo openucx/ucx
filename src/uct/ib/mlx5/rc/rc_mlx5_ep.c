@@ -1487,16 +1487,19 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uint32_t first_failed_psn  = 0;
+    uint32_t receiver_next_psn = 0;
+    int delivered              = 0;
     const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_rc_mlx5_op_callback_data_t callback_data;
     uct_ep_op_info_t info;
     uint16_t pi, end_pi, start_pi;
-    uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
+    uint32_t wqe_first_psn;
+    uint32_t psn_diff;
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
-    int delivered;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1520,26 +1523,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             return UCS_OK;
         }
 
-        if (!(ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED)) {
-            status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
-                                                 &ep->tx.wq.super,
-                                                 IBV_QPS_ERR);
-            if (status != UCS_OK) {
-                return status;
-            }
-
-            ucs_arbiter_group_purge(&iface->super.tx.arbiter,
-                                    &ep->super.arb_group,
-                                    uct_rc_ep_arbiter_purge_internal_cb, NULL);
-            uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED,
-                                          0);
-            uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
-
-            /* Suppress the error handler. The completion poll releases
-             * credits in completion order. */
-            ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-        }
-
+        /* Range for the token check. A rejected token leaves the endpoint
+         * usable. */
         uct_rc_mlx5_ep_save_ft_ci(ep);
     }
 
@@ -1548,37 +1533,59 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
 
+    if (start_pi != end_pi) {
+        num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
+                &iface->super.super, txwq, start_pi, end_pi);
+
+        first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
+                            num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
+        if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
+            rx_token = params->rx_token;
+            if (rx_token == NULL) {
+                ucs_error("rc mlx5: rx token is NULL");
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
+            psn_diff          = (receiver_next_psn - first_failed_psn) &
+                                UCT_IB_MLX5_PSN_MASK;
+            if (psn_diff > num_outstanding_packets) {
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            delivered = 1;
+        } else {
+            /* No peer receive position: every outstanding operation is
+             * undelivered. */
+            receiver_next_psn = 0;
+            delivered         = 0;
+        }
+    }
+
+    if (!ep->err_handler_inprogress &&
+        !(ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED)) {
+        status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
+                                             &ep->tx.wq.super,
+                                             IBV_QPS_ERR);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucs_arbiter_group_purge(&iface->super.tx.arbiter,
+                                &ep->super.arb_group,
+                                uct_rc_ep_arbiter_purge_internal_cb, NULL);
+        uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
+        uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
+
+        /* Suppress the error handler. The completion poll releases credits
+         * in completion order. */
+        ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+    }
+
     /* An idle queue has nothing to report. */
     if (start_pi == end_pi) {
         uct_rc_mlx5_ep_purge_finish_tx(ep);
         return UCS_OK;
-    }
-
-    num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
-            &iface->super.super, txwq, start_pi, end_pi);
-
-    first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
-                        num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
-    if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
-        rx_token = params->rx_token;
-        if (rx_token == NULL) {
-            ucs_error("rc mlx5: rx token is NULL");
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
-        psn_diff          = (receiver_next_psn - first_failed_psn) &
-                            UCT_IB_MLX5_PSN_MASK;
-        if (psn_diff > num_outstanding_packets) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        delivered = 1;
-    } else {
-        /* No peer receive position: every outstanding operation is
-         * undelivered. */
-        receiver_next_psn = 0;
-        delivered         = 0;
     }
 
     wqe_first_psn = first_failed_psn;
