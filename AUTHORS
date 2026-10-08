@@ -1,5 +1,6 @@
 Aboorva Devarajan <aboorvad@linux.ibm.com>
 Adit Ranadive <aranadive@nvidia.com>
+Ahmed Hussein <ahussein@nvidia.com>
 Akshay Venkatesh <akvenkatesh@nvidia.com>
 Alastair McKinstry <mckinstry@debian.org>
 Aleksey Senin <alekseys@nvidia.com>
@@ -63,6 +64,7 @@ Jeff Daily <jeff.daily@amd.com>
 Jeffrey Mahou <jmahou@nvidia.com>
 Jianxin Xiong <jianxin.xiong@intel.com>
 John Snyder <jms285@duke.edu>
+Jon Stevens <159235294+jon-hotaisle@users.noreply.github.com>
 Jonas Zhou <JonasZhou@zhaoxin.com>
 Joseph Schuchart <schuchart@icl.utk.edu>
 Keisuke Fukuda <kfukuda@preferred.jp>
@@ -126,6 +128,7 @@ Swen Boehm <boehms@ornl.gov>
 Thomas Vegas <tvegas@nvidia.com>
 Tomer Gilad <tgilad@nvidia.com>
 Tony Curtis <tonycurtis32@gmail.com>
+Tushar Gohad <tushar.gohad@intel.com>
 Tzafrir Cohen <tzafrirc@nvidia.com>
 Valentin Petrov <valentinp@mellanox.com>
 Wenbin Lu <wenbin.lu@stonybrook.edu>
@@ -144,7 +147,10 @@ Zhu Yanjun <yanjunz@mellanox.com>
 Zihao Zhao <zizhao@nvidia.com>
 lzhang2 <cherry.zhang@intel.com>
 michaelzli <michaelzli@tencent.com>
+shasson5 <103439971+shasson5@users.noreply.github.com>
+wehy <18174858434@163.com>
 ybenabou <ybenabou@nvidia.com>
+yuanwu <yuan.wu@intel.com>
 
 In addition we would like to acknowledge the following members of UCX community
 for their participation in annual face-to-face meeting, design discussions, and

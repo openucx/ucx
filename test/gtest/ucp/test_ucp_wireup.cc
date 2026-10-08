@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -760,6 +760,33 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
     }
 }
 
+/* The wireup ACK is sent on the AM lane before any protocol selects it, so its
+ * iface has to be progressed already during wireup, without waiting for a data
+ * operation to be issued. */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
+                     !is_proto_enabled())
+{
+    sender().connect(&receiver(), get_ep_params());
+
+    ucp_ep_h ep                 = sender().ep();
+    const ucp_lane_index_t lane = ucp_ep_get_am_lane(ep);
+    if (lane == UCP_NULL_LANE) {
+        /* RMA variants over transports which need no AM emulation */
+        UCS_TEST_SKIP_R("endpoint has no AM lane");
+    }
+
+    /* Only the AM lane aliasing the CM lane has no resource, which cannot
+     * happen when connecting by worker address */
+    const ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    ASSERT_NE(UCP_NULL_RESOURCE, rsc_index);
+
+    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
+    ASSERT_TRUE(ucp_worker_iface_is_activated(wiface));
+
+    flush_worker(sender());
+    disconnect(sender());
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
 
 class test_ucp_wireup_2sided : public test_ucp_wireup {
@@ -1007,6 +1034,52 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
+
+class test_ucp_wireup_errh_peer_self : public test_ucp_wireup_errh_peer
+{
+public:
+    void init() override {
+        test_ucp_wireup::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
+{
+    ucp_ep_params_t ep_params = get_ep_params();
+    ucp_address_t *address;
+    ucp_ep_h ep;
+    size_t address_length;
+    ucs_status_t status;
+
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "self",
+                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE));
+
+    status = ucp_worker_get_address(receiver().worker(), &address,
+                                    &address_length);
+    ASSERT_UCS_OK(status);
+
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(sender().worker(), &ep_params, &ep);
+    }
+
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_UCS_OK(status);
+
+    const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+    EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
+    EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
+    EXPECT_GT(key.num_lanes, 0);
+    for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+        EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, lane)->tl_name);
+    }
+
+    disconnect(ep);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_errh_peer_self, self, "self")
 
 class test_ucp_wireup_fallback : public test_ucp_wireup {
 public:

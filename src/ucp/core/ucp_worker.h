@@ -269,6 +269,7 @@ typedef struct {
 /* Hash map to find what remote devices ep needs to flush */
 KHASH_TYPE(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
            ucp_mem_area_t);
+KHASH_TYPE(ucp_worker_rma_bw, ucp_ep_h, struct ucp_rma_bw_ep_state*);
 
 
 /* EP configurations storage */
@@ -405,6 +406,7 @@ typedef struct ucp_worker {
     UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
                                                              ptr mapping */
     kh_ucp_worker_remote_flush_t     remote_flush_hash;
+    kh_ucp_worker_rma_bw_t           rma_bw_hash;
 
     ucp_ep_config_arr_t              ep_config; /* EP configurations storage */
 

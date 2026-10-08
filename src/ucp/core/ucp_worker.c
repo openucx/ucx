@@ -2732,6 +2732,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_init_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2967,6 +2968,7 @@ err_free:
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -3221,6 +3223,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);

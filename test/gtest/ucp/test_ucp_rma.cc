@@ -5,7 +5,10 @@
 * See file LICENSE for terms.
 */
 
+#include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_memheap.h"
+
+#include <memory>
 
 extern "C" {
 #include <ucp/core/ucp_context.h>
@@ -429,6 +432,163 @@ UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
+
+
+class test_ucp_rma_gpu_nic :
+    protected gpu_nic_assignment_checks,
+    public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_rma_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_assignment_modes)),
+                           gpu_nic_assignment_modes);
+    }
+
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
+        modify_config("GPU_NIC_ASSIGNMENT_MODE",
+                      gpu_nic_assignment_modes[get_variant_value(1)]);
+        /* Enough lanes to use every NIC assigned to a GPU */
+        modify_config("MAX_RMA_LANES", "8");
+        modify_config("MAX_RNDV_LANES", "8");
+        /* Count protocol selections, which expect_assigned_lanes() checks */
+        modify_config("PROTO_INFO", "used");
+        test_ucp_rma::init();
+    }
+
+protected:
+    static void get_rma_variants(std::vector<ucp_test_variant> &variants)
+    {
+        /* The base flags stay clear: flush worker, no user memory handle */
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    void test_cuda_mem_types(send_func_t send_func,
+                             const std::string &proto_name,
+                             size_t max_size = 16 * UCS_MBYTE)
+    {
+        if (!is_buffer_gpu_assigned(sender().ucph())) {
+            UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
+        }
+
+        /* The assignment follows the local buffer, so it must be CUDA */
+        test_message_sizes(send_func, 128, max_size, UCS_MEMORY_TYPE_CUDA,
+                           UCS_MEMORY_TYPE_CUDA, 0);
+        expect_assigned_lanes(entities(), proto_name);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, put_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b),
+                        "put/offload/zcopy");
+}
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, get_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b),
+                        "get/zcopy");
+}
+
+/* Network lanes only, since the assignment restricts only NIC lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_gpu_nic, rcx_cuda, "rc_x,cuda_copy")
+
+
+static const char *gpu_nic_rndv_schemes[] = {"put_zcopy", "put_ppln"};
+
+/* Run the RMA rendezvous protocols by the RTR flow: the side receiving the data
+ * sends RTR, and the other side writes the data by rndv/put/zcopy, or by
+ * rndv/put/mtype from host staging fragments. */
+class test_ucp_rma_rndv_gpu_nic : public test_ucp_rma_gpu_nic {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
+                           UCS_MASK(
+                                   ucs_static_array_size(gpu_nic_rndv_schemes)),
+                           gpu_nic_rndv_schemes);
+    }
+
+    test_ucp_rma_rndv_gpu_nic()
+    {
+        /* The RMA rendezvous put/get protocols are a fallback of the direct
+         * zcopy protocols; keep only the rendezvous ones so they are always
+         * selected. */
+        modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
+    }
+
+    void init() override
+    {
+        modify_config("RNDV_SCHEME",
+                      gpu_nic_rndv_schemes[get_variant_value(2)]);
+        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+            modify_config("RNDV_FRAG_MEM_TYPES", "host");
+            modify_config("RNDV_FRAG_SIZE", "host:512K");
+
+            /* TODO: Remove when rndv/put/mtype implements reset. CI exports
+             * UCX_PROTO_REQUEST_RESET=y, which restarts its pending requests */
+            modify_config("PROTO_REQUEST_RESET", "n");
+        }
+
+        test_ucp_rma_gpu_nic::init();
+    }
+
+protected:
+    static constexpr int RNDV_SCHEME_PUT_PPLN = 1;
+    static constexpr size_t PPLN_FRAG_SIZE    = 512 * UCS_KBYTE;
+
+    bool has_cuda_net_md()
+    {
+        const ucp_context_h context = sender().ucph();
+        const ucp_tl_resource_desc_t *rsc;
+
+        ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+            if ((rsc->tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) &&
+                (context->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
+                 UCS_BIT(rsc->md_index))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void test_rtr_flow(send_func_t send_func)
+    {
+        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+            /* Larger messages fall back to the zero-copy protocols */
+            test_cuda_mem_types(send_func, "rndv/put/mtype", PPLN_FRAG_SIZE);
+            return;
+        }
+
+        /* Includes registration by dmabuf, which the MD attributes miss */
+        if (!has_cuda_net_md()) {
+            UCS_TEST_SKIP_R(
+                    "no network memory domain can register CUDA memory");
+        }
+
+        test_cuda_mem_types(send_func, "rndv/put/zcopy");
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, put_blocking)
+{
+    test_rtr_flow(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, get_blocking)
+{
+    test_rtr_flow(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic, rcx_cuda,
+                              "rc_x,cuda_copy")
 
 
 class test_ucp_rma_rndv : public test_ucp_rma {
@@ -1747,8 +1907,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_bw, all, "all")
 
 TEST(test_ucp_rma_bw_helpers, detach_pending)
 {
-    ucp_request_t req          = {};
-    ucp_rma_bw_sample_t sample = {};
+    ucp_request_t req = {};
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample = *sample_ptr;
     ucp_rma_bw_frag_t *frag;
     uct_completion_t *comps[3];
 
@@ -1763,6 +1924,7 @@ TEST(test_ucp_rma_bw_helpers, detach_pending)
         comps[lane] = ucp_rma_bw_frag_start(&req, lane, &frag);
         ucp_rma_bw_frag_posted(frag, 4096, UCS_INPROGRESS);
     }
+    EXPECT_TRUE(sample.concurrent);
     ucp_proto_request_zcopy_abort(&req, UCS_ERR_CANCELED);
     ucp_rma_bw_sample_detach(&req);
 
@@ -1778,4 +1940,86 @@ TEST(test_ucp_rma_bw_helpers, detach_pending)
         comp->func(comp);
     }
     EXPECT_TRUE(ucp_rma_bw_sample_is_free(&sample));
+}
+
+
+TEST(test_ucp_rma_bw_helpers, estimator_three_lanes)
+{
+    constexpr unsigned count = 3;
+    std::vector<uint8_t> storage(
+            sizeof(ucp_rma_bw_estimator_t) +
+                    count * sizeof(ucp_rma_bw_lane_estimate_t),
+            0);
+    auto *estimator = reinterpret_cast<ucp_rma_bw_estimator_t*>(storage.data());
+    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
+    auto &sample            = *sample_ptr;
+    const ucs_time_t second = ucs_time_from_sec(1.0);
+
+    estimator->num_lanes  = count;
+    estimator->epoch      = 1;
+    estimator->generation = 2;
+    sample.num_lanes      = count;
+    sample.epoch          = 1;
+    sample.generation     = 2;
+    sample.dir            = UCP_RMA_BW_PUT;
+    sample.concurrent     = 1;
+    for (unsigned i = 0; i < count; ++i) {
+        estimator->lanes[i].nominal  = 10 * UCS_MBYTE;
+        estimator->lanes[i].smoothed = estimator->lanes[i].nominal;
+        estimator->lanes[i].lane_id  = i;
+        sample.lane_ids[i]           = i;
+        sample.lanes[i].bytes        = (i == 1 ? 8 : 4) * UCS_MBYTE;
+        sample.lanes[i].first_post   = second;
+        sample.lanes[i].last_comp    = 2 * second;
+        sample.lanes[i].num_async    = 1;
+        sample.lanes[i].posted_total = sample.lanes[i].bytes;
+    }
+
+    sample.lanes[2].num_async = 0;
+    EXPECT_EQ(UCP_RMA_BW_REJECT_UNSATURATED,
+              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
+    EXPECT_EQ(0u, estimator->lanes[0].marker_time);
+    sample.lanes[2].num_async = 1;
+    ++sample.generation;
+    EXPECT_EQ(UCP_RMA_BW_REJECT_GENERATION,
+              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
+    --sample.generation;
+    EXPECT_EQ(UCP_RMA_BW_REJECT_WARMUP,
+              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
+
+    /* The second sampled request waits behind 16 others on lane 1. */
+    for (unsigned i = 0; i < count; ++i) {
+        sample.lanes[i].posted_total *= 17;
+        sample.lanes[i].last_comp     = 18 * second;
+        sample.lanes[i].first_post    = (i == 1 ? 2 : 17) * second;
+    }
+
+    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
+              ucp_rma_bw_estimator_update(estimator, &sample, 19 * second));
+    EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[0].smoothed, 1.0);
+    EXPECT_NEAR(9.4 * UCS_MBYTE, estimator->lanes[1].smoothed, 1.0);
+    EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[2].smoothed, 1.0);
+    EXPECT_EQ(UCP_RMA_BW_REJECT_RATE_LIMIT,
+              ucp_rma_bw_estimator_update(estimator, &sample, 19 * second));
+
+    for (unsigned i = 0; i < count; ++i) {
+        sample.lanes[i].bytes         = 256 * UCS_KBYTE;
+        sample.lanes[i].first_post    = 19 * second;
+        sample.lanes[i].last_comp     = 20 * second;
+        sample.lanes[i].posted_total += sample.lanes[i].bytes;
+    }
+    const double previous = estimator->lanes[1].smoothed;
+    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
+              ucp_rma_bw_estimator_update(estimator, &sample, 21 * second));
+    EXPECT_NEAR(0.73 * previous, estimator->lanes[1].smoothed, 1.0);
+
+    for (unsigned i = 0; i < count; ++i) {
+        sample.lanes[i].bytes         = 4 * UCS_MBYTE;
+        sample.lanes[i].first_post    = 51 * second;
+        sample.lanes[i].last_comp     = 52 * second;
+        sample.lanes[i].posted_total += sample.lanes[i].bytes;
+    }
+    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
+              ucp_rma_bw_estimator_update(estimator, &sample, 53 * second));
+    EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[1].smoothed, 1.0);
 }

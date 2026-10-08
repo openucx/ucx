@@ -510,6 +510,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     rndv_req->send.rndv.remote_address     = address;
     rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
+    ucp_proto_rndv_req_fc_init(rndv_req);
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move,
                           &rndv_req->send.state.dt_iter,

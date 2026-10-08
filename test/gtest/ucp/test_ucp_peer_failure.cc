@@ -525,7 +525,8 @@ public:
 
     void init()
     {
-        create_entity();
+        /* Use a different worker to keep the invalidation requirement tested. */
+        ucp_test::init();
         sender().connect(&receiver(), get_ep_params(), 0);
     }
 };

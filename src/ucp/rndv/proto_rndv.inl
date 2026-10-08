@@ -17,6 +17,13 @@
 #include <ucp/tag/offload.h>
 
 
+/* Must be called when a rndv request is set up, see
+ * UCP_REQUEST_RNDV_MTYPE_FC_* */
+static UCS_F_ALWAYS_INLINE void ucp_proto_rndv_req_fc_init(ucp_request_t *req)
+{
+    req->send.rndv.fc_state = UCP_REQUEST_RNDV_MTYPE_FC_NONE;
+}
+
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rndv_shm_pipeline_force_enabled(ucp_context_h context)
 {

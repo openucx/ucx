@@ -71,15 +71,19 @@ enum {
     UCP_REQUEST_FLAG_RNDV_FLUSH            = UCS_BIT(28),
     UCP_REQUEST_FLAG_RNDV_START_FLUSH      = UCS_BIT(29),
     UCP_REQUEST_FLAG_RMA_BW_SAMPLE         = UCS_BIT(30),
-    UCP_REQUEST_FLAG_RNDV_MTYPE_FC         = UCS_BIT(31)
+    UCP_REQUEST_FLAG_RMA_BW_TRACK          = UCS_BIT(31)
 };
 
 
 /**
- * State of a rndv mtype request throttled by the fragment flow control.
- * Valid only while UCP_REQUEST_FLAG_RNDV_MTYPE_FC is set.
+ * Fragment flow control state of a rndv request. Every rndv request must be
+ * initialized with ucp_proto_rndv_req_fc_init() when it is set up, since
+ * ucp_proto_rndv_mtype_fc_cancel() reads the state for any aborted or reset
+ * request.
  */
 enum {
+    /* Not throttled */
+    UCP_REQUEST_RNDV_MTYPE_FC_NONE,
     /* Waiting in the worker-level pending queue */
     UCP_REQUEST_RNDV_MTYPE_FC_QUEUED,
     /* Dequeued, a retry is scheduled from the progress loop */
@@ -331,6 +335,9 @@ struct ucp_request {
                             /* Data start offset of this request */
                             size_t offset;
 
+                            /* UCP_REQUEST_RNDV_MTYPE_FC_* state */
+                            uint8_t fc_state;
+
                             union {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
@@ -352,13 +359,11 @@ struct ucp_request {
                                     ssize_t ack_data_size;
                                 } ppln;
 
-                                /* Used by throttled rndv mtype requests before
-                                 * UCP_REQUEST_FLAG_PROTO_INITIALIZED is set. */
+                                /* Used by rndv mtype requests while fc_state
+                                 * is not UCP_REQUEST_RNDV_MTYPE_FC_NONE */
                                 struct {
                                     /* Element in worker-level pending queue */
                                     ucs_queue_elem_t queue_elem;
-                                    /* UCP_REQUEST_RNDV_MTYPE_FC_* state */
-                                    uint8_t          state;
                                 } fc;
 
                                 /* Used by rndv/rkey_ptr */

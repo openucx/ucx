@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2024. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -20,7 +20,7 @@
 
 #define TL_RESOURCE_NAME_NONE   "<none>"
 #define TEST_PARAMS_ARGS \
-    "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUe::m:a:R:lyzL:F:Y:V"
+    "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUe::m:aR:lyzL:F:Y:V"
 #define TEST_ID_UNDEFINED       -1
 
 #define DEFAULT_DAEMON_PORT     1338

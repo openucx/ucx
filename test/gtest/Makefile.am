@@ -341,13 +341,19 @@ endif # HAVE_HIP
 if HAVE_ZE
 gtest_SOURCES += \
 	ucm/ze_hooks.cc \
-	uct/ze/test_ze.cc
+	uct/ze/test_ze.cc \
+	uct/ze/test_ze_base.cc \
+	uct/ze/test_ze_ipc_md.cc \
+	uct/ze/test_ze_ipc_cache.cc \
+	uct/ze/test_ze_ipc_rma.cc \
+	uct/ze/test_ze_copy_md.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)
 gtest_LDFLAGS += \
 	$(ZE_LDFLAGS)
 gtest_LDADD += \
-	$(ZE_LIBS)
+	$(ZE_LIBS) \
+	$(top_builddir)/src/uct/ze/libuct_ze.la
 endif
 
 noinst_HEADERS = \
@@ -369,6 +375,7 @@ noinst_HEADERS = \
 	uct/test_md.h \
 	uct/test_peer_failure.h \
 	\
+	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h \

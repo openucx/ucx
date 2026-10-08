@@ -18,16 +18,15 @@
 
 void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
 {
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
-    req->flags &= ~UCP_REQUEST_FLAG_RNDV_MTYPE_FC;
+    ucs_assert(req->send.rndv.fc_state != UCP_REQUEST_RNDV_MTYPE_FC_NONE);
+    req->send.rndv.fc_state = UCP_REQUEST_RNDV_MTYPE_FC_NONE;
 }
 
 unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
 {
     ucp_request_t *req = arg;
 
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
-    ucs_assert(req->send.rndv.fc.state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    ucs_assert(req->send.rndv.fc_state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
     /* Keep the request in RESCHED state, so that if it is aborted before
      * ucp_proto_rndv_mtype_request_init() retries the allocation, the wakeup
      * is passed to the next waiter rather than dropped. */
@@ -59,8 +58,7 @@ ucp_proto_rndv_mtype_fc_resched_collect(const ucs_callbackq_elem_t *elem,
     }
 
     req = elem->arg;
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RNDV_MTYPE_FC);
-    ucs_assert(req->send.rndv.fc.state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    ucs_assert(req->send.rndv.fc_state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
     ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
     return 1;
 }
@@ -1058,6 +1056,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     /* Caching rkey_buffer pointer for later unpacking of shm keys in
      * rkey_ptr mtype ppln protocol. */
     req->send.rndv.rkey_buffer = rkey_buffer;
+    ucp_proto_rndv_req_fc_init(req);
 
     ucp_trace_req(req,
                   "%s rva 0x%" PRIx64 " length %zd rreq_id 0x%" PRIx64
