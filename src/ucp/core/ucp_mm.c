@@ -29,6 +29,7 @@
 typedef struct {
     ucs_memory_type_t mem_type;    /* Memory type */
     uint8_t           mem_flags;   /* Memory flags (ucp_mem_flags_t) */
+    ucs_sys_device_t  sys_dev;     /* Device index */
     void              *alloc_base; /* Start of the underlying allocation */
     size_t            alloc_len;   /* Length of the underlying allocation */
     ucp_md_map_t      reg_md_map;  /* Map of memory domains to be registered */
@@ -796,6 +797,7 @@ ucp_memh_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
     ucp_mem_rcache_reg_ctx_t reg_ctx = {
         .mem_type   = mem_type,
         .mem_flags  = mem_info->mem_flags,
+        .sys_dev    = mem_info->sys_dev,
         .alloc_base = mem_info->base_address,
         .alloc_len  = mem_info->alloc_length,
         .reg_md_map = reg_md_map,
@@ -1729,7 +1731,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
 
     ucp_memh_init(memh, context, 0, reg_ctx->uct_flags, UCT_ALLOC_METHOD_LAST,
-                  reg_ctx->mem_type, UCS_SYS_DEVICE_ID_UNKNOWN,
+                  reg_ctx->mem_type, reg_ctx->sys_dev,
                   reg_ctx->mem_flags);
     memh->reg_id = context->next_memh_reg_id++;
 
@@ -1813,6 +1815,12 @@ static int ucp_mem_rcache_can_merge_cb(void *arg, ucs_rcache_region_t *rregion)
 
     if (memh->mem_type == UCS_MEMORY_TYPE_HOST) {
         return 1;
+    }
+
+    if ((memh->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (reg_ctx->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (memh->sys_dev != reg_ctx->sys_dev)) {
+        return 0;
     }
 
     if (reg_ctx->alloc_base == NULL) {
@@ -2016,7 +2024,13 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
                      ucp_mem_h user_memh,
                      ucp_unpacked_exported_memh_t *unpacked)
 {
-    ucs_memory_info_t mem_info = {0};
+    ucs_memory_info_t mem_info = {
+        .type         = UCS_MEMORY_TYPE_HOST,
+        .sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN, 
+        .base_address = NULL,
+        .alloc_length = -1,
+        .mem_flags    = 0
+    };
     ucs_rcache_t *rcache;
     ucs_rcache_params_t rcache_params;
     ucs_status_t status;
