@@ -908,12 +908,17 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
 static int uct_cuda_copy_md_is_mempool(const void *address)
 {
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE
-    CUmemoryPool mempool = NULL;
+    CUpointer_attribute attr_type = CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE;
+    CUmemoryPool mempool          = NULL;
+    void *attr_data               = &mempool;
+    ucs_status_t status;
 
-    /* Depending on the driver a plain allocation is reported either as a NULL
-     * handle or as an invalid value, both mean the memory is not pool-backed */
-    if (cuPointerGetAttribute(&mempool, CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE,
-                              (CUdeviceptr)address) != CUDA_SUCCESS) {
+    /* The attribute only applies to stream-ordered memory, and the plural form
+     * reports a NULL handle for any other memory instead of failing */
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
+            cuPointerGetAttributes(1, &attr_type, &attr_data,
+                                   (CUdeviceptr)address));
+    if (status != UCS_OK) {
         return 0;
     }
 
