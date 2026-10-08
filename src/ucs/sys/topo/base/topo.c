@@ -361,7 +361,7 @@ ucs_topo_get_sys_device_checked_nolock(ucs_sys_device_t sys_dev,
 /* Read a device field under the topology lock, or return a default value */
 #define UCS_TOPO_SYS_DEVICE_GET_FIELD(_sys_dev, _field, _default) \
     ({ \
-        ucs_field_type(ucs_topo_sys_device_info_t, _field) \
+        ucs_typeof(ucs_topo_global_ctx.devices[0]._field) \
                 _get_value = (_default); \
         const ucs_topo_sys_device_info_t *_get_device; \
         \
