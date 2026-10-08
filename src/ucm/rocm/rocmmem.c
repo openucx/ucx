@@ -245,7 +245,8 @@ static ucs_status_t ucm_rocmmem_install(int events)
         status = UCS_OK;
         ucm_info("rocm hooks are ready");
     } else {
-        status = (bistro_status != UCS_OK) ? bistro_status : reloc_status;
+        status = ucm_gpu_hook_install_status((bistro_status != UCS_OK) ?
+                                              bistro_status : reloc_status);
     }
 
     pthread_mutex_unlock(&install_mutex);

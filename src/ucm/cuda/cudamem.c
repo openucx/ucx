@@ -441,6 +441,7 @@ static ucs_status_t ucm_cudamem_install(int events)
     }
 
 out_unlock:
+    status = ucm_gpu_hook_install_status(status);
     pthread_mutex_unlock(&install_mutex);
 out:
     return status;

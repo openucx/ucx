@@ -22,6 +22,7 @@ extern "C" {
 #include <ucs/time/time.h>
 #include <ucm/malloc/malloc_hook.h>
 #include <ucm/bistro/bistro.h>
+#include <ucm/mmap/mmap.h>
 #include <ucm/util/reloc.h>
 #include <ucs/sys/sys.h>
 #ifdef HAVE_MALLOC_H
@@ -1547,6 +1548,16 @@ UCS_MT_TEST_F(malloc_hook_dlopen, dlopen_mt_with_memtype, 2) {
     }
 
     event.unset();
+}
+
+class gpu_hook_install_status : public ucs::test {
+};
+
+/* UCS_ERR_UNSUPPORTED must be remapped, since it's reserved for "disabled by configuration". */
+UCS_TEST_F(gpu_hook_install_status, coerce_unsupported) {
+    EXPECT_EQ(UCS_ERR_IO_ERROR, ucm_gpu_hook_install_status(UCS_ERR_UNSUPPORTED));
+    EXPECT_EQ(UCS_ERR_NO_MEMORY, ucm_gpu_hook_install_status(UCS_ERR_NO_MEMORY));
+    EXPECT_EQ(UCS_OK, ucm_gpu_hook_install_status(UCS_OK));
 }
 
 #if defined(__x86_64__)
