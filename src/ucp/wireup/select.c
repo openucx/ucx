@@ -555,7 +555,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         }
 
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : disabled to avoid memory type copies",

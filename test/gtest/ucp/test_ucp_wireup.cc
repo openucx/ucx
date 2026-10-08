@@ -2206,7 +2206,7 @@ public:
         has_cm  = ucp_ep_init_flags_has_cm(ep_init_flags);
 
         if (!context->config.ext.memtype_copy_enable &&
-            (md_attr->flags & UCT_MD_FLAG_MEMTYPE_COPY) &&
+            (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
             (md_attr->access_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             return 0;
         }
