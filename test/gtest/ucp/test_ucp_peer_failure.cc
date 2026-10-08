@@ -83,6 +83,16 @@ protected:
     void init_buffers(size_t msg_size);
     virtual ucs_memory_type_t memtype() const;
 
+    virtual ucs_memory_type_t tx_memtype() const
+    {
+        return memtype();
+    }
+
+    virtual ucs_memory_type_t rx_memtype() const
+    {
+        return memtype();
+    }
+
     void                        *m_sreq, *m_rreq;
     std::queue<void *>          m_am_rndv_descs;
     size_t                      m_am_rx_count;
@@ -484,8 +494,8 @@ void test_ucp_peer_failure::cleanup_rndv_descs() {
 }
 
 void test_ucp_peer_failure::init_buffers(size_t msg_size) {
-    m_sbuf.reset(new mem_buffer(msg_size, memtype(), TX_SEED));
-    m_rbuf.reset(new mem_buffer(msg_size, memtype(), RX_SEED));
+    m_sbuf.reset(new mem_buffer(msg_size, tx_memtype(), TX_SEED));
+    m_rbuf.reset(new mem_buffer(msg_size, rx_memtype(), RX_SEED));
 }
 
 ucs_memory_type_t test_ucp_peer_failure::memtype() const
@@ -1166,3 +1176,47 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_fc_pending,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
+
+
+/* The sender buffer is in host memory, so the RTS carries a remote key and
+ * the receiver can read the data. The receiver buffer is in managed memory,
+ * which the network lanes cannot register, so the receiver stages the data
+ * through a fragment using rndv/get/mtype. The message fits in a single
+ * fragment, so the pipeline protocol is not used. */
+class test_ucp_peer_failure_get_mtype_abort :
+      public test_ucp_peer_failure_rndv_abort {
+public:
+    static void get_test_variants(variant_vec_t &variants)
+    {
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        test_ucp_peer_failure_rndv_abort::get_test_variants(variants);
+    }
+
+    ucs_memory_type_t rx_memtype() const override
+    {
+        return UCS_MEMORY_TYPE_CUDA_MANAGED;
+    }
+
+    void init() override
+    {
+        /* rndv/get/mtype is enabled by the get_ppln scheme only */
+        modify_config("RNDV_SCHEME", "get_ppln");
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
+        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
+        test_ucp_peer_failure_rndv_abort::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_get_mtype_abort, get_mtype_fc_pending,
+           "RNDV_FRAG_SIZE=host:32K,cuda:32K",
+           "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
+           "RNDV_FRAG_WORKER_MAX_MEM=32K",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    rndv_fc_pending_abort_test(receiver(), UCP_WORKER_RNDV_FC_OP_GET);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_get_mtype_abort);

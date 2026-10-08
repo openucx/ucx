@@ -2424,6 +2424,23 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_cap_reached,
     verify_clean_fc_state();
 }
 
+/* Every replayed request is restarted, so the reset of an initialized
+ * rndv/rtr/mtype request releases its fragment and wakes up a waiter */
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_request_reset,
+           "PROTO_REQUEST_RESET=y", "RNDV_FRAG_SIZE=cuda:256K",
+           "RNDV_FRAG_ALLOC_COUNT=cuda:4", "RNDV_FRAG_WORKER_MAX_MEM=1M",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    fc_counters fc;
+
+    run_fc_test(16, fc);
+
+    EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
+            << "throttling should have occurred with MAX_MEM=1M";
+
+    verify_clean_fc_state();
+}
+
 UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
