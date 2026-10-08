@@ -487,8 +487,9 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
     ucp_request_param_t param;
     param.op_attr_mask = 0;
 
-    ucp_datatype_iter_init(context(), buffer.ptr(), size, UCP_DATATYPE_CONTIG,
-                           size, 1, &dt_iter, &sg_count, &param);
+    ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), size,
+                                       UCP_DATATYPE_CONTIG, size, 1, &dt_iter,
+                                       &sg_count, &param));
 
     ucs_time_t start_time = ucs_get_time();
     ucs_time_t deadline   = start_time + ucs_time_from_sec(test_time_sec);

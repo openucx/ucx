@@ -1451,9 +1451,17 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
 {
     constexpr size_t size = 65536;
     void *address;
+    ucs::handle<void*> buffer;
     uct_mem_h memh;
     ucs_status_t status;
-    ASSERT_EQ(0, posix_memalign(&address, size, size));
+    int ret;
+
+    ret = posix_memalign(&address, size, size);
+    if (ret == 0) {
+        buffer.reset(address, free);
+    }
+
+    ASSERT_EQ(0, ret);
     m_error_count = 0;
     {
         scoped_log_handler slh(count_errors_logger);
@@ -1462,7 +1470,6 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
     }
     ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, status);
     EXPECT_EQ(0u, m_error_count);
-    free(address);
 }
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_support,
