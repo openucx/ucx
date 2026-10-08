@@ -128,7 +128,7 @@ ucs_memory_info_set_host(ucs_memory_info_t *mem_info)
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
     mem_info->base_address = NULL;
     mem_info->alloc_length = -1;
-    mem_info->mem_flags    = UCS_MEM_FLAG_REGISTRABLE;
+    mem_info->mem_flags    = UCS_MEM_FLAGS_DEFAULT;
 }
 
 END_C_DECLS

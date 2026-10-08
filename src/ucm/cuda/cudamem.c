@@ -173,7 +173,7 @@ static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
 {
     /* Indicate unknown type and let cuda_md detect attributes. */
     ucm_cuda_dispatch_mem_type_alloc(ptr, length, UCS_MEMORY_TYPE_LAST,
-                                     UCS_MEM_FLAG_REGISTRABLE);
+                                     UCS_MEM_FLAGS_DEFAULT);
 }
 
 static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
@@ -206,7 +206,7 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
     event.mem_type.size      = length;
     event.mem_type.mem_type  = mem_type;
     event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    event.mem_type.mem_flags = UCS_MEM_FLAGS_DEFAULT;
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
@@ -468,7 +468,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
     event.mem_type.size      = length;
     event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
     event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    event.mem_type.mem_flags = UCS_MEM_FLAGS_DEFAULT;
 
     ucm_event_enter();
     handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);

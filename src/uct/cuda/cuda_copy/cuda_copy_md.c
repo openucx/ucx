@@ -1075,7 +1075,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
         mem_attr->mem_flags = (address != NULL) ? addr_mem_info.mem_flags :
-                                                  UCS_MEM_FLAG_REGISTRABLE;
+                                                  UCS_MEM_FLAGS_DEFAULT;
     }
 
     /* If dmabuf_fd was returned to the caller, the caller is responsible to

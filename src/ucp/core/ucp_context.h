@@ -720,7 +720,7 @@ ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
     mem_info->type    = UCS_MEMORY_TYPE_HOST;
     mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    mem_info->flags   = UCS_MEM_FLAG_REGISTRABLE;
+    mem_info->flags   = UCS_MEM_FLAGS_DEFAULT;
 }
 
 static UCS_F_ALWAYS_INLINE void

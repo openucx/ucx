@@ -71,6 +71,16 @@ typedef enum ucs_mem_flags {
 
 
 /**
+ * Memory capabilities a memory domain can require from a buffer, used as the
+ * default when they were not detected for the buffer itself.
+ * UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE is excluded, as it is not required by
+ * any memory domain and must only be reported when detected.
+ */
+#define UCS_MEM_FLAGS_DEFAULT \
+    (UCS_MEM_FLAG_REGISTRABLE | UCS_MEM_FLAG_PINNABLE)
+
+
+/**
  * Array of string names for each memory type
  */
 extern const char *ucs_memory_type_names[];
