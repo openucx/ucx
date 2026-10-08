@@ -1392,8 +1392,7 @@ uct_rc_mlx5_op_info_fill(uct_rc_mlx5_base_ep_t *ep,
     }
 }
 
-static int uct_ib_mlx5_wqe_is_delivered(const struct mlx5_wqe_ctrl_seg *ctrl,
-                                        uint32_t wqe_first_psn,
+static int uct_ib_mlx5_wqe_is_delivered(uint32_t wqe_first_psn,
                                         uint32_t receiver_next_psn,
                                         uint32_t num_packets)
 {
@@ -1401,17 +1400,6 @@ static int uct_ib_mlx5_wqe_is_delivered(const struct mlx5_wqe_ctrl_seg *ctrl,
     uint32_t diff;
 
     ucs_assert(num_packets > 0);
-
-    /*
-     * receiver_next_psn only proves the read request was accepted by the
-     * responder. The response data travels in the opposite direction,
-     * and only a successful completion proves it reached the local buffer.
-     * Report the read as undelivered so the caller does not consume
-     * indeterminate buffer contents.
-     */
-    if (uct_ib_mlx5_wqe_opcode(ctrl) == MLX5_OPCODE_RDMA_READ) {
-        return 0;
-    }
 
     /*
      * PSNs wrap in a 24-bit sequence space. Since the outstanding window is
@@ -1666,6 +1654,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     } else {
         /* No peer receive position: every outstanding operation is
          * undelivered. */
+        rx_token          = NULL;
         receiver_next_psn = 0;
         delivered         = 0;
     }
@@ -1678,8 +1667,17 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         num_packets = uct_ib_mlx5_wqe_num_packets(&iface->super.super, txwq,
                                                   ctrl, wqe_size);
 
-        if (num_packets != 0) {
-            delivered = uct_ib_mlx5_wqe_is_delivered(ctrl, wqe_first_psn,
+        if ((rx_token != NULL) && (num_packets != 0)) {
+            /*
+             * receiver_next_psn only proves the read request was accepted by
+             * the responder. The response data travels in the opposite
+             * direction, and only a successful completion proves it reached
+             * the local buffer. Report the read as undelivered so
+             * indeterminate buffer contents are not consumed.
+             */
+            delivered = (uct_ib_mlx5_wqe_opcode(ctrl) !=
+                         MLX5_OPCODE_RDMA_READ) &&
+                        uct_ib_mlx5_wqe_is_delivered(wqe_first_psn,
                                                      receiver_next_psn,
                                                      num_packets);
         }
