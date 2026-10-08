@@ -322,7 +322,8 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 
 UCS_TEST_P(test_cuda_ipc_md, nvml_peer_accessibility)
 {
-    int num_devices, can_access, accessible, device_index;
+    int num_devices, can_access, device_index;
+    ucs_ternary_auto_value_t accessible;
     CUdevice local_device, remote_device;
     CUuuid remote_uuid;
     bool checked = false;
@@ -351,6 +352,20 @@ UCS_TEST_P(test_cuda_ipc_md, nvml_peer_accessibility)
     if (!checked) {
         UCS_TEST_SKIP_R("NVML peer accessibility is unavailable");
     }
+}
+
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_unresolved)
+{
+    CUdevice cu_dev;
+    CUuuid unknown_uuid;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&cu_dev, 0));
+
+    /* NVML cannot resolve this UUID, so the handle-mapping probe must decide
+     * the peer reachability */
+    memset(unknown_uuid.bytes, 0xab, sizeof(unknown_uuid.bytes));
+    EXPECT_EQ(UCS_TRY,
+              uct_cuda_ipc_nvml_peer_accessible(cu_dev, &unknown_uuid));
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)

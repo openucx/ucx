@@ -68,8 +68,8 @@ typedef struct {
 } uct_cuda_ipc_dev_cache_t;
 
 
-int uct_cuda_ipc_nvml_peer_accessible(CUdevice cu_dev,
-                                       const CUuuid *remote_uuid);
+ucs_ternary_auto_value_t
+uct_cuda_ipc_nvml_peer_accessible(CUdevice cu_dev, const CUuuid *remote_uuid);
 
 
 static UCS_F_ALWAYS_INLINE int
