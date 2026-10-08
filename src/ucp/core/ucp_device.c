@@ -243,6 +243,11 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
 
             tl_type = UCP_DEVICE_TL_TYPE_LKEY;
         } else {
+            if (!(context->tl_mds[md_index].attr.access_mem_types &
+                  UCS_BIT(mem_type))) {
+                continue;
+            }
+
             tl_type = UCP_DEVICE_TL_TYPE_NOLKEY;
         }
         UCS_STATIC_BITMAP_SET(&tl_bitmap[tl_type], tl_id);
