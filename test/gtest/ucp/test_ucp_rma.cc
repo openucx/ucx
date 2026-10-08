@@ -591,10 +591,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic, rcx_cuda,
                               "rc_x,cuda_copy")
 
 
-/* No NIC registers the responder's stream-ordered CUDA buffer, so the peer's
- * rkey has no sys_dev, and the responder must detect the buffer's GPU locally
- * to keep its host-staged rndv/put/mtype on the NICs assigned to that GPU. */
-class test_ucp_rma_rndv_gpu_nic_async : public test_ucp_rma_rndv_gpu_nic {
+/* Without GPUDirect RDMA no NIC registers the responder's CUDA buffer, so the
+ * peer's rkey has no sys_dev, and the responder must detect the buffer's GPU
+ * locally to keep its host-staged rndv/put/mtype on the NICs assigned to it */
+class test_ucp_rma_rndv_gpu_nic_no_gdr : public test_ucp_rma_rndv_gpu_nic {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
@@ -604,33 +604,22 @@ public:
 
     void init() override
     {
-        if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
-            UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
-        }
-
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
         test_ucp_rma_rndv_gpu_nic::init();
-    }
-
-protected:
-    /* Only the memheap is CUDA, so only the responder's buffer is async */
-    mem_buffer *
-    create_mem_buffer(size_t size, ucs_memory_type_t mem_type) override
-    {
-        const mem_buffer::alloc_mode mode =
-                (mem_type == UCS_MEMORY_TYPE_CUDA) ?
-                        mem_buffer::alloc_mode::ASYNC :
-                        mem_buffer::alloc_mode::DEFAULT;
-        return new mem_buffer(size, mem_type, mode);
     }
 };
 
-UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_async, get_blocking)
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_no_gdr, get_blocking)
 {
+    if (has_cuda_net_md()) {
+        UCS_TEST_SKIP_R("a network memory domain can register CUDA memory");
+    }
+
     if (!is_buffer_gpu_assigned(receiver().ucph())) {
         UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
     }
 
-    /* The initiator's buffer stays registrable so the put can land */
+    /* The initiator's buffer is host memory, so the put can land */
     test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b), 128,
                        PPLN_FRAG_SIZE, UCS_MEMORY_TYPE_HOST,
                        UCS_MEMORY_TYPE_CUDA, 0);
@@ -638,7 +627,7 @@ UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_async, get_blocking)
 }
 
 /* cuda_ipc is reachable intra-node and would resolve the sys_dev */
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic_async, rcx_cuda,
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic_no_gdr, rcx_cuda,
                               "rc_x,cuda_copy")
 
 
