@@ -4,6 +4,7 @@
  * Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
  *
  */
+#include <algorithm>
 #include <list>
 #include <numeric>
 #include <set>
@@ -2442,7 +2443,122 @@ protected:
         fc.receiver_throttled = get_stats(receiver(), cntr);
     }
 
+    /* Both workers send to each other at the same time, so each of them holds
+     * RTR fragments for the peer's messages while needing fragments for its
+     * own PUTs. Without fragments kept for PUT/GET, the pools of both workers
+     * could fill up with RTR fragments and wait for each other forever. */
+    void run_bidirectional_fc_test(size_t num_frags, size_t num_msgs)
+    {
+        const ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+        const size_t size = get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) *
+                            num_frags;
+        bidirectional_side sides[2]      = {{&sender(), mem_type, {}, 0},
+                                            {&receiver(), mem_type, {}, 0}};
+        std::vector<void*> sbufs, sreqs;
+        ucp_request_param_t param;
+
+        if (!sender().is_rndv_put_ppln_supported()) {
+            UCS_TEST_SKIP_R("RNDV is not supported");
+        }
+
+        for (auto &side : sides) {
+            set_am_data_handler(*side.e, TEST_AM_NBX_ID,
+                                am_bidirectional_data_cb, &side);
+        }
+
+        param.op_attr_mask = 0;
+        for (size_t i = 0; i < num_msgs; ++i) {
+            for (auto &side : sides) {
+                void *sbuf = mem_buffer::allocate(size, mem_type);
+                mem_buffer::pattern_fill(sbuf, size, SEED, mem_type);
+                sbufs.push_back(sbuf);
+                sreqs.push_back(ucp_am_send_nbx(side.e->ep(), TEST_AM_NBX_ID,
+                                                NULL, 0, sbuf, size, &param));
+            }
+        }
+
+        /* A deadlock shows up as a timeout rather than a hanging test */
+        const ucs_time_t deadline = ucs::get_deadline(60.0);
+        while (ucs_get_time() < deadline) {
+            progress();
+            if ((sides[0].recv_count == num_msgs) &&
+                (sides[1].recv_count == num_msgs) &&
+                std::all_of(sreqs.begin(), sreqs.end(), [](void *req) {
+                    return ucp_request_check_status(req) != UCS_INPROGRESS;
+                })) {
+                break;
+            }
+        }
+
+        EXPECT_EQ(num_msgs, sides[0].recv_count) << "sender did not receive";
+        EXPECT_EQ(num_msgs, sides[1].recv_count) << "receiver did not receive";
+        for (void *req : sreqs) {
+            EXPECT_NE(UCS_INPROGRESS, ucp_request_check_status(req));
+            if (UCS_PTR_IS_PTR(req)) {
+                ucp_request_release(req);
+            }
+        }
+
+        for (auto &side : sides) {
+            for (void *rbuf : side.rx_bufs) {
+                mem_buffer::pattern_check(rbuf, size, SEED, mem_type);
+                mem_buffer::release(rbuf, mem_type);
+            }
+        }
+
+        for (void *sbuf : sbufs) {
+            mem_buffer::release(sbuf, mem_type);
+        }
+    }
+
 private:
+    struct bidirectional_side {
+        entity             *e;
+        ucs_memory_type_t  mem_type;
+        std::vector<void*> rx_bufs;
+        volatile size_t    recv_count;
+    };
+
+    static void am_bidirectional_recv_cb(void *request, ucs_status_t status,
+                                 size_t length, void *user_data)
+    {
+        EXPECT_UCS_OK(status);
+        ++static_cast<bidirectional_side*>(user_data)->recv_count;
+    }
+
+    static ucs_status_t am_bidirectional_data_cb(
+                                        void *arg, const void *header,
+                                        size_t header_length, void *data,
+                                        size_t length,
+                                        const ucp_am_recv_param_t *rx_param)
+    {
+        bidirectional_side *side = static_cast<bidirectional_side*>(arg);
+        ucp_request_param_t param;
+        ucs_status_ptr_t sp;
+        void *rbuf;
+
+        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+
+        rbuf = mem_buffer::allocate(length, side->mem_type);
+        side->rx_bufs.push_back(rbuf);
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                             UCP_OP_ATTR_FIELD_USER_DATA;
+        param.cb.recv_am   = am_bidirectional_recv_cb;
+        param.user_data    = side;
+
+        sp = ucp_am_recv_data_nbx(side->e->worker(), data, rbuf, length,
+                                  &param);
+        if (UCS_PTR_IS_PTR(sp)) {
+            ucp_request_release(sp);
+            return UCS_INPROGRESS;
+        }
+
+        EXPECT_EQ(NULL, sp);
+        ++side->recv_count;
+        return UCS_OK;
+    }
+
     static void check_pending_queues_empty(const entity &e)
     {
         ucp_worker_h worker = e.worker();
@@ -2489,6 +2605,19 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_request_reset,
     EXPECT_GT(fc.sender_throttled + fc.receiver_throttled, 0u)
             << "throttling should have occurred with MAX_MEM=1M";
 
+    verify_clean_fc_state();
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_enabled_bidirectional,
+           "RNDV_FRAG_SIZE=cuda:256K", "RNDV_FRAG_ALLOC_COUNT=cuda:4",
+           "RNDV_FRAG_WORKER_MAX_MEM=1M", "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    /* 4 messages of 16 fragments in each direction against a 4-fragment
+     * quota per worker */
+    run_bidirectional_fc_test(16, 4);
+
+    check_stats_ge(sender(), UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
+    check_stats_ge(receiver(), UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED, 1);
     verify_clean_fc_state();
 }
 
