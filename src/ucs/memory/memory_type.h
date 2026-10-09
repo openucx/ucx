@@ -61,7 +61,13 @@ typedef enum ucs_mem_flags {
      * Memory can be accessed for inter-process memory type copy by a peer on
      * a different node.
      */
-    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1)
+    UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1),
+
+    /**
+     * CUDA device memory allocated as GPUDirect RDMA (GDR) capable, so its
+     * pages can be pinned for peer access.
+     */
+    UCS_MEM_FLAG_GDR_CAPABLE             = UCS_BIT(2)
 } ucs_mem_flags_t;
 
 
