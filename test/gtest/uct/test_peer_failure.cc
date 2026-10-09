@@ -415,12 +415,13 @@ protected:
         return status;
     }
 
-    static void post_flush(uct_ep_h ep, uct_completion_t *comp)
+    static void post_flush(uct_ep_h ep, uct_completion_t *comp,
+                           unsigned flush_flags = UCT_FLUSH_FLAG_LOCAL)
     {
         ucs_status_t status;
 
         ++comp->count;
-        status = uct_ep_flush(ep, 0, comp);
+        status = uct_ep_flush(ep, flush_flags, comp);
         if (status == UCS_INPROGRESS) {
             return;
         }
@@ -671,6 +672,7 @@ protected:
     }
 
     void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx,
+                                unsigned flush_flags = UCT_FLUSH_FLAG_LOCAL,
                                 bool with_rx_token = true)
     {
         static constexpr uint32_t NUM_MSG_BEFORE_INVALIDATE = 2;
@@ -690,7 +692,7 @@ protected:
         ASSERT_UCS_OK_OR_INPROGRESS(status);
         ++num_posted;
 
-        post_flush(m_sender->ep(0), &ctx.comp);
+        post_flush(m_sender->ep(0), &ctx.comp, flush_flags);
         ctx.num_ops_posted_after_flush = post_until_error(
                 m_sender->ep(0), &ctx.comp, send_func);
         num_posted += ctx.num_ops_posted_after_flush;
@@ -717,6 +719,46 @@ protected:
         EXPECT_EQ(0, ctx.comp.count);
     }
 
+    void test_put_bcopy(unsigned flush_flags, bool with_rx_token)
+    {
+        const uct_iface_attr_t &attr = m_sender->iface_attr();
+        const size_t size = ucs_min((size_t)4096, attr.cap.put.max_bcopy);
+        mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+        mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+        purge_ctx ctx = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
+        ctx.remote_addr = recvbuf.addr();
+        ctx.rkey        = recvbuf.rkey();
+        ctx.send_buf    = sendbuf.ptr();
+        ctx.send_len    = size;
+
+        send_func_t put_bcopy = [&](uct_ep_h ep, uct_completion_t*) {
+            ssize_t ret = uct_ep_put_bcopy(ep, mapped_buffer::pack, &sendbuf,
+                                           ctx.remote_addr, ctx.rkey);
+            return (ret >= 0) ? UCS_OK : (ucs_status_t)ret;
+        };
+
+        /* Dedicated completion for delivered operations */
+        purge_ctx delivered_ctx   = {this,
+                                     UCT_EP_OP_PUT_BCOPY,
+                                     {completion_cb, 0, UCS_OK}};
+        const bool test_delivered = (flush_flags & UCT_FLUSH_FLAG_REMOTE) &&
+                                    with_rx_token;
+        if (test_delivered) {
+            ASSERT_UCS_OK(post_op(m_sender->ep(0), &ctx.comp, put_bcopy));
+            post_flush(m_sender->ep(0), &delivered_ctx.comp,
+                       UCT_FLUSH_FLAG_REMOTE);
+        }
+
+        test_purge_outstanding(put_bcopy, ctx, flush_flags, with_rx_token);
+
+        if (test_delivered) {
+            EXPECT_EQ(0, delivered_ctx.comp.count);
+            EXPECT_UCS_OK(delivered_ctx.comp.status);
+            EXPECT_EQ(1u, delivered_ctx.num_completions);
+        }
+    }
+
     void test_am_short(bool with_rx_token)
     {
         const uct_iface_attr_t &attr = m_sender->iface_attr();
@@ -737,7 +779,8 @@ protected:
             return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER,
                                    ctx.send_buf, ctx.send_len);
         };
-        test_purge_outstanding(am_short, ctx, with_rx_token);
+        test_purge_outstanding(am_short, ctx, UCT_FLUSH_FLAG_LOCAL,
+                               with_rx_token);
 
         EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
         EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
@@ -825,24 +868,7 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_short,
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_bcopy,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
 {
-    const uct_iface_attr_t &attr = m_sender->iface_attr();
-    const size_t size = ucs_min((size_t)4096, attr.cap.put.max_bcopy);
-    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
-    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
-
-    purge_ctx ctx   = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
-    ctx.remote_addr = recvbuf.addr();
-    ctx.rkey        = recvbuf.rkey();
-    ctx.send_buf    = sendbuf.ptr();
-    ctx.send_len    = size;
-
-    send_func_t put_bcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
-        ssize_t ret = uct_ep_put_bcopy(ep, mapped_buffer::pack, &sendbuf,
-                                       ctx.remote_addr, ctx.rkey);
-        return (ret >= 0) ? UCS_OK : (ucs_status_t)ret;
-    };
-
-    test_purge_outstanding(put_bcopy, ctx);
+    test_put_bcopy(UCT_FLUSH_FLAG_LOCAL, true);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
@@ -920,6 +946,20 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_bcopy,
     };
 
     test_purge_outstanding(get_bcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    check_skip_flush_remote();
+    test_put_bcopy(UCT_FLUSH_FLAG_REMOTE, true);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote_no_rx_token,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    check_skip_flush_remote();
+    test_put_bcopy(UCT_FLUSH_FLAG_REMOTE, false);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
