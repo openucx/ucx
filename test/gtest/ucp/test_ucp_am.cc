@@ -2520,7 +2520,7 @@ private:
     };
 
     static void am_bidirectional_recv_cb(void *request, ucs_status_t status,
-                                 size_t length, void *user_data)
+                                         size_t length, void *user_data)
     {
         EXPECT_UCS_OK(status);
         ++static_cast<bidirectional_side*>(user_data)->recv_count;
