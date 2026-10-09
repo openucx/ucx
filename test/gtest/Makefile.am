@@ -118,6 +118,7 @@ gtest_SOURCES = \
 	uct/test_flush.cc \
 	uct/test_many2one_am.cc \
 	uct/test_md.cc \
+	uct/test_musa_contract.cc \
 	uct/test_mm.cc \
 	uct/sm/mm/test_mm_fifo_room.cc \
 	uct/test_mem.cc \
