@@ -1314,9 +1314,11 @@ class test_cuda_copy : public test_md {
 /* Without dmabuf the NIC pins the pages behind the virtual address, which the
  * driver refuses for device-located VMM allocations. Such memory must not be
  * reported as registrable, otherwise ucp_mem_map() attempts the registration
- * and fails instead of leaving the NIC memory domains out. */
+ * and fails instead of leaving the NIC memory domains out. ASYNC_MEM_TYPE is
+ * set to cuda to keep the allocation out of the cuda-managed flow, which is
+ * non-registrable on its own. */
 UCS_TEST_P(test_cuda_copy, async_mem_not_registrable_without_dmabuf,
-           "CUDA_COPY_DMABUF=no")
+           "CUDA_COPY_DMABUF=no", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
     const size_t size = ucs_get_page_size();
     uct_md_mem_attr_v2_t mem_attr = {};
