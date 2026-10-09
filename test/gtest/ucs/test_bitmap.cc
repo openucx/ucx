@@ -270,7 +270,7 @@ UCS_TEST_F(test_static_bitmap, test_for_each_bit_single_word) {
     EXPECT_EQ(104, bits[2]);
 }
 
-/* 255 bits round up to 4 words, with the last word is only partly used */
+/* 255 bits round up to 4 words, with the last word only partly used */
 UCS_TEST_F(test_static_bitmap, test_for_each_bit_partial_last_word) {
     ucs_static_bitmap_s(255) bitmap;
     std::vector<unsigned> bits;
