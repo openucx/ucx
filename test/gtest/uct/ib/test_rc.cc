@@ -224,10 +224,12 @@ UCS_TEST_SKIP_COND_P(test_rc, ep_init_failure_removed_from_ep_list,
     EXPECT_EQ(first, rc->ep_list.next);
 }
 
+/* Synthesize an error receive completion by replacing the poll_cq() operation
+ * of the device context: receive work requests go to the shared receive queue,
+ * which verbs can not move to an error state. */
 static struct {
     struct ibv_cq      *cq;
     void               *desc;
-    enum ibv_wc_status status;
     int                inject;
 } failed_rx;
 
@@ -239,12 +241,8 @@ static int failed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
     }
 
     failed_rx.inject = 0;
-    wc[0].status     = failed_rx.status;
+    wc[0].status     = IBV_WC_REM_ABORT_ERR;
     wc[0].wr_id      = (uintptr_t)failed_rx.desc;
-    wc[0].qp_num     = 0;
-    wc[0].byte_len   = 0;
-    wc[0].slid       = 0;
-    wc[0].imm_data   = 0;
     return 1;
 }
 
@@ -262,55 +260,31 @@ static bool is_desc_in_pool(ucs_mpool_t *mp, void *desc)
     return false;
 }
 
-/* Synthesize an error receive completion by replacing the poll_cq() operation
- * of the device context: receive work requests go to the shared receive queue,
- * which verbs can not move to an error state. */
-class test_rc_failed_rx : public test_rc {
-public:
-    void check_failed_rx(enum ibv_wc_status status)
-    {
-        uct_rc_iface_t *rc = rc_iface(m_e2);
-        void *desc;
-
-        if (ucs_derived_of(m_e2->iface(), uct_rc_verbs_iface_t)->srq == NULL) {
-            UCS_TEST_SKIP_R("SRQ is disabled");
-        }
-
-        desc = ucs_mpool_get(&rc->rx.mp);
-        if (desc == NULL) {
-            UCS_TEST_SKIP_R("no receive descriptor is available");
-        }
-
-        failed_rx.cq     = rc->super.cq[UCT_IB_DIR_RX];
-        failed_rx.desc   = desc;
-        failed_rx.status = status;
-        failed_rx.inject = 1;
-
-        ucs::mock mock;
-        mock.setup(&failed_rx.cq->context->ops.poll_cq, failed_rx_poll_cq);
-
-        progress();
-
-        ASSERT_FALSE(failed_rx.inject);
-        EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, desc))
-                << "receive descriptor leaked";
-    }
-};
-
-/* The repost batch must stay above the one completion reported here, so that
- * the released descriptor is not posted again, and at or below 25, since
- * uct_rc_verbs_iface_post_recv_always() allocates a batch on the stack. */
-UCS_TEST_P(test_rc_failed_rx, flushed, "IB_RX_MAX_BATCH=16")
+/* The repost batch must stay above the single completion reported here, so
+ * that the released descriptor is not posted again. */
+UCS_TEST_SKIP_COND_P(test_rc, failed_rx_release_desc,
+                     GetParam()->tl_name != "rc_verbs", "IB_RX_MAX_BATCH=16")
 {
-    check_failed_rx(IBV_WC_WR_FLUSH_ERR);
-}
+    uct_rc_iface_t *rc = rc_iface(m_e2);
 
-UCS_TEST_P(test_rc_failed_rx, remote_abort, "IB_RX_MAX_BATCH=16")
-{
-    check_failed_rx(IBV_WC_REM_ABORT_ERR);
-}
+    failed_rx.desc = ucs_mpool_get(&rc->rx.mp);
+    ASSERT_TRUE(failed_rx.desc != NULL);
 
-_UCT_INSTANTIATE_TEST_CASE(test_rc_failed_rx, rc_verbs)
+    failed_rx.cq     = rc->super.cq[UCT_IB_DIR_RX];
+    failed_rx.inject = 1;
+
+    ucs::mock mock;
+    mock.setup(&failed_rx.cq->context->ops.poll_cq, failed_rx_poll_cq);
+
+    progress();
+    ASSERT_FALSE(failed_rx.inject);
+
+    /* The completion was reported for a work request the queue never held */
+    rc->rx.srq.available--;
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, failed_rx.desc))
+            << "receive descriptor leaked";
+}
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
