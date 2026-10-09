@@ -342,6 +342,14 @@ void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
     uct_rc_ep_send_op_complete(op);
 }
 
+/* Outstanding purge can tell short operations posted through device memory
+ * from bcopy operations by handler. */
+void uct_rc_ep_short_dm_desc_handler(uct_rc_iface_send_op_t *op,
+                                     const void *UCS_V_UNUSED resp)
+{
+    ucs_mpool_put(op);
+}
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags)
 {
@@ -493,7 +501,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
+        if ((op->handler != (uct_rc_send_handler_t)ucs_mpool_put) &&
+            (op->handler != uct_rc_ep_short_dm_desc_handler)) {
             /* Allow from destroy flow: clean flush cancel and ep_check ops. */
             if (warn &&
                 (op->handler != uct_rc_ep_flush_op_completion_handler) &&
