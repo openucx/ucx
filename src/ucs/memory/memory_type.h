@@ -65,8 +65,7 @@ typedef enum ucs_mem_flags {
 
     /**
      * CUDA device memory allocated as GPUDirect RDMA (GDR) capable, so its
-     * pages can be pinned for peer access, as done by gdr_copy. Reported only
-     * when detected for the buffer, never assumed by default.
+     * pages can be pinned for peer access.
      */
     UCS_MEM_FLAG_GDR_CAPABLE             = UCS_BIT(2)
 } ucs_mem_flags_t;
