@@ -1455,9 +1455,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                       UCS_MEMORY_TYPE_GAUDI);
         uct_ib_check_gpudirect_driver(md, "/dev/hl0", UCS_MEMORY_TYPE_GAUDI);
 
-        /* Do not infer Level Zero device-memory registration support from the
-         * presence of the Xe module. DMA-BUF support is detected below. */
-
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);
     }

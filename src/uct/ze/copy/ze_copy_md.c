@@ -361,6 +361,7 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     ze_result_t ret;
     const uct_ze_subdevice_t *subdevice;
     int dmabuf_supported;
+    ucs_status_t status;
 
     ze_driver = uct_ze_base_get_driver();
     if (ze_driver == NULL) {
@@ -377,32 +378,31 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     subdevice = uct_ze_base_get_subdevice_by_global_id(config->device_ordinal);
     if (subdevice == NULL) {
         ucs_error("Failed to get sub-device at ordinal %d", config->device_ordinal);
-        ucs_free(md);
-        return UCS_ERR_NO_DEVICE;
+        status = UCS_ERR_NO_DEVICE;
+        goto err_free_md;
     }
 
     /* Get the actual device handle from the sub-device */
     md->ze_device = uct_ze_base_get_device_handle_from_subdevice(subdevice);
     if (md->ze_device == NULL) {
         ucs_error("Failed to get device handle for sub-device %d", config->device_ordinal);
-        ucs_free(md);
-        return UCS_ERR_NO_DEVICE;
+        status = UCS_ERR_NO_DEVICE;
+        goto err_free_md;
     }
 
     ret = zeContextCreate(ze_driver, &context_desc, &md->ze_context);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_error("zeContextCreate failed with error %x", ret);
-        ucs_free(md);
-        return UCS_ERR_NO_DEVICE;
+        status = UCS_ERR_NO_DEVICE;
+        goto err_free_md;
     }
 
     dmabuf_supported = uct_ze_copy_md_is_dmabuf_supported(md->ze_device);
     if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
         ucs_error("%s: DMA-BUF is not supported by the Level Zero device",
                   md_name);
-        zeContextDestroy(md->ze_context);
-        ucs_free(md);
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_destroy_context;
     }
 
     md->enable_dmabuf   = (config->enable_dmabuf != UCS_NO) && dmabuf_supported;
@@ -411,6 +411,12 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
 
     *md_p = (uct_md_h)md;
     return UCS_OK;
+
+err_destroy_context:
+    zeContextDestroy(md->ze_context);
+err_free_md:
+    ucs_free(md);
+    return status;
 }
 
 uct_component_t uct_ze_copy_component = {
