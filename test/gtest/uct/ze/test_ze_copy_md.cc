@@ -59,6 +59,22 @@ protected:
 
         return (status == UCS_OK) ? md : NULL;
     }
+
+    /* Allocate ZE_DEVICE memory through the MD; skip the test if the MD
+     * cannot allocate it on this system. */
+    static void alloc_device_or_skip(uct_md_h md, size_t *length_p,
+                                     void **addr_p, uct_mem_h *memh_p)
+    {
+        ucs_status_t status = md->ops->mem_alloc(md, length_p, addr_p,
+                                                 UCS_MEMORY_TYPE_ZE_DEVICE,
+                                                 UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                                 "test_ze_copy", memh_p);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            uct_md_close(md);
+            UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
+        }
+        ASSERT_UCS_OK(status);
+    }
 };
 
 
@@ -124,14 +140,7 @@ UCS_TEST_F(test_ze_copy_md, mem_alloc_free_device) {
     void *addr     = NULL;
     uct_mem_h memh = NULL;
 
-    ucs_status_t status = md->ops->mem_alloc(md, &length, &addr,
-                                             UCS_MEMORY_TYPE_ZE_DEVICE,
-                                             UCS_SYS_DEVICE_ID_UNKNOWN, 0,
-                                             "test_ze_copy", &memh);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
-    }
-    ASSERT_UCS_OK(status);
+    alloc_device_or_skip(md, &length, &addr, &memh);
     ASSERT_TRUE(addr != NULL);
     ASSERT_GE(length, 4096u);
 
@@ -149,17 +158,10 @@ UCS_TEST_F(test_ze_copy_md, detect_memory_type_device) {
         UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
     }
 
-    size_t length       = 4096;
-    void *addr          = NULL;
-    uct_mem_h memh      = NULL;
-    ucs_status_t status = md->ops->mem_alloc(md, &length, &addr,
-                                             UCS_MEMORY_TYPE_ZE_DEVICE,
-                                             UCS_SYS_DEVICE_ID_UNKNOWN, 0,
-                                             "test_ze_copy", &memh);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
-    }
-    ASSERT_UCS_OK(status);
+    size_t length  = 4096;
+    void *addr     = NULL;
+    uct_mem_h memh = NULL;
+    alloc_device_or_skip(md, &length, &addr, &memh);
 
     ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST;
     EXPECT_UCS_OK(md->ops->detect_memory_type(md, addr, length, &mem_type));
@@ -178,7 +180,15 @@ UCS_TEST_F(test_ze_copy_md, memtype_cache_created_at_md_open) {
         UCS_TEST_SKIP_R("memtype cache is disabled");
     }
 
-    /* An earlier test may have created the global cache. */
+    /* Creation fails permanently once it has failed in this process, so make
+     * sure the cache can be created at all; otherwise a NULL instance after
+     * uct_md_open() would prove nothing. */
+    ucs_memtype_cache_global_create();
+    if (ucs_memtype_cache_global_instance == NULL) {
+        UCS_TEST_SKIP_R("memtype cache cannot be created");
+    }
+
+    /* Drop the cache, so that the MD open has to create it again. */
     ucs_memtype_cache_cleanup();
     ucs_memtype_cache_global_init();
     ASSERT_TRUE(ucs_memtype_cache_global_instance == NULL);
@@ -190,21 +200,13 @@ UCS_TEST_F(test_ze_copy_md, memtype_cache_created_at_md_open) {
 
     EXPECT_TRUE(ucs_memtype_cache_global_instance != NULL);
 
-    size_t length       = 4096;
-    void *addr          = NULL;
-    uct_mem_h memh      = NULL;
-    ucs_status_t status = md->ops->mem_alloc(md, &length, &addr,
-                                             UCS_MEMORY_TYPE_ZE_DEVICE,
-                                             UCS_SYS_DEVICE_ID_UNKNOWN, 0,
-                                             "test_ze_copy", &memh);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        uct_md_close(md);
-        UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
-    }
-    ASSERT_UCS_OK(status);
+    size_t length  = 4096;
+    void *addr     = NULL;
+    uct_mem_h memh = NULL;
+    alloc_device_or_skip(md, &length, &addr, &memh);
 
     ucs_memory_info_t mem_info;
-    status = ucs_memtype_cache_lookup(addr, length, &mem_info);
+    ucs_status_t status = ucs_memtype_cache_lookup(addr, length, &mem_info);
     EXPECT_UCS_OK(status);
     if (status == UCS_OK) {
         EXPECT_EQ(UCS_MEMORY_TYPE_ZE_DEVICE, mem_info.type);
@@ -227,17 +229,10 @@ UCS_TEST_F(test_ze_copy_md, mem_query_base_and_length) {
         UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
     }
 
-    size_t length       = 8192;
-    void *addr          = NULL;
-    uct_mem_h memh      = NULL;
-    ucs_status_t status = md->ops->mem_alloc(md, &length, &addr,
-                                             UCS_MEMORY_TYPE_ZE_DEVICE,
-                                             UCS_SYS_DEVICE_ID_UNKNOWN, 0,
-                                             "test_ze_copy", &memh);
-    if (status == UCS_ERR_UNSUPPORTED) {
-        UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
-    }
-    ASSERT_UCS_OK(status);
+    size_t length  = 8192;
+    void *addr     = NULL;
+    uct_mem_h memh = NULL;
+    alloc_device_or_skip(md, &length, &addr, &memh);
 
     uct_md_mem_attr_v2_t mem_attr = {};
     mem_attr.field_mask           = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
