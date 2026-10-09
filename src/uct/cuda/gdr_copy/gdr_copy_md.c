@@ -9,6 +9,7 @@
 
 #include "gdr_copy_md.h"
 
+#include <dlfcn.h>
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
@@ -23,6 +24,7 @@
 #include <ucm/api/ucm.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_util.h>
 
 
 #define UCT_GDR_COPY_RCACHE_OVERHEAD_AUTO 50.0e-9
@@ -63,6 +65,68 @@ uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
     *pin_pcie_fallback_p = 0;
     return UCS_OK;
 #endif
+}
+
+static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
+{
+#if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
+    typedef int (*uct_gdr_get_attribute_func_t)(gdr_t, gdr_attr_t, int*);
+    uct_gdr_get_attribute_func_t get_attribute;
+    Dl_info lib_info, attr_info;
+    void *dl_handle;
+    int using_dmabuf;
+    int ret;
+
+    /* Use the same GDRCopy runtime that created gdr_ctx. */
+    if (dladdr(gdr_open, &lib_info) == 0) {
+        ucs_debug("could not locate loaded GDRCopy runtime");
+        return 0;
+    }
+
+    dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+    if (dl_handle == NULL) {
+        ucs_debug("could not open loaded GDRCopy runtime %s: %s",
+                  lib_info.dli_fname, dlerror());
+        return 0;
+    }
+
+    get_attribute = (uct_gdr_get_attribute_func_t)dlsym(dl_handle,
+                                                         "gdr_get_attribute");
+    if ((get_attribute == NULL) ||
+        (dladdr(get_attribute, &attr_info) == 0) ||
+        (attr_info.dli_fbase != lib_info.dli_fbase)) {
+        ucs_debug("loaded GDRCopy runtime has no gdr_get_attribute symbol");
+        dlclose(dl_handle);
+        return 0;
+    }
+
+    ret = get_attribute(gdr_ctx, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dmabuf);
+    dlclose(dl_handle);
+    if (ret != 0) {
+        ucs_debug("failed to query GDRCopy DMA-BUF backend: %d", ret);
+        return 0;
+    }
+
+    return using_dmabuf;
+#else
+    return 0;
+#endif
+}
+
+static int uct_gdr_copy_cuda_async_detect(gdr_t gdr_ctx)
+{
+    int runtime_major, runtime_minor, driver_version = 0;
+    int using_dmabuf;
+
+    gdr_runtime_get_version(&runtime_major, &runtime_minor);
+    using_dmabuf = uct_gdr_copy_using_dmabuf(gdr_ctx);
+    if (uct_cuda_driver_get_version(&driver_version) != UCS_OK) {
+        return 0;
+    }
+
+    return uct_gdr_copy_cuda_async_supported(runtime_major,
+                                             runtime_minor, using_dmabuf,
+                                             driver_version);
 }
 
 typedef struct {
@@ -224,7 +288,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
 
     ret = gdr_get_info(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->info);
     if (ret) {
-        ucs_error("gdr_get_info failed. ret:%d", ret);
+        ucs_log(log_level, "gdr_get_info failed. ret:%d", ret);
         goto unmap_buffer;
     }
 
@@ -277,6 +341,7 @@ static ucs_status_t
 uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
+    uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     uct_gdr_copy_mem_t *mem_hndl = NULL;
     ucs_status_t status;
 
@@ -289,7 +354,7 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
     }
 
     ucs_ptr_check_align(address, length, GPU_PAGE_SIZE);
-    status = uct_gdr_copy_mem_reg_internal(uct_md, address, length, 0,
+    status = uct_gdr_copy_mem_reg_internal(uct_md, address, length, flags,
                                            mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
@@ -556,6 +621,9 @@ uct_gdr_copy_md_create(uct_component_t *component,
         goto err_free;
     }
 
+    md->cuda_async_supported =
+            uct_gdr_copy_cuda_async_detect(md->gdrcpy_ctx);
+
     if (!md_config->enable_rcache) {
         goto out;
     }
@@ -669,4 +737,3 @@ uct_component_t uct_gdr_copy_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
-

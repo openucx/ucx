@@ -25,8 +25,13 @@ extern "C" {
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif
+#if HAVE_CUDA && HAVE_GDR_COPY
+#include <uct/cuda/gdr_copy/gdr_copy_md.h>
+#include <uct/cuda/base/cuda_util.h>
+#endif
 }
 #include <sys/resource.h>
+#include <dlfcn.h>
 #include <net/if_arp.h>
 #include <ifaddrs.h>
 #include <netdb.h>
@@ -1372,10 +1377,24 @@ UCS_TEST_P(test_cuda, sparse_regions)
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
-#if HAVE_DECL_GDR_PIN_BUFFER_V2
+#if HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2
 
 class test_gdr_copy : public test_md {
 protected:
+    static ucs_log_func_rc_t
+    count_errors_logger(const char *file, unsigned line, const char *function,
+                        ucs_log_level_t level,
+                        const ucs_log_component_config_t *comp_conf,
+                        const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            ++m_error_count;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
     ucs_status_t register_mem()
     {
         constexpr size_t size = 65536;
@@ -1392,7 +1411,11 @@ protected:
         free_memory(address, UCS_MEMORY_TYPE_CUDA);
         return status;
     }
+
+    static unsigned m_error_count;
 };
+
+unsigned test_gdr_copy::m_error_count;
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
@@ -1423,6 +1446,78 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
     ASSERT_UCS_OK(register_mem());
 }
 
+UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no")
+{
+    constexpr size_t size = 65536;
+    void *address;
+    ucs::handle<void*> buffer;
+    uct_mem_h memh;
+    ucs_status_t status;
+    int ret;
+
+    ret = posix_memalign(&address, size, size);
+    if (ret == 0) {
+        buffer.reset(address, free);
+    }
+
+    ASSERT_EQ(0, ret);
+    m_error_count = 0;
+    {
+        scoped_log_handler slh(count_errors_logger);
+        status = reg_mem(UCT_MD_MEM_ACCESS_ALL | UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                         address, size, &memh);
+    }
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, status);
+    EXPECT_EQ(0u, m_error_count);
+}
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_support,
+                     !check_caps(UCT_MD_FLAG_REG))
+{
+    uct_gdr_copy_md_t *gdr_md = ucs_derived_of(md(), uct_gdr_copy_md_t);
+    int expected = 0;
+
+#if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
+    typedef void (*runtime_get_version_func_t)(int*, int*);
+    typedef int (*get_attribute_func_t)(gdr_t, gdr_attr_t, int*);
+    runtime_get_version_func_t runtime_get_version;
+    get_attribute_func_t get_attribute;
+    int runtime_major, runtime_minor, using_dmabuf, driver_version;
+    void *dl_handle;
+
+    dl_handle = dlopen("libgdrapi.so.2", RTLD_LAZY | RTLD_NOLOAD);
+    if (dl_handle != nullptr) {
+        runtime_get_version = reinterpret_cast<runtime_get_version_func_t>(
+                dlsym(dl_handle, "gdr_runtime_get_version"));
+        get_attribute = reinterpret_cast<get_attribute_func_t>(
+                dlsym(dl_handle, "gdr_get_attribute"));
+    } else {
+        runtime_get_version = nullptr;
+        get_attribute       = nullptr;
+    }
+
+    if (runtime_get_version != nullptr) {
+        runtime_get_version(&runtime_major, &runtime_minor);
+        if (((runtime_major > 2) ||
+             ((runtime_major == 2) && (runtime_minor >= 6))) &&
+            (get_attribute != nullptr) &&
+            (uct_cuda_driver_get_version(&driver_version) == UCS_OK) &&
+            (driver_version >= 13050) &&
+            (get_attribute(gdr_md->gdrcpy_ctx, GDR_ATTR_USING_DMA_BUF_MMAP,
+                           &using_dmabuf) == 0)) {
+            expected = !!using_dmabuf;
+        }
+    }
+
+    if (dl_handle != nullptr) {
+        dlclose(dl_handle);
+    }
+#endif
+
+    EXPECT_EQ(expected, gdr_md->cuda_async_supported);
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
 
-#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
+#endif /* HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2 */

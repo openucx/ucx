@@ -487,8 +487,9 @@ void test_ucp_proto::test_dt_iter_mem_reg(ucs_memory_type_t mem_type,
     ucp_request_param_t param;
     param.op_attr_mask = 0;
 
-    ucp_datatype_iter_init(context(), buffer.ptr(), size, UCP_DATATYPE_CONTIG,
-                           size, 1, &dt_iter, &sg_count, &param);
+    ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), size,
+                                         UCP_DATATYPE_CONTIG, size, 1, &dt_iter,
+                                         &sg_count, &param));
 
     ucs_time_t start_time = ucs_get_time();
     ucs_time_t deadline   = start_time + ucs_time_from_sec(test_time_sec);
@@ -1001,6 +1002,8 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
         UCS_TEST_SKIP_R("CUDA async memory is not classified as CUDA managed");
     }
 
+    ASSERT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
+
     hca_md_map = get_required_mem_flags_md_map(context(), UCS_MEMORY_TYPE_CUDA,
                                                UCS_MEM_FLAG_REGISTRABLE);
     hca_md_map &= context()->cache_md_map[mem_type];
@@ -1021,6 +1024,32 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     EXPECT_EQ(static_cast<ucp_md_map_t>(0),
               dt_iter.type.contig.memh->md_map & hca_md_map);
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_explicit_cuda,
+           "CUDA_COPY_ASYNC_MEM_TYPE?=cuda")
+{
+    constexpr size_t buffer_size = 8192;
+    ucp_request_param_t param     = {};
+    ucp_datatype_iter_t dt_iter;
+    uint8_t sg_count;
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    scoped_async_cuda_buffer buffer(buffer_size);
+
+    ASSERT_UCS_OK(ucp_datatype_iter_init(context(), buffer.ptr(), buffer_size,
+                                         UCP_DATATYPE_CONTIG, buffer_size, 1,
+                                         &dt_iter, &sg_count, &param));
+
+    EXPECT_TRUE(dt_iter.mem_info.flags & UCS_MEM_FLAG_CUDA_ASYNC);
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, dt_iter.mem_info.type);
+
+    if (dt_iter.type.contig.memh != NULL) {
+        ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
+    }
 }
 
 /* Remove the GET zcopy protocol, which replaces GET/RNDV on registrable
