@@ -9,6 +9,8 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ze/base/ze_base.h>
 #include <uct/ze/copy/ze_copy_md.h>
+#include <ucs/config/global_opts.h>
+#include <ucs/memory/memtype_cache.h>
 }
 
 
@@ -164,6 +166,54 @@ UCS_TEST_F(test_ze_copy_md, detect_memory_type_device) {
     EXPECT_EQ(UCS_MEMORY_TYPE_ZE_DEVICE, mem_type);
 
     EXPECT_UCS_OK(md->ops->mem_free(md, memh));
+    uct_md_close(md);
+}
+
+
+/*
+ * The first allocation through this MD must be tracked in the memtype cache.
+ */
+UCS_TEST_F(test_ze_copy_md, memtype_cache_created_at_md_open) {
+    if (ucs_global_opts.enable_memtype_cache == UCS_NO) {
+        UCS_TEST_SKIP_R("memtype cache is disabled");
+    }
+
+    /* An earlier test may have created the global cache. */
+    ucs_memtype_cache_cleanup();
+    ucs_memtype_cache_global_init();
+    ASSERT_TRUE(ucs_memtype_cache_global_instance == NULL);
+
+    uct_md_h md = open_first_md();
+    if (md == NULL) {
+        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
+    }
+
+    EXPECT_TRUE(ucs_memtype_cache_global_instance != NULL);
+
+    size_t length       = 4096;
+    void *addr          = NULL;
+    uct_mem_h memh      = NULL;
+    ucs_status_t status = md->ops->mem_alloc(md, &length, &addr,
+                                             UCS_MEMORY_TYPE_ZE_DEVICE,
+                                             UCS_SYS_DEVICE_ID_UNKNOWN, 0,
+                                             "test_ze_copy", &memh);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        uct_md_close(md);
+        UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
+    }
+    ASSERT_UCS_OK(status);
+
+    ucs_memory_info_t mem_info;
+    status = ucs_memtype_cache_lookup(addr, length, &mem_info);
+    EXPECT_UCS_OK(status);
+    if (status == UCS_OK) {
+        EXPECT_EQ(UCS_MEMORY_TYPE_ZE_DEVICE, mem_info.type);
+    }
+
+    EXPECT_UCS_OK(md->ops->mem_free(md, memh));
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_memtype_cache_lookup(addr, length, &mem_info));
+
     uct_md_close(md);
 }
 
