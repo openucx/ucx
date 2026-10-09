@@ -553,7 +553,7 @@ uct_rc_mlx5_base_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     status = uct_rc_mlx5_base_ep_zcopy_post(
             ep, MLX5_OPCODE_SEND, iov, iovcnt, 0ul, id, header, header_length,
             0, 0, 0ul, 0, 0, NULL, MLX5_WQE_CTRL_SOLICITED,
-            uct_rc_ep_send_op_completion_handler, 0, comp);
+            uct_rc_ep_am_zcopy_completion_handler, 0, comp);
     if (ucs_likely(status >= 0)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                           header_length + uct_iov_total_length(iov, iovcnt));
@@ -1006,7 +1006,7 @@ static int uct_rc_mlx5_send_op_is_get_zcopy(const uct_rc_iface_send_op_t *op)
 
 static int uct_rc_mlx5_send_op_is_am_zcopy(const uct_rc_iface_send_op_t *op)
 {
-    return op->handler == uct_rc_ep_send_op_completion_handler;
+    return op->handler == uct_rc_ep_am_zcopy_completion_handler;
 }
 
 /* Return the non-flush send operation waiting on the WQE at the given pi */

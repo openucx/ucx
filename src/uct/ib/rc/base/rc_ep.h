@@ -259,6 +259,9 @@ void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp);
 
+void uct_rc_ep_am_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                           const void *resp);
+
 void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp);
 

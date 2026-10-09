@@ -272,7 +272,7 @@ void uct_rc_ep_flush_remote_handler(uct_rc_iface_send_op_t *op,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_send_op_complete(uct_rc_iface_send_op_t *op)
+uct_rc_ep_send_op_complete_optional_comp(uct_rc_iface_send_op_t *op)
 {
     if (op->user_comp != NULL) {
         uct_invoke_completion(op->user_comp, UCS_OK);
@@ -281,25 +281,38 @@ uct_rc_ep_send_op_complete(uct_rc_iface_send_op_t *op)
     uct_rc_iface_put_send_op(op);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_send_op_complete(uct_rc_iface_send_op_t *op)
+{
+    uct_invoke_completion(op->user_comp, UCS_OK);
+    uct_rc_iface_put_send_op(op);
+}
+
 /* Put zcopy completion handler which allows null user completion. */
 void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
-    uct_rc_ep_send_op_complete(op);
+    uct_rc_ep_send_op_complete_optional_comp(op);
 }
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
     uct_rc_op_release_reads_get_zcopy(op);
-    uct_rc_ep_send_op_completion_handler(op, resp);
+    uct_rc_ep_send_op_complete(op);
 }
 
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp)
 {
-    uct_invoke_completion(op->user_comp, UCS_OK);
-    uct_rc_iface_put_send_op(op);
+    uct_rc_ep_send_op_complete(op);
+}
+
+/* Outstanding purge can tell am zcopy from other operations by handler. */
+void uct_rc_ep_am_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                           const void *resp)
+{
+    uct_rc_ep_send_op_complete(op);
 }
 
 /* Outstanding purge can tell put sgl zcopy from put zcopy by handler.
@@ -307,7 +320,7 @@ void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                                 const void *resp)
 {
-    uct_rc_ep_send_op_complete(op);
+    uct_rc_ep_send_op_complete_optional_comp(op);
 }
 
 void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
@@ -322,7 +335,7 @@ void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
                                         const void *resp)
 {
-    uct_rc_ep_send_op_complete(op);
+    uct_rc_ep_send_op_complete_optional_comp(op);
 }
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
@@ -514,6 +527,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
 
         if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
+            (op->handler == uct_rc_ep_am_zcopy_completion_handler) ||
             (op->handler == uct_rc_ep_put_zcopy_completion_handler) ||
             (op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
             (op->handler == uct_rc_ep_get_zcopy_completion_handler) ||
