@@ -186,12 +186,13 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
 UCS_TEST_SKIP_COND_P(test_rc, ep_init_failure_removed_from_ep_list,
                      GetParam()->tl_name != "rc_verbs")
 {
-    /* rx.queue_len >= 1024 lets rx.max_bufs bound the receive pool. */
+    /* rx.max_bufs bounds the receive pool below rx.queue_len, and pinning
+     * rx.bufs_grow keeps the pool valid regardless of rx.queue_len. */
     if (uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS", "8") != UCS_OK) {
         UCS_TEST_SKIP_R("cannot limit the receive buffer pool");
     }
 
-    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_QUEUE_LEN", "2048"));
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_BUFS_GROW", "8"));
 
     ucs::handle<uct_iface_h> new_iface;
     UCS_TEST_CREATE_HANDLE(uct_iface_h, new_iface, uct_iface_close,
