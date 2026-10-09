@@ -1329,9 +1329,14 @@ UCS_TEST_P(test_cuda_copy, async_mem_not_registrable_without_dmabuf,
 
     scoped_async_cuda_buffer buffer(size);
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
                           UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
     ASSERT_UCS_OK(uct_md_mem_query_v2(md(), buffer.ptr(), size, &mem_attr));
+
+    /* Otherwise the managed flow already reports the memory as
+     * non-registrable, and the assertion below holds vacuously */
+    ASSERT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
 
     if (mem_attr.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         UCS_TEST_SKIP_R("CUDA async memory is not located on a device");

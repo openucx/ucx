@@ -645,10 +645,10 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
 
     *is_async_managed = 0;
     *is_host_located  = 0;
+    *is_async_p       = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
                                       is_host_located);
-    *is_async_p = 0;
     if (is_vmm) {
         if (mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) {
             return UCS_ERR_INVALID_ADDR;
