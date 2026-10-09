@@ -297,7 +297,7 @@ enum ucp_ep_params_flags_field {
                                                            send to a particular
                                                            remote endpoint, for
                                                            example stream */
-    UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID = UCS_BIT(2)   /**< Send client id
+    UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID = UCS_BIT(2), /**< Send client id
                                                            when connecting to remote
                                                            socket address as part of the
                                                            connection request payload.
@@ -305,6 +305,12 @@ enum ucp_ep_params_flags_field {
                                                            can be obtained from
                                                            @ref ucp_conn_request_h using
                                                            @ref ucp_conn_request_query */
+    /**
+     * Resources used by remote keys unpacked (see @ref ucp_ep_rkey_unpack) on
+     * this endpoint have their lifetime bound to the remote key, and are
+     * released once it is destroyed (see @ref ucp_rkey_destroy).
+     */
+    UCP_EP_PARAMS_FLAGS_RKEY_BOUND_LIFETIME = UCS_BIT(3)
 };
 
 

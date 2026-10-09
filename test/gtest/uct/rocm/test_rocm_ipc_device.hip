@@ -184,7 +184,7 @@ UCS_TEST_P(test_rocm_ipc_rma, get_mem_elem_pack)
     ASSERT_NE(nullptr, mem_elem);
     void *release_handle;
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), mem_elem,
+                                       recvbuf.rkey_bundle(), mem_elem,
                                        &release_handle));
     uct_md_mem_elem_release(m_sender->md(), release_handle);
     free(mem_elem);
@@ -223,7 +223,7 @@ UCS_TEST_P(test_rocm_ipc_rma_device, device_put)
             src_elem_host = {};
     void *release_handle;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(),
+                                       recvbuf.rkey_bundle(),
                                        &src_elem_host.tl, &release_handle));
 
     uct_device_local_mem_elem_t *src_elem;
