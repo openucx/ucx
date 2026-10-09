@@ -281,6 +281,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_LCOV], [false])
      AM_CONDITIONAL([HAVE_ZE], [false])
      AM_CONDITIONAL([HAVE_GAUDI], [false])
+     AM_CONDITIONAL([HAVE_MUSA], [false])
      AM_CONDITIONAL([HAVE_GDA], [false])
     ],
     [
@@ -295,6 +296,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/verbs.m4])
      m4_include([config/m4/rocm.m4])
+     m4_include([config/m4/musa.m4])
      m4_include([config/m4/ze.m4])
      m4_include([config/m4/gdrcopy.m4])
      m4_include([config/m4/mad.m4])

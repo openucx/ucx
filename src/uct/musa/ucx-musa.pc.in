@@ -1,0 +1,10 @@
+#
+# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+
+Name: @PACKAGE@-musa
+Description: Unified Communication X Library MUSA module
+Version: @VERSION@
+Libs:
+Libs.private:
