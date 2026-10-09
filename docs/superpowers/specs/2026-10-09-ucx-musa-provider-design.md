@@ -6,7 +6,8 @@ Branch: `feat/musa_support`
 
 Target SDK: MUSA 5.2.0
 
-Status: approved design; implementation and hardware acceptance are pending.
+Status: approved design; implementation slice delivered, hardware acceptance
+pending.
 
 ## 1. Scope
 
