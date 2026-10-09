@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -232,7 +232,9 @@ out_unlock:
 
 static int ucs_async_thread_is_from_async()
 {
-    return pthread_self() == ucs_async_thread_global_context.thread->thread_id;
+    ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
+
+    return (thread != NULL) && (pthread_self() == thread->thread_id);
 }
 
 static void ucs_async_thread_stop()
