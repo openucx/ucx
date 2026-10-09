@@ -8,10 +8,15 @@
 #include "ucp_test.h"
 #include <common/mem_buffer.h>
 
+#include <memory>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_worker.inl>
+#include <ucp/proto/proto.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_ep.inl>
 }
 
@@ -102,16 +107,22 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
 
 
 /*
- * Moves a payload out of memory allocated by UCP, using the transport which
- * performs the rendezvous zero-copy operation. This covers the registration
- * path a network transport uses to reach non-host memory directly, including
- * registration through a DMA-BUF handle: memory which is registered but not
- * readable by the transport is detected by the payload check rather than
- * silently reported as a successful transfer.
+ * Moves a payload out of memory of the tested type, allocated by UCP or by the
+ * application, over a rendezvous protocol. The zero-copy mode covers the
+ * registration path a network transport uses to reach the memory directly,
+ * including registration through a DMA-BUF handle: memory which is registered
+ * but not readable by the transport is detected by the payload check rather
+ * than silently reported as a successful transfer. The staged mode covers the
+ * transfer when the lane cannot register the memory.
  */
 class test_ucp_mem_type_rndv_zcopy : public test_ucp_mem_type {
 public:
     static const uint64_t SEED = 0x1234567890abcdeflu;
+
+    enum xfer_mode {
+        XFER_ZCOPY, /* the transport accesses the source memory directly */
+        XFER_STAGED /* the source is not registered on the rendezvous lane */
+    };
 
 protected:
     typedef ucs::handle<ucp_mem_h, ucp_context_h> mem_handle_t;
@@ -169,7 +180,9 @@ protected:
     }
 
     /*
-     * Memory domains used by the endpoint's rendezvous zero-copy lanes.
+     * Memory domains used by the endpoint's rendezvous zero-copy lanes, without
+     * the domains used for memory type detection: those register their own
+     * memory type regardless of DMA-BUF support.
      *
      * 'remote' returns the destination domains, which is what a GET issued by
      * this endpoint addresses on its peer, so the indices are in the peer's
@@ -180,9 +193,16 @@ protected:
     {
         const ucp_ep_config_t *ep_config = ucp_ep_config(e.ep());
         ucp_context_h context            = e.ucph();
+        ucp_md_map_t copy_md_map         = 0;
         ucp_md_map_t md_map              = 0;
         ucp_lane_index_t i, lane;
         ucp_rsc_index_t rsc_index;
+        ucp_md_index_t md_index;
+
+        for (md_index = 0; md_index < context->num_mem_type_detect_mds;
+             ++md_index) {
+            copy_md_map |= UCS_BIT(context->mem_type_detect_mds[md_index]);
+        }
 
         for (i = 0; i < UCP_MAX_LANES; ++i) {
             lane = ep_config->key.rma_bw_lanes[i];
@@ -198,7 +218,7 @@ protected:
             }
         }
 
-        return md_map;
+        return md_map & ~copy_md_map;
     }
 
     std::string md_map_str(entity &e, ucp_md_map_t md_map)
@@ -219,20 +239,70 @@ protected:
         return names.empty() ? "<none>" : names;
     }
 
-    void test_xfer_from_mem_type(size_t length, bool is_get);
+    /*
+     * Protocol selected for a tagged send of 'length' bytes from 'mem_type'
+     * memory, with its description as reported by UCX_PROTO_INFO.
+     */
+    std::string tag_send_proto(ucs_memory_type_t mem_type, size_t length,
+                               std::string &desc)
+    {
+        ucp_worker_h worker                 = sender().worker();
+        ucp_worker_cfg_index_t ep_cfg_index = sender().ep()->cfg_index;
+        ucp_memory_info_t mem_info          = {
+            .type    = static_cast<uint8_t>(mem_type),
+            .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
+            .flags   = UCS_MEM_FLAG_REGISTRABLE
+        };
+        const ucp_proto_threshold_elem_t *thresh;
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        ucp_proto_query_attr_t attr;
+
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(
+                worker,
+                &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select,
+                0, ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL, &select_param);
+        if (select_elem == NULL) {
+            desc.clear();
+            return "";
+        }
+
+        thresh = ucp_proto_thresholds_search_slow(select_elem->thresholds,
+                                                  length);
+        ucp_proto_config_query(worker, &thresh->proto_config, length, &attr);
+        desc = attr.desc;
+        return thresh->proto_config.proto->name;
+    }
+
+    /*
+     * Send 'length' bytes of the tested memory type to a host buffer over a
+     * rendezvous protocol. 'app_owned' allocates the source without UCP and
+     * sends it without a memory handle, like an application would.
+     */
+    void test_xfer_from_mem_type(size_t length, bool is_get, xfer_mode mode,
+                                 bool app_owned);
 };
 
 void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
-                                                          bool is_get)
+                                                          bool is_get,
+                                                          xfer_mode mode,
+                                                          bool app_owned)
 {
     const ucs_memory_type_t send_mem_type = mem_type();
+    const char *mem_type_name             =
+            ucs_memory_type_names[send_mem_type];
     ucp_request_param_t param;
     mem_handle_t send_memh, recv_memh;
+    std::unique_ptr<mem_buffer> app_buf;
+    std::string proto_name, proto_desc;
     void *send_buf, *recv_buf;
     void *sreq, *rreq;
+    bool can_reg;
 
     if (!mem_buffer::is_mem_type_supported(send_mem_type)) {
-        UCS_TEST_SKIP_R(std::string(ucs_memory_type_names[send_mem_type]) +
+        UCS_TEST_SKIP_R(std::string(mem_type_name) +
                         " memory is not supported");
     }
 
@@ -246,25 +316,64 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
         UCS_TEST_SKIP_R("no rendezvous zero-copy lane is available");
     }
 
-    if (!(sender().ucph()->reg_md_map[send_mem_type] & lane_md_map)) {
+    can_reg = sender().ucph()->reg_md_map[send_mem_type] & lane_md_map;
+    if ((mode == XFER_ZCOPY) && !can_reg) {
         UCS_TEST_SKIP_R(
                 std::string("the rendezvous zero-copy lane cannot register ") +
-                ucs_memory_type_names[send_mem_type] + " memory");
+                mem_type_name + " memory");
+    } else if ((mode == XFER_STAGED) && can_reg) {
+        UCS_TEST_SKIP_R(
+                std::string("the rendezvous zero-copy lane can register ") +
+                mem_type_name + " memory, nothing to stage");
     }
 
-    send_buf = alloc_mem(sender(), length, send_mem_type, send_memh);
+    /* A forced zero-copy scheme can fall back to eager or to AM rendezvous when
+     * it cannot access the source, so check the selected protocol as well as
+     * the payload */
+    proto_name = tag_send_proto(send_mem_type, length, proto_desc);
+    UCS_TEST_MESSAGE << "protocol: " << proto_name << ", " << proto_desc;
+    EXPECT_EQ("tag/rndv", proto_name) << "no rendezvous protocol is selected";
+    if (mode == XFER_ZCOPY) {
+        EXPECT_NE(std::string::npos, proto_desc.find("zero-copy"))
+                << "the source memory is not accessed by the transport";
+    } else {
+        EXPECT_EQ(std::string::npos, proto_desc.find("zero-copy"))
+                << "the source memory is accessed by the transport";
+        /* CPU-accessible memory is copied by the CPU instead of being staged */
+        if (!(UCS_BIT(send_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+            EXPECT_NE(std::string::npos, proto_desc.find("frag host"))
+                    << "device memory is not staged through host fragments";
+        }
+    }
+
+    if (app_owned) {
+        app_buf.reset(new mem_buffer(length, send_mem_type));
+        send_buf = app_buf->ptr();
+    } else {
+        send_buf = alloc_mem(sender(), length, send_mem_type, send_memh);
+    }
     recv_buf = alloc_mem(receiver(), length, UCS_MEMORY_TYPE_HOST, recv_memh);
 
-    UCS_TEST_MESSAGE << (is_get ? "get" : "put") << " lane mds: "
-                     << md_map_str(sender(), lane_md_map)
-                     << " | source memh mds: "
-                     << md_map_str(sender(), send_memh->md_map);
+    if (!app_owned) {
+        UCS_TEST_MESSAGE << (is_get ? "get" : "put") << " lane mds: "
+                         << md_map_str(sender(), lane_md_map)
+                         << " | source memh mds: "
+                         << md_map_str(sender(), send_memh->md_map);
 
-    EXPECT_NE(0u, send_memh->md_map & lane_md_map)
-            << ucs_memory_type_names[send_mem_type]
-            << " memory is not registered on the memory domain used by the "
-               "rendezvous zero-copy lane, the payload would be staged instead "
-               "of accessed by the transport";
+        if (mode == XFER_ZCOPY) {
+            EXPECT_NE(0u, send_memh->md_map & lane_md_map)
+                    << mem_type_name
+                    << " memory is not registered on the memory domain used by "
+                       "the rendezvous zero-copy lane, the payload would be "
+                       "staged instead of accessed by the transport";
+        } else {
+            EXPECT_EQ(0u, send_memh->md_map & lane_md_map)
+                    << mem_type_name
+                    << " memory is registered on the memory domain used by the "
+                       "rendezvous zero-copy lane, the payload would be "
+                       "accessed by the transport instead of staged";
+        }
+    }
 
     mem_buffer::pattern_fill(send_buf, length, SEED, send_mem_type);
     mem_buffer::pattern_fill(recv_buf, length, 0, UCS_MEMORY_TYPE_HOST);
@@ -274,8 +383,12 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
     rreq = ucp_tag_recv_nbx(receiver().worker(), recv_buf, length, 1, 1,
                             &param);
 
-    param.memh = send_memh;
-    sreq       = ucp_tag_send_nbx(sender().ep(), send_buf, length, 1, &param);
+    if (app_owned) {
+        param.op_attr_mask = 0;
+    } else {
+        param.memh = send_memh;
+    }
+    sreq = ucp_tag_send_nbx(sender().ep(), send_buf, length, 1, &param);
 
     EXPECT_UCS_OK(request_wait(sreq));
     EXPECT_UCS_OK(request_wait(rreq));
@@ -286,19 +399,54 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
 UCS_TEST_P(test_ucp_mem_type_rndv_zcopy, get_zcopy, "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy")
 {
-    test_xfer_from_mem_type(4 * UCS_MBYTE, true);
+    test_xfer_from_mem_type(4 * UCS_MBYTE, true, XFER_ZCOPY, false);
 }
 
 UCS_TEST_P(test_ucp_mem_type_rndv_zcopy, put_zcopy, "RNDV_THRESH=0",
            "RNDV_SCHEME=put_zcopy")
 {
-    test_xfer_from_mem_type(4 * UCS_MBYTE, false);
+    test_xfer_from_mem_type(4 * UCS_MBYTE, false, XFER_ZCOPY, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_rndv_zcopy, rcx,
                                         "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_zcopy, rcx_ze,
                               "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_zcopy, rcv_ze,
+                              "rc_v,ze_copy")
+
+
+/*
+ * With DMA-BUF export disabled, the rendezvous zero-copy lane cannot register
+ * Level Zero memory and the payload must be copied through host memory: device
+ * memory is staged through fragments, CPU-accessible memory is copied in and
+ * out. The rendezvous scheme is left to UCP: forcing a zero-copy scheme would
+ * exclude these protocols.
+ */
+class test_ucp_mem_type_rndv_staged : public test_ucp_mem_type_rndv_zcopy {
+public:
+    test_ucp_mem_type_rndv_staged()
+    {
+        m_env.push_back(new ucs::scoped_setenv("UCX_ZE_COPY_DMABUF", "n"));
+    }
+};
+
+UCS_TEST_P(test_ucp_mem_type_rndv_staged, staged, "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=host")
+{
+    test_xfer_from_mem_type(4 * UCS_MBYTE, false, XFER_STAGED, false);
+}
+
+UCS_TEST_P(test_ucp_mem_type_rndv_staged, staged_app_mem, "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=host")
+{
+    test_xfer_from_mem_type(4 * UCS_MBYTE, false, XFER_STAGED, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_staged, rcx_ze,
+                              "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_staged, rcv_ze,
+                              "rc_v,ze_copy")
 
 class test_ucp_cuda : public ucp_test {
 public:

@@ -42,7 +42,8 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
      "DMA-BUF export enabled. Without it, registration can succeed but an\n"
      "RDMA device may read incorrect data, and no error is reported. Set to\n"
      "'n' if the application allocates Level Zero memory without\n"
-     "requesting external export.",
+     "requesting external export; device memory is then staged through\n"
+     "host memory for RDMA.",
      ucs_offsetof(uct_ze_copy_md_config_t, enable_dmabuf),
      UCS_CONFIG_TYPE_TERNARY},
 
