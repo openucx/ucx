@@ -76,27 +76,86 @@ err:
     return status;
 }
 
-static ucs_status_t
-ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+/*
+ * Parse the messages of a received datagram, and set *reply_end_p to 1 if the
+ * datagram ends the reply, i.e. it holds NLMSG_DONE or NLMSG_ERROR (an error
+ * also ends a dump). The kernel may put NLMSG_DONE in the same datagram as the
+ * last data messages (some kernels do so for IPv6 route dumps), so keep
+ * walking the datagram after parse_cb completes.
+ */
+static ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                                          ucs_netlink_parse_cb_t parse_cb,
+                                          void *arg, int *reply_end_p)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           !ucs_netlink_is_msg_done(nlh)) {
+    *reply_end_p = 0;
+
+    for (; NLMSG_OK(nlh, msg_len); nlh = NLMSG_NEXT(nlh, msg_len)) {
+        if (ucs_netlink_is_msg_done(nlh)) {
+            *reply_end_p = 1;
+            break;
+        }
+
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
                       err->error, strerror(-err->error));
+            *reply_end_p = 1;
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, arg);
-        nlh    = NLMSG_NEXT(nlh, msg_len);
+        if (status == UCS_INPROGRESS) {
+            status = parse_cb(nlh, arg);
+        }
     }
 
     return UCS_OK;
+}
+
+ucs_status_t ucs_netlink_recv_response(int fd, unsigned short nlmsg_flags,
+                                       ucs_netlink_parse_cb_t parse_cb,
+                                       void *arg)
+{
+    size_t recv_msg_len;
+    char *recv_msg;
+    int reply_end;
+    ucs_status_t status;
+
+    /* get message size */
+    do {
+        recv_msg_len = 0;
+        status       = ucs_socket_recv_nb(fd, NULL, MSG_PEEK | MSG_TRUNC,
+                                          &recv_msg_len);
+        if (status != UCS_OK) {
+            ucs_error("failed to get netlink message size %d (%s)", status,
+                      ucs_status_string(status));
+            return status;
+        }
+
+        recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
+        if (recv_msg == NULL) {
+            ucs_error("failed to allocate a buffer for netlink receive message"
+                      " of size %zu",
+                      recv_msg_len);
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        status = ucs_socket_recv(fd, recv_msg, recv_msg_len);
+        if (status != UCS_OK) {
+            ucs_error("failed to receive netlink message on fd=%d: %s", fd,
+                      ucs_status_string(status));
+            ucs_free(recv_msg);
+            return status;
+        }
+
+        status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg,
+                                       &reply_end);
+        ucs_free(recv_msg);
+    } while ((nlmsg_flags & NLM_F_DUMP) && !reply_end);
+
+    return status;
 }
 
 ucs_status_t
@@ -107,9 +166,6 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
 {
     struct nlmsghdr nlh = {0};
     int netlink_fd      = -1;
-    size_t recv_msg_len;
-    char *recv_msg;
-    int msg_done;
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
@@ -137,36 +193,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         goto out;
     }
 
-    /* get message size */
-    do {
-        recv_msg_len = 0;
-        status = ucs_socket_recv_nb(netlink_fd, NULL, MSG_PEEK | MSG_TRUNC,
-                                    &recv_msg_len);
-        if (status != UCS_OK) {
-            ucs_error("failed to get netlink message size %d (%s)",
-                    status, ucs_status_string(status));
-            goto out;
-        }
-
-        recv_msg = ucs_malloc(recv_msg_len, "netlink recv message");
-        if (recv_msg == NULL) {
-            ucs_error("failed to allocate a buffer for netlink receive message"
-                      " of size %zu", recv_msg_len);
-            goto out;
-        }
-
-        status = ucs_socket_recv(netlink_fd, recv_msg, recv_msg_len);
-        if (status != UCS_OK) {
-            ucs_error("failed to receive netlink message on fd=%d: %s",
-                    netlink_fd, ucs_status_string(status));
-            ucs_free(recv_msg);
-            goto out;
-        }
-
-        status   = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
-        msg_done = ucs_netlink_is_msg_done((const struct nlmsghdr *)recv_msg);
-        ucs_free(recv_msg);
-    } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
+    status = ucs_netlink_recv_response(netlink_fd, nlmsg_flags, parse_cb, arg);
 
 out:
     ucs_close_fd(&netlink_fd);
