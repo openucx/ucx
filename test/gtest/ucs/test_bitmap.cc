@@ -299,6 +299,32 @@ UCS_TEST_F(test_static_bitmap, test_for_each_bit_partial_last_word) {
     EXPECT_EQ(254u, bits[2]);
 }
 
+UCS_TEST_F(test_static_bitmap, test_index_fits) {
+    ucs_static_bitmap_s(64) bitmap64;
+    ucs_static_bitmap_s(128) bitmap128;
+    ucs_static_bitmap_s(192) bitmap192;
+    ucs_static_bitmap_s(255) bitmap255;
+
+    /* The 64 bits of a 1-word bitmap fit int8_t */
+    EXPECT_TRUE(UCS_STATIC_BITMAP_INDEX_FITS(static_cast<int8_t>(0), bitmap64));
+
+    /* The 128 bits of a 2-word bitmap fit uint8_t but not int8_t */
+    EXPECT_TRUE(
+            UCS_STATIC_BITMAP_INDEX_FITS(static_cast<uint8_t>(0), bitmap128));
+    EXPECT_FALSE(
+            UCS_STATIC_BITMAP_INDEX_FITS(static_cast<int8_t>(0), bitmap128));
+
+    /* The 192 bits of a 3-word bitmap are the most that fit uint8_t */
+    EXPECT_TRUE(
+            UCS_STATIC_BITMAP_INDEX_FITS(static_cast<uint8_t>(0), bitmap192));
+
+    /* The 256 bits of a 4-word bitmap do not fit uint8_t, but fit unsigned */
+    EXPECT_FALSE(
+            UCS_STATIC_BITMAP_INDEX_FITS(static_cast<uint8_t>(0), bitmap255));
+    EXPECT_TRUE(
+            UCS_STATIC_BITMAP_INDEX_FITS(static_cast<unsigned>(0), bitmap255));
+}
+
 UCS_TEST_F(test_static_bitmap, test_compose) {
     /* The result is irrelevant, the code only needs to compile */
     UCS_STATIC_BITMAP_AND(UCS_STATIC_BITMAP_NOT(m_bitmap), m_bitmap);

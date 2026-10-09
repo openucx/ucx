@@ -361,11 +361,14 @@ BEGIN_C_DECLS
                                         UCS_PP_UNIQUE_ID)
 
 
-/* Whether _bit_index, even if signed, can hold the bitmap size, which the bit
+/* Whether the type of _bit_index can hold the bitmap size, which the bit
    iteration assigns to it when no more bits are set */
+#define _UCS_STATIC_BITMAP_INDEX_FITS_BITS(_bit_index, _num_bits) \
+    ((size_t)(ucs_typeof(_bit_index))(_num_bits) == (_num_bits))
 #define UCS_STATIC_BITMAP_INDEX_FITS(_bit_index, _bitmap) \
-    (((UCS_STATIC_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD) >> \
-      ((sizeof(_bit_index) * 8) - 1)) == 0)
+    _UCS_STATIC_BITMAP_INDEX_FITS_BITS( \
+        _bit_index, \
+        UCS_STATIC_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD)
 
 
 /* Fail the build if _bit_index is too narrow. A plain sizeof expression rather
