@@ -73,11 +73,13 @@ typedef struct {
 } ucp_wireup_select_bw_info_t;
 
 
+/* Lanes per device, at most UCP_MAX_LANES + 1, as asserted in
+ * ucp_wireup_add_bw_lanes_pairwise() */
 typedef struct {
-    unsigned local[UCP_MAX_RESOURCES];
-    unsigned remote[UCP_MAX_RESOURCES];
-    unsigned local_skip[UCP_MAX_RESOURCES];
-    unsigned remote_skip[UCP_MAX_RESOURCES];
+    uint8_t local[UCP_MAX_RESOURCES];
+    uint8_t remote[UCP_MAX_RESOURCES];
+    uint8_t local_skip[UCP_MAX_RESOURCES];
+    uint8_t remote_skip[UCP_MAX_RESOURCES];
 } ucp_wireup_dev_usage_count;
 
 
@@ -1911,6 +1913,13 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
     bw_info->criteria.arg = &dev_count;
+
+    /* Each dev_count entry counts at most the selected lanes plus excl_lane,
+     * so it can reach UCP_MAX_LANES + 1 */
+    UCS_STATIC_ASSERT(UCP_MAX_LANES + 1 <= UINT8_MAX);
+    ucs_assertv(bw_info->max_lanes <= UCP_MAX_LANES,
+                "max_lanes=%u exceeds UCP_MAX_LANES=%d", bw_info->max_lanes,
+                UCP_MAX_LANES);
 
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
