@@ -1058,6 +1058,60 @@ UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid)
 /* This fixture accesses rc_verbs-specific state. */
 _UCT_INSTANTIATE_TEST_CASE(test_rc_no_srq, rc_verbs)
 
+class test_rc_srq_select : public test_rc {
+protected:
+    /* Open an interface as if the device did not support an SRQ */
+    void check_no_srq_fallback()
+    {
+        uct_ib_device_t *dev = &uct_ib_iface_md(&rc_iface(m_e1)->super)->dev;
+        int max_srq          = IBV_DEV_ATTR(dev, max_srq);
+        uct_iface_h iface;
+        ucs_status_t status;
+
+        IBV_DEV_ATTR(dev, max_srq) = 0;
+        status = uct_iface_open(m_e1->md(), m_e1->worker(),
+                                &m_e1->iface_params(), m_iface_config, &iface);
+        IBV_DEV_ATTR(dev, max_srq) = max_srq;
+        ASSERT_UCS_OK(status);
+
+        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_disable);
+        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq == NULL);
+        uct_iface_close(iface);
+    }
+};
+
+UCS_TEST_P(test_rc_srq_select, try_uses_srq, "RC_VERBS_SRQ_ENABLE=try")
+{
+    if (!uct_ib_device_has_srq(&uct_ib_iface_md(&rc_iface(m_e1)->super)->dev)) {
+        UCS_TEST_SKIP_R("device does not support SRQ");
+    }
+
+    EXPECT_FALSE(rc_iface(m_e1)->config.srq_disable);
+    EXPECT_TRUE(ucs_derived_of(m_e1->iface(), uct_rc_verbs_iface_t)->srq !=
+                NULL);
+}
+
+UCS_TEST_P(test_rc_srq_select, try_falls_back, "RC_VERBS_SRQ_ENABLE=try")
+{
+    check_no_srq_fallback();
+}
+
+UCS_TEST_P(test_rc_srq_select, yes_warns_and_falls_back,
+           "RC_VERBS_SRQ_ENABLE=try")
+{
+    ASSERT_UCS_OK(
+            uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
+
+    scoped_log_handler wrap_warn(wrap_warns_logger);
+
+    check_no_srq_fallback();
+
+    ASSERT_EQ(1u, m_warnings.size());
+    EXPECT_NE(std::string::npos, m_warnings[0].find("SRQ is not supported"));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_srq_select, rc_verbs)
+
 
 class test_rc_iface_flush_remote : public uct_test {
 protected:
