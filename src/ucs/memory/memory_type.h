@@ -64,20 +64,12 @@ typedef enum ucs_mem_flags {
     UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE = UCS_BIT(1),
 
     /**
-     * Memory pages can be pinned for direct access by another device.
+     * CUDA device memory allocated as GPUDirect RDMA (GDR) capable, so its
+     * pages can be pinned for peer access, as done by gdr_copy. Reported only
+     * when detected for the buffer, never assumed by default.
      */
-    UCS_MEM_FLAG_PINNABLE                = UCS_BIT(2)
+    UCS_MEM_FLAG_GDR_CAPABLE             = UCS_BIT(2)
 } ucs_mem_flags_t;
-
-
-/**
- * Memory capabilities a memory domain can require from a buffer, used as the
- * default when they were not detected for the buffer itself.
- * UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE is excluded, as it is not required by
- * any memory domain and must only be reported when detected.
- */
-#define UCS_MEM_FLAGS_DEFAULT \
-    (UCS_MEM_FLAG_REGISTRABLE | UCS_MEM_FLAG_PINNABLE)
 
 
 /**

@@ -41,7 +41,7 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
         .parent         = &ucp_mem_dummy_handle.memh,
         .mem_type       = UCS_MEMORY_TYPE_HOST,
         .sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN,
-        .mem_flags      = UCS_MEM_FLAGS_DEFAULT,
+        .mem_flags      = UCS_MEM_FLAG_REGISTRABLE,
         .md_map         = 0,
         .inv_md_map     = 0,
         .reg_id         = 0,
@@ -52,7 +52,7 @@ ucp_mem_dummy_handle_t ucp_mem_dummy_handle = {
 const ucp_memory_info_t ucp_mem_info_unknown = {
     .type    = UCS_MEMORY_TYPE_UNKNOWN,
     .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
-    .flags   = UCS_MEM_FLAGS_DEFAULT
+    .flags   = UCS_MEM_FLAG_REGISTRABLE
 };
 
 

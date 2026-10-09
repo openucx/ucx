@@ -1439,11 +1439,11 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
     ASSERT_UCS_OK(register_mem());
 }
 
-/* Pinning goes through nvidia_p2p_get_pages, so memory without device pages
- * must never be offered to this memory domain */
-UCS_TEST_P(test_gdr_copy, gdr_copy_requires_pinnable)
+/* Pinning goes through nvidia_p2p_get_pages, so memory which is not GPUDirect
+ * RDMA capable must never be offered to this memory domain */
+UCS_TEST_P(test_gdr_copy, gdr_copy_requires_gdr_capable)
 {
-    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_PINNABLE);
+    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_GDR_CAPABLE);
 }
 
 /* The reason for the requirement above: stream-ordered memory is only

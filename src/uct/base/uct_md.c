@@ -706,10 +706,10 @@ ucs_status_t uct_md_mem_query_v2(uct_md_h md, const void *address,
     uint64_t field_mask = mem_attr->field_mask;
     ucs_status_t status;
 
-    /* Use default flags; MDs that detect them per-buffer (e.g.
-     * cuda_copy) override this. */
+    /* Default to registrable; MDs that detect per-buffer registrability
+     * (e.g. cuda_copy) override this. */
     if (field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
-        mem_attr->mem_flags = UCS_MEM_FLAGS_DEFAULT;
+        mem_attr->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     }
 
     status = md->ops->mem_query(md, address, length, mem_attr);

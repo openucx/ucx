@@ -255,7 +255,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AC_CHECK_DECLS([CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN],
                         [], [], [[#include <cuda.h>]])
 
-         AC_CHECK_DECLS([CU_POINTER_ATTRIBUTE_MEMPOOL_HANDLE],
+         AC_CHECK_DECLS([CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE],
                         [], [], [[#include <cuda.h>]])
 
          CPPFLAGS="$save_CPPFLAGS"

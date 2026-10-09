@@ -2250,7 +2250,7 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
         context->dmabuf_mds[mem_type]           = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].md_index    = UCP_NULL_RESOURCE;
         context->alloc_md[mem_type].sys_dev     = UCS_SYS_DEVICE_ID_UNKNOWN;
-        context->alloc_md[mem_type].mem_flags   = UCS_MEM_FLAGS_DEFAULT;
+        context->alloc_md[mem_type].mem_flags   = UCS_MEM_FLAG_REGISTRABLE;
         context->alloc_md[mem_type].initialized = 0;
     }
 

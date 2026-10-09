@@ -105,9 +105,9 @@ ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
     mem_info->base_address = NULL;
     mem_info->alloc_length = -1;
-    /* Unknown memory: assume all capabilities. The type is UNKNOWN so
-     * consumers re-detect via the MD anyway, which overwrites this default. */
-    mem_info->mem_flags    = UCS_MEM_FLAGS_DEFAULT;
+    /* Unknown memory: assume registrable. The type is UNKNOWN so consumers
+     * re-detect via the MD anyway, which overwrites this default. */
+    mem_info->mem_flags    = UCS_MEM_FLAG_REGISTRABLE;
 }
 
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)

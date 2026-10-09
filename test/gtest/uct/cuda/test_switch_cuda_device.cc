@@ -378,25 +378,26 @@ protected:
         return static_cast<ucs_mem_flags_t>(mem_attr.mem_flags);
     }
 
-    void query_pinnable(void *address, size_t size, int expected)
+    void query_gdr_capable(void *address, size_t size, int expected)
     {
-        EXPECT_EQ(expected,
-                  !!(query_mem_flags(address, size) & UCS_MEM_FLAG_PINNABLE));
+        ucs_mem_flags_t mem_flags = query_mem_flags(address, size);
+
+        EXPECT_EQ(expected, !!(mem_flags & UCS_MEM_FLAG_GDR_CAPABLE));
     }
 
-    /* Pinnability is orthogonal to registrability, so check both */
-    void query_registrable_pinnable(void *address, size_t size,
-                                    int exp_registrable, int exp_pinnable)
+    /* GDR capability is orthogonal to registrability, so check both */
+    void query_registrable_gdr_capable(void *address, size_t size,
+                                       int exp_registrable, int exp_gdr_capable)
     {
         ucs_mem_flags_t mem_flags = query_mem_flags(address, size);
 
         EXPECT_EQ(exp_registrable, !!(mem_flags & UCS_MEM_FLAG_REGISTRABLE));
-        EXPECT_EQ(exp_pinnable, !!(mem_flags & UCS_MEM_FLAG_PINNABLE));
+        EXPECT_EQ(exp_gdr_capable, !!(mem_flags & UCS_MEM_FLAG_GDR_CAPABLE));
     }
 
     /* Stream-ordered memory from the default pool, as allocated by
      * 'cudaMallocAsync' */
-    void test_mem_pool_not_pinnable()
+    void test_mem_pool_not_gdr_capable()
     {
         constexpr size_t size = 4 * UCS_MBYTE;
 
@@ -407,7 +408,7 @@ protected:
         mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA,
                           mem_buffer::alloc_mode::ASYNC);
 
-        query_pinnable(buffer.ptr(), size, 0);
+        query_gdr_capable(buffer.ptr(), size, 0);
     }
 
     void test_async_managed_mem_pool_registrable()
@@ -558,56 +559,81 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_gpu_pref_loc,
     test_async_managed_mem_pool_registrable();
 }
 
-/* Plain device memory has device pages, so the peer memory driver can pin it */
-UCS_TEST_P(test_mem_alloc_device, legacy_mem_pinnable)
+/* Plain device memory is allocated as GPUDirect RDMA capable */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_gdr_capable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_registrable_pinnable(buffer.ptr(), size, 1, 1);
+    query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
+}
+
+/* VMM device memory is GDR capable only when requested at allocation */
+UCS_TEST_P(test_mem_alloc_device, vmm_mem_not_gdr_capable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_gdr_capable(buffer.ptr(), size, 0);
+}
+
+UCS_TEST_P(test_mem_alloc_device, gdr_vmm_mem_gdr_capable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_gdr_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_gdr_capable(buffer.ptr(), size, 1);
+}
+
+/* gdr_copy only registers CUDA device memory, so managed memory is never
+ * reported as GDR capable */
+UCS_TEST_P(test_mem_alloc_device, managed_mem_not_gdr_capable)
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA_MANAGED);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
 }
 
 #if CUDA_VERSION >= 11020
-/* Stream-ordered memory is only compatible with dma_buf mappings, so the peer
- * memory driver cannot pin it, even when an exportable pool makes it
- * registrable. This is the combination gdr_copy has to reject. */
-UCS_TEST_P(test_mem_alloc_device, exportable_mem_pool_not_pinnable,
+/* Stream-ordered memory is not GDR capable, even when an exportable pool makes
+ * it registrable. This is the combination gdr_copy has to reject. */
+UCS_TEST_P(test_mem_alloc_device, exportable_mem_pool_not_gdr_capable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=try")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_exportable_mem_pool_buffer buffer(size);
 
-    query_registrable_pinnable(buffer.ptr(), size, 1, 0);
+    query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
 }
 #endif
 
-/* Pinning does not become possible for the default, non-exportable pool */
-UCS_TEST_P(test_mem_alloc_device, mem_pool_not_pinnable,
+/* The default, non-exportable pool is not GDR capable either */
+UCS_TEST_P(test_mem_alloc_device, mem_pool_not_gdr_capable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
-    test_mem_pool_not_pinnable();
+    test_mem_pool_not_gdr_capable();
 }
 
 /* The default typing of stream-ordered memory as managed must not report it as
- * pinnable either */
-UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_pinnable,
+ * GDR capable either */
+UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_gdr_capable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda-managed")
 {
-    test_mem_pool_not_pinnable();
+    test_mem_pool_not_gdr_capable();
 }
 
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
-/* Localized memory belongs to a single GPU locality domain, which the driver
- * never places as GDR-capable, so the peer memory driver cannot pin it.
+/* Localized memory cannot be allocated as GPUDirect RDMA capable.
  * Registrability is not asserted, as it depends on whether the platform can
  * export a dma_buf fd for such memory. */
-UCS_TEST_P(test_mem_alloc_device, localized_mem_not_pinnable,
+UCS_TEST_P(test_mem_alloc_device, localized_mem_not_gdr_capable,
            "CUDA_COPY_REG_WHOLE_ALLOC=off")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_localized_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_pinnable(buffer.ptr(), size, 0);
+    query_gdr_capable(buffer.ptr(), size, 0);
 }
 #endif
 
@@ -640,6 +666,17 @@ UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
     query_registrable_no_current_context(buffer.ptr(), size);
+}
+
+/* Host-located VMM is typed as CUDA memory, but cannot be allocated as
+ * GPUDirect RDMA capable */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_not_gdr_capable,
+           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
 }
 #endif
 

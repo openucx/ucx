@@ -59,7 +59,8 @@ public:
     CUresult alloc(size_t size, unsigned handle_type,
                    CUmemLocationType location_type  = CU_MEM_LOCATION_TYPE_DEVICE,
                    size_t num_chunks                = 1,
-                   unsigned char locality_domain_id = 0)
+                   unsigned char locality_domain_id = 0,
+                   bool gdr_capable                 = false)
     {
         size_t granularity             = 0;
         CUmemAllocationProp prop       = {};
@@ -73,8 +74,9 @@ public:
                            "context");
         }
 
-        prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
-        prop.location.type = location_type;
+        prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.location.type                   = location_type;
+        prop.allocFlags.gpuDirectRDMACapable = gdr_capable;
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
         if (location_type == CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN) {
             prop.location.localized.deviceId         = (unsigned char)device;
@@ -200,6 +202,16 @@ public:
     }
 };
 
+/* Device memory allocated as GPUDirect RDMA capable */
+class cuda_gdr_vmm_mem_buffer : public cuda_vmm_mem_buffer {
+public:
+    cuda_gdr_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    {
+        skip_unless_ok(
+                alloc(size, 0, CU_MEM_LOCATION_TYPE_DEVICE, 1, 0, true));
+    }
+};
+
 #if CUDA_VERSION >= 12020
 class cuda_host_vmm_mem_buffer : public cuda_vmm_mem_buffer {
 public:
@@ -211,8 +223,8 @@ public:
 #endif
 
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
-/* Memory localized to a single GPU locality domain, which the driver never
- * places as GDR-capable */
+/* Memory localized to a single GPU locality domain, which the driver cannot
+ * allocate as GPUDirect RDMA capable */
 class cuda_localized_mem_buffer : public cuda_vmm_mem_buffer {
 public:
     cuda_localized_mem_buffer(size_t size, ucs_memory_type_t mem_type)
