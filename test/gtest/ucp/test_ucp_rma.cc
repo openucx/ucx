@@ -15,6 +15,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
 #include <ucp/rma/rma_bw.inl>
 #include <ucs/sys/sys.h>
@@ -607,6 +608,18 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
         test_ucp_rma_rndv_gpu_nic::init();
     }
+
+    /* RTR_REQ carries this rkey's sys_dev, which must stay unknown so the
+     * responder has to detect its buffer's GPU locally */
+    void get_b_expect_empty_rkey(size_t size, void *expected_data,
+                                 ucp_mem_h memh, void *target_ptr,
+                                 ucp_rkey_h rkey, void *arg)
+    {
+        EXPECT_EQ(0, rkey->md_map);
+        EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+                  ucp_rkey_config(sender().worker(), rkey)->key.sys_dev);
+        get_b(size, expected_data, memh, target_ptr, rkey, arg);
+    }
 };
 
 UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_no_gdr, get_blocking)
@@ -620,9 +633,10 @@ UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_no_gdr, get_blocking)
     }
 
     /* The initiator's buffer is host memory, so the put can land */
-    test_message_sizes(static_cast<send_func_t>(&test_ucp_rma::get_b), 128,
-                       PPLN_FRAG_SIZE, UCS_MEMORY_TYPE_HOST,
-                       UCS_MEMORY_TYPE_CUDA, 0);
+    test_message_sizes(
+            static_cast<send_func_t>(
+                    &test_ucp_rma_rndv_gpu_nic_no_gdr::get_b_expect_empty_rkey),
+            128, PPLN_FRAG_SIZE, UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA, 0);
     expect_assigned_lanes(entities(), "rndv/put/mtype");
 }
 
