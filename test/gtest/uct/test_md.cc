@@ -1308,6 +1308,45 @@ UCS_TEST_P(test_rocm_copy, dmabuf_disable, "ROCM_COPY_DMABUF=no")
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_rocm_copy, rocm_cpy)
 
+class test_cuda_copy : public test_md {
+};
+
+/* Without dmabuf the NIC pins the pages behind the virtual address, which the
+ * driver refuses for device-located VMM allocations. Such memory must not be
+ * reported as registrable, otherwise ucp_mem_map() attempts the registration
+ * and fails instead of leaving the NIC memory domains out. ASYNC_MEM_TYPE is
+ * set to cuda to keep the allocation out of the cuda-managed flow, which is
+ * non-registrable on its own. */
+UCS_TEST_P(test_cuda_copy, async_mem_not_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no", "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
+{
+    const size_t size = ucs_get_page_size();
+    uct_md_mem_attr_v2_t mem_attr = {};
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+    }
+
+    scoped_async_cuda_buffer buffer(size);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV |
+                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
+    ASSERT_UCS_OK(uct_md_mem_query_v2(md(), buffer.ptr(), size, &mem_attr));
+
+    /* Otherwise the managed flow already reports the memory as
+     * non-registrable, and the assertion below holds vacuously */
+    ASSERT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+
+    if (mem_attr.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        UCS_TEST_SKIP_R("CUDA async memory is not located on a device");
+    }
+
+    EXPECT_EQ(0, mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy, cuda_cpy)
+
 class test_cuda : public test_md
 {
 };

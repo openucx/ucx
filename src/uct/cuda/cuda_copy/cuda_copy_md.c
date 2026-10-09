@@ -628,7 +628,8 @@ static ucs_status_t
 uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
                                   const void *address, size_t length,
                                   ucs_memory_info_t *mem_info,
-                                  int *is_async_managed, int *is_host_located)
+                                  int *is_async_managed, int *is_host_located,
+                                  int *is_async_p)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 4
     CUmemorytype cuda_mem_type = CU_MEMORYTYPE_HOST;
@@ -644,6 +645,7 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
 
     *is_async_managed = 0;
     *is_host_located  = 0;
+    *is_async_p       = 0;
 
     is_vmm = uct_cuda_copy_detect_vmm(address, &mem_info->type, &cuda_device,
                                       is_host_located);
@@ -674,6 +676,10 @@ uct_cuda_copy_md_query_attributes(const uct_cuda_copy_md_t *md,
             /* pointer not recognized */
             return UCS_ERR_INVALID_ADDR;
         }
+
+        /* Stream-ordered allocations are not owned by a context. This is
+         * independent of how they are typed, which ASYNC_MEM_TYPE controls. */
+        *is_async_p = (cuda_mem_ctx == NULL);
 
         if (is_managed) {
             /* cuMemGetAddress range does not support managed memory so use
@@ -868,6 +874,7 @@ static int
 uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 const ucs_memory_info_t *mem_info,
                                 int is_async_managed, int is_host_located,
+                                int is_async,
                                 const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
@@ -883,9 +890,14 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
     }
 
     /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
-    if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        !md->config.dmabuf_supported) {
+    if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         return 1;
+    }
+
+    if (!md->config.dmabuf_supported) {
+        /* Without dmabuf the NIC pins the pages behind the virtual address,
+         * which the driver refuses for stream-ordered allocations. */
+        return !is_async;
     }
 
     if (dmabuf == NULL) {
@@ -905,12 +917,13 @@ static uint8_t
 uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
                                   const ucs_memory_info_t *mem_info,
                                   int is_async_managed, int is_host_located,
+                                  int is_async,
                                   const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     uint8_t mem_flags = 0;
 
     if (uct_cuda_copy_md_is_registrable(md, mem_info, is_async_managed,
-                                        is_host_located, dmabuf)) {
+                                        is_host_located, is_async, dmabuf)) {
         mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
     }
 
@@ -935,6 +948,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     int dmabuf_queried         = 0;
     int is_async_managed       = 0;
     int is_host_located        = 0;
+    int is_async               = 0;
     CUdevice cur_cuda_device   = CU_DEVICE_INVALID;
     CUdevice avail_cuda_device = CU_DEVICE_INVALID;
     ucs_memory_info_t detected_mem_info = {};
@@ -960,7 +974,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
         status = uct_cuda_copy_md_query_attributes(md, address, length,
                                                    &addr_mem_info,
                                                    &is_async_managed,
-                                                   &is_host_located);
+                                                   &is_host_located, &is_async);
         if (status != UCS_OK) {
             return status;
         }
@@ -1023,7 +1037,7 @@ ucs_status_t uct_cuda_copy_md_mem_query(uct_md_h tl_md, const void *address,
     if (address != NULL) {
         addr_mem_info.mem_flags = uct_cuda_copy_md_detect_mem_flags(
                 md, &detected_mem_info, is_async_managed, is_host_located,
-                dmabuf_queried ? &dmabuf : NULL);
+                is_async, dmabuf_queried ? &dmabuf : NULL);
         ucs_memtype_cache_update(addr_mem_info.base_address,
                                  addr_mem_info.alloc_length, addr_mem_info.type,
                                  addr_mem_info.sys_dev,
