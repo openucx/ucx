@@ -25,7 +25,14 @@ typedef struct {
 } uct_rc_gdaki_channel_t;
 
 typedef struct {
+    uct_worker_tl_data_t   super;
+    uct_ib_mlx5_devx_uar_t *uar;
+    CUdeviceptr            device_ptr;
+} uct_rc_gdaki_devx_uar_t;
+
+typedef struct {
     uintptr_t              gpu_ptr;
+    CUdeviceptr            sq_db; /* CUDA-mapped UAR doorbell address */
     uct_rc_gdaki_channel_t channels[0];
 } uct_rc_gdaki_channel_block_t;
 
@@ -33,6 +40,7 @@ typedef struct {
     void                         *gpu_mem;
     uct_cuda_copy_alloc_handle_t gpu_raw;
     struct mlx5dv_devx_umem      *umem;
+    uct_rc_gdaki_devx_uar_t      *uar_wrap;
 } uct_rc_gdaki_channel_block_mem_t;
 
 typedef struct uct_rc_gdaki_iface {

@@ -95,6 +95,89 @@ static auto &g_test_device_cuda_ctx_guard =
 
 class test_device : public uct_test {
 protected:
+    void skip_if_no_cuda() const
+    {
+        if (!(m_sender->md_attr().reg_mem_types &
+              UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+            UCS_TEST_SKIP_R("CUDA registration not supported");
+        }
+    }
+
+    void skip_if_not_rc_gda() const
+    {
+        if (!has_transport("rc_gda")) {
+            UCS_TEST_SKIP_R("rc_gda transport not supported");
+        }
+    }
+
+    void
+    device_put(uint64_t send_seed, uint64_t recv_seed, unsigned ep_index = 0)
+    {
+        constexpr size_t length = 1024;
+        mapped_buffer sendbuf(length, send_seed, *m_sender, 0,
+                              UCS_MEMORY_TYPE_CUDA);
+        mapped_buffer recvbuf(length, recv_seed, *m_receiver, 0,
+                              UCS_MEMORY_TYPE_CUDA);
+
+        uct_device_mem_elem_t src_elem_host;
+        void *release_handle;
+        ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
+                                           recvbuf.rkey(), &src_elem_host,
+                                           &release_handle));
+
+        mapped_buffer src_elembuf(sizeof(src_elem_host), 0, *m_sender, 0,
+                                  UCS_MEMORY_TYPE_CUDA);
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemcpyHtoD((CUdeviceptr)src_elembuf.ptr(), &src_elem_host,
+                               sizeof(src_elem_host)));
+
+        mapped_buffer rem_elembuf(sizeof(src_elem_host), 0, *m_sender, 0,
+                                  UCS_MEMORY_TYPE_CUDA);
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemcpyHtoD((CUdeviceptr)rem_elembuf.ptr(), &src_elem_host,
+                               sizeof(src_elem_host)));
+
+        uct_device_ep_h dev_ep;
+        ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(ep_index), &dev_ep));
+        ASSERT_UCS_OK(ucx_cuda::launch_uct_put(
+                dev_ep, (const uct_device_mem_elem_t*)src_elembuf.ptr(),
+                (const uct_device_mem_elem_t*)rem_elembuf.ptr(), sendbuf.ptr(),
+                (uintptr_t)recvbuf.ptr(), length));
+
+        recvbuf.pattern_check(send_seed);
+
+        uct_md_mem_elem_release(m_sender->md(), release_handle);
+    }
+
+    void reconnect_test()
+    {
+        skip_if_no_cuda();
+        skip_if_not_rc_gda();
+
+        device_put(0x1111111111111111lu, 0x2222222222222222lu);
+
+        m_sender->destroy_ep(0);
+        m_receiver->destroy_ep(0);
+        short_progress_loop();
+
+        m_sender->create_ep(0);
+        m_receiver->create_ep(0);
+
+        m_sender->connect_p2p_ep(m_sender->ep(0), m_receiver->ep(0));
+        m_receiver->connect_p2p_ep(m_receiver->ep(0), m_sender->ep(0));
+        short_progress_loop();
+
+        device_put(0x3333333333333333lu, 0x4444444444444444lu);
+    }
+
+    void connect_ep(unsigned index)
+    {
+        m_sender->create_ep(index);
+        m_receiver->create_ep(index);
+        m_sender->connect_p2p_ep(m_sender->ep(index), m_receiver->ep(index));
+        m_receiver->connect_p2p_ep(m_receiver->ep(index), m_sender->ep(index));
+    }
+
     void init()
     {
         CUcontext ctx;
@@ -139,49 +222,42 @@ protected:
     entity *m_receiver;
 
 private:
-    CUdevice m_cuda_dev;
+    CUdevice m_cuda_dev = CU_DEVICE_INVALID;
 };
 
 UCS_TEST_P(test_device, put)
 {
-    if (!(m_sender->md_attr().reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
-        UCS_TEST_SKIP_R("CUDA registration not supported");
-    }
+    skip_if_no_cuda();
+    device_put(0x1111111111111111lu, 0x2222222222222222lu);
+}
 
-    constexpr uint64_t SEED1 = 0x1111111111111111lu;
-    constexpr uint64_t SEED2 = 0x2222222222222222lu;
-    constexpr size_t length  = 1024;
-    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
-    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
+UCS_TEST_P(test_device, reconnect)
+{
+    reconnect_test();
+}
 
-    uct_device_mem_elem_t src_elem_host;
-    void *release_handle;
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &src_elem_host,
-                                       &release_handle));
+UCS_TEST_P(test_device, reconnect_multi_channel, "RC_GDA_NUM_CHANNELS?=4")
+{
+    reconnect_test();
+}
 
-    mapped_buffer src_elembuf(sizeof(src_elem_host), 0, *m_sender, 0,
-                              UCS_MEMORY_TYPE_CUDA);
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)src_elembuf.ptr(), &src_elem_host,
-                           sizeof(src_elem_host)));
+UCS_TEST_P(test_device, destroy_one_of_multiple_eps)
+{
+    skip_if_no_cuda();
+    skip_if_not_rc_gda();
 
-    mapped_buffer rem_elembuf(sizeof(src_elem_host), 0, *m_sender, 0,
-                              UCS_MEMORY_TYPE_CUDA);
-    ASSERT_EQ(CUDA_SUCCESS,
-              cuMemcpyHtoD((CUdeviceptr)rem_elembuf.ptr(), &src_elem_host,
-                           sizeof(src_elem_host)));
+    connect_ep(1);
+    device_put(0x1111111111111111lu, 0x2222222222222222lu, 0);
+    device_put(0x3333333333333333lu, 0x4444444444444444lu, 1);
 
-    uct_device_ep_h dev_ep;
-    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
-    ASSERT_UCS_OK(ucx_cuda::launch_uct_put(
-            dev_ep, (const uct_device_mem_elem_t*)src_elembuf.ptr(),
-            (const uct_device_mem_elem_t*)rem_elembuf.ptr(), sendbuf.ptr(),
-            (uintptr_t)recvbuf.ptr(), length));
+    m_sender->destroy_ep(0);
+    m_receiver->destroy_ep(0);
+    short_progress_loop();
 
-    recvbuf.pattern_check(SEED1);
-    recvbuf.pattern_fill(SEED2);
-    uct_md_mem_elem_release(m_sender->md(), release_handle);
+    device_put(0x5555555555555555lu, 0x6666666666666666lu, 1);
+
+    connect_ep(0);
+    device_put(0x7777777777777777lu, 0x8888888888888888lu, 0);
 }
 
 UCS_TEST_P(test_device, atomic)
