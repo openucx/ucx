@@ -32,8 +32,12 @@ public:
             TEST_MSG_SIZE_SMALL, TEST_MSG_SIZE_MEDIUM, TEST_MSG_SIZE_LARGE
         };
 
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT,
-                               op_name(TEST_OP_PUT));
+        for (unsigned msg_size_variant : msg_size_variants) {
+            add_variant_with_value(variants, UCP_FEATURE_RMA,
+                                   TEST_OP_PUT | msg_size_variant,
+                                   op_name(TEST_OP_PUT | msg_size_variant));
+        }
+
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT | TEST_OP_FLUSH));
 
