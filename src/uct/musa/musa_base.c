@@ -383,12 +383,16 @@ uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
     uct_musa_pointer_info_t info;
     ucs_status_t status;
 
+    (void)md;
     *mem_type_p = UCS_MEMORY_TYPE_HOST;
     status = uct_musa_base_query_pointer(address, length, &info);
-    if ((status == UCS_OK) && (info.kind == UCT_MUSA_POINTER_DEVICE)) {
-        *mem_type_p = UCS_MEMORY_TYPE_MUSA;
+    if (status != UCS_OK) {
+        return status;
     }
 
+    if (info.kind == UCT_MUSA_POINTER_DEVICE) {
+        *mem_type_p = UCS_MEMORY_TYPE_MUSA;
+    }
     return UCS_OK;
 }
 
