@@ -9,8 +9,6 @@
 #include <ucs/memory/memory_type.h>
 #include <uct/musa/musa_utils.h>
 
-#include <string>
-
 class test_musa_contract : public ucs::test {
 };
 
