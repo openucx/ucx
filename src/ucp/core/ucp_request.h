@@ -425,7 +425,7 @@ struct ucp_request {
                 } atomic_reply;
 
                 struct {
-                    uct_ep_op_info_t info;    /* Owned operation */
+                    uct_ep_op_info_t *info;   /* Heap-allocated owned operation */
                     void             *buffer; /* Payload or IOV copy */
                 } repost;
             };

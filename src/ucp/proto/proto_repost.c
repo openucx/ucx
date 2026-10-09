@@ -119,7 +119,7 @@ ucp_proto_repost_copy_data(ucp_request_t *req, void **buffer_p, size_t length)
 
 static ucs_status_t ucp_proto_repost_copy_iov(ucp_request_t *req)
 {
-    uct_ep_op_info_t *info = &req->send.repost.info;
+    uct_ep_op_info_t *info = req->send.repost.info;
     size_t iovcnt          = info->rma.payload.zcopy.iovcnt;
     const uct_iov_t *iov   = info->rma.payload.zcopy.iov;
     uct_iov_t *copy;
@@ -144,47 +144,72 @@ static ucs_status_t ucp_proto_repost_copy_iov(ucp_request_t *req)
 }
 
 
+static void ucp_proto_repost_cleanup(ucp_request_t *req)
+{
+    ucs_free(req->send.repost.buffer);
+    ucs_free(req->send.repost.info);
+    req->send.repost.buffer = NULL;
+    req->send.repost.info   = NULL;
+}
+
 /* Descriptor and short/bcopy bytes are valid only for the purge callback. */
 static ucs_status_t
 ucp_proto_repost_save(ucp_request_t *req, const uct_ep_op_info_t *op_info)
 {
-    uct_ep_op_info_t *info = &req->send.repost.info;
+    uct_ep_op_info_t *info;
+    ucs_status_t status;
+
+    info = ucs_malloc(sizeof(*info), "ucp_proto_repost_info");
+    if (info == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
 
     *info                   = *op_info;
+    req->send.repost.info   = info;
     req->send.repost.buffer = NULL;
 
     switch (info->operation) {
     case UCT_EP_OP_AM_SHORT:
     case UCT_EP_OP_AM_BCOPY:
-        return ucp_proto_repost_copy_data(req, &info->am.payload.data.buffer,
-                                          info->am.payload.data.length);
+        status = ucp_proto_repost_copy_data(req, &info->am.payload.data.buffer,
+                                            info->am.payload.data.length);
+        break;
     case UCT_EP_OP_PUT_SHORT:
     case UCT_EP_OP_PUT_BCOPY:
-        return ucp_proto_repost_copy_data(req, &info->rma.payload.data.buffer,
-                                          info->rma.payload.data.length);
+        status = ucp_proto_repost_copy_data(req, &info->rma.payload.data.buffer,
+                                            info->rma.payload.data.length);
+        break;
     case UCT_EP_OP_PUT_ZCOPY:
-        return ucp_proto_repost_copy_iov(req);
+        status = ucp_proto_repost_copy_iov(req);
+        break;
     default:
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        break;
     }
+
+    if (status != UCS_OK) {
+        ucp_proto_repost_cleanup(req);
+    }
+
+    return status;
 }
 
 
 static void ucp_proto_repost_release(ucp_request_t *req, ucs_status_t status)
 {
-    if (req->send.repost.buffer != NULL) {
-        ucs_free(req->send.repost.buffer);
-        req->send.repost.buffer = NULL;
-    }
-
+    ucp_proto_repost_cleanup(req);
     ucp_request_complete_send(req, status);
 }
 
 static uct_completion_t *ucp_proto_repost_origin_comp(const ucp_request_t *req)
 {
-    const uct_ep_op_info_t *info = &req->send.repost.info;
+    const uct_ep_op_info_t *info = req->send.repost.info;
 
-    return (info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) ? info->comp : NULL;
+    if ((info != NULL) && (info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
+        return info->comp;
+    }
+
+    return NULL;
 }
 
 
@@ -194,7 +219,10 @@ static void ucp_proto_repost_completion(uct_completion_t *self)
                                                 send.state.uct_comp);
     uct_completion_t *origin = ucp_proto_repost_origin_comp(req);
 
-    req->send.repost.info.comp = NULL;
+    if (req->send.repost.info != NULL) {
+        req->send.repost.info->comp = NULL;
+    }
+
     if (origin != NULL) {
         ucp_invoke_uct_completion(origin, self->status);
     }
@@ -223,7 +251,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
     const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
-    const uct_ep_op_info_t *info         = &req->send.repost.info;
+    const uct_ep_op_info_t *info         = req->send.repost.info;
     ucp_proto_repost_pack_t pack;
     uct_completion_t *comp;
     ucs_status_t status;
@@ -370,6 +398,8 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
     req->send.ep                   = ep;
     req->send.state.dt_iter.offset = 0;
     req->send.state.dt_iter.length = 0;
+    req->send.repost.info          = NULL;
+    req->send.repost.buffer        = NULL;
     ucp_proto_request_set_proto(req, config, 0);
 
     status = ucp_proto_repost_save(req, op_info);
