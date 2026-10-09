@@ -22,6 +22,77 @@
 #include <ucs/sys/topo/base/topo.h>
 
 
+/* The assignment covers the bandwidth lanes, which wireup selects per NIC */
+static int ucp_proto_multi_lane_type_is_assignable(ucp_lane_type_t lane_type)
+{
+    return (lane_type == UCP_LANE_TYPE_RMA_BW) ||
+           (lane_type == UCP_LANE_TYPE_AM_BW);
+}
+
+ucs_sys_device_t
+ucp_proto_multi_get_owner_sys_dev(const ucp_proto_multi_init_params_t *params)
+{
+    ucs_sys_device_t reg_sys_dev = params->super.reg_mem_info.sys_dev;
+
+    /* The device of the registered buffer is the staging buffer if any,
+     * otherwise it is the application buffer.
+     * Host staging and unregistered buffers have no device, so fall back to
+     * the application buffer's device. */
+    return (reg_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                   reg_sys_dev :
+                   params->super.super.select_param->sys_dev;
+}
+
+static ucs_memory_type_t
+ucp_proto_multi_get_owner_mem_type(const ucp_proto_multi_init_params_t *params)
+{
+    ucs_memory_type_t reg_mem_type = params->super.reg_mem_info.type;
+
+    /* The memory type of the registered buffer is the staging buffer's if any,
+     * otherwise the application buffer's.
+     * Only unregistered buffers have no memory type, so fall back to the
+     * application buffer's memory type. */
+    return (reg_mem_type != UCS_MEMORY_TYPE_UNKNOWN) ?
+                   reg_mem_type :
+                   (ucs_memory_type_t)params->super.super.select_param->mem_type;
+}
+
+const ucs_sys_device_bitmap_t *ucp_proto_multi_get_assigned_nic_bitmap(
+        const ucp_proto_multi_init_params_t *params,
+        ucs_sys_device_t owner_sys_dev)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_context_h context                      = init_params->worker->context;
+    const ucs_sys_device_bitmap_t *bitmap      = NULL;
+    const char *UCS_V_UNUSED owner_desc;
+
+    if (context->gpu_nic_assignment == NULL) {
+        /* No assignment configured. */
+        return NULL;
+    }
+
+    if (!ucp_proto_multi_lane_type_is_assignable(params->middle.lane_type)) {
+        owner_desc = "no RMA_BW or AM_BW lanes";
+        goto out;
+    }
+
+    if (owner_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        /* E.g. host memory, or managed memory without a preferred location */
+        owner_desc = "unknown device";
+        goto out;
+    }
+
+    bitmap     = ucp_gpu_nic_assignment_lookup(context->gpu_nic_assignment,
+                                               owner_sys_dev);
+    owner_desc = (bitmap != NULL) ? "assigned" : "device has no assignment";
+
+out:
+    ucs_trace("gpu-nic owner: proto %s sys_dev %d (%s): %s",
+              ucp_proto_id_field(init_params->proto_id, name), owner_sys_dev,
+              ucs_topo_sys_device_get_name(owner_sys_dev), owner_desc);
+    return bitmap;
+}
+
 static UCS_F_ALWAYS_INLINE double
 ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
                              ucp_lane_index_t lane,
@@ -71,7 +142,7 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
         const ucp_proto_init_params_t *params, const ucp_lane_index_t *lanes,
         const ucp_proto_common_tl_perf_t *lanes_perf,
         const ucp_proto_lane_selection_t *selection, ucp_lane_map_t index_map,
-        unsigned req_sys_dev_ord)
+        unsigned owner_sys_dev_ord)
 {
     /* Initial value is 1Bps, so we don't consider lanes with lower available
      * bandwidth. */
@@ -82,6 +153,7 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
     ucp_lane_index_t i, index, selected_index, first_max_bw_lane;
     const ucp_proto_common_tl_perf_t *lane_perf;
     ucs_sys_device_t sys_dev, selected_sys_dev;
+    const char *UCS_V_UNUSED tie_break;
     unsigned seed;
     double avail_bw;
     int cmp;
@@ -113,15 +185,15 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
     first_max_bw_lane = ucs_ffs64(lane_map);
 
     if (ucs_popcount(lane_map) == 1) {
-        ucs_trace("only one max bw lane %d", first_max_bw_lane);
-        return first_max_bw_lane;
+        selected_index = first_max_bw_lane;
+        tie_break      = "unique";
+        goto out;
     }
 
-    if (req_sys_dev_ord == UCS_SYS_DEVICE_ORDINAL_INVALID) {
-        ucs_trace("could not determine req_sys_dev %d ordinal; "
-                  "falling back to first max bw lane %d",
-                  params->select_param->sys_dev, first_max_bw_lane);
-        return first_max_bw_lane;
+    if (owner_sys_dev_ord == UCS_SYS_DEVICE_ORDINAL_INVALID) {
+        selected_index = first_max_bw_lane;
+        tie_break      = "first-max";
+        goto out;
     }
 
     /* Pass 2: collect unique sys_devs among the tied lanes. */
@@ -148,7 +220,7 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
     /* Use the device's BDF ordinal as seed: it is the device's rank among all
      * devices of the same class ordered by bus id, so seeds for neighboring
      * devices are consecutive as the algorithm requires (e.g GPU0 and GPU1). */
-    seed             = req_sys_dev_ord % num_max_bw_devs;
+    seed             = owner_sys_dev_ord % num_max_bw_devs;
     selected_sys_dev = sys_devs[seed];
 
     /* Pass 3: return the first tied index whose lane is on selected_sys_dev. */
@@ -165,13 +237,18 @@ static ucp_lane_index_t ucp_proto_multi_find_max_avail_bw_lane(
                 "selected_sys_dev=%d num_max_bw_devs=%u seed=%u",
                 selected_sys_dev, num_max_bw_devs, seed);
 
-    ucs_trace("max bw lane: proto %s bdf_ord %u num_max_bw_devs %u seed %u "
-              "-> sys_dev %d index %u " UCP_PROTO_LANE_FMT,
-              ucp_proto_id_field(params->proto_id, name), req_sys_dev_ord,
-              num_max_bw_devs, seed, selected_sys_dev, selected_index,
+    ucs_trace("device-ordinal tie-break: bdf_ord %u num_max_bw_devs %u "
+              "seed %u -> sys_dev %d",
+              owner_sys_dev_ord, num_max_bw_devs, seed, selected_sys_dev);
+
+    tie_break = "device-ordinal";
+out:
+    ucs_trace("max avail bw lane: proto %s num_selected %u tie-break %s "
+              "index %u " UCP_PROTO_LANE_FMT,
+              ucp_proto_id_field(params->proto_id, name), selection->num_lanes,
+              tie_break, selected_index,
               UCP_PROTO_LANE_ARG(params, lanes[selected_index],
                                  &lanes_perf[lanes[selected_index]]));
-
     return selected_index;
 }
 
@@ -194,7 +271,7 @@ static void ucp_proto_multi_select_bw_lanes(
         const ucp_proto_init_params_t *params, const ucp_lane_index_t *lanes,
         ucp_lane_index_t num_lanes, ucp_lane_index_t max_lanes,
         const ucp_proto_common_tl_perf_t *lanes_perf, int fixed_first_lane,
-        unsigned req_sys_dev_ord, ucp_proto_lane_selection_t *selection)
+        unsigned owner_sys_dev_ord, ucp_proto_lane_selection_t *selection)
 {
     ucp_lane_index_t i, lane_index;
     ucp_lane_map_t index_map;
@@ -215,7 +292,7 @@ static void ucp_proto_multi_select_bw_lanes(
                                                             lanes_perf,
                                                             selection,
                                                             index_map,
-                                                            req_sys_dev_ord);
+                                                            owner_sys_dev_ord);
         if (lane_index == UCP_NULL_LANE) {
             break;
         }
@@ -265,21 +342,21 @@ ucp_proto_multi_lane_distance(const ucp_proto_common_tl_perf_t *tl_perf)
  */
 static unsigned long
 ucp_proto_multi_single_net_dev_id(const ucp_context_t *context,
-                                  unsigned req_sys_dev_ord)
+                                  unsigned owner_sys_dev_ord)
 {
     if (context->config.node_local_id != UCS_ULUNITS_AUTO) {
         return context->config.node_local_id;
     }
 
-    return (req_sys_dev_ord == UCS_SYS_DEVICE_ORDINAL_INVALID) ?
+    return (owner_sys_dev_ord == UCS_SYS_DEVICE_ORDINAL_INVALID) ?
                    0 :
-                   req_sys_dev_ord;
+                   owner_sys_dev_ord;
 }
 
 static ucp_lane_index_t ucp_proto_multi_filter_single_net_device(
         ucp_lane_index_t num_lanes, const ucp_proto_init_params_t *params,
         const ucp_proto_common_tl_perf_t *tl_perfs, int fixed_first_lane,
-        unsigned req_sys_dev_ord, ucp_lane_index_t *lanes)
+        unsigned owner_sys_dev_ord, ucp_lane_index_t *lanes)
 {
     ucp_context_h context                   = params->worker->context;
     ucp_lane_index_t num_min_dist_devs      = 0;
@@ -299,10 +376,10 @@ static ucp_lane_index_t ucp_proto_multi_filter_single_net_device(
                                    &context->config.node_local_id, NULL);
     }
 
-    ucs_trace("single net dev: proto=%s node_local_id=%s req_sys_dev_ord=%u "
+    ucs_trace("single net dev: proto=%s node_local_id=%s owner_sys_dev_ord=%u "
               "num_lanes=%u fixed_first_lane=%d",
               ucp_proto_id_field(params->proto_id, name), node_local_id_str,
-              req_sys_dev_ord, num_lanes, fixed_first_lane);
+              owner_sys_dev_ord, num_lanes, fixed_first_lane);
 
     /* Pass 1: collect net lanes at the min distance (min latency, max BW). */
     lane_map = 0;
@@ -349,8 +426,9 @@ static ucp_lane_index_t ucp_proto_multi_filter_single_net_device(
      * This calculation assumes that there is symmetry in the topology, 
      * and also that local ids are consecutive between ranks that see 
      * the same devices with the same minimum distance. */
-    selection_id = ucp_proto_multi_single_net_dev_id(context, req_sys_dev_ord);
-    seed         = selection_id % num_min_dist_devs;
+    selection_id     = ucp_proto_multi_single_net_dev_id(context,
+                                                         owner_sys_dev_ord);
+    seed             = selection_id % num_min_dist_devs;
     selected_sys_dev = sys_devs[seed];
 
     ucs_trace("single net dev: pick selection_id %lu %% num_min_dist_devs %u "
@@ -432,6 +510,103 @@ ucp_proto_multi_find_lanes(const ucp_proto_multi_init_params_t *params,
     return UCS_OK;
 }
 
+/* Resolve the owner GPU's assignment and apply it to the assignable lanes. */
+static ucs_status_t ucp_proto_multi_filter_gpu_nic_lanes(
+        const ucp_proto_multi_init_params_t *params,
+        ucs_sys_device_t gpu_sys_dev, ucp_lane_index_t *lanes,
+        ucp_lane_index_t *num_lanes_p)
+{
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucp_context_h context                      = init_params->worker->context;
+    ucp_lane_index_t num_lanes                 = *num_lanes_p;
+    ucp_lane_index_t num_filtered_lanes        = 0;
+    ucp_lane_index_t num_bulk_lanes_kept       = 0;
+    const ucs_sys_device_bitmap_t *assigned_nic_bitmap;
+    ucp_lane_index_t i, lane, num_removed_lanes;
+    ucs_memory_type_t mem_type;
+    ucp_lane_type_t lane_type;
+    ucs_sys_device_t lane_sys_dev;
+    ucp_rsc_index_t rsc_index;
+    ucp_md_index_t md_index;
+
+    assigned_nic_bitmap = ucp_proto_multi_get_assigned_nic_bitmap(params,
+                                                                  gpu_sys_dev);
+    if (assigned_nic_bitmap == NULL) {
+        return UCS_OK;
+    }
+
+    mem_type = ucp_proto_multi_get_owner_mem_type(params);
+
+    /* Classify before compaction because index zero has the first-lane role. */
+    for (i = 0; i < num_lanes; ++i) {
+        lane      = lanes[i];
+        lane_type = (i == 0) ? params->first.lane_type :
+                               params->middle.lane_type;
+        if (!ucp_proto_multi_lane_type_is_assignable(lane_type)) {
+            /* In practice this is the first AM lane, selected by wireup per
+             * endpoint regardless of the buffer's GPU, which carries its
+             * share of the data on a possibly unassigned NIC. Only the
+             * AM-first protocols are affected: tag and AM eager multi, and
+             * rndv/am. RMA_BW protocols declare no AM lane type, so all their
+             * lanes are checked and no traffic can leak.
+             * TODO: restrict the AM lane as well. */
+            lanes[num_filtered_lanes++] = lane;
+            continue;
+        }
+
+        /* The assignment covers only NICs, e.g. cuda_ipc lanes are kept */
+        if (!ucp_proto_common_is_net_dev(init_params, lane)) {
+            lanes[num_filtered_lanes++] = lane;
+            ++num_bulk_lanes_kept;
+            continue;
+        }
+
+        /* The assignment covers only NICs that can register the buffer
+         * (e.g. tcp lanes are kept). */
+        rsc_index = ucp_proto_common_get_rsc_index(init_params, lane);
+        md_index  = context->tl_rscs[rsc_index].md_index;
+        if (!UCS_BIT_GET(context->reg_md_map[mem_type], md_index)) {
+            ucs_trace("assignment keeps lane %d: md %s cannot register %s "
+                      "memory",
+                      lane, context->tl_mds[md_index].rsc.md_name,
+                      ucs_memory_type_names[mem_type]);
+            lanes[num_filtered_lanes++] = lane;
+            ++num_bulk_lanes_kept;
+            continue;
+        }
+
+        lane_sys_dev = ucp_proto_common_get_sys_dev(init_params, lane);
+
+        /* Keep only lanes whose local transport function is assigned. */
+        if (!ucp_gpu_nic_bitmap_get(assigned_nic_bitmap, lane_sys_dev)) {
+            ucs_trace("assignment removes lane %d on network sys_dev %d", lane,
+                      lane_sys_dev);
+            continue;
+        }
+
+        ucs_trace("assignment keeps lane %d on network sys_dev %d", lane,
+                  lane_sys_dev);
+        lanes[num_filtered_lanes++] = lane;
+        ++num_bulk_lanes_kept;
+    }
+
+    num_removed_lanes = num_lanes - num_filtered_lanes;
+
+    /* Drop the protocol if the assignment removed all its bulk lanes */
+    if ((num_removed_lanes > 0) && (num_bulk_lanes_kept == 0)) {
+        ucs_debug("proto %s: no lane matches the assignment of gpu %s "
+                  "(sys_dev %d), dropping %u lanes",
+                  ucp_proto_id_field(init_params->proto_id, name),
+                  ucs_topo_sys_device_get_name(gpu_sys_dev), gpu_sys_dev,
+                  num_lanes);
+        return UCS_ERR_NO_ELEM;
+    }
+
+    ucs_trace("assignment retained %u/%u lanes", num_filtered_lanes, num_lanes);
+    *num_lanes_p = num_filtered_lanes;
+    return UCS_OK;
+}
+
 /* Get the performance and maximal bandwidth of all candidate lanes. */
 static ucs_status_t
 ucp_proto_multi_query_lanes(const ucp_proto_multi_init_params_t *params,
@@ -504,14 +679,14 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
                              const ucp_lane_index_t *lanes,
                              ucp_lane_index_t num_lanes,
                              const ucp_proto_common_tl_perf_t *lanes_perf,
-                             int fixed_first_lane, unsigned req_sys_dev_ord,
+                             int fixed_first_lane, unsigned owner_sys_dev_ord,
                              ucp_proto_lane_selection_t *selection)
 {
     ucs_log_indent(1);
 
     ucp_proto_multi_select_bw_lanes(&params->super.super, lanes, num_lanes,
                                     params->max_lanes, lanes_perf,
-                                    fixed_first_lane, req_sys_dev_ord,
+                                    fixed_first_lane, owner_sys_dev_ord,
                                     selection);
 
     ucs_assertv(ucs_ilog2(selection->lane_map) < UCP_MAX_LANES,
@@ -780,7 +955,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   ucp_proto_perf_t **perf_p,
                                   ucp_proto_multi_priv_t *mpriv)
 {
-    ucs_sys_device_t req_sys_dev = params->super.super.select_param->sys_dev;
+    const ucp_proto_init_params_t *init_params = &params->super.super;
+    ucs_sys_device_t owner_sys_dev = ucp_proto_multi_get_owner_sys_dev(params);
     ucp_lane_map_t queried_lane_map = 0;
     ucp_proto_common_tl_perf_t lanes_perf[UCP_PROTO_MAX_LANES];
     ucp_proto_common_tl_perf_t perf;
@@ -791,7 +967,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_md_map_t reg_md_map;
     ucs_status_t status;
     int fixed_first_lane;
-    unsigned req_sys_dev_ord;
+    unsigned owner_sys_dev_ord;
 
     status = ucp_proto_multi_check_params(params);
     if (status != UCS_OK) {
@@ -799,6 +975,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     status = ucp_proto_multi_find_lanes(params, lanes, &num_lanes);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_proto_multi_filter_gpu_nic_lanes(params, owner_sys_dev, lanes,
+                                                  &num_lanes);
     if (status != UCS_OK) {
         return status;
     }
@@ -815,23 +997,30 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                                          fixed_first_lane, num_lanes,
                                                          lanes);
 
-    req_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(req_sys_dev);
+    /* Keep the device-ordinal tie-break with an active assignment too: with
+     * flip or round_robin each GPU has exclusive NICs, so the tie-break is a
+     * no-op, and with shared it spreads the GPUs over their shared NICs */
+    owner_sys_dev_ord = ucs_topo_sys_device_get_bdf_class_ordinal(
+            owner_sys_dev);
 
-    ucs_trace(
-            "select bw lanes: proto %s req_sys_dev=%d (%s) req_sys_dev_ord=%u",
-            ucp_proto_id_field(params->super.super.proto_id, name), req_sys_dev,
-            ucs_topo_sys_device_get_name(req_sys_dev), req_sys_dev_ord);
+    ucs_trace("select bw lanes: proto %s owner_sys_dev=%d (%s) "
+              "owner_sys_dev_ord=%u",
+              ucp_proto_id_field(init_params->proto_id, name), owner_sys_dev,
+              ucs_topo_sys_device_get_name(owner_sys_dev), owner_sys_dev_ord);
 
-    if (params->super.super.worker->context->config.ext
-                .proto_use_single_net_device) {
+    if (init_params->worker->context->config.ext.proto_use_single_net_device) {
+        /* ucp_init() rejects UCX_SINGLE_NET_DEVICE with an active gpu-nic assignment */
+        ucs_assert(init_params->worker->context->gpu_nic_assignment == NULL);
+
         num_lanes = ucp_proto_multi_filter_single_net_device(
-                num_lanes, &params->super.super, lanes_perf, fixed_first_lane,
-                req_sys_dev_ord, lanes);
+                num_lanes, init_params, lanes_perf, fixed_first_lane,
+                owner_sys_dev_ord, lanes);
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */
     ucp_proto_multi_select_lanes(params, lanes, num_lanes, lanes_perf,
-                                 fixed_first_lane, req_sys_dev_ord, &selection);
+                                 fixed_first_lane, owner_sys_dev_ord,
+                                 &selection);
     ucp_proto_multi_aggregate_perf(params, &selection, lanes_perf, &perf,
                                    &max_frag_ratio, &min_bandwidth);
 
