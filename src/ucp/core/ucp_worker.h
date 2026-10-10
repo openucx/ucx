@@ -159,6 +159,7 @@ enum {
     UCP_WORKER_STAT_RNDV_RTR,
     UCP_WORKER_STAT_RNDV_RTR_MTYPE,
     UCP_WORKER_STAT_RNDV_RKEY_PTR,
+    UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED,
 
     UCP_WORKER_STAT_LAST
 };
@@ -223,10 +224,24 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
+/**
+ * Rendezvous fragment pools of a memory type and device. RTR requests use
+ * only the shared pool, while PUT/GET requests use the reserved pool first.
+ * This keeps fragments for PUT/GET: an RTR fragment is released only when
+ * the peer's data arrives, and the peer needs a fragment of its own to send
+ * it, so RTR fragments on both peers could otherwise wait for each other.
+ */
+typedef enum {
+    UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+    UCP_WORKER_RNDV_FRAG_POOL_RESERVED
+} ucp_worker_rndv_frag_pool_t;
+
+
 typedef struct ucp_worker_mpool_key {
     ucs_memory_type_t mem_type;  /* memory type of the buffer pool */
     ucs_sys_device_t  sys_dev;   /* identifier for the device,
                                     UINT_MAX for default device */
+    uint8_t           pool;      /* UCP_WORKER_RNDV_FRAG_POOL_* */
 } ucp_worker_mpool_key_t;
 
 
@@ -301,6 +316,19 @@ UCS_PTR_MAP_TYPE(request, 0);
 
 /* rkey configuration storage */
 UCS_ARRAY_DECLARE_TYPE(ucp_rkey_config_arr_t, unsigned, ucp_rkey_config_t*);
+
+
+/**
+ * Rendezvous mtype flow-control operation types.
+ * Used as indices into the per-worker pending queue array.
+ * PUT and GET share the high-priority queue; RTR uses the low-priority queue.
+ */
+enum {
+    UCP_WORKER_RNDV_FC_OP_PUT  = 0,                          /* GET/PUT (hi prio) */
+    UCP_WORKER_RNDV_FC_OP_GET  = UCP_WORKER_RNDV_FC_OP_PUT,  /* Same as PUT */
+    UCP_WORKER_RNDV_FC_OP_RTR  = 1,                          /* RTR (lo prio) */
+    UCP_WORKER_RNDV_FC_OP_LAST = 2
+};
 
 
 /**
@@ -406,6 +434,12 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    struct {
+        /* Pending queues indexed by UCP_WORKER_RNDV_FC_OP_*,
+         * ordered by descending priority (GET/PUT = 0, RTR = 1) */
+        ucs_queue_head_t             pending_q[UCP_WORKER_RNDV_FC_OP_LAST];
+    } rndv_mtype_fc;
 
     struct {
         /* Usage tracker handle */

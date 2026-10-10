@@ -76,6 +76,22 @@ enum {
 
 
 /**
+ * Fragment flow control state of a rndv request. Every rndv request must be
+ * initialized with ucp_proto_rndv_req_fc_init() when it is set up, since
+ * ucp_proto_rndv_mtype_fc_cancel() reads the state for any aborted or reset
+ * request.
+ */
+enum {
+    /* Not throttled */
+    UCP_REQUEST_RNDV_MTYPE_FC_NONE,
+    /* Waiting in the worker-level pending queue */
+    UCP_REQUEST_RNDV_MTYPE_FC_QUEUED,
+    /* Dequeued, a retry is scheduled from the progress loop */
+    UCP_REQUEST_RNDV_MTYPE_FC_RESCHED
+};
+
+
+/**
  * Protocols enumerator to work with send request state
  */
 enum {
@@ -319,6 +335,9 @@ struct ucp_request {
                             /* Data start offset of this request */
                             size_t offset;
 
+                            /* UCP_REQUEST_RNDV_MTYPE_FC_* state */
+                            uint8_t fc_state;
+
                             union {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
@@ -339,6 +358,13 @@ struct ucp_request {
                                     /* Size to send in ack message */
                                     ssize_t ack_data_size;
                                 } ppln;
+
+                                /* Used by rndv mtype requests while fc_state
+                                 * is not UCP_REQUEST_RNDV_MTYPE_FC_NONE */
+                                struct {
+                                    /* Element in worker-level pending queue */
+                                    ucs_queue_elem_t queue_elem;
+                                } fc;
 
                                 /* Used by rndv/rkey_ptr */
                                 struct {
