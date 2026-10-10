@@ -166,7 +166,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
            it to the host memory staging buffer for further processing. */
         header_host_copy = ucs_alloca(header_length);
         ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
-                          header_length, req->recv.dt_iter.mem_info.type);
+                          header_length, req->recv.dt_iter.mem_info.type,
+                          &req->recv.dt_iter.mem_info);
         ucp_tag_rndv_matched(req->recv.worker, req, header_host_copy,
                              header_length);
     }
