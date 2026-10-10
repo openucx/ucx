@@ -936,6 +936,11 @@ static int uct_rc_mlx5_send_op_is_flush(const uct_rc_iface_send_op_t *op)
     return op->handler == uct_rc_ep_flush_op_completion_handler;
 }
 
+static int uct_rc_mlx5_send_op_is_flush_remote(const uct_rc_iface_send_op_t *op)
+{
+    return op->handler == uct_rc_ep_flush_remote_handler;
+}
+
 static int uct_rc_mlx5_send_op_is_ep_check(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == uct_rc_ep_check_completion_handler;
@@ -982,6 +987,15 @@ uct_rc_mlx5_ep_outstanding_peek_send_op(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
     }
 
     return op;
+}
+
+static int
+uct_rc_mlx5_ep_is_flush_remote_wqe(uct_rc_mlx5_base_ep_t *ep, uint16_t pi)
+{
+    uct_rc_iface_send_op_t *op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep,
+                                                                         pi);
+
+    return (op != NULL) && uct_rc_mlx5_send_op_is_flush_remote(op);
 }
 
 static void uct_rc_mlx5_op_info_fill_user_comp(uct_rc_iface_send_op_t *op,
@@ -1340,12 +1354,16 @@ static ucs_status_t uct_rc_mlx5_op_info_fill_get(
     uct_rc_iface_send_op_t *op;
     size_t inline_length, num_dseg;
 
+    op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
+    if ((op != NULL) && uct_rc_mlx5_send_op_is_flush_remote(op)) {
+        return UCS_ERR_NO_ELEM;
+    }
+
     uct_rc_mlx5_wqe_rma_segs(txwq, ctrl, wqe_size, &raddr, &inl, &inline_length,
                              &dptr, &num_dseg);
     ucs_assertv_always(inline_length == 0,
                        "rc mlx5: read wqe with inline segment");
 
-    op = uct_rc_mlx5_ep_outstanding_peek_send_op(ep, pi);
     if ((op != NULL) && uct_rc_mlx5_send_op_is_get_bcopy(op)) {
         uct_rc_mlx5_op_info_fill_get_bcopy(op, raddr, info);
         return UCS_OK;
@@ -1536,6 +1554,7 @@ uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_t *iface,
                uct_rc_mlx5_send_op_is_get_bcopy(op) ||
                uct_rc_mlx5_send_op_is_get_zcopy(op) ||
                uct_rc_mlx5_send_op_is_flush(op) ||
+               uct_rc_mlx5_send_op_is_flush_remote(op) ||
                uct_rc_mlx5_send_op_is_ep_check(op));
 
     if (uct_rc_mlx5_send_op_is_get_bcopy(op)) {
@@ -1572,6 +1591,7 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
                                    uct_rc_mlx5_send_op_is_get_bcopy(op) ||
                                    uct_rc_mlx5_send_op_is_get_zcopy(op) ||
                                    uct_rc_mlx5_send_op_is_flush(op) ||
+                                   uct_rc_mlx5_send_op_is_flush_remote(op) ||
                                    uct_rc_mlx5_send_op_is_ep_check(op),
                            "ep %p qp 0x%x unexpected send op sn %u handler %s",
                            ep, ep->tx.wq.super.qp_num, op->sn,
@@ -1586,6 +1606,7 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
         }
 
         if ((uct_rc_mlx5_send_op_is_flush(op) ||
+             uct_rc_mlx5_send_op_is_flush_remote(op) ||
              uct_rc_mlx5_send_op_is_ep_check(op)) &&
             (op->user_comp != NULL)) {
             uct_invoke_completion(op->user_comp, status);
@@ -1675,12 +1696,16 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
              * direction, and only a successful completion proves it reached
              * the local buffer. Report the read as undelivered so
              * indeterminate buffer contents are not consumed.
+             * A flush-remote read is the exception: the responder executes
+             * requests in order, so accepting the read proves prior writes
+             * reached the remote memory; the response payload is not consumed.
              */
-            delivered = (uct_ib_mlx5_wqe_opcode(ctrl) !=
-                         MLX5_OPCODE_RDMA_READ) &&
-                        uct_ib_mlx5_wqe_is_delivered(wqe_first_psn,
+            delivered = uct_ib_mlx5_wqe_is_delivered(wqe_first_psn,
                                                      receiver_next_psn,
-                                                     num_packets);
+                                                     num_packets) &&
+                        ((uct_ib_mlx5_wqe_opcode(ctrl) !=
+                          MLX5_OPCODE_RDMA_READ) ||
+                         uct_rc_mlx5_ep_is_flush_remote_wqe(ep, pi));
         }
 
         if (!delivered) {
