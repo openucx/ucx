@@ -719,9 +719,9 @@ protected:
 
     void test_am_short(bool with_rx_token)
     {
-        const uct_iface_attr_t &attr = m_sender->iface_attr();
-        const size_t size            = ucs_min((size_t)64,
-                                               attr.cap.am.max_short);
+        const size_t max_size = m_sender->iface_attr().cap.am.max_short -
+                                sizeof(AM_SHORT_HEADER);
+        const size_t size     = ucs::rand() % max_size + 1;
         std::vector<uint8_t> payload(size);
 
         mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
@@ -745,6 +745,34 @@ protected:
                                       ctx.num_ops_posted_after_flush);
     }
 
+    void test_am_short_iov()
+    {
+        const size_t hdr_size = sizeof(AM_SHORT_HEADER);
+        const size_t max_size = m_sender->iface_attr().cap.am.max_short -
+                                hdr_size;
+        const size_t size     = ucs::rand() % max_size + 1;
+        mapped_buffer sendbuf(hdr_size + size, SEND_SEED, *m_sender);
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), 2);
+
+        memcpy(sendbuf.ptr(), &AM_SHORT_HEADER, hdr_size);
+        mem_buffer::pattern_fill(UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), hdr_size),
+                                 size, SEND_SEED);
+
+        purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+        ctx.send_buf  = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), hdr_size);
+        ctx.send_len  = size;
+
+        ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
+                                               am_handler, NULL, 0));
+
+        send_func_t am_short_iov = [&](uct_ep_h ep, uct_completion_t*) {
+            return uct_ep_am_short_iov(ep, AM_SHORT_ID, iov, iovcnt);
+        };
+        test_purge_outstanding(am_short_iov, ctx);
+    }
+
     entity   *m_sender;
     entity   *m_receiver;
     unsigned m_err_count = 0;
@@ -764,6 +792,12 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short_no_rx_token,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT))
 {
     test_am_short(false);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short_iov,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_am_short_iov();
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_bcopy,
@@ -804,7 +838,7 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_short,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
 {
     const uct_iface_attr_t &attr = m_sender->iface_attr();
-    const size_t size            = ucs_min((size_t)64, attr.cap.put.max_short);
+    const size_t size            = ucs::rand() % attr.cap.put.max_short + 1;
     mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
     mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
 
