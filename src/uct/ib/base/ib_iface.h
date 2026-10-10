@@ -105,7 +105,8 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
     UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
     UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4),
-    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
+    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5),
+    UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID     = UCS_BIT(6)
 };
 
 
@@ -147,6 +148,9 @@ typedef struct uct_ib_address_pack_params {
     /* PKEY value,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PKEY is set. */
     uint16_t                          pkey;
+    /* Administrative fabric id, 0 if the peer does not report one,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID is set. */
+    uint16_t                          fabric_id;
 } uct_ib_address_pack_params_t;
 
 
@@ -198,6 +202,9 @@ struct uct_ib_iface_config {
 
     /* Use FLID based routing */
     int                              flid_enabled;
+
+    /* Administrative fabric identifier, 0 for the default fabric */
+    unsigned                         fabric_id;
 
     /* IB SL to use (default: AUTO) */
     unsigned long                    sl;
@@ -371,6 +378,8 @@ struct uct_ib_iface {
         uint8_t                          qp_type;
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
+        /* Digest of the configured fabric id, 0 if unset */
+        uint16_t                         fabric_id;
         enum ibv_mtu                     path_mtu;
         uint8_t                          counter_set_id;
         uct_ib_iface_send_overhead_t     send_overhead;
@@ -494,6 +503,19 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
  * @return IB address size of the given link scope.
  */
 size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params);
+
+
+/**
+ * Get the size of a packed IB address from the address itself. The layout is
+ * described by the address flags, so unlike @ref uct_ib_address_size() the
+ * result is valid for an address packed by a peer whose configuration, or UCX
+ * version, differs from the local one.
+ *
+ * @param [in]  ib_addr  Packed IB address.
+ *
+ * @return IB address size, in bytes.
+ */
+size_t uct_ib_address_packed_size(const uct_ib_address_t *ib_addr);
 
 
 /**

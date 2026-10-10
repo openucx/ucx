@@ -125,7 +125,7 @@ enum {
 
     /* Used for ETH link layer. */
     UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(4),
-    /* Used for ETH link layer, following bits are used to pack RoCE version. */
+    /* Used for ETH link layer, this bit and the next one pack RoCE version. */
     UCT_IB_ADDRESS_FLAG_ETH_LAST       = UCS_BIT(5),
 
     /* Used for IB link layer. */
@@ -133,8 +133,18 @@ enum {
     /* Used for IB link layer. */
     UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(5),
     /* Used for IB link layer. */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6)
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6),
+    /* Administrative fabric id, used for both ETH or IB link layer,
+       see UCX_IB_FABRIC_ID. Last free bit of the flags byte. A peer which
+       predates this flag folds it into the RoCE version and logs
+       '<unknown RoCE version>'. */
+    UCT_IB_ADDRESS_FLAG_FABRIC_ID      = UCS_BIT(7)
 };
+
+
+/* Number of flag bits packing the RoCE version, starting from
+   @ref UCT_IB_ADDRESS_FLAG_ETH_LAST */
+#define UCT_IB_ADDRESS_ROCE_VERSION_BITS 2
 
 
 /**
@@ -142,7 +152,8 @@ enum {
  */
 typedef struct uct_ib_address {
     /* Using flags from UCT_IB_ADDRESS_FLAG_xx
-     * For ETH link layer, the 4 msb's are used to indicate the RoCE version -
+     * For ETH link layer, UCT_IB_ADDRESS_ROCE_VERSION_BITS bits starting from
+     * UCT_IB_ADDRESS_FLAG_ETH_LAST are used to indicate the RoCE version -
      * (by shifting the UCT_IB_DEVICE_ROCE_xx values when packing and unpacking
      * the ib address) */
     uint8_t            flags;
@@ -154,6 +165,11 @@ typedef struct uct_ib_address {
      * - uint64_t subnet64
      * For RoCE:
      * - uint8_t gid[16]
+     * Common tail, following the link layer specific fields:
+     * - uint8_t path_mtu
+     * - uint8_t gid_index
+     * - uint16_t pkey
+     * - uint16_t fabric_id
      */
 } UCS_S_PACKED uct_ib_address_t;
 
