@@ -237,10 +237,10 @@ uct_flush_kernel(uct_device_ep_h ep, const uct_device_mem_elem_t *mem_elem,
             }
         }
 
-        status = uct_device_ep_flush<level>(ep, UCT_DEVICE_FLAG_PUSH);
+        status = uct_device_ep_flush<level>(ep, 0, UCT_DEVICE_FLAG_PUSH);
         while (status == UCS_INPROGRESS) {
             uct_device_ep_progress<level>(ep);
-            status = uct_device_ep_flush<level>(ep, 0);
+            status = uct_device_ep_flush<level>(ep, 0, 0);
         }
         *status_p = status;
     }

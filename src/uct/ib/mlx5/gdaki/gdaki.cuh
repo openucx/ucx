@@ -390,28 +390,20 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
+                                                    unsigned channel_id,
                                                     uint64_t flags)
 {
-    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    unsigned cid;
+    auto ep  = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto cid = channel_id & ep->channel_mask;
+    auto qp  = uct_rc_mlx5_gda_get_qp(ep, cid);
+    uint64_t rsvd_idx;
 
-    for (cid = 0; cid <= ep->channel_mask; cid++) {
-        auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
-        uint64_t rsvd_idx;
-        ucs_status_t status;
-
-        if (flags & UCT_DEVICE_FLAG_PUSH) {
-            uct_rc_mlx5_gda_push_db(ep, cid);
-        }
-
-        rsvd_idx = READ_ONCE(qp->sq_rsvd_index);
-        status   = uct_rc_mlx5_gda_check_cqe(ep, cid, rsvd_idx - 1);
-        if (status != UCS_OK) {
-            return status;
-        }
+    if (flags & UCT_DEVICE_FLAG_PUSH) {
+        uct_rc_mlx5_gda_push_db(ep, cid);
     }
 
-    return UCS_OK;
+    rsvd_idx = READ_ONCE(qp->sq_rsvd_index);
+    return uct_rc_mlx5_gda_check_cqe(ep, cid, rsvd_idx - 1);
 }
 
 #endif /* UCT_GDAKI_CUH_H */

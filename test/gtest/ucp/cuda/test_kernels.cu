@@ -142,7 +142,7 @@ ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
     }
 
     if (params.use_flush) {
-        status = ucp_device_flush<level>(params.remote_mem_list,
+        status = ucp_device_flush<level>(params.remote_mem_list, 0,
                                          UCT_DEVICE_FLAG_PUSH);
     } else {
         // Last iteration must use no-delay flag, to force execution
