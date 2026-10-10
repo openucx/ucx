@@ -317,11 +317,11 @@ ucp_proto_rndv_rkey_mem_flags_estimate(const ucp_proto_init_params_t *params)
         }
 
         /*
-         * Derive UCS_MEM_FLAG_REGISTRABLE from matching local MDs which
-         * require it and whose remote MDs are present in the rkey.
+         * Derive the memory flags required by matching local MDs whose remote
+         * MDs are present in the rkey.
          *
          * UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE is intentionally not inferred
-         * here: unlike REGISTRABLE it is not an MD required_mem_flags bit,
+         * here: it is not an MD required_mem_flags bit,
          * and is checked only when packing keys in
          * ucp_proto_rndv_ctrl_get_md_map(). Runtime packing uses the real
          * local buffer flags; omitting it from this estimate can only make
