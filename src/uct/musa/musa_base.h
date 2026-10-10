@@ -49,9 +49,6 @@ ucs_status_t uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
                                               size_t length,
                                               ucs_memory_type_t *mem_type_p);
 
-ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
-                                int device);
-
 int uct_musa_base_has_dmabuf(void);
 
 ucs_status_t uct_musa_base_export_dmabuf(const void *address, size_t length,

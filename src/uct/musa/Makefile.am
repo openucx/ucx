@@ -17,18 +17,12 @@ libuct_musa_ladir       = $(includedir)/uct/musa
 
 noinst_HEADERS = \
 	musa_utils.h \
-	musa_base.h \
-	musa_md.h \
-	musa_copy_iface.h \
-	musa_copy_ep.h
+	musa_base.h
 
 libuct_musa_la_SOURCES = \
 	musa_base.c \
-	musa_md.c \
-	musa_copy_iface.c \
-	musa_copy_ep.c
-
-PKG_CONFIG_NAME=musa
+	musa_iface.c \
+	musa_md.c
 
 include $(top_srcdir)/config/module.am
 

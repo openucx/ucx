@@ -34,10 +34,3 @@ UCS_TEST_F(test_musa_contract, range_rejects_integer_overflow)
     EXPECT_FALSE(uct_musa_range_is_valid(UINTPTR_MAX - 0x10, 0x20,
                                          UINTPTR_MAX - 0x10, 0x20));
 }
-
-UCS_TEST_F(test_musa_contract, registration_mode_values_are_distinct)
-{
-    EXPECT_NE(UCT_MUSA_REG_MODE_AUTO, UCT_MUSA_REG_MODE_DMABUF);
-    EXPECT_NE(UCT_MUSA_REG_MODE_DMABUF, UCT_MUSA_REG_MODE_PEERMEM);
-    EXPECT_NE(UCT_MUSA_REG_MODE_PEERMEM, UCT_MUSA_REG_MODE_STAGING);
-}

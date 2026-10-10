@@ -14,14 +14,6 @@
 
 BEGIN_C_DECLS
 
-typedef enum {
-    UCT_MUSA_REG_MODE_AUTO,
-    UCT_MUSA_REG_MODE_DMABUF,
-    UCT_MUSA_REG_MODE_PEERMEM,
-    UCT_MUSA_REG_MODE_STAGING,
-    UCT_MUSA_REG_MODE_LAST
-} uct_musa_reg_mode_t;
-
 static UCS_F_ALWAYS_INLINE int
 uct_musa_range_is_valid(uintptr_t base, size_t alloc_length,
                         uintptr_t address, size_t length)
