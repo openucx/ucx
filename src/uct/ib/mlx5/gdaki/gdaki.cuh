@@ -233,12 +233,6 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
 }
 
-UCS_F_DEVICE bool
-uct_rc_mlx5_gda_fc(const uct_rc_gdaki_dev_ep_t *ep, uint16_t wqe_idx)
-{
-    return !(wqe_idx & ep->sq_fc_mask);
-}
-
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_rc_gdaki_dev_ep_t *ep, const uct_device_mem_elem_t *tl_mem_elem,
@@ -248,7 +242,7 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uint64_t add)
 {
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned cflag                = 0;
+    unsigned cflag                = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
     uint64_t wqe_base;
     unsigned lane_id;
     unsigned num_lanes;
@@ -261,12 +255,9 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
 
     if (lane_id == 0) {
         uint16_t wqe_idx = (uint16_t)wqe_base;
-        if ((comp != nullptr) || uct_rc_mlx5_gda_fc(ep, wqe_idx)) {
-            cflag = DOCA_GPUNETIO_IB_MLX5_WQE_CTRL_CQ_UPDATE;
-            if (comp != nullptr) {
-                comp->wqe_idx = wqe_base;
-                comp->channel_id = cid;
-            }
+        if (comp != nullptr) {
+            comp->wqe_idx    = wqe_base;
+            comp->channel_id = cid;
         }
 
         uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
@@ -348,31 +339,76 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_ep_progress(uct_device_ep_h tl_ep)
 {
 }
 
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_check_cqe(uct_rc_gdaki_dev_ep_t *ep,
+                                                    unsigned cid,
+                                                    int64_t margin)
+{
+    uint16_t wqe_cnt, wqe_idx;
+    uint8_t opcode;
+    void *wqe_ptr;
+    int64_t pi;
+
+    pi = uct_rc_mlx5_gda_parse_cqe(ep, cid, &wqe_cnt, &opcode);
+
+    if (pi < margin) {
+        return UCS_INPROGRESS;
+    }
+
+    if (opcode != MLX5_CQE_REQ_ERR) {
+        return UCS_OK;
+    }
+
+    wqe_idx = wqe_cnt & (ep->sq_wqe_num - 1);
+    wqe_ptr = uct_rc_mlx5_gda_get_wqe_ptr(ep, cid, wqe_idx);
+    uct_rc_mlx5_gda_qedump("WQE", wqe_ptr, 64);
+    uct_rc_mlx5_gda_qedump("CQE", ep->qps[cid].cq_buff, 64);
+    return UCS_ERR_IO_ERROR;
+}
+
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
         uct_device_ep_h tl_ep, uct_device_completion_t *tl_comp)
 {
-    uct_rc_gdaki_dev_ep_t *ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
-    uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned cid                  = comp->channel_id;
-    uint16_t wqe_cnt;
-    uint8_t opcode;
-    uint64_t pi;
+    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto comp = &tl_comp->rc_gda;
 
-    pi = uct_rc_mlx5_gda_parse_cqe(ep, cid, &wqe_cnt, &opcode);
+    return uct_rc_mlx5_gda_check_cqe(ep, comp->channel_id, comp->wqe_idx);
+}
 
-    /* since first message wqe_idx is 0 and initial pi is -1
-       we need to cast to signed */
-    if ((int64_t)pi < (int64_t)comp->wqe_idx) {
-        return UCS_INPROGRESS;
-    }
+UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
+                                          unsigned cid)
+{
+    auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    uint64_t wqe_next = READ_ONCE(qp->sq_ready_index);
+    uint32_t qpn_ds   = uct_rc_mlx5_load_const(&qp->qpn_ds);
+    auto *db_ptr      = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
+    auto dbrec_ptr    = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
 
-    if (opcode == MLX5_CQE_REQ_ERR) {
-        uint16_t wqe_idx = wqe_cnt & (ep->sq_wqe_num - 1);
-        auto wqe_ptr     = uct_rc_mlx5_gda_get_wqe_ptr(ep, cid, wqe_idx);
-        uct_rc_mlx5_gda_qedump("WQE", wqe_ptr, 64);
-        uct_rc_mlx5_gda_qedump("CQE", ep->qps[cid].cq_buff, 64);
-        return UCS_ERR_IO_ERROR;
+    doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
+    doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+}
+
+template<ucs_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
+                                                    uint64_t flags)
+{
+    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    unsigned cid;
+
+    for (cid = 0; cid <= ep->channel_mask; cid++) {
+        auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+        uint64_t rsvd_idx;
+        ucs_status_t status;
+
+        if (flags & UCT_DEVICE_FLAG_PUSH) {
+            uct_rc_mlx5_gda_push_db(ep, cid);
+        }
+
+        rsvd_idx = READ_ONCE(qp->sq_rsvd_index);
+        status   = uct_rc_mlx5_gda_check_cqe(ep, cid, rsvd_idx - 1);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;

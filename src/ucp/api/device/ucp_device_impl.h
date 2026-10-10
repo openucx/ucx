@@ -36,7 +36,10 @@ typedef struct ucp_device_request {
  */
 typedef enum {
     UCP_DEVICE_FLAG_NODELAY =
-            UCT_DEVICE_FLAG_NODELAY /**< Complete before return. */
+            UCT_DEVICE_FLAG_NODELAY, /**< Complete before return. */
+    UCP_DEVICE_FLAG_PUSH =
+            UCT_DEVICE_FLAG_PUSH /**< Push any previously posted operations that
+                                      have not been pushed out yet. */
 } ucp_device_flags_t;
 
 
@@ -381,6 +384,60 @@ template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
 UCS_F_DEVICE void ucp_device_counter_write(void *counter_ptr, uint64_t value)
 {
     ucs_device_atomic64_write(reinterpret_cast<uint64_t*>(counter_ptr), value);
+}
+
+
+/**
+ * @ingroup UCP_DEVICE
+ * @brief Flush all outstanding operations on every endpoint referenced by a
+ * memory list.
+ *
+ * This device routine blocks until all operations previously posted have
+ * completed.
+ *
+ * @tparam      level       Level of cooperation of the flush operation.
+ * @param [in]  mem_list_h  Remote memory descriptor list handle to flush.
+ * @param [in]  flags       Flags to modify the function behavior, see
+ *                          @ref ucp_device_flags_t.
+ *
+ * @return UCS_OK           - All outstanding operations completed.
+ * @return Error code as defined by @ref ucs_status_t
+ */
+template<ucs_device_level_t level = UCS_DEVICE_LEVEL_THREAD>
+UCS_F_DEVICE ucs_status_t
+ucp_device_flush(const ucp_device_remote_mem_list_h mem_list_h, uint64_t flags)
+{
+    ucs_status_t status;
+    unsigned index, lane;
+
+    status = ucp_device_check_params(mem_list_h, 0);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    for (index = 0; index < mem_list_h->length; index++) {
+        const auto mem_element = UCP_DEVICE_GET_ELEM(mem_list_h, index);
+
+        for (lane = 0; lane < mem_list_h->num_lanes; lane++) {
+            uct_device_ep_h device_ep = mem_element->tl[lane].ep;
+
+            if (device_ep == NULL) {
+                continue;
+            }
+
+            status = uct_device_ep_flush<level>(device_ep, flags);
+            while (status == UCS_INPROGRESS) {
+                uct_device_ep_progress<level>(device_ep);
+                status = uct_device_ep_flush<level>(device_ep, 0);
+            }
+
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+    }
+
+    return UCS_OK;
 }
 
 

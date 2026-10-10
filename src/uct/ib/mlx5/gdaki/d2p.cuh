@@ -126,4 +126,11 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_ep_check_completion(
     return UCS_OK;
 }
 
+template<ucs_device_level_t level>
+UCS_F_DEVICE ucs_status_t uct_ib_d2p_ep_flush(uct_device_ep_h tl_ep,
+                                              uint64_t flags)
+{
+    return UCS_OK;
+}
+
 #endif /* UCT_D2P_CUH_ */

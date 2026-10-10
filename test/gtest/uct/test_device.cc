@@ -222,5 +222,41 @@ UCS_TEST_P(test_device, atomic)
     uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
+UCS_TEST_P(test_device, flush)
+{
+    if (!(m_sender->md_attr().reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+        UCS_TEST_SKIP_R("CUDA registration not supported");
+    }
+
+    mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0,
+                         UCS_MEMORY_TYPE_CUDA);
+    constexpr unsigned num_ops = 8;
+    constexpr uint64_t add     = 4;
+    uint64_t signal_val        = num_ops * add;
+
+    mapped_buffer elembuf_host(sizeof(uct_device_mem_elem_t), 0, *m_sender, 0,
+                               UCS_MEMORY_TYPE_HOST);
+    mapped_buffer elembuf(sizeof(uct_device_mem_elem_t), 0, *m_sender, 0,
+                          UCS_MEMORY_TYPE_CUDA);
+    uct_device_mem_elem_t *mem_elem_host = (uct_device_mem_elem_t*)
+                                                   elembuf_host.ptr();
+    uct_device_mem_elem_t *mem_elem = (uct_device_mem_elem_t*)elembuf.ptr();
+    void *release_handle;
+    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
+                                       mem_elem_host, &release_handle));
+    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, mem_elem_host,
+                                         sizeof(uct_device_mem_elem_t)));
+
+    uct_device_ep_h dev_ep;
+    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &dev_ep));
+
+    ASSERT_UCS_OK(ucx_cuda::launch_uct_flush(dev_ep, mem_elem,
+                                             (uintptr_t)signal.ptr(), add,
+                                             num_ops));
+    EXPECT_EQ(1, mem_buffer::compare(&signal_val, signal.ptr(),
+                                     sizeof(signal_val), UCS_MEMORY_TYPE_CUDA));
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_device, rc_gda)
 _UCT_INSTANTIATE_TEST_CASE(test_device, cuda_ipc)
