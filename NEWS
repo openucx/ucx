@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### UCT
+ * Outstanding purge can now be called before the endpoint error handler is invoked
 #### ROCM
  * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
 #### RDMA CORE (IB, ROCE, etc.)
