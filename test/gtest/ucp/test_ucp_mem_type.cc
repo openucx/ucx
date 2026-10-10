@@ -118,7 +118,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
  */
 class test_ucp_mem_type_rndv_zcopy : public test_ucp_mem_type {
 public:
-    static const uint64_t SEED = 0x1234567890abcdeflu;
+    static constexpr uint64_t SEED = 0x1234567890abcdeflu;
 
     enum xfer_mode {
         XFER_ZCOPY, /* the transport accesses the source memory directly */
@@ -126,7 +126,7 @@ public:
     };
 
 protected:
-    typedef ucs::handle<ucp_mem_h, ucp_context_h> mem_handle_t;
+    using mem_handle_t = ucs::handle<ucp_mem_h, ucp_context_h>;
 
     static void unmap_memh(ucp_mem_h memh, ucp_context_h context)
     {
@@ -429,6 +429,17 @@ public:
     test_ucp_mem_type_rndv_staged()
     {
         m_env.push_back(new ucs::scoped_setenv("UCX_ZE_COPY_DMABUF", "n"));
+    }
+
+    /* Disabling DMA-BUF export changes how only Level Zero memory is reached */
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        static constexpr uint64_t ze_mem_types =
+                UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
+                UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
+                UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
+
+        add_variant_memtypes(variants, get_test_variants_base, ze_mem_types);
     }
 };
 
