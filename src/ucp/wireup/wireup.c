@@ -1155,7 +1155,8 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
                            ucp_tl_bitmap_t *tl_bitmap)
 {
     ucp_context_h context = ep->worker->context;
-    ucp_rsc_index_t lane_rsc, aux_rsc;
+    ucp_rsc_index_t lane_rsc;
+    ucp_rsc_iter_t aux_rsc;
     ucp_lane_index_t lane;
     uint64_t iface_flags;
 
@@ -2038,7 +2039,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_rsc_index_t ae_cmpts[UCP_MAX_MDS]; /* component index for each address entry */
     const ucp_address_entry_t *ae;
     ucp_rsc_index_t cmpt_index;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_iter_t rsc_index;
     ucp_md_index_t dst_md_index;
     ucp_md_map_t ae_dst_md_map, dst_md_map;
     ucp_md_map_t prev_dst_md_map;
@@ -2896,7 +2897,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     unsigned ep_addr_index;
     ucs_status_t status;
     char *p, *end;
-    ucp_rsc_index_t tl;
+    ucp_rsc_iter_t tl;
 
     /* LANES_ADDR_REQ/REPLY carry a ucp_wireup_msg_lanes_info_t between the
      * wireup header and the packed address; skip it before unpacking. */

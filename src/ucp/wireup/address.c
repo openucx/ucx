@@ -378,7 +378,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
     ucp_address_packed_device_t *dev, *devices;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t num_devices;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_iter_t rsc_index;
     ucp_lane_index_t lane;
     ssize_t length_size;
 
@@ -1211,7 +1211,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
     uct_iface_attr_t *iface_attr;
     ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_iter_t rsc_index;
     ucp_lane_index_t lane, remote_lane;
     ucp_tl_bitmap_t dev_tl_bitmap;
     unsigned num_ep_addrs;

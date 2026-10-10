@@ -26,9 +26,10 @@
 
 
 /* Resources */
-#define UCP_MAX_RESOURCES            128
+#define UCP_MAX_RESOURCES            255
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
+typedef unsigned                     ucp_rsc_iter_t; /* For iterating ucp_tl_bitmap_t bits */
 
 
 /* MDs */
@@ -103,8 +104,10 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_max;
 extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
 
 
-#define UCT_TL_BITMAP_FMT          "0x%lx 0x%lx"
-#define UCT_TL_BITMAP_ARG(_bitmap) (_bitmap)->bits[0], (_bitmap)->bits[1]
+#define UCT_TL_BITMAP_FMT "0x%lx 0x%lx 0x%lx 0x%lx"
+#define UCT_TL_BITMAP_ARG(_bitmap) \
+    (_bitmap)->bits[0], (_bitmap)->bits[1], (_bitmap)->bits[2], \
+            (_bitmap)->bits[3]
 
 
 /**

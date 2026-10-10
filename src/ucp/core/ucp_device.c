@@ -191,7 +191,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                          ucs_sys_device_t local_sys_dev)
 {
     const ucp_worker_iface_t *wiface;
-    ucp_rsc_index_t tl_id;
+    ucp_rsc_iter_t tl_id;
     int tl_type;
 
     /** TODO: Maybe cache results */
@@ -308,7 +308,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     uct_device_mem_elem_t *tl_element;
     size_t i, num_lanes;
     ucs_status_t status;
-    ucp_rsc_index_t tl_id;
+    ucp_rsc_iter_t tl_id;
     void *local_addr;
 
     ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
@@ -504,7 +504,7 @@ static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
     ucp_ep_h ep                      = elem->ep;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane;
-    ucp_rsc_index_t tl_id;
+    ucp_rsc_iter_t tl_id;
 
     if (UCS_STATIC_BITMAP_POPCOUNT(*tl_bitmap) == 0) {
         return 0;
@@ -628,7 +628,7 @@ static ucs_status_t ucp_device_remote_mem_list_fill(
         ucp_device_mem_elem_release_handles_t *release_handles)
 {
     uct_device_remote_tl_elem_t *tl_element;
-    ucp_rsc_index_t tl_id;
+    ucp_rsc_iter_t tl_id;
     ucs_status_t status;
     size_t i;
 

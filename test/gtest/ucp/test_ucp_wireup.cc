@@ -459,7 +459,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     void *buffer;
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     std::set<ucs_sys_device_t> packed_sys_devices, unpacked_sys_devices;
-    ucp_rsc_index_t tl;
+    ucp_rsc_iter_t tl;
 
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
@@ -1102,7 +1102,7 @@ public:
     }
 
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
-        ucp_rsc_index_t rsc_index;
+        ucp_rsc_iter_t rsc_index;
 
         UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
             ucp_md_index_t md_index         = worker->context->tl_rscs[rsc_index].md_index;
@@ -1851,7 +1851,7 @@ public:
     {
         ucp_worker_h worker   = sender().worker();
         ucp_context_h context = worker->context;
-        ucp_rsc_index_t rsc_index;
+        ucp_rsc_iter_t rsc_index;
         uct_iface_is_reachable_params_t params;
 
         params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
@@ -2316,7 +2316,7 @@ public:
         aux_candidate_info result(require_cb_async);
         const ucp_address_entry_t *address_entry;
         ucp_context_h context = worker->context;
-        ucp_rsc_index_t rsc_index;
+        ucp_rsc_iter_t rsc_index;
         unsigned addr_index;
         size_t seg_size;
 

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2024. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -231,7 +231,7 @@ unsigned test_ucp_ep_reconfig::entity::num_shm_rscs() const
 {
     unsigned num_shm = 0;
     auto tl_bitmap   = ep_tl_bitmap();
-    ucp_rsc_index_t rsc_idx;
+    ucp_rsc_iter_t rsc_idx;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &tl_bitmap) {
         num_shm += (ucph()->tl_rscs[rsc_idx].tl_rsc.dev_type ==
@@ -415,7 +415,7 @@ ucp_tl_bitmap_t test_ucp_ep_reconfig::tl_bitmap()
      * receiver side to use */
     ucp_tl_bitmap_t tl_bitmap = UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     size_t num_tls            = 0;
-    ucp_rsc_index_t rsc_idx;
+    ucp_rsc_iter_t rsc_idx;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_idx, &sender().ucph()->tl_bitmap) {
         if (++num_tls > (sender().ucph()->num_tls / 2)) {
