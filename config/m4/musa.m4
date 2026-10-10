@@ -64,7 +64,6 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                                    musaGetDevice
                                    musaSetDevice
                                    musaPointerGetAttributes
-                                   musaMemcpy
                                    musaGetErrorString])
                 ])
 
@@ -76,17 +75,16 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                               #include <musa_runtime_api.h>]],
                             [[int count = 0;
                               int device = 0;
-                              void *dst = 0;
+                              void *address = 0;
                               MUdeviceptr base = 0;
                               size_t size = 0;
                               musaGetDeviceCount(&count);
                               musaGetDevice(&device);
                               musaSetDevice(device);
-                              musaPointerGetAttributes(NULL, dst);
-                              musaMemcpy(dst, dst, 0, musaMemcpyDefault);
+                              musaPointerGetAttributes(NULL, address);
                               musaGetErrorString(musaSuccess);
                               muMemGetAddressRange(&base, &size,
-                                                   (MUdeviceptr)dst);
+                                                   (MUdeviceptr)address);
                               return count < 0;]])],
                         [],
                         [musa_happy=no])
