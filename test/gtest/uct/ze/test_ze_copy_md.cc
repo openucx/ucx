@@ -32,10 +32,14 @@ protected:
         }
     }
 
-    static uct_md_h open_first_md()
+    /* Open the first ze_copy MD into an owning handle, so that it is closed
+     * on every exit path; skip the test if no MD can be opened. */
+    static void open_md_or_skip(ucs::handle<uct_md_h> &md)
     {
         uct_md_resource_desc_t *resources = NULL;
         unsigned num                      = 0;
+        uct_md_config_t *md_config        = NULL;
+        uct_md_h md_h                     = NULL;
         ucs_status_t status;
 
         status = uct_ze_copy_component.query_md_resources(
@@ -43,25 +47,30 @@ protected:
         EXPECT_UCS_OK(status);
         if (num == 0) {
             ucs_free(resources);
-            return NULL;
+            UCS_TEST_SKIP_R("No ze_cpy MD resources on this system");
         }
 
-        uct_md_config_t *md_config = NULL;
         status = uct_md_config_read(&uct_ze_copy_component, NULL, NULL,
                                     &md_config);
-        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            ucs_free(resources);
+            UCS_TEST_ABORT(
+                    "uct_md_config_read failed: " << ucs_status_string(status));
+        }
 
-        uct_md_h md = NULL;
-        status      = uct_md_open(&uct_ze_copy_component, resources[0].md_name,
-                                  md_config, &md);
+        status = uct_md_open(&uct_ze_copy_component, resources[0].md_name,
+                             md_config, &md_h);
         uct_config_release(md_config);
         ucs_free(resources);
+        if (status != UCS_OK) {
+            UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
+        }
 
-        return (status == UCS_OK) ? md : NULL;
+        md.reset(md_h, uct_md_close);
     }
 
     /* Allocate ZE_DEVICE memory through the MD; skip the test if the MD
-     * cannot allocate it on this system. */
+     * cannot allocate it on this system. The caller owns the MD. */
     static void alloc_device_or_skip(uct_md_h md, size_t *length_p,
                                      void **addr_p, uct_mem_h *memh_p)
     {
@@ -70,10 +79,12 @@ protected:
                                                  UCS_SYS_DEVICE_ID_UNKNOWN, 0,
                                                  "test_ze_copy", memh_p);
         if (status == UCS_ERR_UNSUPPORTED) {
-            uct_md_close(md);
             UCS_TEST_SKIP_R("ZE_DEVICE alloc unsupported on this system");
         }
-        ASSERT_UCS_OK(status);
+        if (status != UCS_OK) {
+            UCS_TEST_ABORT(
+                    "ZE_DEVICE alloc failed: " << ucs_status_string(status));
+        }
     }
 };
 
@@ -96,24 +107,18 @@ UCS_TEST_F(test_ze_copy_md, query_md_resources_returns_at_least_one) {
 
 
 UCS_TEST_F(test_ze_copy_md, open_close_md) {
-    uct_md_h md = open_first_md();
-    if (md == NULL) {
-        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
-    }
+    ucs::handle<uct_md_h> md;
+    open_md_or_skip(md);
 
-    auto *ze_md = ucs_derived_of(md, uct_ze_copy_md_t);
+    auto *ze_md = ucs_derived_of(md.get(), uct_ze_copy_md_t);
     EXPECT_TRUE(ze_md->ze_device != NULL);
     EXPECT_TRUE(ze_md->ze_context != NULL);
-
-    uct_md_close(md);
 }
 
 
 UCS_TEST_F(test_ze_copy_md, md_attr_advertises_alloc_caps) {
-    uct_md_h md = open_first_md();
-    if (md == NULL) {
-        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
-    }
+    ucs::handle<uct_md_h> md;
+    open_md_or_skip(md);
 
     uct_md_attr_v2_t attr;
     attr.field_mask = UINT64_MAX;
@@ -122,8 +127,6 @@ UCS_TEST_F(test_ze_copy_md, md_attr_advertises_alloc_caps) {
     /* ze_copy MD must be able to allocate ZE memory. */
     EXPECT_NE(0u, attr.alloc_mem_types);
     EXPECT_GT(attr.max_alloc, 0u);
-
-    uct_md_close(md);
 }
 
 
@@ -131,21 +134,18 @@ UCS_TEST_F(test_ze_copy_md, md_attr_advertises_alloc_caps) {
  * Allocate ZE_DEVICE memory through the MD, then free it.
  */
 UCS_TEST_F(test_ze_copy_md, mem_alloc_free_device) {
-    uct_md_h md = open_first_md();
-    if (md == NULL) {
-        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
-    }
+    ucs::handle<uct_md_h> md;
+    open_md_or_skip(md);
 
     size_t length  = 4096;
     void *addr     = NULL;
     uct_mem_h memh = NULL;
 
     alloc_device_or_skip(md, &length, &addr, &memh);
-    ASSERT_TRUE(addr != NULL);
-    ASSERT_GE(length, 4096u);
+    EXPECT_TRUE(addr != NULL);
+    EXPECT_GE(length, 4096u);
 
     EXPECT_UCS_OK(md->ops->mem_free(md, memh));
-    uct_md_close(md);
 }
 
 
@@ -153,10 +153,8 @@ UCS_TEST_F(test_ze_copy_md, mem_alloc_free_device) {
  * detect_memory_type must classify ZE device pointers as ZE_DEVICE.
  */
 UCS_TEST_F(test_ze_copy_md, detect_memory_type_device) {
-    uct_md_h md = open_first_md();
-    if (md == NULL) {
-        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
-    }
+    ucs::handle<uct_md_h> md;
+    open_md_or_skip(md);
 
     size_t length  = 4096;
     void *addr     = NULL;
@@ -168,7 +166,6 @@ UCS_TEST_F(test_ze_copy_md, detect_memory_type_device) {
     EXPECT_EQ(UCS_MEMORY_TYPE_ZE_DEVICE, mem_type);
 
     EXPECT_UCS_OK(md->ops->mem_free(md, memh));
-    uct_md_close(md);
 }
 
 
@@ -193,10 +190,8 @@ UCS_TEST_F(test_ze_copy_md, memtype_cache_created_at_md_open) {
     ucs_memtype_cache_global_init();
     ASSERT_TRUE(ucs_memtype_cache_global_instance == NULL);
 
-    uct_md_h md = open_first_md();
-    if (md == NULL) {
-        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
-    }
+    ucs::handle<uct_md_h> md;
+    open_md_or_skip(md);
 
     EXPECT_TRUE(ucs_memtype_cache_global_instance != NULL);
 
@@ -215,8 +210,6 @@ UCS_TEST_F(test_ze_copy_md, memtype_cache_created_at_md_open) {
     EXPECT_UCS_OK(md->ops->mem_free(md, memh));
     EXPECT_EQ(UCS_ERR_NO_ELEM,
               ucs_memtype_cache_lookup(addr, length, &mem_info));
-
-    uct_md_close(md);
 }
 
 
@@ -224,10 +217,8 @@ UCS_TEST_F(test_ze_copy_md, memtype_cache_created_at_md_open) {
  * mem_query reports base address and allocation length back.
  */
 UCS_TEST_F(test_ze_copy_md, mem_query_base_and_length) {
-    uct_md_h md = open_first_md();
-    if (md == NULL) {
-        UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
-    }
+    ucs::handle<uct_md_h> md;
+    open_md_or_skip(md);
 
     size_t length  = 8192;
     void *addr     = NULL;
@@ -244,5 +235,4 @@ UCS_TEST_F(test_ze_copy_md, mem_query_base_and_length) {
     EXPECT_GE(mem_attr.alloc_length, length);
 
     EXPECT_UCS_OK(md->ops->mem_free(md, memh));
-    uct_md_close(md);
 }
