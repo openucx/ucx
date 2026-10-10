@@ -69,6 +69,7 @@ noinst_HEADERS = \
 	proto/proto_single.h \
 	proto/proto_single.inl \
 	proto/proto.h \
+	proto/proto_repost.h \
 	rma/rma.h \
 	rma/rma.inl \
 	rma/rma_bw.h \
@@ -139,6 +140,7 @@ libucp_la_SOURCES = \
 	proto/proto_debug.c \
 	proto/proto_perf.c \
 	proto/proto_reconfig.c \
+	proto/proto_repost.c \
 	proto/proto_multi.c \
 	proto/proto_select.c \
 	proto/proto_single.c \
