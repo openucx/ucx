@@ -67,54 +67,66 @@ SpaceBeforeParens: ControlStatementsExceptForEachMacros
 SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
 SortIncludes: false
-ForEachMacros: ['UCS_STATIC_BITMAP_FOR_EACH_BIT',
-                'UCS_DYNAMIC_BITMAP_FOR_EACH_BIT',
-                'UCS_STATIC_BITMAP_FOR_EACH_BIT',
-                'FOR_EACH_ENTITY',
-                'ucs_carray_for_each',
-                'ucs_carray_for_each_index',
-                'kh_foreach',
-                'kh_foreach_key',
-                'kh_foreach_value',
-                'UCP_PROTO_PERF_TYPE_FOREACH',
-                'ucp_unpacked_address_for_each',
-                'ucp_datatype_iter_iov_for_each',
-                'ucp_proto_perf_segment_foreach',
-                'ucp_proto_perf_segment_foreach_range',
-                'ucs_array_for_each',
-                'ucs_array_for_each_index',
-                'UCS_BITMAP_FOR_EACH_BIT',
-                'ucs_for_each_bit',
-                'ucs_for_each_submask',
-                'ucs_hlist_for_each',
-                'ucs_hlist_for_each_extract',
-                'ucs_hlist_for_each_extract_if',
-                'ucs_hlist_for_each_safe',
-                'ucs_list_for_each',
-                'ucs_list_for_each_safe',
-                'ucs_memory_type_for_each',
-                'UCS_PP_FOREACH',
-                'UCS_PP_FOREACH_SEP',
-                'ucs_profile_for_each_location',
-                'ucs_ptr_array_for_each',
-                'ucs_ptr_array_locked_for_each',
-                'ucs_queue_for_each',
-                'ucs_queue_for_each_extract',
-                'ucs_queue_for_each_safe',
-                'ucs_timerq_for_each_expired',
-                'ucs_string_buffer_for_each_token',
-                'UCT_IB_IFACE_VERBS_FOREACH_RXWQE',
-                'UCT_RC_VERBS_IFACE_FOREACH_TXWQE',
-                'UCS_INIT_ONCE',
-                'UCS_CLEANUP_ONCE',
-                'UCS_TEST_F',
-                'UCX_PERF_TEST_FOREACH',
-                'uct_dc_iface_for_each_valid_dci',
-                'ucs_lru_for_each']
-StatementMacros : []
-TypenameMacros: ['khash_t',
-                 'ucs_array_s',
-                 'ucs_static_bitmap_s']
+ForEachMacros:
+  [
+    'FOR_EACH_ENTITY',
+    'UCS_BITMAP_BITS_FOR_EACH_BIT',
+    'UCS_CLEANUP_ONCE',
+    'UCS_DYNAMIC_BITMAP_FOR_EACH_BIT',
+    'UCS_INIT_ONCE',
+    'UCS_MT_TEST_F',
+    'UCS_MT_TEST_P',
+    'UCS_PP_FOREACH',
+    'UCS_PP_FOREACH_SEP',
+    'UCS_STATIC_BITMAP_FOR_EACH_BIT',
+    'UCS_TEST_F',
+    'UCS_TEST_P',
+    'UCS_TEST_SCOPE_EXIT',
+    'UCS_TEST_SKIP_COND_F',
+    'UCS_TEST_SKIP_COND_P',
+    'UCS_TEST_TIME_LIMIT',
+    'UCT_IB_IFACE_VERBS_FOREACH_RXWQE',
+    'UCT_RC_VERBS_IFACE_FOREACH_TXWQE',
+    'UCX_PERF_TEST_FOREACH',
+    'array_foreach',
+    'kh_foreach',
+    'kh_foreach_key',
+    'kh_foreach_value',
+    'ucp_datatype_iter_iov_for_each',
+    'ucp_proto_perf_segment_foreach',
+    'ucp_proto_perf_segment_foreach_range',
+    'ucp_unpacked_address_for_each',
+    'ucs_array_for_each',
+    'ucs_array_for_each_index',
+    'ucs_carray_for_each',
+    'ucs_carray_for_each_index',
+    'ucs_for_each_bit',
+    'ucs_for_each_submask',
+    'ucs_hlist_for_each',
+    'ucs_hlist_for_each_extract',
+    'ucs_hlist_for_each_extract_if',
+    'ucs_hlist_for_each_safe',
+    'ucs_list_for_each',
+    'ucs_list_for_each_safe',
+    'ucs_lru_for_each',
+    'ucs_memory_type_for_each',
+    'ucs_piecewise_func_seg_foreach',
+    'ucs_profile_ctx_for_each_location',
+    'ucs_ptr_array_for_each',
+    'ucs_ptr_array_locked_for_each',
+    'ucs_queue_for_each',
+    'ucs_queue_for_each_extract',
+    'ucs_queue_for_each_safe',
+    'ucs_string_buffer_for_each_token',
+    'ucs_timerq_for_each_expired',
+    'uct_dc_iface_for_each_valid_dci',
+  ]
+StatementMacros: []
+TypenameMacros: [
+    'khash_t',
+    'ucs_array_s',
+    'ucs_static_bitmap_s'
+  ]
 WhitespaceSensitiveMacros: []
 
 # CPP
@@ -134,10 +146,10 @@ NamespaceIndentation: None
 UseTab: Never
 ReflowComments: false
 IncludeCategories:
- - Regex: '^"'
-   Priority: 1
- - Regex: '^<'
-   Priority: 2
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<'
+    Priority: 2
 SortUsingDeclarations: true
 TabWidth: 4
 SpacesInAngles: false
