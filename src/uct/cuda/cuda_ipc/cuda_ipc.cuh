@@ -82,9 +82,10 @@ uct_cuda_ipc_map_remote(const uct_cuda_ipc_md_device_mem_element_t *elem,
 
 UCS_F_DEVICE void uct_cuda_ipc_atomic_inc(uint64_t *dst, uint64_t inc_value)
 {
-    cuda::atomic_ref<uint64_t, cuda::thread_scope_system> dst_ref{*dst};
-    dst_ref.fetch_add(inc_value, cuda::memory_order_relaxed);
-    cuda::atomic_thread_fence(cuda::memory_order_release, cuda::thread_scope_system);
+    asm volatile("red.release.sys.global.add.u64 [%0], %1;"
+                 :
+                 : "l"(dst), "l"(inc_value)
+                 : "memory");
 }
 
 template<ucs_device_level_t level>
