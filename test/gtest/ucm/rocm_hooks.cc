@@ -151,3 +151,30 @@ UCS_TEST_F(rocm_hooks, test_hipMallocPitch) {
         check_mem_free_events((void*)dptr, 0);
     }
 }
+
+class rocm_hooks_disabled : public ucs::test {
+protected:
+    virtual void init() {
+        int dev_count;
+        ucs::test::init();
+
+        if ((hipGetDeviceCount(&dev_count) != hipSuccess) || (dev_count < 1)) {
+            UCS_TEST_SKIP_R("no ROCm device detected");
+        }
+
+        /* Only meaningful when hooks are disabled, e.g. UCX_MEM_ROCM_HOOK_MODE=none. */
+        if (ucm_global_opts.rocm_hook_modes &
+            (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))) {
+            UCS_TEST_SKIP_R("rocm memory hooks are enabled");
+        }
+    }
+};
+
+UCS_TEST_F(rocm_hooks_disabled, mem_type_events_unsupported) {
+    ucs_status_t status;
+
+    status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC, 0,
+                                   rocm_mem_alloc_callback,
+                                   reinterpret_cast<void*>(this));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+}

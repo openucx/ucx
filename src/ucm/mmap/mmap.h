@@ -22,6 +22,20 @@
 #  define UCM_DEFAULT_HOOK_MODE_STR UCM_MMAP_HOOK_RELOC_STR
 #endif
 
+/* Functional GPU (cuda/rocm) hook modes, i.e. excluding UCM_MMAP_HOOK_NONE,
+ * which occupies bit 0 and is therefore never equal to a zero hook-modes
+ * bitmap. */
+#define UCM_GPU_HOOK_MODES_MASK \
+    (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))
+
+/* Reserve UCS_ERR_UNSUPPORTED for "disabled by configuration", so a real
+ * patch failure on an enabled backend isn't mistaken for that and skipped. */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucm_gpu_hook_install_status(ucs_status_t status)
+{
+    return (status == UCS_ERR_UNSUPPORTED) ? UCS_ERR_IO_ERROR : status;
+}
+
 ucs_status_t ucm_mmap_install(int events, int exclusive);
 
 void *ucm_override_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);

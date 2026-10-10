@@ -525,6 +525,7 @@ static ucs_status_t ucm_event_install(int events)
     ucm_event_installer_t *event_installer;
     int malloc_events;
     ucs_status_t status;
+    int any_supported;
 
     ucm_prevent_dl_unload();
 
@@ -547,16 +548,23 @@ static ucs_status_t ucm_event_install(int events)
 
     ucm_debug("malloc hooks are ready");
 
-    /* Call extra event installers */
+    /* Call extra event installers. A backend may decline with
+     * UCS_ERR_UNSUPPORTED (e.g. its hooks are disabled by configuration) -
+     * that must not prevent other backends on the same machine from
+     * installing their own hooks. Only propagate UCS_ERR_UNSUPPORTED if
+     * every installer declined. */
+    any_supported = 0;
     UCS_MODULE_FRAMEWORK_LOAD(ucm, UCS_MODULE_LOAD_FLAG_NODELETE);
     ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
         status = event_installer->install(events);
-        if (status != UCS_OK) {
+        if (status == UCS_OK) {
+            any_supported = 1;
+        } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_unlock;
         }
     }
 
-    status = UCS_OK;
+    status = any_supported ? UCS_OK : status;
 
 out_unlock:
     return status;
