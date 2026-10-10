@@ -25,6 +25,25 @@ class uct_test_event_base : public uct_p2p_test {
 public:
     uct_test_event_base(): uct_p2p_test(0), m_event() {}
 
+    /* LAST_WQE_REACHED is generated only for QPs attached to an SRQ. */
+    static bool iface_has_srq(entity &e) {
+        uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
+
+        return !iface->config.srq_disable;
+    }
+
+    /* Before init(), no entity exists and the test cannot determine whether
+     * its QPs use an SRQ, so do not skip yet. */
+    bool has_srq() {
+        FOR_EACH_ENTITY(iter) {
+            if (!iface_has_srq(**iter)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     class qp {
     public:
         qp(entity &e) : m_e(e) {}
@@ -217,7 +236,7 @@ public:
     }
 };
 
-UCS_TEST_P(uct_p2p_test_event_log, last_wqe)
+UCS_TEST_SKIP_COND_P(uct_p2p_test_event_log, last_wqe, !has_srq())
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
@@ -255,7 +274,8 @@ public:
 
 };
 
-UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_after_subscribe)
+UCS_TEST_SKIP_COND_P(uct_p2p_test_event, last_wqe_cb_after_subscribe,
+                     !has_srq())
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
@@ -266,7 +286,8 @@ UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_after_subscribe)
     }
 }
 
-UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_before_subscribe)
+UCS_TEST_SKIP_COND_P(uct_p2p_test_event, last_wqe_cb_before_subscribe,
+                     !has_srq())
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
@@ -304,6 +325,12 @@ public:
     virtual void init() {
         uct_test::init();
         m_e.reset(create_entity(0));
+        check_skip_test();
+    }
+
+    /* m_e is not stored in m_entities, so check its interface directly. */
+    bool has_srq() {
+        return (m_e == NULL) || iface_has_srq(*m_e);
     }
 
     bool wait_for_last_wqe_event(bool before) {
@@ -387,7 +414,7 @@ private:
             ucs_status_t status;
 
             status = uct_rc_iface_qp_create(&m_iface->super, &m_ibqp, &attr,
-                                            m_iface->super.config.tx_qp_len,
+                                            m_iface->super.config.tx_qp_len, 0,
                                             m_iface->srq);
             ASSERT_UCS_OK(status);
 
@@ -418,12 +445,14 @@ private:
     };
 };
 
-UCS_TEST_P(uct_qp_test_event, last_wqe_cb_after_subscribe)
+UCS_TEST_SKIP_COND_P(uct_qp_test_event, last_wqe_cb_after_subscribe,
+                     !has_srq())
 {
     ASSERT_TRUE(wait_for_last_wqe_event(false));
 }
 
-UCS_TEST_P(uct_qp_test_event, last_wqe_cb_before_subscribe)
+UCS_TEST_SKIP_COND_P(uct_qp_test_event, last_wqe_cb_before_subscribe,
+                     !has_srq())
 {
     ASSERT_TRUE(wait_for_last_wqe_event(true));
 }

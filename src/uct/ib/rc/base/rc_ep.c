@@ -118,20 +118,29 @@ void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
 
     ucs_assertv(cq_credits < (UINT16_MAX / 2), "cq_credits=%d", cq_credits);
 
-    ucs_list_del(&ep->list);
     uct_rc_iface_remove_qp(iface, qp_num);
 
-    cleanup_ctx->super.cbq  = &iface->super.super.worker->super.progress_q;
-    cleanup_ctx->super.cb   = uct_rc_iface_qp_cleanup_progress;
     cleanup_ctx->iface      = iface;
     cleanup_ctx->qp_num     = qp_num;
     cleanup_ctx->cq_credits = cq_credits;
     ucs_list_add_tail(&iface->qp_gc_list, &cleanup_ctx->list);
 
-    status = uct_ib_device_async_event_wait(&md->dev,
-                                            IBV_EVENT_QP_LAST_WQE_REACHED,
-                                            qp_num, &cleanup_ctx->super);
-    ucs_assert_always(status == UCS_OK);
+    /* The LAST_WQE event is generated only for QPs with SRQ, otherwise the
+     * transport has to trigger the cleanup by itself by calling
+     * uct_rc_iface_qp_cleanup_progress() directly */
+    if (!iface->config.srq_disable) {
+        cleanup_ctx->super.cbq = &iface->super.super.worker->super.progress_q;
+        cleanup_ctx->super.cb  = uct_rc_iface_qp_cleanup_progress;
+        status = uct_ib_device_async_event_wait(&md->dev,
+                                                IBV_EVENT_QP_LAST_WQE_REACHED,
+                                                qp_num, &cleanup_ctx->super);
+        ucs_assert_always(status == UCS_OK);
+    } else {
+        /* Nothing is registered, so mark the waiting context as empty. */
+        cleanup_ctx->super.cb    = NULL;
+        cleanup_ctx->super.cbq   = NULL;
+        cleanup_ctx->super.cb_id = UCS_CALLBACKQ_ID_NULL;
+    }
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
@@ -186,6 +195,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_debug("destroy rc ep %p", self);
 
+    ucs_list_del(&self->list);
     uct_rc_ep_pending_purge(&self->super.super,
                             uct_rc_ep_pending_purge_warn_cb, self);
     uct_rc_fc_cleanup(&self->fc);
