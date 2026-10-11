@@ -162,7 +162,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %exclude %{_datadir}/ucx/examples
 %doc README AUTHORS NEWS
 %{!?_licensedir:%global license %%doc}
-%license LICENSE
+%license LICENSE THIRD_PARTY_NOTICES
 %{_sysconfdir}/ucx/ucx.conf
 
 %files devel

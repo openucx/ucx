@@ -79,6 +79,7 @@ EXTRA_DIST += debian/changelog
 EXTRA_DIST += debian/compat
 EXTRA_DIST += debian/copyright
 EXTRA_DIST += debian/control
+EXTRA_DIST += debian/ucx.docs
 EXTRA_DIST += debian/ucx.install
 EXTRA_DIST += debian/ucx-cuda.install
 EXTRA_DIST += debian/rules
@@ -86,6 +87,7 @@ EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
 EXTRA_DIST += ucx.spec
 EXTRA_DIST += LICENSE
+EXTRA_DIST += THIRD_PARTY_NOTICES
 
 endif #!DOCS_ONLY
 EXTRA_DIST += docs/uml/uct.dot
