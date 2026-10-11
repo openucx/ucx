@@ -112,7 +112,7 @@ and re-run CI.
 The legacy UCX release images (`docker-compose-<arch>.yml` + `push-release-images.sh`)
 build each arch separately and push to per-arch paths (`ucx/x86_64/...`,
 `ucx/aarch64/...`), predating good multi-arch tooling. The RAPIDS wrappers use the
-modern path: one compose file with `build.platforms`, built via `docker buildx bake`
+modern path: one compose file, built via `docker buildx bake` with the platforms forced on the CLI
 against a 2-node native builder, producing a single multi-arch manifest per image -
 fewer pipeline container resources (one tag, arch auto-resolved) and one command
 instead of a per-arch loop plus manual `imagetools create`.
