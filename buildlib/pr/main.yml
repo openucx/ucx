@@ -276,24 +276,24 @@ resources:
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ucxx_rapidsai_ci_conda
       # Thin wrapper of rapidsai/ci-conda; see buildlib/dockers/rapidsai-ci-conda.Dockerfile.
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.10-azp-1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.10-azp-2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
     - container: ucxx_rapidsai_ci_conda_gpu
       # No IB/host-net: with IB, UCX binds rc_mlx5 and the AM/tag tests hang here.
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.10-azp-1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.10-azp-2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL) --gpus all --ipc=host
     # Wheel images are CUDA-pinned: one base per CUDA version (see rapidsai-ci-wheel.Dockerfile).
     - container: ucxx_rapidsai_ci_wheel_cuda13
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda13-azp-1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda13-azp-2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
     - container: ucxx_rapidsai_ci_wheel_cuda13_gpu
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda13-azp-1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda13-azp-2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL) --gpus all --ipc=host
     - container: ucxx_rapidsai_ci_wheel_cuda12
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda12-azp-1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda12-azp-2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL)
     - container: ucxx_rapidsai_ci_wheel_cuda12_gpu
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda12-azp-1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.10-cuda12-azp-2
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(UCXX_PIP_CACHE_VOL) --gpus all --ipc=host
 
 stages:
