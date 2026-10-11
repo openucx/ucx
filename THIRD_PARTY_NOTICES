@@ -32,7 +32,6 @@ NVIDIA DOCA GPUNetIO
 
   Git submodule: external/gpunetio
   Upstream: https://github.com/NVIDIA-DOCA/gpunetio
-  Pinned commit: f44728fb023ba61911b705dba289b1650ce2eb28
   Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   License: BSD-3-Clause
 
