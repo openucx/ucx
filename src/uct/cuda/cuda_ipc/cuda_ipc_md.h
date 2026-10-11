@@ -43,13 +43,27 @@ typedef struct uct_cuda_ipc_md_handle {
     unsigned long long        buffer_id;
 } uct_cuda_ipc_md_handle_t;
 
+#define UCT_CUDA_IPC_CLUSTER_UUID_LEN 16
+
+
+/**
+ * @brief NVLink domain of the local GPU fabric. GPUs on different nodes can
+ * reach each other over multi-node NVLINK only if both are equal.
+ */
+typedef struct {
+    uint8_t  cluster_uuid[UCT_CUDA_IPC_CLUSTER_UUID_LEN]; /**< Fabric cluster UUID */
+    uint32_t clique_id;                                   /**< Fabric clique ID */
+} UCS_S_PACKED uct_cuda_ipc_nvlink_domain_t;
+
+
 /**
  * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
-    uct_md_t                 super;             /**< Domain info */
-    int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
-    int                      fabric_supported;  /**< CUDA fabric support status */
+    uct_md_t                     super;            /**< Domain info */
+    int                          enable_mnnvl;     /**< Multi-node NVLINK support status */
+    int                          fabric_supported; /**< CUDA fabric support status */
+    uct_cuda_ipc_nvlink_domain_t nvlink_domain;    /**< Valid if enable_mnnvl */
 } uct_cuda_ipc_md_t;
 
 
