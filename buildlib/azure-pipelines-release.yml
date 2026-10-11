@@ -9,10 +9,21 @@ pr:
   - master
   - v*.*.x
 
+# UCXX nightlies are not built here - they stay RAPIDS-side. This stage only
+# builds UCXX on a UCX release tag (publishing itself is deferred; see the
+# per-job notes in pr/ucxx_build.yml).
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local
+  DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
 
 resources:
+  repositories:
+    - repository: ucxx
+      type: github
+      name: rapidsai/ucxx
+      endpoint: Mellanox-lab
+      ref: 30e0d1ac3983db7b303f3ffe3da6caf98456c2e9
+
   containers:
     # x86_64
     - container: centos7_cuda11_x86_64
@@ -77,6 +88,18 @@ resources:
     - container: rocky9_cuda13_aarch64
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/aarch64/rocky9-mofed24.10-cuda13:2
       options: $(DOCKER_OPT_VOLUMES)
+
+    # UCXX release: CPU-only conda + wheel builders (mirrors PR pipeline).
+    # Wheel images are CUDA-pinned: one base per CUDA version (see rapidsai-ci-wheel.Dockerfile).
+    - container: ucxx_rapidsai_ci_conda
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-conda:26.08-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_wheel_cuda12
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.08-cuda12-azp-1
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
+    - container: ucxx_rapidsai_ci_wheel_cuda13
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/rapidsai-ci-wheel:26.08-cuda13-azp-2
+      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Prepare
@@ -150,3 +173,35 @@ stages:
           container: centos8_cuda11_aarch64
           demands: ucx-arm64
           target: publish-release
+
+  - template: pr/ucxx_build.yml
+    parameters:
+      dependsOn: [Prepare]
+      # Build UCXX on a UCX release tag. Publishing is deferred (per-job notes):
+      # wheels -> Kitmaker/PyPI, conda -> conda-forge once upstream; nightlies
+      # stay RAPIDS-side.
+      condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
+      conda_cpp_slices:
+        - { name: x86_64_cuda12_py311,  demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+      conda_python_slices:
+        - { name: x86_64_cuda12_py311,  demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+      # libucxx + ucxx wheels for cuda12 + cuda13, x86_64 + aarch64.
+      wheel_libucxx_slices:
+        - { name: x86_64_cuda12_py311,  container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, container: ucxx_rapidsai_ci_wheel_cuda12, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, container: ucxx_rapidsai_ci_wheel_cuda13, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+      wheel_ucxx_slices:
+        - { name: x86_64_cuda12_py311,  container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: x86_64_cuda12_py311,  demands: ucx_docker, rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: x86_64_cuda13_py311,  container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: x86_64_cuda13_py311,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda12_py311, container: ucxx_rapidsai_ci_wheel_cuda12, libucxx_slice: aarch64_cuda12_py311, demands: ucx_arm64,  rapids_cuda_version: '12.9.1', rapids_py_version: '3.11' }
+        - { name: aarch64_cuda13_py311, container: ucxx_rapidsai_ci_wheel_cuda13, libucxx_slice: aarch64_cuda13_py311, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
+      docs_slices:
+        - { name: x86_64_cuda13_py311, cpp_slice: x86_64_cuda13_py311, python_slice: x86_64_cuda13_py311,
+            demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.11' }
