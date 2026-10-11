@@ -8,7 +8,7 @@
 # opposite arch over an ssh docker context. Set the ssh endpoint of the OTHER
 # builder and the harbor push credentials in the environment:
 #
-#   RAPIDS_VER=<ver> \
+#   RAPIDS_VER=<ver> IMAGE_REV=<rev> \
 #   ARM_NODE=ssh://<user>@<arm-builder>   # required when running on an x86 host
 #   X86_NODE=ssh://<user>@<x86-builder>   # required when running on an arm host
 #   HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
@@ -20,6 +20,8 @@
 #
 # Env:
 #   RAPIDS_VER   required, RAPIDS CalVer, e.g. 26.08
+#   IMAGE_REV    required, wrapper revision tag suffix, e.g. azp-2; use a new
+#                one per rebuild so a pushed tag is never overwritten
 #   ARM_NODE     ssh endpoint of the arm64 builder (required on an x86 host)
 #   X86_NODE     ssh endpoint of the x86_64 builder (required on an arm host)
 #   REGISTRY     push registry (default: harbor.mellanox.com); also consumed by
@@ -33,6 +35,8 @@ set -eE -o pipefail
 
 basedir=$(cd "$(dirname "$0")" && pwd)
 : "${RAPIDS_VER:?set RAPIDS_VER, e.g. 26.08}"
+: "${IMAGE_REV:?set IMAGE_REV, e.g. azp-2}"
+export IMAGE_REV  # consumed by the compose image: fields
 : "${HARBOR_UCX_USER:?set HARBOR_UCX_USER}" "${HARBOR_UCX_PASSWORD:?set HARBOR_UCX_PASSWORD}"
 BUILDER=${BUILDER:-ucx-rapidsai}
 REMOTE_CTX=${REMOTE_CTX:-ucx-remote-buildnode}
@@ -90,9 +94,9 @@ RAPIDS_VER="$RAPIDS_VER" docker buildx bake \
 # 4. verify the 3 manifests really carry both arches - a single-arch manifest is
 # the failure this script exists to prevent, so it has to be fatal, not printed.
 echo "=== pushed manifests ==="
-for img in rapidsai-ci-conda:${RAPIDS_VER}-azp-1 \
-           rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-azp-1 \
-           rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-azp-1; do
+for img in rapidsai-ci-conda:${RAPIDS_VER}-${IMAGE_REV} \
+           rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-${IMAGE_REV} \
+           rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-${IMAGE_REV}; do
   printf '%-42s ' "$img"
   arches=$(docker manifest inspect "$REGISTRY/ucx/$img" \
            | grep -o '"architecture": "[a-z0-9]*"' | grep -o '[a-z0-9]*"$' | tr -d '"' | sort -u)
@@ -103,4 +107,4 @@ for img in rapidsai-ci-conda:${RAPIDS_VER}-azp-1 \
   done
   echo
 done
-echo "DONE: rapidsai-ci-{conda,wheel cuda12/13}:${RAPIDS_VER}-azp-1 (amd64+arm64)"
+echo "DONE: rapidsai-ci-{conda,wheel cuda12/13}:${RAPIDS_VER}-${IMAGE_REV} (amd64+arm64)"

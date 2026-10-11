@@ -10,11 +10,13 @@ builds nothing until they land.
 
 | Wrapper image (`ucx/`)                     | RAPIDS base                                            | Used for                   |
 |--------------------------------------------|--------------------------------------------------------|----------------------------|
-| `rapidsai-ci-conda:<VER>-azp-1`            | `rapidsai/ci-conda:<VER>-latest`                       | conda build + tests        |
-| `rapidsai-ci-wheel:<VER>-cuda13-azp-1`     | `rapidsai/ci-wheel:<VER>-cuda<CU13>-rockylinux8-py3.11`| libucxx/ucxx wheels (CUDA 13) |
-| `rapidsai-ci-wheel:<VER>-cuda12-azp-1`     | `rapidsai/ci-wheel:<VER>-cuda<CU12>-rockylinux8-py3.11`| libucxx/ucxx wheels (CUDA 12) |
+| `rapidsai-ci-conda:<VER>-<REV>`            | `rapidsai/ci-conda:<VER>-latest`                       | conda build + tests        |
+| `rapidsai-ci-wheel:<VER>-cuda13-<REV>`     | `rapidsai/ci-wheel:<VER>-cuda<CU13>-rockylinux8-py3.11`| libucxx/ucxx wheels (CUDA 13) |
+| `rapidsai-ci-wheel:<VER>-cuda12-<REV>`     | `rapidsai/ci-wheel:<VER>-cuda<CU12>-rockylinux8-py3.11`| libucxx/ucxx wheels (CUDA 12) |
 
-`<VER>` is the RAPIDS CalVer, e.g. `26.08`. The wrappers only add a `chmod` so the
+`<VER>` is the RAPIDS CalVer, e.g. `26.08`. `<REV>` is the wrapper revision
+(`azp-1`, `azp-2`, ...), new for every rebuild so a pushed tag is never
+overwritten under running CI. The wrappers only add a `chmod` so the
 non-root UID Azure runs steps as can write (`/opt/conda`, `/pyenv`) and `gdb` for
 stack capture. Each image is a multi-arch manifest (`linux/amd64` + `linux/arm64`);
 Azure picks the right arch per agent automatically.
@@ -22,10 +24,16 @@ Azure picks the right arch per agent automatically.
 ## When to rebuild
 
 RAPIDS ships ~every 2 months (CalVer `YY.MM`). We do **not** bump on every release:
-the ucxx repo is pinned to a specific `main` commit, so we rebuild these images only
-when we intentionally advance that pin to a commit whose base images/scripts require
-a newer RAPIDS version. The CI images, the ucxx ref, and the in-repo CI scripts move
-together.
+the ucxx repo is pinned to a specific ref, so we rebuild these images only when we
+intentionally advance that pin and the new ucxx CI scripts need it:
+
+- **new RAPIDS version** - the new ucxx ref targets a newer `<VER>`: new `<VER>`,
+  `<REV>` restarts at `azp-1`.
+- **refreshed base, same version** - the new ucxx scripts call a tool (e.g. from
+  gha-tools) that RAPIDS added to the `<VER>` base images after our wrappers were
+  built: same `<VER>`, next `<REV>`.
+
+The CI images, the ucxx ref, and the in-repo CI scripts move together.
 
 ## Prerequisites
 
@@ -64,7 +72,7 @@ the opposite arch over ssh). Set the opposite-arch node endpoint and harbor cred
 the environment:
 
 ```sh
-RAPIDS_VER=26.08 \
+RAPIDS_VER=26.08 IMAGE_REV=azp-1 \
 ARM_NODE=ssh://<user>@<arm-builder> \   # when running on an x86 host
 HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
 ./rapidsai-images-build.sh
@@ -81,7 +89,8 @@ builder. The script logs out on exit.
 
 ### 3. Point the pipelines at the new images
 
-Bump the old `<VER>` to the new one in the only places that reference it:
+Bump the old `<VER>`/`<REV>` to the new one in the only places that reference it
+(a same-version refresh only changes `<REV>` in the two pipeline files):
 
 - `buildlib/dockers/rapidsai-ci-conda.Dockerfile` (`BASE_IMAGE`)
 - `buildlib/dockers/rapidsai-ci-wheel.Dockerfile` (`BASE_IMAGE`)

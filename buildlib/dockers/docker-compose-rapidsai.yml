@@ -3,7 +3,7 @@
 # Driven by rapidsai-images-build.sh (sets up a 2-node buildx builder, then
 # `docker buildx bake --push` against this file -> native multi-arch manifests).
 # Manual equivalent:
-#   RAPIDS_VER=26.10 REGISTRY=harbor.mellanox.com docker buildx bake \
+#   RAPIDS_VER=26.10 IMAGE_REV=azp-2 REGISTRY=harbor.mellanox.com docker buildx bake \
 #     --builder <multi> -f docker-compose-rapidsai.yml \
 #     --set '*.platform=linux/amd64,linux/arm64' --push
 #
@@ -16,7 +16,7 @@
 # pr/main.yml + azure-pipelines-release.yml.
 services:
   rapidsai-ci-conda:
-    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-conda:${RAPIDS_VER}-azp-1
+    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-conda:${RAPIDS_VER}-${IMAGE_REV}
     build:
       context: .
       dockerfile: rapidsai-ci-conda.Dockerfile
@@ -24,7 +24,7 @@ services:
         BASE_IMAGE: rapidsai/ci-conda:${RAPIDS_VER}-latest
 
   rapidsai-ci-wheel-cuda13:
-    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-azp-1
+    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-${IMAGE_REV}
     build:
       context: .
       dockerfile: rapidsai-ci-wheel.Dockerfile
@@ -32,7 +32,7 @@ services:
         BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda13.3.0-rockylinux8-py3.11
 
   rapidsai-ci-wheel-cuda12:
-    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-azp-1
+    image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-${IMAGE_REV}
     build:
       context: .
       dockerfile: rapidsai-ci-wheel.Dockerfile
