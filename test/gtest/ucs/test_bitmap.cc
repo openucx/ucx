@@ -300,10 +300,10 @@ UCS_TEST_F(test_static_bitmap, test_for_each_bit_partial_last_word) {
 }
 
 UCS_TEST_F(test_static_bitmap, test_index_fits) {
-    ucs_static_bitmap_s(64) bitmap64;
-    ucs_static_bitmap_s(128) bitmap128;
-    ucs_static_bitmap_s(192) bitmap192;
-    ucs_static_bitmap_s(255) bitmap255;
+    const ucs_static_bitmap_s(64) bitmap64   = {};
+    const ucs_static_bitmap_s(128) bitmap128 = {};
+    const ucs_static_bitmap_s(192) bitmap192 = {};
+    const ucs_static_bitmap_s(255) bitmap255 = {};
 
     /* The 64 bits of a 1-word bitmap fit int8_t */
     EXPECT_TRUE(UCS_STATIC_BITMAP_INDEX_FITS(static_cast<int8_t>(0), bitmap64));

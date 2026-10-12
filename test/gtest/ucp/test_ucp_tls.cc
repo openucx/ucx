@@ -33,7 +33,7 @@ protected:
 
         /* Pack the address directly: with UCP_FEATURE_WAKEUP, an endpoint
          * needs send completion events, which self does not have */
-        ucp_object_version_t addr_version =
+        const ucp_object_version_t addr_version =
                 worker->context->config.ext.worker_addr_version;
         ASSERT_UCS_OK(ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
                                        UCP_ADDRESS_PACK_FLAGS_ALL, addr_version,
