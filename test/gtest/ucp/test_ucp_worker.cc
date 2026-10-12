@@ -852,9 +852,9 @@ protected:
     {
         ucp_worker_h worker   = sender().worker();
         ucp_context_h context = worker->context;
-        ucp_rsc_iter_t tl_id;
+        ucp_rsc_index_t tl_id;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
             const auto &resource   = context->tl_rscs[tl_id].tl_rsc;
             const auto &iface_attr = *ucp_worker_iface_get_attr(worker, tl_id);
             const auto is_network  = (iface_attr.cap.flags &
@@ -879,12 +879,12 @@ protected:
         ucp_worker_attr_t worker_attr{};
         ucp_unpacked_address_t unpacked_address{};
         ucp_tl_bitmap_t tl_bitmap;
-        ucp_rsc_iter_t tl_id;
+        ucp_rsc_index_t tl_id;
         ucs_status_t status;
 
         ucp_context_dev_tl_bitmap(context, address_device_name.c_str(),
                                   &tl_bitmap);
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             const auto &iface_attr = *ucp_worker_iface_get_attr(worker, tl_id);
 
             if (!iface_matches_address_flags(iface_attr, address_flags)) {
@@ -920,7 +920,7 @@ protected:
         ucp_unpacked_address_for_each(address_entry, &unpacked_address) {
             auto found = false;
 
-            UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+            UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
                 const auto &resource = context->tl_rscs[tl_id];
 
                 if ((resource.md_index == address_entry->md_index) &&
@@ -1074,9 +1074,9 @@ public:
     }
 
     void verify_seg_size(ucp_worker_h worker) const {
-        ucp_rsc_iter_t tl_id;
+        ucp_rsc_index_t tl_id;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
             ucp_worker_iface_t *wiface = ucp_worker_iface(worker, tl_id);
 
             if (wiface->attr.cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {

@@ -147,7 +147,7 @@ static ucp_rsc_index_t
 ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
                              const ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_rsc_iter_t rsc_index = UCS_STATIC_BITMAP_FFS(*tl_bitmap);
+    ucp_rsc_index_t rsc_index = ucp_tl_bitmap_ffs(tl_bitmap, 0);
     ucp_rsc_index_t dev_index;
 
     ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
@@ -156,7 +156,7 @@ ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
     dev_index = context->tl_rscs[rsc_index].dev_index;
 
     /* check that all TL resources in the TL bitmap have the same dev_index */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
         ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
     }
 

@@ -459,7 +459,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     void *buffer;
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     std::set<ucs_sys_device_t> packed_sys_devices, unpacked_sys_devices;
-    ucp_rsc_iter_t tl;
+    ucp_rsc_index_t tl;
 
     ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
@@ -471,7 +471,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
     EXPECT_EQ(addr_v, sender().ucph()->config.ext.worker_addr_version);
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &sender().worker()->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl, &sender().worker()->context->tl_bitmap) {
         const ucp_tl_resource_desc_t &rsc =
                 sender().worker()->context->tl_rscs[tl];
         packed_dev_priorities.insert(
@@ -1102,9 +1102,9 @@ public:
     }
 
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
-        ucp_rsc_iter_t rsc_index;
+        ucp_rsc_index_t rsc_index;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
             ucp_md_index_t md_index         = worker->context->tl_rscs[rsc_index].md_index;
             const uct_md_attr_v2_t *md_attr = &worker->context->tl_mds[md_index].attr;
 
@@ -1851,7 +1851,7 @@ public:
     {
         ucp_worker_h worker   = sender().worker();
         ucp_context_h context = worker->context;
-        ucp_rsc_iter_t rsc_index;
+        ucp_rsc_index_t rsc_index;
         uct_iface_is_reachable_params_t params;
 
         params.field_mask  = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
@@ -1861,7 +1861,7 @@ public:
         params.iface_addr  = ae->iface_addr;
         params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             auto wiface = ucp_worker_iface(worker, rsc_index);
 
             /* Compare resources by md_index, transport name, and device */
@@ -2316,11 +2316,11 @@ public:
         aux_candidate_info result(require_cb_async);
         const ucp_address_entry_t *address_entry;
         ucp_context_h context = worker->context;
-        ucp_rsc_iter_t rsc_index;
+        ucp_rsc_index_t rsc_index;
         unsigned addr_index;
         size_t seg_size;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             ucp_unpacked_address_for_each(address_entry, remote_address) {
                 addr_index = ucp_unpacked_address_index(remote_address,
                                                         address_entry);

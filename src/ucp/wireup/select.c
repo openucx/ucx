@@ -458,7 +458,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     uct_tl_resource_desc_t *resource;
     const ucp_address_entry_t *ae;
     ucp_worker_iface_t *wiface;
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
     ucp_lane_index_t lane;
     char tls_info[UCP_WIREUP_TLS_INFO_SIZE];
@@ -539,7 +539,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
      * Pick the best local resource to satisfy the criteria.
      * best one has the highest score (from the dedicated score_func) and
      * has a reachable tl on the remote peer */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &tl_bitmap) {
         local_md_flags = criteria->local_md_flags;
         resource       = &context->tl_rscs[rsc_index].tl_rsc;
         dev_index      = context->tl_rscs[rsc_index].dev_index;
@@ -962,11 +962,11 @@ static void ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
                                         address_list[sinfo->addr_index];
     ucp_md_index_t md_index       = context->tl_rscs[sinfo->rsc_index].md_index;
     ucp_md_index_t dst_md_index   = ae->md_index;
-    ucp_rsc_iter_t i;
+    ucp_rsc_index_t i;
 
     *remote_md_map &= ~UCS_BIT(dst_md_index);
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(i, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(i, &context->tl_bitmap) {
         if (context->tl_rscs[i].md_index == md_index) {
             UCS_STATIC_BITMAP_RESET(tl_bitmap, i);
         }
@@ -1341,7 +1341,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     unsigned ep_init_flags         = ucp_wireup_ep_init_flags(select_params,
                                                               select_ctx);
     ucp_wireup_criteria_t criteria = {};
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
     ucp_tl_bitmap_t tl_bitmap;
 
     if (!ucs_test_flags(context->config.features, UCP_FEATURE_AMO32,
@@ -1365,7 +1365,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
      * connect back on p2p transport.
      */
     tl_bitmap = worker->atomic_tls;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         if (ucp_worker_is_tl_2iface(worker, rsc_index)) {
             UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
         }
@@ -3012,10 +3012,10 @@ static void ucp_wireup_filter_token_tls(ucp_worker_h worker,
                                         const ucp_tl_bitmap_t *tl_bitmap_in,
                                         ucp_tl_bitmap_t *tl_bitmap_out)
 {
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
 
     memset(tl_bitmap_out, 0, sizeof(*tl_bitmap_out));
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap_in) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap_in) {
         if (ucp_worker_iface_get_attr_v2(worker, rsc_index)->cap.flags &
             UCT_IFACE_FLAG_V2_QUERY_TOKEN) {
             UCS_STATIC_BITMAP_SET(tl_bitmap_out, rsc_index);

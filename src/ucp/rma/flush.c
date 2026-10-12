@@ -823,10 +823,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_flush, (ep), ucp_ep_h ep)
 static ucs_status_t ucp_worker_fence_weak(ucp_worker_h worker)
 {
     ucp_worker_iface_t *wiface;
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
     ucs_status_t status;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->iface == NULL) {
             continue;

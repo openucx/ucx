@@ -11,6 +11,9 @@ extern "C" {
 #include <ucp/wireup/address.h>
 }
 
+#include <numeric>
+#include <vector>
+
 class test_ucp_tl : public test_ucp_context {
 protected:
     virtual void init()
@@ -82,3 +85,77 @@ UCS_TEST_P(test_ucp_tl, check_ucp_tl_exceeds_limit)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tl, self, "self");
+
+class test_ucp_tl_bitmap : public ucs::test {
+protected:
+    virtual void init()
+    {
+        UCS_STATIC_BITMAP_RESET_ALL(&m_tl_bitmap);
+    }
+
+    /* Indices visited by UCP_TL_BITMAP_FOR_EACH_BIT, which must end the
+     * iteration at UCP_MAX_RESOURCES */
+    std::vector<ucp_rsc_index_t> visited_bits() const
+    {
+        std::vector<ucp_rsc_index_t> bits;
+        ucp_rsc_index_t rsc_index;
+
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &m_tl_bitmap) {
+            bits.push_back(rsc_index);
+        }
+
+        EXPECT_EQ(UCP_MAX_RESOURCES, rsc_index);
+        return bits;
+    }
+
+    ucp_tl_bitmap_t m_tl_bitmap;
+};
+
+UCS_TEST_F(test_ucp_tl_bitmap, min_max_values) {
+    /* No bits are set in the min bitmap */
+    EXPECT_TRUE(ucs_bitmap_bits_is_equal(
+            UCS_STATIC_BITMAP_BITS_CARGS(&m_tl_bitmap),
+            UCS_STATIC_BITMAP_BITS_CARGS(&ucp_tl_bitmap_min)));
+
+    /* Exactly the valid resource indices are set in the max bitmap */
+    for (unsigned rsc_index = 0; rsc_index < UCP_MAX_RESOURCES; ++rsc_index) {
+        UCS_STATIC_BITMAP_SET(&m_tl_bitmap, rsc_index);
+    }
+
+    EXPECT_TRUE(ucs_bitmap_bits_is_equal(
+            UCS_STATIC_BITMAP_BITS_CARGS(&m_tl_bitmap),
+            UCS_STATIC_BITMAP_BITS_CARGS(&ucp_tl_bitmap_max)));
+}
+
+UCS_TEST_F(test_ucp_tl_bitmap, empty) {
+    EXPECT_TRUE(visited_bits().empty());
+}
+
+UCS_TEST_F(test_ucp_tl_bitmap, set_bits) {
+    /* Set bits at word boundaries and the last valid index */
+    const std::vector<ucp_rsc_index_t> expected_visited_bits =
+            {0, 63, 64, 128, UCP_MAX_RESOURCES - 1};
+
+    for (auto rsc_index : expected_visited_bits) {
+        UCS_STATIC_BITMAP_SET(&m_tl_bitmap, rsc_index);
+    }
+
+    EXPECT_EQ(expected_visited_bits, visited_bits());
+}
+
+UCS_TEST_F(test_ucp_tl_bitmap, max) {
+    std::vector<ucp_rsc_index_t> expected_visited_bits(UCP_MAX_RESOURCES);
+
+    /* Fill the expected_visited_bits vector with the valid resource indices
+     * [0, 1, 2, ..., (UCP_MAX_RESOURCES - 1)] */
+    std::iota(expected_visited_bits.begin(), expected_visited_bits.end(), 0);
+
+    m_tl_bitmap = ucp_tl_bitmap_max;
+    EXPECT_EQ(expected_visited_bits, visited_bits());
+}
+
+/* Bit UCP_MAX_RESOURCES exists only because the bitmap is rounded up to words */
+UCS_TEST_F(test_ucp_tl_bitmap, rounding_bit) {
+    UCS_STATIC_BITMAP_SET(&m_tl_bitmap, UCP_MAX_RESOURCES);
+    EXPECT_TRUE(visited_bits().empty());
+}

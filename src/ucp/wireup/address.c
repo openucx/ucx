@@ -378,7 +378,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
     ucp_address_packed_device_t *dev, *devices;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t num_devices;
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     ssize_t length_size;
 
@@ -389,7 +389,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
 
     num_devices = 0;
     UCS_STATIC_BITMAP_AND_INPLACE(&current_tl_bitmap, context->tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &current_tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &current_tl_bitmap) {
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (!ucp_worker_iface_can_connect(iface_attr)) {
             continue;
@@ -1211,7 +1211,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
     uct_iface_attr_t *iface_attr;
     ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, remote_lane;
     ucp_tl_bitmap_t dev_tl_bitmap;
     unsigned num_ep_addrs;
@@ -1318,7 +1318,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         }
 
         flags_ptr = NULL;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &dev_tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &dev_tl_bitmap) {
             wiface     = ucp_worker_iface(worker, rsc_index);
             iface_attr = &wiface->attr;
 

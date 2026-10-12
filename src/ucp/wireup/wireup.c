@@ -1155,8 +1155,7 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
                            ucp_tl_bitmap_t *tl_bitmap)
 {
     ucp_context_h context = ep->worker->context;
-    ucp_rsc_index_t lane_rsc;
-    ucp_rsc_iter_t aux_rsc;
+    ucp_rsc_index_t lane_rsc, aux_rsc;
     ucp_lane_index_t lane;
     uint64_t iface_flags;
 
@@ -1166,7 +1165,7 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
             continue;
         }
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
             if (UCS_STATIC_BITMAP_GET(*tl_bitmap, aux_rsc)) {
                 continue;
             }
@@ -2039,7 +2038,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_rsc_index_t ae_cmpts[UCP_MAX_MDS]; /* component index for each address entry */
     const ucp_address_entry_t *ae;
     ucp_rsc_index_t cmpt_index;
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
     ucp_md_index_t dst_md_index;
     ucp_md_map_t ae_dst_md_map, dst_md_map;
     ucp_md_map_t prev_dst_md_map;
@@ -2047,7 +2046,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     char info_str[UCP_WIREUP_UCT_INFO_SIZE];
 
     ae_dst_md_map = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
             *info_str = '\0';
             if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae,
@@ -2897,7 +2896,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     unsigned ep_addr_index;
     ucs_status_t status;
     char *p, *end;
-    ucp_rsc_iter_t tl;
+    ucp_rsc_index_t tl;
 
     /* LANES_ADDR_REQ/REPLY carry a ucp_wireup_msg_lanes_info_t between the
      * wireup header and the packed address; skip it before unpacking. */
@@ -2934,7 +2933,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
             rsc = &context->tl_rscs[tl];
             if (ae->tl_name_csum == rsc->tl_name_csum) {
                 snprintf(p, end - p, " "UCT_TL_RESOURCE_DESC_FMT,

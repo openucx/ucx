@@ -70,6 +70,7 @@ SortIncludes: false
 ForEachMacros:
   [
     'FOR_EACH_ENTITY',
+    'UCP_TL_BITMAP_FOR_EACH_BIT',
     'UCS_BITMAP_BITS_FOR_EACH_BIT',
     'UCS_CLEANUP_ONCE',
     'UCS_DYNAMIC_BITMAP_FOR_EACH_BIT',

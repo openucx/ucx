@@ -747,7 +747,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned addr_indices[UCP_MAX_LANES];
     ucp_lane_index_t num_lanes;
-    ucp_rsc_iter_t rsc_index;
+    ucp_rsc_index_t rsc_index;
 
     ucs_memory_type_for_each(mem_type) {
         ucp_context_memaccess_tl_bitmap(context, UCS_BIT(mem_type), 0,
@@ -755,7 +755,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 
         /* Exclude transports that map remote memory via rkey pointer
          * since mem_type EP is for in-process communication */
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &mem_access_tls) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &mem_access_tls) {
             if (context->tl_mds[context->tl_rscs[rsc_index].md_index].attr.flags &
                 UCT_MD_FLAG_RKEY_PTR) {
                 UCS_STATIC_BITMAP_RESET(&mem_access_tls, rsc_index);

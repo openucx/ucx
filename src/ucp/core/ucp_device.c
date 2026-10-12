@@ -191,7 +191,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
                          ucs_sys_device_t local_sys_dev)
 {
     const ucp_worker_iface_t *wiface;
-    ucp_rsc_iter_t tl_id;
+    ucp_rsc_index_t tl_id;
     int tl_type;
 
     /** TODO: Maybe cache results */
@@ -200,7 +200,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap[tl_type]);
     }
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, tl_id);
 
         if (!(wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_EP)) {
@@ -308,7 +308,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
     uct_device_mem_elem_t *tl_element;
     size_t i, num_lanes;
     ucs_status_t status;
-    ucp_rsc_iter_t tl_id;
+    ucp_rsc_index_t tl_id;
     void *local_addr;
 
     ucp_device_get_tl_bitmap(worker, tl_bitmap, local_sys_dev);
@@ -331,7 +331,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
                                             ucp_element, local_addr, LOCAL_ADDR, NULL);
         uct_element->addr = local_addr;
         tl_element        = uct_element->tl;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap[tl_type]) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap[tl_type]) {
             wiface = ucp_worker_iface(worker, tl_id);
             status = ucp_device_local_mem_list_element_pack(worker, wiface,
                                                             ucp_element,
@@ -504,13 +504,13 @@ static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
     ucp_ep_h ep                      = elem->ep;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_lane_index_t lane;
-    ucp_rsc_iter_t tl_id;
+    ucp_rsc_index_t tl_id;
 
     if (UCS_STATIC_BITMAP_POPCOUNT(*tl_bitmap) == 0) {
         return 0;
     }
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
         lane = ucp_device_ep_find_lane(ep, tl_id);
         if (lane == UCP_NULL_LANE) {
             return 0;
@@ -628,14 +628,14 @@ static ucs_status_t ucp_device_remote_mem_list_fill(
         ucp_device_mem_elem_release_handles_t *release_handles)
 {
     uct_device_remote_tl_elem_t *tl_element;
-    ucp_rsc_iter_t tl_id;
+    ucp_rsc_index_t tl_id;
     ucs_status_t status;
     size_t i;
 
     uct_element->addr = ucp_element->remote_addr;
     tl_element        = uct_element->tl;
     for (i = 0; i < num_lanes;) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
             status = ucp_device_remote_mem_list_element_pack(ucp_element, tl_id,
                                                              tl_element,
                                                              release_handles);
