@@ -25,10 +25,20 @@ protected:
 
     void init() override {
         test_md::init();
+        ASSERT_EQ(cudaSuccess, cudaGetDevice(&m_init_device));
         ASSERT_EQ(cudaGetDeviceCount(&m_num_devices), cudaSuccess);
     }
 
+    void cleanup() override
+    {
+        /* Restore the device in case a test ended early on a switched one,
+         * so it does not leak into later tests */
+        EXPECT_EQ(cudaSuccess, cudaSetDevice(m_init_device));
+        test_md::cleanup();
+    }
+
     int m_num_devices;
+    int m_init_device = 0;
 };
 
 template<class T>
@@ -872,7 +882,17 @@ protected:
         if (m_num_devices < 2) {
             UCS_TEST_SKIP_R("less than two cuda devices available");
         }
+
+        ASSERT_EQ(cudaSuccess, cudaGetDevice(&m_init_device));
         uct_p2p_test::init();
+    }
+
+    void cleanup() override
+    {
+        /* Restore the device in case a test ended early on a switched one,
+         * so it does not leak into later tests */
+        EXPECT_EQ(cudaSuccess, cudaSetDevice(m_init_device));
+        uct_p2p_test::cleanup();
     }
 
 private:
@@ -913,7 +933,8 @@ private:
         ASSERT_UCS_OK(uct_md_mem_dereg_v2(e.md(), &dereg_params));
     }
 
-    int                          m_num_devices;
+    int m_num_devices;
+    int m_init_device = 0;
 };
 
 UCS_TEST_P(test_p2p_send_on_diff_device, vmm_short)
