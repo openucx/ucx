@@ -1765,6 +1765,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
                                                         sizeof(uint64_t)),
                                            "rc_purge_dm");
         if (callback_data.dm_data == NULL) {
+            ucs_error("rc mlx5: ep %p qp 0x%x failed to allocate dm data", ep,
+                      txwq->super.qp_num);
             return UCS_ERR_NO_MEMORY;
         }
     } else
