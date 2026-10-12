@@ -5,17 +5,30 @@ Source: https://github.com/openucx/ucx
 
 Files: *
 Copyright:
- 2014-2015 UT-Battelle, LLC. All rights reserved.
- 2014-2020 NVIDIA corporation & affiliates. All rights reserved.
+ 2001-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ 2014-2019 UT-Battelle, LLC. All rights reserved.
  2014-2015 The University of Houston System. All rights reserved.
- 2015 The University of Tennessee and The University of Tennessee Research
- Foundation. All rights reserved.
- 2016-2020 ARM Ltd. All rights reserved.
- 2016 Los Alamos National Security, LLC. All rights reserved.
- 2016-2020 Advanced Micro Devices, Inc. All rights reserved.
+ 2015-2016 The University of Tennessee and The University of Tennessee
+ Research Foundation. All rights reserved.
+ 2016-2021 Arm Ltd. All rights reserved.
+ 2016-2019 Los Alamos National Security, LLC. All rights reserved.
+ 2016-2026 Advanced Micro Devices, Inc. All rights reserved.
  2019 UChicago Argonne, LLC. All rights reserved.
- 2020 Huawei Technologies Co., Ltd. All rights reserved.
+ 2020-2023 Huawei Technologies Co., Ltd. All rights reserved.
  2016-2020 Stony Brook University. All rights reserved.
+ 2015 IBM. All rights reserved.
+ 2019 Hiroyuki Sato. All rights reserved.
+ 2020 Shanghai Zhaoxin Semiconductor Co., Ltd. All rights reserved.
+ 2021 Broadcom Inc. and/or its subsidiaries. All rights reserved.
+ 2021 NextSilicon Ltd. All rights reserved.
+ 2022 Tactical Computing Labs, LLC. All rights reserved.
+ 2018, 2023 Triad National Security, LLC. All rights reserved.
+ 2023-2026 Intel Corporation. All rights reserved.
+ 2023 Rivos Inc.
+ 2024 Google, LLC. All rights reserved.
+ 2025 Fujitsu Limited. All rights reserved.
+ 2026 Zhixian Li. All rights reserved.
+ Oak Ridge National Laboratory. All rights reserved.
 License: BSD-3-clause
 
 Files:
