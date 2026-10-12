@@ -1707,7 +1707,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
-    size_t dm_data_len;
     void *callback_arg;
     int delivered;
     ucs_status_t status;
@@ -1762,12 +1761,15 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
 #if HAVE_IBV_DM
     if (iface->dm.dm != NULL) {
-        dm_data_len = ucs_align_up(iface->dm.seg_len, sizeof(uint64_t));
-        callback_data.dm_data = ucs_alloc_on_stack(dm_data_len, "rc_purge_dm");
+        callback_data.dm_data = ucs_malloc(ucs_align_up(iface->dm.seg_len,
+                                                        sizeof(uint64_t)),
+                                           "rc_purge_dm");
+        if (callback_data.dm_data == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
     } else
 #endif
     {
-        dm_data_len           = 0;
         callback_data.dm_data = NULL;
     }
 
@@ -1816,7 +1818,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
 
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
-    ucs_free_on_stack(callback_data.dm_data, dm_data_len);
+    ucs_free(callback_data.dm_data);
     uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
     txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;
