@@ -3166,11 +3166,7 @@ void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         status        = ucp_ep_reconfig_internal(ep, UCS_BIT(lane));
         if (status != UCS_OK) {
             ucp_ep_tf_purge_live_ep(ep, lane, uct_ep);
-            tf->uct_ep     = NULL;
-            tf->state      = UCP_EP_TF_LANE_EMPTY;
-            tf->request_id = 0;
-            tf->peer_id    = 0;
-            ucp_ep_tf_free_tokens(tf);
+            ucp_ep_tf_lane_release(ep, tf);
             ucp_ep_set_lanes_failed(ep, UCS_BIT(lane),
                                     UCS_ERR_CONNECTION_RESET);
             break;
