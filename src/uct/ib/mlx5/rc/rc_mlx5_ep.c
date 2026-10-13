@@ -1198,8 +1198,9 @@ uct_rc_mlx5_op_info_fill_am_bcopy(uct_rc_iface_send_op_t *op,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    info->field_mask = UCT_EP_OP_INFO_FIELD_OPERATION | UCT_EP_OP_INFO_FIELD_AM;
-    info->operation  = UCT_EP_OP_AM_BCOPY;
+    info->field_mask             = UCT_EP_OP_INFO_FIELD_OPERATION |
+                                   UCT_EP_OP_INFO_FIELD_AM;
+    info->operation              = UCT_EP_OP_AM_BCOPY;
     info->am.field_mask          = UCT_EP_OP_INFO_AM_FIELD_AM_ID |
                                    UCT_EP_OP_INFO_AM_FIELD_FLAGS |
                                    UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
