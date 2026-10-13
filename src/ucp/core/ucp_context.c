@@ -2574,13 +2574,15 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rndv_chunk_size == 0) {
         ucs_error("minimum chunk size for rendezvous protocol must be greater"
                   " than 0");
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
     }
 
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
     }
 
     /* Save environment prefix to later notify user for unused variables */
@@ -2722,7 +2724,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         !context->config.ext.proto_enable) {
         ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
         status = UCS_ERR_INVALID_PARAM;
-        goto err_free_key_list;
+        goto err_free_am_mpool_sizes;
     } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
         if ((context->config.ext.max_rma_lanes > 1) ||
             context->config.ext.proto_enable) {
@@ -2750,6 +2752,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     return UCS_OK;
 
+err_free_am_mpool_sizes:
+    ucs_free(context->config.am_mpools.sizes);
 err_free_key_list:
     ucp_cached_key_list_release(&context->cached_key_list);
 err_free_alloc_methods:
