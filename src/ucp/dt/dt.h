@@ -78,12 +78,19 @@ ucp_memory_info_equal(const ucp_memory_info_t *a, const ucp_memory_info_t *b)
            (a->flags == b->flags);
 }
 
+/*
+ * Copy to/from memory which is not accessible from the CPU, through the memory
+ * type endpoint. @a mem_info holds the memory flags already resolved for the
+ * buffer, or is NULL when they are unknown and have to be looked up.
+ */
 void ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src,
-                       size_t length, ucs_memory_type_t mem_type);
+                       size_t length, ucs_memory_type_t mem_type,
+                       const ucp_memory_info_t *mem_info);
 
 void ucp_mem_type_unpack(ucp_worker_h worker, void *buffer,
                          const void *recv_data, size_t recv_length,
-                         ucs_memory_type_t mem_type);
+                         ucs_memory_type_t mem_type,
+                         const ucp_memory_info_t *mem_info);
 
 
 static UCS_F_ALWAYS_INLINE void

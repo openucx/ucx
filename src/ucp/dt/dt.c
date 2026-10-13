@@ -60,14 +60,88 @@ ucs_status_t ucp_dt_mem_info_verify(const char *dt_name, size_t index,
 }
 
 
+/*
+ * Select the first RMA lane of the mem type endpoint whose memory domain
+ * accepts the buffer. @a mem_info holds the memory flags resolved by the
+ * caller, or is NULL when they are unknown, in which case they are resolved on
+ * the first memory domain which actually requires them. Returns UCP_NULL_LANE
+ * if no lane is compatible.
+ */
+static ucp_lane_index_t
+ucp_mem_type_ep_find_lane(ucp_ep_h ep, const void *address, size_t length,
+                          const ucp_memory_info_t *mem_info)
+{
+    ucp_context_h context          = ep->worker->context;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_memory_info_t detected;
+    ucp_lane_index_t lane;
+    unsigned i;
+
+    for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
+        lane    = key->rma_lanes[i];
+        md_attr = ucp_ep_md_attr(ep, lane);
+        if (md_attr->required_mem_flags == 0) {
+            return lane;
+        }
+
+        if (mem_info == NULL) {
+            /* Coverity wrongly resolves the memory domain deregister function
+             * pointer to 'uct_cuda_ipc_mem_dereg' and considers 'address' as
+             * freed */
+            /* coverity[pass_freed_arg] */
+            ucp_memory_detect(context, address, length, &detected);
+            mem_info = &detected;
+        }
+
+        if (ucs_test_all_flags(mem_info->flags,
+                               md_attr->required_mem_flags)) {
+            return lane;
+        }
+
+        /* TODO: Also take the memory flags into account in the protocol
+         * performance estimation, as they are already part of the selection
+         * key. Performance model here diverges from the lane actually used. */
+    }
+
+    return UCP_NULL_LANE;
+}
+
+/*
+ * Select the mem type endpoint lane which can register the buffer, and register
+ * it. @a mem_info holds the memory flags resolved by the caller, or is NULL
+ * when they are unknown.
+ */
+static ucs_status_t
+ucp_mem_type_lane_reg(ucp_worker_h worker, ucp_ep_h ep, void *address,
+                      size_t length, ucs_memory_type_t mem_type,
+                      const ucp_memory_info_t *mem_info,
+                      ucp_lane_index_t *lane_p,
+                      ucp_mtype_pack_context_t *pack_context)
+{
+    ucp_lane_index_t lane = ucp_mem_type_ep_find_lane(ep, address, length,
+                                                      mem_info);
+
+    if (lane == UCP_NULL_LANE) {
+        ucs_error("no mem type lane can register %s buffer %p length %zu",
+                  ucs_memory_type_names[mem_type], address, length);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *lane_p = lane;
+    return ucp_mem_type_reg_buffers(worker, address, length, mem_type,
+                                    ucp_ep_md_index(ep, lane), pack_context);
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
-                      (worker, buffer, recv_data, recv_length, mem_type),
+                      (worker, buffer, recv_data, recv_length, mem_type,
+                       mem_info),
                       ucp_worker_h worker, void *buffer, const void *recv_data,
-                      size_t recv_length, ucs_memory_type_t mem_type)
+                      size_t recv_length, ucs_memory_type_t mem_type,
+                      const ucp_memory_info_t *mem_info)
 {
     ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
-    unsigned md_index;
     ucs_status_t status;
     ucp_mtype_pack_context_t pack_context;
 
@@ -75,11 +149,8 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
-    md_index = ucp_ep_md_index(ep, lane);
-
-    status = ucp_mem_type_reg_buffers(worker, buffer, recv_length, mem_type,
-                                      md_index, &pack_context);
+    status = ucp_mem_type_lane_reg(worker, ep, buffer, recv_length, mem_type,
+                                   mem_info, &lane, &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
@@ -96,13 +167,13 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_unpack,
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
-                      (worker, dest, src, length, mem_type),
+                      (worker, dest, src, length, mem_type, mem_info),
                       ucp_worker_h worker, void *dest, const void *src,
-                      size_t length, ucs_memory_type_t mem_type)
+                      size_t length, ucs_memory_type_t mem_type,
+                      const ucp_memory_info_t *mem_info)
 {
     ucp_ep_h ep = worker->mem_type_ep[mem_type];
     ucp_lane_index_t lane;
-    ucp_md_index_t md_index;
     ucs_status_t status;
     ucp_mtype_pack_context_t pack_context;
 
@@ -110,11 +181,8 @@ UCS_PROFILE_FUNC_VOID(ucp_mem_type_pack,
         return;
     }
 
-    lane     = ucp_ep_config(ep)->key.rma_lanes[0];
-    md_index = ucp_ep_md_index(ep, lane);
-
-    status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
-                                      md_index, &pack_context);
+    status = ucp_mem_type_lane_reg(worker, ep, (void*)src, length, mem_type,
+                                   mem_info, &lane, &pack_context);
     if (status != UCS_OK) {
         ucs_fatal("failed to register buffer with mem type domain %s",
                   ucs_memory_type_names[mem_type]);
@@ -141,18 +209,21 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
         return length;
     }
 
+    /* This path is driven by 'ucp_dt_state_t', which unlike the datatype
+     * iterator does not carry the resolved memory flags of the buffer */
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
         ucp_dt_contig_pack(worker, dest,
                            UCS_PTR_BYTE_OFFSET(src, state->offset),
-                           length, mem_type, length);
+                           length, mem_type, NULL, length);
         result_len = length;
         break;
 
     case UCP_DATATYPE_IOV:
         UCS_PROFILE_CALL_VOID(ucp_dt_iov_gather, worker, dest, src, length,
                               &state->dt.iov.iov_offset,
-                              &state->dt.iov.iovcnt_offset, mem_type, length);
+                              &state->dt.iov.iovcnt_offset, mem_type, NULL,
+                              length);
         result_len = length;
         break;
 
