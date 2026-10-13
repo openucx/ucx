@@ -272,10 +272,10 @@ ucs_conn_match_get_elem(ucs_conn_match_ctx_t *conn_match_ctx,
 }
 
 void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
+                                const void *address,
                                 ucs_conn_match_elem_t *elem,
                                 ucs_conn_match_queue_type_t conn_queue_type)
 {
-    const void *address   = conn_match_ctx->ops.get_address(elem);
     ucs_conn_sn_t conn_sn = conn_match_ctx->ops.get_conn_sn(elem);
     char UCS_V_UNUSED address_str[UCS_CONN_MATCH_ADDRESS_STR_MAX];
     ucs_conn_match_peer_t *peer;

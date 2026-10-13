@@ -17,6 +17,7 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
+#include <ucp/rma/rma_bw.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
@@ -473,11 +474,17 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
-    if ((wireup_ep == NULL) ||
-        !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
+    if ((wireup_ep == NULL) || !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
-         * means failure on the UCP EP */
+         * means failure on the UCP EP. A token-capable lane is taken off the
+         * endpoint here; UCT keeps the TX ring only when this returns
+         * UCS_INPROGRESS. */
+        if ((wireup_ep == NULL) &&
+            (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK)) {
+            return UCS_INPROGRESS;
+        }
+
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
         return UCS_OK;
     }
@@ -1441,6 +1448,33 @@ ucs_status_t ucp_worker_iface_estimate_perf(const ucp_worker_iface_t *wiface,
     return UCS_OK;
 }
 
+/* Static v2 fields only. Token pointers are per-call derivation arguments and
+ * stay out of this cache. A transport that does not implement tokens returns
+ * UCS_ERR_UNSUPPORTED when a token field is requested; iface open still
+ * succeeds and both lengths stay 0. */
+static ucs_status_t
+ucp_worker_iface_query_attr_v2(ucp_worker_iface_t *wiface)
+{
+    uct_iface_attr_v2_t *attr_v2 = &wiface->attr_v2;
+    const uint64_t basic_mask    = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                                   UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+                                   UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+    const uint64_t token_mask    = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH |
+                                   UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
+    ucs_status_t status;
+
+    memset(attr_v2, 0, sizeof(*attr_v2));
+    attr_v2->field_mask = basic_mask | token_mask;
+    status              = uct_iface_query_v2(wiface->iface, attr_v2);
+    if (status != UCS_ERR_UNSUPPORTED) {
+        return status;
+    }
+
+    memset(attr_v2, 0, sizeof(*attr_v2));
+    attr_v2->field_mask = basic_mask;
+    return uct_iface_query_v2(wiface->iface, attr_v2);
+}
+
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface_p)
 {
@@ -1550,6 +1584,11 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
 
     status = uct_iface_query(wiface->iface, &wiface->attr);
+    if (status != UCS_OK) {
+        goto err_close_iface;
+    }
+
+    status = ucp_worker_iface_query_attr_v2(wiface);
     if (status != UCS_OK) {
         goto err_close_iface;
     }
@@ -2291,9 +2330,8 @@ out:
     return UCS_OK;
 }
 
-static void
-ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
-                                ucp_rkey_config_key_t *key)
+static void ucp_worker_dump_rkey_config_key(ucs_string_buffer_t *log_strb,
+                                            const ucp_rkey_config_key_t *key)
 {
     ucs_string_buffer_appendf(
             log_strb,
@@ -2312,6 +2350,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
     const ucp_ep_config_t *ep_config = &ucs_array_elem(&worker->ep_config,
                                                        key->ep_cfg_index);
     ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t **rkey_config_p;
+    unsigned dump_idx;
     ucp_rkey_config_t *rkey_config;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -2330,15 +2370,14 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         /* Dump all rkey config keys */
         ucs_string_buffer_init(&log_strb);
 
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            ucs_string_buffer_appendf(
-                    &log_strb, "rkey [%ld]: ",
-                    rkey_config - ucs_array_begin(&worker->rkey_config));
-            ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        ucs_array_for_each_index(rkey_config_p, dump_idx,
+                                 &worker->rkey_config) {
+            ucs_string_buffer_appendf(&log_strb, "rkey [%u]: ", dump_idx);
+            ucp_worker_dump_rkey_config_key(&log_strb, &(*rkey_config_p)->key);
         }
 
         ucs_string_buffer_appendf(&log_strb, "rkey key new: ");
-        ucp_worker_dump_rkey_config_key(&log_strb, &rkey_config->key);
+        ucp_worker_dump_rkey_config_key(&log_strb, key);
 
         ucs_debug("%s", ucs_string_buffer_cstr(&log_strb));
         ucs_string_buffer_cleanup(&log_strb);
@@ -2351,11 +2390,12 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                (lanes_distance != NULL));
 
     /* Initialize rkey configuration */
-    rkey_cfg_index      = ucs_array_length(&worker->rkey_config);
-    rkey_config         = ucp_worker_config_array_append(
-                                  worker, &worker->rkey_config,
-                                  status = UCS_ERR_NO_MEMORY;
-                                  goto err;);
+    rkey_cfg_index = ucs_array_length(&worker->rkey_config);
+    rkey_config    = ucs_malloc(sizeof(*rkey_config), "rkey_config");
+    if (rkey_config == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
 
     rkey_config->key = *key;
 
@@ -2370,6 +2410,11 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                   ucs_topo_distance_str(&rkey_config->lanes_distance[lane], buf,
                                         sizeof(buf)));
     }
+
+    rkey_config_p = ucp_worker_config_array_append(worker, &worker->rkey_config,
+                                                   status = UCS_ERR_NO_MEMORY;
+                                                   goto err_free_rkey_config;);
+    *rkey_config_p = rkey_config;
 
     /* Save key-to-index lookup */
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
@@ -2407,6 +2452,8 @@ err_kh_del:
     kh_del(ucp_worker_rkey_config, &worker->rkey_config_hash, khiter);
 err_pop_rkey_config:
     ucs_array_pop_back(&worker->rkey_config);
+err_free_rkey_config:
+    ucs_free(rkey_config);
 err:
     return status;
 }
@@ -2425,29 +2472,30 @@ static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 static void ucp_worker_trace_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
-    ucp_rkey_config_t *rkey_config;
+    ucp_rkey_config_t **rkey_config_p;
 
     ucs_array_for_each(ep_config, &worker->ep_config) {
         ucp_proto_select_trace(worker, &ep_config->proto_select);
     }
 
-    ucs_array_for_each(rkey_config, &worker->rkey_config) {
-        ucp_proto_select_trace(worker, &rkey_config->proto_select);
+    ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+        ucp_proto_select_trace(worker, &(*rkey_config_p)->proto_select);
     }
 }
 
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     ucp_ep_config_t *ep_config;
-    ucp_rkey_config_t *rkey_config;
+    ucp_rkey_config_t **rkey_config_p;
 
     ucs_array_for_each(ep_config, &worker->ep_config) {
         ucp_ep_config_cleanup(worker, ep_config);
     }
     ucs_array_cleanup_dynamic(&worker->ep_config);
 
-    ucs_array_for_each(rkey_config, &worker->rkey_config) {
-        ucp_proto_select_cleanup(&rkey_config->proto_select);
+    ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+        ucp_proto_select_cleanup(&(*rkey_config_p)->proto_select);
+        ucs_free(*rkey_config_p);
     }
     ucs_array_cleanup_dynamic(&worker->rkey_config);
 }
@@ -2682,6 +2730,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_init_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2843,6 +2892,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_tag_match_cleanup;
     }
 
+    if (context->config.ext.rma_bw_measure) {
+        worker->rma_bw_samples = ucs_calloc(UCP_RMA_BW_MAX_ACTIVE,
+                                            sizeof(*worker->rma_bw_samples),
+                                            "rma_bw_samples");
+        if (worker->rma_bw_samples == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_am_cleanup;
+        }
+    }
+
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
 
@@ -2869,6 +2928,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     return UCS_OK;
 
 err_am_cleanup:
+    ucs_free(worker->rma_bw_samples);
     ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
@@ -2901,6 +2961,7 @@ err_free:
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -3145,6 +3206,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
+    ucs_free(worker->rma_bw_samples);
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
@@ -3154,6 +3216,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
+    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);

@@ -79,6 +79,29 @@ KHASH_IMPL(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
            ucp_mem_area_t, 1, ucp_worker_remote_flush_hash_func,
            ucp_worker_remote_flush_key_is_equal);
 
+static UCS_F_ALWAYS_INLINE khint_t ucp_worker_rma_bw_hash_func(ucp_ep_h ep)
+{
+    return kh_int64_hash_func((uintptr_t)ep);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_rma_bw_key_is_equal(ucp_ep_h ep1, ucp_ep_h ep2)
+{
+    return ep1 == ep2;
+}
+
+KHASH_IMPL(ucp_worker_rma_bw, ucp_ep_h, struct ucp_rma_bw_ep_state*, 1,
+           ucp_worker_rma_bw_hash_func, ucp_worker_rma_bw_key_is_equal);
+
+static UCS_F_ALWAYS_INLINE struct ucp_rma_bw_ep_state*
+ucp_worker_rma_bw_state_get(ucp_ep_h ep)
+{
+    kh_ucp_worker_rma_bw_t *hash = &ep->worker->rma_bw_hash;
+    khiter_t it                 = kh_get(ucp_worker_rma_bw, hash, ep);
+
+    return (it == kh_end(hash)) ? NULL : kh_value(hash, it);
+}
+
 
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_remote_flush_hash_put(kh_ucp_worker_remote_flush_t *hash,
@@ -168,6 +191,15 @@ static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
 ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     return &ucp_worker_iface(worker, rsc_index)->attr;
+}
+
+/**
+ * @return worker's iface v2 attributes by resource index
+ */
+static UCS_F_ALWAYS_INLINE uct_iface_attr_v2_t*
+ucp_worker_iface_get_attr_v2(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return &ucp_worker_iface(worker, rsc_index)->attr_v2;
 }
 
 /**

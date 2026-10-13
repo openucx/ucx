@@ -32,6 +32,7 @@ typedef struct {
     ucs_sys_pci_id_t        pci_id;
     uintptr_t               user_value;
     ucs_topo_device_class_t device_class;
+    unsigned                flags; /* ucs_topo_device_flags_t */
 
     /* Cached rank of the device's BDF within its class, or
      * UCS_SYS_DEVICE_ORDINAL_INVALID if not yet computed.
@@ -48,12 +49,10 @@ typedef struct {
 
 
 /**
- * Compare two system devices by their topology identity.
- *
- * The topology lock must be held by the caller.
+ * Compare two system device information entries by their topology identity.
  */
-int ucs_topo_sys_device_cmp_nolock(ucs_sys_device_t sys_dev1,
-                                   ucs_sys_device_t sys_dev2);
+int ucs_topo_sys_device_info_cmp(const ucs_topo_sys_device_info_t *device1,
+                                 const ucs_topo_sys_device_info_t *device2);
 
 
 /**

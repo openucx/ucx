@@ -506,6 +506,15 @@ bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     return true;
 }
 
+bool uct_test::check_caps_v2(uint64_t required_flags) {
+    FOR_EACH_ENTITY(iter) {
+        if (!(*iter)->check_caps_v2(required_flags)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void uct_test::check_caps_skip(uint64_t required_flags, uint64_t invalid_flags) {
     if (!check_caps(required_flags, invalid_flags)) {
         UCS_TEST_SKIP_R("unsupported");
@@ -1096,6 +1105,16 @@ bool uct_test::entity::check_caps(uint64_t required_flags,
     uint64_t iface_flags = iface_attr().cap.flags;
     return (ucs_test_all_flags(iface_flags, required_flags) &&
             !(iface_flags & invalid_flags));
+}
+
+bool uct_test::entity::check_caps_v2(uint64_t required_flags)
+{
+    uct_iface_attr_v2_t attr = {};
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+    EXPECT_UCS_OK(uct_iface_query_v2(m_iface, &attr));
+
+    return ucs_test_all_flags(attr.cap.flags, required_flags);
 }
 
 bool uct_test::entity::check_event_caps(uint64_t required_flags,

@@ -12,6 +12,7 @@
 #include "proto_select.inl"
 
 #include <ucp/am/ucp_am.inl>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/rndv/proto_rndv.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/debug/table.h>
@@ -483,8 +484,7 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
         }
 
         ucp_rkey_config_dump_brief(
-                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key,
-                strb);
+                &ucp_worker_rkey_config(worker, rkey_cfg_index)->key, strb);
     }
 
     if (ucp_proto_select_is_atomic_op(select_param)) {

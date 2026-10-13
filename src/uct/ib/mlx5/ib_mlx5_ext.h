@@ -77,7 +77,6 @@ typedef struct uct_ib_mlx5_ext_ops {
     uct_ib_mlx5_ext_iface_query_func_t             iface_query;                  /**< Iface query callback */
     uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t max_put_sgl_zcopy_count;      /**< Maximum PUT SGL zero-copy entry count callback */
     uct_ep_put_sgl_zcopy_func_t                    ep_put_sgl_zcopy;             /**< PUT SGL zero-copy callback */
-    uct_ep_outstanding_purge_func_t                ep_outstanding_purge;         /**< Outstanding operation purge callback */
 } uct_ib_mlx5_ext_ops_t;
 
 /**
@@ -117,9 +116,6 @@ ucs_status_t uct_ib_mlx5_ext_ep_put_sgl_zcopy(uct_ep_h ep,
                                               const size_t *strides,
                                               size_t count,
                                               uct_completion_t *comp);
-
-ucs_status_t uct_ib_mlx5_ext_ep_outstanding_purge(
-        uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
 
 END_C_DECLS
 

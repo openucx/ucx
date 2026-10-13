@@ -21,13 +21,6 @@ ucp_ep_ext_from_conn_match(const ucs_conn_match_elem_t *conn_match)
     return ucs_container_of(conn_match, ucp_ep_ext_t, ep_match.conn_match);
 }
 
-static const void *
-ucp_ep_match_get_address(const ucs_conn_match_elem_t *conn_match)
-{
-    const ucp_ep_ext_t *ep_ext = ucp_ep_ext_from_conn_match(conn_match);
-    return &ep_ext->ep_match.dest_uuid;
-}
-
 static ucs_conn_sn_t
 ucp_ep_match_get_conn_sn(const ucs_conn_match_elem_t *conn_match)
 {
@@ -45,7 +38,6 @@ ucp_ep_match_address_str(const ucs_conn_match_ctx_t *conn_match_ctx,
 }
 
 const ucs_conn_match_ops_t ucp_ep_match_ops = {
-    .get_address = ucp_ep_match_get_address,
     .get_conn_sn = ucp_ep_match_get_conn_sn,
     .address_str = ucp_ep_match_address_str,
     .purge_cb    = NULL
@@ -125,6 +117,7 @@ void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
     ucs_assert(ep->conn_sn != UCP_EP_MATCH_CONN_SN_MAX);
 
     ucs_conn_match_remove_elem(&worker->conn_match_ctx,
+                               &ep->ext->ep_match.dest_uuid,
                                &ep->ext->ep_match.conn_match,
                                (ep->flags & UCP_EP_FLAG_REMOTE_ID) ?
                                UCS_CONN_MATCH_QUEUE_UNEXP :

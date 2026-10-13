@@ -101,8 +101,18 @@ typedef uint8_t ucs_sys_device_t;
 typedef enum {
     UCS_TOPO_DEVICE_CLASS_UNKNOWN = 0, /**< Unclassified device */
     UCS_TOPO_DEVICE_CLASS_NET, /**< Network device */
-    UCS_TOPO_DEVICE_CLASS_ACC /**< Acceleration device (e.g. GPU) */
+    UCS_TOPO_DEVICE_CLASS_ACC, /**< Acceleration device (e.g. GPU) */
+    UCS_TOPO_DEVICE_CLASS_LAST
 } ucs_topo_device_class_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Properties of a system device, set by the owning transport.
+ */
+typedef enum {
+    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0) /**< DPU device (e.g. BlueField) */
+} ucs_topo_device_flags_t;
 
 
 /**
@@ -473,6 +483,39 @@ ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
                               ucs_topo_device_class_t device_class);
 
 /**
+ * Add flags to a given system device.
+ *
+ * @param [in]  sys_dev  System device index.
+ * @param [in]  flags    Flags to add, from @ref ucs_topo_device_flags_t.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t
+ucs_topo_sys_device_add_flags(ucs_sys_device_t sys_dev, unsigned flags);
+
+/**
+ * Get the flags of a given system device.
+ *
+ * @param [in]  sys_dev  System device index.
+ *
+ * @return Flags from @ref ucs_topo_device_flags_t, or 0 if the system device
+ *         is unknown or invalid.
+ */
+unsigned ucs_topo_sys_device_get_flags(ucs_sys_device_t sys_dev);
+
+/**
+ * Mark a device class as incomplete.
+ *
+ * This operation is irreversible until the topology state is reset.
+ *
+ * @param [in]  device_class  Device class whose inventory is incomplete.
+ *
+ * @return UCS_OK on success, error otherwise.
+ */
+ucs_status_t
+ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class);
+
+/**
  * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
  * among all unique BDFs of the same class.
  *
@@ -485,7 +528,8 @@ ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
  * @param [in]  sys_dev System device to query.
  *
  * @return The ordinal of the system device, or UCS_SYS_DEVICE_ORDINAL_INVALID
- *         if the system device is unknown/invalid or has no assigned class.
+ *         if the system device is unknown/invalid, has no assigned class, or
+ *         its class inventory is incomplete.
  */
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev);
 
