@@ -3165,10 +3165,7 @@ void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         old_cfg_index = ep->cfg_index;
         status        = ucp_ep_reconfig_internal(ep, UCS_BIT(lane));
         if (status != UCS_OK) {
-            ucp_ep_tf_purge_live_ep(ep, lane, uct_ep);
-            ucp_ep_tf_lane_release(ep, tf);
-            ucp_ep_set_lanes_failed(ep, UCS_BIT(lane),
-                                    UCS_ERR_CONNECTION_RESET);
+            ucp_ep_set_lanes_failed_schedule(ep, 0, status);
             break;
         }
 
