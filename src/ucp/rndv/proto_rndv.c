@@ -1059,15 +1059,11 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                                  const ucp_rndv_rtr_req_hdr_t *rtr_req)
 {
     const ucp_rndv_rtr_hdr_t *rtr = &rtr_req->super;
-    ucp_memory_info_t mem_info    = {
-        .type    = rtr_req->mem_type,
-        .sys_dev = rtr_req->sys_dev
-    };
-    ucp_memory_info_t local_mem_info;
+    ucp_memory_info_t mem_info;
 
-    ucp_memory_detect(ep->worker->context, (void*)(uintptr_t)rtr_req->address,
-                      rtr->size, &local_mem_info);
-    mem_info.flags = local_mem_info.flags;
+    ucp_proto_rndv_memory_detect(ep->worker->context, rtr_req->address,
+                                 rtr->size, rtr_req->mem_type, rtr_req->sys_dev,
+                                 &mem_info);
 
     ucp_proto_request_send_init(req, ep,
                                 UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL);
@@ -1075,7 +1071,7 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                              ucp_proto_rndv_rtr_req_send_complete);
     req->send.buffer              = (void*)(uintptr_t)rtr_req->address;
     req->send.length              = rtr->size;
-    req->send.mem_type            = rtr_req->mem_type;
+    req->send.mem_type            = mem_info.type;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
     req->send.rndv.rkey           = NULL;
     req->send.rndv.remote_address = rtr_req->address;
