@@ -1655,10 +1655,16 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             return UCS_OK;
         }
 
-        /* The transmit range is closed after the operations are reported. */
-        if ((ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) &&
-            (txwq->ft_ci == txwq->prev_sw_pi)) {
-            return UCS_OK;
+        if (ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) {
+            /* A previous purge closed the transmit range. */
+            if (txwq->ft_ci == txwq->prev_sw_pi) {
+                return UCS_OK;
+            }
+
+            /* The error handler already released these operations. */
+            ucs_error("ep %p: outstanding purge after a completed error "
+                      "handler", ep);
+            return UCS_ERR_INVALID_PARAM;
         }
 
         /* Range for the token check. A rejected token leaves the endpoint
