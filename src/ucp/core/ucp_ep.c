@@ -2817,11 +2817,17 @@ ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
     }
 }
 
-/* The repost protocol posts the operation and completes it. */
+/* Repost owns the completion after a successful submit. */
 static void
 ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
 {
-    ucp_proto_repost_submit(arg, op_info);
+    ucs_status_t status;
+
+    status = ucp_proto_repost_submit(arg, op_info);
+    if ((status != UCS_OK) &&
+        (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
+        ucp_invoke_uct_completion(op_info->comp, status);
+    }
 }
 
 /* Resolve this lane's outstanding operations. Pending requests are appended
@@ -3121,8 +3127,6 @@ ucp_ep_tf_purge_live_ep(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
 
     ucs_assert(ep->ext->recovery_arg != NULL);
 
-    /* The request token is the remote send position, not this endpoint's
-     * receive position, so the walk reports every local send. */
     uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb,
                          &ep->ext->recovery_arg->tf_pending_q);
     memset(&params, 0, sizeof(params));
@@ -3130,7 +3134,10 @@ ucp_ep_tf_purge_live_ep(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
                         UCT_EP_OUTSTANDING_FIELD_ARG;
     params.cb         = ucp_ep_tf_outstanding_purge_cb;
     params.arg        = ep;
-    status            = uct_ep_outstanding_purge(uct_ep, &params);
+
+    /* The request token is the remote send position, not this endpoint's
+     * receive position, so the walk reports every local send. */
+    status = uct_ep_outstanding_purge(uct_ep, &params);
     if (status != UCS_OK) {
         ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep, lane,
                   ucs_status_string(status));
