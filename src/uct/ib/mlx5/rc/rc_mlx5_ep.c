@@ -1698,12 +1698,6 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
             }
 
             delivered = 1;
-        } else {
-            /* No peer receive position: every outstanding operation is
-             * undelivered. */
-            rx_token          = NULL;
-            receiver_next_psn = 0;
-            delivered         = 0;
         }
     }
 
