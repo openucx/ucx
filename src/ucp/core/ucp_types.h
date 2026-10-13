@@ -64,6 +64,8 @@ typedef uint16_t                     ucp_worker_cfg_index_t;
 
 /* Forward declarations */
 typedef struct ucp_request            ucp_request_t;
+typedef struct ucp_rma_bw_sample      ucp_rma_bw_sample_t;
+typedef struct ucp_rma_bw_estimator   ucp_rma_bw_estimator_t;
 typedef struct ucp_recv_desc          ucp_recv_desc_t;
 typedef struct ucp_address_iface_attr ucp_address_iface_attr_t;
 typedef struct ucp_address_entry      ucp_address_entry_t;
@@ -261,6 +263,9 @@ typedef enum {
      * across the N GPUs of the group.
      * The group's NICs are assigned to the following GPU indices in order:
      * 0, 1, ..., N-1, N-1, ..., 1, 0, 0, 1, ...
+     * This targets architectures where only some of the NICs share a PCIe
+     * switch with a local SSD, so that each GPU gets NICs both with and without
+     * direct SSD access.
      */
     UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
 

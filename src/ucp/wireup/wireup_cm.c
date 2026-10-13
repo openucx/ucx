@@ -411,7 +411,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
             continue;
         }
 
-        status = ucp_wireup_ep_create(ep, &uct_ep);
+        status = ucp_wireup_ep_create(ep, 1, &uct_ep);
         if (status != UCS_OK) {
             goto out;
         }
@@ -1443,7 +1443,7 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     ucs_assert(max_num_paths > 0);
 
     /* TODO: split CM and wireup lanes */
-    status = ucp_wireup_ep_create(ep, &uct_ep);
+    status = ucp_wireup_ep_create(ep, 1, &uct_ep);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to create wireup CM lane, status %s",
                  ep, ucs_status_string(status));

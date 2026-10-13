@@ -586,6 +586,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'n' : Select RMA/AMO lanes according to performance charasteristics",
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
 
+  {"RMA_BW_MEASURE", "n",
+   "Sample completed payload throughput of multi-lane PUT/GET zcopy operations. "
+   "This experimental option estimates per-endpoint, per-direction lane "
+   "completion throughput but does not change lane weights.",
+   ucs_offsetof(ucp_context_config_t, rma_bw_measure), UCS_CONFIG_TYPE_BOOL},
+
   {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
                      "rndv_rts:275ns,sw:40ns,rkey_ptr:0",
    "Protocol overhead", 0,
@@ -648,7 +654,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
    "for a GPU's memory to the NICs assigned to that GPU.\n"
-   "All ports of a NIC are assigned together.\n"
+   "Only protocol lanes are restricted, not the NICs the memory is\n"
+   "registered on, which UCX_MAX_HCA_PER_GPU controls independently.\n"
+   "The first Active Message lane is not restricted.\n"
+   "UCX_SINGLE_NET_DEVICE=y is not supported while an assignment is active.\n"
+   "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
+   "address are assigned together (e.g. MLOPart partitions of a GPU).\n"
+   "NICs without memory registration and DPUs are skipped during assignment.\n"
+   "NICs excluded by UCX_NET_DEVICES or UCX_TLS are ignored.\n"
    "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
    "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
    "some GPUs without any NICs.\n"
@@ -2561,13 +2574,15 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rndv_chunk_size == 0) {
         ucs_error("minimum chunk size for rendezvous protocol must be greater"
                   " than 0");
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
     }
 
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
     }
 
     /* Save environment prefix to later notify user for unused variables */
@@ -2709,7 +2724,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         !context->config.ext.proto_enable) {
         ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
         status = UCS_ERR_INVALID_PARAM;
-        goto err_free_key_list;
+        goto err_free_am_mpool_sizes;
     } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
         if ((context->config.ext.max_rma_lanes > 1) ||
             context->config.ext.proto_enable) {
@@ -2737,6 +2752,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     return UCS_OK;
 
+err_free_am_mpool_sizes:
+    ucs_free(context->config.am_mpools.sizes);
 err_free_key_list:
     ucp_cached_key_list_release(&context->cached_key_list);
 err_free_alloc_methods:
@@ -2809,15 +2826,86 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
-static ucs_status_t
-ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
-                                    ucp_gpu_nic_assignment_t **assignment_p)
+static int
+ucp_context_is_net_device_assignable(ucp_context_h context,
+                                     const ucp_tl_resource_desc_t *rsc)
 {
+    const uct_tl_resource_desc_t *resource = &rsc->tl_rsc;
+    const ucp_tl_md_t *md                  = &context->tl_mds[rsc->md_index];
+
+    if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
+        (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
+    }
+
+    if (rsc->flags & UCP_TL_RSC_FLAG_AUX) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: auxiliary transport",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: no memory registration",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    if (ucs_topo_sys_device_get_flags(resource->sys_device) &
+        UCS_TOPO_DEVICE_FLAG_DPU) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: dpu device",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is used for gpu-nic assignment",
+              UCT_TL_RESOURCE_DESC_ARG(resource));
+    return 1;
+}
+
+static void ucp_context_gpu_nic_assignment_net_device_filter_init(
+        ucp_context_h context, ucs_sys_device_bitmap_t *net_device_filter)
+{
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+        if (ucp_context_is_net_device_assignable(context, rsc)) {
+            UCS_STATIC_BITMAP_SET(net_device_filter, rsc->tl_rsc.sys_device);
+        }
+    }
+}
+
+static ucs_status_t
+ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
+                                            ucp_gpu_nic_assignment_mode_t mode)
+{
+    const char *conflict;
+
+    if (!context->config.ext.proto_enable) {
+        conflict = "UCX_PROTO_ENABLE=n";
+    } else if (context->config.ext.proto_use_single_net_device) {
+        conflict = "UCX_SINGLE_NET_DEVICE=y";
+    } else {
+        return UCS_OK;
+    }
+
+    ucs_error("%s is not supported by gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
+              conflict, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
+static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
+{
+    ucp_gpu_nic_assignment_mode_t mode =
+            context->config.ext.gpu_nic_assignment_mode;
+    ucs_sys_device_bitmap_t net_device_filter =
+            UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
     ucs_status_t status;
-
-    *assignment_p = NULL;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
         /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
@@ -2836,13 +2924,36 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
-    status = ucs_topo_build_groups(&groups);
+    ucp_context_gpu_nic_assignment_net_device_filter_init(context,
+                                                          &net_device_filter);
+    if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
+        if (context->config.ext.gpu_nic_assignment_mode ==
+            UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+            ucs_diag("gpu-nic assignment is disabled: no assignable network "
+                     "devices");
+            return UCS_OK;
+        }
+
+        ucs_error("no assignable network devices for gpu-nic assignment mode "
+                  "%s, set UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
+                  ucp_gpu_nic_assignment_modes[mode]);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_topo_build_groups(&net_device_filter, &groups);
     if (status != UCS_OK) {
         return status;
     }
 
     if (ucs_array_is_empty(&groups)) {
         ucs_diag("topology groups are empty, skipping gpu-nic assignment");
+        goto out_release_groups;
+    }
+
+    /* Checked after every case that skips the assignment, so a conflict is
+     * reported only when the assignment is about to be built */
+    status = ucp_context_gpu_nic_assignment_check_config(context, mode);
+    if (status != UCS_OK) {
         goto out_release_groups;
     }
 
@@ -2859,7 +2970,7 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
         goto out_release_groups;
     }
 
-    *assignment_p = assignment;
+    context->gpu_nic_assignment = assignment;
 
 out_release_groups:
     ucs_topo_release_groups(&groups);
@@ -2920,9 +3031,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
-    status = ucp_context_gpu_nic_assignment_init(
-            context->config.ext.gpu_nic_assignment_mode,
-            &context->gpu_nic_assignment);
+    status = ucp_context_gpu_nic_assignment_init(context);
     if (status != UCS_OK) {
         goto err_free_res;
     }
