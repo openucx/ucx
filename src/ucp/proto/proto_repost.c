@@ -14,6 +14,7 @@
 #include "proto_common.inl"
 
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/sys/string.h>
 
 #include <string.h>
 
@@ -66,7 +67,11 @@ static void ucp_proto_repost_probe(const ucp_proto_init_params_t *params)
     num_lanes = ucp_proto_common_find_lanes(params, 0, UCP_LANE_TYPE_LAST,
                                             UCP_PROTO_REPOST_TL_CAP_FLAGS, 0,
                                             1, 0, NULL, &lane);
-    rpriv.lane = (num_lanes == 0) ? UCP_NULL_LANE : lane;
+    if (num_lanes == 0) {
+        return;
+    }
+
+    rpriv.lane = lane;
 
     status = ucp_proto_perf_create("repost", &perf);
     if (status != UCS_OK) {
@@ -83,14 +88,8 @@ static void ucp_proto_repost_probe(const ucp_proto_init_params_t *params)
         return;
     }
 
-    ucp_proto_select_add_proto(params, 0, 0, perf, &rpriv, sizeof(rpriv));
-}
-
-static void
-ucp_proto_repost_query(const ucp_proto_query_params_t *params,
-                       ucp_proto_query_attr_t *attr)
-{
-    ucp_proto_default_query(params, attr);
+    ucp_proto_select_add_proto(params, UCS_MEMUNITS_AUTO, 0, perf, &rpriv,
+                               sizeof(rpriv));
 }
 
 static ucs_status_t
@@ -241,11 +240,6 @@ static void ucp_proto_repost_abort(ucp_request_t *req, ucs_status_t status)
     ucp_proto_repost_release(req, status);
 }
 
-static ucs_status_t ucp_proto_repost_bcopy_status(ssize_t packed)
-{
-    return (packed >= 0) ? UCS_OK : (ucs_status_t)packed;
-}
-
 static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
@@ -257,11 +251,6 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     ucs_status_t status;
     uct_ep_h uct_ep;
     ssize_t packed;
-
-    if (rpriv->lane == UCP_NULL_LANE) {
-        ucp_proto_repost_abort(req, UCS_ERR_UNREACHABLE);
-        return UCS_OK;
-    }
 
     uct_ep = ucp_ep_get_lane(req->send.ep, rpriv->lane);
     if (uct_ep == NULL) {
@@ -283,7 +272,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         packed      = uct_ep_am_bcopy(uct_ep, info->am.am_id,
                                       ucp_proto_repost_pack, &pack,
                                       info->am.flags);
-        status      = ucp_proto_repost_bcopy_status(packed);
+        status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_SHORT:
         status = uct_ep_put_short(uct_ep, info->rma.payload.data.buffer,
@@ -295,7 +284,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         pack.length = info->rma.payload.data.length;
         packed      = uct_ep_put_bcopy(uct_ep, ucp_proto_repost_pack, &pack,
                                        info->rma.remote_addr, info->rma.rkey);
-        status      = ucp_proto_repost_bcopy_status(packed);
+        status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
         status = uct_ep_put_zcopy(uct_ep, info->rma.payload.zcopy.iov,
@@ -322,22 +311,16 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_proto_repost_reset(ucp_request_t *req)
-{
-    return UCS_OK;
-}
-
-
 ucp_proto_t ucp_repost_proto = {
     .name     = "repost",
     .desc     = "repost an undelivered operation",
-    .flags    = UCP_PROTO_FLAG_INVALID,
+    .flags    = 0,
     .dt_mask  = UCP_DT_MASK_ALL,
     .probe    = ucp_proto_repost_probe,
-    .query    = ucp_proto_repost_query,
+    .query    = ucp_proto_default_query,
     .progress = {ucp_proto_repost_progress},
     .abort    = ucp_proto_repost_abort,
-    .reset    = ucp_proto_repost_reset
+    .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
 };
 
 
@@ -383,8 +366,7 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
     }
 
     rpriv = config->priv;
-    if ((rpriv->lane == UCP_NULL_LANE) ||
-        (ucp_ep_get_lane(ep, rpriv->lane) == NULL)) {
+    if (ucp_ep_get_lane(ep, rpriv->lane) == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
 
