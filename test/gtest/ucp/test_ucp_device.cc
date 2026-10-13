@@ -635,7 +635,7 @@ protected:
             params.with_request  = false;
             break;
         case FLUSH_WITHOUT_REQ:
-            params.with_no_delay = true;
+            params.with_no_delay = false;
             params.with_request  = false;
             params.use_flush     = true;
             break;

@@ -369,20 +369,20 @@ template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
         uct_device_ep_h tl_ep, uct_device_completion_t *tl_comp)
 {
-    auto ep = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
+    auto ep   = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto comp = &tl_comp->rc_gda;
 
     return uct_rc_mlx5_gda_check_cqe(ep, comp->channel_id, comp->wqe_idx);
 }
 
-UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
-                                          unsigned cid)
+UCS_F_DEVICE void
+uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid)
 {
-    auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    auto qp           = uct_rc_mlx5_gda_get_qp(ep, cid);
     uint64_t wqe_next = READ_ONCE(qp->sq_ready_index);
     uint32_t qpn_ds   = uct_rc_mlx5_load_const(&qp->qpn_ds);
-    auto *db_ptr      = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
-    auto dbrec_ptr    = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
+    auto *db_ptr   = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
+    auto dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
 
     doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
     doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
@@ -390,16 +390,23 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
-                                                    unsigned channel_id,
-                                                    uint64_t flags)
+                                                   unsigned channel_id,
+                                                   uint64_t flags)
 {
     auto ep  = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto cid = channel_id & ep->channel_mask;
     auto qp  = uct_rc_mlx5_gda_get_qp(ep, cid);
     uint64_t rsvd_idx;
+    unsigned lane_id;
+    unsigned num_lanes;
 
     if (flags & UCT_DEVICE_FLAG_PUSH) {
-        uct_rc_mlx5_gda_push_db(ep, cid);
+        uct_dev_exec_init<level>(lane_id, num_lanes);
+        if (lane_id == 0) {
+            uct_rc_mlx5_gda_push_db(ep, cid);
+        }
+
+        uct_dev_sync<level>();
     }
 
     rsvd_idx = READ_ONCE(qp->sq_rsvd_index);

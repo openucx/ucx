@@ -343,7 +343,7 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
 
 template<ucs_device_level_t level = UCS_DEVICE_LEVEL_BLOCK>
 UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_flush(uct_device_ep_h device_ep,
-                                                 uint64_t flags)
+                                                uint64_t flags)
 {
     return UCS_OK;
 }

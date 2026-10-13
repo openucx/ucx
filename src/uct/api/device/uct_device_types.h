@@ -66,7 +66,7 @@ typedef struct uct_ib_md_device_mem_element {
  */
 typedef enum {
     UCT_DEVICE_FLAG_NODELAY = UCS_BIT(0), /**< Complete before return. */
-    UCT_DEVICE_FLAG_PUSH    = UCS_BIT(1)  /**< Push any previously posted
+    UCT_DEVICE_FLAG_PUSH    = UCS_BIT(1), /**< Push any previously posted
                                                 operations that have not
                                                 been pushed out yet. */
 } uct_device_flags_t;
