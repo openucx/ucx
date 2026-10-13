@@ -11,7 +11,6 @@
 #include <uct/api/device/uct_device_types.h>
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
-#include <cuda/atomic>
 
 #define UCT_CUDA_IPC_WARP_SIZE 32
 #define UCT_CUDA_IPC_COPY_LOOP_UNROLL 8
