@@ -1284,8 +1284,8 @@ static UCS_F_NOINLINE void
 uct_tcp_ep_handle_invalid_am_length(uct_tcp_ep_t *ep, uint32_t length,
                                     size_t max_length)
 {
-    ucs_debug("tcp_ep %p (state %s): received AM length %u exceeds maximum %zu",
-              ep, uct_tcp_ep_cm_state[ep->conn_state].name, length, max_length);
+    ucs_diag("tcp_ep %p (state %s): received AM length %u exceeds maximum %zu",
+             ep, uct_tcp_ep_cm_state[ep->conn_state].name, length, max_length);
     uct_tcp_ep_ctx_reset(&ep->rx);
     uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
 }

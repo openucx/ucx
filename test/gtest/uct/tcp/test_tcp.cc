@@ -261,8 +261,8 @@ UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_close) {
 
 UCS_TEST_P(test_uct_tcp, reject_oversized_am)
 {
-    const uint64_t magic_number = UCT_TCP_MAGIC_NUMBER;
-    const uct_tcp_am_hdr_t hdr  = {
+    constexpr uint64_t magic_number = UCT_TCP_MAGIC_NUMBER;
+    const uct_tcp_am_hdr_t hdr      = {
         0, std::numeric_limits<uint32_t>::max()
     };
     std::vector<char> buf(sizeof(magic_number) + sizeof(hdr));
