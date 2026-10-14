@@ -1113,4 +1113,5 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 #undef UCP_FT_TESTS
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance_tf)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, shm_ib, "shm,ib")
