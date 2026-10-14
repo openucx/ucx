@@ -202,6 +202,15 @@ ucs_status_t ucp_memh_register(ucp_context_h context, ucp_mem_h memh,
                                ucp_md_map_t md_map, unsigned uct_flags,
                                const char *alloc_name);
 
+ucp_md_map_t ucp_memh_apply_reg_policy(ucp_context_h context,
+                                       ucs_memory_type_t mem_type,
+                                       ucs_sys_device_t sys_dev,
+                                       ucp_md_map_t reg_md_map);
+
+ucp_md_map_t ucp_memh_filter_dmabuf_reg_mds(
+        ucp_context_h context, ucs_sys_device_t mem_sys_dev,
+        ucp_md_map_t reg_md_map);
+
 void ucp_memh_invalidate(ucp_context_h context, ucp_mem_h memh,
                          ucs_rcache_invalidate_comp_func_t cb, void *arg,
                          ucp_md_map_t inv_md_map);
