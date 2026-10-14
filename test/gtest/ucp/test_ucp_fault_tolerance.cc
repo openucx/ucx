@@ -932,6 +932,8 @@ class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
 public:
     DISABLED_test_ucp_fault_tolerance_tf() {
         modify_config("FAILOVER_MODE", "token");
+        /* Token recovery stays selected only while indirect atomics are off. */
+        modify_config("IB_INDIRECT_ATOMIC", "n");
     }
 };
 

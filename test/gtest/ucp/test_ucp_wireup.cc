@@ -1615,6 +1615,28 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_amo)
 
+static void test_ucp_wireup_failover_err_cb(void *arg, ucp_ep_h ep,
+                                            ucs_status_t status)
+{
+}
+
+UCS_TEST_P(test_ucp_wireup_fallback_amo, failover_no_device_amo)
+{
+    ucp_ep_params_t params = get_ep_params();
+
+    params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                             UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+    params.err_handler.cb  = test_ucp_wireup_failover_err_cb;
+    params.err_handler.arg = NULL;
+
+    create_entity(false);
+    create_entity(true);
+    sender().connect(&receiver(), params);
+    EXPECT_FALSE(use_device_amo(sender().ep()));
+    test_ucp_wireup::cleanup();
+}
+
 UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
     std::vector<std::string> tls;
 
