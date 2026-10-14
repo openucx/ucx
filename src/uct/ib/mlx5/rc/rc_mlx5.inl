@@ -1985,7 +1985,9 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
                             uct_rc_mlx5_base_ep_t);
-    ucs_assert(ep != NULL);
+    if (ucs_unlikely(ep == NULL)) {
+        return 1;
+    }
 
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
