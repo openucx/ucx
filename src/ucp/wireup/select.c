@@ -539,7 +539,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
      * Pick the best local resource to satisfy the criteria.
      * best one has the highest score (from the dedicated score_func) and
      * has a reachable tl on the remote peer */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &tl_bitmap) {
         local_md_flags = criteria->local_md_flags;
         resource       = &context->tl_rscs[rsc_index].tl_rsc;
         dev_index      = context->tl_rscs[rsc_index].dev_index;
@@ -966,7 +966,7 @@ static void ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
 
     *remote_md_map &= ~UCS_BIT(dst_md_index);
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(i, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(i, &context->tl_bitmap) {
         if (context->tl_rscs[i].md_index == md_index) {
             UCS_STATIC_BITMAP_RESET(tl_bitmap, i);
         }
@@ -1365,7 +1365,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
      * connect back on p2p transport.
      */
     tl_bitmap = worker->atomic_tls;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         if (ucp_worker_is_tl_2iface(worker, rsc_index)) {
             UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
         }
@@ -3015,7 +3015,7 @@ static void ucp_wireup_filter_token_tls(ucp_worker_h worker,
     ucp_rsc_index_t rsc_index;
 
     memset(tl_bitmap_out, 0, sizeof(*tl_bitmap_out));
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap_in) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap_in) {
         if (ucp_worker_iface_get_attr_v2(worker, rsc_index)->cap.flags &
             UCT_IFACE_FLAG_V2_QUERY_TOKEN) {
             UCS_STATIC_BITMAP_SET(tl_bitmap_out, rsc_index);

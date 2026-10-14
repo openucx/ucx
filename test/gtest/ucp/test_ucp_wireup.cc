@@ -471,7 +471,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
     EXPECT_EQ(addr_v, sender().ucph()->config.ext.worker_addr_version);
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &sender().worker()->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl, &sender().worker()->context->tl_bitmap) {
         const ucp_tl_resource_desc_t &rsc =
                 sender().worker()->context->tl_rscs[tl];
         packed_dev_priorities.insert(
@@ -1104,7 +1104,7 @@ public:
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
         ucp_rsc_index_t rsc_index;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
             ucp_md_index_t md_index         = worker->context->tl_rscs[rsc_index].md_index;
             const uct_md_attr_v2_t *md_attr = &worker->context->tl_mds[md_index].attr;
 
@@ -1861,7 +1861,7 @@ public:
         params.iface_addr  = ae->iface_addr;
         params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             auto wiface = ucp_worker_iface(worker, rsc_index);
 
             /* Compare resources by md_index, transport name, and device */
@@ -2320,7 +2320,7 @@ public:
         unsigned addr_index;
         size_t seg_size;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             ucp_unpacked_address_for_each(address_entry, remote_address) {
                 addr_index = ucp_unpacked_address_index(remote_address,
                                                         address_entry);
