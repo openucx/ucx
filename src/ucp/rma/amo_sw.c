@@ -434,7 +434,8 @@ static void ucp_proto_amo_sw_probe(const ucp_proto_init_params_t *init_params,
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
-                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE,
+                               UCP_PROTO_COMMON_INIT_FLAG_CAP_SEG_SIZE |
+                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
         .super.exclude_map   = ~UCP_MAX_FAST_PATH_LANES_MASK,
         .super.reg_mem_info  = ucp_mem_info_unknown,
         .lane_type           = UCP_LANE_TYPE_AM,
@@ -482,7 +483,7 @@ ucp_proto_t ucp_get_amo_post_proto = {
     .probe    = ucp_proto_amo_sw_post_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_post},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_bcopy_abort,
     .reset    = ucp_proto_request_bcopy_reset
 };
 
@@ -511,6 +512,6 @@ ucp_proto_t ucp_get_amo_fetch_proto = {
     .probe    = ucp_proto_amo_sw_fetch_probe,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_amo_sw_progress_fetch},
-    .abort    = ucp_proto_abort_fatal_not_implemented,
+    .abort    = ucp_proto_request_bcopy_id_abort,
     .reset    = ucp_proto_request_bcopy_id_reset
 };
