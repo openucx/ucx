@@ -813,6 +813,49 @@ err_cleanup_eps:
     return status;
 }
 
+ucp_ep_h ucp_worker_cuda_async_ep_for_short(
+        ucp_worker_h worker, const ucp_memory_info_t *mem_info,
+        uct_ep_operation_t operation, ucp_lane_index_t *lane_p)
+{
+    ucp_ep_h ep = worker->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+    const ucp_ep_config_key_t *key;
+    const uct_md_attr_v2_t *md_attr;
+    ucp_lane_index_t lane;
+    uint64_t iface_flag;
+    unsigned i;
+
+    *lane_p = UCP_NULL_LANE;
+    if ((ep == NULL) || !(mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC) ||
+        ((mem_info->type != UCS_MEMORY_TYPE_CUDA) &&
+         (mem_info->type != UCS_MEMORY_TYPE_CUDA_MANAGED)) ||
+        ((operation != UCT_EP_OP_GET_SHORT) &&
+         (operation != UCT_EP_OP_PUT_SHORT))) {
+        return NULL;
+    }
+
+    iface_flag = (operation == UCT_EP_OP_GET_SHORT) ? UCT_IFACE_FLAG_GET_SHORT :
+                                                    UCT_IFACE_FLAG_PUT_SHORT;
+    key        = &ucp_ep_config(ep)->key;
+    for (i = 0; key->rma_lanes[i] != UCP_NULL_LANE; ++i) {
+        lane    = key->rma_lanes[i];
+        md_attr = ucp_ep_md_attr(ep, lane);
+        if (!(md_attr->flags & UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY) ||
+            !(ucp_ep_get_iface_attr(ep, lane)->cap.flags & iface_flag)) {
+            continue;
+        }
+
+        /* DMA-BUF CPU mapping waives only legacy peer-pinning eligibility. */
+        if (ucs_test_all_flags(mem_info->flags,
+                              md_attr->required_mem_flags &
+                                      ~UCS_MEM_FLAG_GDR_CAPABLE)) {
+            *lane_p = lane;
+            return ep;
+        }
+    }
+
+    return NULL;
+}
+
 void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
 {
     ucs_memory_type_t mem_type;

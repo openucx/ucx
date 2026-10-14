@@ -23,6 +23,9 @@ extern "C" {
 #include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
+#include <ucp/core/ucp_ep.inl>
+#include <uct/base/uct_iface.h>
+#include <uct/base/uct_md.h>
 #include <uct/api/v2/uct_v2.h>
 }
 
@@ -859,6 +862,272 @@ UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_rndv_force_cuda, shm_ib,
                                         "shm,ib")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_rma_rndv, ib, "ib")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_am_rndv, shm_ib, "shm,ib")
+
+
+class test_ucp_proto_cuda_async_short : public test_ucp_proto {
+protected:
+    class scoped_md_flags {
+    public:
+        scoped_md_flags(uct_md_attr_v2_t *md_attr, uint64_t flags) :
+            m_md_attr(md_attr), m_orig_flags(md_attr->flags),
+            m_orig_required_flags(md_attr->required_mem_flags)
+        {
+            m_md_attr->flags = flags;
+        }
+
+        ~scoped_md_flags()
+        {
+            m_md_attr->flags = m_orig_flags;
+            m_md_attr->required_mem_flags = m_orig_required_flags;
+        }
+
+        void set_required_flags(uint8_t flags)
+        {
+            m_md_attr->required_mem_flags = flags;
+        }
+
+    private:
+        uct_md_attr_v2_t *m_md_attr;
+        uint64_t m_orig_flags;
+        uint8_t m_orig_required_flags;
+    };
+
+    class scoped_copy_perf_counter {
+    public:
+        scoped_copy_perf_counter(uct_iface_h cuda_iface,
+                                 uct_iface_h managed_iface) :
+            m_ifaces{ucs_derived_of(cuda_iface, uct_base_iface_t),
+                     ucs_derived_of(managed_iface, uct_base_iface_t)},
+            m_counts{0, 0}
+        {
+            ucs_assert(m_active == nullptr);
+            ucs_assert(m_ifaces[0]->internal_ops != m_ifaces[1]->internal_ops);
+            m_active = this;
+            for (unsigned i = 0; i < 2; ++i) {
+                m_orig[i] = m_ifaces[i]->internal_ops->iface_estimate_perf;
+                m_ifaces[i]->internal_ops->iface_estimate_perf = estimate_perf;
+            }
+        }
+
+        ~scoped_copy_perf_counter()
+        {
+            for (unsigned i = 0; i < 2; ++i) {
+                m_ifaces[i]->internal_ops->iface_estimate_perf = m_orig[i];
+            }
+            m_active = nullptr;
+        }
+
+        unsigned cuda_count() const
+        {
+            return m_counts[0];
+        }
+        unsigned managed_count() const
+        {
+            return m_counts[1];
+        }
+
+    private:
+        static ucs_status_t estimate_perf(uct_iface_h iface,
+                                          uct_perf_attr_t *perf_attr)
+        {
+            unsigned i = (iface == &m_active->m_ifaces[0]->super) ? 0 : 1;
+
+            ucs_assert(iface == &m_active->m_ifaces[i]->super);
+            ++m_active->m_counts[i];
+            return m_active->m_orig[i](iface, perf_attr);
+        }
+
+        uct_base_iface_t *m_ifaces[2];
+        uct_iface_estimate_perf_func_t m_orig[2];
+        unsigned m_counts[2];
+        static scoped_copy_perf_counter *m_active;
+    };
+
+
+
+    void get_mem_type_eps(ucp_ep_h &cuda_ep, ucp_ep_h &managed_ep,
+                           ucp_lane_index_t &cuda_lane,
+                           ucp_lane_index_t &managed_lane)
+    {
+        cuda_ep    = worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+        managed_ep = worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA_MANAGED];
+        if ((cuda_ep == nullptr) || (managed_ep == nullptr)) {
+            UCS_TEST_SKIP_R("CUDA memory-type endpoints are unavailable");
+        }
+
+        cuda_lane    = ucp_ep_config(cuda_ep)->key.rma_lanes[0];
+        managed_lane = ucp_ep_config(managed_ep)->key.rma_lanes[0];
+    }
+
+    void get_short_copy_eps(ucp_ep_h &cuda_ep, ucp_ep_h &managed_ep,
+                             ucp_lane_index_t &cuda_lane,
+                             ucp_lane_index_t &managed_lane)
+    {
+        get_mem_type_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+        if (ucp_ep_md_index(cuda_ep, cuda_lane) ==
+            ucp_ep_md_index(managed_ep, managed_lane)) {
+            UCS_TEST_SKIP_R("CUDA endpoint did not select a distinct GDR MD");
+        }
+    }
+
+    void test_short_copy_perf(const ucp_memory_info_t &remote_mem_info,
+                              unsigned expected_cuda_count,
+                              unsigned expected_managed_count)
+    {
+        ucp_ep_h cuda_ep, managed_ep;
+        ucp_lane_index_t cuda_lane, managed_lane;
+        ucp_proto_perf_t *perf;
+        ucp_memory_info_t host_mem_info = {
+            UCS_MEMORY_TYPE_HOST, UCS_SYS_DEVICE_ID_UNKNOWN, 0
+        };
+
+        get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+        scoped_copy_perf_counter counter(
+                ucp_ep_get_lane(cuda_ep, cuda_lane)->iface,
+                ucp_ep_get_lane(managed_ep, managed_lane)->iface);
+
+        ASSERT_UCS_OK(ucp_proto_perf_create("short copy", &perf));
+        ASSERT_UCS_OK(ucp_proto_init_add_buffer_copy_time(
+                worker(), "remote copy", &host_mem_info, &remote_mem_info,
+                UCT_EP_OP_PUT_SHORT, 0, 1024, 0, perf));
+        ucp_proto_perf_destroy(perf);
+
+        EXPECT_EQ(expected_cuda_count, counter.cuda_count());
+        EXPECT_EQ(expected_managed_count, counter.managed_count());
+    }
+
+    void test_operation_failure(uct_ep_operation_t operation)
+    {
+        ucp_ep_h cuda_ep, managed_ep;
+        ucp_lane_index_t cuda_lane, managed_lane, lane;
+        ucp_memory_info_t info = {
+            UCS_MEMORY_TYPE_CUDA_MANAGED, UCS_SYS_DEVICE_ID_UNKNOWN,
+            UCS_MEM_FLAG_CUDA_ASYNC
+        };
+        get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+        auto *attr = &context()->tl_mds[ucp_ep_md_index(cuda_ep, cuda_lane)].attr;
+        scoped_md_flags flags(attr, (attr->flags |
+                                     UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY) &
+                                    ~UCT_MD_FLAG_NEED_RKEY);
+        ASSERT_EQ(cuda_ep, ucp_worker_cuda_async_ep_for_short(
+                                  worker(), &info, operation, &lane));
+        auto *iface = ucp_ep_get_lane(cuda_ep, lane)->iface;
+        auto *fallback = ucp_ep_get_lane(managed_ep, managed_lane)->iface;
+        auto orig = iface->ops, fallback_orig = fallback->ops;
+        auto restore = [](uct_iface_h p, void *saved) {
+            p->ops = *static_cast<uct_iface_ops_t*>(saved);
+        };
+        ucs::handle<uct_iface_h> restore_copy(iface, restore, &orig);
+        ucs::handle<uct_iface_h> restore_fallback(fallback, restore,
+                                                 &fallback_orig);
+        iface->ops.ep_get_short = [](uct_ep_h, void*, unsigned, uint64_t,
+                                     uct_rkey_t) { return UCS_ERR_IO_ERROR; };
+        iface->ops.ep_put_short = [](uct_ep_h, const void*, unsigned, uint64_t,
+                                     uct_rkey_t) { return UCS_ERR_IO_ERROR; };
+        fallback->ops.ep_get_short = [](uct_ep_h, void*, unsigned, uint64_t,
+                                        uct_rkey_t) { return UCS_OK; };
+        fallback->ops.ep_put_short = [](uct_ep_h, const void*, unsigned,
+                                        uint64_t, uct_rkey_t) { return UCS_OK; };
+        char buffer[64] = {};
+        auto saved = ucs_global_opts.handle_errors;
+        ucs_global_opts.handle_errors = 0;
+        if (operation == UCT_EP_OP_GET_SHORT) {
+            EXPECT_DEATH(ucp_mem_type_pack(worker(), buffer, buffer, 64,
+                                           UCS_MEMORY_TYPE_CUDA_MANAGED, &info),
+                         "mem type pack failed.*Input/output error");
+        } else {
+            EXPECT_DEATH(ucp_mem_type_unpack(worker(), buffer, buffer, 64,
+                                             UCS_MEMORY_TYPE_CUDA_MANAGED,
+                                             &info),
+                         "mem type unpack failed.*Input/output error");
+        }
+        ucs_global_opts.handle_errors = saved;
+    }
+};
+
+test_ucp_proto_cuda_async_short::scoped_copy_perf_counter*
+        test_ucp_proto_cuda_async_short::scoped_copy_perf_counter::m_active = nullptr;
+
+UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_route)
+{
+    auto select = ucp_worker_cuda_async_ep_for_short;
+    ucp_ep_h cuda_ep, managed_ep;
+    ucp_lane_index_t cuda_lane, managed_lane, lane;
+    ucp_memory_info_t info = {
+        UCS_MEMORY_TYPE_CUDA_MANAGED, UCS_SYS_DEVICE_ID_UNKNOWN,
+        UCS_MEM_FLAG_CUDA_ASYNC
+    };
+    get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+    auto *attr = &context()->tl_mds[ucp_ep_md_index(cuda_ep, cuda_lane)].attr;
+    scoped_md_flags flags(attr, attr->flags &
+                               ~UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY);
+    for (auto op : {UCT_EP_OP_GET_SHORT, UCT_EP_OP_PUT_SHORT}) {
+        EXPECT_EQ(nullptr, select(worker(), &info, op, &lane));
+    }
+    attr->flags |= UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY;
+    for (auto op : {UCT_EP_OP_GET_SHORT, UCT_EP_OP_PUT_SHORT}) {
+        EXPECT_EQ(cuda_ep, select(worker(), &info, op, &lane));
+        EXPECT_EQ(cuda_lane, lane);
+    }
+    flags.set_required_flags(UCS_MEM_FLAG_GDR_CAPABLE | UCS_MEM_FLAG_REGISTRABLE);
+    EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
+    info.flags |= UCS_MEM_FLAG_REGISTRABLE;
+    EXPECT_EQ(cuda_ep, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
+    info.flags = 0;
+    EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
+    info.flags = UCS_MEM_FLAG_CUDA_ASYNC;
+    info.type = UCS_MEMORY_TYPE_HOST;
+    EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
+    info.type = UCS_MEMORY_TYPE_CUDA;
+    EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_ZCOPY, &lane));
+    flags.set_required_flags(UCS_MEM_FLAG_GDR_CAPABLE);
+    auto *iface_attr = ucp_ep_get_iface_attr(cuda_ep, cuda_lane);
+    auto orig_caps = iface_attr->cap.flags;
+    ucs::handle<uct_iface_attr_t*> restore(
+            iface_attr, [](uct_iface_attr_t *p, void *saved) {
+                p->cap.flags = *static_cast<uint64_t*>(saved);
+            }, &orig_caps);
+    iface_attr->cap.flags &= ~UCT_IFACE_FLAG_GET_SHORT;
+    EXPECT_EQ(nullptr, select(worker(), &info, UCT_EP_OP_GET_SHORT, &lane));
+    EXPECT_EQ(cuda_ep, select(worker(), &info, UCT_EP_OP_PUT_SHORT, &lane));
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_short, cuda_async_short_perf)
+{
+    ucp_ep_h cuda_ep, managed_ep;
+    ucp_lane_index_t cuda_lane, managed_lane;
+    get_short_copy_eps(cuda_ep, managed_ep, cuda_lane, managed_lane);
+    auto *attr = &context()->tl_mds[ucp_ep_md_index(cuda_ep, cuda_lane)].attr;
+    scoped_md_flags flags(attr, attr->flags &
+                               ~UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY);
+    ucp_memory_info_t info = {
+        UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN, 0
+    };
+    // Retain the baseline first-lane estimate, even without GDR_CAPABLE.
+    test_short_copy_perf(info, 1, 0);
+    info.type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+    info.flags = UCS_MEM_FLAG_CUDA_ASYNC;
+    test_short_copy_perf(info, 0, 1);
+    attr->flags |= UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY;
+    test_short_copy_perf(info, 1, 0);
+    info.flags = 0;
+    test_short_copy_perf(info, 0, 1);
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_short,
+           cuda_async_operation_failure_is_not_retried)
+{
+    test_operation_failure(UCT_EP_OP_GET_SHORT);
+}
+
+UCS_TEST_P(test_ucp_proto_cuda_async_short,
+           cuda_async_put_failure_is_not_retried)
+{
+    test_operation_failure(UCT_EP_OP_PUT_SHORT);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_short, tcp_gdr_short,
+                              "tcp,cuda_copy,gdr_copy")
 
 class test_ucp_proto_cuda_async_non_reg : public test_ucp_proto {
 protected:
