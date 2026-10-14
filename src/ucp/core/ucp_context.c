@@ -2215,17 +2215,20 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
-/* Effective UCX_IB_INDIRECT_ATOMIC: IB MD default and environment, then
- * cached ucp_config_modify() overrides. */
+/* Effective UCX_IB_INDIRECT_ATOMIC on a selected IB memory domain. IB MD
+ * default and environment, then cached ucp_config_modify() overrides.
+ * Returns 0 when no IB domain was selected. */
 static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
 {
     int enabled = 1;
+    ucp_md_index_t md_index;
     ucp_rsc_index_t cmpt_index;
     uct_md_config_t *md_config;
     ucs_status_t status;
     char value[8];
 
-    for (cmpt_index = 0; cmpt_index < context->num_cmpts; ++cmpt_index) {
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        cmpt_index = context->tl_mds[md_index].cmpt_index;
         if (strcmp(context->tl_cmpts[cmpt_index].attr.name, "ib") != 0) {
             continue;
         }

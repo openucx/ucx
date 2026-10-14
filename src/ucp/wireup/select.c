@@ -1339,7 +1339,7 @@ ucp_wireup_exclude_device_amo_tls(ucp_worker_h worker,
 {
     ucp_rsc_index_t rsc_index;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
         if (!(ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags &
               UCT_IFACE_FLAG_ATOMIC_DEVICE)) {
             continue;
