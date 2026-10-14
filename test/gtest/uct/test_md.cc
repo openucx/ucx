@@ -25,8 +25,13 @@ extern "C" {
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif
+#if HAVE_CUDA && HAVE_GDR_COPY
+#include <uct/cuda/gdr_copy/gdr_copy_md.h>
+#include <cuda.h>
+#endif
 }
 #include <sys/resource.h>
+#include <dlfcn.h>
 #include <net/if_arp.h>
 #include <ifaddrs.h>
 #include <netdb.h>
@@ -1372,11 +1377,26 @@ UCS_TEST_P(test_cuda, sparse_regions)
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
-#if HAVE_DECL_GDR_PIN_BUFFER_V2
+#if HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2
 
 class test_gdr_copy : public test_md {
 protected:
+    static ucs_log_func_rc_t
+    count_errors_logger(const char *file, unsigned line, const char *function,
+                        ucs_log_level_t level,
+                        const ucs_log_component_config_t *comp_conf,
+                        const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            ++m_error_count;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
     static constexpr size_t REG_SIZE = 65536;
+    static unsigned m_error_count;
 
     ucs_status_t register_mem()
     {
@@ -1410,6 +1430,8 @@ protected:
     }
 };
 
+unsigned test_gdr_copy::m_error_count;
+
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
 {
@@ -1439,6 +1461,78 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
     ASSERT_UCS_OK(register_mem());
 }
 
+UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no")
+{
+    constexpr size_t size = 65536;
+    void *address;
+    ucs::handle<void*> buffer;
+    uct_mem_h memh;
+
+    int ret = posix_memalign(&address, size, size);
+    if (ret == 0) {
+        buffer.reset(address, free);
+    }
+    ASSERT_EQ(0, ret);
+
+    for (unsigned flags : {0u, unsigned(UCT_MD_MEM_FLAG_HIDE_ERRORS)}) {
+        m_error_count = 0;
+        ucs_status_t status;
+        {
+            scoped_log_handler slh(count_errors_logger);
+            status = reg_mem(UCT_MD_MEM_ACCESS_ALL | flags, address, size,
+                             &memh);
+        }
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, status);
+        if (flags == 0) {
+            EXPECT_GT(m_error_count, 0u);
+        } else {
+            EXPECT_EQ(0u, m_error_count);
+        }
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_qualification,
+                     !check_caps(UCT_MD_FLAG_REG))
+{
+    using detect_func_t = int (*)(gdr_t);
+    Dl_info plugin_info;
+    int expected = 0;
+
+    ASSERT_NE(0, dladdr(reinterpret_cast<void*>(md()->ops->mem_reg),
+                       &plugin_info));
+    ucs::handle<void*> plugin(
+            dlopen(plugin_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD),
+            [](void *handle) { if (handle != nullptr) { dlclose(handle); } });
+    ASSERT_NE(nullptr, plugin.get());
+    auto detect = reinterpret_cast<detect_func_t>(
+            dlsym(plugin.get(), "uct_gdr_copy_cuda_async_detect"));
+    ASSERT_NE(nullptr, detect);
+
+#if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
+    using version_func_t = void (*)(int*, int*);
+    using attribute_func_t = int (*)(gdr_t, gdr_attr_t, int*);
+    auto version = reinterpret_cast<version_func_t>(
+            dlsym(plugin.get(), "gdr_runtime_get_version"));
+    auto attribute = reinterpret_cast<attribute_func_t>(
+            dlsym(plugin.get(), "gdr_get_attribute"));
+    int major, minor, backend, driver;
+
+    ASSERT_NE(nullptr, version);
+    version(&major, &minor);
+    if (((major > 2) || ((major == 2) && (minor >= 6))) &&
+        (attribute != nullptr) && (cuDriverGetVersion(&driver) == CUDA_SUCCESS) &&
+        (driver >= 13050) &&
+        (attribute(ucs_derived_of(md(), uct_gdr_copy_md_t)->gdrcpy_ctx,
+                   GDR_ATTR_USING_DMA_BUF_MMAP, &backend) == 0)) {
+        expected = !!backend;
+    }
+#endif
+
+    EXPECT_EQ(expected,
+              detect(ucs_derived_of(md(), uct_gdr_copy_md_t)->gdrcpy_ctx));
+}
+
 /* Pinning goes through nvidia_p2p_get_pages, so memory which is not GPUDirect
  * RDMA capable must never be offered to this memory domain */
 UCS_TEST_P(test_gdr_copy, gdr_copy_requires_gdr_capable)
@@ -1459,4 +1553,4 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_async_cuda_fail,
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
 
-#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
+#endif /* HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2 */
