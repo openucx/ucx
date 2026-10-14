@@ -1213,7 +1213,7 @@ ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
         /* selects SL requested by a user */
         sl                    = ucs_ffs64(sl_allow_mask);
         if (have_sl_mask_cap) {
-            sl_ar_support_str = (sl & sls_with_ar) ? "yes" : "no";
+            sl_ar_support_str = (UCS_BIT(sl) & sls_with_ar) ? "yes" : "no";
         } else {
             sl_ar_support_str = "unknown";
         }
