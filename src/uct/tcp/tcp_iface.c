@@ -205,7 +205,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_iface_local_addr_ns_t *local_addr_ns;
     uct_tcp_device_addr_t *tcp_dev_addr;
     int is_local_loopback, is_remote_loopback;
-    struct sockaddr_storage remote_addr;
+    struct sockaddr_storage remote_addr = {0};
     char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
     unsigned ndev_index;
     ucs_status_t status;
