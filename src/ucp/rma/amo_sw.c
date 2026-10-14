@@ -239,10 +239,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
                       UCT_IFACE_FLAG_ATOMIC_DEVICE))) {
         ucs_error("Unsupported: got software atomic request while device atomics are selected on worker %p",
                   worker);
-        /* TODO: this situation will be possible then CM wireup is implemented
-         *       and CM lane is bound to suboptimal device, then need to execute
-         *       AMO on fastest resource from worker->atomic_tls using loopback
-         *       EP and continue SW AMO protocol */
+        /* TODO: This situation may occur when:
+         *       - The CM lane is bound to a suboptimal device
+         *       - An EP with error handling mode failover is used alongside
+         *         other EPs
+         *       In this case, the AMO should be executed on the fastest
+         *       resource from worker->atomic_tls using the loopback EP, and
+         *       the SW AMO protocol should continue.
+         */
     }
 
     if (atomicreqh->req.req_id == UCS_PTR_MAP_KEY_INVALID) {
