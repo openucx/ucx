@@ -711,6 +711,8 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
     ucs_status_t status;
     char buf[64];
     int64_t *cluster_uuid;
+    const char *poc_domain;
+    uint64_t poc_uuid;
 
     if (mnnvl_supported != -1) {
         goto out;
@@ -749,7 +751,22 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         memcpy(nvlink_domain.cluster_uuid, fabric_info.clusterUuid,
                UCT_CUDA_IPC_CLUSTER_UUID_LEN);
         nvlink_domain.clique_id = fabric_info.cliqueId;
-        mnnvl_supported         = 1;
+
+        poc_domain = getenv("UCX_CUDA_IPC_POC_DOMAIN");
+        if (poc_domain != NULL) {
+            poc_uuid = (*poc_domain == 'A') ? UCT_CUDA_IPC_CLUSTER_UUID_A :
+                                              UCT_CUDA_IPC_CLUSTER_UUID_B;
+            UCS_STATIC_ASSERT(UCT_CUDA_IPC_CLUSTER_UUID_LEN ==
+                              (2 * sizeof(poc_uuid)));
+            memcpy(&nvlink_domain.cluster_uuid[0], &poc_uuid,
+                   sizeof(poc_uuid));
+            memcpy(&nvlink_domain.cluster_uuid[sizeof(poc_uuid)], &poc_uuid,
+                   sizeof(poc_uuid));
+            ucs_debug("POC: overriding NVLink cluster UUID with domain %c",
+                      *poc_domain);
+        }
+
+        mnnvl_supported = 1;
         goto out;
     }
 

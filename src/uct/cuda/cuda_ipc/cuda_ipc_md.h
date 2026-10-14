@@ -45,6 +45,9 @@ typedef struct uct_cuda_ipc_md_handle {
 
 #define UCT_CUDA_IPC_CLUSTER_UUID_LEN 16
 
+#define UCT_CUDA_IPC_CLUSTER_UUID_A 0x1234567890abcdefull
+#define UCT_CUDA_IPC_CLUSTER_UUID_B 0xabcdef1234567890ull
+
 
 /**
  * @brief NVLink domain of the local GPU fabric. GPUs on different nodes can
