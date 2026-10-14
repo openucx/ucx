@@ -352,6 +352,7 @@ public:
     static const uint64_t SEND_SEED       = 0xa1a1a1a1a1a1a1a1ul;
     static const uint64_t RECV_SEED       = 0xb2b2b2b2b2b2b2b2ul;
     static const uint64_t AM_ZCOPY_SEED   = 0xc3c3c3c3c3c3c3c3ul;
+    static const uint64_t SENTINEL_SEED   = 0xd4d4d4d4d4d4d4d4ul;
     static const uint8_t AM_SHORT_ID      = 3;
     static const uint8_t AM_BCOPY_ID      = 4;
     static const uint8_t AM_ZCOPY_ID      = 5;
@@ -782,9 +783,28 @@ protected:
         const bool test_delivered = (flush_flags & UCT_FLUSH_FLAG_REMOTE) &&
                                     with_rx_token;
         if (test_delivered) {
+            const size_t sentinel_size   = ucs_min((size_t)4, size);
+            const size_t sentinel_offset = size - sentinel_size;
+            mapped_buffer sentinel_buf(sentinel_size, SENTINEL_SEED, *m_sender);
+            const uint8_t *tail = (uint8_t*)recvbuf.ptr() + sentinel_offset;
+
             ASSERT_UCS_OK(post_op(m_sender->ep(0), &ctx.comp, put_bcopy));
             post_flush(m_sender->ep(0), &delivered_ctx.comp,
                        UCT_FLUSH_FLAG_REMOTE);
+
+            ssize_t ret = uct_ep_put_bcopy(m_sender->ep(0), mapped_buffer::pack,
+                                           &sentinel_buf,
+                                           ctx.remote_addr + sentinel_offset,
+                                           ctx.rkey);
+            ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
+
+            const ucs_time_t deadline = ucs::get_deadline();
+            while ((*tail != *(uint8_t*)sentinel_buf.ptr()) &&
+                   (ucs_get_time() < deadline)) {
+                progress();
+            }
+
+            EXPECT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
         }
 
         test_purge_outstanding(put_bcopy, ctx, flush_flags, with_rx_token);
