@@ -30,6 +30,10 @@ Copyright:
  2026 Zhixian Li. All rights reserved.
  Oak Ridge National Laboratory. All rights reserved.
 License: BSD-3-clause
+Comment:
+ These copyright notices are aggregated from UCX source files covered by the
+ top-level BSD-3-clause license. Files with different terms are listed in
+ dedicated stanzas below.
 
 Files:
  src/ucs/config/ini.c
