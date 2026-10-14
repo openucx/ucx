@@ -17,7 +17,6 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
-#include <ucp/rma/rma_bw.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
@@ -2730,7 +2729,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
-    kh_init_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
@@ -2892,16 +2890,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_tag_match_cleanup;
     }
 
-    if (context->config.ext.rma_bw_measure) {
-        worker->rma_bw_samples = ucs_calloc(UCP_RMA_BW_MAX_ACTIVE,
-                                            sizeof(*worker->rma_bw_samples),
-                                            "rma_bw_samples");
-        if (worker->rma_bw_samples == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err_am_cleanup;
-        }
-    }
-
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
 
@@ -2928,7 +2916,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     return UCS_OK;
 
 err_am_cleanup:
-    ucs_free(worker->rma_bw_samples);
     ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
@@ -2961,7 +2948,6 @@ err_free:
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
-    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -3206,7 +3192,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
-    ucs_free(worker->rma_bw_samples);
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
@@ -3216,7 +3201,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
-    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
