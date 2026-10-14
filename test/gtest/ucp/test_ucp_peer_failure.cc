@@ -8,6 +8,7 @@
 
 #include "ucp_test.h"
 #include "ucp_datatype.h"
+#include "rndv_frag_mpools.h"
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>    /* for testing EP RNDV configuration */
@@ -82,16 +83,6 @@ protected:
 
     void init_buffers(size_t msg_size);
     virtual ucs_memory_type_t memtype() const;
-
-    virtual ucs_memory_type_t tx_memtype() const
-    {
-        return memtype();
-    }
-
-    virtual ucs_memory_type_t rx_memtype() const
-    {
-        return memtype();
-    }
 
     void                        *m_sreq, *m_rreq;
     std::queue<void *>          m_am_rndv_descs;
@@ -494,8 +485,8 @@ void test_ucp_peer_failure::cleanup_rndv_descs() {
 }
 
 void test_ucp_peer_failure::init_buffers(size_t msg_size) {
-    m_sbuf.reset(new mem_buffer(msg_size, tx_memtype(), TX_SEED));
-    m_rbuf.reset(new mem_buffer(msg_size, rx_memtype(), RX_SEED));
+    m_sbuf.reset(new mem_buffer(msg_size, memtype(), TX_SEED));
+    m_rbuf.reset(new mem_buffer(msg_size, memtype(), RX_SEED));
 }
 
 ucs_memory_type_t test_ucp_peer_failure::memtype() const
@@ -889,7 +880,8 @@ protected:
                                       close_fc_pending_ep_cb, self);
         }
 
-        if (self->m_close_on_alloc_failure && self->m_alloc_failed &&
+        if (self->m_close_on_alloc_failure &&
+            (rndv_frag_mpools::num_alloc_failures() > 0) &&
             (worker == self->m_fc_pending_entity->worker())) {
             self->m_close_on_alloc_failure = false;
             /* The request was aborted locally, the peer is still waiting for
@@ -901,120 +893,9 @@ protected:
         return status;
     }
 
-    static ucs_status_t fail_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
-                                         void **chunk_p)
-    {
-        self->m_alloc_failed = true;
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    /* Make every CUDA fragment mpool of the worker fail to grow */
-    void fail_cuda_fragment_alloc(ucp_worker_h worker)
-    {
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-        for (khiter_t iter = kh_begin(&worker->mpool_hash);
-             iter != kh_end(&worker->mpool_hash); ++iter) {
-            if (!kh_exist(&worker->mpool_hash, iter) ||
-                (kh_key(&worker->mpool_hash, iter).mem_type !=
-                UCS_MEMORY_TYPE_CUDA)) {
-                continue;
-            }
-
-            ucs_mpool_t *mpool = &kh_val(&worker->mpool_hash, iter);
-            m_orig_mpool_ops.emplace_back(mpool, mpool->data->ops);
-            m_fail_mpool_ops             = *mpool->data->ops;
-            m_fail_mpool_ops.chunk_alloc = fail_chunk_alloc;
-            mpool->data->ops             = &m_fail_mpool_ops;
-        }
-
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-    }
-
-    void restore_cuda_fragment_alloc(ucp_worker_h worker)
-    {
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-        for (auto &mpool_ops : m_orig_mpool_ops) {
-            mpool_ops.first->data->ops = mpool_ops.second;
-        }
-
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
-        m_orig_mpool_ops.clear();
-    }
-
-    /* Whether the next fragment allocation must grow a failing pool: with no
-     * free fragment, a pool without quota would throttle the request instead,
-     * and a pool created later would not fail */
-    bool cuda_fragment_alloc_fails(ucp_worker_h worker) const
-    {
-        bool fails = !m_orig_mpool_ops.empty();
-
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-        for (auto &mpool_ops : m_orig_mpool_ops) {
-            fails = fails && !ucs_mpool_is_empty(mpool_ops.first);
-        }
-
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
-        return fails;
-    }
-
     static bool has_fc_pending(ucp_worker_h worker, unsigned fc_op)
     {
         return !ucs_queue_is_empty(&worker->rndv_mtype_fc.pending_q[fc_op]);
-    }
-
-    static std::vector<ucp_mem_desc_t *>
-    hold_cuda_fragments(ucp_worker_h worker)
-    {
-        std::vector<ucp_mem_desc_t *> held;
-        ucp_mem_desc_t *mdesc;
-
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-        for (khiter_t iter = kh_begin(&worker->mpool_hash);
-             iter != kh_end(&worker->mpool_hash); ++iter) {
-            if (!kh_exist(&worker->mpool_hash, iter) ||
-                (kh_key(&worker->mpool_hash, iter).mem_type !=
-                UCS_MEMORY_TYPE_CUDA)) {
-                continue;
-            }
-
-            /* Terminates only because the mpool quota is finite, which
-             * requires proto v2 */
-            while ((mdesc = static_cast<ucp_mem_desc_t *>(
-                            ucs_mpool_get_inline(
-                                    &kh_val(&worker->mpool_hash, iter)))) !=
-                   nullptr) {
-                held.push_back(mdesc);
-            }
-        }
-
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
-        return held;
-    }
-
-    static void
-    release_cuda_fragments(ucp_worker_h worker,
-                           std::vector<ucp_mem_desc_t *> &held)
-    {
-        UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-        for (auto *mdesc : held) {
-            /*
-             * Return the descriptor without invoking FC rescheduling. Endpoint
-             * purge must already have removed requests from pending_q.
-             */
-            ucs_mpool_put_inline(mdesc);
-        }
-
-        UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-
-        held.clear();
     }
 
     virtual void cleanup()
@@ -1094,9 +975,10 @@ protected:
 
         /* Complete one transfer so the CUDA fragment mpool is created. */
         smoke_test(true);
-        std::vector<ucp_mem_desc_t *> held_mdescs =
-                hold_cuda_fragments(fc_entity.worker());
-        if (held_mdescs.empty()) {
+        rndv_frag_mpools frag_mpools(fc_entity.worker(),
+                                     UCS_MEMORY_TYPE_CUDA);
+        frag_mpools.hold();
+        if (frag_mpools.num_held() == 0) {
             UCS_TEST_SKIP_R("no CUDA fragments were allocated");
         }
 
@@ -1112,7 +994,7 @@ protected:
             result = smoke_test(true);
         }
 
-        release_cuda_fragments(fc_entity.worker(), held_mdescs);
+        frag_mpools.release();
         m_progress_mock.cleanup();
 
         EXPECT_TRUE(UCS_STATUS_IS_ERR(result.first));
@@ -1127,7 +1009,6 @@ protected:
     {
         const ucp_ep_config_t *sender_config = ucp_ep_config(sender().ep());
         std::pair<ucs_status_t, ucs_status_t> result;
-        std::vector<ucp_mem_desc_t *> held_mdescs;
 
         if (sender_config->key.rma_bw_lanes[0] == UCP_NULL_LANE) {
             UCS_TEST_SKIP_R("transport has no rma_bw lanes");
@@ -1140,25 +1021,23 @@ protected:
          * grows a pool up to its quota otherwise, while the next request must
          * find no free fragment and quota left, so that it has to grow. */
         smoke_test(true);
-        fail_cuda_fragment_alloc(fc_entity.worker());
+        rndv_frag_mpools frag_mpools(fc_entity.worker(),
+                                     UCS_MEMORY_TYPE_CUDA);
+        frag_mpools.fail_alloc();
         {
             /* Failing to grow a pool is logged as an error */
             scoped_log_handler slh(hide_errors_logger);
-            held_mdescs = hold_cuda_fragments(fc_entity.worker());
+            frag_mpools.hold();
         }
 
-        if (held_mdescs.empty()) {
-            restore_cuda_fragment_alloc(fc_entity.worker());
+        if (frag_mpools.num_held() == 0) {
             UCS_TEST_SKIP_R("no CUDA fragments were allocated");
         }
 
-        if (!cuda_fragment_alloc_fails(fc_entity.worker())) {
-            restore_cuda_fragment_alloc(fc_entity.worker());
-            release_cuda_fragments(fc_entity.worker(), held_mdescs);
-            FAIL() << "a CUDA fragment pool has no quota left to grow";
-        }
+        ASSERT_TRUE(frag_mpools.can_grow())
+                << "a CUDA fragment pool has no quota left to grow";
 
-        m_alloc_failed           = false;
+        rndv_frag_mpools::reset_alloc_failures();
         m_fc_pending_entity      = &fc_entity;
         m_close_on_alloc_failure = true;
         setup_progress_mock(sender().worker(), m_progress_mock);
@@ -1171,10 +1050,10 @@ protected:
         }
 
         m_progress_mock.cleanup();
-        restore_cuda_fragment_alloc(fc_entity.worker());
-        release_cuda_fragments(fc_entity.worker(), held_mdescs);
+        frag_mpools.restore_alloc();
+        frag_mpools.release();
 
-        EXPECT_TRUE(m_alloc_failed);
+        EXPECT_GT(rndv_frag_mpools::num_alloc_failures(), 0u);
         EXPECT_TRUE(m_is_peer_closed);
         EXPECT_EQ(UCS_ERR_NO_MEMORY, (&fc_entity == &sender()) ?
                                              result.first : result.second);
@@ -1189,10 +1068,6 @@ protected:
     bool              m_is_peer_closed{false};
     bool              m_close_fc_pending_ep{false};
     bool              m_close_on_alloc_failure{false};
-    volatile bool     m_alloc_failed{false};
-    ucs_mpool_ops_t   m_fail_mpool_ops{};
-    std::vector<std::pair<ucs_mpool_t*, const ucs_mpool_ops_t*>>
-                      m_orig_mpool_ops;
     std::string       m_proto_name{};
     /* Protocol stage during which data transfer happens */
     uint8_t           m_proto_xfer_stage{};
@@ -1339,47 +1214,3 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_alloc_failure,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
-
-
-/* The sender buffer is in host memory, so the RTS carries a remote key and
- * the receiver can read the data. The receiver buffer is in managed memory,
- * which the network lanes cannot register, so the receiver stages the data
- * through a fragment using rndv/get/mtype. The message fits in a single
- * fragment, so the pipeline protocol is not used. */
-class test_ucp_peer_failure_get_mtype_abort :
-      public test_ucp_peer_failure_rndv_abort {
-public:
-    static void get_test_variants(variant_vec_t &variants)
-    {
-        if (!mem_buffer::is_gpu_supported()) {
-            return;
-        }
-
-        test_ucp_peer_failure_rndv_abort::get_test_variants(variants);
-    }
-
-    ucs_memory_type_t rx_memtype() const override
-    {
-        return UCS_MEMORY_TYPE_CUDA_MANAGED;
-    }
-
-    void init() override
-    {
-        /* rndv/get/mtype is enabled by the get_ppln scheme only */
-        modify_config("RNDV_SCHEME", "get_ppln");
-        modify_config("RNDV_PIPELINE_SHM_ENABLE", "n");
-        modify_config("RNDV_PIPELINE_ERROR_HANDLING", "y");
-        test_ucp_peer_failure_rndv_abort::init();
-    }
-};
-
-UCS_TEST_P(test_ucp_peer_failure_get_mtype_abort, get_mtype_fc_pending,
-           "RNDV_FRAG_SIZE=host:32K,cuda:32K",
-           "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=32K",
-           "RNDV_FRAG_MEM_TYPE=cuda")
-{
-    rndv_fc_pending_abort_test(receiver(), UCP_WORKER_RNDV_FC_OP_GET);
-}
-
-UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_get_mtype_abort);

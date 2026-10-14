@@ -157,6 +157,11 @@ public:
         bool has_lane_with_caps(uint64_t caps,
                                 uint64_t v2_caps = 0) const;
 
+        /* Whether a rma_bw lane which can register the memory type has
+         * the given UCT_IFACE_FLAG_*_ZCOPY capability */
+        bool is_rndv_zcopy_supported(uint64_t iface_cap,
+                                     ucs_memory_type_t mem_type) const;
+
         bool is_rndv_put_ppln_supported() const;
 
         bool is_rndv_supported() const;

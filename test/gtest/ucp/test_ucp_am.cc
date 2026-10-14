@@ -2346,6 +2346,11 @@ protected:
                 << "counter is " << stats_name(e, cntr);
     }
 
+    ucp_err_handling_mode_t get_err_mode() const
+    {
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(1));
+    }
+
 private:
     ucs_memory_type_t tx_memtype() const override
     {
@@ -2355,11 +2360,6 @@ private:
     ucs_memory_type_t rx_memtype() const override
     {
         return m_mem_type;
-    }
-
-    ucp_err_handling_mode_t get_err_mode() const
-    {
-        return static_cast<ucp_err_handling_mode_t>(get_variant_value(1));
     }
 
     ucs_memory_type_t m_mem_type;
@@ -2636,6 +2636,73 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_mtype_fc, fc_disabled,
 
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_mtype_fc);
+
+
+/* The sender buffer is in host memory, so the RTS carries a remote key and
+ * the receiver can read the data. The receiver buffer is in managed memory,
+ * which the network lanes cannot register, so the receiver stages the data
+ * through a fragment using rndv/get/mtype, which is enabled by the get_ppln
+ * scheme only and does not support error handling. */
+class test_ucp_am_nbx_rndv_get_mtype_fc :
+        public test_ucp_am_nbx_rndv_mtype_fc {
+public:
+    void init() override
+    {
+        if (get_err_mode() != UCP_ERR_HANDLING_MODE_NONE) {
+            UCS_TEST_SKIP_R("rndv/get/mtype does not support error handling");
+        }
+
+        test_ucp_am_nbx_rndv_mtype_fc::init();
+    }
+
+protected:
+    ucs_memory_type_t tx_memtype() const override
+    {
+        return UCS_MEMORY_TYPE_HOST;
+    }
+
+    ucs_memory_type_t rx_memtype() const override
+    {
+        return UCS_MEMORY_TYPE_CUDA_MANAGED;
+    }
+
+    /* Only the receiver uses fragments: the sender buffer is read directly */
+    void throttle_test(size_t num_frags)
+    {
+        const uint64_t cntr = UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED;
+
+        /* The receiver reads the sender buffer, which is in host memory */
+        if (!receiver().is_rndv_zcopy_supported(UCT_IFACE_FLAG_GET_ZCOPY,
+                                                UCS_MEMORY_TYPE_HOST)) {
+            UCS_TEST_SKIP_R("rndv/get/mtype is not supported");
+        }
+
+        test_am_send_recv(get_rndv_frag_size(UCS_MEMORY_TYPE_CUDA) *
+                          num_frags);
+
+        if (get_stats(receiver(), UCP_WORKER_STAT_RNDV_RTR_MTYPE) > 0) {
+            UCS_TEST_SKIP_R("rndv/get/mtype was not selected");
+        }
+
+        EXPECT_EQ(0u, get_stats(sender(),
+                                UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY));
+        EXPECT_EQ(0u, get_stats(sender(), cntr));
+        EXPECT_GT(get_stats(receiver(), cntr), 0u)
+                << "the receiver should have been throttled";
+        verify_clean_fc_state();
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_get_mtype_fc, fc_enabled_cap_reached,
+           "RNDV_SCHEME=get_ppln", "RNDV_FRAG_SIZE=cuda:256K",
+           "RNDV_FRAG_ALLOC_COUNT=cuda:4", "RNDV_FRAG_WORKER_MAX_MEM=1M",
+           "RNDV_FRAG_MEM_TYPE=cuda")
+{
+    /* 16 fragments against a 4-fragment quota */
+    throttle_test(16);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_get_mtype_fc);
 
 #endif
 
