@@ -798,12 +798,7 @@ protected:
                                            ctx.rkey);
             ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
 
-            const ucs_time_t deadline = ucs::get_deadline();
-            while ((*tail != *(uint8_t*)sentinel_buf.ptr()) &&
-                   (ucs_get_time() < deadline)) {
-                progress();
-            }
-
+            wait_for_value(tail, *(uint8_t*)sentinel_buf.ptr(), false);
             EXPECT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
         }
 
