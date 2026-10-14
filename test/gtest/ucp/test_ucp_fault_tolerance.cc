@@ -925,7 +925,8 @@ uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
 unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token. */
+/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token, but
+ * only on transports that support token based retransmits. */
 class test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
 public:
     test_ucp_fault_tolerance_tf() {
@@ -1114,4 +1115,3 @@ UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, shm_ib, "shm,ib")
