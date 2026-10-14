@@ -31,20 +31,21 @@ public:
         static constexpr unsigned msg_size_variants[] = {
             TEST_MSG_SIZE_SMALL, TEST_MSG_SIZE_MEDIUM, TEST_MSG_SIZE_LARGE
         };
+        static constexpr unsigned rma_ops[]           = {
+            TEST_OP_PUT, TEST_OP_GET
+        };
 
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT,
-                               op_name(TEST_OP_PUT));
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_PUT | TEST_OP_FLUSH,
-                               op_name(TEST_OP_PUT | TEST_OP_FLUSH));
+        for (unsigned rma_op : rma_ops) {
+            for (unsigned msg_size_variant : msg_size_variants) {
+                add_variant_with_value(variants, UCP_FEATURE_RMA,
+                                       rma_op | msg_size_variant,
+                                       op_name(rma_op | msg_size_variant));
+            }
 
-        for (unsigned msg_size_variant : msg_size_variants) {
             add_variant_with_value(variants, UCP_FEATURE_RMA,
-                                   TEST_OP_GET | msg_size_variant,
-                                   op_name(TEST_OP_GET | msg_size_variant));
+                                   rma_op | TEST_OP_FLUSH,
+                                   op_name(rma_op | TEST_OP_FLUSH));
         }
-
-        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_OP_GET | TEST_OP_FLUSH,
-                               op_name(TEST_OP_GET | TEST_OP_FLUSH));
         add_variant_with_value(variants, UCP_FEATURE_AM,  TEST_OP_AM,
                                op_name(TEST_OP_AM));
         add_variant_with_value(variants, UCP_FEATURE_AM,

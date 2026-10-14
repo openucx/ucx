@@ -161,7 +161,10 @@ typedef enum {
     UCP_OP_ID_RNDV_RECV_DROP,
     UCP_OP_ID_RNDV_LAST,
 
-    UCP_OP_ID_LAST = UCP_OP_ID_RNDV_LAST
+    /* Internal key for the single repost protocol instance. */
+    UCP_OP_ID_REPOST,
+
+    UCP_OP_ID_LAST
 } ucp_operation_id_t;
 
 
