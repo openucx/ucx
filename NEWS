@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### UCT
+ * Added flush operation to the device API
 #### ROCM
  * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
 #### RDMA CORE (IB, ROCE, etc.)
