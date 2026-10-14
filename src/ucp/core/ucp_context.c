@@ -834,7 +834,10 @@ const char *ucp_feature_str[] = {
 };
 
 
-const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
+/* All valid resource indices, without the bits added by rounding up to words */
+const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX, UINT64_MAX,
+                                            UCS_MASK(UCP_MAX_RESOURCES %
+                                                     UCS_BITMAP_BITS_IN_WORD)}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
@@ -1588,7 +1591,7 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     p    = str;
     endp = str + max_str_len;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
         ucs_snprintf_zero(p, endp - p, "%s ",
                           context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
@@ -1750,7 +1753,7 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
         cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
@@ -3256,7 +3259,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
     }
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         md_index = context->tl_rscs[rsc_index].md_index;
         md_attr  = &context->tl_mds[md_index].attr;
         if (md_attr->flags & md_reg_flags) {
@@ -3280,7 +3283,7 @@ ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
     ucp_rsc_index_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
             continue;
         }
@@ -3296,7 +3299,7 @@ ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
     ucp_rsc_index_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
             UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
         }
