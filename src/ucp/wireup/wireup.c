@@ -1392,6 +1392,24 @@ ucp_wireup_lanes_with_tokens(ucp_lane_map_t lane_map,
     return lanes;
 }
 
+static void
+ucp_wireup_store_rx_tokens(ucp_ep_h ep,
+                           const ucp_wireup_msg_lanes_info_t *lanes_info,
+                           uint32_t request_id, int from_ack,
+                           const ucp_wireup_lane_token_t *rx_tokens)
+{
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes_info->requested_lane_map) {
+        if (rx_tokens[lane].len == 0) {
+            continue;
+        }
+
+        ucp_ep_tf_save_rx(ep, lane, request_id, from_ack,
+                          rx_tokens[lane].token, rx_tokens[lane].len);
+    }
+}
+
 /* A token in the reply means the remote side already failed that lane.
  * Invalidate it, purge it, and take it off the lane. The queue pair stays
  * alive in @a retired until the caller derives tokens. Lanes that cannot
@@ -1402,7 +1420,8 @@ ucp_wireup_invalidate_unaware_failed_lanes(
         uint32_t request_id, const ucp_wireup_lane_token_t *tx_tokens,
         const ucp_wireup_lane_token_t *rx_tokens, uct_ep_h retired[])
 {
-    ucp_lane_map_t lanes, leftover, invalidated;
+    ucp_lane_map_t invalidated = 0;
+    ucp_lane_map_t lanes, leftover;
     ucs_status_t status;
 
     if (request_id == 0) {
@@ -1414,14 +1433,19 @@ ucp_wireup_invalidate_unaware_failed_lanes(
             ucp_wireup_lanes_with_tokens(lanes_info->provided_lane_map,
                                          tx_tokens);
     lanes &= ~ucp_ep_get_failed_lanes(ep);
-    if (lanes == 0) {
-        return;
+    if (lanes != 0) {
+        invalidated = ucp_ep_tf_invalidate_lanes(ep, lanes, request_id, 0);
     }
 
-    invalidated = ucp_ep_tf_invalidate_lanes(ep, lanes, request_id, 0);
-    /* Keep the queue pairs until the reply handler derives RX tokens. */
-    ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
-    leftover    = lanes & ~invalidated;
+    /* Reply RX token is the peer receive position. Store it before the live
+     * purge, and for already-held lanes that this reply does not retire. */
+    ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
+    if (invalidated != 0) {
+        /* Keep the queue pairs until the reply handler derives RX tokens. */
+        ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
+    }
+
+    leftover = lanes & ~invalidated;
     if (leftover == 0) {
         return;
     }
@@ -1568,26 +1592,6 @@ ucp_wireup_parse_lanes_addr(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
     return UCS_OK;
 }
 
-/* -------------------------------------------------------------------------- */
-
-static void
-ucp_wireup_store_rx_tokens(ucp_ep_h ep,
-                           const ucp_wireup_msg_lanes_info_t *lanes_info,
-                           uint32_t request_id, int from_ack,
-                           const ucp_wireup_lane_token_t *rx_tokens)
-{
-    ucp_lane_index_t lane;
-
-    ucs_for_each_bit(lane, lanes_info->requested_lane_map) {
-        if (rx_tokens[lane].len == 0) {
-            continue;
-        }
-
-        ucp_ep_tf_save_rx(ep, lane, request_id, from_ack,
-                          rx_tokens[lane].token, rx_tokens[lane].len);
-    }
-}
-
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                            size_t length, unsigned flags)
 {
@@ -1667,7 +1671,6 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_invalidate_unaware_failed_lanes(ep, lanes_info,
                                                    request_id, tx_tokens,
                                                    rx_tokens, retired);
-        ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
         ucp_wireup_process_lanes_addr_reply(worker, ep, msg, lanes_info,
                                             request_id, tx_tokens,
                                             &remote_address);

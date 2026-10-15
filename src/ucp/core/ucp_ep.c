@@ -2817,13 +2817,19 @@ ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
     }
 }
 
-/* Repost owns the completion after a successful submit. */
+/* The repost protocol posts the operation and completes it. */
 static void
 ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
 {
-    ucs_status_t status;
+    ucp_proto_repost_submit(arg, op_info);
+}
 
-    status = ucp_proto_repost_submit(arg, op_info);
+/* Complete an outstanding operation. Teardown must not allocate a repost. */
+static void
+ucp_ep_tf_outstanding_cancel_cb(const uct_ep_op_info_t *op_info, void *arg)
+{
+    ucs_status_t status = UCS_PTR_STATUS(arg);
+
     if ((status != UCS_OK) &&
         (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
         ucp_invoke_uct_completion(op_info->comp, status);
@@ -2832,7 +2838,7 @@ ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
 
 /* Resolve this lane's outstanding operations. Pending requests are appended
  * to the shared queue and drained after every held lane. Outstanding
- * operations are handed to the repost protocol. */
+ * operations are canceled. */
 static void
 ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
 {
@@ -2847,8 +2853,8 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
                          &ep->ext->recovery_arg->tf_pending_q);
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                         UCT_EP_OUTSTANDING_FIELD_ARG;
-    params.cb         = ucp_ep_tf_outstanding_purge_cb;
-    params.arg        = ep;
+    params.cb         = ucp_ep_tf_outstanding_cancel_cb;
+    params.arg        = UCS_STATUS_PTR(UCS_ERR_CANCELED);
     status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
     if (status != UCS_OK) {
         ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
@@ -3123,10 +3129,15 @@ static void
 ucp_ep_tf_purge_live_ep(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
 {
     uct_ep_outstanding_purge_params_t params;
+    ucp_ep_lane_tf_t *tf;
     ucs_status_t status;
 
     ucs_assert(ep->ext->recovery_arg != NULL);
 
+    tf = ucp_ep_tf_get(ep, lane);
+
+    /* A stored reply RX token is the peer receive position. Without one,
+     * every outstanding send is undelivered. */
     uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb,
                          &ep->ext->recovery_arg->tf_pending_q);
     memset(&params, 0, sizeof(params));
@@ -3134,9 +3145,11 @@ ucp_ep_tf_purge_live_ep(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
                         UCT_EP_OUTSTANDING_FIELD_ARG;
     params.cb         = ucp_ep_tf_outstanding_purge_cb;
     params.arg        = ep;
+    if ((tf != NULL) && (tf->rx_token != NULL)) {
+        params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
+        params.rx_token = tf->rx_token;
+    }
 
-    /* The request token is the remote send position, not this endpoint's
-     * receive position, so the walk reports every local send. */
     status = uct_ep_outstanding_purge(uct_ep, &params);
     if (status != UCS_OK) {
         ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep, lane,
@@ -3172,7 +3185,9 @@ void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         old_cfg_index = ep->cfg_index;
         status        = ucp_ep_reconfig_internal(ep, UCS_BIT(lane));
         if (status != UCS_OK) {
-            ucp_ep_set_lanes_failed_schedule(ep, 0, status);
+            /* Reconfiguration failed, so the endpoint is unrecoverable. Do not
+             * purge this lane: the current configuration still selects it. */
+            ucp_ep_set_failed(ep, lane, UCS_ERR_CONNECTION_RESET);
             break;
         }
 
