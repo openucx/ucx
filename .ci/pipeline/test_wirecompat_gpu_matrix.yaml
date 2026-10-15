@@ -1,0 +1,143 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-wirecompat-gpu
+
+failFast: false
+timeout_minutes: 90
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 2Gi, cpu: 1000m}"
+  requests: "{memory: 2Gi, cpu: 1000m}"
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+
+env:
+  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+  CUDA11_IMAGE: "harbor.mellanox.com#ucx/centos7-mofed5.4-cuda11:1"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_HEAD_NODE: scctl
+  SLURM_JOB_TIMEOUT: '00:40:00'
+  SLURM_IMMEDIATE_TIMEOUT: 1800
+  SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  CI_IMAGE_TAG: "20260223-1"
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+
+matrix:
+  axes:
+    arch:
+      - x86_64
+
+taskName: '${arch}/probe'
+
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
+  - name: Probe plain
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: "set -x; hostname; id; cat /proc/self/uid_map; env | sort; ls -la /dev/nvidia* /dev/gdrdrv /dev/infiniband; nvidia-smi -L; ls /hpc/local/etc/modulefiles/dev | grep -i cuda; ls -d /usr/local/cuda*; find /usr/local/cuda/ -name libcudart.so*; which sudo unshare; sudo -n true; unshare --user whoami; for n in pid ipc net user mnt; do readlink /proc/self/ns/$n /proc/1/ns/$n; done; nproc; free -g; df -h /tmp /dev/shm .; cat /proc/sys/kernel/shmmax; ulimit -a; true"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}-a"
+
+  - name: Probe nvidia env
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: "set -x; env | grep -i nvidia; ls -la /dev/nvidia*; nvidia-smi -L; true"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}-b"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all", "HOME=/tmp"]
+
+  - name: Probe remap root
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: "set -x; id; cat /proc/self/uid_map; sudo -n true; sudo unshare --mount-proc --pid --fork sudo -u root readlink /proc/self/ns/pid; unshare --user whoami; true"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}-c"
+      extraArgs: ["--container-remap-root"]
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+  - name: Probe cuda11 image
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 20
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: "set -x; cat /etc/redhat-release; env | sort; nvidia-smi -L; ls -d /usr/local/cuda*; /usr/local/cuda/bin/nvcc --version; gcc --version; git --version; which autoconf automake libtool; ofed_info -s; true"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CUDA11_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}-d"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
