@@ -1,0 +1,126 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-udstale
+
+failFast: false
+timeout_minutes: 150
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 6000m}"
+  requests: "{memory: 16Gi, cpu: 6000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+runs_on_dockers:
+  - {
+      name: "ib-pin",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      P_ASAN: "no", P_PIN: "yes", P_LOAD: "0"
+    }
+  - {
+      name: "ib-pin-load",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      P_ASAN: "no", P_PIN: "yes", P_LOAD: "4"
+    }
+  - {
+      name: "ib-nopin",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      P_ASAN: "no", P_PIN: "no", P_LOAD: "0"
+    }
+  - {
+      name: "ib-asan-pin",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      P_ASAN: "yes", P_PIN: "yes", P_LOAD: "0"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+env:
+  P_ITER: "80"
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 140
+    run: |
+      set -x
+      allowed_cpus=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
+      first_chunk=${allowed_cpus%%,*}
+      start_cpu=${first_chunk%-*}
+      cpu_set="${start_cpu}-$((start_cpu + 1))"
+      [ "${P_PIN}" = "yes" ] || cpu_set="${allowed_cpus}"
+      echo "==== probe ${name} asan=${P_ASAN} pin=${P_PIN} load=${P_LOAD} cpus=${cpu_set} allowed=${allowed_cpus}"
+      ibv_devinfo -l || true
+
+      asan_flags=""
+      [ "${P_ASAN}" = "yes" ] && asan_flags="--enable-asan"
+      ./autogen.sh
+      mkdir -p build-test && cd build-test
+      ../contrib/configure-devel --prefix="${PWD}/install" --without-java \
+          --enable-gtest --without-valgrind ${asan_flags}
+      make -j10 -s
+      make -j10 -s -C test/gtest gtest
+
+      export UCX_HANDLE_ERRORS=bt
+      export UCX_IB_ROCE_SUBNET_PREFIX_LEN=inf
+      export ASAN_OPTIONS=protect_shadow_gap=0
+      export LSAN_OPTIONS=suppressions=${WORKSPACE}/contrib/lsan.supp
+      export GTEST_FILTER='ud_verbs/test_ud.stale_private_ep_reuse/*:ud_mlx5/test_ud.stale_private_ep_reuse/*'
+      for l in $(seq 1 ${P_LOAD}); do taskset -c "${cpu_set}" sh -c 'while :; do :; done' & done
+
+      set +xe
+      for i in $(seq 1 ${P_ITER}); do
+          timeout 300 taskset -c "${cpu_set}" make -s -C test/gtest test > it.log 2>&1
+          rc=$?
+          for t in ud_verbs ud_mlx5; do
+              if grep -q "\[       OK \] ${t}/test_ud.stale_private_ep_reuse" it.log; then
+                  r=PASS
+              else
+                  r=FAIL
+              fi
+              ms=$(grep -o "${t}/test_ud.stale_private_ep_reuse/0 ([0-9]* ms)" it.log | grep -o "[0-9]* ms")
+              echo "ITER ${i} ${t} ${r} rc=${rc} ${ms}" | tee -a probe.sum
+          done
+          if [ ${rc} -ne 0 ]; then
+              grep -B2 -A6 "Failure\|Fatal\|ERROR\|Assertion" it.log | head -40
+          fi
+      done
+      jobs -p | xargs -r kill || true
+      echo "==== SUMMARY ${name}"
+      for t in ud_verbs ud_mlx5; do
+          echo "RESULT ${name} ${t} fail=$(grep -c " ${t} FAIL" probe.sum) of $(grep -c " ${t} " probe.sum)"
+      done
+      exit 0
