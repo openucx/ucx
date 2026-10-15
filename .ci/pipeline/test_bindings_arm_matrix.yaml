@@ -1,0 +1,202 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# JUCX aarch64 tests on one DL cluster GB200 node (Slurm over SSH, dl-base
+# image), mirroring buildlib/jucx/jucx-test.yml. Java 8 and 11 run one after
+# the other in a single allocation.
+---
+job: ucx-test-bindings-arm
+
+failFast: false
+# Covers the allocation wait plus the step timeouts.
+timeout_minutes: 180
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
+
+credentials:
+  - {credentialsId: 'ucx_harbor_credentials', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
+
+env:
+  DOCKER_IMAGE: "${registry_host}#${registry_path}/aarch64/dl-base:${CI_IMAGE_TAG}"
+  SLURM_NODES: 1
+  # The account is tied to the partition by the cluster's cli_filter.
+  SLURM_PARTITION: gb200nvl72_ci
+  SLURM_ACCOUNT: oberon-gb-ci
+  SLURM_HEAD_NODE: dlcluster.nvidia.com
+  SLURM_HEAD_USER: svcnbu-swx-hpcx
+  SLURM_JOB_TIMEOUT: '01:30:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  CONTAINER_NAME: "ucx-ci-jucx-${BUILD_NUMBER}"
+  CI_IMAGE_TAG: "20260906-1"
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.dl-base',
+     name: 'dl-base',
+     arch: "aarch64",
+     tag: "${CI_IMAGE_TAG}"
+    }
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_dl',
+     arch: "aarch64",
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04 --build-arg ARCH=aarch64'
+    }
+
+matrix:
+  axes:
+    arch:
+      - aarch64
+
+taskName: '${arch}/${name}'
+
+# Scripts are single lines: the head node login shell is tcsh.
+steps:
+  - name: Allocate
+    containerSelector: "{name: 'build_helper_dl'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "${CONTAINER_NAME}"
+      # Build number last: pipeline_stop finds files by job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      extraArgs: ["--account=${SLURM_ACCOUNT}"]
+
+  # All steps share the container, so later steps find the checkout and JDK 11.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 20
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      # dl-base has JDK 8 and 21; JDK 11 and ip (used by get_ip) come from apt.
+      testScript: "set -xe; apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openjdk-11-jdk-headless iproute2; git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      extraArgs: ["--container-remap-root"]
+
+  # JUCX steps mirror buildlib/jucx/jucx-test.yml; jucx_jdk selects the JDK.
+  - name: JUCX Build UCX java8
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      testScript: &jucx_build 'set -xeE; git clean -xdfq; export JAVA_HOME=/usr/lib/jvm/$jucx_jdk; export PATH=/usr/lib/jvm/$jucx_jdk/bin:$(printenv PATH); ./autogen.sh; ./contrib/configure-devel --prefix=$(pwd)/install --with-java --enable-gtest=no --with-cuda=no; make -j32; make install'
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["jucx_jdk=java-8-openjdk-arm64"]
+
+  - name: JUCX Publish-Local
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      testScript: 'set -xeE; export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-arm64; export PATH=/usr/lib/jvm/java-8-openjdk-arm64/bin:$(printenv PATH); make -C bindings/java/src/main/native/ publish-local JUCX_VERSION=$(git describe --tags | cut -c2-)'
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+
+  - name: JUCX Tests java8
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      testScript: &jucx_test 'set -xeE; export JAVA_HOME=/usr/lib/jvm/$jucx_jdk; export PATH=/usr/lib/jvm/$jucx_jdk/bin:$(printenv PATH); ulimit -l unlimited; unset UCX_NET_DEVICES; source buildlib/az-helpers.sh; ifaces=$(get_rdma_interfaces); if [ -z "$ifaces" ]; then echo ERROR: No active RDMA interfaces on machine; exit 1; fi; jport=$((20000 + RANDOM % 10000)); export JUCX_TEST_PORT=$jport; make -C bindings/java/src/main/native test; make -C bindings/java/src/main/native package; ipv4_found=0; for iface in $ifaces; do sip=$(get_ip $iface); if [ -z "$sip" ]; then continue; fi; echo Running standalone benchmark on $iface:$jport; java -XX:ErrorFile=hs_err_%p.log -XX:OnError="cat hs_err_%p.log" -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver s=$sip p=$jport t=1000000 & sleep 10; java -XX:ErrorFile=hs_err_%p.log -XX:OnError="cat hs_err_%p.log" -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" org.openucx.jucx.examples.UcxReadBWBenchmarkSender s=$sip p=$jport t=1000000; wait; ipv4_found=1; done; if [ $ipv4_found -eq 0 ]; then echo ERROR: No IPv4 address on any of $ifaces; exit 1; fi'
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["jucx_jdk=java-8-openjdk-arm64"]
+
+  - name: JUCX Build UCX java11
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      testScript: *jucx_build
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["jucx_jdk=java-11-openjdk-arm64"]
+
+  - name: JUCX Tests java11
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      testScript: *jucx_test
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["jucx_jdk=java-11-openjdk-arm64"]
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_dl'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SSH_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    headUser: "${SLURM_HEAD_USER}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
