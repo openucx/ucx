@@ -11,11 +11,13 @@ kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
 
+# Without a hugepages request legacy UCX gets SIGBUS opening shm (mm) ifaces.
 # RAM-backed /dev/shm for shm transports; counts toward pod memory.
 empty_volumes:
   - {mountPath: /dev/shm, memory: true}
 
 runs_on_dockers:
+  # Ubuntu 22.04 (GCC 11): UCX v1.14.0 does not build with GCC 13.
   # HCA RoCE (CX7)
   - {
       name: "hca-roce",
@@ -48,7 +50,7 @@ taskName: '${name}/${arch}'
 env:
   RUNNING_IN_AZURE: "no"
   BUILD_REPOSITORY_URI: "https://github.com/openucx/ucx.git"
-  UCX_LEGACY_TAGS: "v1.14.0 v1.18.x"
+  UCX_LEGACY_TAGS: "v1.14.0 v1.15.x v1.16.x v1.17.x v1.18.x"
   AZP_AGENT_ID: "0"
 
 steps:
@@ -68,9 +70,6 @@ steps:
     timeout: 120
     run: |
       source buildlib/az-helpers.sh
-      df -h /dev/shm; grep -i huge /proc/meminfo; cat /proc/self/cgroup; ls /sys/fs/cgroup | grep -i huge || true; cat /sys/fs/cgroup/hugetlb.2MB.max /sys/fs/cgroup/hugetlb/hugetlb.2MB.limit_in_bytes || true
-      ${WORKSPACE}/ucx-install-current/bin/ucx_info -d | grep -c Transport || true
-      UCX_POSIX_HUGETLB_MODE=n ${WORKSPACE}/ucx-install-current/bin/ucx_info -d | grep -c Transport || true
       export UCX_PR_LIB_PATH=${WORKSPACE}/ucx-install-current/lib
       failed=""
       set +e
