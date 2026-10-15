@@ -48,6 +48,21 @@ if (currentPrNumber) {
     targets.addAll(staleBuilds.collect { [env.JOB_NAME, it.number] })
     staleBuilds = null
 
+    // Stop gracefully first so pipeline_stop can release Slurm allocations.
+    targets.each { t ->
+      if (Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.isBuilding()) {
+        echo "Stopping ${t[0]} #${t[1]}"
+        Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.doStop()
+      }
+    }
+    for (int i = 0; i < 30; i++) {
+      def stopping = targets.findAll { t ->
+        Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.isBuilding()
+      }
+      if (!stopping) break
+      sleep 10
+    }
+
     for (int attempt = 1; attempt <= 3; attempt++) {
       def alive = targets.findAll { t ->
         Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.isBuilding()
