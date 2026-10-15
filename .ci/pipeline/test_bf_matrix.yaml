@@ -5,14 +5,15 @@
 job: ucx-test-bf
 
 failFast: false
-timeout_minutes: 360
+timeout_minutes: 600
+# BF3 nodes fit two of these pods each; run the plain and ASan rows in turn.
+batchSize: 4
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
-  # 8 pods share two 16-core/31G BF3 DPUs, four per node.
-  limits: "{memory: 6Gi, cpu: 3000m}"
-  requests: "{memory: 6Gi, cpu: 3000m}"
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  requests: "{memory: 10Gi, cpu: 6000m}"
 
 empty_volumes:
   - {mountPath: /dev/shm, memory: true}
@@ -62,7 +63,7 @@ env:
 steps:
   - name: Test
     parallel: false
-    timeout: 330
+    timeout: 290
     run: |
       # Host network and CPUs are shared, so each pod gets its own ports and 2 CPUs.
       slot=$((SLOT_BASE + worker))
