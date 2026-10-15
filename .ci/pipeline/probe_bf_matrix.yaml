@@ -23,7 +23,8 @@ runs_on_dockers:
       arch: aarch64,
       nodeSelector: "hardware.node.kubernetes.io=BF3",
       tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
-      caps_add: "[ IPC_LOCK, NET_RAW ]"
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true
     }
   - {
       name: "bf4",
@@ -31,7 +32,8 @@ runs_on_dockers:
       arch: aarch64,
       nodeSelector: "hardware.node.kubernetes.io=BF4",
       tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF4', effect: 'NoSchedule'}]",
-      caps_add: "[ IPC_LOCK, NET_RAW ]"
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true
     }
 
 matrix:
