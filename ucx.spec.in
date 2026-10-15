@@ -442,6 +442,7 @@ runtime library is loaded at run time.
 
 %files rdu
 %{_libdir}/ucx/libuct_rdu.so.*
+%{_libdir}/ucx/libucm_rdu.so.*
 %endif
 
 %if %{with gda}

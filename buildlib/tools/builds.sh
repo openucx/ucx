@@ -445,6 +445,7 @@ build_rdu() {
 	# Compilation check: configure must have enabled the RDU modules.
 	grep '#define HAVE_RDU 1' config.h
 	test -f src/uct/rdu/.libs/libuct_rdu.so
+	test -f src/ucm/rdu/.libs/libucm_rdu.so
 
 	make_clean distclean
 }
