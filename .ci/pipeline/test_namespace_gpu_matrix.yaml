@@ -89,6 +89,24 @@ steps:
       containerName: "ucx-ci-gpuns-${BUILD_NUMBER}"
       extraArgs: ["--container-remap-root"]
 
+  # The CUDA image has no sudo; apt's sandbox user is not mapped in the container.
+  - name: Install sudo
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
+      testScript: "apt-get -o APT::Sandbox::User=root update && apt-get -o APT::Sandbox::User=root install -y sudo"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuns-${BUILD_NUMBER}"
+      extraArgs: ["--container-remap-root"]
+      slurmEnv: ["DEBIAN_FRONTEND=noninteractive"]
+
   - name: Run namespace test
     containerSelector: "{name: 'build_helper_ucx'}"
     timeout: 30
