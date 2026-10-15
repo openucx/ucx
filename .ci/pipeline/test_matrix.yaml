@@ -32,7 +32,8 @@ runs_on_dockers:
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
       limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
       requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]"
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      TEST_PERF: "0"
     }
   # HCA IB (CX8)
   - {
@@ -43,7 +44,34 @@ runs_on_dockers:
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
       limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
       requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]"
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      TEST_PERF: "1"
+    }
+
+  # AddressSanitizer on both fabrics
+  - {
+      name: "hca-roce-asan",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      TEST_PERF: "0",
+      ASAN_CHECK: "yes"
+    }
+  - {
+      name: "hca-ib-asan",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      TEST_PERF: "0",
+      ASAN_CHECK: "yes"
     }
 
 matrix:
@@ -55,7 +83,6 @@ taskName: '${name}/${arch}/w${worker}'
 
 env:
   RUN_TESTS: "yes"
-  TEST_PERF: "0"
   VALGRIND_CHECK: "no"
   nworkers: "4"
   STEP_TIMEOUT_MINUTES: "120"
