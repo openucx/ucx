@@ -97,7 +97,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
-      testScript: "git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      testScript: "mkdir -p /ws && cd /ws && git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
@@ -114,7 +114,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
-      testScript: "./contrib/test_jenkins.sh"
+      testScript: "cd /ws && ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
