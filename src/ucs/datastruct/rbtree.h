@@ -33,19 +33,55 @@ struct ucs_rbtree_node {
 
 
 /**
+ * Recompute one node's derived attribute, invoked bottom-up on every node
+ * whose subtree changed.
+ *
+ * The object embedding a node may cache an attribute summarizing that node's
+ * whole subtree. ucs_interval_map_t, for instance, keeps the largest interval
+ * end below each node. The callback recomputes that attribute for a single node
+ * from the node itself and the attribute already stored in its two children.
+ *
+ * The attribute must be a function of the subtree's node set - a maximum, sum
+ * or count - and not of its shape. A rotation re-augments only the two rotated
+ * nodes, because it leaves every ancestor's node set unchanged; a
+ * shape-dependent attribute such as height would go stale above it.
+ *
+ * The node being inserted is one of those visited, so whatever the attribute
+ * is derived from must already be set when ucs_rbtree_insert_at() is called.
+ */
+typedef void (*ucs_rbtree_augment_cb_t)(ucs_rbtree_node_t *node);
+
+
+/**
  * Intrusive red-black tree.
  */
 typedef struct {
-    ucs_rbtree_node_t *root; /**< Root node, NULL when empty */
+    ucs_rbtree_node_t      *root;      /**< Root node, NULL when empty */
+    ucs_rbtree_augment_cb_t augment;   /**< Derived-data hook, NULL if unused */
+    size_t                  num_nodes; /**< Number of nodes in the tree */
 } ucs_rbtree_t;
+
+
+/**
+ * @brief Number of nodes in the tree
+ *
+ * @param [in]  tree  Tree to query.
+ *
+ * @return Number of nodes currently in @a tree.
+ */
+static UCS_F_ALWAYS_INLINE size_t ucs_rbtree_count(const ucs_rbtree_t *tree)
+{
+    return tree->num_nodes;
+}
 
 
 /**
  * @brief Initialize an empty tree
  *
- * @param [in]  tree  Tree to initialize.
+ * @param [in]  tree     Tree to initialize.
+ * @param [in]  augment  Derived-data hook, or NULL if the caller keeps none.
  */
-void ucs_rbtree_init(ucs_rbtree_t *tree);
+void ucs_rbtree_init(ucs_rbtree_t *tree, ucs_rbtree_augment_cb_t augment);
 
 
 /**

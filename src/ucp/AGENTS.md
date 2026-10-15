@@ -60,6 +60,9 @@ applications. Almost every meaningful UCX feature lives here.
 - For data sent during wireup (worker addresses, capability bits, etc.),
   the pack/unpack lives in `wireup/address.c` — anything that needs to
   cross the wire at handshake time must round-trip through it.
+- Iterate TL bitmaps with `UCP_TL_BITMAP_FOR_EACH_BIT`, not
+  `UCS_STATIC_BITMAP_FOR_EACH_BIT`, and use `ucp_tl_bitmap_ffs` over
+  `UCS_STATIC_BITMAP_FFS`.
 
 ## Pointers
 

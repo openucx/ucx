@@ -110,6 +110,13 @@ static const char *ucp_fence_modes[] = {
     [UCP_FENCE_MODE_LAST]     = NULL
 };
 
+static const char *ucp_failover_modes[] = {
+    [UCP_FAILOVER_MODE_AUTO]  = "auto",
+    [UCP_FAILOVER_MODE_SW]    = "sw",
+    [UCP_FAILOVER_MODE_TOKEN] = "token",
+    [UCP_FAILOVER_MODE_LAST]  = NULL
+};
+
 static const char *ucp_gpu_nic_assignment_modes[] = {
     [UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO]        = "auto",
     [UCP_GPU_NIC_ASSIGNMENT_MODE_OFF]         = "off",
@@ -471,6 +478,20 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
 
+  {"FAILOVER_MODE", "auto",
+   "Failover method for endpoints created with\n"
+   "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
+   " auto  - auto selected recovery protocol. Transport selection is\n"
+   "         unchanged. Selects software PSN when UCX_IB_INDIRECT_ATOMIC\n"
+   "         is enabled.\n"
+   " sw    - force software PSN based recovery protocol. Transport\n"
+   "         selection is unchanged.\n"
+   " token - force token based retransmits. Transports that do not support\n"
+   "         the required capabilities are disabled. Rejected when\n"
+   "         UCX_IB_INDIRECT_ATOMIC is enabled.",
+   ucs_offsetof(ucp_context_config_t, failover_mode),
+   UCS_CONFIG_TYPE_ENUM(ucp_failover_modes)},
+
   {"DYNAMIC_TL_SWITCH_INTERVAL", "inf",
    "Time interval between dynamic transport switching rounds. Must be\n"
    "non-zero value. use 'inf' to disable this feature.",
@@ -629,7 +650,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
    "for a GPU's memory to the NICs assigned to that GPU.\n"
-   "All ports of a NIC are assigned together.\n"
+   "Only protocol lanes are restricted, not the NICs the memory is\n"
+   "registered on, which UCX_MAX_HCA_PER_GPU controls independently.\n"
+   "The first Active Message lane is not restricted.\n"
+   "UCX_SINGLE_NET_DEVICE=y is not supported while an assignment is active.\n"
+   "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
+   "address are assigned together (e.g. MLOPart partitions of a GPU).\n"
+   "NICs without memory registration and DPUs are skipped during assignment.\n"
+   "NICs excluded by UCX_NET_DEVICES or UCX_TLS are ignored.\n"
    "The 'flip', 'round_robin' and 'shared' modes apply on any hardware.\n"
    "With 'flip' and 'round_robin', a group with fewer NICs than GPUs leaves\n"
    "some GPUs without any NICs.\n"
@@ -827,7 +855,10 @@ const char *ucp_feature_str[] = {
 };
 
 
-const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
+/* All valid resource indices, without the bits added by rounding up to words */
+const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX, UINT64_MAX,
+                                            UCS_MASK(UCP_MAX_RESOURCES %
+                                                     UCS_BITMAP_BITS_IN_WORD)}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
@@ -1581,7 +1612,7 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     p    = str;
     endp = str + max_str_len;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
         ucs_snprintf_zero(p, endp - p, "%s ",
                           context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
@@ -1743,7 +1774,7 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
         cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
@@ -2184,6 +2215,67 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
+/* Effective UCX_IB_INDIRECT_ATOMIC on a selected IB memory domain. IB MD
+ * default and environment, then cached ucp_config_modify() overrides.
+ * Returns 0 when no IB domain was selected. */
+static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
+{
+    int enabled = 1;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t cmpt_index;
+    uct_md_config_t *md_config;
+    ucs_status_t status;
+    char value[8];
+
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        cmpt_index = context->tl_mds[md_index].cmpt_index;
+        if (strcmp(context->tl_cmpts[cmpt_index].attr.name, "ib") != 0) {
+            continue;
+        }
+
+        status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt,
+                                    NULL, NULL, &md_config);
+        if (status != UCS_OK) {
+            return 1;
+        }
+
+        ucp_apply_uct_config_list(context, md_config);
+        status = uct_config_get(md_config, "INDIRECT_ATOMIC", value,
+                                sizeof(value));
+        if ((status != UCS_OK) ||
+            (ucs_config_sscanf_bool(value, &enabled, NULL) == 0)) {
+            enabled = 1;
+        }
+
+        uct_config_release(md_config);
+        return enabled;
+    }
+
+    return 0;
+}
+
+/* Indirect atomics have no token replay. */
+static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
+{
+    int enabled = ucp_context_query_ib_indirect_atomic(context);
+
+    if (!enabled) {
+        return UCS_OK;
+    }
+
+    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
+        ucs_error("UCX_FAILOVER_MODE=token requires "
+                  "UCX_IB_INDIRECT_ATOMIC=n");
+        return UCS_ERR_INVALID_PARAM;
+    } else if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+        ucs_debug("ib indirect atomic is enabled, failover mode auto "
+                  "selects software psn recovery");
+        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 {
@@ -2338,6 +2430,11 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
     ucp_fill_sockaddr_prio_list(context, config);
 
     ucp_context_log_tl_info(context, &all_rscs);
+
+    status = ucp_context_adjust_failover_mode(context);
+    if (status != UCS_OK) {
+        goto err_free_resources;
+    }
 
 out_release_components:
     ucs_array_cleanup_dynamic(&all_rscs);
@@ -2542,13 +2639,15 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rndv_chunk_size == 0) {
         ucs_error("minimum chunk size for rendezvous protocol must be greater"
                   " than 0");
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
     }
 
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
     }
 
     /* Save environment prefix to later notify user for unused variables */
@@ -2690,7 +2789,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         !context->config.ext.proto_enable) {
         ucs_error("UCX_FENCE_MODE=ep_based requires UCX_PROTO_ENABLE=y");
         status = UCS_ERR_INVALID_PARAM;
-        goto err_free_key_list;
+        goto err_free_am_mpool_sizes;
     } else if (context->config.ext.fence_mode == UCP_FENCE_MODE_AUTO) {
         if ((context->config.ext.max_rma_lanes > 1) ||
             context->config.ext.proto_enable) {
@@ -2711,6 +2810,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     return UCS_OK;
 
+err_free_am_mpool_sizes:
+    ucs_free(context->config.am_mpools.sizes);
 err_free_key_list:
     ucp_cached_key_list_release(&context->cached_key_list);
 err_free_alloc_methods:
@@ -2783,15 +2884,86 @@ ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
     ucs_debug("Configured with: %s", UCX_CONFIGURE_FLAGS);
 }
 
-static ucs_status_t
-ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
-                                    ucp_gpu_nic_assignment_t **assignment_p)
+static int
+ucp_context_is_net_device_assignable(ucp_context_h context,
+                                     const ucp_tl_resource_desc_t *rsc)
 {
+    const uct_tl_resource_desc_t *resource = &rsc->tl_rsc;
+    const ucp_tl_md_t *md                  = &context->tl_mds[rsc->md_index];
+
+    if ((resource->dev_type != UCT_DEVICE_TYPE_NET) ||
+        (resource->sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        return 0;
+    }
+
+    if (rsc->flags & UCP_TL_RSC_FLAG_AUX) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: auxiliary transport",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    if (!(md->attr.flags & UCT_MD_FLAG_REG)) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: no memory registration",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    if (ucs_topo_sys_device_get_flags(resource->sys_device) &
+        UCS_TOPO_DEVICE_FLAG_DPU) {
+        ucs_debug(UCT_TL_RESOURCE_DESC_FMT
+                  " is ignored for gpu-nic assignment: dpu device",
+                  UCT_TL_RESOURCE_DESC_ARG(resource));
+        return 0;
+    }
+
+    ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is used for gpu-nic assignment",
+              UCT_TL_RESOURCE_DESC_ARG(resource));
+    return 1;
+}
+
+static void ucp_context_gpu_nic_assignment_net_device_filter_init(
+        ucp_context_h context, ucs_sys_device_bitmap_t *net_device_filter)
+{
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+        if (ucp_context_is_net_device_assignable(context, rsc)) {
+            UCS_STATIC_BITMAP_SET(net_device_filter, rsc->tl_rsc.sys_device);
+        }
+    }
+}
+
+static ucs_status_t
+ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
+                                            ucp_gpu_nic_assignment_mode_t mode)
+{
+    const char *conflict;
+
+    if (!context->config.ext.proto_enable) {
+        conflict = "UCX_PROTO_ENABLE=n";
+    } else if (context->config.ext.proto_use_single_net_device) {
+        conflict = "UCX_SINGLE_NET_DEVICE=y";
+    } else {
+        return UCS_OK;
+    }
+
+    ucs_error("%s is not supported by gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to use it",
+              conflict, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
+static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
+{
+    ucp_gpu_nic_assignment_mode_t mode =
+            context->config.ext.gpu_nic_assignment_mode;
+    ucs_sys_device_bitmap_t net_device_filter =
+            UCS_STATIC_BITMAP_ZERO_INITIALIZER;
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
     ucs_status_t status;
-
-    *assignment_p = NULL;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
         /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
@@ -2810,13 +2982,36 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
-    status = ucs_topo_build_groups(&groups);
+    ucp_context_gpu_nic_assignment_net_device_filter_init(context,
+                                                          &net_device_filter);
+    if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
+        if (context->config.ext.gpu_nic_assignment_mode ==
+            UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+            ucs_diag("gpu-nic assignment is disabled: no assignable network "
+                     "devices");
+            return UCS_OK;
+        }
+
+        ucs_error("no assignable network devices for gpu-nic assignment mode "
+                  "%s, set UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
+                  ucp_gpu_nic_assignment_modes[mode]);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_topo_build_groups(&net_device_filter, &groups);
     if (status != UCS_OK) {
         return status;
     }
 
     if (ucs_array_is_empty(&groups)) {
         ucs_diag("topology groups are empty, skipping gpu-nic assignment");
+        goto out_release_groups;
+    }
+
+    /* Checked after every case that skips the assignment, so a conflict is
+     * reported only when the assignment is about to be built */
+    status = ucp_context_gpu_nic_assignment_check_config(context, mode);
+    if (status != UCS_OK) {
         goto out_release_groups;
     }
 
@@ -2833,7 +3028,7 @@ ucp_context_gpu_nic_assignment_init(ucp_gpu_nic_assignment_mode_t mode,
         goto out_release_groups;
     }
 
-    *assignment_p = assignment;
+    context->gpu_nic_assignment = assignment;
 
 out_release_groups:
     ucs_topo_release_groups(&groups);
@@ -2894,9 +3089,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_thread_lock_finalize;
     }
 
-    status = ucp_context_gpu_nic_assignment_init(
-            context->config.ext.gpu_nic_assignment_mode,
-            &context->gpu_nic_assignment);
+    status = ucp_context_gpu_nic_assignment_init(context);
     if (status != UCS_OK) {
         goto err_free_res;
     }
@@ -3157,7 +3350,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
     }
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         md_index = context->tl_rscs[rsc_index].md_index;
         md_attr  = &context->tl_mds[md_index].attr;
         if (md_attr->flags & md_reg_flags) {
@@ -3181,7 +3374,7 @@ ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
     ucp_rsc_index_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
             continue;
         }
@@ -3197,7 +3390,7 @@ ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
     ucp_rsc_index_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
             UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
         }

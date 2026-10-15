@@ -14,8 +14,8 @@ no transport or protocol logic — only foundational utilities.
 - `datastruct/` — generic containers: `mpool`, `mpool_set`, `ptr_array`,
   `ptr_map`, `khash`, `list`/`hlist`/`queue`, `callbackq`, `arbiter`,
   `pgtable`, `bitmap`/`static_bitmap`/`dynamic_bitmap`, `frag_list`,
-  `interval_tree`, `rbtree`, `lru`, `mpmc`, `strided_alloc`, `string_buffer`,
-  `string_set`, `array`, `usage_tracker`, `conn_match`,
+  `interval_tree`, `interval_map`, `rbtree`, `lru`, `mpmc`, `strided_alloc`,
+  `string_buffer`, `string_set`, `array`, `usage_tracker`, `conn_match`,
   `linear_func`/`piecewise_func`, `sglib`.
 - `debug/` — `assert`, `log`, `memtrack` (allocation accounting), `debug` (BFD
   symbol resolution, backtraces).

@@ -736,7 +736,7 @@ typedef struct uct_ep_connect_to_ep_params {
  * @ingroup UCT_RESOURCE
  * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
  */
- typedef struct {
+typedef struct {
     /**
      * Mask of valid fields in this structure. Must currently be equal to zero.
      * Fields not specified in this mask will be ignored. Provides ABI
@@ -1945,12 +1945,14 @@ typedef enum {
 typedef struct {
     /** Mask of valid fields, using bits from @ref
      *  uct_ep_outstanding_purge_field_t. @ref
-     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN and @ref
-     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. */
+     *  UCT_EP_OUTSTANDING_FIELD_CB must be set. If @ref
+     *  UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, every outstanding
+     *  operation is treated as undelivered. */
     uint64_t                            field_mask;
 
     /**
      * Opaque RX token received from the remote peer.
+     * Valid when @ref UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is set.
      */
     const void                          *rx_token;
 
@@ -1972,9 +1974,17 @@ typedef struct {
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
  *
- * @note This routine should be called only after the error handler for @a ep
- *       returns @ref UCS_INPROGRESS. It can be used only if the interface
- *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ * @note This routine invalidates @a ep and reports undelivered operations.
+ *       A later completion does not call the error handler. It can also be
+ *       used after the error handler returns @ref UCS_INPROGRESS. The
+ *       interface must support @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
+ *
+ * @note The pending queue of @a ep must be empty. Remove posted requests
+ *       with @ref uct_ep_pending_purge.
+ *
+ * @note If @ref UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, @a cb may also
+ *       be invoked for operations the peer already received. Reposting those
+ *       operations can duplicate data.
  */
 ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,

@@ -110,6 +110,7 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
     };
     ze_result_t ret;
     unsigned group_index, i;
+    ucs_status_t status;
 
     ret = ze_init_devices();
     if (ret != ZE_RESULT_SUCCESS) {
@@ -117,7 +118,11 @@ static ucs_status_t ucx_perf_ze_init(ucx_perf_context_t *perf)
     }
 
     group_index = rte_call(perf, group_index);
-    i           = group_index % gpu_count;
+    status      = ucx_perf_get_device_index(perf, group_index, gpu_count, "ze",
+                                            &i);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if ((tls_cmdlist != NULL) && (tls_gpu_index != i)) {
         ucx_perf_ze_destroy_tls_cmdlist();
@@ -287,6 +292,7 @@ static void *ucx_perf_ze_memset(void *dst, int value, size_t count)
 
 static ucx_perf_allocator_t ze_host_allocator = {
     .name             = "ze-host",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_ZE_HOST,
     .init             = ucx_perf_ze_init,
     .uct_alloc        = uct_perf_ze_host_alloc,
@@ -298,6 +304,7 @@ static ucx_perf_allocator_t ze_host_allocator = {
 
 static ucx_perf_allocator_t ze_device_allocator = {
     .name             = "ze-device",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_ZE_DEVICE,
     .init             = ucx_perf_ze_init,
     .uct_alloc        = uct_perf_ze_device_alloc,
@@ -309,6 +316,7 @@ static ucx_perf_allocator_t ze_device_allocator = {
 
 static ucx_perf_allocator_t ze_managed_allocator = {
     .name             = "ze-managed",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
     .default_mem_type = UCS_MEMORY_TYPE_ZE_MANAGED,
     .init             = ucx_perf_ze_init,
     .uct_alloc        = uct_perf_ze_managed_alloc,

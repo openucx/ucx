@@ -200,7 +200,7 @@ ucp_device_get_tl_bitmap(const ucp_worker_h worker,
         UCS_STATIC_BITMAP_RESET_ALL(&tl_bitmap[tl_type]);
     }
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &worker->context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, tl_id);
 
         if (!(wiface->attr.cap.flags & UCT_IFACE_FLAG_DEVICE_EP)) {
@@ -285,7 +285,8 @@ static ucs_status_t ucp_device_mem_list_export_handle(
         return status;
     }
 
-    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type);
+    ucp_mem_type_unpack(worker, mem->address, handle, handle_size, mem_type,
+                        NULL);
     return UCS_OK;
 }
 
@@ -330,7 +331,7 @@ static ucs_status_t ucp_device_local_mem_list_create_handle(
                                             ucp_element, local_addr, LOCAL_ADDR, NULL);
         uct_element->addr = local_addr;
         tl_element        = uct_element->tl;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap[tl_type]) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap[tl_type]) {
             wiface = ucp_worker_iface(worker, tl_id);
             status = ucp_device_local_mem_list_element_pack(worker, wiface,
                                                             ucp_element,
@@ -509,7 +510,7 @@ static int ucp_device_ep_check_lanes(const ucp_device_mem_list_elem_t *elem,
         return 0;
     }
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
         lane = ucp_device_ep_find_lane(ep, tl_id);
         if (lane == UCP_NULL_LANE) {
             return 0;
@@ -634,7 +635,7 @@ static ucs_status_t ucp_device_remote_mem_list_fill(
     uct_element->addr = ucp_element->remote_addr;
     tl_element        = uct_element->tl;
     for (i = 0; i < num_lanes;) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, tl_bitmap) {
             status = ucp_device_remote_mem_list_element_pack(ucp_element, tl_id,
                                                              tl_element,
                                                              release_handles);
@@ -872,23 +873,29 @@ void ucp_device_mem_list_release(void *mem_list_h)
     uct_mem_free(&info.mem);
 }
 
-static ucs_memory_type_t
-ucp_device_counter_mem_type(ucp_context_h context, const void *counter_ptr,
-                            const ucp_device_counter_params_t *params)
+/*
+ * Resolve the memory info of the counter area. Returns NULL when the memory
+ * flags cannot be resolved, in which case only @a mem_info->type is set and
+ * the memory type endpoint looks the flags up by itself.
+ */
+static const ucp_memory_info_t *
+ucp_device_counter_mem_info(ucp_context_h context, const void *counter_ptr,
+                            const ucp_device_counter_params_t *params,
+                            ucp_memory_info_t *mem_info)
 {
-    ucs_memory_info_t mem_info;
-
     if (params->field_mask & UCP_DEVICE_COUNTER_PARAMS_FIELD_MEMH) {
-        return params->memh->mem_type;
+        *mem_info = ucp_memory_info_from_memh(params->memh);
+        return mem_info;
     }
 
     if (params->field_mask & UCP_DEVICE_COUNTER_PARAMS_FIELD_MEM_TYPE) {
-        return params->mem_type;
+        /* The memory flags are not part of the caller's hint */
+        mem_info->type = params->mem_type;
+        return NULL;
     }
 
-    ucp_memory_detect_internal(context, counter_ptr, sizeof(uint64_t),
-                               &mem_info);
-    return mem_info.type;
+    ucp_memory_detect(context, counter_ptr, sizeof(uint64_t), mem_info);
+    return mem_info;
 }
 
 ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
@@ -896,12 +903,14 @@ ucs_status_t ucp_device_counter_init(ucp_worker_h worker,
                                      void *counter_ptr)
 {
     uint64_t counter_value = 0;
-    ucs_memory_type_t mem_type;
+    ucp_memory_info_t mem_info;
+    const ucp_memory_info_t *resolved;
 
-    mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
-                                           params);
+    resolved = ucp_device_counter_mem_info(worker->context, counter_ptr, params,
+                                           &mem_info);
     ucp_dt_contig_unpack(worker, counter_ptr, &counter_value,
-                         sizeof(counter_value), mem_type,
+                         sizeof(counter_value),
+                         (ucs_memory_type_t)mem_info.type, resolved,
                          sizeof(counter_value));
     return UCS_OK;
 }
@@ -911,11 +920,13 @@ uint64_t ucp_device_counter_read(ucp_worker_h worker,
                                  void *counter_ptr)
 {
     uint64_t counter_value = 0;
-    ucs_memory_type_t mem_type;
+    ucp_memory_info_t mem_info;
+    const ucp_memory_info_t *resolved;
 
-    mem_type = ucp_device_counter_mem_type(worker->context, counter_ptr,
-                                           params);
+    resolved = ucp_device_counter_mem_info(worker->context, counter_ptr, params,
+                                           &mem_info);
     ucp_dt_contig_pack(worker, &counter_value, counter_ptr,
-                       sizeof(counter_value), mem_type, sizeof(counter_value));
+                       sizeof(counter_value), (ucs_memory_type_t)mem_info.type,
+                       resolved, sizeof(counter_value));
     return counter_value;
 }
