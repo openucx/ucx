@@ -341,6 +341,10 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     md->super.component = &uct_ze_copy_component;
 
     *md_p = (uct_md_h)md;
+
+    /* Create the memtype cache, so that its UCM handler sees allocations made
+     * through this MD. */
+    ucs_memtype_cache_global_create();
     return UCS_OK;
 }
 
