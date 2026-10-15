@@ -116,7 +116,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
-      testScript: "set -eEx; cd /ws; nvidia-smi -L | grep GPU; unshare --user whoami; ./contrib/test_namespace.sh || { ls -la /dev/nvidia-caps-imex-channels; grep -i imex /proc/devices; cat /proc/driver/nvidia/params | grep -i imex; UCX_LOG_LEVEL=debug /ws/install/bin/ucx_info -d 2>&1 | grep -i fabric; /ws/install/bin/ucx_info -d | grep -A12 cuda_ipc; exit 1; }"
+      testScript: "set -eEx; cd /ws; nvidia-smi -L | grep GPU; unshare --user whoami; ./contrib/test_namespace.sh || { set +e; ls -la /dev | grep -i nvidia; ls -la /dev/nvidia-caps-imex-channels; grep -i imex /proc/devices; cat /proc/driver/nvidia/params | grep -i imex; UCX_LOG_LEVEL=debug /ws/install/bin/ucx_info -d 2>&1 | grep -i -E \"fabric|imex\"; /ws/install/bin/ucx_info -d | grep -A12 cuda_ipc; exit 1; }"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
