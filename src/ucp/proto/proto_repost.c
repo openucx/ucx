@@ -403,11 +403,6 @@ static void ucp_proto_repost_abort(ucp_request_t *req, ucs_status_t status)
     ucp_proto_repost_release(req, status);
 }
 
-static ucs_status_t ucp_proto_repost_bcopy_status(ssize_t packed)
-{
-    return (packed >= 0) ? UCS_OK : (ucs_status_t)packed;
-}
-
 static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
@@ -460,7 +455,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         packed      = uct_ep_am_bcopy(uct_ep, info->am.am_id,
                                       ucp_proto_repost_pack, &pack,
                                       info->am.flags);
-        status      = ucp_proto_repost_bcopy_status(packed);
+        status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_SHORT:
         status = uct_ep_put_short(uct_ep, info->rma.payload.data.buffer,
@@ -472,7 +467,7 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
         pack.length = info->rma.payload.data.length;
         packed      = uct_ep_put_bcopy(uct_ep, ucp_proto_repost_pack, &pack,
                                        info->rma.remote_addr, tl_rkey);
-        status      = ucp_proto_repost_bcopy_status(packed);
+        status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
         status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
