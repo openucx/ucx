@@ -273,6 +273,19 @@ steps:
       slurmEnv: ["ALL", "NVIDIA_VISIBLE_DEVICES=all", "NVIDIA_DRIVER_CAPABILITIES=all"]
       containerEnv: ["NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES"]
 
+# Loads swx-jenkins-lib before the rows; parallel first loads race and fail
+# with "No such property: slurm". /tmp holds no job ID files, so it stops nothing.
+pipeline_start:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "/tmp"
+
 pipeline_stop:
   containerSelector: "{name: 'build_helper_ucx'}"
   parallel: false
