@@ -60,7 +60,8 @@ steps:
     parallel: false
     timeout: 10
     run: |
-      set -x
+      # ci-demo runs steps with -e; Azure does not.
+      set -x +e
       # Standard go pre-commit: https://github.com/golang/go/blob/release-branch.go1.1/misc/git/pre-commit
       gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$')
       [ -z "$gofiles" ] && exit 0
