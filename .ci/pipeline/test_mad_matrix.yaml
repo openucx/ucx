@@ -15,6 +15,7 @@ kubernetes:
 
 runs_on_dockers:
   # Two CX8 VFs: a port takes one MAD RTE registration, so server and client need their own.
+  # Server and client share the pod, so the data path may go over shm.
   - {
       name: "hca-ib-2vf",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
