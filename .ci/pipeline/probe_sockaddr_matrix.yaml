@@ -1,0 +1,129 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-sockaddr
+
+failFast: false
+timeout_minutes: 120
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 6000m}"
+  requests: "{memory: 16Gi, cpu: 6000m}"
+
+runs_on_dockers:
+  - {
+      name: "roce-pin",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      PIN: "yes"
+    }
+  - {
+      name: "roce-nopin",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      PIN: "no"
+    }
+  - {
+      name: "ib-nopin",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      PIN: "no"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 100
+    run: |
+      set -x
+      uname -r
+      ip -br addr
+      ip -6 route || true
+      ibdev2netdev || true
+      cat > /tmp/ra.c <<'XEOF'
+      #include <rdma/rdma_cma.h>
+      #include <arpa/inet.h>
+      #include <stdio.h>
+      #include <string.h>
+      #include <errno.h>
+      /* rdma_resolve_addr(src=argv[1], dst=240.0.0.0) and print errno */
+      int main(int argc, char **argv)
+      {
+          struct rdma_event_channel *ch = rdma_create_event_channel();
+          struct sockaddr_storage src = {0};
+          struct sockaddr_in dst      = {0};
+          struct rdma_cm_id *id;
+          int ret;
+          dst.sin_family      = AF_INET;
+          dst.sin_addr.s_addr = inet_addr("240.0.0.0");
+          if (strchr(argv[1], ':')) {
+              struct sockaddr_in6 *s6 = (struct sockaddr_in6*)&src;
+              s6->sin6_family = AF_INET6;
+              inet_pton(AF_INET6, argv[1], &s6->sin6_addr);
+          } else {
+              struct sockaddr_in *s4 = (struct sockaddr_in*)&src;
+              s4->sin_family = AF_INET;
+              inet_pton(AF_INET, argv[1], &s4->sin_addr);
+          }
+          rdma_create_id(ch, &id, NULL, RDMA_PS_TCP);
+          ret = rdma_resolve_addr(id, (struct sockaddr*)&src,
+                                  (struct sockaddr*)&dst, 1000);
+          printf("RA src=%s dst=240.0.0.0 ret=%d errno=%d (%s)\n", argv[1],
+                 ret, ret ? errno : 0, ret ? strerror(errno) : "ok");
+          return 0;
+      }
+      XEOF
+      gcc -o /tmp/ra /tmp/ra.c -lrdmacm || true
+      for a in $(ip -o addr show dev net1 scope global | awk '{print $4}' | cut -d/ -f1); do
+        /tmp/ra "$a" || true
+      done
+
+      ./autogen.sh
+      mkdir -p build-test && cd build-test
+      ../contrib/configure-devel --prefix="${PWD}/install" --without-java \
+          --without-go --enable-gtest --without-valgrind
+      make -j10 -s
+      make -j10 -s -C test/gtest gtest
+
+      cpu_set=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
+      if [ "${PIN}" = "yes" ]; then
+        first_chunk=${cpu_set%%,*}
+        start_cpu=${first_chunk%-*}
+        cpu_set="${start_cpu}-$((start_cpu + 1))"
+      fi
+      echo "==== PIN=${PIN} cpu_set=${cpu_set}"
+
+      export UCX_HANDLE_ERRORS=bt
+      export GTEST_FILTER='rdmacm/test_uct_sockaddr_err_handle_non_exist_ip.*'
+      UCX_LOG_LEVEL=diag taskset -c "${cpu_set}" make -C test/gtest test 2>&1 | \
+          grep -E "RUN|OK \]|FAILED|Testing|rdma_resolve_addr|Failure|Error:" || true
+
+      GTEST_EXTRA_ARGS="--gtest_repeat=30" taskset -c "${cpu_set}" \
+          make -C test/gtest test > /tmp/rep.log 2>&1 || true
+      grep -E "Testing rdmacm" /tmp/rep.log | sed -E 's/:[0-9]+ interface/ interface/' | sort | uniq -c
+      grep -oE "(OK|FAILED) \] rdmacm/[^ ]*conn_to_non_exist_ip/[0-9]+" /tmp/rep.log | sort | uniq -c
+      echo "==== RESULT PIN=${PIN} done"
