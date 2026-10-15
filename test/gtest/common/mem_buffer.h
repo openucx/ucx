@@ -84,6 +84,18 @@ public:
     /* return the string name of a memory type */
     static std::string mem_type_name(ucs_memory_type_t mem_type);
 
+    /* Kind of RDU memory, the values match the RDU runtime */
+    enum class rdu_mem_kind {
+        HBM = 0,
+        DDR = 1
+    };
+
+    /* returns whether SambaNova RDU memory is supported */
+    static bool is_rdu_supported();
+
+    /* allocate RDU memory of a given kind, release it with release() */
+    static void *allocate_rdu(size_t size, rdu_mem_kind kind);
+
     /* returns whether any other type of memory besides the CPU is supported */
     static bool is_gpu_supported();
 

@@ -141,6 +141,24 @@ bool ucp_test::has_any_transport(const std::string *tls, size_t tl_size) const {
     return has_any_transport(tl_names);
 }
 
+/* Check if UCP can copy memory of the given type, either by the CPU or with a
+ * memory type endpoint */
+bool ucp_test::is_mem_type_copy_supported(ucs_memory_type_t mem_type)
+{
+    return UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
+           (sender().worker()->mem_type_ep[mem_type] != NULL);
+}
+
+/* Check if RMA operations on memory of the given type are supported: memory
+ * which cannot be copied is accessed only by RDMA transports */
+bool ucp_test::is_mem_type_rma_supported(ucs_memory_type_t mem_type)
+{
+    static const std::string rdma_tls[] = {"rc_v", "rc_x", "dc_x", "ib"};
+
+    return is_mem_type_copy_supported(mem_type) ||
+           has_any_transport(rdma_tls, ucs_static_array_size(rdma_tls));
+}
+
 bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }

@@ -167,22 +167,35 @@ protected:
 
         /* The tests try to allocate two buffers with different memory types */
         for (auto mem_type : mem_buffer::supported_mem_types()) {
-            for (size_t i = 1; i <= ucs_get_page_size(); i += step) {
-                mem_buffer *buf1 = allocate_mem_buffer(i, GetParam(),
-                                                       &allocated_buffers, 0);
-
-                for (size_t j = 1; j <= ucs_get_page_size(); j += inner_step) {
-                    mem_buffer *buf2 = allocate_mem_buffer(j, mem_type,
+            try {
+                for (size_t i = 1; i <= ucs_get_page_size(); i += step) {
+                    mem_buffer *buf1 = allocate_mem_buffer(i, GetParam(),
                                                            &allocated_buffers,
                                                            0);
+
+                    for (size_t j = 1; j <= ucs_get_page_size();
+                         j       += inner_step) {
+                        mem_buffer *buf2 = allocate_mem_buffer(
+                                j, mem_type, &allocated_buffers, 0);
+                        if (!keep_buffers) {
+                            release_mem_buffer(buf2, &released_ptrs,
+                                               &allocated_buffers);
+                        }
+                    }
+
                     if (!keep_buffers) {
-                        release_mem_buffer(buf2, &released_ptrs);
+                        release_mem_buffer(buf1, &released_ptrs,
+                                           &allocated_buffers);
                     }
                 }
-
-                if (!keep_buffers) {
-                    release_mem_buffer(buf1, &released_ptrs);
+            } catch (...) {
+                /* Do not leak the buffers if the test is aborted or skipped,
+                 * e.g. when a device limits the number of allocations */
+                while (!allocated_buffers.empty()) {
+                    delete allocated_buffers.back();
+                    allocated_buffers.pop_back();
                 }
+                throw;
             }
 
             if (keep_buffers) {
@@ -527,6 +540,10 @@ protected:
 
         {
             mem_buffer b(buf_size, GetParam());
+
+            /* Allocate in all threads before any thread releases its buffer,
+             * since a released address range may be allocated again */
+            barrier();
 
             test_memtype_cache::init();
 

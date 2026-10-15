@@ -20,11 +20,15 @@ public:
     virtual void init()
     {
         ucp_test::init();
-        sender().connect(&receiver(), get_ep_params());
         int mem_type_pair_index = get_variant_value() %
                                   mem_buffer::supported_mem_types().size();
         m_mem_type              =
                 mem_buffer::supported_mem_types()[mem_type_pair_index];
+        if (!is_mem_type_copy_supported(m_mem_type)) {
+            UCS_TEST_SKIP_R("memory type cannot be copied");
+        }
+
+        sender().connect(&receiver(), get_ep_params());
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)

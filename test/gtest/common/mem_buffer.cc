@@ -2,6 +2,7 @@
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
  * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
+ * Copyright (C) SambaNova Systems, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -18,6 +19,11 @@
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 #include <common/test_helpers.h>
+
+#if HAVE_RDU
+#include <atomic>
+#include <dlfcn.h>
+#endif
 
 #if HAVE_CUDA
 #include <cuda.h>
@@ -115,6 +121,77 @@ void mem_buffer_ze_memset(void *dst, int value, size_t length);
 #endif
 
 
+#if HAVE_RDU
+namespace {
+
+using rdu_init_func_t   = int (*)(void);
+using rdu_malloc_func_t = void *(*)(uint32_t rdu_id, size_t size, int mem_type);
+using rdu_free_func_t   = void (*)(uint32_t rdu_id, void *ptr);
+
+/* RDU used by the tests */
+constexpr uint32_t mem_buffer_rdu_id = 0;
+
+/* Maximal number of live allocations supported by the runtime */
+constexpr size_t mem_buffer_rdu_max_allocs = 1024;
+
+/* Number of live allocations made by the tests */
+std::atomic<size_t> mem_buffer_rdu_num_allocs(0);
+
+/* -1: not checked, 0: not supported, 1: supported */
+int mem_buffer_rdu_status = -1;
+rdu_malloc_func_t mem_buffer_rdu_malloc;
+rdu_free_func_t mem_buffer_rdu_free;
+
+/*
+ * The runtime library is loaded to the global scope, and its allocation
+ * functions are called from a helper library through the relocation table, as
+ * done by applications linked with the runtime, so UCM can intercept them.
+ */
+bool mem_buffer_rdu_init()
+{
+    static const char *libs[] = {"librdu_devmem.so.1", "librdu_devmem.so"};
+    rdu_init_func_t init_func;
+    void *runtime = NULL;
+    void *helper;
+
+    if (mem_buffer_rdu_status != -1) {
+        return mem_buffer_rdu_status == 1;
+    }
+
+    mem_buffer_rdu_status = 0;
+
+    for (size_t i = 0; (i < ucs_static_array_size(libs)) && (runtime == NULL);
+         ++i) {
+        runtime = dlopen(libs[i], RTLD_NOW | RTLD_GLOBAL);
+    }
+
+    if (runtime == NULL) {
+        return false;
+    }
+
+    helper = dlopen(GTEST_UCM_HOOK_LIB_DIR "/librdu_test_alloc.so", RTLD_NOW);
+    if (helper == NULL) {
+        UCS_TEST_MESSAGE << "failed to load RDU test helper: " << dlerror();
+        return false;
+    }
+
+    init_func = (rdu_init_func_t)dlsym(helper, "gtest_rdu_devmem_init");
+    mem_buffer_rdu_malloc = (rdu_malloc_func_t)dlsym(helper,
+                                                     "gtest_rdu_malloc");
+    mem_buffer_rdu_free   = (rdu_free_func_t)dlsym(helper, "gtest_rdu_free");
+    if ((init_func == NULL) || (mem_buffer_rdu_malloc == NULL) ||
+        (mem_buffer_rdu_free == NULL) || (init_func() != 0)) {
+        return false;
+    }
+
+    mem_buffer_rdu_status = 1;
+    return true;
+}
+
+} // namespace
+#endif
+
+
 bool mem_buffer::is_cuda_supported()
 {
 #if HAVE_CUDA
@@ -143,6 +220,41 @@ bool mem_buffer::is_ze_supported()
     return mem_buffer_ze_init();
 #else
     return false;
+#endif
+}
+
+bool mem_buffer::is_rdu_supported()
+{
+#if HAVE_RDU
+    return mem_buffer_rdu_init();
+#else
+    return false;
+#endif
+}
+
+void *mem_buffer::allocate_rdu(size_t size, rdu_mem_kind kind)
+{
+#if HAVE_RDU
+    void *ptr;
+
+    if (!mem_buffer_rdu_init()) {
+        UCS_TEST_SKIP_R("RDU memory is not supported");
+    }
+
+    if (++mem_buffer_rdu_num_allocs > mem_buffer_rdu_max_allocs) {
+        --mem_buffer_rdu_num_allocs;
+        UCS_TEST_SKIP_R("too many RDU allocations");
+    }
+
+    ptr = mem_buffer_rdu_malloc(mem_buffer_rdu_id, size, (int)kind);
+    if (ptr == NULL) {
+        --mem_buffer_rdu_num_allocs;
+        UCS_TEST_ABORT("rdu_malloc(size=" << size << ") failed");
+    }
+
+    return ptr;
+#else
+    UCS_TEST_SKIP_R("RDU memory is not supported");
 #endif
 }
 
@@ -219,6 +331,9 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
             vec.push_back(UCS_MEMORY_TYPE_ZE_HOST);
             vec.push_back(UCS_MEMORY_TYPE_ZE_DEVICE);
             vec.push_back(UCS_MEMORY_TYPE_ZE_MANAGED);
+        }
+        if (is_rdu_supported()) {
+            vec.push_back(UCS_MEMORY_TYPE_RDU);
         }
     }
 
@@ -658,6 +773,10 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         return ptr;
     }
 #endif
+    case UCS_MEMORY_TYPE_RDU:
+        /* The runtime places allocations next to each other, so leave a gap
+         * after the buffer, since tests check the memory type beyond it */
+        return allocate_rdu(size + ucs_get_page_size(), rdu_mem_kind::HBM);
     default:
         UCS_TEST_SKIP_R(std::string(ucs_memory_type_names[mem_type]) +
                         " memory is not supported");
@@ -700,6 +819,14 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
         case UCS_MEMORY_TYPE_ZE_MANAGED:
             if (ptr != NULL) {
                 ZE_CALL(zeMemFree(mem_buffer_ze_context, ptr), ": ptr=" << ptr);
+            }
+            break;
+#endif
+#if HAVE_RDU
+        case UCS_MEMORY_TYPE_RDU:
+            if (ptr != NULL) {
+                mem_buffer_rdu_free(mem_buffer_rdu_id, ptr);
+                --mem_buffer_rdu_num_allocs;
             }
             break;
 #endif
@@ -814,6 +941,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
     case UCS_MEMORY_TYPE_ZE_HOST:
     case UCS_MEMORY_TYPE_ZE_MANAGED:
+    case UCS_MEMORY_TYPE_RDU:
         ::memset(buffer, c, length);
         break;
 #if HAVE_CUDA
@@ -873,6 +1001,9 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
                               ucs_memory_type_t src_mem_type)
 {
     const uint64_t host_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    /* RDU memory is mapped to the host address space */
+    const uint64_t rdu_mem_types  = host_mem_types |
+                                    UCS_BIT(UCS_MEMORY_TYPE_RDU);
 #if HAVE_CUDA
     const uint64_t cuda_mem_types = host_mem_types |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -891,7 +1022,7 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
                                       UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE);
 #endif
 
-    if (check_mem_types(dst_mem_type, src_mem_type, host_mem_types)) {
+    if (check_mem_types(dst_mem_type, src_mem_type, rdu_mem_types)) {
         memcpy(dst, src, length);
 #if HAVE_CUDA
     } else if (check_mem_types(dst_mem_type, src_mem_type, cuda_mem_types)) {

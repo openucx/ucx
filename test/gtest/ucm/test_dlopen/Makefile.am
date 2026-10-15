@@ -19,4 +19,9 @@ libdlopen_test_do_load_rpath_la_CPPFLAGS = -I$(top_srcdir)/src
 libdlopen_test_do_load_la_CPPFLAGS       = -I$(top_srcdir)/src
 libdlopen_test_do_load_rpath_la_LDFLAGS  = -R=${PWD}/rpath-subdir/.libs
 
+if HAVE_RDU
+noinst_lib_LTLIBRARIES           += librdu_test_alloc.la
+librdu_test_alloc_la_SOURCES      = rdu_test_alloc.c
+endif
+
 SUBDIRS = rpath-subdir

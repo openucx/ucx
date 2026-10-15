@@ -178,6 +178,7 @@ public:
     ucp_mem_h import_memh(ucp_mem_h exported_memh);
 
 protected:
+    bool is_alloc_supported(ucs_memory_type_t mem_type);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
@@ -210,6 +211,26 @@ private:
 protected:
     ucp_md_map_t m_always_equal_md_map;
 };
+
+/* Check if UCP can allocate memory of the given type */
+bool test_ucp_mmap::is_alloc_supported(ucs_memory_type_t mem_type)
+{
+    ucp_context_h context = sender().ucph();
+    ucp_md_index_t md_index;
+
+    if (mem_type == UCS_MEMORY_TYPE_HOST) {
+        return true;
+    }
+
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        if (context->tl_mds[md_index].attr.alloc_mem_types &
+            UCS_BIT(mem_type)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 test_ucp_mmap::mem_chunk::mem_chunk(ucp_context_h ctx) : context(ctx)
 {
@@ -515,6 +536,10 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
     bool is_dummy;
 
     for (auto mem_type : mem_types) {
+        if (!is_alloc_supported(mem_type)) {
+            continue;
+        }
+
         for (int i = 0; i < (100 / ucs::test_time_multiplier()); ++i) {
             size_t size = ucs::rand() % (UCS_MBYTE);
 
@@ -1033,6 +1058,10 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 {
     ucp_worker_h worker = sender().worker();
     for (auto mem_type : mem_buffer::supported_mem_types()) {
+        if (!is_alloc_supported(mem_type)) {
+            continue;
+        }
+
         ucp_mem_desc_t *mdesc;
 
         ASSERT_UCS_OK(rndv_mpool_get(worker, mem_type,
