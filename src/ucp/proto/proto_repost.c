@@ -89,13 +89,6 @@ static void ucp_proto_repost_probe(const ucp_proto_init_params_t *params)
     ucp_proto_select_add_proto(params, 0, 0, perf, &rpriv, sizeof(rpriv));
 }
 
-static void
-ucp_proto_repost_query(const ucp_proto_query_params_t *params,
-                       ucp_proto_query_attr_t *attr)
-{
-    ucp_proto_default_query(params, attr);
-}
-
 static ucs_status_t
 ucp_proto_repost_copy_data(ucp_request_t *req, void **buffer_p, size_t length)
 {
@@ -527,7 +520,7 @@ ucp_proto_t ucp_repost_proto = {
     .flags    = UCP_PROTO_FLAG_INVALID,
     .dt_mask  = UCP_DT_MASK_ALL,
     .probe    = ucp_proto_repost_probe,
-    .query    = ucp_proto_repost_query,
+    .query    = ucp_proto_default_query,
     .progress = {ucp_proto_repost_progress},
     .abort    = ucp_proto_repost_abort,
     .reset    = ucp_proto_repost_reset
