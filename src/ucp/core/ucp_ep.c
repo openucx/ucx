@@ -2817,13 +2817,6 @@ ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
     }
 }
 
-/* The repost protocol posts the operation and completes it. */
-static void
-ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
-{
-    ucp_proto_repost_submit(arg, op_info);
-}
-
 /* Complete an outstanding operation. Teardown must not allocate a repost. */
 static void
 ucp_ep_tf_outstanding_cancel_cb(const uct_ep_op_info_t *op_info, void *arg)
@@ -2834,6 +2827,16 @@ ucp_ep_tf_outstanding_cancel_cb(const uct_ep_op_info_t *op_info, void *arg)
         (op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP)) {
         ucp_invoke_uct_completion(op_info->comp, status);
     }
+}
+
+/* Repost owns the completion after a successful submit. */
+static void
+ucp_ep_tf_outstanding_purge_cb(const uct_ep_op_info_t *op_info, void *arg)
+{
+    ucs_status_t status;
+
+    status = ucp_proto_repost_submit(arg, op_info);
+    ucp_ep_tf_outstanding_cancel_cb(op_info, UCS_STATUS_PTR(status));
 }
 
 /* Resolve this lane's outstanding operations. Pending requests are appended
@@ -3187,7 +3190,7 @@ void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         if (status != UCS_OK) {
             /* Reconfiguration failed, so the endpoint is unrecoverable. Do not
              * purge this lane: the current configuration still selects it. */
-            ucp_ep_set_failed(ep, lane, UCS_ERR_CONNECTION_RESET);
+            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
             break;
         }
 
