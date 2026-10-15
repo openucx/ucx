@@ -18,17 +18,6 @@ empty_volumes:
 
 runs_on_dockers:
   - {
-      name: "ib-pin",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
-      arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
-      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]",
-      P_ASAN: "no", P_PIN: "yes", P_LOAD: "0"
-    }
-  - {
       name: "ib-pin-load",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
@@ -39,28 +28,6 @@ runs_on_dockers:
       caps_add: "[ IPC_LOCK, NET_RAW ]",
       P_ASAN: "no", P_PIN: "yes", P_LOAD: "4"
     }
-  - {
-      name: "ib-nopin",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
-      arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
-      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]",
-      P_ASAN: "no", P_PIN: "no", P_LOAD: "0"
-    }
-  - {
-      name: "ib-asan-pin",
-      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
-      arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
-      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]",
-      P_ASAN: "yes", P_PIN: "yes", P_LOAD: "0"
-    }
 
 matrix:
   axes:
@@ -69,7 +36,8 @@ matrix:
 taskName: '${name}/${arch}'
 
 env:
-  P_ITER: "80"
+  P_ITER: "8"
+  UCX_LOG_LEVEL: "debug"
 
 steps:
   - name: Probe
@@ -116,6 +84,7 @@ steps:
           done
           if [ ${rc} -ne 0 ]; then
               grep -B2 -A6 "Failure\|Fatal\|ERROR\|Assertion" it.log | head -40
+              sed -n '/RUN .*ud_verbs\/test_ud.stale_private_ep_reuse/,/ud_verbs\/test_ud.stale_private_ep_reuse.*ms)/p' it.log | grep -E "ud_ep|ep\(?0x|timeout of|created|destroyed|dropping|stale|disconnect|resend|Failure|FAILED|RUN" | head -200
           fi
       done
       jobs -p | xargs -r kill || true
