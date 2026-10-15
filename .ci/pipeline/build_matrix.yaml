@@ -44,7 +44,7 @@ runs_on_dockers:
   - { name: "tencentos44-mofed26.04", url: "harbor.mellanox.com/hpcx/x86_64/tencentos4.4/builder:mofed-26.04-0.7.6.0", arch: x86_64, build_mode: short }
   # 20.1060a is the newest UOS rootfs on urm; DOCA publishes it for x86_64 only.
   - { name: "uos201060a-doca3.4", url: "harbor.mellanox.com/hpcx/x86_64/uos20.1060a/builder:doca-3.4.0", arch: x86_64, build_mode: short }
-  - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64, build_mode: short }
+  - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64, build_mode: short, CONTAINER: "ubuntu2204_rocm" }
   - { name: "centos7-ib", url: "harbor.mellanox.com/ucx/centos7:5", arch: x86_64, build_mode: sanity }
   # Intel oneAPI compiler with the Level Zero null driver; no Intel GPU needed.
   - { name: "ubuntu2404-ze", url: "harbor.mellanox.com/ucx/x86_64/ubuntu24.04/builder:ze-oneapi-2026.0.0-l0-1.27.0", arch: x86_64, build_mode: ze, require_ze: "yes" }
