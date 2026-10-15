@@ -1,0 +1,116 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-gaps3
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 6000m}"
+  requests: "{memory: 16Gi, cpu: 6000m}"
+
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
+runs_on_dockers:
+  - { name: "pgi", url: "harbor.mellanox.com/ucx/centos7:4", arch: x86_64, P_KIND: "pgi" }
+  - {
+      name: "mad-1vf",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      P_KIND: "mad"
+    }
+  - {
+      name: "mad-2vf",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network,cx8-ib-network" }],
+      limits: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 2}",
+      requests: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 2}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      P_KIND: "mad"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 80
+    run: |
+      set +e
+      echo "==== probe ${name} node=${K8S_NODE_NAME}"
+      if [ "${P_KIND}" = "pgi" ]; then
+        B=/hpc/local/oss/hpc_sdk
+        mount | grep " /hpc/local"
+        ls -la ${B} ${B}/Linux_x86_64 ${B}/Linux_x86_64.bac ${B}/Linux_x86_64/21.2 ${B}/Linux_x86_64/21.2/compilers
+        for d in ${B}/Linux_x86_64/*/compilers/bin ${B}/Linux_x86_64.bac/*/compilers/bin; do
+          echo "BIN ${d} count=$(ls ${d} | wc -l) nvc=$(ls -la ${d}/nvc 2>&1) anh=$(ls ${d}/add_network_host 2>&1)"
+        done
+        ls ${B}/Linux_x86_64/21.2/compilers/bin | head -20
+        ls /hpc/local/etc/modulefiles/hpc-sdk/*
+        cat /hpc/local/etc/modulefiles/hpc-sdk/nvhpc/21.2 | grep -v '^#' | head -30
+        ls /hpc/local/etc/modulefiles | grep -i 'pgi\|nvhpc\|hpc'
+        ls /hpc/local/oss | grep -i 'pgi\|nvhpc\|hpc_sdk\|hpc-sdk'
+        timeout 300 find /hpc/local -maxdepth 4 \( -iname 'nvc' -o -iname 'pgcc' -o -iname '*nvhpc*' -o -iname 'hpc_sdk*' \) -print 2>&1 | head -40
+        timeout 300 find /hpc/local/oss /hpc/local/opt /hpc/local/compilers -maxdepth 6 -type f -name nvc -print 2>&1 | head -20
+        /usr/bin/modulecmd bash avail 2>&1 | tr ' ' '\n' | grep -i 'pgi\|nvhpc\|hpc-sdk'
+        echo "==== RESULT pgi done"
+        exit 0
+      fi
+
+      export BUILD_SOURCESDIRECTORY=${WORKSPACE} BUILD_BUILDID=${BUILD_NUMBER}
+      ls -la /dev/infiniband/
+      grep Cap /proc/self/status
+      for p in /sys/class/infiniband_mad/umad*; do echo "UMAD ${p} $(cat ${p}/ibdev) $(cat ${p}/port)"; done
+      ibv_devinfo -v | grep -E 'hca_id|vendor_part_id|port:|state:|link_layer|port_lid|sm_lid|phys_state'
+      ibstat
+      ls /usr/include/infiniband/ | grep -i mad
+      hcas=$(ibv_devinfo | awk '/hca_id:/ {h=$2} /port:/ {p=$2} /state:/ {s=$2} /link_layer:/ {if (s=="PORT_ACTIVE" && $2=="InfiniBand") print h ":" p}')
+      echo "ACTIVE_IB=${hcas}"
+      HCA_S=$(echo ${hcas} | awk '{print $1}')
+      HCA_C=$(echo ${hcas} | awk '{print ($2 != "") ? $2 : $1}')
+      LID=$(ibstat ${HCA_S/:/ } | grep Base | awk '{print $NF}')
+      GUID=$(ibstat ${HCA_S/:/ } | grep GUID | awk '{print $NF}')
+      echo "SRV=${HCA_S} CLI=${HCA_C} LID=${LID} GUID=${GUID}"
+      echo "==== diag: sminfo / smpquery (SMP) / perfquery (GMP PMA) / saquery (GMP SA)"
+      timeout 30 sminfo -C ${HCA_S%:*} -P ${HCA_S#*:}; echo "sminfo rc=$?"
+      timeout 30 smpquery -C ${HCA_S%:*} -P ${HCA_S#*:} nodeinfo ${LID}; echo "smpquery rc=$?"
+      timeout 30 perfquery -C ${HCA_S%:*} -P ${HCA_S#*:}; echo "perfquery rc=$?"
+      timeout 30 saquery -C ${HCA_S%:*} -P ${HCA_S#*:} -p ${LID} 2>&1 | head -20; echo "saquery rc=${PIPESTATUS[0]}"
+
+      echo "==== set_vars as Azure calls it"
+      ( source ./buildlib/tools/test_mad.sh && set_vars ) 2>&1 | tail -5; echo "set_vars rc=${PIPESTATUS[0]}"
+
+      echo "==== build_ucx"
+      ( source ./buildlib/tools/test_mad.sh && build_ucx ) > build.log 2>&1; rc=$?
+      echo "build rc=${rc}"; tail -20 build.log
+      grep -i 'mad' config.log | grep -i 'checking\|result' | head
+      ls install/lib/ucx/ | grep -i perf
+      [ ${rc} -eq 0 ] || exit 0
+
+      for addr in "lid:${LID}" "guid:${GUID}"; do
+        tag=${addr%%:*}
+        timeout 200 ./install/bin/ucx_perftest -K ${HCA_S} > srv_${tag}.log 2>&1 &
+        spid=$!
+        sleep 5
+        timeout 120 ./install/bin/ucx_perftest -t tag_bw -e -K ${HCA_C} ${addr}; crc=$?
+        sleep 2; kill ${spid}; wait ${spid}; src=$?
+        echo "==== server log ${tag}"; cat srv_${tag}.log
+        echo "==== RESULT ${name} ${addr} client_rc=${crc} server_rc=${src}"
+      done
+      exit 0

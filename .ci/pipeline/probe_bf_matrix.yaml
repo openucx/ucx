@@ -1,0 +1,47 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-bf
+
+failFast: false
+timeout_minutes: 30
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 2Gi, cpu: 1000m}"
+  requests: "{memory: 2Gi, cpu: 1000m}"
+
+runs_on_dockers:
+  - {
+      name: "bf3",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]"
+    }
+  - {
+      name: "bf4",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF4",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF4', effect: 'NoSchedule'}]"
+    }
+
+matrix:
+  axes:
+    arch: [aarch64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 10
+    run: |
+      set +e
+      echo "==== probe ${name} node=${K8S_NODE_NAME}"
+      cat /proc/cpuinfo | grep -m3 -i 'model\|implementer'
+      ls /dev/infiniband/; ibv_devinfo -l
+      echo "==== RESULT ${name} scheduled on ${K8S_NODE_NAME}"
