@@ -23,7 +23,10 @@ runs_on_dockers:
   - {
       name: "namespace",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
-      arch: x86_64
+      arch: x86_64,
+      # posix without proc link needs the host (default) PID namespace;
+      # ci-demo has no hostPID option, so it rides on the raw tolerations.
+      tolerations: "[]\n  hostPID: true"
     }
 
 matrix:
@@ -42,5 +45,6 @@ steps:
     parallel: false
     timeout: 30
     run: |
+      readlink /proc/self/ns/pid
       unshare --user whoami
       ./contrib/test_namespace.sh
