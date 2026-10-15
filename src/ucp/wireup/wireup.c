@@ -1314,17 +1314,16 @@ ucp_wireup_process_lanes_addr_request(
         const ucp_unpacked_address_t *remote_address)
 {
     ucp_lane_map_t peer_unaware, to_rebuild, peer_provided, invalidated;
+    ucp_lane_map_t discard = 0;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
-    uct_ep_h retired[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    /* A peer token means that lane already failed remotely. Invalidate it
-     * without waiting for an error completion, then purge and destroy it so
-     * the reply can carry a rebuilt address. */
+    /* A peer token means that lane already failed remotely. Take it off the
+     * endpoint so the reply can carry a rebuilt address. The old transport
+     * endpoint stays held until the ACK brings the receive token. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
-    memset(retired, 0, sizeof(retired));
     invalidated = 0;
     if (request_id != 0) {
         invalidated = ucp_ep_tf_invalidate_lanes(ep,
@@ -1332,14 +1331,14 @@ ucp_wireup_process_lanes_addr_request(
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens);
-        ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
-        ucp_ep_tf_destroy_retired_lanes(ep, retired);
+        discard = ucp_ep_tf_hold_invalidated_lanes(ep, invalidated);
     }
 
-    /* Lanes still up, and not waiting for the token error handler, take the
-     * software path. Invalidated lanes stay out of that discard. */
-    peer_unaware = lanes_info->provided_lane_map &
-                   ~ucp_ep_get_failed_lanes(ep) & ~invalidated;
+    /* Lanes still up take the software path. A held lane is already failed
+     * and waits for the ACK. */
+    peer_unaware = (lanes_info->provided_lane_map &
+                    ~ucp_ep_get_failed_lanes(ep) & ~invalidated) |
+                   discard;
     if (peer_unaware != 0) {
         ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
                   "asymmetric failure on lanes 0x%" PRIx64,

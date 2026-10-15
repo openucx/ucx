@@ -1112,6 +1112,18 @@ void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
 
 
 /**
+ * Take invalidated lanes off the endpoint and keep their transport endpoints
+ * until an RX token purges them.
+ *
+ * The reply can carry a rebuilt address while the old endpoint stays held.
+ * Lanes whose token snapshot failed are returned for the software discard
+ * path. Reconfiguration failure fails the whole endpoint and is not returned.
+ */
+ucp_lane_map_t
+ucp_ep_tf_hold_invalidated_lanes(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/**
  * Destroy endpoints returned by @ref ucp_ep_tf_retire_unaware_lanes and drop
  * their token state.
  */

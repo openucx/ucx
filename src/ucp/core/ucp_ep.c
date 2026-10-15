@@ -2378,6 +2378,25 @@ void ucp_ep_recovery_on_reply_received(ucp_ep_h ep)
     }
 }
 
+static ucp_lane_map_t ucp_ep_tf_held_lanes(ucp_ep_h ep)
+{
+    ucp_lane_map_t held = 0;
+    ucp_lane_index_t lane;
+    ucp_ep_lane_tf_t *tf;
+
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+            (tf->uct_ep == NULL)) {
+            continue;
+        }
+
+        held |= UCS_BIT(lane);
+    }
+
+    return held;
+}
+
 int ucp_ep_recovery_progress(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
@@ -2416,7 +2435,10 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     ucs_assert(ep->ext->recovery_arg->retries_left > 0);
 
-    recovered = ucp_ep_recovery_get_ready_lanes(ep, failed);
+    /* A held transport endpoint is purged by the ACK. Clearing the lane now
+     * would drop it with the recovery state. */
+    recovered = ucp_ep_recovery_get_ready_lanes(ep, failed) &
+                ~ucp_ep_tf_held_lanes(ep);
     status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
     if (status != UCS_OK) {
         ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
@@ -2478,6 +2500,17 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         }
 
         ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        if (--ep->ext->recovery_arg->retries_left == 0) {
+            goto exhausted;
+        }
+
+        ret = 1;
+        goto done;
+    }
+
+    /* Every remaining lane is rebuilt and is only waiting for the ACK.
+     * Another request would republish it. */
+    if (ucp_ep_recovery_get_ready_lanes(ep, failed) == failed) {
         if (--ep->ext->recovery_arg->retries_left == 0) {
             goto exhausted;
         }
@@ -3037,6 +3070,48 @@ ucs_status_t ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     }
 
     return ucp_ep_tf_detach(ep, lane);
+}
+
+ucp_lane_map_t
+ucp_ep_tf_hold_invalidated_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    ucp_lane_map_t discard = 0;
+    ucp_lane_index_t lane;
+    ucp_ep_lane_tf_t *tf;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
+            (tf->uct_ep != NULL)) {
+            continue;
+        }
+
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep) ||
+            ucp_wireup_ep_test(uct_ep)) {
+            continue;
+        }
+
+        status = ucp_ep_tf_hold(ep, lane, uct_ep);
+        if (status == UCS_OK) {
+            continue;
+        }
+
+        /* Detach clears the lane after a failed reconfiguration and leaves
+         * the transport endpoint installed. The endpoint cannot recover. */
+        if (tf->state == UCP_EP_TF_LANE_EMPTY) {
+            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
+            break;
+        }
+
+        ucs_debug("ep %p: lane %d hold failed: %s", ep, lane,
+                  ucs_status_string(status));
+        discard |= UCS_BIT(lane);
+    }
+
+    return discard;
 }
 
 ucs_status_t
