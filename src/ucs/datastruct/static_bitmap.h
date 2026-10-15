@@ -371,12 +371,10 @@ BEGIN_C_DECLS
         UCS_STATIC_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD)
 
 
-/* Fail the build if _bit_index is too narrow. A plain sizeof expression rather
-   than UCS_STATIC_ASSERT, since cppcheck loses track of the loop index
-   assignment after a statement expression */
+/* Fail the build if _bit_index is too narrow. */
 #define UCS_STATIC_BITMAP_CHECK_INDEX_TYPE(_bit_index, _bitmap) \
-    ((void)sizeof( \
-            char[UCS_STATIC_BITMAP_INDEX_FITS(_bit_index, _bitmap) ? 1 : -1]))
+    (sizeof(char[UCS_STATIC_BITMAP_INDEX_FITS(_bit_index, _bitmap) ? 1 : -1]) \
+     != 0)
 
 
 /*
@@ -388,9 +386,9 @@ BEGIN_C_DECLS
  */
 #define UCS_STATIC_BITMAP_FOR_EACH_BIT(_bit_index, _bitmap_ptr) \
     _UCS_BITMAP_BITS_FOR_EACH_BIT( \
-            UCS_STATIC_BITMAP_CHECK_INDEX_TYPE(_bit_index, *(_bitmap_ptr)), \
             _bit_index, (_bitmap_ptr)->bits, \
-            UCS_STATIC_BITMAP_NUM_WORDS(*(_bitmap_ptr)))
+            UCS_STATIC_BITMAP_NUM_WORDS(*(_bitmap_ptr)), \
+            UCS_STATIC_BITMAP_CHECK_INDEX_TYPE(_bit_index, *(_bitmap_ptr)))
 
 END_C_DECLS
 

@@ -64,17 +64,11 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
                 (_src_num_words));
 
 
-/* Iterate over set bits. 
- * _static_check is a compile-time check, such as on the index type */
-#define _UCS_BITMAP_BITS_FOR_EACH_BIT(_static_check, _bit_index, _bits, \
-                                      _num_words) \
-    for ((_static_check), \
-         _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
-         _bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD; \
+/* Iterate over set bits while _cond holds */
+#define _UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words, _cond) \
+    for (_bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, 0); \
+         (_cond) && (_bit_index < (_num_words)*UCS_BITMAP_BITS_IN_WORD); \
          _bit_index = ucs_bitmap_bits_ffs(_bits, _num_words, _bit_index + 1))
-
-
-#define UCS_BITMAP_NO_STATIC_CHECK ((void)0)
 
 
 /**
@@ -85,8 +79,7 @@ typedef ucs_bitmap_word_t (*ucs_bitmap_binary_op_t)(ucs_bitmap_word_t,
  * @param _num_words Number of words in the bitmap.
  */
 #define UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words) \
-    _UCS_BITMAP_BITS_FOR_EACH_BIT(UCS_BITMAP_NO_STATIC_CHECK, _bit_index, \
-                                  _bits, _num_words)
+    _UCS_BITMAP_BITS_FOR_EACH_BIT(_bit_index, _bits, _num_words, 1)
 
 
 /**
