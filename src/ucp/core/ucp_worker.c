@@ -1238,7 +1238,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     worker->num_ifaces = num_ifaces;
     iface_id           = 0;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
         status = ucp_worker_iface_open(worker, tl_id,
                                        &worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1261,7 +1261,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     }
 
     UCS_STATIC_BITMAP_RESET_ALL(&worker->scalable_tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
         ucs_assert(ucp_worker_is_tl_p2p(worker, tl_id) ||
                    ucp_worker_is_tl_2iface(worker, tl_id) ||
                    ucp_worker_is_tl_2sockaddr(worker, tl_id));
@@ -1276,7 +1276,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
               UCS_STATIC_BITMAP_POPCOUNT(worker->scalable_tl_bitmap));
 
     iface_id = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
         status = ucp_worker_iface_init(worker, tl_id,
                                        worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1861,7 +1861,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucs_debug("worker %p: using device atomics", worker);
 
     /* Enable atomics on all resources using same device as the "best" resource */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         rsc = &context->tl_rscs[rsc_index];
         if (UCS_STATIC_BITMAP_GET(supp_tls, rsc_index) &&
             (rsc->md_index == best_rsc->md_index) &&
@@ -3192,7 +3192,7 @@ ucp_worker_address_pack(ucp_worker_h worker, uint32_t address_flags,
     }
 
     if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
             if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE)) {
                 UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);
