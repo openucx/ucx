@@ -13,20 +13,25 @@ kubernetes:
   limits: "{memory: 2Gi, cpu: 1000m}"
   requests: "{memory: 2Gi, cpu: 1000m}"
 
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+
 runs_on_dockers:
   - {
       name: "bf3",
       url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
       arch: aarch64,
       nodeSelector: "hardware.node.kubernetes.io=BF3",
-      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]"
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
   - {
       name: "bf4",
       url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
       arch: aarch64,
       nodeSelector: "hardware.node.kubernetes.io=BF4",
-      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF4', effect: 'NoSchedule'}]"
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF4', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
 
 matrix:
@@ -43,5 +48,9 @@ steps:
       set +e
       echo "==== probe ${name} node=${K8S_NODE_NAME}"
       cat /proc/cpuinfo | grep -m3 -i 'model\|implementer'
-      ls /dev/infiniband/; ibv_devinfo -l
+      nproc; free -g; cat /sys/fs/cgroup/cpu.max; cat /etc/mlnx-release
+      ls /sys/class/infiniband/ /sys/class/net/
+      ls -la /dev/infiniband/
+      ibv_devinfo | grep -E 'hca_id|state|link_layer|vendor_part_id'
+      env | grep -i 'pcidevice\|nvidia\|sriov'
       echo "==== RESULT ${name} scheduled on ${K8S_NODE_NAME}"
