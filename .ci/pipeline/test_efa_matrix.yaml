@@ -50,6 +50,11 @@ steps:
         [ -e /dev/infiniband/uverbs$i ] || mknod -m 666 /dev/infiniband/uverbs$i c 1 3
       done
       ls -l /dev/infiniband
+      df -h /dev/shm; grep -i huge /proc/meminfo; cat /sys/fs/cgroup/hugetlb.*.max || true
+      export UCX_HANDLE_ERRORS=bt
+      ./install/bin/ucx_info -d | grep -c Transport || true
+      UCX_SYSV_HUGETLB_MODE=n ./install/bin/ucx_info -d | grep -c Transport || true
+      UCX_SYSV_HUGETLB_MODE=n UCX_POSIX_HUGETLB_MODE=n ./install/bin/ucx_info -d | grep -c Transport || true
 
   - name: Run gtests
     parallel: false
