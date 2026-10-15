@@ -1,0 +1,67 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-bf
+
+failFast: false
+timeout_minutes: 30
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 6000m}"
+  requests: "{memory: 8Gi, cpu: 6000m}"
+
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
+runs_on_dockers:
+  - {
+      name: "bf3-podnet",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true
+    }
+  - {
+      name: "bf3-hostnet",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true,
+      hostNetwork: true
+    }
+
+matrix:
+  axes:
+    arch: [aarch64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 20
+    run: |
+      set +e
+      echo "==== probe ${name} node=${K8S_NODE_NAME} hostname=$(hostname)"
+      ip -br addr
+      ibv_devinfo -v | grep -E 'hca_id|vendor_part_id|state:|link_layer|GID\['
+      ls /sys/class/infiniband/*/ports/1/gid_attrs/ndevs/ 2>&1 | head
+      for d in /sys/class/infiniband/*; do for g in 0 1 2 3; do echo "$(basename $d) gid$g $(cat $d/ports/1/gids/$g) $(cat $d/ports/1/gid_attrs/ndevs/$g 2>&1) $(cat $d/ports/1/gid_attrs/types/$g 2>&1)"; done; done
+      ls /hpc/local | head -5; ls /hpc/local/etc/modulefiles | grep -i 'arm\|gcc' | head
+      ./autogen.sh > /dev/null 2>&1 && ./contrib/configure-release --prefix=${PWD}/inst --without-go --without-java > /dev/null 2>&1 && make -s -j6 install > /dev/null 2>&1; echo "build rc=$?"
+      ./inst/bin/ucx_info -d | grep -E 'Transport|Device' | sort | uniq -c
+      export UCX_TLS=rc_x
+      timeout 60 ./inst/bin/ucx_perftest -t tag_bw > srv.log 2>&1 &
+      sleep 3
+      timeout 50 ./inst/bin/ucx_perftest -t tag_bw 127.0.0.1; echo "perftest rc_x rc=$?"
+      wait; tail -5 srv.log
+      unset UCX_TLS
+      echo "==== RESULT ${name}"
