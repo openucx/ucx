@@ -1445,6 +1445,8 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
+    size_t max_am_length   = iface->config.rx_seg_size -
+                             sizeof(uct_tcp_am_hdr_t);
     unsigned handled       = 0;
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
@@ -1495,11 +1497,9 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
         }
 
         hdr = UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset);
-        if (ucs_unlikely(hdr->length >
-                         (iface->config.rx_seg_size - sizeof(*hdr)))) {
-            uct_tcp_ep_handle_invalid_am_length(
-                    ep, hdr->length,
-                    iface->config.rx_seg_size - sizeof(*hdr));
+        if (ucs_unlikely(hdr->length > max_am_length)) {
+            uct_tcp_ep_handle_invalid_am_length(ep, hdr->length,
+                                                max_am_length);
             goto out;
         }
 
