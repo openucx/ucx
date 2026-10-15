@@ -1,0 +1,179 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-vfctx
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 6000m}"
+  requests: "{memory: 16Gi, cpu: 6000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+runs_on_dockers:
+  # HCA RoCE (CX7)
+  - {
+      name: "hca-roce",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  # HCA IB (CX8)
+  - {
+      name: "hca-ib",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+    probe: [info, gtest]
+
+taskName: '${name}/${arch}/${probe}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 80
+    run: |
+      dev=$(ibv_devices | awk 'NR>2 {print $1; exit}')
+      echo "==== probe=${probe} dev=${dev} nofile=$(ulimit -n) memlock=$(ulimit -l) uname=$(uname -r)"
+
+      if [ "${probe}" = "info" ]; then
+        set -x
+        ibv_devinfo -v -d ${dev}
+        pci=$(readlink -f /sys/class/infiniband/${dev}/device)
+        echo "pci=${pci} physfn=$(readlink ${pci}/physfn)"
+        cat ${pci}/resource
+        i=0; while read s e f; do
+          [ $((s)) -ne 0 ] && echo "BAR${i} size=$(( (e - s + 1) / 1024 )) KB"; i=$((i + 1))
+        done < ${pci}/resource
+        for f in fw_ver hca_type board_id fw_pages reg_pages; do
+          echo "${f}: $(cat /sys/class/infiniband/${dev}/${f} 2>&1)"
+        done
+        rdma dev show 2>&1; rdma resource show 2>&1
+        lspci -s $(basename ${pci}) -vv 2>&1 | grep -iE "region|sr-iov|vf" | head
+        command -v mlxconfig mstconfig mlxreg 2>&1 || echo "no mlx tools"
+        set +x
+        cat > /tmp/vfcap.c <<'EOF'
+      #include <infiniband/mlx5dv.h>
+      #include <arpa/inet.h>
+      #include <stdio.h>
+      #include <string.h>
+      #include <errno.h>
+      #include <stdint.h>
+
+      static unsigned bits(const uint8_t *cap, unsigned off, unsigned w)
+      {
+          uint32_t dw = ntohl(*(const uint32_t*)(cap + (off / 32) * 4));
+          return (w == 32) ? dw : (dw >> (32 - (off % 32) - w)) & ((1u << w) - 1);
+      }
+
+      /* Query general HCA caps, then count contexts (+CQ, +QP) until failure */
+      int main(int argc, char **argv)
+      {
+          struct ibv_device **list = ibv_get_device_list(NULL);
+          struct mlx5dv_context_attr attr = {.flags = MLX5DV_CONTEXT_FLAGS_DEVX};
+          uint32_t in[4] = {0}, out[4 + 0x1000 / 4] = {0};
+          struct ibv_qp_init_attr qp_attr;
+          static struct ibv_context *ctxs[4096];
+          struct ibv_context *ctx;
+          struct ibv_pd *pd;
+          struct ibv_cq *cq;
+          int mode, n, i;
+
+          ctx = mlx5dv_open_device(list[0], &attr);
+          in[0] = htonl(0x100 << 16);
+          in[1] = htonl(1);
+          if ((ctx == NULL) || mlx5dv_devx_general_cmd(ctx, in, sizeof(in), out,
+                                                       sizeof(out))) {
+              printf("VFCAP query failed errno=%d\n", errno);
+          } else {
+              const uint8_t *cap = (const uint8_t*)out + 16;
+              printf("VFCAP uar_4k=%u uar_sz=%u (UAR BAR %u MB) log_pg_sz=%u bf=%u "
+                     "log_bf_reg_size=%u log_uar_page_sz=%u num_of_uars_per_page=%u\n",
+                     bits(cap, 0x240, 1), bits(cap, 0x24a, 6),
+                     1u << bits(cap, 0x24a, 6), bits(cap, 0x258, 8),
+                     bits(cap, 0x260, 1), bits(cap, 0x26b, 5),
+                     bits(cap, 0x490, 16), bits(cap, 0x520, 32));
+              ibv_close_device(ctx);
+          }
+
+          for (mode = 0; mode < 3; ++mode) {
+              for (n = 0; n < 4096; ++n) {
+                  ctxs[n] = ctx = ibv_open_device(list[0]);
+                  if (ctx == NULL) {
+                      break;
+                  }
+                  if (mode == 0) {
+                      continue;
+                  }
+                  pd = ibv_alloc_pd(ctx);
+                  cq = pd ? ibv_create_cq(ctx, 256, NULL, NULL, 0) : NULL;
+                  if (cq == NULL) {
+                      break;
+                  }
+                  if (mode == 1) {
+                      continue;
+                  }
+                  memset(&qp_attr, 0, sizeof(qp_attr));
+                  qp_attr.send_cq = qp_attr.recv_cq = cq;
+                  qp_attr.qp_type = IBV_QPT_RC;
+                  qp_attr.cap.max_send_wr = qp_attr.cap.max_recv_wr = 128;
+                  qp_attr.cap.max_send_sge = qp_attr.cap.max_recv_sge = 1;
+                  if (ibv_create_qp(pd, &qp_attr) == NULL) {
+                      break;
+                  }
+              }
+              printf("VFCTX mode=%s limit=%d errno=%d (%s)\n",
+                     (const char*[]){"ctx", "ctx+pd+cq", "ctx+pd+cq+rcqp"}[mode],
+                     n, errno, strerror(errno));
+              for (i = 0; i <= n && i < 4096; ++i) {
+                  if (ctxs[i] != NULL) {
+                      ibv_close_device(ctxs[i]);
+                      ctxs[i] = NULL;
+                  }
+              }
+          }
+          return 0;
+      }
+      EOF
+        gcc -O2 -o /tmp/vfcap /tmp/vfcap.c -libverbs -lmlx5 && /tmp/vfcap
+        exit 0
+      fi
+
+      ./autogen.sh > /dev/null
+      mkdir -p build-test && cd build-test
+      ../contrib/configure-devel --prefix="${PWD}/install" --without-java \
+          --enable-gtest --without-valgrind > /dev/null
+      make -j10 -s > /dev/null
+      make -j10 -s -C test/gtest gtest > /dev/null
+
+      export GTEST_FILTER='*test_uct_peer_failure_multiple*'
+      make -C test/gtest test > /tmp/run1.log 2>&1 && rc=0 || rc=$?
+      grep -E "RUN|OK \]|FAILED|PASSED|INFO \] <|Failure|Error:|setting not found" /tmp/run1.log
+      echo "==== RESULT run1 rc=${rc}"
+
+      # Debug log of one RC run around the first failure
+      export GTEST_FILTER='rc_verbs/test_uct_peer_failure_multiple*'
+      UCX_LOG_LEVEL=debug ./test/gtest/gtest > /tmp/run2.log 2>&1 && rc=0 || rc=$?
+      echo "==== run2 rc=${rc} lines=$(wc -l < /tmp/run2.log)"
+      grep -c "ibv_open_device\|created md\|md_open" /tmp/run2.log || true
+      grep -n -iE "fail|error|uar|errno|cannot" /tmp/run2.log | head -40
+      exit 0
