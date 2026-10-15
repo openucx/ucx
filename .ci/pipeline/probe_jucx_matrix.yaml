@@ -1,0 +1,133 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-jucx
+
+failFast: false
+timeout_minutes: 120
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
+runs_on_dockers:
+  - {
+      name: "roce",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  - {
+      name: "ib1",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  - {
+      name: "ib2",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 110
+    run: |
+      set -x +e
+      source buildlib/az-helpers.sh
+      az_init_modules
+      az_module_load dev/mvn
+      az_module_load dev/jdk-1.8
+      ip -br addr
+      ibdev2netdev
+      ibv_devinfo -v | grep -E "hca_id|sys_image_guid|link_layer|state:"
+      # Diagnostic prints next to the two asserts under investigation.
+      python3 - <<'PYEOF'
+      import re
+      p = 'src/ucp/wireup/wireup.c'
+      s = open(p).read()
+      a = '                ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;\n'
+      assert a in s
+      s = s.replace(a, a + '                ucs_diag("PROBE ep %p init 0x%x rsc %d %s/%s lmd %d cmpt %d(%s) -> ae md %d", ep, ep_init_flags, rsc_index, context->tl_rscs[rsc_index].tl_rsc.tl_name, context->tl_rscs[rsc_index].tl_rsc.dev_name, dst_md_index, ae_cmpts[ae->md_index], context->tl_cmpts[ae_cmpts[ae->md_index]].attr.name, ae->md_index);\n')
+      b = '                ucs_assert_always(cmpt_index == ae_cmpts[dst_md_index]);\n'
+      assert b in s
+      s = s.replace(b, '                if (cmpt_index != ae_cmpts[dst_md_index]) { ucp_md_index_t pi; ucs_diag("PROBE MISMATCH ep %p dst_md %d prev_cmpt %d(%s) ae_cmpt %d(%s) prev_map 0x%lx ae_map 0x%lx", ep, dst_md_index, cmpt_index, context->tl_cmpts[cmpt_index].attr.name, ae_cmpts[dst_md_index], context->tl_cmpts[ae_cmpts[dst_md_index]].attr.name, (unsigned long)prev_dst_md_map, (unsigned long)ae_dst_md_map); for (pi = 0; pi < context->num_mds; ++pi) { ucs_diag("PROBE md[%d] %s cmpt %d", pi, context->tl_mds[pi].rsc.md_name, context->tl_mds[pi].cmpt_index); } }\n' + b)
+      open(p, 'w').write(s)
+      p = 'src/ucp/core/ucp_mm.c'
+      s = open(p).read()
+      c = '            ucs_assert_always(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY);\n'
+      assert c in s
+      s = s.replace(c, '            if (!(md_attr->flags & UCT_MD_FLAG_EXPORTED_MKEY)) { ucp_md_index_t pi; ucs_diag("PROBE import ctx %p md %d %s/%s flags 0x%lx local_md_map 0x%lx export_md_map 0x%lx num_mds %d", context, md_index, md_attr->component_name, context->tl_mds[md_index].rsc.md_name, (unsigned long)md_attr->flags, (unsigned long)tl_mkeys[tl_mkey_index].local_md_map, (unsigned long)context->export_md_map, context->num_mds); for (pi = 0; pi < context->num_mds; ++pi) { ucs_diag("PROBE md[%d] %s/%s flags 0x%lx", pi, context->tl_mds[pi].attr.component_name, context->tl_mds[pi].rsc.md_name, (unsigned long)context->tl_mds[pi].attr.flags); } }\n' + c)
+      open(p, 'w').write(s)
+      PYEOF
+      git diff --stat
+      ./autogen.sh > /dev/null
+      ./contrib/configure-devel --prefix=${WORKSPACE}/install --with-java --enable-gtest=no > /dev/null || exit 1
+      make -j`nproc` > /tmp/make.log 2>&1 || { tail -50 /tmp/make.log; exit 1; }
+      make install > /dev/null 2>&1 || exit 1
+      ./install/bin/ucx_info -d | grep -E "Memory domain|Component"
+      gcc -o /tmp/ucp_cs install/share/ucx/examples/ucp_client_server.c \
+          -Iinstall/include -Linstall/lib -lucp -lucs -Wl,-rpath,${WORKSPACE}/install/lib || exit 1
+      ip4=$(ip -4 -o addr show net1 | awk '{print $4}' | cut -d/ -f1 | head -1)
+      ip6=$(ip -6 -o addr show net1 scope global | awk '{print $4}' | cut -d/ -f1 | head -1)
+      echo "net1 ip4=$ip4 ip6=$ip6"
+      flt='PROBE|Assertion|too small|switching|reachable_mds|lane\[|client created|UCX  ERROR|XGVMI'
+      run_cs() {
+          label=$1; addr=$2; fam=$3; shift 3
+          port=$((40000 + RANDOM % 10000))
+          env UCX_LOG_LEVEL=debug "$@" timeout 60 /tmp/ucp_cs $fam -l $addr -p $port > /tmp/srv_$label.log 2>&1 &
+          spid=$!
+          sleep 3
+          env UCX_LOG_LEVEL=debug "$@" timeout 60 /tmp/ucp_cs $fam -a $addr -p $port > /tmp/cli_$label.log 2>&1
+          echo "==== cs $label client rc=$?"
+          wait $spid
+          echo "==== cs $label server rc=$?"
+          grep -hE "$flt" /tmp/cli_$label.log /tmp/srv_$label.log | grep -v "cannot reach" | cut -c1-300 | head -60
+          grep -hE "UCX data message|received|Client|Server" /tmp/cli_$label.log | tail -3
+      }
+      if [ -n "$ip6" ]; then
+          run_cs ip6 $ip6 -6
+          run_cs ip6_noall $ip6 -6 UCX_CM_USE_ALL_DEVICES=n
+      fi
+      if [ -n "$ip4" ]; then
+          run_cs ip4 $ip4 ""
+      fi
+      export JUCX_TEST_PORT=$((20000 + RANDOM % 10000))
+      cd bindings/java/src/main/native
+      echo "==== JUCX listener, debug"
+      UCX_LOG_LEVEL=debug MAVEN_OPTS='-Dtest=UcpListenerTest -DfailIfNoTests=false' \
+          timeout 300 make test 2>&1 | grep -E "$flt|Tests run|Bound" | grep -v "cannot reach" | cut -c1-300 | head -120
+      echo "==== JUCX listener, UCX_CM_USE_ALL_DEVICES=n"
+      UCX_CM_USE_ALL_DEVICES=n MAVEN_OPTS='-Dtest=UcpListenerTest -DfailIfNoTests=false' \
+          timeout 300 make test 2>&1 | grep -E "Assertion|Tests run|Bound"
+      for order in alphabetical reversealphabetical random random random; do
+          echo "==== JUCX full suite runOrder=$order"
+          UCX_LOG_LEVEL=diag MAVEN_OPTS="-Dsurefire.runOrder=$order" \
+              timeout 600 make test 2>&1 | grep -E "PROBE|Assertion|Running org|Tests run" | cut -c1-300
+      done
+      exit 0
