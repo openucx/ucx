@@ -25,7 +25,7 @@ credentials:
 
 env:
   UCX_REPO: "https://github.com/openucx/ucx.git"
-  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio"
   RUN_TESTS: "yes"
   TEST_PERF: "1"
   ASAN_CHECK: "no"
@@ -35,6 +35,7 @@ env:
   nworkers: "4"
   SLURM_NODES: 1
   SLURM_PARTITION: funk
+  SLURM_GRES: "gpu:1"
   SLURM_HEAD_NODE: scctl
   SLURM_JOB_TIMEOUT: '02:45:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
@@ -83,6 +84,8 @@ steps:
       # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      # Without a GPU gres the node's GPU is hidden from the job.
+      extraArgs: ["--gres=${SLURM_GRES}"]
 
   # Same container name as Test, so pyxis reuses the checkout.
   - name: Checkout
@@ -99,6 +102,8 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-gpu-${BUILD_NUMBER}-w${worker}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
 
   - name: Test
     containerSelector: "{name: 'build_helper_ucx'}"
@@ -114,7 +119,9 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-gpu-${BUILD_NUMBER}-w${worker}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
       slurmEnv: [
+        "NVIDIA_VISIBLE_DEVICES=all",
         "GTEST_MAX_IB_SL=${GTEST_MAX_IB_SL}",
         "EXECUTOR_NUMBER=${worker}",
         "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
