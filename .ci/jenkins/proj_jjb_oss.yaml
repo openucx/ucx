@@ -176,3 +176,83 @@
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-bindings
+    jjb_proj: "ucx-test-bindings-oss"
+    jjb_conf_file: ".ci/pipeline/test_bindings_matrix.yaml"
+    jjb_description: "UCX Go and JUCX bindings tests (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-bindings-gpu
+    jjb_proj: "ucx-test-bindings-gpu-oss"
+    jjb_conf_file: ".ci/pipeline/test_bindings_gpu_matrix.yaml"
+    jjb_description: "UCX Go and JUCX GPU bindings tests on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-bindings-arm
+    jjb_proj: "ucx-test-bindings-arm-oss"
+    jjb_conf_file: ".ci/pipeline/test_bindings_arm_matrix.yaml"
+    jjb_description: "UCX JUCX tests on DL cluster (GB200/aarch64) (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-namespace
+    jjb_proj: "ucx-test-namespace-oss"
+    jjb_conf_file: ".ci/pipeline/test_namespace_matrix.yaml"
+    jjb_description: "UCX namespace tests (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-namespace-gpu
+    jjb_proj: "ucx-test-namespace-gpu-oss"
+    jjb_conf_file: ".ci/pipeline/test_namespace_gpu_matrix.yaml"
+    jjb_description: "UCX GPU namespace tests on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-wirecompat
+    jjb_proj: "ucx-test-wirecompat-oss"
+    jjb_conf_file: ".ci/pipeline/test_wirecompat_matrix.yaml"
+    jjb_description: "UCX wire compatibility tests (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-wirecompat-gpu
+    jjb_proj: "ucx-test-wirecompat-gpu-oss"
+    jjb_conf_file: ".ci/pipeline/test_wirecompat_gpu_matrix.yaml"
+    jjb_description: "UCX GPU wire compatibility tests on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-efa
+    jjb_proj: "ucx-test-efa-oss"
+    jjb_conf_file: ".ci/pipeline/test_efa_matrix.yaml"
+    jjb_description: "UCX EFA tests on AWS (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-mad
+    jjb_proj: "ucx-test-mad-oss"
+    jjb_conf_file: ".ci/pipeline/test_mad_matrix.yaml"
+    jjb_description: "UCX MAD tests (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-bf
+    jjb_proj: "ucx-test-bf-oss"
+    jjb_conf_file: ".ci/pipeline/test_bf_matrix.yaml"
+    jjb_description: "UCX GTest on BlueField (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"

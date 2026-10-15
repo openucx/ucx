@@ -94,6 +94,13 @@ def jobs = [
   'ucx-test-oss',
   'ucx-test-gpu-oss',
   'ucx-test-dl-gpu-oss',
+  'ucx-test-bindings-oss',
+  'ucx-test-bindings-gpu-oss',
+  'ucx-test-namespace-oss',
+  'ucx-test-wirecompat-oss',
+  'ucx-test-wirecompat-gpu-oss',
+  'ucx-test-efa-oss',
+  'ucx-test-mad-oss',
 ]
 
 try {
