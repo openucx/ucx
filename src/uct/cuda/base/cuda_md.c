@@ -28,18 +28,11 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     }
 }
 
-UCS_STATIC_INIT
-{
-    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
-}
-
-UCS_STATIC_CLEANUP
-{
-}
-
 UCS_MODULE_INIT() {
     /* TODO make gdrcopy independent of cuda */
     UCS_MODULE_FRAMEWORK_DECLARE(uct_cuda);
+
+    UCT_CUDADRV_FUNC_LOG_DEBUG(cuInit(0));
     UCS_MODULE_FRAMEWORK_LOAD(uct_cuda, 0);
     return UCS_OK;
 }
