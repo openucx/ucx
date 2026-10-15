@@ -80,6 +80,8 @@ steps:
       # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      # Without a GPU gres the job cgroup hides the GPUs.
+      extraArgs: ["--gres=gpu:1"]
 
   # Same container name in all steps, so pyxis reuses the checkout.
   - name: Checkout
