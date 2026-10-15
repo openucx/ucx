@@ -196,7 +196,7 @@ ucp_ep_flush_slow_path_remove_filter(const ucs_callbackq_elem_t *elem,
            (elem->arg == arg);
 }
 
-static void ucp_ep_flush_mem_completion(uct_completion_t *self)
+void ucp_ep_flush_mem_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.flush.mem.uct_comp);

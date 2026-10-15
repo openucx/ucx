@@ -1268,7 +1268,13 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
+    if ((ucp_ep_params_err_handling_mode(params) ==
+         UCP_ERR_HANDLING_MODE_FAILOVER) &&
+        !worker->context->config.ext.proto_enable) {
+        ucs_error("UCP_ERR_HANDLING_MODE_FAILOVER requires "
+                  "UCX_PROTO_ENABLE=y");
+        status = UCS_ERR_INVALID_PARAM;
+    } else if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
         status = ucp_ep_create_to_sock_addr(worker, params, &ep);
     } else if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
         status = ucp_ep_create_api_conn_request(worker, params, &ep);

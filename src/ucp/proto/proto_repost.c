@@ -215,16 +215,34 @@ static uct_completion_t *ucp_proto_repost_origin_comp(const ucp_request_t *req)
     return NULL;
 }
 
-/* The purged completion is embedded in the origin request. */
+/* Protocol v2 stores this completion in the origin request. */
 static ucp_request_t *ucp_proto_repost_origin_req(const ucp_request_t *req)
 {
     uct_completion_t *origin = ucp_proto_repost_origin_comp(req);
+    ucp_request_t *origin_req;
 
     if (origin == NULL) {
         return NULL;
     }
 
-    return ucs_container_of(origin, ucp_request_t, send.state.uct_comp);
+    ucs_assert(origin->func != ucp_ep_flush_mem_completion);
+    origin_req = ucs_container_of(origin, ucp_request_t, send.state.uct_comp);
+    ucs_assert(origin_req->flags & UCP_REQUEST_FLAG_PROTO_SEND);
+    return origin_req;
+}
+
+static ucp_rkey_h ucp_proto_repost_origin_rkey(const ucp_request_t *origin)
+{
+    ucp_operation_id_t op_id;
+
+    ucs_assert(origin->send.proto_config != NULL);
+
+    op_id = ucp_proto_select_op_id(&origin->send.proto_config->select_param);
+    if ((op_id >= UCP_OP_ID_RNDV_FIRST) && (op_id < UCP_OP_ID_RNDV_LAST)) {
+        return origin->send.rndv.rkey;
+    }
+
+    return origin->send.rma.rkey;
 }
 
 static ucs_status_t
@@ -247,7 +265,7 @@ ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
         return UCS_ERR_UNREACHABLE;
     }
 
-    rkey = origin->send.rma.rkey;
+    rkey = ucp_proto_repost_origin_rkey(origin);
     if (rkey == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
@@ -494,11 +512,20 @@ ucp_proto_repost_config(ucp_ep_h ep)
 ucs_status_t
 ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
 {
-    const ucp_proto_config_t *config = ucp_proto_repost_config(ep);
+    const ucp_proto_config_t *config;
     const ucp_proto_repost_priv_t *rpriv;
     ucp_request_t *req;
     ucs_status_t status;
 
+    /* A memory flush completion is not in the origin request. The caller
+     * completes it; a later flush uses the reconfigured lanes. */
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL) &&
+        (op_info->comp->func == ucp_ep_flush_mem_completion)) {
+        return UCS_ERR_CANCELED;
+    }
+
+    config = ucp_proto_repost_config(ep);
     if (config == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
