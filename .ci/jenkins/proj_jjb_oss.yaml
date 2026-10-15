@@ -48,7 +48,7 @@
       scm:
         - git:
             url: "https://github.com/openucx/ucx.git"
-            branches: [ 'master' ]
+            branches: [ 'origin/pr/12094/head' ]
             shallow-clone: true
             depth: 100
             refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*"
