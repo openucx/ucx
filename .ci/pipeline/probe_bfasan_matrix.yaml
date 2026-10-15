@@ -1,0 +1,51 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-bfasan
+
+failFast: false
+timeout_minutes: 60
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 3Gi, cpu: 2000m}"
+  requests: "{memory: 3Gi, cpu: 2000m}"
+
+runs_on_dockers:
+  - {
+      name: "bf3-asan",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      privileged: true,
+      hostNetwork: true
+    }
+
+matrix:
+  axes:
+    arch: [aarch64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 50
+    run: |
+      set +e
+      echo "==== probe node=${K8S_NODE_NAME} kernel=$(uname -r)"
+      grep -m1 Features /proc/cpuinfo; grep -m1 'CPU part' /proc/cpuinfo
+      gcc --version | head -1; ls -la /lib/aarch64-linux-gnu/libasan.so*
+      cat /proc/sys/kernel/randomize_va_space; ulimit -a | grep -i 'virtual\|stack'
+      printf '#include <stdio.h>\n#include <stdlib.h>\nint main(){char *p=malloc(8);p[0]=1;printf("asan hello %%d\\n",p[0]);free(p);return 0;}\n' > a.c
+      gcc -fsanitize=address -g a.c -o a.out
+      ./a.out; echo "plain rc=$?"
+      ASAN_OPTIONS=protect_shadow_gap=0 ./a.out; echo "psg0 rc=$?"
+      ASAN_OPTIONS=protect_shadow_gap=0:verbosity=1 LD_PRELOAD=/lib/aarch64-linux-gnu/libasan.so.8 stdbuf -e0 -o0 ./a.out 2>&1 | tail -25; echo "preload+stdbuf rc=${PIPESTATUS[0]}"
+      LD_PRELOAD=/lib/aarch64-linux-gnu/libasan.so.8 stdbuf -e0 -o0 ./a.out; echo "preload+stdbuf default rc=$?"
+      ASAN_OPTIONS=protect_shadow_gap=0 LD_PRELOAD=/lib/aarch64-linux-gnu/libasan.so.8 ./a.out; echo "preload psg0 nostdbuf rc=$?"
+      dmesg 2>&1 | tail -5
+      echo "==== RESULT probe done"
