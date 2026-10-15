@@ -29,7 +29,6 @@
 #include <ucp/core/ucp_listener.h>
 #include <ucp/rma/rma.inl>
 #include <ucp/rma/rma.h>
-#include <ucp/rma/rma_bw.h>
 
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/init_once.h>
@@ -231,7 +230,6 @@ static void ucp_ep_deallocate(ucp_ep_h ep)
 {
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep->ext->uct_eps);
-    ucp_rma_bw_ep_state_cleanup(ep);
     ucs_free(ep->ext);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
@@ -755,7 +753,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 
         /* Exclude transports that map remote memory via rkey pointer
          * since mem_type EP is for in-process communication */
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &mem_access_tls) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &mem_access_tls) {
             if (context->tl_mds[context->tl_rscs[rsc_index].md_index].attr.flags &
                 UCT_MD_FLAG_RKEY_PTR) {
                 UCS_STATIC_BITMAP_RESET(&mem_access_tls, rsc_index);
@@ -5366,13 +5364,6 @@ void ucp_ep_set_cfg_index(ucp_ep_h ep, ucp_worker_cfg_index_t cfg_index,
     ucs_trace("ep %p: set cfg_index %u -> %u", ep, ep->cfg_index, cfg_index);
     ep->cfg_index = cfg_index;
     ep->am_lane   = ucp_ep_config(ep)->key.am_lane;
-    if (ucs_unlikely(ep->worker->context->config.ext.rma_bw_measure)) {
-        ucp_rma_bw_ep_state_t *state = ucp_worker_rma_bw_state_get(ep);
-
-        if (state != NULL) {
-            ++state->generation;
-        }
-    }
 }
 
 unsigned ucp_ep_err_mode_init_flags(ucp_err_handling_mode_t err_mode)

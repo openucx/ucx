@@ -259,6 +259,9 @@ void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp);
 
+void uct_rc_ep_am_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                           const void *resp);
+
 void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp);
 
@@ -627,6 +630,24 @@ uct_rc_op_release_iov_get_zcopy(uct_rc_iface_send_op_t *op)
     }
 
     op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_get_bcopy(uct_rc_iface_send_op_t *op)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
+                                                    uct_rc_iface_send_desc_t);
+    uct_rc_iface_t *iface = ucs_container_of(ucs_mpool_obj_owner(desc),
+                                             uct_rc_iface_t, tx.mp);
+
+    iface->tx.reads_completed += op->length;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_reads_get_zcopy(uct_rc_iface_send_op_t *op)
+{
+    op->iface->tx.reads_completed += op->length;
+    uct_rc_op_release_iov_get_zcopy(op);
 }
 
 #endif

@@ -1165,7 +1165,7 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
             continue;
         }
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
             if (UCS_STATIC_BITMAP_GET(*tl_bitmap, aux_rsc)) {
                 continue;
             }
@@ -2046,7 +2046,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     char info_str[UCP_WIREUP_UCT_INFO_SIZE];
 
     ae_dst_md_map = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
             *info_str = '\0';
             if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae,
@@ -2933,7 +2933,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
             rsc = &context->tl_rscs[tl];
             if (ae->tl_name_csum == rsc->tl_name_csum) {
                 snprintf(p, end - p, " "UCT_TL_RESOURCE_DESC_FMT,

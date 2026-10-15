@@ -599,11 +599,8 @@ ucs_status_t ucp_rma_rndv_process_rts(ucp_worker_h worker,
     recv_req->recv.worker        = worker;
     recv_req->recv.op_attr       = 0;
     recv_req->recv.remote_req_id = rts->super.sreq.req_id;
-    ucp_memory_detect(worker->context, (void*)(uintptr_t)rts->address,
-                      rts->super.size, &mem_info);
-    ucs_assertv(mem_info.type == rts->mem_type, "detected mem_type=%s rts=%s",
-                ucs_memory_type_names[mem_info.type],
-                ucs_memory_type_names[rts->mem_type]);
+    ucp_proto_rndv_memory_detect(worker->context, rts->address, rts->super.size,
+                                 rts->mem_type, rts->sys_dev, &mem_info);
     ucp_datatype_iter_init_contig(&recv_req->recv.dt_iter,
                                   (void*)(uintptr_t)rts->address,
                                   rts->super.size, &mem_info);
