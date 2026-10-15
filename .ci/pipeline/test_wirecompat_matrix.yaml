@@ -19,7 +19,7 @@ runs_on_dockers:
   # HCA RoCE (CX7)
   - {
       name: "hca-roce",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
@@ -30,7 +30,7 @@ runs_on_dockers:
   # HCA IB (CX8)
   - {
       name: "hca-ib",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
@@ -48,7 +48,7 @@ taskName: '${name}/${arch}'
 env:
   RUNNING_IN_AZURE: "no"
   BUILD_REPOSITORY_URI: "https://github.com/openucx/ucx.git"
-  UCX_LEGACY_TAGS: "v1.14.0 v1.15.x v1.16.x v1.17.x v1.18.x"
+  UCX_LEGACY_TAGS: "v1.14.0 v1.18.x"
   AZP_AGENT_ID: "0"
 
 steps:
@@ -68,6 +68,9 @@ steps:
     timeout: 120
     run: |
       source buildlib/az-helpers.sh
+      df -h /dev/shm; grep -i huge /proc/meminfo; cat /sys/fs/cgroup/hugetlb.*.max || true
+      ${WORKSPACE}/ucx-install-current/bin/ucx_info -d | grep -c Transport || true
+      UCX_POSIX_HUGETLB_MODE=n ${WORKSPACE}/ucx-install-current/bin/ucx_info -d | grep -c Transport || true
       export UCX_PR_LIB_PATH=${WORKSPACE}/ucx-install-current/lib
       failed=""
       set +e
