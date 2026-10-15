@@ -288,6 +288,8 @@ static ucp_rkey_h ucp_proto_repost_origin_rkey(const ucp_request_t *origin)
     ucs_assert(origin->send.proto_config != NULL);
 
     op_id = ucp_proto_select_op_id(&origin->send.proto_config->select_param);
+    /* A repost request stores the copied payload where rma.rkey sits. */
+    ucs_assert(op_id != UCP_OP_ID_REPOST);
     if ((op_id >= UCP_OP_ID_RNDV_FIRST) && (op_id < UCP_OP_ID_RNDV_LAST)) {
         return origin->send.rndv.rkey;
     }
@@ -508,8 +510,14 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     return UCS_OK;
 }
 
+/* Keep the saved operation. Restart posts this request on the new lane. */
 static ucs_status_t ucp_proto_repost_reset(ucp_request_t *req)
 {
+    if (ucp_proto_repost_origin_comp(req) != NULL) {
+        ucp_proto_completion_init(&req->send.state.uct_comp,
+                                  ucp_proto_repost_completion);
+    }
+
     return UCS_OK;
 }
 
@@ -570,6 +578,17 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
         (op_info->comp != NULL) &&
         (op_info->comp->func == ucp_ep_flush_mem_completion)) {
         return UCS_ERR_CANCELED;
+    }
+
+    /* This completion is the live repost request. Saving op_info again would
+     * replace the user completion with it. */
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL) &&
+        (op_info->comp->func == ucp_proto_repost_completion)) {
+        req = ucs_container_of(op_info->comp, ucp_request_t,
+                                              send.state.uct_comp);
+        ucp_proto_request_restart(req);
+        return UCS_OK;
     }
 
     config = ucp_proto_repost_config(ep);
