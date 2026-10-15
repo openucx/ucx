@@ -599,16 +599,13 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
 
     status = ucp_proto_repost_save(req, op_info);
     if (status != UCS_OK) {
-        /* A stored descriptor means abort already completed the origin.
-         * Return success so the purge callback does not complete it
-         * again. */
-        if (req->send.repost.info != NULL) {
-            ucp_proto_repost_abort(req, status);
-            return UCS_OK;
-        }
+        /* Abort frees the descriptor, so sample it before the call. */
+        int stored = (req->send.repost.info != NULL);
 
+        /* A stored descriptor makes this abort complete the origin. Return
+         * success so the purge callback does not complete it again. */
         ucp_proto_repost_abort(req, status);
-        return status;
+        return stored ? UCS_OK : status;
     }
 
     if (ucp_proto_repost_origin_comp(req) != NULL) {
