@@ -19,7 +19,7 @@ volumes:
 runs_on_dockers:
   - { name: "ubuntu2204-mofed5.7", url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0", arch: x86_64 }
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
-  # Runs the static hello_world over the IB transports, so it needs an RDMA VF.
+  # IB hello_world needs an RDMA VF.
   - {
       name: "centos7-ib",
       url: "harbor.mellanox.com/ucx/centos7:5",

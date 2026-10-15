@@ -13,7 +13,7 @@ kubernetes:
   limits: "{memory: 16Gi, cpu: 8000m}"
   requests: "{memory: 16Gi, cpu: 8000m}"
 
-# Compiler, CUDA, fuse and doxygen modules used by builds.sh.
+# Modules for builds.sh.
 volumes:
   - {mountPath: /hpc/local, hostPath: /hpc/local}
 
@@ -46,9 +46,9 @@ runs_on_dockers:
   - { name: "uos201060a-doca3.4", url: "harbor.mellanox.com/hpcx/x86_64/uos20.1060a/builder:doca-3.4.0", arch: x86_64, build_mode: short }
   - { name: "ubuntu2204-rocm6.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu2204:rocm-6.0.0", arch: x86_64, build_mode: short, CONTAINER: "ubuntu2204_rocm" }
   - { name: "centos7-ib", url: "harbor.mellanox.com/ucx/centos7:5", arch: x86_64, build_mode: sanity }
-  # Intel oneAPI compiler with the Level Zero null driver; no Intel GPU needed.
+  # ZE null driver, no GPU needed.
   - { name: "ubuntu2404-ze", url: "harbor.mellanox.com/ucx/x86_64/ubuntu24.04/builder:ze-oneapi-2026.0.0-l0-1.27.0", arch: x86_64, build_mode: ze, require_ze: "yes" }
-  # ICC and PGI come from /hpc/local modules.
+  # ICC/PGI from /hpc/local.
   - { name: "centos7-icc-pgi", url: "harbor.mellanox.com/ucx/centos7:4", arch: x86_64, build_mode: compilers }
   # aarch64
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0", arch: aarch64, build_mode: long }

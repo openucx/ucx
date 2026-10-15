@@ -81,12 +81,11 @@ steps:
       jobTimeout: "${SLURM_JOB_TIMEOUT}"
       immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
       jobName: "ucx-ci-gpu-${BUILD_NUMBER}-w${worker}"
-      # Build number last: pipeline_stop finds files by job_id_*_${BUILD_NUMBER}.txt.
+      # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
 
-  # Checkout and Test share a container name, so pyxis reuses the container
-  # and the test step finds the checkout in place.
+  # Same container name as Test, so pyxis reuses the checkout.
   - name: Checkout
     containerSelector: "{name: 'build_helper_ucx'}"
     timeout: "${TEST_TIMEOUT}"

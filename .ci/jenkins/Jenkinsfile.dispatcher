@@ -35,8 +35,7 @@ if (currentPrNumber) {
     // across the sleep below breaks the pipeline state checkpoint (WorkflowRun is
     // not serializable). Leaf builds are collected from each stale dispatcher's
     // console log and listed first, so they are killed before their dispatcher.
-    // Leaf jobs live in a folder, logged as "UCX-OSS » <job>", so the display
-    // path is mapped back to the "UCX-OSS/<job>" full name.
+    // Leaf jobs are logged as "UCX-OSS » <job>".
     def targets = []
     staleBuilds.each { b ->
       b.getLog(1000).each { line ->
