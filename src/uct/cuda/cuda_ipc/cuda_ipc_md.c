@@ -489,6 +489,78 @@ static uct_cuda_ipc_rkey_handle_t *uct_cuda_ipc_create_rkey_handle()
     return rkey_handle;
 }
 
+static void uct_cuda_ipc_uuid_to_string(const CUuuid *uuid, char *buffer,
+                                        size_t max)
+{
+    const uint8_t *bytes = (const uint8_t*)uuid->bytes;
+
+    ucs_snprintf_safe(buffer, max,
+                      "GPU-%02x%02x%02x%02x-%02x%02x-%02x%02x-"
+                      "%02x%02x-%02x%02x%02x%02x%02x%02x",
+                      bytes[0], bytes[1], bytes[2], bytes[3], bytes[4],
+                      bytes[5], bytes[6], bytes[7], bytes[8], bytes[9],
+                      bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                      bytes[15]);
+}
+
+static ucs_status_t
+uct_cuda_ipc_nvml_device_by_uuid(const CUuuid *uuid, nvmlDevice_t *device)
+{
+    char uuid_string[NVML_DEVICE_UUID_BUFFER_SIZE];
+
+    uct_cuda_ipc_uuid_to_string(uuid, uuid_string, sizeof(uuid_string));
+    return UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByUUID, uuid_string,
+                                   device);
+}
+
+ucs_ternary_auto_value_t
+uct_cuda_ipc_nvml_peer_accessible(CUdevice cu_dev, const CUuuid *remote_uuid)
+{
+    static const nvmlGpuP2PCapsIndex_t p2p_caps[] = {NVML_P2P_CAPS_INDEX_READ,
+                                                     NVML_P2P_CAPS_INDEX_WRITE};
+    ucs_ternary_auto_value_t result = UCS_NO;
+    nvmlDevice_t local_device, remote_device;
+    nvmlGpuP2PStatus_t p2p_status;
+    CUuuid local_uuid;
+    unsigned i;
+
+    if (UCT_CUDADRV_FUNC(cuDeviceGetUuid(&local_uuid, cu_dev),
+                         UCS_LOG_LEVEL_DEBUG) != UCS_OK) {
+        return UCS_TRY;
+    }
+
+    if (memcmp(&local_uuid, remote_uuid, sizeof(local_uuid)) == 0) {
+        return UCS_YES;
+    }
+
+    if ((uct_cuda_ipc_nvml_device_by_uuid(&local_uuid, &local_device) !=
+         UCS_OK) ||
+        (uct_cuda_ipc_nvml_device_by_uuid(remote_uuid, &remote_device) !=
+         UCS_OK)) {
+        return UCS_TRY;
+    }
+
+    /* CUDA IPC has a single reachability verdict for both GET and PUT, so
+     * reject the peer only if neither native P2P read nor write is supported */
+    for (i = 0; i < ucs_static_array_size(p2p_caps); ++i) {
+        if (UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetP2PStatus, local_device,
+                                    remote_device, p2p_caps[i],
+                                    &p2p_status) != UCS_OK) {
+            return UCS_TRY;
+        }
+
+        if (p2p_status == NVML_P2P_STATUS_OK) {
+            return UCS_YES;
+        }
+
+        if (p2p_status == NVML_P2P_STATUS_UNKNOWN) {
+            result = UCS_TRY;
+        }
+    }
+
+    return result;
+}
+
 static ucs_status_t
 uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 uct_cuda_ipc_unpacked_rkey_t *rkey,
@@ -498,6 +570,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
     ucs_status_t status;
     void *d_mapped;
     uct_cuda_ipc_dev_cache_t *cache;
+    ucs_ternary_auto_value_t peer_accessible;
     uint8_t *accessible;
 
     rkey_handle->cu_dev = cu_dev;
@@ -516,6 +589,17 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
     rkey->stream_id = cache->dev_num;
     accessible      = &cache->accessible[cu_dev];
     if (ucs_unlikely(*accessible == UCS_TRY)) { /* unchecked, add to cache */
+        peer_accessible = uct_cuda_ipc_nvml_peer_accessible(
+                cu_dev, &rkey->super.super.uuid);
+        if (peer_accessible == UCS_NO) {
+            *accessible = UCS_NO;
+            ucs_debug("nvml p2p check: device %d has no native p2p access to "
+                      "remote memory addr %p len %zu",
+                      cu_dev, (void*)rkey->super.super.d_bptr,
+                      rkey->super.super.b_len);
+            status = UCS_ERR_UNREACHABLE;
+            goto err;
+        }
 
         /* Check if peer is reachable by trying to open memory handle. This is
          * necessary when the device is not visible through CUDA_VISIBLE_DEVICES
