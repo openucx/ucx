@@ -1,0 +1,53 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-efa
+
+failFast: false
+timeout_minutes: 140
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# EFA is mocked by ibmock, so no RDMA VF; MKNOD creates the fake uverbs nodes.
+runs_on_dockers:
+  - {
+      name: "rhel90",
+      url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0",
+      arch: x86_64,
+      caps_add: "[ SYS_PTRACE, MKNOD ]"
+    }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Build rdma-core and ibmock
+    parallel: false
+    timeout: 60
+    run: ./contrib/test_efa.sh build_efa
+
+  - name: Run gtests
+    parallel: false
+    timeout: 60
+    run: ./contrib/test_efa.sh gtest_efa
+
+  - name: Setup rdma-core
+    parallel: false
+    timeout: 10
+    run: ./contrib/test_efa.sh install_rdma_core_efa
+
+  - name: RPM test
+    parallel: false
+    timeout: 30
+    run: ./contrib/test_efa.sh test_rpm_efa
