@@ -15,7 +15,6 @@ kubernetes:
 
 volumes:
   - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
-  - {mountPath: /hpc/local, hostPath: /hpc/local}
 
 runs_on_dockers:
   - {
@@ -55,7 +54,6 @@ steps:
       ibv_devinfo -v | grep -E 'hca_id|vendor_part_id|state:|link_layer|GID\['
       ls /sys/class/infiniband/*/ports/1/gid_attrs/ndevs/ 2>&1 | head
       for d in /sys/class/infiniband/*; do for g in 0 1 2 3; do echo "$(basename $d) gid$g $(cat $d/ports/1/gids/$g) $(cat $d/ports/1/gid_attrs/ndevs/$g 2>&1) $(cat $d/ports/1/gid_attrs/types/$g 2>&1)"; done; done
-      ls /hpc/local | head -5; ls /hpc/local/etc/modulefiles | grep -i 'arm\|gcc' | head
       ./autogen.sh > /dev/null 2>&1 && ./contrib/configure-release --prefix=${PWD}/inst --without-go --without-java > /dev/null 2>&1 && make -s -j6 install > /dev/null 2>&1; echo "build rc=$?"
       ./inst/bin/ucx_info -d | grep -E 'Transport|Device' | sort | uniq -c
       export UCX_TLS=rc_x
