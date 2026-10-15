@@ -59,6 +59,8 @@ env:
   TEST_PERF: "0"
   VALGRIND_CHECK: "no"
   nworkers: "4"
+  # The DPU's only non-bridge IPv4 netdev is the calico VXLAN, where rdmacm cannot connect.
+  GTEST_FILTER: "*:-all/test_ucp_sockaddr*"
 
 steps:
   - name: Test
