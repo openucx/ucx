@@ -1,0 +1,62 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-probe-cpumask
+
+failFast: false
+timeout_minutes: 90
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 6000m}"
+  requests: "{memory: 16Gi, cpu: 6000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+runs_on_dockers:
+  # HCA RoCE (CX7)
+  - {
+      name: "hca-roce",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  # HCA IB (CX8)
+  - {
+      name: "hca-ib",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Probe
+    parallel: false
+    timeout: 80
+    run: |
+      set -x
+      grep Cpus_allowed_list /proc/self/status
+      ulimit -n
+      ./autogen.sh
+      mkdir -p build-test && cd build-test
+      ../contrib/configure-devel --prefix="${PWD}/install" --without-java --enable-gtest --without-valgrind
+      make -j10 -s
+      make -j10 -s -C test/gtest gtest
+      export UCX_HANDLE_ERRORS=bt
+      GTEST_FILTER='*test_worker_cpu_mask*' make -C test/gtest test && rc=0 || rc=$?
+      echo "==== RESULT ${name} rc=${rc}"
+      exit ${rc}
