@@ -1,0 +1,269 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-bindings-gpu
+
+failFast: false
+timeout_minutes: 240
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
+  privileged: true
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+  - {credentialsId: 'ucx_harbor_credentials', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
+
+env:
+  UCX_REPO: "https://github.com/openucx/ucx.git"
+  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_HEAD_NODE: scctl
+  SLURM_JOB_TIMEOUT: '02:45:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  TEST_TIMEOUT: 120
+  STORAGE_DRIVER: overlay
+  CI_IMAGE_TAG: "20260223-1"
+
+empty_volumes:
+  - {mountPath: /var/lib/containers/storage, memory: false}
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+
+# One Slurm allocation per binding; both JDKs run in the JUCX one.
+matrix:
+  axes:
+    arch:
+      - x86_64
+    binding: [go, jucx]
+
+taskName: '${binding}-gpu/${arch}'
+
+# testScript runs via bash -c on the funk node. Jenkins substitutes $VAR and
+# ${VAR} for its own env names, so scripts use $(pwd) and lowercase names and
+# contain no backslashes.
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+      # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
+  # Same container name in all steps, so pyxis reuses the checkout.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      testScript: "git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+
+  # Go steps mirror buildlib/pr/go/go-test.yml with name=gpu.
+  - name: Go Format
+    containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
+    timeout: 10
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      testScript: |
+        set -x
+        gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$')
+        [ -z "$gofiles" ] && exit 0
+        unformatted=$(gofmt -l $gofiles)
+        [ -z "$unformatted" ] && exit 0
+        echo >&2 "Go files must be formatted with gofmt. Please run:"
+        for fn in $unformatted; do echo >&2 "  gofmt -w $(pwd)/$fn"; done
+        exit 1
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+
+  - name: Go Build UCX
+    containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      testScript: |
+        set -xeE
+        export ucx_gpu=yes
+        source buildlib/az-helpers.sh
+        az_init_modules
+        az_module_load dev/go-latest
+        load_cuda_env
+        ./autogen.sh
+        setup_go_env
+        mkdir build
+        cd build
+        ../contrib/configure-devel --prefix=$(pwd)/../ucx-install --with-go --enable-gtest=no --with-cuda=$have_cuda
+        make -j$(nproc)
+        make install
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+
+  - name: Go Tests
+    containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      testScript: |
+        set -xeE
+        export ucx_gpu=yes
+        source buildlib/az-helpers.sh
+        az_init_modules
+        load_cuda_env
+        az_module_load dev/go-latest
+        make -C build/bindings/go test
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+
+  - name: Go Perftest
+    containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      testScript: |
+        set -xeE
+        export ucx_gpu=yes
+        source buildlib/az-helpers.sh
+        az_init_modules
+        load_cuda_env
+        az_module_load dev/go-latest
+        ucx_prefix=$(pwd)/ucx-install
+        export LD_LIBRARY_PATH=$ucx_prefix/lib${LD_LIBRARY_PATH:+:}${LD_LIBRARY_PATH:-}
+        perf_args="-p=$((30000 + RANDOM % 10000)) -m=cuda"
+        $ucx_prefix/bin/goperftest $perf_args &
+        sleep 5
+        $ucx_prefix/bin/goperftest $perf_args -i=localhost
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+
+  # JUCX steps mirror buildlib/jucx/jucx-test.yml for java8 and java11.
+  - name: JUCX Tests
+    containerSelector: "{name: 'build_helper_ucx', binding: 'jucx'}"
+    timeout: "${TEST_TIMEOUT}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
+      testScript: |
+        set -xeE
+        export ucx_gpu=yes
+        source buildlib/az-helpers.sh
+        az_init_modules
+        ifaces=$(get_rdma_interfaces)
+        if [ -z "$ifaces" ]; then echo "ERROR: No active RDMA interfaces on machine"; exit 1; fi
+        for jucx_jdk in 1.8 1.11; do
+          echo "==== JUCX java $jucx_jdk: build UCX ===="
+          git clean -xdfq
+          az_module_load dev/mvn
+          az_module_load dev/jdk-$jucx_jdk
+          load_cuda_env
+          ./autogen.sh
+          ./contrib/configure-devel --prefix=$(pwd)/install --with-java --enable-gtest=no --with-cuda=$have_cuda
+          make -j$(nproc)
+          make install
+          echo "==== JUCX java $jucx_jdk: publish-local ===="
+          az_module_unload dev/jdk-$jucx_jdk
+          az_module_load dev/jdk-1.8
+          jucx_tag=$(git describe --tags)
+          make -C bindings/java/src/main/native/ publish-local JUCX_VERSION=${jucx_tag:1}
+          az_module_unload dev/jdk-1.8
+          az_module_load dev/jdk-$jucx_jdk
+          echo "==== JUCX java $jucx_jdk: tests ===="
+          jucx_port=$((20000 + RANDOM % 10000))
+          export JUCX_TEST_PORT=$jucx_port
+          make -C bindings/java/src/main/native test
+          make -C bindings/java/src/main/native package
+          ipv4_found=0
+          for iface in $ifaces; do
+            server_ip=$(get_ip $iface)
+            [ -z "$server_ip" ] && continue
+            echo "Running standalone benchmark on $iface:$jucx_port"
+            java_cmd=(java "-XX:ErrorFile=$(pwd)/hs_err_%p.log" "-XX:OnError=cat $(pwd)/hs_err_%p.log" -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*")
+            "${java_cmd[@]}" org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver s=$server_ip p=$jucx_port t=1000000 &
+            java_pid=$!
+            sleep 10
+            "${java_cmd[@]}" org.openucx.jucx.examples.UcxReadBWBenchmarkSender s=$server_ip p=$jucx_port t=1000000
+            wait $java_pid
+            ipv4_found=1
+          done
+          if [ $ipv4_found -eq 0 ]; then echo "ERROR: No IPv4 address on any of $ifaces"; exit 1; fi
+          az_module_unload dev/jdk-$jucx_jdk
+        done
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
