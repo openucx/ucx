@@ -1381,22 +1381,7 @@ UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
 class test_gdr_copy : public test_md {
 protected:
-    static ucs_log_func_rc_t
-    count_errors_logger(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level,
-                        const ucs_log_component_config_t *comp_conf,
-                        const char *message, va_list ap)
-    {
-        if (level == UCS_LOG_LEVEL_ERROR) {
-            ++m_error_count;
-            return UCS_LOG_FUNC_RC_STOP;
-        }
-
-        return UCS_LOG_FUNC_RC_CONTINUE;
-    }
-
     static constexpr size_t REG_SIZE = 65536;
-    static unsigned m_error_count;
 
     ucs_status_t register_mem()
     {
@@ -1430,8 +1415,6 @@ protected:
     }
 };
 
-unsigned test_gdr_copy::m_error_count;
-
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
 {
@@ -1464,30 +1447,30 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
 UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no")
 {
-    constexpr size_t size = 65536;
     void *address;
     ucs::handle<void*> buffer;
     uct_mem_h memh;
 
-    int ret = posix_memalign(&address, size, size);
+    int ret = posix_memalign(&address, REG_SIZE, REG_SIZE);
     if (ret == 0) {
         buffer.reset(address, free);
     }
     ASSERT_EQ(0, ret);
 
     for (unsigned flags : {0u, unsigned(UCT_MD_MEM_FLAG_HIDE_ERRORS)}) {
-        m_error_count = 0;
         ucs_status_t status;
+
+        m_errors.clear();
         {
-            scoped_log_handler slh(count_errors_logger);
-            status = reg_mem(UCT_MD_MEM_ACCESS_ALL | flags, address, size,
+            scoped_log_handler slh(hide_errors_logger);
+            status = reg_mem(UCT_MD_MEM_ACCESS_ALL | flags, address, REG_SIZE,
                              &memh);
         }
         ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, status);
         if (flags == 0) {
-            EXPECT_GT(m_error_count, 0u);
+            EXPECT_GT(m_errors.size(), 0u);
         } else {
-            EXPECT_EQ(0u, m_error_count);
+            EXPECT_EQ(0u, m_errors.size());
         }
     }
 }
@@ -1522,7 +1505,7 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_qualification,
     version(&major, &minor);
     if (((major > 2) || ((major == 2) && (minor >= 6))) &&
         (attribute != nullptr) && (cuDriverGetVersion(&driver) == CUDA_SUCCESS) &&
-        (driver >= 13050) &&
+        (driver >= UCT_GDR_COPY_CUDA_ASYNC_MIN_DRIVER_VERSION) &&
         (attribute(ucs_derived_of(md(), uct_gdr_copy_md_t)->gdrcpy_ctx,
                    GDR_ATTR_USING_DMA_BUF_MMAP, &backend) == 0)) {
         expected = !!backend;
