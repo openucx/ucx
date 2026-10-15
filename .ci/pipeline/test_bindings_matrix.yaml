@@ -44,15 +44,15 @@ runs_on_dockers:
       JAVA_VERSION: "1.8"
     }
   - {
-      name: "jucx-java8-roce",
+      name: "jucx-java11",
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
-      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
-      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]",
-      JAVA_VERSION: "1.8"
+      JAVA_VERSION: "1.11"
     }
 
 taskName: '${name}/${arch}'
@@ -161,28 +161,6 @@ steps:
       MAVEN_VERSION=${TAG:1}
       make -C bindings/java/src/main/native/ publish-local \
           JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
-
-  # Temporary: device and MD info for the JUCX assertion triage.
-  - name: JUCX Diag
-    containerSelector: "{name: 'jucx.*'}"
-    parallel: false
-    timeout: 60
-    run: |
-      set -x +e
-      source buildlib/az-helpers.sh
-      az_init_modules
-      az_module_load dev/mvn
-      az_module_load dev/jdk-${JAVA_VERSION}
-      ibv_devinfo -v | grep -E "hca_id|fw_ver|node_guid|sys_image_guid|link_layer|state:|vendor_part_id"
-      ip -br addr
-      ./install/bin/ucx_info -v
-      ./install/bin/ucx_info -d | grep -E "Memory domain|Component|register|export|Transport|Device"
-      UCX_LOG_LEVEL=debug ./install/bin/ucx_info -e -u t 2>&1 | grep -iE "global|export|md\[" | head -40
-      cd bindings/java/src/main/native
-      for t in UcpMemoryTest UcpListenerTest; do
-          MAVEN_OPTS="-Dtest=$t -DfailIfNoTests=false" UCX_LOG_LEVEL=debug UCX_HANDLE_ERRORS=bt timeout 300 make test 2>&1 | grep -iE "export|global_id|md\[|wireup|cmpt|Assertion|Tests run|lane|select" | head -150
-      done
-      exit 0
 
   - name: JUCX Tests
     containerSelector: "{name: 'jucx.*'}"
