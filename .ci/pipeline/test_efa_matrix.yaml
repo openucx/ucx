@@ -41,6 +41,16 @@ steps:
     timeout: 60
     run: ./contrib/test_efa.sh build_efa
 
+  # ibmock devices need uverbs0/1, which a VF pod does not have.
+  - name: Setup mock devices
+    parallel: false
+    timeout: 5
+    run: |
+      for i in 0 1; do
+        [ -e /dev/infiniband/uverbs$i ] || mknod -m 666 /dev/infiniband/uverbs$i c 1 3
+      done
+      ls -l /dev/infiniband
+
   - name: Run gtests
     parallel: false
     timeout: 140
