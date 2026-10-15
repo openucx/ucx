@@ -40,16 +40,6 @@ runs_on_dockers:
       requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
-  - {
-      name: "ib2",
-      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
-      arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
-      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
-      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]"
-    }
 
 taskName: '${name}/${arch}'
 
@@ -91,43 +81,36 @@ steps:
       make -j`nproc` > /tmp/make.log 2>&1 || { tail -50 /tmp/make.log; exit 1; }
       make install > /dev/null 2>&1 || exit 1
       ./install/bin/ucx_info -d | grep -E "Memory domain|Component"
-      gcc -o /tmp/ucp_cs install/share/ucx/examples/ucp_client_server.c \
-          -Iinstall/include -Linstall/lib -lucp -lucs -Wl,-rpath,${WORKSPACE}/install/lib || exit 1
-      ip4=$(ip -4 -o addr show net1 | awk '{print $4}' | cut -d/ -f1 | head -1)
-      ip6=$(ip -6 -o addr show net1 scope global | awk '{print $4}' | cut -d/ -f1 | head -1)
-      echo "net1 ip4=$ip4 ip6=$ip6"
-      flt='PROBE|Assertion|too small|switching|reachable_mds|lane\[|client created|UCX  ERROR|XGVMI'
-      run_cs() {
-          label=$1; addr=$2; fam=$3; shift 3
-          port=$((40000 + RANDOM % 10000))
-          env UCX_LOG_LEVEL=debug "$@" timeout 60 /tmp/ucp_cs $fam -l $addr -p $port > /tmp/srv_$label.log 2>&1 &
-          spid=$!
-          sleep 3
-          env UCX_LOG_LEVEL=debug "$@" timeout 60 /tmp/ucp_cs $fam -a $addr -p $port > /tmp/cli_$label.log 2>&1
-          echo "==== cs $label client rc=$?"
-          wait $spid
-          echo "==== cs $label server rc=$?"
-          grep -hE "$flt" /tmp/cli_$label.log /tmp/srv_$label.log | grep -v "cannot reach" | cut -c1-300 | head -60
-          grep -hE "UCX data message|received|Client|Server" /tmp/cli_$label.log | tail -3
-      }
-      if [ -n "$ip6" ]; then
-          run_cs ip6 $ip6 -6
-          run_cs ip6_noall $ip6 -6 UCX_CM_USE_ALL_DEVICES=n
-      fi
-      if [ -n "$ip4" ]; then
-          run_cs ip4 $ip4 ""
-      fi
       export JUCX_TEST_PORT=$((20000 + RANDOM % 10000))
       cd bindings/java/src/main/native
-      echo "==== JUCX listener, debug"
-      UCX_LOG_LEVEL=debug MAVEN_OPTS='-Dtest=UcpListenerTest -DfailIfNoTests=false' \
-          timeout 300 make test 2>&1 | grep -E "$flt|Tests run|Bound" | grep -v "cannot reach" | cut -c1-300 | head -120
-      echo "==== JUCX listener, UCX_CM_USE_ALL_DEVICES=n"
-      UCX_CM_USE_ALL_DEVICES=n MAVEN_OPTS='-Dtest=UcpListenerTest -DfailIfNoTests=false' \
-          timeout 300 make test 2>&1 | grep -E "Assertion|Tests run|Bound"
-      for order in alphabetical reversealphabetical random random random; do
-          echo "==== JUCX full suite runOrder=$order"
-          UCX_LOG_LEVEL=diag MAVEN_OPTS="-Dsurefire.runOrder=$order" \
-              timeout 600 make test 2>&1 | grep -E "PROBE|Assertion|Running org|Tests run" | cut -c1-300
+      MAVEN_OPTS='-Dtest=UcpRequestTest -DfailIfNoTests=false' timeout 300 make test 2>&1 | grep -E "Tests run"
+      tc=build-java/test-classes
+      echo "==== readdir order of $tc/ucx"
+      ls -U $tc/ucx
+      for so in $tc/ucx/libuct_ib.so $tc/ucx/libuct_rdmacm.so $tc/ucx/libuct_ib_mlx5.so $tc/ucx/libuct_ib_gga.so; do
+          [ -e $so ] || continue
+          echo "==== $so"
+          readelf -d $so | grep -E "NEEDED|RUNPATH|RPATH|SONAME"
       done
+      # Dump which libuct_ib copies the frozen test JVM mapped.
+      run_maps() {
+          label=$1; shift
+          echo "==== JUCX $label"
+          env "$@" UCX_LOG_LEVEL=diag timeout 240 make test > /tmp/jucx_$label.log 2>&1 &
+          mpid=$!
+          for i in $(seq 1 200); do
+              for jp in $(pgrep -f surefirebooter); do
+                  grep -oE "/[^ ]*libuct_(ib|rdmacm)[^ /]*\.so[^ ]*" /proc/$jp/maps 2>/dev/null | sort -u > /tmp/maps_$label.$jp
+              done
+              grep -q "Assertion\|Tests run: [0-9]*, Failures: [0-9]*, Errors: [0-9]*, Skipped: [0-9]*$" /tmp/jucx_$label.log && break
+              sleep 1
+          done
+          sleep 2
+          for m in /tmp/maps_$label.*; do echo "-- $m"; cat $m; done
+          pkill -f surefirebooter
+          wait $mpid
+          grep -E "Assertion|Running org|Tests run|PROBE (MISMATCH|import|md\[)" /tmp/jucx_$label.log | cut -c1-260 | head -40
+      }
+      run_maps listener MAVEN_OPTS='-Dtest=UcpListenerTest -DfailIfNoTests=false'
+      run_maps memory MAVEN_OPTS='-Dtest=UcpMemoryTest -DfailIfNoTests=false'
       exit 0
