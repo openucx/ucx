@@ -788,6 +788,20 @@ typedef struct ucp_ep_params {
      */
     ucs_sock_addr_t         local_sockaddr;
 
+    /**
+     * Quality of service level of this endpoint, where 0 is the highest
+     * priority and larger values denote lower priority. This is an abstract
+     * level: each transport maps it to the prioritization mechanism provided
+     * by the underlying fabric.
+     *
+     * The number of levels a transport can distinguish is limited. Levels
+     * which exceed that number are mapped to the lowest priority available,
+     * and transports which do not support prioritization ignore this value.
+     *
+     * This setting is optional. To enable it, the corresponding @ref
+     * UCP_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must be set.
+     */
+    uint8_t                 qos_level;
 } ucp_ep_params_t;
 
 
