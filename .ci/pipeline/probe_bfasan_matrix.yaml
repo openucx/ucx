@@ -5,47 +5,59 @@
 job: ucx-probe-bfasan
 
 failFast: false
-timeout_minutes: 60
+timeout_minutes: 600
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
   namespace: nbu-swx-ucx
-  limits: "{memory: 3Gi, cpu: 2000m}"
-  requests: "{memory: 3Gi, cpu: 2000m}"
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  requests: "{memory: 10Gi, cpu: 6000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# Verbs need privileged mode, RoCE GIDs need the DPU host netdevs.
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
 
 runs_on_dockers:
   - {
       name: "bf3-asan",
-      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      # gcc 13 ASan gtest dies with SIGILL on BF3; gcc 11 matches the Azure BF hosts.
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu22.04/builder:mofed-24.10-3.2.4.0",
       arch: aarch64,
       nodeSelector: "hardware.node.kubernetes.io=BF3",
       tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
       privileged: true,
-      hostNetwork: true
+      hostNetwork: true,
+      SLOT_BASE: "4",
+      ASAN_CHECK: "yes"
     }
 
 matrix:
   axes:
     arch: [aarch64]
+    worker: [0, 1, 2, 3]
 
-taskName: '${name}/${arch}'
+taskName: '${name}/${arch}/w${worker}'
+
+env:
+  RUN_TESTS: "yes"
+  TEST_PERF: "0"
+  VALGRIND_CHECK: "no"
+  nworkers: "4"
+  # The DPU's only non-bridge IPv4 netdev is the calico VXLAN, where rdmacm cannot connect.
+  GTEST_FILTER: "*:-all/test_ucp_sockaddr*"
 
 steps:
-  - name: Probe
+  - name: Test
     parallel: false
-    timeout: 50
+    timeout: 290
     run: |
-      set +e
-      echo "==== probe node=${K8S_NODE_NAME} kernel=$(uname -r)"
-      grep -m1 Features /proc/cpuinfo; grep -m1 'CPU part' /proc/cpuinfo
-      gcc --version | head -1; ls -la /lib/aarch64-linux-gnu/libasan.so*
-      cat /proc/sys/kernel/randomize_va_space; ulimit -a | grep -i 'virtual\|stack'
-      printf '#include <stdio.h>\n#include <stdlib.h>\nint main(){char *p=malloc(8);p[0]=1;printf("asan hello %%d\\n",p[0]);free(p);return 0;}\n' > a.c
-      gcc -fsanitize=address -g a.c -o a.out
-      ./a.out; echo "plain rc=$?"
-      ASAN_OPTIONS=protect_shadow_gap=0 ./a.out; echo "psg0 rc=$?"
-      ASAN_OPTIONS=protect_shadow_gap=0:verbosity=1 LD_PRELOAD=/lib/aarch64-linux-gnu/libasan.so.8 stdbuf -e0 -o0 ./a.out 2>&1 | tail -25; echo "preload+stdbuf rc=${PIPESTATUS[0]}"
-      LD_PRELOAD=/lib/aarch64-linux-gnu/libasan.so.8 stdbuf -e0 -o0 ./a.out; echo "preload+stdbuf default rc=$?"
-      ASAN_OPTIONS=protect_shadow_gap=0 LD_PRELOAD=/lib/aarch64-linux-gnu/libasan.so.8 ./a.out; echo "preload psg0 nostdbuf rc=$?"
-      dmesg 2>&1 | tail -5
-      echo "==== RESULT probe done"
+      # Host network and CPUs are shared, so each pod gets its own ports and 2 CPUs.
+      slot=$((SLOT_BASE + worker))
+      export EXECUTOR_NUMBER=${slot}
+      cpu_set="$((slot * 2))-$((slot * 2 + 1))"
+      echo "Running test_jenkins.sh on $(hostname) slot ${slot} CPUs ${cpu_set}"
+      taskset -c "${cpu_set}" ./contrib/test_jenkins.sh

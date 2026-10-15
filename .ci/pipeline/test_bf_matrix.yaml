@@ -36,7 +36,8 @@ runs_on_dockers:
     }
   - {
       name: "bf3-asan",
-      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      # gcc 13 ASan gtest dies with SIGILL on BF3; gcc 11 matches the Azure BF hosts.
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu22.04/builder:mofed-24.10-3.2.4.0",
       arch: aarch64,
       nodeSelector: "hardware.node.kubernetes.io=BF3",
       tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
