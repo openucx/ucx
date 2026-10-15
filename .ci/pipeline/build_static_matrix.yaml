@@ -17,16 +17,27 @@ volumes:
   - {mountPath: /hpc/local, hostPath: /hpc/local}
 
 runs_on_dockers:
-  - { name: "ubuntu2004-mofed5.0", url: "harbor.mellanox.com/ucx/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0", arch: x86_64 }
-  - { name: "centos7-ib", url: "harbor.mellanox.com/ucx/centos7:5", arch: x86_64 }
+  - { name: "ubuntu2204-mofed5.7", url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0", arch: x86_64 }
+  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
+  # Runs the static hello_world over the IB transports, so it needs an RDMA VF.
+  - {
+      name: "centos7-ib",
+      url: "harbor.mellanox.com/ucx/centos7:5",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 8Gi, cpu: 6000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 8Gi, cpu: 6000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      EXTRA_MODULES: "ucx-ib ucx-cma ucx-rdmacm ucx-ib-mlx5",
+      EXTRA_TLS: "dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma",
+      RUN_TLS: "ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm"
+    }
 
 taskName: '${arch}/${name}'
 
 env:
   BUILD_ID: "${BUILD_NUMBER}"
-  EXTRA_MODULES: ""
-  EXTRA_TLS: ""
-  RUN_TLS: ""
 
 steps:
   - name: Build Static
@@ -34,4 +45,6 @@ steps:
     timeout: 30
     run: |
       set -euo pipefail
+      # Only the IB row sets these.
+      export EXTRA_MODULES="${EXTRA_MODULES:-}" EXTRA_TLS="${EXTRA_TLS:-}" RUN_TLS="${RUN_TLS:-}"
       ./buildlib/tools/build_static.sh
