@@ -59,6 +59,7 @@ matrix:
 
 taskName: '${binding}-gpu/${arch}'
 
+# The NVIDIA_* env makes enroot inject the GPU driver and nvidia-smi.
 # testScript runs via bash -c on the funk node. Jenkins substitutes $VAR and
 # ${VAR} for its own env names, so scripts use $(pwd) and lowercase names and
 # contain no backslashes.
@@ -148,6 +149,8 @@ steps:
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
+      slurmEnv: ["ALL", "NVIDIA_VISIBLE_DEVICES=all", "NVIDIA_DRIVER_CAPABILITIES=all"]
+      containerEnv: ["NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES"]
 
   - name: Go Tests
     containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
@@ -171,6 +174,8 @@ steps:
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
+      slurmEnv: ["ALL", "NVIDIA_VISIBLE_DEVICES=all", "NVIDIA_DRIVER_CAPABILITIES=all"]
+      containerEnv: ["NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES"]
 
   - name: Go Perftest
     containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
@@ -199,6 +204,8 @@ steps:
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
+      slurmEnv: ["ALL", "NVIDIA_VISIBLE_DEVICES=all", "NVIDIA_DRIVER_CAPABILITIES=all"]
+      containerEnv: ["NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES"]
 
   # JUCX steps mirror buildlib/jucx/jucx-test.yml for java8 and java11.
   - name: JUCX Tests
@@ -260,6 +267,8 @@ steps:
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
+      slurmEnv: ["ALL", "NVIDIA_VISIBLE_DEVICES=all", "NVIDIA_DRIVER_CAPABILITIES=all"]
+      containerEnv: ["NVIDIA_VISIBLE_DEVICES", "NVIDIA_DRIVER_CAPABILITIES"]
 
 pipeline_stop:
   containerSelector: "{name: 'build_helper_ucx'}"
