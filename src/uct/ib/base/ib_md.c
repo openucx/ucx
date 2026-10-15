@@ -1459,6 +1459,13 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
         /* Check for dma-buf support */
         uct_ib_md_check_dmabuf(md);
+
+        /* SambaNova RDU memory is registered with dma-buf when supported;
+         * otherwise, it is registered directly, as RDU drivers without a
+         * dma-buf exporter allow */
+        if (!(md->cap_flags & UCT_MD_FLAG_REG_DMABUF)) {
+            uct_ib_check_gpudirect_driver(md, "/dev/rdu", UCS_MEMORY_TYPE_RDU);
+        }
     }
 
     if (!(md->reg_mem_types & ~UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&

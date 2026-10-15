@@ -22,6 +22,7 @@ static const char *uct_rdu_devmem_libs[] = {"librdu_devmem.so.1",
 static ucs_init_once_t uct_rdu_devmem_init_once = UCS_INIT_ONCE_INITIALIZER;
 static uct_rdu_devmem_ops_t uct_rdu_devmem_ops;
 static int uct_rdu_devmem_available = 0;
+static int uct_rdu_devmem_dmabuf    = 0;
 
 static void uct_rdu_devmem_load(void)
 {
@@ -46,7 +47,12 @@ static void uct_rdu_devmem_load(void)
     uct_rdu_devmem_ops.detect        = dlsym(handle, "rdu_detect");
     uct_rdu_devmem_ops.get_pcie_path = dlsym(handle, "rdu_get_pcie_path");
     uct_rdu_devmem_ops.foreach_alloc = dlsym(handle, "rdu_foreach_alloc");
+    uct_rdu_devmem_ops.dmabuf_export = dlsym(handle, "rdu_dmabuf_export");
+    uct_rdu_devmem_ops.dmabuf_export_supported =
+            dlsym(handle, "rdu_dmabuf_export_supported");
 
+    /* The dma-buf functions are optional: without them, RDU memory is not
+     * exported as a dma-buf, and the IB memory domain registers it directly */
     if ((uct_rdu_devmem_ops.detect == NULL) ||
         (uct_rdu_devmem_ops.get_pcie_path == NULL) ||
         (uct_rdu_devmem_ops.foreach_alloc == NULL)) {
@@ -54,6 +60,15 @@ static void uct_rdu_devmem_load(void)
         dlclose(handle);
         return;
     }
+
+    /* Ask the runtime once whether the driver can export dma-buf, so every
+     * memory domain and UCP context sees the same answer */
+    uct_rdu_devmem_dmabuf = (uct_rdu_devmem_ops.dmabuf_export != NULL) &&
+                            (uct_rdu_devmem_ops.dmabuf_export_supported !=
+                             NULL) &&
+                            uct_rdu_devmem_ops.dmabuf_export_supported();
+    ucs_debug("rdu_md: dma-buf export is %ssupported",
+              uct_rdu_devmem_dmabuf ? "" : "not ");
 
     /* The library stays loaded for the lifetime of the process */
     uct_rdu_devmem_available = 1;
@@ -66,4 +81,9 @@ const uct_rdu_devmem_ops_t *uct_rdu_devmem_get(void)
         uct_rdu_devmem_load();
     }
     return uct_rdu_devmem_available ? &uct_rdu_devmem_ops : NULL;
+}
+
+int uct_rdu_devmem_dmabuf_supported(void)
+{
+    return (uct_rdu_devmem_get() != NULL) && uct_rdu_devmem_dmabuf;
 }

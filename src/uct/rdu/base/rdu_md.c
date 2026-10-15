@@ -18,6 +18,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <inttypes.h>
 
 /* Bounded length for the sysfs PCIe path of an RDU */
@@ -136,7 +137,11 @@ static ucs_status_t uct_rdu_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_md_base_md_query(md_attr);
     md_attr->flags            = 0;
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_RDU);
-    md_attr->dmabuf_mem_types = 0;
+    /* The IB memory domain registers RDU memory with the dma-buf file
+     * descriptor returned by mem_query, when the driver can export one */
+    md_attr->dmabuf_mem_types = uct_rdu_devmem_dmabuf_supported() ?
+                                        UCS_BIT(UCS_MEMORY_TYPE_RDU) :
+                                        0;
     md_attr->access_mem_types = 0;
     md_attr->max_alloc        = 0;
     md_attr->max_reg          = ULONG_MAX;
@@ -202,6 +207,9 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
 {
     uct_rdu_md_t *md               = ucs_derived_of(uct_md, uct_rdu_md_t);
     uct_rdu_find_alloc_ctx_t alloc = {address, address, length};
+    uint64_t dmabuf_offset         = 0;
+    int dmabuf_fd                  = UCT_DMABUF_FD_INVALID;
+    uct_rdu_devmem_status_t status;
     uint32_t rdu_id;
     uint64_t dev_addr;
     ucs_sys_device_t sys_dev;
@@ -236,6 +244,33 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
         mem_attr->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    if (mem_attr->field_mask & (UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+                                UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET)) {
+        /* The returned offset is the position of the address within the
+         * exported dma-buf; the caller owns the file descriptor */
+        status = uct_rdu_devmem_dmabuf_supported() ?
+                         uct_rdu_devmem_dmabuf_export(address, length,
+                                                      &dmabuf_fd,
+                                                      &dmabuf_offset) :
+                         UCT_RDU_DEVMEM_ENOTSUPPORTED;
+        if (status != UCT_RDU_DEVMEM_SUCCESS) {
+            ucs_debug("rdu_md: failed to export dma-buf for %p length %zu: %d",
+                      address, length, status);
+            dmabuf_fd     = UCT_DMABUF_FD_INVALID;
+            dmabuf_offset = 0;
+        }
+
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
+            mem_attr->dmabuf_fd = dmabuf_fd;
+        } else if (dmabuf_fd != UCT_DMABUF_FD_INVALID) {
+            close(dmabuf_fd);
+        }
+
+        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
+            mem_attr->dmabuf_offset = dmabuf_offset;
+        }
     }
 
     return UCS_OK;

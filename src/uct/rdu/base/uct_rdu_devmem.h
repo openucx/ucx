@@ -6,6 +6,7 @@
 #ifndef UCT_RDU_DEVMEM_H
 #define UCT_RDU_DEVMEM_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,10 +16,12 @@
  * does for NVML, so the module builds without the runtime installed.
  */
 
-/* Return codes; only the two the memory domain checks against are declared. */
+/* Return codes; only the ones the memory domain checks against are declared,
+ * with the values of the runtime library. */
 typedef enum {
-    UCT_RDU_DEVMEM_FAILURE = -1, /* call did not succeed */
-    UCT_RDU_DEVMEM_SUCCESS = 0 /* call succeeded */
+    UCT_RDU_DEVMEM_FAILURE       = -1, /* call did not succeed */
+    UCT_RDU_DEVMEM_SUCCESS       = 0, /* call succeeded */
+    UCT_RDU_DEVMEM_ENOTSUPPORTED = 4 /* the driver cannot export dma-buf */
 } uct_rdu_devmem_status_t;
 
 /* Callback for rdu_foreach_alloc(): invoked once per live RDU allocation. */
@@ -32,6 +35,9 @@ typedef struct uct_rdu_devmem_ops {
     uct_rdu_devmem_status_t (*get_pcie_path)(uint32_t rdu_id, char *buf,
                                              size_t buflen);
     void (*foreach_alloc)(uct_rdu_devmem_foreach_cb_t cb, void *arg);
+    uct_rdu_devmem_status_t (*dmabuf_export)(const void *address, size_t size,
+                                             int *fd_p, uint64_t *offset_p);
+    bool (*dmabuf_export_supported)(void);
 } uct_rdu_devmem_ops_t;
 
 /*
@@ -39,6 +45,12 @@ typedef struct uct_rdu_devmem_ops {
  * call, or NULL if the runtime is not available.  Idempotent and thread-safe.
  */
 const uct_rdu_devmem_ops_t *uct_rdu_devmem_get(void);
+
+/*
+ * Return nonzero if RDU memory can be exported as a dma-buf on this host. This
+ * is decided once, when the runtime library is loaded, and does not change.
+ */
+int uct_rdu_devmem_dmabuf_supported(void);
 
 /*
  * Thin wrappers so call sites stay SDK-agnostic: they dispatch through the
@@ -69,6 +81,18 @@ uct_rdu_devmem_foreach_alloc(uct_rdu_devmem_foreach_cb_t cb, void *arg)
     if (ops != NULL) {
         ops->foreach_alloc(cb, arg);
     }
+}
+
+static inline uct_rdu_devmem_status_t
+uct_rdu_devmem_dmabuf_export(const void *address, size_t size, int *fd_p,
+                             uint64_t *offset_p)
+{
+    const uct_rdu_devmem_ops_t *ops = uct_rdu_devmem_get();
+    /* dmabuf_export is optional: it is absent on runtimes without a dma-buf
+     * exporter */
+    return ((ops != NULL) && (ops->dmabuf_export != NULL)) ?
+                   ops->dmabuf_export(address, size, fd_p, offset_p) :
+                   UCT_RDU_DEVMEM_FAILURE;
 }
 
 #endif /* UCT_RDU_DEVMEM_H */
