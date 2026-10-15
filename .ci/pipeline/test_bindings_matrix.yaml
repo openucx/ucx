@@ -37,9 +37,9 @@ runs_on_dockers:
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
-      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
-      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]",
       JAVA_VERSION: "1.8"
     }
@@ -48,9 +48,9 @@ runs_on_dockers:
       url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
-      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
-      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]",
       JAVA_VERSION: "1.11"
     }
