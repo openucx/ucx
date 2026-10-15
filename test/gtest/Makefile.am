@@ -82,12 +82,6 @@ gtest_CPPFLAGS = \
 	$(GTEST_CPPFLAGS) \
 	$(OPENMP_CFLAGS)
 
-if HAVE_CUDA
-if HAVE_GDR_COPY
-gtest_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
-endif
-endif
-
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
 
 # disable-new-dtags to force using RPATH instead of RUNPATH to avoid loading of
@@ -307,6 +301,11 @@ endif
 
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
+
+if HAVE_GDR_COPY
+gtest_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
+endif
+
 gtest_LDFLAGS += \
 	$(CUDA_LDFLAGS)
 gtest_LDADD += \
