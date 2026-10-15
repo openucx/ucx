@@ -5,7 +5,7 @@
 job: ucx-test-gpu
 
 failFast: false
-timeout_minutes: 160
+timeout_minutes: 240
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -30,7 +30,6 @@ env:
   TEST_PERF: "1"
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
-  EXECUTOR_NUMBER: "0"
   RUNNING_IN_AZURE: "no"
   GTEST_MAX_IB_SL: "4"
   nworkers: "4"
