@@ -2,10 +2,10 @@
 # See file LICENSE for terms.
 #
 ---
-job: ucx-probe-cpumask
+job: ucx-probe-nopin
 
 failFast: false
-timeout_minutes: 90
+timeout_minutes: 240
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
@@ -13,8 +13,13 @@ kubernetes:
   limits: "{memory: 16Gi, cpu: 6000m}"
   requests: "{memory: 16Gi, cpu: 6000m}"
 
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
 empty_volumes:
   - {mountPath: /dev/shm, memory: true}
+
+# MPI modules used by test_jenkins.sh.
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
 
 runs_on_dockers:
   # HCA RoCE (CX7)
@@ -40,23 +45,26 @@ runs_on_dockers:
       caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
 
+matrix:
+  axes:
+    arch: [x86_64]
+    worker: [0, 1, 2, 3]
 
-taskName: '${name}/${arch}'
+taskName: '${name}/${arch}/w${worker}'
+
+env:
+  RUN_TESTS: "yes"
+  TEST_PERF: "0"
+  VALGRIND_CHECK: "no"
+  nworkers: "4"
+  STEP_TIMEOUT_MINUTES: "210"
+  # Needs more contexts than the VF BAR allows.
+  GTEST_FILTER: "*:-*test_uct_peer_failure_multiple*"
 
 steps:
-  - name: Probe
+  - name: Test
     parallel: false
-    timeout: 80
+    timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
-      set -x
       grep Cpus_allowed_list /proc/self/status
-      ulimit -n
-      ./autogen.sh
-      mkdir -p build-test && cd build-test
-      ../contrib/configure-devel --prefix="${PWD}/install" --without-java --enable-gtest --without-valgrind
-      make -j10 -s
-      make -j10 -s -C test/gtest gtest
-      export UCX_HANDLE_ERRORS=bt
-      GTEST_FILTER='*test_worker_cpu_mask*' make -C test/gtest test && rc=0 || rc=$?
-      echo "==== RESULT ${name} rc=${rc}"
-      exit ${rc}
+      ./contrib/test_jenkins.sh
