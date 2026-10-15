@@ -31,17 +31,7 @@ runs_on_dockers:
       requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
       caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
-  # HCA IB (CX8)
-  - {
-      name: "hca-ib",
-      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
-      arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true",
-      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
-      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}",
-      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}",
-      caps_add: "[ IPC_LOCK, NET_RAW ]"
-    }
+  # HCA IB (CX8) off: legacy v1.14-v1.17 fail RC sends there.
 
 matrix:
   axes:
