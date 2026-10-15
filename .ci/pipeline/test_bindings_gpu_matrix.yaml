@@ -147,6 +147,7 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
 
   - name: Go Tests
     containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
@@ -169,6 +170,7 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
 
   - name: Go Perftest
     containerSelector: "{name: 'build_helper_ucx', binding: 'go'}"
@@ -196,6 +198,7 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
 
   # JUCX steps mirror buildlib/jucx/jucx-test.yml for java8 and java11.
   - name: JUCX Tests
@@ -256,6 +259,7 @@ steps:
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-bindings-gpu-${BUILD_NUMBER}-${binding}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
 
 pipeline_stop:
   containerSelector: "{name: 'build_helper_ucx'}"
