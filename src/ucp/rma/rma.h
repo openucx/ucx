@@ -26,6 +26,91 @@
  */
 #define UCP_PROTO_RMA_MAX_BCOPY_LANES 1
 
+/**
+ * Reconcile lanes carrying pre-fence operations with the endpoint's current
+ * live lanes. If a recorded lane disappeared, its replacement cannot be
+ * identified by lane index alone, so conservatively flush every live lane.
+ */
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t
+ucp_ep_fence_lane_map_update(ucp_lane_map_t unflushed_lanes,
+                             ucp_lane_map_t live_lanes)
+{
+    if (unflushed_lanes & ~live_lanes) {
+        return live_lanes;
+    }
+
+    return unflushed_lanes;
+}
+
+/**
+ * Normalize fence lane tracking after the endpoint topology changed. A dirty
+ * topology expands tracked work to every live lane because a replacement may
+ * reuse the same lane index.
+ */
+static UCS_F_ALWAYS_INLINE ucp_lane_map_t
+ucp_ep_fence_lane_map_normalize(ucp_lane_map_t unflushed_lanes,
+                                ucp_lane_map_t live_lanes, int lanes_dirty)
+{
+    if ((unflushed_lanes != 0) && lanes_dirty) {
+        return live_lanes;
+    }
+
+    return ucp_ep_fence_lane_map_update(unflushed_lanes, live_lanes);
+}
+
+/**
+ * Update an in-progress flush after the endpoint's live lanes changed.
+ *
+ * Lanes that disappeared before their flush started no longer need a
+ * completion. Lanes already started remain accounted for by their completion
+ * or discard flow. Newly created lanes need a completion and are added to the
+ * requested lane mask.
+ *
+ * If the lane generation changed without changing the live lane map, a
+ * transport endpoint was replaced at the same lane index. Preserve already
+ * started completions and restart the current live lanes.
+ *
+ * @return Change to apply to the flush completion count.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_flush_lane_state_update(ucp_lane_map_t live_lanes,
+                               int lane_generation_changed,
+                               ucp_lane_map_t *started_lanes_p,
+                               ucp_lane_map_t *all_lanes_p,
+                               ucp_lane_map_t *lane_mask_p)
+{
+    ucp_lane_map_t unstarted_lanes;
+    ucp_lane_map_t destroyed_lanes;
+    ucp_lane_map_t new_lanes;
+
+    if (lane_generation_changed) {
+        unstarted_lanes  = *all_lanes_p & ~*started_lanes_p;
+        *all_lanes_p     = live_lanes;
+        *lane_mask_p    |= live_lanes;
+        *started_lanes_p = 0;
+        return ucs_popcount(live_lanes) - ucs_popcount(unstarted_lanes);
+    }
+
+    destroyed_lanes = *all_lanes_p & ~live_lanes & ~*started_lanes_p;
+    new_lanes       = live_lanes & ~*all_lanes_p;
+
+    *all_lanes_p = live_lanes;
+    *lane_mask_p |= new_lanes;
+
+    return ucs_popcount(new_lanes) - ucs_popcount(destroyed_lanes);
+}
+
+/**
+ * Return whether an in-progress flush has not started on every live lane.
+ * Historical started bits for lanes destroyed after starting are ignored.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_flush_has_unstarted_lanes(ucp_lane_map_t live_lanes,
+                                 ucp_lane_map_t started_lanes)
+{
+    return !!(live_lanes & ~started_lanes);
+}
+
 
 /**
  * Defines functions for AMO protocol
@@ -93,5 +178,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
 ucs_status_t ucp_ep_fence_weak(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep);
+
+ucs_status_t ucp_ep_fence_strong_nb(ucp_ep_h ep, uint64_t fence_seq);
 
 #endif
