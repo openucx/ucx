@@ -197,10 +197,13 @@ steps:
         az_module_load dev/go-latest
         ucx_prefix=$(pwd)/ucx-install
         export LD_LIBRARY_PATH=$ucx_prefix/lib${LD_LIBRARY_PATH:+:}${LD_LIBRARY_PATH:-}
+        # Fail if UCX sees no CUDA transports on the GPU node.
+        nvidia-smi -L
+        $ucx_prefix/bin/ucx_info -d | grep -E 'Transport: (cuda|gdr)'
         perf_args="-p=$((30000 + RANDOM % 10000)) -m=cuda"
         $ucx_prefix/bin/goperftest $perf_args &
         sleep 5
-        $ucx_prefix/bin/goperftest $perf_args -i=localhost
+        UCX_PROTO_INFO=y $ucx_prefix/bin/goperftest $perf_args -i=localhost
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
