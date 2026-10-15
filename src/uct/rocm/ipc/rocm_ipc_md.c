@@ -84,6 +84,12 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->pid     = getpid();
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 
+    /* One IPC signal per export. Every importer of this key watches it. */
+    if (uct_rocm_ipc_export_add(key->address, key->length, &key->ipc_signal) !=
+        UCS_OK) {
+        return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
+    }
+
     return HSA_STATUS_SUCCESS;
 }
 
@@ -119,6 +125,7 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
+    /* The IPC signal is owned by the export table and stays until free. */
     mem_hndl = params->memh;
     ucs_free(mem_hndl);
     return UCS_OK;
