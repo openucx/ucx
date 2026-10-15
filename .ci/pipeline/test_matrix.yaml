@@ -82,14 +82,18 @@ env:
   VALGRIND_CHECK: "no"
   nworkers: "4"
   STEP_TIMEOUT_MINUTES: "210"
-  # Needs more contexts than the VF BAR allows.
-  GTEST_FILTER: "*:-*test_uct_peer_failure_multiple*"
+  # VF limits: BAR too small for peer_failure_multiple, PCI link speed unknown.
+  GTEST_FILTER: "*:-*test_uct_peer_failure_multiple*:*test_pci_bw.get_pci_bw*"
 
 steps:
   - name: Test
     parallel: false
     timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
+      # Test dials IPv4 even from the RoCE IPv6 source address.
+      if [[ "${name}" == hca-roce* ]]; then
+        export GTEST_FILTER="${GTEST_FILTER}:rdmacm/test_uct_sockaddr_err_handle_non_exist_ip.*"
+      fi
       # Limit tests to 2 CPUs to prevent max_threads exhaustion in k8s (similar to Azure CPU affinity)
       allowed_cpus=$(awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status)
       first_chunk=${allowed_cpus%%,*}
