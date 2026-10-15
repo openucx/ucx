@@ -45,6 +45,19 @@ struct ucs_memtype_cache {
 };
 
 
+/**
+ * Record memory whose type and lifetime are explicitly managed by a caller.
+ * The owner token is used to remove the record before freeing the memory.
+ * Overlapping registrations fall back to normal detection when ambiguous.
+ */
+void ucs_memtype_explicit_register(const void *address, size_t size,
+                                   ucs_memory_type_t mem_type,
+                                   ucs_sys_device_t sys_dev, uint8_t mem_flags,
+                                   const void *owner);
+void ucs_memtype_explicit_unregister(const void *owner);
+ucs_status_t ucs_memtype_explicit_lookup(const void *address, size_t size,
+                                         ucs_memory_info_t *mem_info);
+
 void ucs_memtype_cache_global_init(void);
 
 
