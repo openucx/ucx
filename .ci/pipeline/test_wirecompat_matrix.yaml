@@ -17,13 +17,15 @@ empty_volumes:
   - {mountPath: /dev/shm, memory: true}
 
 runs_on_dockers:
+  # hostIPC (via the raw tolerations string): legacy UCX does not reach the
+  # PR's shm ifaces from a non-default IPC namespace.
   # Ubuntu 22.04 (GCC 11): UCX v1.14.0 does not build with GCC 13.
   # HCA RoCE (CX7)
   - {
       name: "hca-roce",
       url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
       arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
       limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
       requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
@@ -34,7 +36,7 @@ runs_on_dockers:
       name: "hca-ib",
       url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
       arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
       limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}",
       requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1, hugepages-2Mi: 2Gi}",
