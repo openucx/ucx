@@ -11,6 +11,7 @@
 %bcond_with    vfs
 %bcond_with    mad
 %bcond_with    ze
+%bcond_with    rdu
 %bcond_without mlx5
 %bcond_with    efa
 %bcond_with    gda
@@ -140,6 +141,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg ugni ugni \
            %_with_arg mad mad \
            %_with_arg ze ze \
+           %_with_arg rdu rdu \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -426,6 +428,20 @@ Provides oneAPI Level Zero (ZE) Runtime support for UCX.
 %files ze
 %{_libdir}/ucx/libuct_ze.so.*
 %{_libdir}/ucx/libucm_ze.so.*
+%endif
+
+%if %{with rdu}
+%package rdu
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX SambaNova RDU support
+Group: System Environment/Libraries
+
+%description rdu
+Provides SambaNova RDU memory support for UCX. The SambaNova rdu_devmem
+runtime library is loaded at run time.
+
+%files rdu
+%{_libdir}/ucx/libuct_rdu.so.*
 %endif
 
 %if %{with gda}

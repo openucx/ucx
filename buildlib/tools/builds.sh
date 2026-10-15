@@ -433,6 +433,22 @@ build_ze() {
 	make_clean distclean
 }
 
+# Build RDU (SambaNova) - compile-only.
+# The rdu_devmem runtime is loaded at run time, so the modules build with no RDU
+# runtime installed.
+#
+build_rdu() {
+	echo "==== Build with enable rdu ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rdu
+	$MAKEP
+
+	# Compilation check: configure must have enabled the RDU modules.
+	grep '#define HAVE_RDU 1' config.h
+	test -f src/uct/rdu/.libs/libuct_rdu.so
+
+	make_clean distclean
+}
+
 #
 # Build with clang compiler
 #
@@ -620,6 +636,7 @@ base_tests=('build_docs' \
 			'build_prof' \
 			'build_cuda' \
 			'build_rocm' \
+			'build_rdu' \
 			'build_no_verbs' \
 			'build_release_pkg' \
 			'build_fuse')

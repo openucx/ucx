@@ -118,6 +118,7 @@ if [ $opt_binrpm -eq 1 ]; then
 	with_args+=" $(with_arg mlx5)"
 	with_args+=" $(with_arg efa)"
 	with_args+=" $(with_arg gda)"
+	with_args+=" $(with_arg rdu)"
 
 	echo rpmbuild -bb $rpmmacros $rpmopts $rpmspec $defines $with_args | bash -eEx
 fi
