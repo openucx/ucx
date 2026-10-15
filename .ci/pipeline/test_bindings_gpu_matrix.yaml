@@ -226,12 +226,13 @@ steps:
         az_init_modules
         ifaces=$(get_rdma_interfaces)
         if [ -z "$ifaces" ]; then echo "ERROR: No active RDMA interfaces on machine"; exit 1; fi
+        # A loaded module is not listed by az_module_load, so load these once.
+        az_module_load dev/mvn
+        load_cuda_env
         for jucx_jdk in 1.8 1.11; do
           echo "==== JUCX java $jucx_jdk: build UCX ===="
           git clean -xdfq
-          az_module_load dev/mvn
           az_module_load dev/jdk-$jucx_jdk
-          load_cuda_env
           ./autogen.sh
           ./contrib/configure-devel --prefix=$(pwd)/install --with-java --enable-gtest=no --with-cuda=$have_cuda
           make -j$(nproc)
