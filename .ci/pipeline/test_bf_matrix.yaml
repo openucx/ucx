@@ -1,0 +1,72 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-bf
+
+failFast: false
+timeout_minutes: 360
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  # 8 pods share two 16-core/31G BF3 DPUs, four per node.
+  limits: "{memory: 6Gi, cpu: 3000m}"
+  requests: "{memory: 6Gi, cpu: 3000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# Verbs need privileged mode, RoCE GIDs need the DPU host netdevs.
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+
+runs_on_dockers:
+  - {
+      name: "bf3",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true,
+      hostNetwork: true,
+      SLOT_BASE: "0"
+    }
+  - {
+      name: "bf3-asan",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true,
+      hostNetwork: true,
+      SLOT_BASE: "4",
+      ASAN_CHECK: "yes"
+    }
+
+matrix:
+  axes:
+    arch: [aarch64]
+    worker: [0, 1, 2, 3]
+
+taskName: '${name}/${arch}/w${worker}'
+
+env:
+  RUN_TESTS: "yes"
+  TEST_PERF: "0"
+  VALGRIND_CHECK: "no"
+  nworkers: "4"
+
+steps:
+  - name: Test
+    parallel: false
+    timeout: 330
+    run: |
+      # Host network and CPUs are shared, so each pod gets its own ports and 2 CPUs.
+      slot=$((SLOT_BASE + worker))
+      export EXECUTOR_NUMBER=${slot}
+      cpu_set="$((slot * 2))-$((slot * 2 + 1))"
+      echo "Running test_jenkins.sh on $(hostname) slot ${slot} CPUs ${cpu_set}"
+      taskset -c "${cpu_set}" ./contrib/test_jenkins.sh
