@@ -155,6 +155,62 @@ static void ucp_proto_repost_cleanup(ucp_request_t *req)
     req->send.repost.info   = NULL;
 }
 
+static void
+ucp_proto_repost_assert_fields(const uct_ep_op_info_t *info UCS_V_UNUSED)
+{
+    switch (info->operation) {
+    case UCT_EP_OP_AM_SHORT:
+        ucs_assert(ucs_test_all_flags(info->field_mask,
+                                      UCT_EP_OP_INFO_FIELD_OPERATION |
+                                      UCT_EP_OP_INFO_FIELD_AM));
+        ucs_assert(ucs_test_all_flags(info->am.field_mask,
+                                      UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                                      UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+                                      UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA));
+        break;
+    case UCT_EP_OP_AM_BCOPY:
+        ucs_assert(ucs_test_all_flags(info->field_mask,
+                                      UCT_EP_OP_INFO_FIELD_OPERATION |
+                                      UCT_EP_OP_INFO_FIELD_AM));
+        ucs_assert(ucs_test_all_flags(info->am.field_mask,
+                                      UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                                      UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                                      UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA));
+        break;
+    case UCT_EP_OP_PUT_SHORT:
+    case UCT_EP_OP_PUT_BCOPY:
+        ucs_assert(ucs_test_all_flags(info->field_mask,
+                                      UCT_EP_OP_INFO_FIELD_OPERATION |
+                                      UCT_EP_OP_INFO_FIELD_RMA));
+        ucs_assert(ucs_test_all_flags(info->rma.field_mask,
+                                      UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                      UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                                      UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA));
+        break;
+    case UCT_EP_OP_PUT_ZCOPY:
+    case UCT_EP_OP_GET_ZCOPY:
+        ucs_assert(ucs_test_all_flags(info->field_mask,
+                                      UCT_EP_OP_INFO_FIELD_OPERATION |
+                                      UCT_EP_OP_INFO_FIELD_RMA));
+        ucs_assert(ucs_test_all_flags(info->rma.field_mask,
+                                      UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                      UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                                      UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY));
+        break;
+    case UCT_EP_OP_GET_BCOPY:
+        ucs_assert(ucs_test_all_flags(info->field_mask,
+                                      UCT_EP_OP_INFO_FIELD_OPERATION |
+                                      UCT_EP_OP_INFO_FIELD_RMA));
+        ucs_assert(ucs_test_all_flags(info->rma.field_mask,
+                                      UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                      UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                                      UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK));
+        break;
+    default:
+        break;
+    }
+}
+
 /* Descriptor and short/bcopy bytes are valid only for the purge callback. */
 static ucs_status_t
 ucp_proto_repost_save(ucp_request_t *req, const uct_ep_op_info_t *op_info)
@@ -170,6 +226,7 @@ ucp_proto_repost_save(ucp_request_t *req, const uct_ep_op_info_t *op_info)
     *info                   = *op_info;
     req->send.repost.info   = info;
     req->send.repost.buffer = NULL;
+    ucp_proto_repost_assert_fields(info);
 
     switch (info->operation) {
     case UCT_EP_OP_AM_SHORT:
@@ -377,6 +434,8 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
 
     comp = (ucp_proto_repost_origin_comp(req) != NULL) ?
             &req->send.state.uct_comp : NULL;
+    ucp_proto_repost_assert_fields(info);
+
     if ((info->operation == UCT_EP_OP_PUT_SHORT) ||
         (info->operation == UCT_EP_OP_PUT_BCOPY) ||
         (info->operation == UCT_EP_OP_PUT_ZCOPY) ||
