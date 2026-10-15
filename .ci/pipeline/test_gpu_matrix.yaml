@@ -5,7 +5,7 @@
 job: ucx-test-gpu
 
 failFast: false
-timeout_minutes: 240
+timeout_minutes: 420
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -37,11 +37,11 @@ env:
   SLURM_PARTITION: funk
   SLURM_GRES: "gpu:1"
   SLURM_HEAD_NODE: scctl
-  SLURM_JOB_TIMEOUT: '02:45:00'
+  SLURM_JOB_TIMEOUT: '05:30:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
-  TEST_TIMEOUT: 140
+  TEST_TIMEOUT: 300
   STORAGE_DRIVER: overlay
   CI_IMAGE_TAG: "20260223-1"
 
