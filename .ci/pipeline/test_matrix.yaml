@@ -13,6 +13,15 @@ kubernetes:
   limits: "{memory: 16Gi, cpu: 6000m}"
   requests: "{memory: 16Gi, cpu: 6000m}"
 
+# gtest shared-memory transports need more than the 64M container default
+# /dev/shm. A RAM-backed /dev/shm counts against the pod memory limit.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# MPI modules used by test_jenkins.sh.
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
 runs_on_dockers:
   # HCA RoCE (CX7)
   - {
@@ -21,8 +30,8 @@ runs_on_dockers:
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
-      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
-      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
   # HCA IB (CX8)
@@ -32,8 +41,8 @@ runs_on_dockers:
       arch: x86_64,
       tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
-      limits: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
-      requests: "{memory: 16Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}",
       caps_add: "[ IPC_LOCK, NET_RAW ]"
     }
 
@@ -50,6 +59,9 @@ env:
   VALGRIND_CHECK: "no"
   nworkers: "4"
   STEP_TIMEOUT_MINUTES: "120"
+  # A VF has a 2M BAR, which fits about 247 contexts with a QP; this test opens
+  # one per TX queue entry (256 by default).
+  GTEST_FILTER: "*:-*test_uct_peer_failure_multiple*"
 
 steps:
   - name: Test
