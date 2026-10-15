@@ -44,9 +44,11 @@ static void uct_rdu_devmem_load(void)
     }
 
     uct_rdu_devmem_ops.detect        = dlsym(handle, "rdu_detect");
+    uct_rdu_devmem_ops.get_pcie_path = dlsym(handle, "rdu_get_pcie_path");
     uct_rdu_devmem_ops.foreach_alloc = dlsym(handle, "rdu_foreach_alloc");
 
     if ((uct_rdu_devmem_ops.detect == NULL) ||
+        (uct_rdu_devmem_ops.get_pcie_path == NULL) ||
         (uct_rdu_devmem_ops.foreach_alloc == NULL)) {
         ucs_debug("rdu_md: %s is missing required symbols", lib);
         dlclose(handle);

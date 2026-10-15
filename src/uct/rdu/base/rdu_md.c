@@ -20,6 +20,10 @@
 #include <string.h>
 #include <inttypes.h>
 
+/* Bounded length for the sysfs PCIe path of an RDU */
+#define UCT_RDU_PATH_MAX 1024
+
+
 typedef struct {
     const void *address; /* Address to look up */
     const void *base; /* Start of the allocation containing the address */
@@ -31,6 +35,84 @@ static ucs_config_field_t uct_rdu_md_config_table[] =
         {{"", "", NULL, ucs_offsetof(uct_rdu_md_config_t, super),
           UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
          {NULL}};
+
+/*
+ * Parse the BDF of a sysfs PCIe path, e.g. /sys/bus/pci/devices/0000:23:00.0,
+ * into a bus id.
+ */
+static ucs_status_t
+uct_rdu_parse_bdf(const char *path, ucs_sys_bus_id_t *bus_id_p)
+{
+    const char *bdf = strrchr(path, '/');
+    unsigned domain, bus, slot, function;
+
+    if (bdf == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (sscanf(bdf + 1, "%x:%x:%x.%x", &domain, &bus, &slot, &function) != 4) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    bus_id_p->domain   = (uint16_t)domain;
+    bus_id_p->bus      = (uint8_t)bus;
+    bus_id_p->slot     = (uint8_t)slot;
+    bus_id_p->function = (uint8_t)function;
+    return UCS_OK;
+}
+
+/* PCI vendor id of SambaNova Systems */
+#define UCT_RDU_PCI_VENDOR_ID 0x1e0d
+
+/*
+ * Check that a sysfs PCIe path reported by the runtime is an RDU.  Runtimes may
+ * report the root complex (e.g. /sys/bus/pci/devices/0000:00:00.0) for an RDU
+ * which they have not opened yet.
+ */
+static int uct_rdu_md_is_rdu_device(const char *path)
+{
+    long vendor;
+
+    return (ucs_read_file_number(&vendor, 1, "%s/vendor", path) == UCS_OK) &&
+           (vendor == UCT_RDU_PCI_VENDOR_ID);
+}
+
+/*
+ * Return the system device of an RDU, resolving it from the PCIe path reported
+ * by the runtime on first use.  An RDU which the runtime has not initialized
+ * yet, or for which it reports a device that is not an RDU, stays unresolved,
+ * and is retried on the next call.
+ */
+static ucs_sys_device_t
+uct_rdu_md_get_sys_dev(uct_rdu_md_t *md, uint32_t rdu_id)
+{
+    char path[UCT_RDU_PATH_MAX];
+    ucs_sys_bus_id_t bus_id;
+    ucs_sys_device_t sys_dev;
+
+    if (rdu_id >= UCT_RDU_MAX_RDUS) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    sys_dev = md->sys_dev[rdu_id];
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return sys_dev;
+    }
+
+    if ((uct_rdu_devmem_get_pcie_path(rdu_id, path, sizeof(path)) !=
+         UCT_RDU_DEVMEM_SUCCESS) ||
+        !uct_rdu_md_is_rdu_device(path) ||
+        (uct_rdu_parse_bdf(path, &bus_id) != UCS_OK) ||
+        (ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev) != UCS_OK)) {
+        ucs_debug("rdu_md: could not resolve the system device of rdu %u",
+                  rdu_id);
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    ucs_debug("rdu_md: rdu %u is %s, sys_dev %u", rdu_id, path, sys_dev);
+    md->sys_dev[rdu_id] = sys_dev;
+    return sys_dev;
+}
 
 static void
 uct_rdu_find_alloc_cb(const void *va, size_t size, uint32_t rdu_id, void *arg)
@@ -118,27 +200,30 @@ static ucs_status_t uct_rdu_mem_query(uct_md_h uct_md, const void *address,
                                       size_t length,
                                       uct_md_mem_attr_v2_t *mem_attr)
 {
+    uct_rdu_md_t *md               = ucs_derived_of(uct_md, uct_rdu_md_t);
     uct_rdu_find_alloc_ctx_t alloc = {address, address, length};
     uint32_t rdu_id;
     uint64_t dev_addr;
+    ucs_sys_device_t sys_dev;
 
     if (uct_rdu_devmem_detect(address, &rdu_id, &dev_addr) !=
         UCT_RDU_DEVMEM_SUCCESS) {
         return UCS_ERR_INVALID_ADDR;
     }
 
+    sys_dev = uct_rdu_md_get_sys_dev(md, rdu_id);
+
     /* Report the whole allocation, if the runtime knows it */
     uct_rdu_devmem_foreach_alloc(uct_rdu_find_alloc_cb, &alloc);
 
-    uct_rdu_md_memtype_cache_update(address, length, &alloc,
-                                    UCS_SYS_DEVICE_ID_UNKNOWN);
+    uct_rdu_md_memtype_cache_update(address, length, &alloc, sys_dev);
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr->mem_type = UCS_MEMORY_TYPE_RDU;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
-        mem_attr->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        mem_attr->sys_dev = sys_dev;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
@@ -179,6 +264,7 @@ uct_rdu_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     uct_rdu_md_t *md;
+    uint32_t rdu_id;
 
     /* Without the runtime there is no RDU memory to detect */
     if (uct_rdu_devmem_get() == NULL) {
@@ -194,6 +280,13 @@ uct_rdu_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops       = &uct_rdu_md_ops;
     md->super.component = &uct_rdu_component;
+
+    /* Resolve the RDUs already initialized by the runtime; others are resolved
+     * by mem_query on first use */
+    for (rdu_id = 0; rdu_id < UCT_RDU_MAX_RDUS; rdu_id++) {
+        md->sys_dev[rdu_id] = UCS_SYS_DEVICE_ID_UNKNOWN;
+        uct_rdu_md_get_sys_dev(md, rdu_id);
+    }
 
     *md_p = (uct_md_h)md;
     return UCS_OK;

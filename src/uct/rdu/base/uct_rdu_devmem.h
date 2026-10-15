@@ -29,6 +29,8 @@ typedef void (*uct_rdu_devmem_foreach_cb_t)(const void *address, size_t size,
 typedef struct uct_rdu_devmem_ops {
     uct_rdu_devmem_status_t (*detect)(const void *address, uint32_t *rdu_id_p,
                                       uint64_t *dev_addr_p);
+    uct_rdu_devmem_status_t (*get_pcie_path)(uint32_t rdu_id, char *buf,
+                                             size_t buflen);
     void (*foreach_alloc)(uct_rdu_devmem_foreach_cb_t cb, void *arg);
 } uct_rdu_devmem_ops_t;
 
@@ -49,6 +51,14 @@ uct_rdu_devmem_detect(const void *address, uint32_t *rdu_id_p,
 {
     const uct_rdu_devmem_ops_t *ops = uct_rdu_devmem_get();
     return (ops != NULL) ? ops->detect(address, rdu_id_p, dev_addr_p) :
+                           UCT_RDU_DEVMEM_FAILURE;
+}
+
+static inline uct_rdu_devmem_status_t
+uct_rdu_devmem_get_pcie_path(uint32_t rdu_id, char *buf, size_t buflen)
+{
+    const uct_rdu_devmem_ops_t *ops = uct_rdu_devmem_get();
+    return (ops != NULL) ? ops->get_pcie_path(rdu_id, buf, buflen) :
                            UCT_RDU_DEVMEM_FAILURE;
 }
 
