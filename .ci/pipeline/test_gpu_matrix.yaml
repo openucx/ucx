@@ -25,10 +25,8 @@ credentials:
 
 env:
   UCX_REPO: "https://github.com/openucx/ucx.git"
-  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio"
   RUN_TESTS: "yes"
   TEST_PERF: "1"
-  ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
   GTEST_MAX_IB_SL: "4"
@@ -58,7 +56,17 @@ runs_on_dockers:
      file: '.ci/dockerfiles/Dockerfile.build_helper',
      name: 'build_helper_ucx',
      tag: "${CI_IMAGE_TAG}",
-     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04',
+     DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio",
+     ASAN_CHECK: "no"
+    }
+  # AddressSanitizer row, same agent image as above.
+  - {
+     name: 'build_helper_ucx_asan',
+     uri: 'x86_64/build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     DOCKER_IMAGE: "harbor.mellanox.com#ucx/centos8-mofed23-cuda11_asan:1",
+     ASAN_CHECK: "yes"
     }
 
 matrix:
@@ -71,7 +79,7 @@ taskName: '${arch}/${name}/w${worker}'
 
 steps:
   - name: Allocate Environment
-    containerSelector: "{name: 'build_helper_ucx'}"
+    containerSelector: "{name: 'build_helper_ucx.*'}"
     parallel: false
     shell: action
     module: slurmCI
@@ -82,45 +90,45 @@ steps:
       nodes: "${SLURM_NODES}"
       jobTimeout: "${SLURM_JOB_TIMEOUT}"
       immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
-      jobName: "ucx-ci-gpu-${BUILD_NUMBER}-w${worker}"
+      jobName: "ucx-ci-gpu-${BUILD_NUMBER}-${name}-w${worker}"
       # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${name}_w${worker}_${BUILD_NUMBER}.txt"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       # Without a GPU gres the node's GPU is hidden from the job.
       extraArgs: ["--gres=${SLURM_GRES}"]
 
   # Same container name as Test, so pyxis reuses the checkout.
   - name: Checkout
-    containerSelector: "{name: 'build_helper_ucx'}"
+    containerSelector: "{name: 'build_helper_ucx.*'}"
     timeout: "${TEST_TIMEOUT}"
     parallel: false
     shell: action
     module: slurmCI
     run: run
     args:
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${name}_w${worker}_${BUILD_NUMBER}.txt"
       testScript: "mkdir -p /ws && cd /ws && git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
-      containerName: "ucx-ci-gpu-${BUILD_NUMBER}-w${worker}"
+      containerName: "ucx-ci-gpu-${BUILD_NUMBER}-${name}-w${worker}"
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
       slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
 
   - name: Test
-    containerSelector: "{name: 'build_helper_ucx'}"
+    containerSelector: "{name: 'build_helper_ucx.*'}"
     timeout: "${TEST_TIMEOUT}"
     parallel: false
     shell: action
     module: slurmCI
     run: run
     args:
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${name}_w${worker}_${BUILD_NUMBER}.txt"
       testScript: "cd /ws && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
-      containerName: "ucx-ci-gpu-${BUILD_NUMBER}-w${worker}"
+      containerName: "ucx-ci-gpu-${BUILD_NUMBER}-${name}-w${worker}"
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
       slurmEnv: [
         "NVIDIA_VISIBLE_DEVICES=all",
