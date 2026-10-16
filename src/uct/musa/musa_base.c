@@ -159,7 +159,7 @@ static ucs_status_t
 uct_musa_base_query_pointer_attributes(const void *address,
                                        uct_musa_pointer_info_t *info)
 {
-    musaPointerAttributes attributes;
+    struct musaPointerAttributes attributes;
     musaError_t error;
 
     memset(&attributes, 0, sizeof(attributes));
