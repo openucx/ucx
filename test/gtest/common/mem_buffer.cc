@@ -242,12 +242,12 @@ void mem_buffer::set_device_context()
 
 #if HAVE_CUDA
     if (is_cuda_supported()) {
-        cudaSetDevice(0);
+        m_default_device = 0;
+        cudaSetDevice(m_default_device);
         /* need to call free as context maybe lazily initialized when calling
-         * cudaSetDevice(0) but calling cudaFree(0) should guarantee context
+         * cudaSetDevice() but calling cudaFree(0) should guarantee context
          * creation upon return */
         cudaFree(0);
-        m_default_device = 0;
     }
 #endif
 
@@ -297,7 +297,7 @@ void mem_buffer::set_device(int device)
 #endif
 }
 
-int mem_buffer::restore_device_context()
+void mem_buffer::check_and_restore_device_context()
 {
 #if HAVE_CUDA
     cudaError_t cerr;
@@ -305,8 +305,11 @@ int mem_buffer::restore_device_context()
 
     if ((m_default_device < 0) || (cudaGetDevice(&device) != cudaSuccess) ||
         (device == m_default_device)) {
-        return -1;
+        return;
     }
+
+    ADD_FAILURE() << "test left CUDA device " << device
+                  << " as the current device";
 
     cerr = cudaSetDevice(m_default_device);
     if (cerr != cudaSuccess) {
@@ -314,10 +317,6 @@ int mem_buffer::restore_device_context()
                       << ") failed: " << cudaGetErrorString(cerr)
                       << ", later tests run on CUDA device " << device;
     }
-
-    return device;
-#else
-    return -1;
 #endif
 }
 

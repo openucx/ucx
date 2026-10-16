@@ -434,11 +434,7 @@ void test_base::TearDownProxy() {
 
     /* A device left current by this test would silently change the behavior
      * of later tests, so restore it and fail this test instead */
-    int leaked_device = mem_buffer::restore_device_context();
-    if (leaked_device >= 0) {
-        ADD_FAILURE() << "test left CUDA device " << leaked_device
-                      << " as the current device";
-    }
+    mem_buffer::check_and_restore_device_context();
 
     m_errors.clear();
 

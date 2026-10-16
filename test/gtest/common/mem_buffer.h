@@ -98,8 +98,8 @@ public:
     static void set_device(int device);
 
     /* If the current CUDA device is not the one set by set_device_context(),
-     * restore it and return the device that was current, otherwise return -1 */
-    static int restore_device_context();
+     * fail the current test and restore the device */
+    static void check_and_restore_device_context();
 
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
@@ -182,7 +182,7 @@ private:
                                 const uint64_t mem_types);
 
     static size_t           m_bar1_free_size;
-    static int m_default_device;
+    static int              m_default_device;
 
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;
@@ -222,11 +222,11 @@ public:
     /* Save the current device, and switch to @a device unless it is -1 */
     explicit scoped_cuda_device(int device = -1);
 
-    scoped_cuda_device(const scoped_cuda_device&) = delete;
-
-    scoped_cuda_device &operator=(const scoped_cuda_device&) = delete;
-
     ~scoped_cuda_device();
+
+    /* Non-copyable, non-moveable */
+    scoped_cuda_device(const scoped_cuda_device&) = delete;
+    scoped_cuda_device &operator=(const scoped_cuda_device&) = delete;
 
 private:
     int m_saved_device;
