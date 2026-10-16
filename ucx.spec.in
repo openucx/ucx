@@ -38,6 +38,8 @@ Requires: %{?extra_deps}
 # Legacy package cleanup
 Conflicts: ucx-knem < %{version}-%{release}
 Obsoletes: ucx-knem < %{version}-%{release}
+Conflicts: ucx-rocmgdr < %{version}-%{release}
+Obsoletes: ucx-rocmgdr < %{version}-%{release}
 
 BuildRequires: automake autoconf libtool gcc-c++
 %if %{with cma}
@@ -367,19 +369,6 @@ Provides Radeon Open Compute (ROCm) Runtime support for UCX.
 %{_libdir}/ucx/libuct_rocm.so.*
 %{_libdir}/ucx/libucm_rocm.so.*
 
-%if %{with gdrcopy}
-%package rocmgdr
-Requires: %{name}-rocm%{?_isa} = %{version}-%{release}
-Summary: UCX GDRCopy support for ROCM
-Group: System Environment/Libraries
-
-%description rocmgdr
-Provide GDRCopy support for UCX ROCM. GDRCopy is a low-latency GPU memory copy
-library, built on top of the NVIDIA GPUDirect RDMA technology.
-
-%files rocmgdr
-%{_libdir}/ucx/libuct_rocm_gdr.so.*
-%endif
 %endif
 
 %if %{with ugni}
