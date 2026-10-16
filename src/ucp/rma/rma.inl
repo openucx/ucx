@@ -150,6 +150,15 @@ ucp_ep_rma_is_fence_required(ucp_ep_h ep)
     return ep->ext->fence_seq < ep->worker->fence_seq;
 }
 
+/* A weak fence orders only its own lane, so an operation on another lane
+ * requires a strong fence */
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_rma_is_strong_fence_required(ucp_ep_h ep, ucp_lane_map_t lane_map)
+{
+    return ucs_unlikely(ep->ext->fenced_lane != UCP_NULL_LANE) &&
+           (lane_map & ~UCS_BIT(ep->ext->fenced_lane));
+}
+
 static UCS_F_ALWAYS_INLINE uint32_t
 ucp_ep_rma_get_fence_flag(ucp_ep_h ep)
 {
@@ -169,13 +178,24 @@ ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
     /* Apply a fence if EP's sequence is behind worker's */
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
         if (ucs_unlikely(ep->ext->unflushed_lanes == 0)) {
-            status = UCS_OK;
+            /* No earlier operation to order */
+            ucs_assert(ep->ext->fenced_lane == UCP_NULL_LANE);
+            ep->ext->fence_seq = ep->worker->fence_seq;
+            status             = UCS_OK;
         } else if (ucs_likely(
             ucs_is_pow2_or_zero(ep->ext->unflushed_lanes | lane_map))) {
             status = ucp_ep_fence_weak(ep);
+            if (status == UCS_OK) {
+                /* The fence orders all earlier operations on this single
+                 * lane, so later operations on it need no further fence */
+                ep->ext->fence_seq   = ep->worker->fence_seq;
+                ep->ext->fenced_lane = ucs_ffs64(ep->ext->unflushed_lanes);
+            }
         } else {
             status = ucp_ep_fence_strong(ep);
         }
+    } else if (ucp_ep_rma_is_strong_fence_required(ep, lane_map)) {
+        status = ucp_ep_fence_strong(ep);
     } else {
         status = UCS_OK;
     }
