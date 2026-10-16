@@ -382,16 +382,30 @@ protected:
                           m_desc_elem_indices.data());
     }
 
-    void check_next_iter(size_t next_offset, size_t next_frag_offset)
+    size_t flat_offset(size_t elem_index, size_t frag_offset) const
     {
-        EXPECT_EQ(next_offset, m_next_iter.offset);
-        EXPECT_EQ(next_frag_offset, m_next_iter.type.sgl.frag_offset);
+        size_t offset = frag_offset;
+
+        for (size_t i = 0; i < elem_index; ++i) {
+            offset += m_lengths[i];
+        }
+
+        return offset;
     }
 
-    void check_position(size_t offset, size_t frag_offset)
+    void check_next_iter(size_t next_elem_index, size_t next_frag_offset)
     {
-        EXPECT_EQ(offset, m_dt_iter.offset);
+        EXPECT_EQ(next_elem_index, m_next_iter.type.sgl.elem_index);
+        EXPECT_EQ(next_frag_offset, m_next_iter.type.sgl.frag_offset);
+        EXPECT_EQ(flat_offset(next_elem_index, next_frag_offset),
+                  m_next_iter.offset);
+    }
+
+    void check_position(size_t elem_index, size_t frag_offset)
+    {
+        EXPECT_EQ(elem_index, m_dt_iter.type.sgl.elem_index);
         EXPECT_EQ(frag_offset, m_dt_iter.type.sgl.frag_offset);
+        EXPECT_EQ(flat_offset(elem_index, frag_offset), m_dt_iter.offset);
     }
 
     void start_partial_elem(size_t max_frag_length)
@@ -402,14 +416,14 @@ protected:
     }
 
     void check_frag(size_t elem_index, size_t frag_offset, size_t length,
-                    size_t next_offset, size_t next_frag_offset)
+                    size_t next_elem_index, size_t next_frag_offset)
     {
         EXPECT_EQ(elem_index, m_elem_index);
         EXPECT_EQ(length, m_length);
         EXPECT_EQ(UCS_PTR_BYTE_OFFSET(m_buffers[elem_index], frag_offset),
                   m_buffer);
         EXPECT_EQ(m_remote_addrs[elem_index] + frag_offset, m_remote_addr);
-        check_next_iter(next_offset, next_frag_offset);
+        check_next_iter(next_elem_index, next_frag_offset);
     }
 
     void check_desc(size_t desc_index, size_t elem_index, size_t frag_offset,
@@ -481,11 +495,13 @@ UCS_TEST_F(test_ucp_dt_sgl, mem_reg_provided_memh_missing_md) {
 
     ucp_datatype_iter_t dt_iter  = {};
     dt_iter.dt_class             = UCP_DATATYPE_SGL;
-    dt_iter.length               = NUM_ELEMS;
+    dt_iter.length               = NUM_ELEMS * LENGTH;
     dt_iter.offset               = 0;
     dt_iter.type.sgl.buffers     = buffers.data();
     dt_iter.type.sgl.lengths     = lengths.data();
     dt_iter.type.sgl.memhs       = memhs.data();
+    dt_iter.type.sgl.elem_count  = NUM_ELEMS;
+    dt_iter.type.sgl.elem_index  = 0;
     dt_iter.type.sgl.frag_offset = 0;
     ucp_memory_info_set_host(&dt_iter.mem_info);
 
@@ -645,40 +661,64 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_zero_length) {
     EXPECT_EQ(1u, next_frag(MAX_FRAG));
     check_frag(3, 0, MAX_FRAG, 4, 0);
     advance();
-    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
-    /* Trailing zero-length element produces no descriptor */
-    EXPECT_EQ(0u, next_frag(MAX_FRAG));
-    check_next_iter(5, 0);
-    advance();
+    /* No bytes are left, so the last zero-length element does not need another
+       iteration */
+    check_position(4, 0);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_mixed_lengths) {
-    static constexpr size_t MAX_FRAG  = 32;
+    static constexpr size_t MAX_TOTAL = 32;
     static constexpr size_t MAX_COUNT = 2;
 
     init_sgl_iter(3, {16, 80, 16});
 
-    /* A whole element is batched with the first fragment of the next one */
-    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
+    /* A whole element is batched with a part of the next one */
+    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_TOTAL));
     check_desc(0, 0, 0, 16);
-    check_desc(1, 1, 0, MAX_FRAG);
-    check_next_iter(1, MAX_FRAG);
+    check_desc(1, 1, 0, 16);
+    check_next_iter(1, 16);
     advance();
 
-    /* Two more fragments of the same element, the last one is the remainder */
-    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
-    check_desc(0, 1, MAX_FRAG, MAX_FRAG);
-    check_desc(1, 1, 2 * MAX_FRAG, 80 - (2 * MAX_FRAG));
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 1, 16, MAX_TOTAL);
+    check_next_iter(1, 16 + MAX_TOTAL);
+    advance();
+
+    /* The fragment ends exactly at the end of the element */
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 1, 48, MAX_TOTAL);
     check_next_iter(2, 0);
     advance();
 
-    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_FRAG));
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
     check_desc(0, 2, 0, 16);
     check_next_iter(3, 0);
     advance();
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_total_length) {
+    static constexpr size_t MAX_TOTAL = 48;
+    static constexpr size_t MAX_COUNT = 4;
+    static constexpr size_t ELEM_LEN  = 64;
+
+    init_sgl_iter(3, {ELEM_LEN, ELEM_LEN, ELEM_LEN});
+
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 0, 0, MAX_TOTAL);
+    check_next_iter(0, MAX_TOTAL);
+    advance();
+
+    /* The batch starts in the middle of an element and ends in the middle of
+       the next one */
+    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 0, MAX_TOTAL, ELEM_LEN - MAX_TOTAL);
+    check_desc(1, 1, 0, MAX_TOTAL - (ELEM_LEN - MAX_TOTAL));
+    check_next_iter(1, MAX_TOTAL - (ELEM_LEN - MAX_TOTAL));
+    advance();
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
@@ -687,16 +727,52 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_seek) {
     init_sgl_iter(2, {96, 64});
     start_partial_elem(MAX_FRAG);
 
-    ucp_datatype_iter_seek(&m_dt_iter, 1, UCS_BIT(UCP_DATATYPE_SGL));
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, 0),
+                           UCS_BIT(UCP_DATATYPE_SGL));
     check_position(1, 0);
     EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 
     EXPECT_EQ(1u, next_frag(MAX_FRAG));
     check_frag(1, 0, MAX_FRAG, 1, MAX_FRAG);
 
-    ucp_datatype_iter_seek(&m_dt_iter, 2, UCS_BIT(UCP_DATATYPE_SGL));
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(0, MAX_FRAG),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(0, MAX_FRAG);
+
+    EXPECT_EQ(1u, next_frag(MAX_FRAG));
+    check_frag(0, MAX_FRAG, MAX_FRAG, 0, 2 * MAX_FRAG);
+
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, MAX_FRAG),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, MAX_FRAG);
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(2, 0),
+                           UCS_BIT(UCP_DATATYPE_SGL));
     check_position(2, 0);
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, iter_seek_zero_length) {
+    init_sgl_iter(5, {0, 96, 0, 32, 0});
+
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, 32),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, 32);
+
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(3, 16),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(3, 16);
+
+    ucp_datatype_iter_seek(&m_dt_iter, m_dt_iter.length,
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(5, 0);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    ucp_datatype_iter_seek(&m_dt_iter, flat_offset(1, 0),
+                           UCS_BIT(UCP_DATATYPE_SGL));
+    check_position(1, 0);
+    EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_rewind) {
@@ -730,4 +806,18 @@ UCS_TEST_F(test_ucp_dt_sgl, init_zero_count) {
     EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
     EXPECT_EQ(UCS_MEMORY_TYPE_HOST, m_dt_iter.mem_info.type);
     EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, m_dt_iter.mem_info.sys_dev);
+}
+
+UCS_TEST_F(test_ucp_dt_sgl, init_all_zero_length) {
+    static constexpr size_t NUM_ELEMS = 3;
+
+    init_sgl_iter(NUM_ELEMS, std::vector<size_t>(NUM_ELEMS, 0));
+
+    EXPECT_EQ(0u, m_dt_iter.length);
+    EXPECT_EQ(NUM_ELEMS, m_dt_iter.type.sgl.elem_count);
+    check_position(0, 0);
+    EXPECT_TRUE(ucp_datatype_iter_is_end(&m_dt_iter));
+
+    EXPECT_EQ(0u, next_frag(SIZE_MAX));
+    check_next_iter(NUM_ELEMS, 0);
 }

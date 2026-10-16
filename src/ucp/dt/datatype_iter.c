@@ -296,10 +296,12 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     ucs_assert(remote != NULL);
 
     dt_iter->dt_class             = UCP_DATATYPE_SGL;
-    dt_iter->length               = count;
+    dt_iter->length               = ucp_dt_sgl_length(local->lengths, count);
     dt_iter->offset               = 0;
     dt_iter->type.sgl.buffers     = local->buffers;
     dt_iter->type.sgl.lengths     = local->lengths;
+    dt_iter->type.sgl.elem_count  = count;
+    dt_iter->type.sgl.elem_index  = 0;
     dt_iter->type.sgl.frag_offset = 0;
 
     if (ucs_unlikely(count == 0)) {
@@ -352,7 +354,7 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
                                            ucp_md_map_t md_map,
                                            unsigned uct_flags)
 {
-    size_t count = dt_iter->length;
+    size_t count = dt_iter->type.sgl.elem_count;
     ucs_status_t status;
     ucp_mem_h *memhs;
     size_t i;
@@ -393,7 +395,7 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
 
 void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
 {
-    size_t count = dt_iter->length;
+    size_t count = dt_iter->type.sgl.elem_count;
     size_t i;
 
     ucs_assert(ucp_datatype_iter_sgl_owns_memhs(dt_iter));
@@ -403,6 +405,38 @@ void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
 
     ucs_free(dt_iter->type.sgl.memhs);
     dt_iter->type.sgl.memhs = NULL;
+}
+
+void ucp_datatype_iter_sgl_seek_always(ucp_datatype_iter_t *dt_iter,
+                                       size_t offset)
+{
+    const size_t *lengths = dt_iter->type.sgl.lengths;
+    size_t count          = dt_iter->type.sgl.elem_count;
+    size_t elem_index     = dt_iter->type.sgl.elem_index;
+    ssize_t elem_offset;
+    size_t length_it;
+
+    elem_offset = dt_iter->type.sgl.frag_offset + (offset - dt_iter->offset);
+    if (elem_offset < 0) {
+        /* seek backwards */
+        do {
+            ucs_assertv(elem_index > 0, "dt_iter=%p", dt_iter);
+            --elem_index;
+            elem_offset += lengths[elem_index];
+        } while (elem_offset < 0);
+    } else {
+        /* Unlike IOV, the loop is limited by the element count, because an SGL
+           can end with zero-length elements and a seek can reach its end */
+        while ((elem_index < count) &&
+               (elem_offset >= (ssize_t)(length_it = lengths[elem_index]))) {
+            elem_offset -= length_it;
+            ++elem_index;
+        }
+    }
+
+    dt_iter->offset               = offset;
+    dt_iter->type.sgl.elem_index  = elem_index;
+    dt_iter->type.sgl.frag_offset = elem_offset;
 }
 
 void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
@@ -419,7 +453,7 @@ void ucp_datatype_iter_sgl_cleanup(ucp_datatype_iter_t *dt_iter, int dereg)
     }
 
     if (UCS_ENABLE_ASSERT) {
-        for (i = 0; i < dt_iter->length; ++i) {
+        for (i = 0; i < dt_iter->type.sgl.elem_count; ++i) {
             ucp_datatatype_iter_memh_cleanup_check(dt_iter->type.sgl.memhs[i]);
         }
     }
@@ -491,6 +525,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
     ucp_memory_info_t cur, ref;
     ucp_mem_h sgl_memh;
     size_t iov_count;
+    size_t count;
     size_t i;
 
     if (memh == NULL) {
@@ -516,8 +551,9 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
         }
         break;
     case UCP_DATATYPE_SGL:
-        ref = ucp_memory_info_from_memh(memh);
-        for (i = 0; i < dt_iter->length; ++i) {
+        count = dt_iter->type.sgl.elem_count;
+        ref   = ucp_memory_info_from_memh(memh);
+        for (i = 0; i < count; ++i) {
             sgl_memh = dt_iter->type.sgl.memhs[i];
             if (sgl_memh == NULL) {
                 ucs_error("sgl[%zu]: got NULL memory handle", i);
@@ -536,8 +572,7 @@ int ucp_datatype_iter_is_user_memh_valid(const ucp_datatype_iter_t *dt_iter,
             }
 
             cur = ucp_memory_info_from_memh(sgl_memh);
-            if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref,
-                                       dt_iter->length) != UCS_OK) {
+            if (ucp_dt_mem_info_verify("sgl", i, &cur, &ref, count) != UCS_OK) {
                 return 0;
             }
         }
