@@ -42,6 +42,8 @@ env:
   SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   TEST_TIMEOUT: 300
+  # Fail on funk only (no IMEX channel, host PID ns, 64 CPUs).
+  GTEST_FILTER: "*:-cuda_ipc/test_cuda_ipc_md.mkey_pack_mempool/*:cuda_ipc/test_uct_loopback_cuda.envelope/*:all/test_worker_cpu_mask.all_cpus/*"
   STORAGE_DRIVER: overlay
   CI_IMAGE_TAG: "20260223-1"
 
@@ -114,7 +116,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
-      testScript: "cd /ws && ./contrib/test_jenkins.sh"
+      testScript: "cd /ws && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
