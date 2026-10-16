@@ -84,6 +84,13 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
     };
 
+    /* TODO: no completion, so repost cannot reach the ucp_rkey a zcopy
+     * offload keeps on the origin request. */
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return;
+    }
+
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
         !ucp_proto_is_short_supported(init_params->select_param)) {
         return;
@@ -224,6 +231,13 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
+
+    /* TODO: no completion, so repost cannot reach the ucp_rkey a zcopy
+     * offload keeps on the origin request. */
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return;
+    }
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
