@@ -1985,7 +1985,15 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
                             uct_rc_mlx5_base_ep_t);
-    ucs_assert(ep != NULL);
+    if (ucs_unlikely(ep == NULL)) {
+        /* Endpoint cleanup withheld one CQ credit for this completion. */
+        ucs_trace("ignoring completion on removed qpn 0x%x wqe[%d]", qp_num,
+                 ntohs(cqe->wqe_counter));
+        uct_rc_iface_add_cq_credits(&iface->super, 1);
+        uct_rc_iface_arbiter_dispatch(&iface->super);
+        uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+        return 1;
+    }
 
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
