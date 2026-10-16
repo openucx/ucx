@@ -575,6 +575,8 @@ typedef struct ucp_ep_ext {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    ucp_lane_index_t              path_ka_next_lane; /* Next path KA lane, or
+                                                        UCP_NULL_LANE when done */
     union {
         ucp_request_t             *close_req;    /* Close protocol request */
         ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.

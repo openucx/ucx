@@ -1068,6 +1068,12 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
 
 class test_ucp_proto_mock_path_monitor : public test_ucp_proto_mock_rcx {
 protected:
+    virtual void cleanup() override
+    {
+        m_path_probe_mock.cleanup();
+        test_ucp_proto_mock_rcx::cleanup();
+    }
+
     virtual void post_ucp_init() override
     {
         ucp_worker_h worker;
@@ -1134,7 +1140,77 @@ protected:
 
         EXPECT_EQ(0, key.path_keepalive_lanes);
     }
+
+    static ucs_status_t path_probe_mock(uct_ep_h ep, unsigned flags,
+                                        uct_completion_t *comp)
+    {
+        std::map<uct_ep_h, unsigned>::iterator iter =
+                m_path_probe_counts.find(ep);
+
+        if (iter == m_path_probe_counts.end()) {
+            return UCS_OK;
+        }
+
+        ++iter->second;
+        if ((ep == m_no_resource_ep) && !m_no_resource_returned) {
+            m_no_resource_returned = true;
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        return UCS_OK;
+    }
+
+    void setup_path_probe_mock()
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+        std::set<uct_ep_check_func_t*> mocked_ops;
+        ucp_lane_index_t lane;
+        uct_ep_h uct_ep;
+
+        m_path_probe_counts.clear();
+        m_no_resource_ep       = NULL;
+        m_no_resource_returned = false;
+
+        ucs_for_each_bit(lane, key.path_keepalive_lanes) {
+            uct_ep = ucp_ep_get_lane(sender().ep(), lane);
+            m_path_probe_counts[uct_ep] = 0;
+            if (mocked_ops.insert(&uct_ep->iface->ops.ep_check).second) {
+                m_path_probe_mock.setup(&uct_ep->iface->ops.ep_check,
+                                        path_probe_mock);
+            }
+        }
+
+        ASSERT_FALSE(m_path_probe_counts.empty());
+        ASSERT_EQ(ucs_popcount(key.path_keepalive_lanes),
+                  m_path_probe_counts.size());
+        m_no_resource_ep = m_path_probe_counts.begin()->first;
+    }
+
+    static bool all_path_probes_done()
+    {
+        std::map<uct_ep_h, unsigned>::const_iterator iter;
+
+        for (iter = m_path_probe_counts.begin();
+             iter != m_path_probe_counts.end(); ++iter) {
+            if (iter->second == 0) {
+                return false;
+            }
+        }
+
+        return m_no_resource_returned &&
+               (m_path_probe_counts[m_no_resource_ep] > 1);
+    }
+
+    ucs::mock                           m_path_probe_mock;
+    static std::map<uct_ep_h, unsigned> m_path_probe_counts;
+    static uct_ep_h                    m_no_resource_ep;
+    static bool                        m_no_resource_returned;
 };
+
+std::map<uct_ep_h, unsigned>
+        test_ucp_proto_mock_path_monitor::m_path_probe_counts;
+uct_ep_h test_ucp_proto_mock_path_monitor::m_no_resource_ep = NULL;
+bool test_ucp_proto_mock_path_monitor::m_no_resource_returned = false;
 
 UCS_TEST_P(test_ucp_proto_mock_path_monitor, lane_mapping_v1,
            "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
@@ -1147,6 +1223,31 @@ UCS_TEST_P(test_ucp_proto_mock_path_monitor, lane_mapping_v2,
            "ADDRESS_VERSION=v2")
 {
     check_lane_mapping();
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, periodic_probe,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
+           "KEEPALIVE_INTERVAL=1ms")
+{
+    ucp_worker_h worker                = sender().worker();
+    const ucp_ep_config_key_t &key     = ucp_ep_config(sender().ep())->key;
+    static const unsigned max_progress = 64;
+    unsigned count;
+
+    ASSERT_EQ(UCP_NULL_LANE, key.keepalive_lane);
+    ASSERT_NE(0, key.path_keepalive_lanes);
+    ASSERT_NE(UCS_CALLBACKQ_ID_NULL, worker->keepalive.cb_id);
+    setup_path_probe_mock();
+
+    worker->keepalive.last_round = 0;
+    for (count = 0; (count < max_progress) && !all_path_probes_done();
+         ++count) {
+        worker->keepalive.iter_count = 0;
+        ucp_worker_progress(worker);
+    }
+
+    EXPECT_TRUE(all_path_probes_done());
+    EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor, rcx, "rc_x")

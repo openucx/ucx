@@ -274,6 +274,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->local_ep_id                  = UCS_PTR_MAP_KEY_INVALID;
     ep->ext->remote_ep_id                 = UCS_PTR_MAP_KEY_INVALID;
     ep->ext->err_cb                       = NULL;
+    ep->ext->path_ka_next_lane            = 0;
     ep->ext->close_req                    = NULL;
 #if UCS_ENABLE_ASSERT
     ep->ext->ka_last_round                = 0;
