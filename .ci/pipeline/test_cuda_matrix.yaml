@@ -133,6 +133,7 @@ steps:
       containerName: "ucx-ci-cuda-src-${BUILD_NUMBER}-${test}"
       extraArgs: ["--container-mounts=/tmp:/host_tmp"]
 
+  # Like Azure Docker, /.dockerenv skips check_nv_peer_mem; some images lack lsmod.
   - name: Memory hooks test
     containerSelector: "{name: 'build_helper_ucx', test: '[0-9].*'}"
     timeout: 60
@@ -144,7 +145,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
       testScript: >-
         ws=/host_tmp/ucx-ci-cuda-${BUILD_NUMBER}-${test}; rc=0;
-        chmod u+rwx -R $ws;
+        chmod u+rwx -R $ws; touch /.dockerenv;
         WORKSPACE=$ws $ws/buildlib/pr/cuda/test_malloc_hook.sh || rc=$?;
         rm -rf $ws; exit $rc
       headNode: "${SLURM_HEAD_NODE}"
