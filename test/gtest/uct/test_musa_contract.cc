@@ -7,6 +7,7 @@
 #include <common/test.h>
 
 #include <ucs/memory/memory_type.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <uct/musa/base/musa_utils.h>
 
 class test_musa_contract : public ucs::test {
@@ -33,4 +34,23 @@ UCS_TEST_F(test_musa_contract, range_rejects_integer_overflow)
 {
     EXPECT_FALSE(uct_musa_range_is_valid(UINTPTR_MAX - 0x10, 0x20,
                                          UINTPTR_MAX - 0x10, 0x20));
+}
+
+UCS_TEST_F(test_musa_contract, parse_pci_bus_id_with_function)
+{
+    ucs_sys_bus_id_t bus_id;
+
+    ASSERT_TRUE(uct_musa_parse_pci_bus_id("0000:3b:00.2", &bus_id));
+    EXPECT_EQ(0, bus_id.domain);
+    EXPECT_EQ(0x3b, bus_id.bus);
+    EXPECT_EQ(0, bus_id.slot);
+    EXPECT_EQ(2, bus_id.function);
+}
+
+UCS_TEST_F(test_musa_contract, reject_invalid_pci_bus_id)
+{
+    ucs_sys_bus_id_t bus_id;
+
+    EXPECT_FALSE(uct_musa_parse_pci_bus_id("0000:3b:00", &bus_id));
+    EXPECT_FALSE(uct_musa_parse_pci_bus_id("0000:3b:00.0.trailing", &bus_id));
 }
