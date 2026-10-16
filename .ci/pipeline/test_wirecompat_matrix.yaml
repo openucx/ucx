@@ -42,7 +42,8 @@ taskName: '${name}/${arch}'
 env:
   RUNNING_IN_AZURE: "no"
   BUILD_REPOSITORY_URI: "https://github.com/openucx/ucx.git"
-  UCX_LEGACY_TAGS: "v1.14.0 v1.15.x v1.16.x v1.17.x v1.18.x"
+  # v1.14.0 off: its server cannot reconfigure the ep the PR client answers.
+  UCX_LEGACY_TAGS: "v1.15.x v1.16.x v1.17.x v1.18.x"
   AZP_AGENT_ID: "0"
 
 steps:
