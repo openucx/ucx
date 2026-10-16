@@ -196,6 +196,18 @@ steps:
         "ucx_gpu=yes"
       ]
 
+# Loads swx-jenkins-lib once before the parallel rows; /tmp has no job id files.
+pipeline_start:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "/tmp"
+
 pipeline_stop:
   containerSelector: "{name: 'build_helper_ucx'}"
   parallel: false
