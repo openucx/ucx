@@ -50,7 +50,6 @@ typedef enum uct_ep_operation {
     UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous */
     UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
     UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
-    UCT_EP_OP_FLUSH,        /**< Flush */
     UCT_EP_OP_LAST
 } uct_ep_operation_t;
 
@@ -1635,11 +1634,8 @@ typedef enum uct_ep_op_info_field {
     /** Enables @ref uct_ep_op_info_t::rma. */
     UCT_EP_OP_INFO_FIELD_RMA       = UCS_BIT(3),
 
-    /** Enables @ref uct_ep_op_info_t::flush. */
-    UCT_EP_OP_INFO_FIELD_FLUSH     = UCS_BIT(4),
-
     /** Enables @ref uct_ep_op_info_t::atomic. */
-    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(5),
+    UCT_EP_OP_INFO_FIELD_ATOMIC    = UCS_BIT(4),
 } uct_ep_op_info_field_t;
 
 
@@ -1703,19 +1699,6 @@ typedef enum {
     /** Enables @ref uct_ep_op_info_t::rma::payload::unpack. */
     UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK = UCS_BIT(4),
 } uct_ep_op_info_rma_field_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
- * @brief Field mask for @ref uct_ep_op_info_t::flush.
- *
- * The enumeration allows specifying which fields in the @c flush group are
- * present, for backward compatibility support.
- */
-typedef enum {
-    /** Enables @ref uct_ep_op_info_t::flush::flags. */
-    UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS = UCS_BIT(0),
-} uct_ep_op_info_flush_field_t;
 
 
 /**
@@ -1796,8 +1779,6 @@ typedef enum {
  *   @ref UCT_EP_OP_INFO_ATOMIC_FIELD_SIZE. If @a atomic.op is
  *   @ref UCT_ATOMIC_OP_CSWAP, @ref UCT_EP_OP_INFO_ATOMIC_FIELD_COMPARE is
  *   required as well.
- * - FLUSH: @ref UCT_EP_OP_INFO_FIELD_FLUSH with @a flush.field_mask =
- *   @ref UCT_EP_OP_INFO_FLUSH_FIELD_FLAGS.
  *
  * Operation-specific groups live in a single tail union so future fields can be
  * appended inside the active group without shifting the fixed header fields.
@@ -1812,7 +1793,7 @@ typedef struct uct_ep_op_info {
 
     /**
      * Operation type from @ref uct_ep_operation_t (e.g. UCT_EP_OP_AM_SHORT,
-     * UCT_EP_OP_PUT_ZCOPY, UCT_EP_OP_FLUSH, etc.).
+     * UCT_EP_OP_PUT_ZCOPY, etc.).
      */
     uct_ep_operation_t operation;
 
@@ -1882,14 +1863,6 @@ typedef struct uct_ep_op_info {
                 } unpack;
             } payload;
         } rma;
-
-        /* Flush operation parameters. */
-        struct {
-            /* Bits from @ref uct_ep_op_info_flush_field_t */
-            uint16_t field_mask;
-            /* Flush flags. */
-            unsigned flags;
-        } flush;
 
         /* Atomic operation parameters. */
         struct {
