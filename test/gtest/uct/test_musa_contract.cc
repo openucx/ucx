@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+ * Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -7,7 +7,7 @@
 #include <common/test.h>
 
 #include <ucs/memory/memory_type.h>
-#include <uct/musa/musa_utils.h>
+#include <uct/musa/base/musa_utils.h>
 
 class test_musa_contract : public ucs::test {
 };
