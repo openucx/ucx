@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -19,6 +19,7 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_vmm_multi.h>
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/sys/uid.h>
 #include <uct/cuda/base/cuda_util.h>
@@ -113,6 +114,32 @@ protected:
                                                                 size);
         free_mempool(&ptr, &mpool, &cu_stream);
         return rkey;
+    }
+
+    /* Publish the chunk metadata of [address, address + length), a range
+     * spanning allocations. A plain pack of 'alloc_len' bytes at 'address',
+     * within the first allocation, creates the local key it is attached to. */
+    const uct_cuda_ipc_vmm_multi_meta_t *
+    vmm_multi_publish(uct_mem_h memh, void *address, size_t alloc_len,
+                      size_t length)
+    {
+        uct_cuda_ipc_memh_t *cuda_memh = static_cast<uct_cuda_ipc_memh_t*>(
+                memh);
+        const uct_cuda_ipc_vmm_multi_meta_t *meta = NULL;
+        uct_cuda_ipc_extended_rkey_t rkey;
+        uct_cuda_ipc_lkey_t *key;
+
+        EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, address, alloc_len,
+                                           NULL, &rkey));
+        ucs_list_for_each(key, &cuda_memh->list, link) {
+            if (((uintptr_t)address >= key->d_bptr) &&
+                ((uintptr_t)address < (key->d_bptr + key->b_len))) {
+                EXPECT_UCS_OK(uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
+                        key, address, length, &meta));
+                break;
+            }
+        }
+        return meta;
     }
 #endif
 
@@ -318,6 +345,64 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
     /* Currently MNNVL is always disabled in CI */
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+}
+
+UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
+{
+#if HAVE_CUDA_FABRIC
+    constexpr unsigned num_chunks = 4;
+    cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, num_chunks);
+    std::vector<uct_cuda_ipc_vmm_chunk_desc_t> descs(num_chunks);
+    const uct_cuda_ipc_vmm_multi_meta_t *meta;
+    uct_md_mem_dereg_params_t params;
+    unsigned long long buffer_id;
+    uct_mem_h memh;
+    CUdeviceptr chunk;
+
+    ASSERT_UCS_OK(md()->ops->mem_reg(md(), alloc.ptr(), alloc.size(), NULL,
+                                     &memh));
+
+    /* A range starting and ending inside allocations covers them whole */
+    meta = vmm_multi_publish(memh,
+                             UCS_PTR_BYTE_OFFSET(alloc.ptr(),
+                                                 alloc.chunk_size() / 2),
+                             alloc.chunk_size() / 2,
+                             alloc.size() - alloc.chunk_size());
+    ASSERT_TRUE(meta != NULL);
+    EXPECT_EQ(meta, vmm_multi_publish(memh, alloc.ptr(), alloc.chunk_size(),
+                                      alloc.size()));
+
+    EXPECT_EQ((CUdeviceptr)alloc.ptr(), meta->d_bptr);
+    EXPECT_EQ(alloc.size(), meta->b_len);
+    EXPECT_EQ(UCT_CUDA_IPC_VMM_MULTI_VERSION, meta->info.version);
+    EXPECT_EQ(num_chunks, meta->info.num_chunks);
+    EXPECT_EQ(sizeof(uct_cuda_ipc_vmm_chunk_desc_t),
+              meta->info.chunk_desc_size);
+
+    /* The published descriptors name every allocation, in order */
+    ASSERT_EQ(CUDA_SUCCESS,
+              cuMemcpyDtoH(descs.data(), meta->dev_ptr,
+                           num_chunks * sizeof(descs[0])));
+    for (unsigned i = 0; i < num_chunks; ++i) {
+        chunk = (CUdeviceptr)alloc.ptr() + (i * alloc.chunk_size());
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuPointerGetAttribute(&buffer_id,
+                                        CU_POINTER_ATTRIBUTE_BUFFER_ID, chunk));
+        EXPECT_EQ(chunk, descs[i].d_bptr);
+        EXPECT_EQ(alloc.chunk_size(), descs[i].b_len);
+        EXPECT_EQ(buffer_id, descs[i].buffer_id);
+    }
+
+    /* A range inside published metadata reuses it */
+    EXPECT_EQ(meta, vmm_multi_publish(memh, alloc.ptr(), alloc.chunk_size(),
+                                      2 * alloc.chunk_size()));
+
+    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+    params.memh       = memh;
+    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)

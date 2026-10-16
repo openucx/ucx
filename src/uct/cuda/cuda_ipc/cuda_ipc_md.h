@@ -23,6 +23,21 @@ typedef enum {
 } uct_cuda_ipc_key_handle_t;
 
 
+#if HAVE_CUDA_FABRIC
+/**
+ * @brief Inline description of VMM multi-chunk metadata
+ */
+typedef struct {
+    uint8_t  version;
+    uint8_t  reserved;
+    uint16_t num_chunks;
+    uint16_t info_size;
+    uint16_t chunk_desc_size;
+    size_t   alloc_size;
+} uct_cuda_ipc_vmm_multi_info_t;
+#endif
+
+
 typedef struct uct_cuda_ipc_md_handle {
     uct_cuda_ipc_key_handle_t handle_type;
     union {
@@ -138,6 +153,9 @@ typedef struct {
     CUdeviceptr               d_bptr; /* Allocation base address */
     size_t                    b_len;  /* Allocation size */
     ucs_list_link_t           link;
+#if HAVE_CUDA_FABRIC
+    ucs_list_link_t           vmm_multi_list; /* Published VMM metadata */
+#endif
 } uct_cuda_ipc_lkey_t;
 
 
