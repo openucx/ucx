@@ -16,6 +16,135 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
+{
+    ucs_assert(req->send.rndv.fc_state != UCP_REQUEST_RNDV_MTYPE_FC_NONE);
+    req->send.rndv.fc_state = UCP_REQUEST_RNDV_MTYPE_FC_NONE;
+}
+
+unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert(req->send.rndv.fc_state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    /* Keep the request in RESCHED state, so that if it is aborted before
+     * ucp_proto_rndv_mtype_request_init() retries the allocation, the wakeup
+     * is passed to the next waiter rather than dropped. */
+    ucp_request_send(req);
+    return 1;
+}
+
+int ucp_proto_rndv_mtype_fc_reschedule_filter(
+        const ucs_callbackq_elem_t *elem, void *arg)
+{
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    ucs_error("ep %p still has mtype FC reschedule callback for req %p", arg,
+              elem->arg);
+    return 1;
+}
+
+static int
+ucp_proto_rndv_mtype_fc_resched_collect(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
+{
+    ucs_queue_head_t *reqs = arg;
+    ucp_request_t *req;
+
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    req = elem->arg;
+    ucs_assert(req->send.rndv.fc_state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
+    return 1;
+}
+
+/* Move all throttled requests of the endpoint into @a reqs. Queued requests
+ * are removed from the worker pending queues and leave the flow-control state.
+ * Woken-up requests have their reschedule callback removed, but stay in the
+ * flow-control state, so that aborting or resetting them passes their wakeup
+ * to the next waiter. Returns nonzero if any request was found. */
+static int
+ucp_proto_rndv_mtype_fc_ep_dequeue(ucp_ep_h ep, ucs_queue_head_t *reqs)
+{
+    ucp_worker_h worker = ep->worker;
+    ucs_queue_head_t *pending_q;
+    ucs_queue_iter_t iter;
+    ucp_request_t *req;
+    unsigned q_index;
+
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; ++q_index) {
+        pending_q = &worker->rndv_mtype_fc.pending_q[q_index];
+        ucs_queue_for_each_safe(req, iter, pending_q,
+                                send.rndv.fc.queue_elem) {
+            if (req->send.ep != ep) {
+                continue;
+            }
+
+            ucs_queue_del_iter(pending_q, iter);
+            ucp_proto_rndv_mtype_fc_leave(req);
+            ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
+        }
+    }
+
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_proto_rndv_mtype_fc_resched_collect,
+                                 reqs);
+    return !ucs_queue_is_empty(reqs);
+}
+
+void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
+{
+    ucs_queue_head_t reqs;
+    ucp_request_t *req;
+
+    /* Aborting a woken-up request may wake up another request of this ep,
+     * which is then aborted on a later iteration */
+    ucs_queue_head_init(&reqs);
+    while (ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs)) {
+        ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+            ucp_proto_request_abort(req, status);
+        }
+    }
+}
+
+/* Reset the request, since the replay does not always restart it, and add it
+ * to the replay queue */
+static void
+ucp_proto_rndv_mtype_fc_extract_one(ucp_request_t *req,
+                                    ucs_queue_head_t *replay_queue)
+{
+    ucs_status_t status;
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+    ucp_trace_req(req, "mtype_fc: extract for replay");
+
+    status = req->send.proto_config->proto->reset(req);
+    ucs_assertv_always(status == UCS_OK, "req %p, failed to reset: %s", req,
+                       ucs_status_string(status));
+    ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+}
+
+void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
+                                        ucs_queue_head_t *replay_queue)
+{
+    ucs_queue_head_t reqs;
+    ucp_request_t *req;
+
+    /* Resetting a woken-up request may wake up another request of this ep,
+     * which is then extracted on a later iteration */
+    ucs_queue_head_init(&reqs);
+    while (ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs)) {
+        ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+            ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
+        }
+    }
+}
+
 static int
 ucp_proto_rndv_ctrl_skip_inter_node_md(
         const ucp_proto_common_init_params_t *params,
@@ -687,16 +816,18 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
+    int invalidating;
+
     ucp_am_release_user_header(req);
     ucp_request_rndv_flush_complete(req);
 
-    if (ucp_request_memh_invalidate(req, status)) {
-        ucp_proto_rndv_rts_reset(req);
-        return;
+    /* Fragments of this request may have already completed (e.g. aborted
+     * during EP purge), so ucp_proto_rndv_rts_reset() cannot be used here */
+    invalidating = ucp_request_memh_invalidate(req, status);
+    ucp_proto_request_zcopy_id_reset(req);
+    if (!invalidating) {
+        ucp_request_complete_send(req, status);
     }
-
-    ucp_proto_rndv_rts_reset(req);
-    ucp_request_complete_send(req, status);
 }
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
@@ -706,6 +837,46 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
+}
+
+unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
+                                       ucs_memory_type_t frag_mem_type)
+{
+    const size_t max_mem = context->config.ext.rndv_frag_worker_max_mem;
+    size_t frag_size;
+    size_t max_frags;
+
+    if ((max_mem == UCS_MEMUNITS_INF) || (max_mem == UCS_MEMUNITS_AUTO)) {
+        return UINT_MAX;
+    }
+
+    frag_size = context->config.ext.rndv_frag_size[frag_mem_type];
+    ucs_assert_always(frag_size > 0);
+
+    max_frags = max_mem / frag_size;
+    if (max_frags == 0) {
+        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM %zu is smaller than one %s "
+                 "fragment (%zu), using one fragment",
+                 max_mem, ucs_memory_type_names[frag_mem_type], frag_size);
+        return 1;
+    }
+
+    return ucs_min(max_frags, UINT_MAX);
+}
+
+unsigned ucp_proto_rndv_frag_shared_elems(ucp_context_h context,
+                                          unsigned max_elems)
+{
+    const double ratio = context->config.ext.rndv_frag_rtr_ratio;
+    unsigned shared;
+
+    /* A reserve needs at least two fragments: one to keep and one to share */
+    if ((max_elems == UINT_MAX) || (ratio >= 1.0) || (max_elems < 2)) {
+        return max_elems;
+    }
+
+    shared = ucs_min((unsigned)(max_elems * ratio), max_elems - 1);
+    return ucs_max(shared, 1);
 }
 
 ucs_status_t
@@ -885,6 +1056,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     /* Caching rkey_buffer pointer for later unpacking of shm keys in
      * rkey_ptr mtype ppln protocol. */
     req->send.rndv.rkey_buffer = rkey_buffer;
+    ucp_proto_rndv_req_fc_init(req);
 
     ucp_trace_req(req,
                   "%s rva 0x%" PRIx64 " length %zd rreq_id 0x%" PRIx64
