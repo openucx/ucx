@@ -16,10 +16,14 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <dlfcn.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <string.h>
+
+#define UCT_MUSA_PCI_BUS_ID_LEN 32
 
 #define UCT_MUSA_DMABUF_HANDLE_TYPE MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD
 
@@ -104,6 +108,50 @@ uct_musa_base_query_md_resources(uct_component_h component,
                                            num_resources_p);
 }
 
+static ucs_status_t
+uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
+{
+    ucs_sys_bus_id_t bus_id;
+    ucs_sys_device_t sys_dev;
+    char pci_bus_id[UCT_MUSA_PCI_BUS_ID_LEN];
+    ucs_status_t status;
+    musaError_t err;
+
+    /* MUSA runtime exposes the PCI location only as a
+     * "domain:bus:slot.function" string (no per-attribute query). */
+    err = musaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), (int)device);
+    if (err != musaSuccess) {
+        ucs_debug("musaDeviceGetPCIBusId(device=%u) failed: %s", device,
+                  musaGetErrorString(err));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (sscanf(pci_bus_id, "%hx:%hhx:%hhx", &bus_id.domain, &bus_id.bus,
+               &bus_id.slot) != 3) {
+        ucs_debug("failed to parse MUSA PCI bus id \"%s\"", pci_bus_id);
+        return UCS_ERR_INVALID_PARAM;
+    }
+    bus_id.function = 0;
+
+    status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_sys_device_enable_aux_path(sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *sys_dev_p = sys_dev;
+    return UCS_OK;
+}
+
 ucs_status_t
 uct_musa_base_query_devices(uct_md_h md,
                             uct_tl_device_resource_t **tl_devices_p,
@@ -127,7 +175,9 @@ uct_musa_base_query_devices(uct_md_h md,
 
     for (i = 0; i < count; ++i) {
         devices[i].type     = UCT_DEVICE_TYPE_ACC;
-        devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        if (uct_musa_base_get_sys_dev(i, &devices[i].sys_device) != UCS_OK) {
+            devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
         ucs_snprintf_zero(devices[i].name, sizeof(devices[i].name), "musa%u",
                           i);
     }
@@ -407,7 +457,7 @@ ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
 {
     uct_musa_pointer_info_t src_info;
     uct_musa_pointer_info_t dst_info;
-    musaMemcpyKind kind;
+    enum musaMemcpyKind kind;
     int current_device;
     int have_current_device;
     ucs_status_t status;

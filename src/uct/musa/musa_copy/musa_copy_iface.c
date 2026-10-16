@@ -227,6 +227,35 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_musa_copy_iface_t, uct_iface_t, uct_md_h,
                           const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_musa_copy_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_musa_component, musa_copy, uct_musa_base_query_devices,
+static ucs_status_t
+uct_musa_copy_query_devices(uct_md_h md,
+                            uct_tl_device_resource_t **tl_devices_p,
+                            unsigned *num_tl_devices_p)
+{
+    ucs_status_t status;
+    unsigned full_count;
+
+    status = uct_musa_base_query_devices(md, tl_devices_p, num_tl_devices_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    full_count = *num_tl_devices_p;
+
+    /* FIXME: UCX memtype EP asserts num_lanes <= 2. Remove this cap when UCX
+     * supports multi-lane memtype endpoints or selects a single device
+     * deterministically (same limitation as ze_copy). The copy EP selects the
+     * device from the pointer attributes, so a single iface is sufficient. */
+    if (full_count > 1) {
+        ucs_warn("musa_copy: %u devices found, limiting to 1 "
+                 "for memtype ep compatibility",
+                 full_count);
+        *num_tl_devices_p = 1;
+    }
+
+    return UCS_OK;
+}
+
+UCT_TL_DEFINE(&uct_musa_component, musa_copy, uct_musa_copy_query_devices,
               uct_musa_copy_iface_t, "MUSA_COPY_",
               uct_musa_copy_iface_config_table, uct_musa_copy_iface_config_t);
