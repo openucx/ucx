@@ -80,14 +80,6 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                                  [musa_happy=no])
                 ])
                 AS_IF([test "x$musa_happy" = "xyes"], [
-                    AC_CHECK_FUNCS([musaGetDeviceCount
-                                   musaGetDevice
-                                   musaSetDevice
-                                   musaPointerGetAttributes
-                                   musaGetErrorString])
-                ])
-
-                AS_IF([test "x$musa_happy" = "xyes"], [
                     AC_LINK_IFELSE(
                         [AC_LANG_PROGRAM(
                             [[#include <stddef.h>
