@@ -2564,6 +2564,20 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
     return 1;
 }
 
+static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
+                                      unsigned max_rails)
+{
+    const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+
+    if (max_rails > max_lanes) {
+        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
+                  name, max_rails, max_lanes);
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2646,6 +2660,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
+    }
+
+    if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
+                                    context->config.ext.max_eager_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
+                                    context->config.ext.max_rndv_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
+                                    context->config.ext.max_rma_lanes)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }
