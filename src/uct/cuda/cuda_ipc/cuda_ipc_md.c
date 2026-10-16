@@ -633,8 +633,7 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     uct_cuda_ipc_extended_rkey_t *extended_rkey;
     uct_cuda_ipc_rkey_t *rkey;
 
-    if ((uct_rkey == 0) || (rkey_handle == NULL) ||
-        (rkey_handle->mapped_addr == NULL)) {
+    if ((uct_rkey == 0) || (rkey_handle == NULL)) {
         return;
     }
 
@@ -642,9 +641,15 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     extended_rkey = &unpacked_rkey->super;
     rkey          = &extended_rkey->super;
 
-    uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
-                                 rkey_handle->mapped_addr, rkey_handle->cu_dev,
-                                 uct_cuda_ipc_component.enable_remote_cache);
+    if (rkey_handle->mapped_addr != NULL) {
+        uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns,
+                                     rkey->d_bptr, rkey_handle->mapped_addr,
+                                     rkey_handle->cu_dev,
+                                     uct_cuda_ipc_component.enable_remote_cache);
+    }
+
+    uct_cuda_ipc_cache_release_unused_region(rkey->pid, extended_rkey->pid_ns,
+                                             rkey->d_bptr, rkey_handle->cu_dev);
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,

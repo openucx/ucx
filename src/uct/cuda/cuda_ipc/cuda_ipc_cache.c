@@ -661,6 +661,32 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     pthread_rwlock_unlock(&cache->lock);
 }
 
+void uct_cuda_ipc_cache_release_unused_region(pid_t pid, ucs_sys_ns_t pid_ns,
+                                              uintptr_t d_bptr, CUdevice cu_dev)
+{
+    const uct_cuda_ipc_cache_hash_key_t key = {pid, pid_ns, cu_dev};
+    ucs_pgt_region_t *pgt_region;
+    uct_cuda_ipc_cache_region_t *region;
+    uct_cuda_ipc_cache_t *cache;
+
+    ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
+    cache = uct_cuda_ipc_remote_cache_get(key);
+    if (cache != NULL) {
+        pthread_rwlock_wrlock(&cache->lock);
+        pgt_region = ucs_pgtable_lookup(&cache->pgtable, d_bptr);
+        if (pgt_region != NULL) {
+            region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+            if (region->refcount == 0) {
+                uct_cuda_ipc_cache_region_destroy(cache, region);
+            }
+        }
+
+        pthread_rwlock_unlock(&cache->lock);
+    }
+
+    ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
+}
+
 void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
                                   uintptr_t d_bptr, const void *mapped_addr,
                                   CUdevice cu_dev, int cache_enabled)
