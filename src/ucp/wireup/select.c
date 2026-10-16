@@ -60,6 +60,8 @@ typedef struct {
     ucs_sys_device_t     dst_sys_dev;
     ucp_lane_type_mask_t lane_types;
     uint8_t              port_speed;
+    /* Data lane index for a path-monitor lane, or UCP_NULL_LANE. */
+    ucp_lane_index_t     monitored_lane;
     size_t               seg_size;
     double               score[UCP_LANE_TYPE_LAST];
 } ucp_wireup_lane_desc_t;
@@ -162,7 +164,8 @@ static const char *ucp_wireup_peer_flags[] = {
     [ucs_ilog2(UCP_ADDR_IFACE_FLAG_GET)]              = "get",
     [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_EAGER)]        = "tag_eager",
     [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_RNDV)]         = "tag_rndv",
-    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_EVENT_RECV)]       = "tag_am_recv_event"
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_EVENT_RECV)]       = "tag_am_recv_event",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_PATH_MONITOR)]     = "path monitor"
 };
 
 static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
@@ -798,6 +801,64 @@ ucp_wireup_path_index_is_equal(unsigned path_index1, unsigned path_index2)
            (path_index1 == path_index2);
 }
 
+static UCS_F_NOINLINE ucs_status_t ucp_wireup_append_lane_desc(
+        const ucp_wireup_select_params_t *select_params,
+        const ucp_wireup_select_info_t *select_info,
+        ucp_md_index_t dst_md_index, ucs_sys_device_t dst_sys_dev,
+        ucp_lane_type_t lane_type, unsigned seg_size,
+        ucp_wireup_select_context_t *select_ctx, int show_error,
+        ucp_wireup_lane_desc_t **lane_desc_p)
+{
+    ucp_worker_h worker = select_params->ep->worker;
+    ucp_wireup_lane_desc_t *lane_desc;
+    ucp_lane_type_t lane_type_iter;
+    ucp_worker_iface_t *wiface;
+    ucs_log_level_t log_level;
+
+    /* We rely on 'ucp_wireup_search_lanes' to add fast lanes before slow
+     * lanes, so that all fast lanes are inserted to the cached ucp_ep
+     * structure */
+    if (ucp_wireup_lane_type_is_fast_path(lane_type)) {
+        /* assert we don't have slow lanes until we finished with fast lanes */
+        ucs_assert_always(!ucp_wireup_has_slow_lanes(select_ctx));
+    }
+
+    if (select_ctx->num_lanes >=
+        ucp_wireup_max_lanes(select_params, lane_type)) {
+        log_level = show_error ? UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
+        ucs_log(log_level, "cannot add %s lane - reached limit (%d)",
+                ucp_lane_type_info[lane_type].short_name,
+                select_ctx->num_lanes);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    lane_desc = &select_ctx->lane_descs[select_ctx->num_lanes++];
+
+    lane_desc->rsc_index      = select_info->rsc_index;
+    lane_desc->addr_index     = select_info->addr_index;
+    lane_desc->path_index     = select_info->path_index;
+    lane_desc->dst_md_index   = dst_md_index;
+    lane_desc->dst_sys_dev    = dst_sys_dev;
+    lane_desc->lane_types     = 0;
+    lane_desc->monitored_lane = UCP_NULL_LANE;
+    wiface                    = ucp_worker_iface(worker,
+                                                select_info->rsc_index);
+    lane_desc->port_speed     = (wiface != NULL) ? wiface->port_speed : 0;
+    lane_desc->seg_size       = seg_size;
+    for (lane_type_iter = UCP_LANE_TYPE_FIRST;
+         lane_type_iter < UCP_LANE_TYPE_LAST;
+         ++lane_type_iter) {
+        lane_desc->score[lane_type_iter] = 0.0;
+    }
+
+    if (select_info->rsc_index != UCP_NULL_RESOURCE) {
+        UCS_STATIC_BITMAP_SET(&select_ctx->tl_bitmap, select_info->rsc_index);
+    }
+
+    *lane_desc_p = lane_desc;
+    return UCS_OK;
+}
+
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         const ucp_wireup_select_params_t *select_params,
         const ucp_wireup_select_info_t *select_info,
@@ -805,12 +866,9 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         ucp_lane_type_t lane_type, unsigned seg_size,
         ucp_wireup_select_context_t *select_ctx, int show_error)
 {
-    ucp_worker_h worker = select_params->ep->worker;
-    ucp_worker_iface_t *wiface;
     ucp_wireup_lane_desc_t *lane_desc;
-    ucp_lane_type_t lane_type_iter;
     ucp_lane_index_t lane;
-    ucs_log_level_t log_level;
+    ucs_status_t status;
 
     /* Add a new lane, but try to reuse already added lanes which are selected
      * on the same transport resources.
@@ -846,43 +904,11 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         }
     }
 
-    /* We rely on 'ucp_wireup_search_lanes' to add fast lanes before slow
-     * lanes, so that all fast lanes are inserted to the cached ucp_ep
-     * structure */
-    if (ucp_wireup_lane_type_is_fast_path(lane_type)) {
-        /* assert we don't have slow lanes until we finished with fast lanes */
-        ucs_assert_always(!ucp_wireup_has_slow_lanes(select_ctx));
-    }
-
-    if (select_ctx->num_lanes >=
-        ucp_wireup_max_lanes(select_params, lane_type)) {
-        log_level = show_error ? UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
-        ucs_log(log_level, "cannot add %s lane - reached limit (%d)",
-                ucp_lane_type_info[lane_type].short_name,
-                select_ctx->num_lanes);
-        return UCS_ERR_EXCEEDS_LIMIT;
-    }
-
-    lane_desc = &select_ctx->lane_descs[select_ctx->num_lanes];
-    ++select_ctx->num_lanes;
-
-    lane_desc->rsc_index    = select_info->rsc_index;
-    lane_desc->addr_index   = select_info->addr_index;
-    lane_desc->path_index   = select_info->path_index;
-    lane_desc->dst_md_index = dst_md_index;
-    lane_desc->dst_sys_dev  = dst_sys_dev;
-    lane_desc->lane_types   = UCS_BIT(lane_type);
-    wiface                  = ucp_worker_iface(worker, select_info->rsc_index);
-    lane_desc->port_speed   = (wiface != NULL) ? wiface->port_speed : 0;
-    lane_desc->seg_size     = seg_size;
-    for (lane_type_iter = UCP_LANE_TYPE_FIRST;
-         lane_type_iter < UCP_LANE_TYPE_LAST;
-         ++lane_type_iter) {
-        lane_desc->score[lane_type_iter] = 0.0;
-    }
-
-    if (select_info->rsc_index != UCP_NULL_RESOURCE) {
-        UCS_STATIC_BITMAP_SET(&select_ctx->tl_bitmap, select_info->rsc_index);
+    status = ucp_wireup_append_lane_desc(
+            select_params, select_info, dst_md_index, dst_sys_dev, lane_type,
+            seg_size, select_ctx, show_error, &lane_desc);
+    if (status != UCS_OK) {
+        return status;
     }
 
 out_update:
@@ -2448,7 +2474,8 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
     ucp_wireup_fill_aux_criteria(&criteria, ep_init_flags,
                                  UCP_ADDR_IFACE_FLAG_CB_ASYNC);
     for (lane = 0; lane < num_lanes; ++lane) {
-        if (lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) {
+        if ((lane_descs[lane].rsc_index == UCP_NULL_RESOURCE) ||
+            (lane_descs[lane].monitored_lane != UCP_NULL_LANE)) {
             continue;
         }
 
@@ -2583,6 +2610,93 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     }
 
     return status;
+}
+
+static int ucp_wireup_lane_supports_path_monitor(
+        const ucp_wireup_select_params_t *select_params,
+        const ucp_wireup_lane_desc_t *lane_desc)
+{
+    const ucp_lane_type_mask_t data_lane_types =
+            UCS_BIT(UCP_LANE_TYPE_AM_BW) | UCS_BIT(UCP_LANE_TYPE_RMA_BW);
+    ucp_worker_h worker = select_params->ep->worker;
+    ucp_worker_iface_t *wiface;
+
+    if (!(lane_desc->lane_types & data_lane_types) ||
+        (lane_desc->rsc_index == UCP_NULL_RESOURCE)) {
+        return 0;
+    }
+
+    wiface = ucp_worker_iface(worker, lane_desc->rsc_index);
+    return (wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_PATH_MONITOR) &&
+           (select_params->address->address_list[lane_desc->addr_index].
+                    iface_attr.flags & UCP_ADDR_IFACE_FLAG_PATH_MONITOR) &&
+           ucp_wireup_connect_p2p(
+                   worker, lane_desc->rsc_index,
+                   ucp_ep_init_flags_has_cm(select_params->ep_init_flags));
+}
+
+static ucs_status_t
+ucp_wireup_add_path_monitor_lanes(
+        const ucp_wireup_select_params_t *select_params,
+        ucp_wireup_select_context_t *select_ctx)
+{
+    unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
+                                                       select_ctx);
+    ucp_lane_index_t lane, num_data_lanes, num_monitors;
+    ucp_wireup_lane_desc_t *data_lane_desc, *monitor_lane_desc;
+    ucp_wireup_select_info_t select_info;
+    ucs_status_t status;
+
+    if (!ucp_worker_keepalive_is_enabled(select_params->ep->worker) ||
+        (ep_init_flags & (UCP_EP_INIT_FLAG_INTERNAL |
+                          UCP_EP_INIT_CREATE_AM_LANE_ONLY))) {
+        return UCS_OK;
+    }
+
+    num_data_lanes = select_ctx->num_lanes;
+    num_monitors   = 0;
+    for (lane = 0; lane < num_data_lanes; ++lane) {
+        num_monitors += ucp_wireup_lane_supports_path_monitor(
+                select_params, &select_ctx->lane_descs[lane]);
+    }
+
+    /* Keep path monitoring all-or-none for an endpoint. A partially monitored
+     * lane set would provide incomplete input to load balancing. */
+    if ((select_ctx->num_lanes + num_monitors) >
+        ucp_wireup_bw_max_lanes(select_params)) {
+        ucs_debug("ep %p: path monitoring disabled: need %u additional lanes, "
+                  "only %zu are available", select_params->ep, num_monitors,
+                  ucp_wireup_bw_max_lanes(select_params) -
+                          select_ctx->num_lanes);
+        return UCS_OK;
+    }
+
+    for (lane = 0; lane < num_data_lanes; ++lane) {
+        data_lane_desc = &select_ctx->lane_descs[lane];
+        if (!ucp_wireup_lane_supports_path_monitor(select_params,
+                                                   data_lane_desc)) {
+            continue;
+        }
+
+        select_info.score      = 0.0;
+        select_info.tiebreak   = 0.0;
+        select_info.addr_index = data_lane_desc->addr_index;
+        select_info.path_index = data_lane_desc->path_index;
+        select_info.rsc_index  = data_lane_desc->rsc_index;
+        select_info.priority   = 0;
+        status = ucp_wireup_append_lane_desc(
+                select_params, &select_info, data_lane_desc->dst_md_index,
+                data_lane_desc->dst_sys_dev, UCP_LANE_TYPE_KEEPALIVE,
+                data_lane_desc->seg_size, select_ctx, 0, &monitor_lane_desc);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        monitor_lane_desc->lane_types = UCS_BIT(UCP_LANE_TYPE_KEEPALIVE);
+        monitor_lane_desc->monitored_lane = lane;
+    }
+
+    return UCS_OK;
 }
 
 static void
@@ -2727,6 +2841,11 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
 
     /* Add lanes that run operations on device */
     status = ucp_wireup_add_device_lanes(select_params, select_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_wireup_add_path_monitor_lanes(select_params, select_ctx);
     if (status != UCS_OK) {
         return status;
     }
@@ -2878,14 +2997,16 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucs_assert(select_ctx->lane_descs[lane].lane_types != 0);
-        addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
-        key->lanes[lane].rsc_index    = select_ctx->lane_descs[lane].rsc_index;
-        key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
-        key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
-        key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
-        key->lanes[lane].port_speed   = select_ctx->lane_descs[lane].port_speed;
-        key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
-        key->lanes[lane].path_index   = ucp_wireup_default_path_index(
+        addr_indices[lane]              = select_ctx->lane_descs[lane].addr_index;
+        key->lanes[lane].rsc_index      = select_ctx->lane_descs[lane].rsc_index;
+        key->lanes[lane].dst_md_index   = select_ctx->lane_descs[lane].dst_md_index;
+        key->lanes[lane].dst_sys_dev    = select_ctx->lane_descs[lane].dst_sys_dev;
+        key->lanes[lane].lane_types     = select_ctx->lane_descs[lane].lane_types;
+        key->lanes[lane].port_speed     = select_ctx->lane_descs[lane].port_speed;
+        key->lanes[lane].monitored_lane =
+                select_ctx->lane_descs[lane].monitored_lane;
+        key->lanes[lane].seg_size       = select_ctx->lane_descs[lane].seg_size;
+        key->lanes[lane].path_index     = ucp_wireup_default_path_index(
                                        select_ctx->lane_descs[lane].path_index);
 
         rsc_index = select_ctx->lane_descs[lane].rsc_index;
@@ -2934,10 +3055,15 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
             key->tag_lane = lane;
         }
         if (select_ctx->lane_descs[lane].lane_types &
-                    UCS_BIT(UCP_LANE_TYPE_KEEPALIVE) &&
-            !ucp_wireup_is_built_in_keepalive(ep->worker, lane, select_params, key)) {
-            ucs_assert(key->keepalive_lane == UCP_NULL_LANE);
-            key->keepalive_lane = lane;
+            UCS_BIT(UCP_LANE_TYPE_KEEPALIVE)) {
+            if (select_ctx->lane_descs[lane].monitored_lane !=
+                UCP_NULL_LANE) {
+                key->path_keepalive_lanes |= UCS_BIT(lane);
+            } else if (!ucp_wireup_is_built_in_keepalive(
+                               ep->worker, lane, select_params, key)) {
+                ucs_assert(key->keepalive_lane == UCP_NULL_LANE);
+                key->keepalive_lane = lane;
+            }
         }
     }
 

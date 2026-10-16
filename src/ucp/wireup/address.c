@@ -127,9 +127,11 @@ typedef struct {
     float            bandwidth;
     float            lat_ovh;
     uint32_t         prio_cap_flags; /* 8 lsb : prio
-                                      * 22 msb:
+                                      * 21 bits:
                                       *        - iface flags
                                       *        - iface event flags
+                                      * 1 bit :
+                                      *        - path monitor
                                       * 2 hsb :
                                       *        - amo32
                                       *        - amo64 */
@@ -175,8 +177,9 @@ typedef struct {
 UCS_ARRAY_DECLARE_TYPE(ucp_address_remote_device_array_t, unsigned,
                        ucp_address_remote_device_t);
 
-#define UCP_ADDRESS_V1_FLAG_ATOMIC32  UCS_BIT(30) /* 32bit atomic operations */
-#define UCP_ADDRESS_V1_FLAG_ATOMIC64  UCS_BIT(31) /* 64bit atomic operations */
+#define UCP_ADDRESS_V1_FLAG_PATH_MONITOR UCS_BIT(29) /* Path monitoring */
+#define UCP_ADDRESS_V1_FLAG_ATOMIC32 UCS_BIT(30) /* 32bit atomic operations */
+#define UCP_ADDRESS_V1_FLAG_ATOMIC64 UCS_BIT(31) /* 64bit atomic operations */
 
 #define UCP_ADDRESS_FLAG_LAST         0x80u  /* Last address in the list */
 #define UCP_ADDRESS_FLAG_HAS_EP_ADDR  0x40u  /* For iface address:
@@ -676,7 +679,8 @@ static uint64_t ucp_address_unpack_flags(uint32_t input_flags,
 }
 
 static uint64_t ucp_address_flags_from_iface_flags(uint64_t iface_cap_flags,
-                                                   uint64_t iface_event_flags)
+                                                   uint64_t iface_event_flags,
+                                                   int path_monitor_enabled)
 {
     uint64_t iface_flags = 0;
 
@@ -717,7 +721,18 @@ static uint64_t ucp_address_flags_from_iface_flags(uint64_t iface_cap_flags,
         iface_flags |= UCP_ADDR_IFACE_FLAG_EVENT_RECV;
     }
 
+    if (path_monitor_enabled) {
+        iface_flags |= UCP_ADDR_IFACE_FLAG_PATH_MONITOR;
+    }
+
     return iface_flags;
+}
+
+static int ucp_address_iface_path_monitor_is_enabled(
+        const ucp_worker_iface_t *wiface)
+{
+    return ucp_worker_keepalive_is_enabled(wiface->worker) &&
+           (wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_PATH_MONITOR);
 }
 
 static unsigned
@@ -740,6 +755,10 @@ ucp_address_pack_iface_attr_v1(const ucp_worker_iface_t *wiface, void *ptr,
             iface_attr->cap.event_flags, UCP_ADDRESS_IFACE_EVENT_FLAGS,
             8 + ucs_popcount(UCP_ADDRESS_IFACE_FLAGS));
 
+    if (ucp_address_iface_path_monitor_is_enabled(wiface)) {
+        packed->prio_cap_flags |= UCP_ADDRESS_V1_FLAG_PATH_MONITOR;
+    }
+
     if (atomic_flags & UCP_ADDR_IFACE_FLAG_ATOMIC32) {
         packed->prio_cap_flags |= UCP_ADDRESS_V1_FLAG_ATOMIC32;
     }
@@ -749,7 +768,7 @@ ucp_address_pack_iface_attr_v1(const ucp_worker_iface_t *wiface, void *ptr,
     }
 
     ucs_assert_always((ucs_popcount(UCP_ADDRESS_IFACE_FLAGS) +
-                ucs_popcount(UCP_ADDRESS_IFACE_EVENT_FLAGS)) <= 22);
+                ucs_popcount(UCP_ADDRESS_IFACE_EVENT_FLAGS)) <= 21);
 
     return sizeof(*packed);
 }
@@ -791,7 +810,9 @@ ucp_address_pack_iface_attr_v2(const ucp_worker_iface_t *wiface, void *ptr,
     packed->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
     packed->prio      = ucs_min(UINT8_MAX, iface_attr->priority);
     addr_iface_flags  = ucp_address_flags_from_iface_flags(
-                            iface_attr->cap.flags, iface_attr->cap.event_flags);
+                            iface_attr->cap.flags,
+                            iface_attr->cap.event_flags,
+                            ucp_address_iface_path_monitor_is_enabled(wiface));
     packed->flags     = (uint16_t)(addr_iface_flags | atomic_flags);
     seg_size          = ucp_address_iface_seg_size(iface_attr) /
                         UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR;
@@ -884,7 +905,12 @@ ucp_address_unpack_iface_attr_v1(ucp_worker_t *worker,
                                   UCP_ADDRESS_IFACE_EVENT_FLAGS,
                                   8 + ucs_popcount(UCP_ADDRESS_IFACE_FLAGS));
     iface_attr->flags       = ucp_address_flags_from_iface_flags(iface_flags,
-                                                                 event_flags);
+                                                                 event_flags,
+                                                                 0);
+
+    if (packed->prio_cap_flags & UCP_ADDRESS_V1_FLAG_PATH_MONITOR) {
+        iface_attr->flags |= UCP_ADDR_IFACE_FLAG_PATH_MONITOR;
+    }
 
     if (packed->prio_cap_flags & UCP_ADDRESS_V1_FLAG_ATOMIC32) {
         iface_attr->flags  |= UCP_ADDR_IFACE_FLAG_ATOMIC32;
@@ -960,9 +986,11 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
 
         /* Just take the rest of iface attrs from the local resource. */
         wiface                    = ucp_worker_iface(worker, rsc_idx);
+        /* Path-monitor enablement depends on the remote worker keepalive
+         * configuration, which is not packed in unified mode. */
         iface_attr->flags         = ucp_address_flags_from_iface_flags(
                                         wiface->attr.cap.flags,
-                                        wiface->attr.cap.event_flags);
+                                        wiface->attr.cap.event_flags, 0);
         iface_attr->priority      = wiface->attr.priority;
         iface_attr->overhead      = wiface->attr.overhead;
         iface_attr->bandwidth     =

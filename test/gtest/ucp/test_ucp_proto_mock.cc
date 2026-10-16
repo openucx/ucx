@@ -1066,6 +1066,143 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
 
+class test_ucp_proto_mock_path_monitor : public test_ucp_proto_mock_rcx {
+protected:
+    virtual void post_ucp_init() override
+    {
+        ucp_worker_h worker;
+        unsigned iface_id;
+
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter) {
+            worker = (*iter)->worker();
+            for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+                worker->ifaces[iface_id]->attr_v2.cap.flags |=
+                        UCT_IFACE_FLAG_V2_PATH_MONITOR;
+            }
+        }
+    }
+
+    void check_lane_mapping()
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+        const ucp_lane_type_mask_t data_types =
+                UCS_BIT(UCP_LANE_TYPE_AM_BW) |
+                UCS_BIT(UCP_LANE_TYPE_RMA_BW);
+        ucp_lane_map_t monitored_data_lanes = 0;
+        ucp_lane_map_t data_lanes           = 0;
+        ucp_lane_map_t monitor_lanes        = 0;
+        ucp_lane_index_t lane, data_lane;
+
+        for (lane = 0; lane < key.num_lanes; ++lane) {
+            if (ucp_ep_config_is_path_keepalive_lane(&key, lane)) {
+                data_lane = key.lanes[lane].monitored_lane;
+                ASSERT_LT(data_lane, key.num_lanes);
+                EXPECT_FALSE(ucp_ep_config_is_path_keepalive_lane(&key,
+                                                                   data_lane));
+                EXPECT_TRUE(key.lanes[data_lane].lane_types & data_types);
+                EXPECT_EQ(UCS_BIT(UCP_LANE_TYPE_KEEPALIVE),
+                          key.lanes[lane].lane_types);
+                EXPECT_EQ(key.lanes[data_lane].rsc_index,
+                          key.lanes[lane].rsc_index);
+                EXPECT_EQ(key.lanes[data_lane].path_index,
+                          key.lanes[lane].path_index);
+                EXPECT_EQ(key.lanes[data_lane].dst_md_index,
+                          key.lanes[lane].dst_md_index);
+                EXPECT_EQ(key.lanes[data_lane].dst_sys_dev,
+                          key.lanes[lane].dst_sys_dev);
+                EXPECT_FALSE(monitored_data_lanes & UCS_BIT(data_lane));
+                monitored_data_lanes |= UCS_BIT(data_lane);
+                monitor_lanes        |= UCS_BIT(lane);
+            } else if (key.lanes[lane].lane_types & data_types) {
+                data_lanes |= UCS_BIT(lane);
+            }
+        }
+
+        EXPECT_GT(ucs_popcount(data_lanes), 1);
+        EXPECT_EQ(data_lanes, monitored_data_lanes);
+        EXPECT_EQ(key.path_keepalive_lanes, monitor_lanes);
+        EXPECT_EQ(ucs_popcount(data_lanes), ucs_popcount(monitor_lanes));
+        if (key.wireup_msg_lane != UCP_NULL_LANE) {
+            EXPECT_FALSE(monitor_lanes & UCS_BIT(key.wireup_msg_lane));
+        }
+    }
+
+    static void check_no_path_monitor_lanes(const entity &e)
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(e.ep())->key;
+
+        EXPECT_EQ(0, key.path_keepalive_lanes);
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, lane_mapping_v1,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
+{
+    check_lane_mapping();
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, lane_mapping_v2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
+           "ADDRESS_VERSION=v2")
+{
+    check_lane_mapping();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor, rcx, "rc_x")
+
+class test_ucp_proto_mock_path_monitor_asymmetric :
+    public test_ucp_proto_mock_path_monitor {
+public:
+    enum {
+        KEEPALIVE_DISABLED_LOCAL,
+        KEEPALIVE_DISABLED_REMOTE
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        const uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_AM |
+                                  UCP_FEATURE_RMA;
+
+        add_variant_with_value(variants, features, KEEPALIVE_DISABLED_LOCAL,
+                               "local_disabled");
+        add_variant_with_value(variants, features, KEEPALIVE_DISABLED_REMOTE,
+                               "remote_disabled");
+    }
+
+protected:
+    void post_ucp_init() override
+    {
+        ucp_worker_h disabled_worker;
+
+        test_ucp_proto_mock_path_monitor::post_ucp_init();
+        ASSERT_TRUE(ucp_worker_keepalive_is_enabled(sender().worker()));
+        ASSERT_TRUE(ucp_worker_keepalive_is_enabled(receiver().worker()));
+
+        disabled_worker = (get_variant_value() == KEEPALIVE_DISABLED_LOCAL) ?
+                                  sender().worker() : receiver().worker();
+        disabled_worker->context->config.ext.keepalive_interval =
+                UCS_TIME_INFINITY;
+        ASSERT_FALSE(ucp_worker_keepalive_is_enabled(disabled_worker));
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor_asymmetric, lane_mapping_v1,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
+{
+    check_no_path_monitor_lanes(sender());
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor_asymmetric, lane_mapping_v2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
+           "ADDRESS_VERSION=v2")
+{
+    check_no_path_monitor_lanes(sender());
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor_asymmetric, rcx,
+                              "rc_x")
+
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:
     test_ucp_proto_mock_rcx2()

@@ -331,4 +331,11 @@ static UCS_F_ALWAYS_INLINE ucp_lane_map_t ucp_ep_get_live_lanes(ucp_ep_h ep)
     return lane_map;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_config_is_path_keepalive_lane(const ucp_ep_config_key_t *key,
+                                     ucp_lane_index_t lane)
+{
+    return !!(key->path_keepalive_lanes & UCS_BIT(lane));
+}
+
 #endif
