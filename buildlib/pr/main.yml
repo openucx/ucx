@@ -288,6 +288,79 @@ stages:
     jobs:
     - template: codestyle.yml
 
+  - stage: CI_selftest
+    dependsOn: []
+    displayName: CI tooling self-test (do not merge)
+    jobs:
+      - job: selftest_pass
+        displayName: self-test pass
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
+        steps:
+          - checkout: none
+          - bash: echo "CI self-test passes on every attempt"
+            displayName: Pass
+
+      - job: selftest_fail
+        displayName: self-test fail on first attempt
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
+        steps:
+          - checkout: none
+          - bash: |
+              echo "Job attempt: ${JOB_ATTEMPT}"
+              if [ "${JOB_ATTEMPT:-1}" -gt 1 ]; then
+                  echo "CI self-test passes on a rerun"
+                  exit 0
+              fi
+              echo "Note: Randomizing tests' orders with a seed of 12345 ."
+              echo "Note: This is test shard 2 of 4."
+              echo "[==========] Running 2 tests from 1 test suite."
+              echo "[ RUN      ] azure_ci_selftest.pass"
+              echo "[       OK ] azure_ci_selftest.pass (0 ms)"
+              echo "[ RUN      ] azure_ci_selftest.fail_first_attempt/0"
+              echo "selftest.cc:42: Failure"
+              echo "Expected equality of these values:"
+              echo "  job_attempt"
+              echo "    Which is: 1"
+              echo "  2"
+              echo "[  FAILED  ] azure_ci_selftest.fail_first_attempt/0, where GetParam() = rc (1 ms)"
+              echo "[==========] 2 tests from 1 test suite ran. (1 ms total)"
+              echo "[  PASSED  ] 1 test."
+              echo "[  FAILED  ] 1 test, listed below:"
+              echo "[  FAILED  ] azure_ci_selftest.fail_first_attempt/0, where GetParam() = rc"
+              exit 1
+            displayName: Fail on first attempt
+            env:
+              JOB_ATTEMPT: $(System.JobAttempt)
+
+      - job: selftest_hang
+        displayName: self-test hang on first attempt
+        timeoutInMinutes: 45
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
+        steps:
+          - checkout: none
+          - bash: |
+              echo "Job attempt: ${JOB_ATTEMPT}"
+              if [ "${JOB_ATTEMPT:-1}" -gt 1 ]; then
+                  echo "CI self-test passes on a rerun"
+                  exit 0
+              fi
+              echo "[ RUN      ] azure_ci_selftest.hang_first_attempt"
+              sleep 3600
+              echo "CI self-test hang was not canceled"
+              exit 1
+            displayName: Hang on first attempt
+            env:
+              JOB_ATTEMPT: $(System.JobAttempt)
+
   - stage: Basic_compile
     dependsOn: []
     jobs:
