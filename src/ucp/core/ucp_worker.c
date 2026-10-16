@@ -3748,6 +3748,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
+    ucs_status_t path_status;
     ucp_ep_h ep;
     uct_ep_h uct_ep;
 
@@ -3776,10 +3777,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
         goto out_done;
     }
 
-    status = ucp_worker_do_ep_path_keepalive(worker, ep);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        return 0;
-    }
+    path_status = ucp_worker_do_ep_path_keepalive(worker, ep);
 
     if (key->keepalive_lane != UCP_NULL_LANE) {
         lane      = key->keepalive_lane;
@@ -3813,7 +3811,9 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
         }
     }
 
-    ep->ext->path_ka_next_lane = 0;
+    if (path_status != UCS_ERR_NO_RESOURCE) {
+        ep->ext->path_ka_next_lane = 0;
+    }
 
 #if UCS_ENABLE_ASSERT
     ucs_assertv((now - ep->ext->ka_last_round) >=
