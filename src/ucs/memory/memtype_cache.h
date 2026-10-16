@@ -40,8 +40,10 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    ucs_spinlock_t        lock;       /**< protests the page table */
+    ucs_spinlock_t        lock;       /**< Protects the page table and owners */
     ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
+    ucs_list_link_t       owners;     /**< Explicitly managed memory */
+    int                   has_events; /**< Allocation/free events are active */
 };
 
 
@@ -105,13 +107,48 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
 
 
 /**
- * Find if global memtype_cache is empty.
+ * Add memory with a known lifetime to the memory type cache. Used when the
+ * cache is not tracking allocations by UCM events; otherwise the call has no effect.
+ *
+ * The range is extended to UCS_PGT_ADDR_ALIGN. The owner must call
+ * @ref ucs_memtype_cache_unregister before the memory is released, since
+ * without free events the cache cannot detect that it became invalid.
+ *
+ * @param [in]  address         Start address of the memory.
+ * @param [in]  size            Size of the memory.
+ * @param [in]  mem_type        Memory type of the range. Host memory is not
+ *                              registered.
+ * @param [in]  sys_dev         System device of the range.
+ * @param [in]  mem_flags       UCS memory flags of the range.
+ * @param [in]  owner_token     Unique token identifying the registration, used
+ *                              to unregister it. Must not be NULL. A second
+ *                              registration with the same token is ignored.
+ */
+void ucs_memtype_cache_register(const void *address, size_t size,
+                                ucs_memory_type_t mem_type,
+                                ucs_sys_device_t sys_dev, uint8_t mem_flags,
+                                const void *owner_token);
+
+
+/**
+ * Remove a registration made by @ref ucs_memtype_cache_register. Does nothing
+ * if the token is not registered.
+ *
+ * @param [in]  owner_token     Token passed to @ref ucs_memtype_cache_register.
+ */
+void ucs_memtype_cache_unregister(const void *owner_token);
+
+
+/**
+ * Find if an event-tracked memtype cache is empty. An explicit-only cache
+ * cannot prove that an unregistered address is host memory.
  *
  * @return 1 if empty 0 if otherwise.
  */
 static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty(void)
 {
     return (ucs_memtype_cache_global_instance != NULL) &&
+           ucs_memtype_cache_global_instance->has_events &&
            (ucs_memtype_cache_global_instance->pgtable.num_regions == 0);
 }
 

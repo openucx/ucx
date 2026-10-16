@@ -8,6 +8,7 @@
 #include <common/mem_buffer.h>
 
 #include <ucs/sys/sys.h>
+#include <ucs/config/global_opts.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucm/api/ucm.h>
 
@@ -575,3 +576,121 @@ UCS_MT_TEST_P(test_memtype_cache_deferred_create, mt_cache_init, 8) {
 
 INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
+
+class test_memtype_explicit : public ucs::test {
+};
+
+UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
+    if (ucm_global_opts.enable_events &&
+        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
+        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
+    }
+
+    int owner = 0;
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x10000);
+
+    ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 5, &owner);
+    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
+                      UCS_PTR_BYTE_OFFSET(base, 0x100), 0x100, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, info.sys_dev);
+    EXPECT_EQ(5, info.mem_flags);
+    EXPECT_EQ(base, info.base_address);
+    EXPECT_EQ(0x1000, info.alloc_length);
+    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
+                      UCS_PTR_BYTE_OFFSET(base, 0xff0), 0x20, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
+
+    ucs_memtype_cache_unregister(&owner);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+}
+
+UCS_TEST_F(test_memtype_explicit, overlapping_owners) {
+    if (ucm_global_opts.enable_events &&
+        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
+        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
+    }
+
+    int first_owner = 0, second_owner = 0;
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x20000);
+
+    ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &first_owner);
+    ucs_memtype_cache_register(UCS_PTR_BYTE_OFFSET(base, 0x800), 0x100,
+                               UCS_MEMORY_TYPE_CUDA_MANAGED,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 2,
+                                &second_owner);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, ucs_memtype_cache_lookup(
+                               UCS_PTR_BYTE_OFFSET(base, 0x700), 0x200,
+                               &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, ucs_memtype_cache_lookup(
+                               UCS_PTR_BYTE_OFFSET(base, 0x800), 0x80,
+                               &info));
+
+    ucs_memtype_cache_unregister(&second_owner);
+    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
+                      UCS_PTR_BYTE_OFFSET(base, 0x800), 0x80, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    ucs_memtype_cache_unregister(&first_owner);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+}
+
+UCS_TEST_F(test_memtype_explicit, duplicate_owners_and_uncached_detection) {
+    if (ucm_global_opts.enable_events &&
+        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
+        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
+    }
+
+    int first_owner = 0, second_owner = 0;
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x30000);
+
+    ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &first_owner);
+    ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &second_owner);
+    ucs_memtype_cache_unregister(&first_owner);
+    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+
+    ucs_memtype_cache_unregister(&second_owner);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+
+    /* Without free events, a detection result cannot be cached safely. */
+    ucs_memtype_cache_update(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                             UCS_SYS_DEVICE_ID_UNKNOWN, 1);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+}
+
+UCS_TEST_F(test_memtype_explicit, unaligned_range) {
+    if (ucm_global_opts.enable_events &&
+        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
+        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
+    }
+
+    int owner = 0;
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x40000);
+
+    /* Neither the start nor the length is aligned */
+    ucs_memtype_cache_register(UCS_PTR_BYTE_OFFSET(base, 3), 1000,
+                               UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
+                               1, &owner);
+    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
+                      UCS_PTR_BYTE_OFFSET(base, 3), 1000, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+
+    ucs_memtype_cache_unregister(&owner);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 3), 1000,
+                                       &info));
+}
