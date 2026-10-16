@@ -61,6 +61,18 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                     AC_CHECK_LIB([musart], [musaFree],
                                  [],
                                  [musa_happy=no])
+                    AC_CHECK_LIB([musart], [musaMemcpy],
+                                 [],
+                                 [musa_happy=no])
+                    AC_CHECK_LIB([musart], [musaHostRegister],
+                                 [],
+                                 [musa_happy=no])
+                    AC_CHECK_LIB([musart], [musaHostUnregister],
+                                 [],
+                                 [musa_happy=no])
+                    AC_CHECK_LIB([musart], [musaDeviceGetPCIBusId],
+                                 [],
+                                 [musa_happy=no])
                 ])
                 AS_IF([test "x$musa_happy" = "xyes"], [
                     AC_CHECK_LIB([musa], [muMemGetAddressRange],
