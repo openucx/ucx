@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+ * Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -7,7 +7,7 @@
 #  include "config.h"
 #endif
 
-#include "musa_base.h"
+#include <uct/musa/base/musa_base.h>
 
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>

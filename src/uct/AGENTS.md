@@ -35,6 +35,7 @@ Defined in `api/uct.h` and `api/uct_def.h`; implemented per-transport.
 - `rocm/` — AMD GPU: `copy/`, `ipc/`, `base/`.
 - `ze/` — Intel Level Zero: `copy/`, `base/`.
 - `gaudi/` — Habana Gaudi: `gaudi_gdr/`, `base/`.
+- `musa/` — Moore Threads GPU: shared `base/` and `musa_copy/`.
 - `sm/` — host shared-memory family: `mm/` (POSIX/SysV/xpmem), `scopy/`
   (CMA, KNEM), `self/` (loopback). Compiled into `libuct` directly (see
   `Makefile.am`).

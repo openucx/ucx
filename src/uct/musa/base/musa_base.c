@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+ * Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -400,6 +400,72 @@ uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
         *mem_type_p = UCS_MEMORY_TYPE_MUSA;
     }
     return UCS_OK;
+}
+
+ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
+                                int device)
+{
+    uct_musa_pointer_info_t src_info;
+    uct_musa_pointer_info_t dst_info;
+    musaMemcpyKind kind;
+    int current_device;
+    int have_current_device;
+    ucs_status_t status;
+
+    if (length == 0) {
+        return UCS_OK;
+    }
+
+    status = uct_musa_base_query_pointer(src, length, &src_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+    status = uct_musa_base_query_pointer(dst, length, &dst_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((src_info.kind == UCT_MUSA_POINTER_MANAGED) ||
+        (dst_info.kind == UCT_MUSA_POINTER_MANAGED)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+    if ((src_info.kind == UCT_MUSA_POINTER_DEVICE) &&
+        (dst_info.kind == UCT_MUSA_POINTER_DEVICE) &&
+        (src_info.device != dst_info.device)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((src_info.kind == UCT_MUSA_POINTER_HOST) &&
+        (dst_info.kind == UCT_MUSA_POINTER_HOST)) {
+        memcpy(dst, src, length);
+        return UCS_OK;
+    }
+
+    if ((src_info.kind == UCT_MUSA_POINTER_HOST) &&
+        (dst_info.kind == UCT_MUSA_POINTER_DEVICE)) {
+        kind = musaMemcpyHostToDevice;
+    } else if ((src_info.kind == UCT_MUSA_POINTER_DEVICE) &&
+               (dst_info.kind == UCT_MUSA_POINTER_HOST)) {
+        kind = musaMemcpyDeviceToHost;
+    } else {
+        kind = musaMemcpyDeviceToDevice;
+    }
+
+    if (device < 0) {
+        device = (dst_info.kind == UCT_MUSA_POINTER_DEVICE) ?
+                 dst_info.device : src_info.device;
+    }
+
+    have_current_device =
+            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
+    status = uct_musa_base_set_device(device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_musa_status(musaMemcpy(dst, src, length, kind), "musaMemcpy");
+    uct_musa_base_restore_device(current_device, have_current_device);
+    return status;
 }
 
 UCS_MODULE_INIT()
