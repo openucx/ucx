@@ -834,7 +834,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
-  { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "rocm",  { "rocm_copy", "rocm_ipc", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
