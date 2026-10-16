@@ -1,5 +1,5 @@
 #
-# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+# Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -16,13 +16,20 @@ libuct_musa_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_musa_ladir       = $(includedir)/uct/musa
 
 noinst_HEADERS = \
-	musa_utils.h \
-	musa_base.h
+	base/musa_utils.h \
+	base/musa_base.h
 
 libuct_musa_la_SOURCES = \
-	musa_base.c \
-	musa_iface.c \
-	musa_md.c
+	base/musa_base.c
+
+noinst_HEADERS += \
+	musa_copy/musa_copy_iface.h \
+	musa_copy/musa_copy_ep.h
+
+libuct_musa_la_SOURCES += \
+	musa_copy/musa_copy_md.c \
+	musa_copy/musa_copy_iface.c \
+	musa_copy/musa_copy_ep.c
 
 include $(top_srcdir)/config/module.am
 

@@ -1,5 +1,5 @@
 #
-# Copyright (C) Advanced Micro Devices, Inc. 2026. ALL RIGHTS RESERVED.
+# Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
