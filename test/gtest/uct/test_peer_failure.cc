@@ -803,39 +803,53 @@ protected:
             return (ret >= 0) ? UCS_OK : (ucs_status_t)ret;
         };
 
-        /* Dedicated completion for delivered operations */
-        purge_ctx delivered_ctx   = {this,
-                                     UCT_EP_OP_PUT_BCOPY,
-                                     {completion_cb, 0, UCS_OK}};
-        const bool test_delivered = (flush_flags & UCT_FLUSH_FLAG_REMOTE) &&
-                                    with_rx_token;
-        if (test_delivered) {
-            const size_t sentinel_size   = ucs_min((size_t)4, size);
-            const size_t sentinel_offset = size - sentinel_size;
-            mapped_buffer sentinel_buf(sentinel_size, SENTINEL_SEED, *m_sender);
-            const uint8_t *tail = (uint8_t*)recvbuf.ptr() + sentinel_offset;
-
-            ASSERT_UCS_OK(post_op(m_sender->ep(0), &ctx.comp, put_bcopy));
-            post_flush(m_sender->ep(0), &delivered_ctx.comp,
-                       UCT_FLUSH_FLAG_REMOTE);
-
-            ssize_t ret = uct_ep_put_bcopy(m_sender->ep(0), mapped_buffer::pack,
-                                           &sentinel_buf,
-                                           ctx.remote_addr + sentinel_offset,
-                                           ctx.rkey);
-            ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
-
-            wait_for_value(tail, *(uint8_t*)sentinel_buf.ptr(), false);
-            EXPECT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
-        }
-
         test_purge_outstanding(put_bcopy, ctx, flush_flags, with_rx_token);
+    }
 
-        if (test_delivered) {
-            EXPECT_EQ(0, delivered_ctx.comp.count);
-            EXPECT_UCS_OK(delivered_ctx.comp.status);
-            EXPECT_EQ(1u, delivered_ctx.num_completions);
-        }
+    void test_flush_purge_delivered(unsigned flush_flags)
+    {
+        const uct_iface_attr_t &attr = m_sender->iface_attr();
+        const size_t size = ucs_min((size_t)4096, attr.cap.put.max_bcopy);
+        mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+        mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+        purge_ctx ctx = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
+        ctx.remote_addr = recvbuf.addr();
+        ctx.rkey        = recvbuf.rkey();
+        ctx.send_buf    = sendbuf.ptr();
+        ctx.send_len    = size;
+
+        ssize_t ret = uct_ep_put_bcopy(m_sender->ep(0), mapped_buffer::pack,
+                                       &sendbuf, ctx.remote_addr, ctx.rkey);
+        ASSERT_EQ((ssize_t)size, ret);
+        post_flush(m_sender->ep(0), &ctx.comp, flush_flags);
+
+        const size_t sentinel_size   = ucs_min((size_t)4, size);
+        const size_t sentinel_offset = size - sentinel_size;
+        mapped_buffer sentinel_buf(sentinel_size, SENTINEL_SEED, *m_sender);
+        ret = uct_ep_put_bcopy(m_sender->ep(0), mapped_buffer::pack,
+                               &sentinel_buf, ctx.remote_addr + sentinel_offset,
+                               ctx.rkey);
+        ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
+
+        /*
+         * Nothing progresses the sender after the posts, so the flush
+         * completion is never polled and the flush operation is still
+         * outstanding when purge runs. The sentinel proves all prior
+         * requests were executed at the receiver, so purge itself must
+         * classify the flush as delivered and complete it.
+         */
+        const uint8_t *tail = (uint8_t*)recvbuf.ptr() + sentinel_offset;
+        wait_for_value(tail, *(uint8_t*)sentinel_buf.ptr(), false);
+        ASSERT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
+
+        purge_outstanding(&ctx, true);
+
+        EXPECT_EQ(0u, ctx.num_ops_purged);
+        EXPECT_EQ(0, ctx.comp.count);
+        EXPECT_UCS_OK(ctx.comp.status);
+        EXPECT_EQ(1u, ctx.num_completions);
+        EXPECT_EQ(0u, m_sender_err_count);
     }
 
     void test_purge_before_error(const send_func_t &sender_send,
@@ -1194,6 +1208,19 @@ UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote_no_rx_token,
 {
     check_skip_flush_remote();
     test_put_bcopy(UCT_FLUSH_FLAG_REMOTE, false);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_purge_delivered,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    test_flush_purge_delivered(UCT_FLUSH_FLAG_LOCAL);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote_purge_delivered,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    check_skip_flush_remote();
+    test_flush_purge_delivered(UCT_FLUSH_FLAG_REMOTE);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
