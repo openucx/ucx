@@ -277,13 +277,15 @@ endif # HAVE_IB
 
 if HAVE_MUSA
 gtest_SOURCES += \
-	ucm/musa_hooks.cc
+	ucm/musa_hooks.cc \
+	uct/test_musa_copy_md.cc
 
 gtest_CPPFLAGS += \
 	$(MUSA_CPPFLAGS)
 gtest_LDFLAGS += \
 	$(MUSA_LDFLAGS)
 gtest_LDADD += \
+	$(top_builddir)/src/uct/musa/libuct_musa.la \
 	$(MUSA_LIBS)
 endif
 

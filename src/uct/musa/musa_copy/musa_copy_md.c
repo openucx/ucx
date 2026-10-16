@@ -74,8 +74,11 @@ uct_musa_md_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return status;
     }
 
-    if ((info.kind == UCT_MUSA_POINTER_DEVICE) ||
-        (info.kind == UCT_MUSA_POINTER_MANAGED)) {
+    if (info.kind == UCT_MUSA_POINTER_MANAGED) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (info.kind == UCT_MUSA_POINTER_DEVICE) {
         /* MUSA allocations do not need registration for the copy transport */
         *memh_p = &uct_musa_dummy_memh;
         return UCS_OK;

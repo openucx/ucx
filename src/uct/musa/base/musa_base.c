@@ -126,12 +126,10 @@ uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (sscanf(pci_bus_id, "%hx:%hhx:%hhx", &bus_id.domain, &bus_id.bus,
-               &bus_id.slot) != 3) {
+    if (!uct_musa_parse_pci_bus_id(pci_bus_id, &bus_id)) {
         ucs_debug("failed to parse MUSA PCI bus id \"%s\"", pci_bus_id);
         return UCS_ERR_INVALID_PARAM;
     }
-    bus_id.function = 0;
 
     status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
     if (status != UCS_OK) {
