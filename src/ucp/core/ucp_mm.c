@@ -1261,6 +1261,11 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 out:
     if (status == UCS_OK) {
         ucs_assert(ucp_memh_is_user_memh(memh));
+        if (!(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+            ucs_memtype_explicit_register(ucp_memh_address(memh),
+                                           ucp_memh_length(memh), memh->mem_type,
+                                           memh->sys_dev, memh->mem_flags, memh);
+        }
         *memh_p = memh;
     }
     return status;
@@ -1288,6 +1293,7 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
         return UCS_OK;
     }
 
+    ucs_memtype_explicit_unregister(memh);
     ucp_memh_cleanup(context, memh);
     return UCS_OK;
 }
