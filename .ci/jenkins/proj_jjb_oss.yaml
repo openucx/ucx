@@ -170,6 +170,14 @@
       - "{jjb_proj}"
 
 - project:
+    name: ucx-test-cuda
+    jjb_proj: "ucx-test-cuda-oss"
+    jjb_conf_file: ".ci/pipeline/test_cuda_matrix.yaml"
+    jjb_description: "UCX CUDA memory hooks and SONAME suffix tests on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
     name: ucx-test-dl-gpu
     jjb_proj: "ucx-test-dl-gpu-oss"
     jjb_conf_file: ".ci/pipeline/test_dl_matrix.yaml"
