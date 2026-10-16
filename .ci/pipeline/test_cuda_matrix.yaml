@@ -144,6 +144,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
       testScript: >-
         ws=/host_tmp/ucx-ci-cuda-${BUILD_NUMBER}-${test}; rc=0;
+        chmod u+rwx -R $ws;
         WORKSPACE=$ws $ws/buildlib/pr/cuda/test_malloc_hook.sh || rc=$?;
         rm -rf $ws; exit $rc
       headNode: "${SLURM_HEAD_NODE}"
@@ -151,7 +152,7 @@ steps:
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
       containerName: "ucx-ci-cuda-${BUILD_NUMBER}-${test}"
       extraArgs: ["--container-mounts=/tmp:/host_tmp"]
-      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all", "NVIDIA_DRIVER_CAPABILITIES=compute,utility"]
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
 
   - name: Checkout source
     containerSelector: "{name: 'build_helper_ucx', test: 'soname.*'}"
@@ -177,6 +178,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      # builds.sh builds in $HOME; keep it in the container, not the NFS home.
       testScript: "cd /ws && ./buildlib/tools/builds.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${BUILDER_IMAGE}"
@@ -185,6 +187,7 @@ steps:
       extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
       slurmEnv: [
         "NVIDIA_VISIBLE_DEVICES=all",
+        "HOME=/ws/home",
         "BUILD_ID=${BUILD_NUMBER}",
         "EXECUTOR_NUMBER=0",
         "build_mode=soname_suffix",
