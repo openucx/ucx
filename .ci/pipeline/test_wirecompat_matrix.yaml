@@ -1,0 +1,112 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-wirecompat
+
+failFast: false
+timeout_minutes: 180
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+
+# Without a hugepages request legacy UCX gets SIGBUS opening shm (mm) ifaces.
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+runs_on_dockers:
+  # hostIPC (via the raw tolerations string): legacy UCX does not reach the
+  # PR's shm ifaces from a non-default IPC namespace.
+  # Ubuntu 22.04 (GCC 11): UCX v1.14.0 does not build with GCC 13.
+  # HCA RoCE (CX7)
+  - {
+      name: "hca-roce",
+      url: "harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]\n  hostIPC: true",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
+      requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 2Gi}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  # HCA IB (CX8) off: legacy v1.14-v1.17 fail RC sends there.
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+env:
+  RUNNING_IN_AZURE: "no"
+  BUILD_REPOSITORY_URI: "https://github.com/openucx/ucx.git"
+  # v1.14.0 off: its server cannot reconfigure the ep the PR client answers.
+  UCX_LEGACY_TAGS: "v1.15.x v1.16.x v1.17.x v1.18.x"
+  AZP_AGENT_ID: "0"
+
+steps:
+  - name: Build ucx artifact
+    parallel: false
+    timeout: 30
+    run: |
+      ./autogen.sh
+      ucx_dir=${WORKSPACE}/ucx-install-current
+      ./contrib/configure-release --enable-assertions  --without-java --without-go --prefix=${ucx_dir}
+      make -s -j `nproc`
+      make install
+
+  # One pod per fabric runs all legacy tags to stay within the VF budget.
+  - name: Test wire compatibility
+    parallel: false
+    timeout: 120
+    run: |
+      source buildlib/az-helpers.sh
+      export UCX_PR_LIB_PATH=${WORKSPACE}/ucx-install-current/lib
+      failed=""
+      set +e
+      for ucx_tag in ${UCX_LEGACY_TAGS}
+      do
+        (
+          set -eEx
+          ucx_dir=${WORKSPACE}/ucx_${ucx_tag}
+          test_dir=${ucx_dir}/examples
+          export UCX_LEGACY_LIB_PATH=${ucx_dir}/lib
+
+          git_clone_with_retry "${ucx_tag}" "${ucx_dir}" 1
+          cd ${ucx_dir}
+          ./autogen.sh
+          ./contrib/configure-release --enable-assertions --prefix=${PWD} --without-java --without-go
+          make -s -j `nproc`
+          make install
+          cd ./examples
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o client_server ucp_client_server.c -lm -lucs -lucp
+          gcc -I${ucx_dir}/include -L${ucx_dir}/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp
+          cd ${WORKSPACE}
+
+          if [ "${ucx_tag}" != "v1.14.0" ]
+          then
+            UCX_PR_PATH=${WORKSPACE}/ucx-install-current UCX_LEGACY_PATH=${ucx_dir} \
+              buildlib/tools/check_tls_perf_caps.sh
+            WIRE_COMPAT_STAGE_ID=1 timeout 2m \
+              buildlib/tools/test_wire_compat.sh ${test_dir}/client_server -a "-c tag"
+          fi
+          WIRE_COMPAT_STAGE_ID=2 timeout 2m \
+            buildlib/tools/test_wire_compat.sh ${test_dir}/ucp_hworld -n
+          if [ "${ucx_tag}" != "v1.14.0" ]
+          then
+            UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=3 timeout 2m \
+              buildlib/tools/test_wire_compat.sh ${test_dir}/client_server -a "-c tag"
+          fi
+          UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=4 timeout 2m \
+            buildlib/tools/test_wire_compat.sh ${test_dir}/ucp_hworld -n
+        )
+        # Not "|| ..." on the subshell: that would disable its set -e.
+        [ $? -eq 0 ] || failed="${failed} ${ucx_tag}"
+      done
+      if [ -n "${failed}" ]
+      then
+        echo "Wire compatibility failed with UCX:${failed}"
+        exit 1
+      fi

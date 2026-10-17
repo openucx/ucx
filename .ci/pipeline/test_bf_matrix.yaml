@@ -1,0 +1,76 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-bf
+
+failFast: false
+timeout_minutes: 600
+# BF3 nodes fit two of these pods each; run the plain and ASan rows in turn.
+batchSize: 4
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 10Gi, cpu: 6000m}"
+  requests: "{memory: 10Gi, cpu: 6000m}"
+
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# Verbs need privileged mode, RoCE GIDs need the DPU host netdevs.
+volumes:
+  - {mountPath: /dev/infiniband, hostPath: /dev/infiniband}
+
+runs_on_dockers:
+  - {
+      name: "bf3",
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true,
+      hostNetwork: true,
+      SLOT_BASE: "0"
+    }
+  - {
+      name: "bf3-asan",
+      # gcc 13 ASan gtest dies with SIGILL on BF3; gcc 11 matches the Azure BF hosts.
+      url: "harbor.mellanox.com/hpcx/aarch64/ubuntu22.04/builder:mofed-24.10-3.2.4.0",
+      arch: aarch64,
+      nodeSelector: "hardware.node.kubernetes.io=BF3",
+      tolerations: "[{key: 'hardware.node.kubernetes.io', operator: 'Equal', value: 'BF3', effect: 'NoSchedule'}]",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      privileged: true,
+      hostNetwork: true,
+      SLOT_BASE: "4",
+      ASAN_CHECK: "yes"
+    }
+
+matrix:
+  axes:
+    arch: [aarch64]
+    worker: [0, 1, 2, 3]
+
+taskName: '${name}/${arch}/w${worker}'
+
+env:
+  RUN_TESTS: "yes"
+  TEST_PERF: "0"
+  VALGRIND_CHECK: "no"
+  nworkers: "4"
+  # The DPU's only non-bridge IPv4 netdev is the calico VXLAN, where rdmacm cannot connect.
+  GTEST_FILTER: "*:-all/test_ucp_sockaddr*"
+
+steps:
+  - name: Test
+    parallel: false
+    timeout: 290
+    run: |
+      # Host network and CPUs are shared, so each pod gets its own ports and 2 CPUs.
+      slot=$((SLOT_BASE + worker))
+      export EXECUTOR_NUMBER=${slot}
+      cpu_set="$((slot * 2))-$((slot * 2 + 1))"
+      echo "Running test_jenkins.sh on $(hostname) slot ${slot} CPUs ${cpu_set}"
+      taskset -c "${cpu_set}" ./contrib/test_jenkins.sh

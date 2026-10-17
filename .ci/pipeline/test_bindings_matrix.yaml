@@ -1,0 +1,212 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-bindings
+
+failFast: false
+timeout_minutes: 120
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# Go, Maven and JDK modules.
+volumes:
+  - {mountPath: /hpc/local, hostPath: /hpc/local}
+
+runs_on_dockers:
+  - {
+      name: "go",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+  - {
+      name: "jucx-java8",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      JAVA_VERSION: "1.8"
+    }
+  - {
+      name: "jucx-java11",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network" }],
+      limits: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      requests: "{memory: 32Gi, cpu: 8000m, nvidia.com/cx8_vfs: 1}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]",
+      JAVA_VERSION: "1.11"
+    }
+
+taskName: '${name}/${arch}'
+
+steps:
+  # Go steps mirror buildlib/pr/go/go-test.yml.
+  - name: Go Format
+    containerSelector: "{name: 'go'}"
+    parallel: false
+    timeout: 10
+    run: |
+      # ci-demo runs steps with -e; Azure does not.
+      set -x +e
+      # Standard go pre-commit: https://github.com/golang/go/blob/release-branch.go1.1/misc/git/pre-commit
+      gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$')
+      [ -z "$gofiles" ] && exit 0
+
+      unformatted=$(gofmt -l $gofiles)
+      [ -z "$unformatted" ] && exit 0
+
+      # Some files are not gofmt'd. Print message and fail.
+
+      echo >&2 "Go files must be formatted with gofmt. Please run:"
+      for fn in $unformatted; do
+        echo >&2 "  gofmt -w $PWD/$fn"
+      done
+
+      exit 1
+
+  - name: Go Build UCX
+    containerSelector: "{name: 'go'}"
+    parallel: false
+    timeout: 60
+    run: |
+      set -xeE
+      source buildlib/az-helpers.sh
+      az_init_modules
+      az_module_load dev/go-latest
+      load_cuda_env
+      ./autogen.sh
+      setup_go_env
+      mkdir build
+      cd build
+      ../contrib/configure-devel --prefix=${WORKSPACE}/ucx-install \
+        --with-go --enable-gtest=no --with-cuda=$have_cuda
+      make -j`nproc`
+      make install
+
+  - name: Go Tests
+    containerSelector: "{name: 'go'}"
+    parallel: false
+    timeout: 30
+    run: |
+      set -xeE
+      source buildlib/az-helpers.sh
+      az_init_modules
+      load_cuda_env
+      az_module_load dev/go-latest
+      make -C build/bindings/go test
+
+  - name: Go Perftest
+    containerSelector: "{name: 'go'}"
+    parallel: false
+    timeout: 15
+    run: |
+      set -xeE
+      source buildlib/az-helpers.sh
+      az_init_modules
+      load_cuda_env
+      az_module_load dev/go-latest
+      go_port=$((30000 + $RANDOM % 10000))
+      args="-p=$go_port"
+      LD_LIBRARY_PATH=${WORKSPACE}/ucx-install/lib/:$LD_LIBRARY_PATH ${WORKSPACE}/ucx-install/bin/goperftest $args &
+      sleep 5
+      LD_LIBRARY_PATH=${WORKSPACE}/ucx-install/lib/:$LD_LIBRARY_PATH ${WORKSPACE}/ucx-install/bin/goperftest $args -i=localhost
+
+  # JUCX steps mirror buildlib/jucx/jucx-test.yml.
+  - name: JUCX Build UCX
+    containerSelector: "{name: 'jucx.*'}"
+    parallel: false
+    timeout: 60
+    run: |
+      set -xeE
+      source buildlib/az-helpers.sh
+      az_init_modules
+      az_module_load dev/mvn
+      az_module_load dev/jdk-${JAVA_VERSION}
+      load_cuda_env
+      ./autogen.sh
+      ./contrib/configure-devel --prefix=${WORKSPACE}/install \
+        --with-java --enable-gtest=no --with-cuda=$have_cuda
+      make -j`nproc`
+      make install
+
+  - name: JUCX Publish-Local
+    containerSelector: "{name: 'jucx.*'}"
+    parallel: false
+    timeout: 30
+    run: |
+      set -exE
+      source buildlib/az-helpers.sh
+      az_init_modules
+      az_module_load dev/mvn
+      az_module_load dev/jdk-1.8
+      TAG=`git describe --tags`
+      MAVEN_VERSION=${TAG:1}
+      make -C bindings/java/src/main/native/ publish-local \
+          JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
+
+  - name: JUCX Tests
+    containerSelector: "{name: 'jucx.*'}"
+    parallel: false
+    timeout: 60
+    run: |
+      set -xeE
+      source buildlib/az-helpers.sh
+      az_init_modules
+      load_cuda_env
+      az_module_load dev/mvn
+      az_module_load dev/jdk-${JAVA_VERSION}
+
+      ifaces=`get_rdma_interfaces`
+      if [ -z "$ifaces" ]; then
+          echo "ERROR: No active RDMA interfaces on machine"
+          exit 1
+      fi
+      jucx_port=$((20000 + $RANDOM % 10000))
+      export JUCX_TEST_PORT=$jucx_port
+      # Fail fast on asserts instead of freezing the JVM.
+      export UCX_HANDLE_ERRORS=bt
+      make -C bindings/java/src/main/native test
+      make -C bindings/java/src/main/native package
+      ipv4_found=0
+      for iface in $ifaces
+      do
+          server_ip=$(get_ip ${iface})
+          if [ -z "$server_ip" ]; then
+              continue
+          fi
+          echo "Running standalone benchmark on $iface:$jucx_port"
+          java_cmd='java -XX:ErrorFile=${WORKSPACE}/hs_err_${BUILD_NUMBER}_%p.log  \
+              -XX:OnError="cat ${WORKSPACE}/hs_err_${BUILD_NUMBER}_%p.log" \
+              -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
+              org.openucx.jucx.examples.$bench_class s=$server_ip p=$jucx_port t=1000000'
+          bench_class=UcxReadBWBenchmarkReceiver
+          eval "$java_cmd &"
+          java_pid=$!
+          sleep 10
+          bench_class=UcxReadBWBenchmarkSender
+          eval "$java_cmd"
+          wait $java_pid
+          ipv4_found=1
+      done
+      if [[ $ipv4_found -eq 0 ]]; then
+          echo "ERROR: No IPv4 address on any of $ifaces"
+          exit 1
+      fi
