@@ -3707,7 +3707,8 @@ ucp_worker_do_ep_path_keepalive(ucp_worker_h worker, ucp_ep_h ep)
     ucs_status_t status;
     uct_ep_h uct_ep;
 
-    if (ep->ext->path_ka_next_lane == UCP_NULL_LANE) {
+    if (ep->ext->path_ka_next_lane == UCP_NULL_LANE ||
+        (key->path_keepalive_lanes == 0)) {
         return UCS_OK;
     }
 

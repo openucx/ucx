@@ -1222,19 +1222,53 @@ protected:
         m_no_resource_ep = m_keepalive_ep;
     }
 
-    static bool all_path_probes_done()
+    static unsigned total_path_probe_count()
+    {
+        std::map<uct_ep_h, unsigned>::const_iterator iter;
+        unsigned count = 0;
+
+        for (iter = m_path_probe_counts.begin();
+             iter != m_path_probe_counts.end(); ++iter) {
+            count += iter->second;
+        }
+
+        return count;
+    }
+
+    static void check_path_probe_counts(unsigned no_resource_count,
+                                        unsigned other_count)
     {
         std::map<uct_ep_h, unsigned>::const_iterator iter;
 
         for (iter = m_path_probe_counts.begin();
              iter != m_path_probe_counts.end(); ++iter) {
-            if (iter->second == 0) {
-                return false;
+            if (iter->first == m_no_resource_ep) {
+                EXPECT_EQ(no_resource_count, iter->second);
+            } else {
+                EXPECT_EQ(other_count, iter->second);
             }
         }
+    }
 
-        return m_no_resource_returned &&
-               (m_path_probe_counts[m_no_resource_ep] > 1);
+    void progress_until_path_probe_count(ucp_worker_h worker,
+                                         unsigned expected_count)
+    {
+        static const unsigned max_progress = 64;
+        unsigned count;
+
+        for (count = 0;
+             (count < max_progress) &&
+             (total_path_probe_count() < expected_count);
+             ++count) {
+            worker->keepalive.last_round = 0;
+            worker->keepalive.iter_count = 0;
+#if UCS_ENABLE_ASSERT
+            sender().ep()->ext->ka_last_round = 0;
+#endif
+            ucp_worker_progress(worker);
+        }
+
+        ASSERT_EQ(expected_count, total_path_probe_count());
     }
 
     ucs::mock                           m_path_probe_mock;
@@ -1269,24 +1303,25 @@ UCS_TEST_P(test_ucp_proto_mock_path_monitor, periodic_probe,
            "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
            "KEEPALIVE_INTERVAL=1ms")
 {
-    ucp_worker_h worker                = sender().worker();
-    const ucp_ep_config_key_t &key     = ucp_ep_config(sender().ep())->key;
-    static const unsigned max_progress = 64;
-    unsigned count;
+    ucp_worker_h worker            = sender().worker();
+    const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    unsigned num_path_probes;
 
     ASSERT_EQ(UCP_NULL_LANE, key.keepalive_lane);
     ASSERT_NE(0, key.path_keepalive_lanes);
     ASSERT_NE(UCS_CALLBACKQ_ID_NULL, worker->keepalive.cb_id);
     setup_path_probe_mock();
+    num_path_probes = m_path_probe_counts.size();
 
-    worker->keepalive.last_round = 0;
-    for (count = 0; (count < max_progress) && !all_path_probes_done();
-         ++count) {
-        worker->keepalive.iter_count = 0;
-        ucp_worker_progress(worker);
-    }
+    /* The first path KA round retries the lane that returns NO_RESOURCE. */
+    progress_until_path_probe_count(worker, num_path_probes + 1);
+    EXPECT_TRUE(m_no_resource_returned);
+    check_path_probe_counts(2, 1);
+    EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
 
-    EXPECT_TRUE(all_path_probes_done());
+    /* The next round must probe every path again exactly once. */
+    progress_until_path_probe_count(worker, (2 * num_path_probes) + 1);
+    check_path_probe_counts(3, 2);
     EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
 }
 
