@@ -961,7 +961,10 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release-mt --with-mpi --enable-assertions
+			# Resolve the UCX libraries that libmpi needs from this build at link time
+			libdir=${WORKSPACE}/build-test/src
+			build release-mt --with-mpi --enable-assertions \
+				LDFLAGS="-Wl,-rpath-link,${libdir}/ucs/.libs:${libdir}/ucm/.libs:${libdir}/uct/.libs:${libdir}/ucp/.libs"
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
