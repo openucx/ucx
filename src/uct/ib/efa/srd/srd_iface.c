@@ -804,9 +804,11 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
 
     ucs_assertv(ctl->id == UCT_SRD_CTL_ID_REQ, "iface=%p got %s (id=%u)", iface,
                 uct_srd_ctl_id_to_string(ctl->id), ctl->id);
-    ucs_assertv((sizeof(*ctl) + iface->super.addr_size) == length,
+    /* The remote address layout may differ from the local one, so its sizeis
+       derived from the address itself rather than from iface->addr_size */
+    ucs_assertv((sizeof(*ctl) + uct_ib_address_packed_size(ib_addr)) == length,
                 "req size mismatch expected=%zu received=%u",
-                sizeof(*ctl) + iface->super.addr_size, length);
+                sizeof(*ctl) + uct_ib_address_packed_size(ib_addr), length);
 
     /* TODO do we need an actual non-zero path index ? */
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr, 0,
