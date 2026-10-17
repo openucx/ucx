@@ -219,6 +219,9 @@ typedef struct ucp_ep_config_key_lane {
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
     uint8_t              port_speed; /* Quantized port speed */
+    ucp_lane_index_t     monitored_lane; /* Data lane measured by this
+                                            path-monitor lane,
+                                            or UCP_NULL_LANE. */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
 } ucp_ep_config_key_lane_t;
@@ -239,6 +242,7 @@ struct ucp_ep_config_key {
     ucp_lane_index_t         wireup_msg_lane; /* Lane for wireup messages (can be NULL) */
     ucp_lane_index_t         cm_lane;         /* Lane for holding a CM connection (can be NULL) */
     ucp_lane_index_t         keepalive_lane;  /* Lane for checking a connection state (can be NULL) */
+    ucp_lane_map_t           path_keepalive_lanes; /* Dedicated path monitors */
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t         rma_lanes[UCP_MAX_LANES];
@@ -571,6 +575,8 @@ typedef struct ucp_ep_ext {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    ucp_lane_index_t              path_ka_next_lane; /* Next path KA lane, or
+                                                        UCP_NULL_LANE when done */
     union {
         ucp_request_t             *close_req;    /* Close protocol request */
         ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
