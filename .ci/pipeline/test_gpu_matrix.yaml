@@ -124,7 +124,8 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${name}_w${worker}_${BUILD_NUMBER}.txt"
-      testScript: "cd /ws && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
+      # Adds /hpc/local modules, so test_jenkins.sh can load CUDA 13 like Azure.
+      testScript: "cd /ws && source ./buildlib/az-helpers.sh && az_init_modules && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
