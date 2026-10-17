@@ -181,6 +181,68 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
 }
 
+/* Synthesize an error receive completion by replacing the poll_cq() operation
+ * of the device context: receive work requests go to the shared receive queue,
+ * which verbs can not move to an error state. */
+static struct {
+    struct ibv_cq      *cq;
+    void               *desc;
+    int                inject;
+} failed_rx;
+
+static int failed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
+                             struct ibv_wc *wc)
+{
+    if ((cq != failed_rx.cq) || (num_entries < 1) || !failed_rx.inject) {
+        return 0;
+    }
+
+    failed_rx.inject = 0;
+    wc[0].status     = IBV_WC_REM_ABORT_ERR;
+    wc[0].wr_id      = (uintptr_t)failed_rx.desc;
+    return 1;
+}
+
+static bool is_desc_in_pool(ucs_mpool_t *mp, void *desc)
+{
+    ucs_mpool_elem_t *elem;
+
+    for (elem = mp->freelist; elem != NULL; elem = elem->next) {
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof(*elem));
+        if (UCS_PTR_BYTE_OFFSET(elem, sizeof(*elem)) == desc) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* The repost batch must stay above the single completion reported here, so
+ * that the released descriptor is not posted again. */
+UCS_TEST_SKIP_COND_P(test_rc, failed_rx_release_desc,
+                     GetParam()->tl_name != "rc_verbs", "IB_RX_MAX_BATCH=16")
+{
+    uct_rc_iface_t *rc = rc_iface(m_e2);
+
+    failed_rx.desc = ucs_mpool_get(&rc->rx.mp);
+    ASSERT_TRUE(failed_rx.desc != NULL);
+
+    failed_rx.cq     = rc->super.cq[UCT_IB_DIR_RX];
+    failed_rx.inject = 1;
+
+    ucs::mock mock;
+    mock.setup(&failed_rx.cq->context->ops.poll_cq, failed_rx_poll_cq);
+
+    progress();
+    ASSERT_FALSE(failed_rx.inject);
+
+    /* The completion was reported for a work request the queue never held */
+    rc->rx.srq.available--;
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, failed_rx.desc))
+            << "receive descriptor leaked";
+}
+
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 #ifdef HAVE_MLX5_DV
