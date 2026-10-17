@@ -32,8 +32,9 @@ typedef enum {
 
 
 typedef struct {
-    uint64_t     system_uuid;
-    uint8_t      flags; /* uct_cuda_ipc_device_addr_flags_t */
+    uint64_t                     system_uuid;
+    uint8_t                      flags; /* uct_cuda_ipc_device_addr_flags_t */
+    uct_cuda_ipc_nvlink_domain_t nvlink_domain; /* Valid if FLAG_MNNVL */
 } UCS_S_PACKED uct_cuda_ipc_device_addr_t;
 
 
@@ -102,6 +103,8 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
         if (md->fabric_supported) {
             dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
         }
+
+        dev_addr->nvlink_domain = md->nvlink_domain;
     }
 
     dev_addr->system_uuid = ucs_get_system_id();
@@ -178,6 +181,14 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     if (!same_uuid &&
         !uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
         uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
+        return 0;
+    }
+
+    /* Multi-node NVLINK connects only GPUs in the same NVLink domain */
+    if ((dev_addr_len < sizeof(uct_cuda_ipc_device_addr_t)) ||
+        memcmp(&dev_addr->nvlink_domain, &md->nvlink_domain,
+               sizeof(md->nvlink_domain))) {
+        uct_iface_fill_info_str_buf(params, "different NVLink domain");
         return 0;
     }
 

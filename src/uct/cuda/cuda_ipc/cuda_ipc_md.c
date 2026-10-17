@@ -705,11 +705,14 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
     static int mnnvl_supported = 0;
 #else
     static int mnnvl_supported = -1;
+    static uct_cuda_ipc_nvlink_domain_t nvlink_domain;
     nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
     int64_t *cluster_uuid;
+    const char *poc_domain;
+    uint64_t poc_uuid;
 
     if (mnnvl_supported != -1) {
         goto out;
@@ -732,16 +735,37 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         goto out_not_supported;
     }
 
-    ucs_debug("fabric_info: state=%u status=%u uuid=%s", fabric_info.state,
-              fabric_info.status,
+    ucs_debug("fabric_info: state=%u status=%u uuid=%s clique=%u",
+              fabric_info.state, fabric_info.status,
               ucs_str_dump_hex(fabric_info.clusterUuid,
                                NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
-                               SIZE_MAX));
+                               SIZE_MAX),
+              fabric_info.cliqueId);
 
     cluster_uuid = (int64_t*)fabric_info.clusterUuid;
     if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
         (fabric_info.status == NVML_SUCCESS) &&
         (cluster_uuid[0] | cluster_uuid[1]) != 0) {
+        UCS_STATIC_ASSERT(NVML_GPU_FABRIC_UUID_LEN ==
+                          UCT_CUDA_IPC_CLUSTER_UUID_LEN);
+        memcpy(nvlink_domain.cluster_uuid, fabric_info.clusterUuid,
+               UCT_CUDA_IPC_CLUSTER_UUID_LEN);
+        nvlink_domain.clique_id = fabric_info.cliqueId;
+
+        poc_domain = getenv("UCX_CUDA_IPC_POC_DOMAIN");
+        if (poc_domain != NULL) {
+            poc_uuid = (*poc_domain == 'A') ? UCT_CUDA_IPC_CLUSTER_UUID_A :
+                                              UCT_CUDA_IPC_CLUSTER_UUID_B;
+            UCS_STATIC_ASSERT(UCT_CUDA_IPC_CLUSTER_UUID_LEN ==
+                              (2 * sizeof(poc_uuid)));
+            memcpy(&nvlink_domain.cluster_uuid[0], &poc_uuid,
+                   sizeof(poc_uuid));
+            memcpy(&nvlink_domain.cluster_uuid[sizeof(poc_uuid)], &poc_uuid,
+                   sizeof(poc_uuid));
+            ucs_debug("POC: overriding NVLink cluster UUID with domain %c",
+                      *poc_domain);
+        }
+
         mnnvl_supported = 1;
         goto out;
     }
@@ -749,6 +773,7 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
 out_not_supported:
     mnnvl_supported = 0;
 out:
+    md->nvlink_domain = nvlink_domain;
 #endif
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
         ucs_error("multi-node NVLINK support is requested but not supported");
