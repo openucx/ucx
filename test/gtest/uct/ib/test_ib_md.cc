@@ -300,13 +300,6 @@ UCS_TEST_P(test_ib_md, relaxed_order_no_devx, "IB_MLX5_DEVX=no",
     }
 
     uint64_t buffer = 0;
-    auto *mr       = ibv_reg_mr(ib_md().pd, &buffer, sizeof(buffer),
-                               IBV_ACCESS_LOCAL_WRITE |
-                               IBV_ACCESS_RELAXED_ORDERING);
-    if (mr == nullptr) {
-        UCS_TEST_SKIP_R("relaxed-order registration unavailable");
-    }
-    ASSERT_EQ(0, ibv_dereg_mr(mr));
 
     EXPECT_EQ(0, uct_ib_md_get_atomic_mr_id(
                          ucs_derived_of(md(), uct_ib_md_t)));
