@@ -732,6 +732,7 @@ static int ucp_address_iface_path_monitor_is_enabled(
         const ucp_worker_iface_t *wiface)
 {
     return ucp_worker_keepalive_is_enabled(wiface->worker) &&
+           (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) &&
            (wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_PATH_MONITOR);
 }
 

@@ -2628,6 +2628,7 @@ static int ucp_wireup_lane_supports_path_monitor(
 
     wiface = ucp_worker_iface(worker, lane_desc->rsc_index);
     return (wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_PATH_MONITOR) &&
+           (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) &&
            (select_params->address->address_list[lane_desc->addr_index].
                     iface_attr.flags & UCP_ADDR_IFACE_FLAG_PATH_MONITOR) &&
            ucp_wireup_connect_p2p(

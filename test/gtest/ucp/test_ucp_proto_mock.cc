@@ -1156,7 +1156,9 @@ class test_ucp_proto_mock_path_monitor_asymmetric :
 public:
     enum {
         KEEPALIVE_DISABLED_LOCAL,
-        KEEPALIVE_DISABLED_REMOTE
+        KEEPALIVE_DISABLED_REMOTE,
+        EP_CHECK_DISABLED_LOCAL,
+        EP_CHECK_DISABLED_REMOTE
     };
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
@@ -1168,22 +1170,46 @@ public:
                                "local_disabled");
         add_variant_with_value(variants, features, KEEPALIVE_DISABLED_REMOTE,
                                "remote_disabled");
+        add_variant_with_value(variants, features, EP_CHECK_DISABLED_LOCAL,
+                               "local_no_ep_check");
+        add_variant_with_value(variants, features, EP_CHECK_DISABLED_REMOTE,
+                               "remote_no_ep_check");
     }
 
 protected:
     void post_ucp_init() override
     {
         ucp_worker_h disabled_worker;
+        unsigned iface_id;
 
         test_ucp_proto_mock_path_monitor::post_ucp_init();
         ASSERT_TRUE(ucp_worker_keepalive_is_enabled(sender().worker()));
         ASSERT_TRUE(ucp_worker_keepalive_is_enabled(receiver().worker()));
 
-        disabled_worker = (get_variant_value() == KEEPALIVE_DISABLED_LOCAL) ?
-                                  sender().worker() : receiver().worker();
-        disabled_worker->context->config.ext.keepalive_interval =
-                UCS_TIME_INFINITY;
-        ASSERT_FALSE(ucp_worker_keepalive_is_enabled(disabled_worker));
+        switch (get_variant_value()) {
+        case KEEPALIVE_DISABLED_LOCAL:
+        case KEEPALIVE_DISABLED_REMOTE:
+            disabled_worker =
+                    (get_variant_value() == KEEPALIVE_DISABLED_LOCAL) ?
+                            sender().worker() : receiver().worker();
+            disabled_worker->context->config.ext.keepalive_interval =
+                    UCS_TIME_INFINITY;
+            ASSERT_FALSE(ucp_worker_keepalive_is_enabled(disabled_worker));
+            break;
+        case EP_CHECK_DISABLED_LOCAL:
+        case EP_CHECK_DISABLED_REMOTE:
+            disabled_worker =
+                    (get_variant_value() == EP_CHECK_DISABLED_LOCAL) ?
+                            sender().worker() : receiver().worker();
+            for (iface_id = 0; iface_id < disabled_worker->num_ifaces;
+                 ++iface_id) {
+                disabled_worker->ifaces[iface_id]->attr.cap.flags &=
+                        ~UCT_IFACE_FLAG_EP_CHECK;
+            }
+            break;
+        default:
+            UCS_TEST_ABORT("unexpected test variant");
+        }
     }
 };
 
