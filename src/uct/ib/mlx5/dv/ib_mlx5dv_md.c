@@ -3371,24 +3371,6 @@ uct_ib_mlx5dv_check_ddp(struct ibv_context *ctx, uct_ib_mlx5_md_t *md)
     return UCS_OK;
 }
 
-static int uct_ib_mlx5dv_check_relaxed_order(uct_ib_md_t *md)
-{
-    struct ibv_mr *mr;
-    uint64_t buffer;
-
-    if (IBV_ACCESS_RELAXED_ORDERING == 0) {
-        return 0;
-    }
-
-    mr = ibv_reg_mr(md->pd, &buffer, sizeof(buffer),
-                    IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_RELAXED_ORDERING);
-    if (mr == NULL) {
-        return 0;
-    }
-
-    return uct_ib_dereg_mr(mr) == UCS_OK;
-}
-
 static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
                                           const uct_ib_md_config_t *md_config,
                                           uct_ib_md_t **p_md)
@@ -3455,11 +3437,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->super.name = UCT_IB_MD_NAME(mlx5);
 
-    status = uct_ib_md_parse_relaxed_order(
-            &md->super, md_config,
-            (md_config->mr_relaxed_order != UCS_NO) &&
-                    uct_ib_mlx5dv_check_relaxed_order(&md->super),
-            0);
+    status = uct_ib_md_parse_relaxed_order(&md->super, md_config, 1, 0);
     if (status != UCS_OK) {
         goto err_md_close;
     }
@@ -3468,7 +3446,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     md->direct_nic_sys_dev =
             uct_ib_mlx5dv_check_direct_nic(dev, md_config->ext.direct_nic);
 
-    /* Verbs companion keys use the original address, without a DEVX offset. */
+    /* Clear atomic_mr_id (flush_rkey bits 8-15): verbs companion keys use
+     * the original address, so atomic_mr_offset must be zero. */
     md->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     /* cppcheck-suppress autoVariables */
