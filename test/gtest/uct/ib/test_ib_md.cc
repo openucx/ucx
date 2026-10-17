@@ -291,6 +291,40 @@ UCS_TEST_P(test_ib_md, aligned) {
     ib_md_umr_check(&rkey_buffer[0], true, size, true);
 }
 
+UCS_TEST_P(test_ib_md, relaxed_order_no_devx, "IB_MLX5_DEVX=no",
+           "IB_PCI_RELAXED_ORDERING=try")
+{
+    if (!(ib_md().dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) ||
+        (IBV_ACCESS_RELAXED_ORDERING == 0)) {
+        UCS_TEST_SKIP_R("requires mlx5 relaxed ordering");
+    }
+
+    uint64_t buffer = 0;
+
+    EXPECT_EQ(0, uct_ib_md_get_atomic_mr_id(
+                         ucs_derived_of(md(), uct_ib_md_t)));
+
+    uct_mem_h memh;
+    ASSERT_UCS_OK(reg_mem(UCT_MD_MEM_ACCESS_ALL, &buffer, sizeof(buffer), &memh));
+    EXPECT_TRUE(static_cast<uct_ib_mem_t*>(memh)->flags &
+                UCT_IB_MEM_STRICT_ORDER_MR);
+
+    std::vector<uint8_t> packed(md_attr().rkey_packed_size);
+    uct_rkey_bundle_t bundle;
+    ucs_status_t status = uct_md_mkey_pack(md(), memh, packed.data());
+    EXPECT_UCS_OK(status);
+    if (status == UCS_OK) {
+        status = uct_rkey_unpack(md()->component, packed.data(), &bundle);
+        EXPECT_UCS_OK(status);
+        if (status == UCS_OK) {
+            EXPECT_NE(uct_ib_md_direct_rkey(bundle.rkey),
+                      uct_ib_md_atomic_rkey(bundle.rkey));
+            EXPECT_UCS_OK(uct_rkey_release(md()->component, &bundle));
+        }
+    }
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+}
+
 ucs_status_t test_ib_md::reg_smkey_pack(void *buffer, size_t size,
                                         uct_ib_mem_t **memh, uct_rkey_t *rkey_p)
 {
