@@ -7,12 +7,10 @@ the UCX source tree or referenced by a pinned Git submodule. It does not cover
 libraries and tools that users install separately and that are only detected,
 compiled against, or loaded at runtime.
 
-
 BSD-3-Clause components
 -----------------------
 
 UCX project sources
-
   Files: UCX source files that refer to the top-level LICENSE
   Copyright notices include:
     2001-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
@@ -42,7 +40,6 @@ UCX project sources
   License: BSD-3-Clause
 
 inih
-
   Files:
     src/ucs/config/ini.c
     src/ucs/config/ini.h
@@ -51,7 +48,6 @@ inih
   License: BSD-3-Clause
 
 ThunderX2 optimized memcpy
-
   File: src/ucs/arch/aarch64/memcpy_thunderx2.S
   Copyright (c) 2018, Marvell Technology Group Ltd.
   License: Apache-2.0 OR BSD-3-Clause
@@ -59,7 +55,6 @@ ThunderX2 optimized memcpy
   UCX redistributes this file under the BSD-3-Clause alternative.
 
 NVIDIA DOCA GPUNetIO
-
   Git submodule: external/gpunetio
   Upstream: https://github.com/NVIDIA-DOCA/gpunetio
   Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
@@ -94,12 +89,10 @@ follows:
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
-
 qsort_r BSD license
 -------------------
 
 qsort_r
-
   Files:
     src/ucs/algorithm/qsort_r.c
     src/ucs/algorithm/qsort_r.h
@@ -133,12 +126,10 @@ The license distributed with qsort_r follows:
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 GoogleTest BSD license
 ----------------------
 
 GoogleTest
-
   Files: test/gtest/common/googletest/
   Upstream: https://github.com/google/googletest
   Copyright 2005-2015, Google Inc., as identified in the individual files.
@@ -172,12 +163,10 @@ The license distributed with GoogleTest follows:
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
-
 MIT component
 -------------
 
 khash
-
   File: src/ucs/datastruct/khash.h
   Upstream: https://github.com/attractivechaos/klib
   Copyright (c) 2008, 2009, 2011 by Attractive Chaos
@@ -203,12 +192,10 @@ The MIT license applicable to khash follows:
   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
   IN THE SOFTWARE.
 
-
 SGLIB component
 ---------------
 
 SGLIB 1.0.3
-
   File: src/ucs/datastruct/sglib.h
   Upstream: http://www.xref-tech.com/sglib
   Copyright (C) 2003-2005 Marian Vittek
@@ -222,32 +209,33 @@ The license conditions distributed with SGLIB follow:
   project, or you need sglib under any other license conditions, contact the
   author.
 
-
 Autoconf Archive component
 --------------------------
 
-Doxygen Autoconf macros
-
-  Files:
-    config/m4/ax_prog_doxygen.m4
-    docs/doxygen/doxygen.am
+Doxygen Autoconf macro
+  File: config/m4/ax_prog_doxygen.m4
   Upstream: https://www.gnu.org/software/autoconf-archive/ax_prog_doxygen.html
   Copyright (c) 2009 Oren Ben-Kiki
   Copyright (C) 2014-2015 UT-Battelle, LLC. All rights reserved.
   License: FSF All Permissive License
 
-The license distributed with these files follows:
+Doxygen Automake rules
+  File: docs/doxygen/doxygen.am
+  Copyright (c) 2009 Oren Ben-Kiki
+  Copyright (C) 2014-2015 UT-Battelle, LLC. All rights reserved.
+  License: BSD-3-Clause and FSF All Permissive License
+
+The BSD-3-Clause license is reproduced above. The FSF All Permissive License
+distributed with these files follows:
 
   Copying and distribution of this file, with or without modification, are
   permitted in any medium without royalty provided the copyright notice and
   this notice are preserved. This file is offered as-is, without any warranty.
 
-
 Public-domain components
 ------------------------
 
 dlmalloc 2.8.6
-
   Files:
     src/ucm/ptmalloc286/malloc.c
     src/ucm/ptmalloc286/malloc-2.8.6.h
@@ -261,7 +249,6 @@ The source states:
   http://creativecommons.org/publicdomain/zero/1.0/.
 
 Quickselect routine
-
   File: src/tools/perf/lib/libperf.c
   Author: Nicolas Devillard
   Copyright year: 1998

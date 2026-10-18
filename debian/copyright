@@ -46,7 +46,9 @@ Copyright: 2018 Marvell Technology Group Ltd.
 License: Apache-2.0 or BSD-3-clause
 Comment: UCX redistributes this file under the BSD-3-clause alternative.
 
-Files: external/gpunetio/*
+Files:
+ external/gpunetio/*
+ src/uct/ib/mlx5/gdaki/gpunetio/*
 Copyright: 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 License: BSD-3-clause
 
@@ -61,6 +63,16 @@ License: BSD-3-clause and BSD-3-clause-UC
 Files: test/gtest/common/googletest/*
 Copyright: 2005-2015 Google Inc.
 License: BSD-3-clause-Google
+
+Files: test/gtest/common/googletest/Makefile.am
+Copyright:
+ 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ 2021 NextSilicon Ltd. All rights reserved.
+License: BSD-3-clause
+
+Files: test/gtest/common/googletest/configure.m4
+Copyright: 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+License: BSD-3-clause
 
 Files: src/ucs/datastruct/khash.h
 Copyright: 2008, 2009, 2011 Attractive Chaos <attractor@live.co.uk>

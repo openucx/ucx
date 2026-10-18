@@ -147,6 +147,7 @@ rm -f %{buildroot}%{_libdir}/*.la
 rm -f %{buildroot}%{_libdir}/libucs_signal.a
 rm -f %{buildroot}%{_libdir}/ucx/*.la
 rm -f %{buildroot}%{_libdir}/ucx/lib*.so
+rm -rf %{buildroot}%{_datadir}/doc/%{name}
 
 %files
 %{_libdir}/lib*.so.*
