@@ -482,11 +482,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Failover method for endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
    " auto  - auto selected recovery protocol. Transport selection is\n"
-   "         unchanged.\n"
+   "         unchanged. Selects software PSN when UCX_IB_INDIRECT_ATOMIC\n"
+   "         is enabled.\n"
    " sw    - force software PSN based recovery protocol. Transport\n"
    "         selection is unchanged.\n"
    " token - force token based retransmits. Transports that do not support\n"
-   "         the required capabilities are disabled.",
+   "         the required capabilities are disabled. Rejected when\n"
+   "         UCX_IB_INDIRECT_ATOMIC is enabled.",
    ucs_offsetof(ucp_context_config_t, failover_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_failover_modes)},
 
@@ -585,12 +587,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " 'y' : Prefer transports with native RMA/AMO support (if available)\n"
    " 'n' : Select RMA/AMO lanes according to performance charasteristics",
    ucs_offsetof(ucp_context_config_t, prefer_offload), UCS_CONFIG_TYPE_BOOL},
-
-  {"RMA_BW_MEASURE", "n",
-   "Sample completed payload throughput of multi-lane PUT/GET zcopy operations. "
-   "This experimental option estimates per-endpoint, per-direction lane "
-   "completion throughput but does not change lane weights.",
-   ucs_offsetof(ucp_context_config_t, rma_bw_measure), UCS_CONFIG_TYPE_BOOL},
 
   {"PROTO_OVERHEAD", "single:5ns,multi:10ns,rndv_offload:40ns,rndv_rtr:40ns,"
                      "rndv_rts:275ns,sw:40ns,rkey_ptr:0",
@@ -859,7 +855,10 @@ const char *ucp_feature_str[] = {
 };
 
 
-const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
+/* All valid resource indices, without the bits added by rounding up to words */
+const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX, UINT64_MAX,
+                                            UCS_MASK(UCP_MAX_RESOURCES %
+                                                     UCS_BITMAP_BITS_IN_WORD)}};
 const ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0}};
 
 
@@ -1613,7 +1612,7 @@ const char *ucp_tl_bitmap_str(ucp_context_h context,
     p    = str;
     endp = str + max_str_len;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(i, tl_bitmap) {
         ucs_snprintf_zero(p, endp - p, "%s ",
                           context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
@@ -1775,7 +1774,7 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
         cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(cmpt_idx, &cm_cmpts_bitmap_safe) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
@@ -2216,6 +2215,67 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
+/* Effective UCX_IB_INDIRECT_ATOMIC on a selected IB memory domain. IB MD
+ * default and environment, then cached ucp_config_modify() overrides.
+ * Returns 0 when no IB domain was selected. */
+static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
+{
+    int enabled = 1;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t cmpt_index;
+    uct_md_config_t *md_config;
+    ucs_status_t status;
+    char value[8];
+
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        cmpt_index = context->tl_mds[md_index].cmpt_index;
+        if (strcmp(context->tl_cmpts[cmpt_index].attr.name, "ib") != 0) {
+            continue;
+        }
+
+        status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt,
+                                    NULL, NULL, &md_config);
+        if (status != UCS_OK) {
+            return 1;
+        }
+
+        ucp_apply_uct_config_list(context, md_config);
+        status = uct_config_get(md_config, "INDIRECT_ATOMIC", value,
+                                sizeof(value));
+        if ((status != UCS_OK) ||
+            (ucs_config_sscanf_bool(value, &enabled, NULL) == 0)) {
+            enabled = 1;
+        }
+
+        uct_config_release(md_config);
+        return enabled;
+    }
+
+    return 0;
+}
+
+/* Indirect atomics have no token replay. */
+static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
+{
+    int enabled = ucp_context_query_ib_indirect_atomic(context);
+
+    if (!enabled) {
+        return UCS_OK;
+    }
+
+    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
+        ucs_error("UCX_FAILOVER_MODE=token requires "
+                  "UCX_IB_INDIRECT_ATOMIC=n");
+        return UCS_ERR_INVALID_PARAM;
+    } else if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+        ucs_debug("ib indirect atomic is enabled, failover mode auto "
+                  "selects software psn recovery");
+        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 {
@@ -2370,6 +2430,11 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
     ucp_fill_sockaddr_prio_list(context, config);
 
     ucp_context_log_tl_info(context, &all_rscs);
+
+    status = ucp_context_adjust_failover_mode(context);
+    if (status != UCS_OK) {
+        goto err_free_resources;
+    }
 
 out_release_components:
     ucs_array_cleanup_dynamic(&all_rscs);
@@ -2734,13 +2799,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     } else {
         context->config.worker_fence_mode = context->config.ext.fence_mode;
-    }
-
-    /* Token based recovery is not implemented yet, so automatic selection
-     * uses the software PSN recovery protocol. */
-    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
-        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
-        ucs_debug("failover mode auto selects software psn recovery");
     }
 
     context->config.progress_wrapper_enabled =
@@ -3292,7 +3350,7 @@ void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
     }
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         md_index = context->tl_rscs[rsc_index].md_index;
         md_attr  = &context->tl_mds[md_index].attr;
         if (md_attr->flags & md_reg_flags) {
@@ -3316,7 +3374,7 @@ ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
     ucp_rsc_index_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
             continue;
         }
@@ -3332,7 +3390,7 @@ ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
     ucp_rsc_index_t tl_idx;
 
     UCS_STATIC_BITMAP_RESET_ALL(tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_idx, &context->tl_bitmap) {
         if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
             UCS_STATIC_BITMAP_SET(tl_bitmap, tl_idx);
         }
