@@ -125,7 +125,8 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${name}_w${worker}_${BUILD_NUMBER}.txt"
       # Adds /hpc/local modules, so test_jenkins.sh can load CUDA 13 like Azure.
-      testScript: "cd /ws && source ./buildlib/az-helpers.sh && az_init_modules && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
+      # Drops the Slurm step env: with it mpirun picks the Slurm launcher, which the container lacks.
+      testScript: "cd /ws && for v in $(env | grep -o \"^SLURM[A-Z_]*\"); do unset $v; done && source ./buildlib/az-helpers.sh && az_init_modules && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
