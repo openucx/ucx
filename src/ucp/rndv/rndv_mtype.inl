@@ -127,6 +127,12 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req,
         status = ucp_rndv_mpool_get(worker, frag_mem_type, frag_sys_dev,
                                     UCP_WORKER_RNDV_FRAG_POOL_RESERVED,
                                     &req->send.rndv.mdesc);
+        if ((status == UCS_OK) && owns_wakeup) {
+            /* The wakeup may have been for a shared fragment, which is then
+             * still free, so pass it on rather than leave it unused. */
+            ucp_proto_rndv_mtype_fc_reschedule_pending(
+                                    worker, UCP_WORKER_RNDV_FC_OP_LAST);
+        }
     }
 
     if (status == UCS_ERR_NO_RESOURCE) {
@@ -334,7 +340,10 @@ ucp_proto_rndv_mtype_mdesc_release(ucp_request_t *req)
     ucp_rndv_mpool_priv_t *mpriv = ucs_mpool_priv(ucs_mpool_obj_owner(mdesc));
     unsigned num_queues;
 
-    /* Only PUT/GET requests can use a fragment of the reserved pool */
+    /* Only PUT/GET requests can use a fragment of the reserved pool. A woken
+     * up PUT/GET which takes a reserved fragment passes its wakeup on, see
+     * ucp_proto_rndv_mtype_request_init(), so a shared fragment freed in the
+     * meantime is not left without a waiter. */
     num_queues = (mpriv->pool == UCP_WORKER_RNDV_FRAG_POOL_RESERVED) ?
                                            (UCP_WORKER_RNDV_FC_OP_PUT + 1) :
                                            UCP_WORKER_RNDV_FC_OP_LAST;
