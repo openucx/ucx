@@ -17,9 +17,6 @@
 # so the shell flags have to be set here for the fail-loud guards to bite.
 set -eE -o pipefail
 
-# RAPIDS CI scripts require it whenever CI is set.
-export RAPIDS_DATETIME_STRING=${RAPIDS_DATETIME_STRING:-$(date -u +%y%m%d%H%M%S)}
-
 phase=${1:?phase required}
 case "$phase" in
   build|test_cpp|test_python) : "${IS_GPU:?IS_GPU required}" ;;
@@ -31,6 +28,7 @@ esac
 ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
 export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
 source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+use_local_rapids_env
 
 # The PR's UCX was built once by the UCXX_ucx stage and staged at
 # UCX_PR_PREFIX by the fetch step; every build and test consumes it.
@@ -91,14 +89,6 @@ export_host_driver_override() {
 
 case "$phase" in
   build)
-    if [ "${IS_GPU,,}" = "true" ]; then
-      # sccache wrapper crashes CMake's compiler probe on the GPU build hosts; no-op it.
-      cat > "$HOME/.local/bin/rapids-configure-sccache" <<'EOF'
-#!/bin/bash
-export CMAKE_C_COMPILER_LAUNCHER= CMAKE_CXX_COMPILER_LAUNCHER= CMAKE_CUDA_COMPILER_LAUNCHER= RUSTC_WRAPPER=
-EOF
-      chmod +x "$HOME/.local/bin/rapids-configure-sccache"
-    fi
     bash ci/build_cpp.sh
     bash ci/build_python.sh
     ;;

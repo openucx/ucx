@@ -6,12 +6,24 @@
 #                         conda-forge toolchain env
 #   use_pr_ucx          - patch the ucxx tree (cwd) so every package build and
 #                         test consumes the PR's UCX instead of released ucx
+#   use_local_rapids_env - run the RAPIDS CI scripts as local builds
 # Requires: ucx_dir, UCX_PR_PREFIX exported by the caller; cwd = UCXX_DIR for
 # use_pr_ucx.
 
 # This file's own path, so build_ucx_pr_conda can re-source it in the toolchain
 # shell instead of relying on an exported function surviving conda run.
 ucxx_ucx_pr_sh=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
+
+# RAPIDS CI scripts treat CI=true as their own runners: preset timestamp and an
+# S3 sccache that needs AWS credentials. Run them as local builds, no sccache.
+use_local_rapids_env() {
+  unset CI
+  mkdir -p "$HOME/.local/bin"
+  printf '#!/bin/bash\nexport CMAKE_C_COMPILER_LAUNCHER= CMAKE_CXX_COMPILER_LAUNCHER= CMAKE_CUDA_COMPILER_LAUNCHER= RUSTC_WRAPPER=\n' \
+    > "$HOME/.local/bin/rapids-configure-sccache"
+  chmod +x "$HOME/.local/bin/rapids-configure-sccache"
+  export PATH="$HOME/.local/bin:$PATH"
+}
 
 # Runs inside the toolchain env created by build_ucx_pr_conda, which sources
 # this file to get it. Idempotent - the container, and thus /tmp, is shared

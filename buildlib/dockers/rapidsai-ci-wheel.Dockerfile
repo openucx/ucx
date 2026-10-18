@@ -6,5 +6,5 @@ ARG BASE_IMAGE=rapidsai/ci-wheel:26.12-cuda13.3.0-rockylinux8-py3.12
 FROM ${BASE_IMAGE}
 
 RUN chmod -R o+rwX /pyenv \
- && dnf install -y gdb \
+ && dnf --refresh install -y gdb \
  && dnf clean all

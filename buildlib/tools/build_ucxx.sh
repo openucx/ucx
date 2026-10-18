@@ -18,9 +18,6 @@
 # so the shell flags have to be set here for the fail-loud guards to bite.
 set -eE -o pipefail
 
-# RAPIDS CI scripts require it whenever CI is set.
-export RAPIDS_DATETIME_STRING=${RAPIDS_DATETIME_STRING:-$(date -u +%y%m%d%H%M%S)}
-
 phase=${1:?phase required}
 
 if [ "$phase" = "ucx_pr" ]; then
@@ -69,6 +66,7 @@ esac
 ucx_dir=$(cd "$(dirname "$0")/../.." && pwd)
 export ucx_dir UCX_PR_PREFIX=/tmp/ucx-pr
 source "$ucx_dir/buildlib/tools/ucxx_ucx_pr.sh"
+use_local_rapids_env
 
 export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 # upstream test-env matrices select the dependency set via this key
