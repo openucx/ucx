@@ -146,6 +146,18 @@ steps:
         "worker=${worker}"
       ]
 
+  # Frees the node once the row passes; pipeline_stop covers failed rows.
+  - name: Release Environment
+    containerSelector: "{name: 'build_helper_dl'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: stop
+    args:
+      headNode: "${SLURM_HEAD_NODE}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+
 pipeline_stop:
   containerSelector: "{name: 'build_helper_dl'}"
   parallel: false

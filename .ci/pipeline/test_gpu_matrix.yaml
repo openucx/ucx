@@ -152,6 +152,18 @@ steps:
         "VALGRIND_CHECK=${VALGRIND_CHECK}"
       ]
 
+  # Frees the node once the row passes; pipeline_stop covers failed rows.
+  - name: Release Environment
+    containerSelector: "{name: 'build_helper_ucx.*'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: stop
+    args:
+      headNode: "${SLURM_HEAD_NODE}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${name}_w${worker}_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
 # Loads swx-jenkins-lib once before the parallel rows; /tmp has no job id files.
 pipeline_start:
   containerSelector: "{name: 'build_helper_ucx'}"

@@ -153,6 +153,18 @@ steps:
         "BUILD_REPOSITORY_URI=${UCX_REPO}"
       ]
 
+  # Frees the node once the row passes; pipeline_stop covers failed rows.
+  - name: Release Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: stop
+    args:
+      headNode: "${SLURM_HEAD_NODE}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
 pipeline_stop:
   containerSelector: "{name: 'build_helper_ucx'}"
   parallel: false
