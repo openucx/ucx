@@ -143,6 +143,7 @@ steps:
         "worker=${worker}",
         "nworkers=${nworkers}",
         "RUN_TESTS=${RUN_TESTS}",
+        "RUN_MPI_TESTS=${RUN_MPI_TESTS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}"
