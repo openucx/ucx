@@ -11,7 +11,7 @@
 # compose `build.platforms` key, so listing it here would be inert.
 #
 # Bumping RAPIDS: set RAPIDS_VER. If RAPIDS moves the wheel CUDA/py tag
-# (e.g. cuda13.3.0 -> 13.3.0, or py3.11 -> py3.12), update the two wheel
+# (e.g. cuda13.3.0 -> 13.3.0, or py3.12 -> py3.13), update the two wheel
 # BASE_IMAGE args below AND the matching rapids_cuda_version/py in
 # pr/main.yml + azure-pipelines-release.yml.
 services:
@@ -29,7 +29,7 @@ services:
       context: .
       dockerfile: rapidsai-ci-wheel.Dockerfile
       args:
-        BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda13.3.0-rockylinux8-py3.11
+        BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda13.3.0-rockylinux8-py3.12
 
   rapidsai-ci-wheel-cuda12:
     image: ${REGISTRY:-harbor.mellanox.com}/ucx/rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-${IMAGE_REV}
@@ -37,4 +37,4 @@ services:
       context: .
       dockerfile: rapidsai-ci-wheel.Dockerfile
       args:
-        BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda12.9.2-rockylinux8-py3.11
+        BASE_IMAGE: rapidsai/ci-wheel:${RAPIDS_VER}-cuda12.9.2-rockylinux8-py3.12

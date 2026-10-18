@@ -11,8 +11,8 @@ builds nothing until they land.
 | Wrapper image (`ucx/`)                     | RAPIDS base                                            | Used for                   |
 |--------------------------------------------|--------------------------------------------------------|----------------------------|
 | `rapidsai-ci-conda:<VER>-<REV>`            | `rapidsai/ci-conda:<VER>-latest`                       | conda build + tests        |
-| `rapidsai-ci-wheel:<VER>-cuda13-<REV>`     | `rapidsai/ci-wheel:<VER>-cuda<CU13>-rockylinux8-py3.11`| libucxx/ucxx wheels (CUDA 13) |
-| `rapidsai-ci-wheel:<VER>-cuda12-<REV>`     | `rapidsai/ci-wheel:<VER>-cuda<CU12>-rockylinux8-py3.11`| libucxx/ucxx wheels (CUDA 12) |
+| `rapidsai-ci-wheel:<VER>-cuda13-<REV>`     | `rapidsai/ci-wheel:<VER>-cuda<CU13>-rockylinux8-py3.12`| libucxx/ucxx wheels (CUDA 13) |
+| `rapidsai-ci-wheel:<VER>-cuda12-<REV>`     | `rapidsai/ci-wheel:<VER>-cuda<CU12>-rockylinux8-py3.12`| libucxx/ucxx wheels (CUDA 12) |
 
 `<VER>` is the RAPIDS CalVer, e.g. `26.08`. `<REV>` is the wrapper revision
 (`azp-1`, `azp-2`, ...), new for every rebuild so a pushed tag is never
@@ -53,10 +53,10 @@ not committed here - supply them via the environment, see below.)
 The build script preflights this; to check by hand (no login needed):
 
 ```sh
-VER=26.08
+VER=26.12
 docker manifest inspect rapidsai/ci-conda:${VER}-latest
-docker manifest inspect rapidsai/ci-wheel:${VER}-cuda<CU13>-rockylinux8-py3.11
-docker manifest inspect rapidsai/ci-wheel:${VER}-cuda<CU12>-rockylinux8-py3.11
+docker manifest inspect rapidsai/ci-wheel:${VER}-cuda<CU13>-rockylinux8-py3.12
+docker manifest inspect rapidsai/ci-wheel:${VER}-cuda<CU12>-rockylinux8-py3.12
 ```
 
 The exact CUDA (`<CU12>`/`<CU13>`) and Python versions live in ONE place:
@@ -72,7 +72,7 @@ the opposite arch over ssh). Set the opposite-arch node endpoint and harbor cred
 the environment:
 
 ```sh
-RAPIDS_VER=26.08 IMAGE_REV=azp-1 \
+RAPIDS_VER=26.12 IMAGE_REV=azp-1 \
 ARM_NODE=ssh://<user>@<arm-builder> \   # when running on an x86 host
 HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
 ./rapidsai-images-build.sh
