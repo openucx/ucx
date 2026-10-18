@@ -46,6 +46,7 @@ steps:
     parallel: false
     timeout: 15
     run: |
+      source .ci/scripts/cap_output.sh
       set -eEx -o pipefail
       hcas=($(ibv_devinfo | awk '/hca_id:/ {h=$2} /port:/ {p=$2} /state:/ {s=$2}
                                  /link_layer:/ {if (s == "PORT_ACTIVE" && $2 == "InfiniBand") print h ":" p}'))

@@ -106,6 +106,7 @@ steps:
     parallel: false
     timeout: 30
     run: |
+      source .ci/scripts/cap_output.sh
       set -xeE
       source buildlib/az-helpers.sh
       az_init_modules
@@ -118,6 +119,7 @@ steps:
     parallel: false
     timeout: 15
     run: |
+      source .ci/scripts/cap_output.sh
       set -xeE
       source buildlib/az-helpers.sh
       az_init_modules
@@ -167,6 +169,7 @@ steps:
     parallel: false
     timeout: 60
     run: |
+      source .ci/scripts/cap_output.sh
       set -xeE
       source buildlib/az-helpers.sh
       az_init_modules

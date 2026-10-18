@@ -165,6 +165,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
       testScript: |
         set -xeE
+        source .ci/scripts/cap_output.sh
         export ucx_gpu=yes
         source buildlib/az-helpers.sh
         az_init_modules
@@ -190,6 +191,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
       testScript: |
         set -xeE
+        source .ci/scripts/cap_output.sh
         export ucx_gpu=yes
         source buildlib/az-helpers.sh
         az_init_modules
@@ -224,6 +226,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${binding}_${BUILD_NUMBER}.txt"
       testScript: |
         set -xeE
+        source .ci/scripts/cap_output.sh
         export ucx_gpu=yes
         source buildlib/az-helpers.sh
         az_init_modules

@@ -45,6 +45,7 @@ steps:
     parallel: false
     timeout: 30
     run: |
+      source .ci/scripts/cap_output.sh
       readlink /proc/self/ns/pid
       unshare --user whoami
       ./contrib/test_namespace.sh
