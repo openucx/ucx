@@ -145,9 +145,9 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         return UCS_ERR_IO_ERROR;
     }
 
-    if (mem_type == HSA_EXT_POINTER_TYPE_HSA) {
-        /* This covers device memory and memory allocated
-           with hipHostMalloc */
+    if (uct_rocm_base_is_hsa_mem_type(mem_type)) {
+        /* This covers device memory, including memory mapped with hipMemMap,
+           and memory allocated with hipHostMalloc */
         dev_addr = address;
     } else {
         if (pg_align_addr) {
