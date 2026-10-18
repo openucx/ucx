@@ -10,6 +10,9 @@
 #endif
 
 #include "rocm_ipc_cache.h"
+#include "rocm_ipc_fd.h"
+
+#include <uct/rocm/base/rocm_base.h>
 
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
@@ -19,6 +22,8 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/rwlock.h>
+
+#include <unistd.h>
 
 
 typedef struct uct_rocm_ipc_cache_hash_key {
@@ -55,6 +60,9 @@ typedef struct uct_rocm_ipc_remote_cache {
 
 static uct_rocm_ipc_remote_cache_t uct_rocm_ipc_remote_cache;
 
+/* Set while the caches are destroyed at library unload */
+static int uct_rocm_ipc_cache_unloading = 0;
+
 static ucs_pgt_dir_t *uct_rocm_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
     void *ptr;
@@ -70,6 +78,200 @@ static void uct_rocm_ipc_cache_pgt_dir_release(const ucs_pgtable_t *pgtable,
                                                ucs_pgt_dir_t *dir)
 {
     ucs_free(dir);
+}
+
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+/* Import the VMM allocation of a remote key and map it at a new address */
+static ucs_status_t
+uct_rocm_ipc_vmem_map(const uct_rocm_ipc_key_t *key, void **mapped_addr_p)
+{
+    hsa_amd_memory_access_desc_t *descs;
+    hsa_amd_vmem_alloc_handle_t handle;
+    hsa_agent_t *gpu_agents;
+    ucs_status_t ucs_status;
+    hsa_status_t status;
+    void *va;
+    int num_gpu, i, fd;
+
+    ucs_status = uct_rocm_ipc_fd_import(key->pid, key->server_id, key->fd_id,
+                                        &fd);
+    if (ucs_status != UCS_OK) {
+        return ucs_status;
+    }
+
+    status = hsa_amd_vmem_import_shareable_handle(fd, &handle);
+    close(fd);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_debug("hsa_amd_vmem_import_shareable_handle failed: 0x%x", status);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = hsa_amd_vmem_address_reserve(&va, key->length, 0, 0);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("hsa_amd_vmem_address_reserve(%zu) failed: 0x%x", key->length,
+                  status);
+        ucs_status = UCS_ERR_NO_MEMORY;
+        goto release_handle;
+    }
+
+    status = hsa_amd_vmem_map(va, key->length, 0, handle, 0);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("hsa_amd_vmem_map(%p, %zu) failed: 0x%x", va, key->length,
+                  status);
+        ucs_status = UCS_ERR_IO_ERROR;
+        goto free_va;
+    }
+
+    /* As hsa_amd_ipc_memory_attach does, make it accessible to all GPUs */
+    num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
+    descs   = ucs_alloca(num_gpu * sizeof(*descs));
+    for (i = 0; i < num_gpu; ++i) {
+        descs[i].permissions  = HSA_ACCESS_PERMISSION_RW;
+        descs[i].agent_handle = gpu_agents[i];
+    }
+
+    status = hsa_amd_vmem_set_access(va, key->length, descs, num_gpu);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_error("hsa_amd_vmem_set_access(%p, %zu) failed: 0x%x", va,
+                  key->length, status);
+        ucs_status = UCS_ERR_IO_ERROR;
+        goto unmap;
+    }
+
+    /* The mapping holds a reference to the allocation */
+    hsa_amd_vmem_handle_release(handle);
+    *mapped_addr_p = va;
+    ucs_trace("mapped vmem 0x%lx/%zu of pid %d at %p", key->address,
+              key->length, (int)key->pid, va);
+    return UCS_OK;
+
+unmap:
+    hsa_amd_vmem_unmap(va, key->length);
+free_va:
+    hsa_amd_vmem_address_free(va, key->length);
+release_handle:
+    hsa_amd_vmem_handle_release(handle);
+    return ucs_status;
+}
+
+static void uct_rocm_ipc_vmem_unmap(void *va, size_t length)
+{
+    if (uct_rocm_ipc_cache_unloading) {
+        /* At process exit the HSA runtime may already be shut down, and the
+         * mapping goes away with the process anyway */
+        return;
+    }
+
+    if ((hsa_amd_vmem_unmap(va, length) != HSA_STATUS_SUCCESS) ||
+        (hsa_amd_vmem_address_free(va, length) != HSA_STATUS_SUCCESS)) {
+        ucs_warn("failed to unmap vmem %p/%zu", va, length);
+    }
+}
+
+/* Probe once whether the ROCm runtime handles shared VMM allocations: older
+ * releases report the queried address instead of the mapping base in
+ * hsa_amd_pointer_info, which also makes exported keys wrong, and crash in
+ * hsa_amd_pointer_info and hsa_amd_memory_async_copy on imported ones. A
+ * local mapping is probed, since querying an imported one may crash. */
+static int uct_rocm_ipc_vmem_probe_runtime(void)
+{
+    hsa_amd_vmem_alloc_handle_t handle;
+    hsa_amd_pointer_info_t info;
+    hsa_amd_memory_pool_t pool;
+    hsa_status_t status;
+    size_t granule;
+    int supported;
+    void *va;
+
+    if ((uct_rocm_base_get_last_device_pool(&pool) != UCS_OK) ||
+        (hsa_amd_memory_pool_get_info(
+                 pool, HSA_AMD_MEMORY_POOL_INFO_RUNTIME_ALLOC_GRANULE,
+                 &granule) != HSA_STATUS_SUCCESS) ||
+        (hsa_amd_vmem_handle_create(pool, granule, MEMORY_TYPE_NONE, 0,
+                                    &handle) != HSA_STATUS_SUCCESS)) {
+        return 0;
+    }
+
+    supported = 0;
+    status    = hsa_amd_vmem_address_reserve(&va, granule, 0, 0);
+    if (status != HSA_STATUS_SUCCESS) {
+        goto out_release;
+    }
+
+    if (hsa_amd_vmem_map(va, granule, 0, handle, 0) == HSA_STATUS_SUCCESS) {
+        info.size = sizeof(info);
+        supported = (hsa_amd_pointer_info(UCS_PTR_BYTE_OFFSET(va, 1), &info,
+                                          NULL, NULL, NULL) ==
+                     HSA_STATUS_SUCCESS) &&
+                    (info.agentBaseAddress == va);
+        hsa_amd_vmem_unmap(va, granule);
+    }
+
+    hsa_amd_vmem_address_free(va, granule);
+out_release:
+    hsa_amd_vmem_handle_release(handle);
+    return supported;
+}
+
+int uct_rocm_ipc_vmem_ipc_supported(void)
+{
+    /* -1: not checked yet, 0: unsupported, 1: supported */
+    static int supported = -1;
+
+    if (supported == -1) {
+        supported = uct_rocm_ipc_vmem_probe_runtime();
+        if (!supported) {
+            ucs_diag("the ROCm runtime cannot share vmem allocations; not "
+                     "using rocm_ipc for them");
+        }
+    }
+
+    return supported;
+}
+
+ucs_status_t uct_rocm_ipc_vmem_check_import(const uct_rocm_ipc_key_t *key)
+{
+    uct_rocm_ipc_key_t map_key = *key;
+    void *mapped_addr;
+
+    if (!uct_rocm_ipc_vmem_ipc_supported()) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    /* Map it now, as cuda_ipc does, so that an unreachable exporter is found
+     * before a protocol selects rocm_ipc; transfers reuse the mapping */
+    return uct_rocm_ipc_cache_map_memhandle(&map_key, &mapped_addr);
+}
+#endif
+
+static ucs_status_t
+uct_rocm_ipc_cache_attach(const uct_rocm_ipc_key_t *key, void **mapped_addr_p)
+{
+    hsa_status_t status;
+
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+    if (key->handle_type == UCT_ROCM_IPC_KEY_HANDLE_TYPE_VMEM_FD) {
+        return uct_rocm_ipc_vmem_map(key, mapped_addr_p);
+    }
+#endif
+
+    status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
+                                       mapped_addr_p);
+    return (status == HSA_STATUS_SUCCESS) ? UCS_OK : UCS_ERR_INVALID_ADDR;
+}
+
+static void uct_rocm_ipc_cache_detach(const uct_rocm_ipc_cache_region_t *region)
+{
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+    if (region->key.handle_type == UCT_ROCM_IPC_KEY_HANDLE_TYPE_VMEM_FD) {
+        uct_rocm_ipc_vmem_unmap(region->mapped_addr, region->key.length);
+        return;
+    }
+#endif
+
+    if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
+        ucs_warn("failed to unmap addr:%p", region->mapped_addr);
+    }
 }
 
 static void
@@ -94,9 +296,7 @@ static void uct_rocm_ipc_cache_purge(uct_rocm_ipc_cache_t *cache)
                       &region_list);
 
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
-        }
+        uct_rocm_ipc_cache_detach(region);
 
         ucs_free(region);
     }
@@ -123,9 +323,7 @@ static void uct_rocm_ipc_cache_invalidate_regions(uct_rocm_ipc_cache_t *cache,
                       (void *)region->key.address, ucs_status_string(status));
         }
 
-        if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
-        }
+        uct_rocm_ipc_cache_detach(region);
         ucs_free(region);
     }
     ucs_trace("%s: closed memhandles in the range [%p..%p]",
@@ -139,7 +337,6 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_rocm_ipc_cache_region_t *region;
-    hsa_status_t hsa_status;
     int ret;
 
     /* A per-cache lock would be needed only if the caller holds no lock or
@@ -149,7 +346,7 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                                   &cache->pgtable, key->address);
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_rocm_ipc_cache_region_t);
-        if (memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0) {
+        if (uct_rocm_ipc_key_is_same(key, &region->key)) {
             /*cache hit */
             ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->address,
@@ -170,19 +367,16 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                 goto err;
             }
 
-            if (hsa_amd_ipc_memory_detach(region->mapped_addr) != HSA_STATUS_SUCCESS) {
-                ucs_warn("failed to unmap addr:%p", region->mapped_addr);
-            }
+            uct_rocm_ipc_cache_detach(region);
 
             ucs_free(region);
         }
     }
 
-    hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL, mapped_addr);
-    if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
-        ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu hsa_status:%d",
-                  cache->name, (void *)key->address, key->length, hsa_status);
-        status = UCS_ERR_INVALID_ADDR;
+    status = uct_rocm_ipc_cache_attach(key, mapped_addr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu",
+                  cache->name, (void *)key->address, key->length);
         goto err;
     }
 
@@ -339,6 +533,8 @@ UCS_STATIC_INIT
 UCS_STATIC_CLEANUP
 {
     uct_rocm_ipc_cache_t *cache;
+
+    uct_rocm_ipc_cache_unloading = 1;
 
     kh_foreach_value(&uct_rocm_ipc_remote_cache.hash, cache,
                      { uct_rocm_ipc_destroy_cache(cache); })
