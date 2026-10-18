@@ -32,11 +32,6 @@
      UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
 
 
-static uint32_t uct_ib_mlx5_flush_rkey_make()
-{
-    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
-}
-
 ucs_sys_device_t
 uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 {
@@ -100,6 +95,11 @@ typedef struct uct_ib_mlx5_dbrec_page {
     uct_ib_mlx5_devx_umem_t    mem;
 } uct_ib_mlx5_dbrec_page_t;
 
+
+static uint32_t uct_ib_mlx5_flush_rkey_make()
+{
+    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
+}
 
 /* Should be called after DDP is initialized */
 static int

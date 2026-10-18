@@ -596,7 +596,12 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
     test_put_fence_no_flush_remote();
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote_no_devx,
+UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
+
+class test_rc_mlx5_iface_flush_remote : public test_rc_iface_flush_remote {
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_iface_flush_remote, put_fence_no_flush_remote_no_devx,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY),
                      "IB_PCI_RELAXED_ORDERING?=try", "IB_MLX5_DEVX=no",
                      "RC_FENCE=weak")
@@ -604,7 +609,7 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote_no_de
     test_put_fence_no_flush_remote();
 }
 
-UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_iface_flush_remote, rc_mlx5)
 
 
 class test_rc_get_limit : public test_rc {
