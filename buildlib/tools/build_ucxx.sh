@@ -18,6 +18,9 @@
 # so the shell flags have to be set here for the fail-loud guards to bite.
 set -eE -o pipefail
 
+# RAPIDS CI scripts require it whenever CI is set.
+export RAPIDS_DATETIME_STRING=${RAPIDS_DATETIME_STRING:-$(date -u +%y%m%d%H%M%S)}
+
 phase=${1:?phase required}
 
 if [ "$phase" = "ucx_pr" ]; then
