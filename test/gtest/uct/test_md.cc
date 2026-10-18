@@ -1450,8 +1450,9 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
     void *address;
     ucs::handle<void*> buffer;
     uct_mem_h memh;
+    int ret;
 
-    int ret = posix_memalign(&address, REG_SIZE, REG_SIZE);
+    ret = posix_memalign(&address, REG_SIZE, REG_SIZE);
     if (ret == 0) {
         buffer.reset(address, free);
     }

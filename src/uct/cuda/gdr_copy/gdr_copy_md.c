@@ -74,6 +74,7 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
     uct_gdr_get_attribute_func_t get_attribute;
     Dl_info lib_info, attr_info;
     void *dl_handle;
+    const char *error;
     int using_dmabuf;
     int ret;
 
@@ -84,7 +85,9 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
 
     dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
     if (dl_handle == NULL) {
-        ucs_debug("could not open loaded GDRCopy runtime: %s", dlerror());
+        error = dlerror();
+        ucs_debug("could not open loaded GDRCopy runtime: %s",
+                  (error != NULL) ? error : "unknown error");
         return 0;
     }
 
