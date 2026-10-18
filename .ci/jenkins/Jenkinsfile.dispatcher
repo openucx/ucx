@@ -79,50 +79,57 @@ if (currentPrNumber) {
   }
 }
 
-def sha = githubHelper.getMergedSHA()
 def pipelineOverviewUrl = "${env.BUILD_URL}pipeline-overview/"
 
-githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHubCommitState.PENDING)
+githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI started", GitHubCommitState.PENDING)
 currentBuild.description = githubHelper.getBuildDescription()
 
-def jobs = [
-  'ucx-codestyle-oss',
-  'ucx-static-checks-oss',
-  'ucx-coverity-oss',
-  'ucx-build-oss',
-  'ucx-build-static-oss',
-  'ucx-test-oss',
-  'ucx-test-gpu-oss',
-  'ucx-test-cuda-oss',
-  'ucx-test-dl-gpu-oss',
-  'ucx-test-bindings-oss',
-  'ucx-test-bindings-gpu-oss',
-  'ucx-test-bindings-arm-oss',
-  'ucx-test-ucxx-oss',
-  'ucx-test-ucxx-gpu-oss',
-  'ucx-test-namespace-oss',
-  'ucx-test-wirecompat-oss',
-  'ucx-test-wirecompat-gpu-oss',
-  'ucx-test-efa-oss',
-  'ucx-test-mad-oss',
-  'ucx-test-bf-oss',
+// Leaf jobs to dispatch, keyed by parallel-branch name
+def leafJobs = [
+  'codestyle':      'UCX-OSS/ucx-codestyle-oss',
+  'static-checks':  'UCX-OSS/ucx-static-checks-oss',
+  'coverity':       'UCX-OSS/ucx-coverity-oss',
+  'build':          'UCX-OSS/ucx-build-oss',
+  'build-static':   'UCX-OSS/ucx-build-static-oss',
+  'test':           'UCX-OSS/ucx-test-oss',
+  'gpu':            'UCX-OSS/ucx-test-gpu-oss',
+  'cuda':           'UCX-OSS/ucx-test-cuda-oss',
+  'dl-gpu':         'UCX-OSS/ucx-test-dl-gpu-oss',
+  'bindings':       'UCX-OSS/ucx-test-bindings-oss',
+  'bindings-gpu':   'UCX-OSS/ucx-test-bindings-gpu-oss',
+  'bindings-arm':   'UCX-OSS/ucx-test-bindings-arm-oss',
+  'ucxx':           'UCX-OSS/ucx-test-ucxx-oss',
+  'ucxx-gpu':       'UCX-OSS/ucx-test-ucxx-gpu-oss',
+  'namespace':      'UCX-OSS/ucx-test-namespace-oss',
+  'wirecompat':     'UCX-OSS/ucx-test-wirecompat-oss',
+  'wirecompat-gpu': 'UCX-OSS/ucx-test-wirecompat-gpu-oss',
+  'efa':            'UCX-OSS/ucx-test-efa-oss',
+  'mad':            'UCX-OSS/ucx-test-mad-oss',
+  'bf':             'UCX-OSS/ucx-test-bf-oss',
 ]
 
 try {
-  def fanout = [:]
-  for (def j in jobs) {
-    def jobName = "UCX-OSS/${j}"
-    fanout[jobName] = {
-      build job: jobName, parameters: [
-        string(name: 'sha1', value: sha),
-        string(name: 'githubData', value: VARIABLE_FROM_POST),
-      ], propagate: false, wait: true
-    }
-  }
-  parallel fanout
-  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI passed", GitHubCommitState.SUCCESS)
+  // Compute the merged SHA once so all leaf jobs test the same commit
+  def mergedSHA = githubHelper.getMergedSHA()
+
+  // Leaf jobs report their own GitHub statuses; the dispatcher build stays
+  // SUCCESS unless dispatching itself fails. catchError paints a failed
+  // leaf's branch red without failing the build, and all branches run to
+  // completion regardless of sibling failures.
+  parallel(leafJobs.collectEntries { branchName, jobName ->
+    [(branchName): {
+      catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+        build job: jobName, parameters: [
+          string(name: 'sha1', value: mergedSHA),
+          string(name: 'githubData', value: VARIABLE_FROM_POST)
+        ], wait: true
+      }
+    }]
+  })
+
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI ended", GitHubCommitState.SUCCESS)
 } catch(Exception ex) {
   println ex
-  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI failed", GitHubCommitState.FAILURE)
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI ended", GitHubCommitState.FAILURE)
   throw ex
 }
