@@ -106,7 +106,7 @@ EOF
     if [ "${IS_GPU,,}" = "true" ]; then
       bash ci/test_cpp.sh
     else
-      CUDA_VISIBLE_DEVICES= UCX_TLS=tcp,sm,self GTEST_FILTER='-RMM*.*:CCCL*.*' \
+      CUDA_VISIBLE_DEVICES= UCX_TLS=tcp,sm,self GTEST_FILTER='-RMM*.*:CCCL*.*:ListenerCuda*.*' \
         bash ci/test_cpp.sh
     fi
     ;;
