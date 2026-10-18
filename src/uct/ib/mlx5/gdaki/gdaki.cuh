@@ -396,21 +396,26 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
     auto ep  = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(tl_ep);
     auto cid = channel_id & ep->channel_mask;
     auto qp  = uct_rc_mlx5_gda_get_qp(ep, cid);
+    ucs_status_t status = UCS_INPROGRESS;
     uint64_t rsvd_idx;
     unsigned lane_id;
     unsigned num_lanes;
 
-    if (flags & UCT_DEVICE_FLAG_PUSH) {
-        uct_dev_exec_init<level>(lane_id, num_lanes);
-        if (lane_id == 0) {
+    uct_dev_exec_init<level>(lane_id, num_lanes);
+
+    if (lane_id == 0) {
+        if (flags & UCT_DEVICE_FLAG_PUSH) {
             uct_rc_mlx5_gda_push_db(ep, cid);
         }
 
-        uct_dev_sync<level>();
+        rsvd_idx = READ_ONCE(qp->sq_rsvd_index);
+        do {
+            status = uct_rc_mlx5_gda_check_cqe(ep, cid, rsvd_idx - 1);
+        } while (status == UCS_INPROGRESS);
     }
 
-    rsvd_idx = READ_ONCE(qp->sq_rsvd_index);
-    return uct_rc_mlx5_gda_check_cqe(ep, cid, rsvd_idx - 1);
+    return static_cast<ucs_status_t>(
+            uct_dev_bcast<level>(static_cast<int>(status), lane_id));
 }
 
 #endif /* UCT_GDAKI_CUH_H */

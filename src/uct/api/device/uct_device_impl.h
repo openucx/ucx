@@ -280,7 +280,7 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_check_completion(
  * @brief Flush all outstanding operations on channel @a channel_id of
  * device endpoint @a device_ep.
  *
- * This device routine checks whether all operations previously posted on
+ * This device routine blocks until all operations previously posted on
  * @a channel_id of @a device_ep have completed.
  *
  * @param [in]  device_ep       Device endpoint to be used for the operation.
@@ -290,7 +290,6 @@ UCS_F_DEVICE ucs_status_t uct_device_ep_check_completion(
  *
  * @return UCS_OK             - All outstanding operations on the channel
  *                              have completed.
- * @return UCS_INPROGRESS     - One or more operations are still in progress.
  * @return Error code as defined by @ref ucs_status_t
  */
 template<ucs_device_level_t level>

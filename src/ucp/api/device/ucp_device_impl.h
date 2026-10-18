@@ -428,11 +428,6 @@ ucp_device_flush(const ucp_device_remote_mem_list_h mem_list_h,
         }
 
         status = uct_device_ep_flush<level>(device_ep, uct_channel_id, flags);
-        while (status == UCS_INPROGRESS) {
-            uct_device_ep_progress<level>(device_ep);
-            status = uct_device_ep_flush<level>(device_ep, uct_channel_id, 0);
-        }
-
         if (status != UCS_OK) {
             return status;
         }
