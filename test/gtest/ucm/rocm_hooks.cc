@@ -4,6 +4,7 @@
 * See file LICENSE for terms.
 */
 #include <ucm/api/ucm.h>
+#include <ucs/sys/ptr_arith.h>
 #include <common/test.h>
 #include <hip_runtime.h>
 
@@ -150,4 +151,33 @@ UCS_TEST_F(rocm_hooks, test_hipMallocPitch) {
         ASSERT_EQ(ret, hipSuccess);
         check_mem_free_events((void*)dptr, 0);
     }
+}
+
+UCS_TEST_F(rocm_hooks, test_hipMemMapUnmap) {
+    hipMemAllocationProp prop = {};
+    hipMemGenericAllocationHandle_t handle;
+    size_t size, granularity;
+    void *ptr;
+
+    prop.type          = hipMemAllocationTypePinned;
+    prop.location.type = hipMemLocationTypeDevice;
+    prop.location.id   = 0;
+    if (hipMemGetAllocationGranularity(&granularity, &prop,
+                                       hipMemAllocationGranularityMinimum) !=
+        hipSuccess) {
+        UCS_TEST_SKIP_R("HIP virtual memory management is not supported");
+    }
+
+    size = ucs_align_up(256 * UCS_KBYTE, granularity);
+    ASSERT_EQ(hipSuccess, hipMemCreate(&handle, size, &prop, 0));
+    ASSERT_EQ(hipSuccess, hipMemAddressReserve(&ptr, size, 0, nullptr, 0));
+
+    ASSERT_EQ(hipSuccess, hipMemMap(ptr, size, 0, handle, 0));
+    check_mem_alloc_events(ptr, size);
+
+    ASSERT_EQ(hipSuccess, hipMemUnmap(ptr, size));
+    check_mem_free_events(ptr, size);
+
+    EXPECT_EQ(hipSuccess, hipMemAddressFree(ptr, size));
+    EXPECT_EQ(hipSuccess, hipMemRelease(handle));
 }
