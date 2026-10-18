@@ -117,7 +117,7 @@ steps:
       # Without a GPU gres the node's GPU is hidden from the job.
       extraArgs: ["--gres=${SLURM_GRES}"]
 
-  # All conda steps share the container, so they find /ws and /tmp/ucx-pr.
+  # Steps share the container's /ws, but /tmp is fresh per step: UCX is restored from /ws.
   - name: Checkout
     containerSelector: "{name: 'build_helper_ucx'}"
     timeout: 20
@@ -147,7 +147,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
         set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
-        export HOME=/ws/home RAPIDS_CUDA_VERSION=${cuda} UCX_PR_TARBALL=/tmp/ucx-pr.tar.gz;
+        export HOME=/ws/home RAPIDS_CUDA_VERSION=${cuda} UCX_PR_TARBALL=/ws/ucx-pr.tar.gz;
         bash /ws/ucx/buildlib/tools/build_ucxx.sh ucx_pr
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${CONDA_IMAGE}"
@@ -164,7 +164,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
-      testScript: "set -eEx; cp /tmp/ucx-pr.tar.gz /host_tmp/${CONTAINER_NAME}-ucx-pr.tar.gz"
+      testScript: "set -eEx; cp /ws/ucx-pr.tar.gz /host_tmp/${CONTAINER_NAME}-ucx-pr.tar.gz"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${CONDA_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
@@ -182,8 +182,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
         set -eEx; ucx_pr=/host_tmp/${CONTAINER_NAME}-ucx-pr.tar.gz;
-        tar -C /tmp -xzf $ucx_pr; rm -f $ucx_pr; /tmp/ucx-pr/bin/ucx_info -v;
-        mkdir -p /ws/home; cd /ws;
+        mkdir -p /ws/home; mv $ucx_pr /ws/ucx-pr.tar.gz; cd /ws;
         git clone ${UCX_REPO} ucx; git -C ucx fetch --no-tags origin ${sha1}; git -C ucx checkout ${sha1};
         git clone ${UCXX_REPO} ucxx; git -C ucxx checkout ${UCXX_REF}
       headNode: "${SLURM_HEAD_NODE}"
@@ -202,7 +201,7 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
-        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh; tar -C /tmp -xzf /ws/ucx-pr.tar.gz;
         export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION} RAPIDS_BLD_OUTPUT_DIR=/ws/wheel-libucxx;
         bash /ws/ucx/buildlib/tools/build_ucxx.sh wheel_libucxx
       headNode: "${SLURM_HEAD_NODE}"
@@ -220,7 +219,7 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
-        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh; tar -C /tmp -xzf /ws/ucx-pr.tar.gz;
         export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION} RAPIDS_BLD_OUTPUT_DIR=/ws/wheel-ucxx
         WHEEL_INPUT_DIR=/ws/wheel-libucxx;
         bash /ws/ucx/buildlib/tools/build_ucxx.sh wheel_ucxx
@@ -239,7 +238,7 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
-        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh; tar -C /tmp -xzf /ws/ucx-pr.tar.gz;
         export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
         LIBUCXX_WHL_DIR=/ws/wheel-libucxx UCXX_WHL_DIR=/ws/wheel-ucxx;
         bash /ws/ucx/buildlib/tools/test_ucxx.sh test_wheel_ucxx
@@ -260,8 +259,8 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
-        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
-        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true;
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh; tar -C /tmp -xzf /ws/ucx-pr.tar.gz;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true RAPIDS_CONDA_BLD_OUTPUT_DIR=/ws/conda-bld-output;
         bash /ws/ucx/buildlib/tools/test_ucxx.sh build
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${CONDA_IMAGE}"
@@ -279,8 +278,8 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
-        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
-        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true;
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh; tar -C /tmp -xzf /ws/ucx-pr.tar.gz;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true RAPIDS_CONDA_BLD_OUTPUT_DIR=/ws/conda-bld-output;
         bash /ws/ucx/buildlib/tools/test_ucxx.sh test_cpp
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${CONDA_IMAGE}"
@@ -298,8 +297,8 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
       testScript: >-
-        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
-        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true;
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh; tar -C /tmp -xzf /ws/ucx-pr.tar.gz;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true RAPIDS_CONDA_BLD_OUTPUT_DIR=/ws/conda-bld-output;
         bash /ws/ucx/buildlib/tools/test_ucxx.sh test_python
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${CONDA_IMAGE}"
