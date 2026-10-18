@@ -1,0 +1,331 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# UCXX rows that need a GPU, against this UCX on funk, mirroring the Azure
+# UCXX stages (buildlib/pr/ucxx_*.yml). One allocation per target and CUDA.
+# The CPU-only rows are in test_ucxx_matrix.yaml.
+---
+job: ucx-test-ucxx-gpu
+
+failFast: false
+# Covers the allocation wait plus the step timeouts.
+timeout_minutes: 420
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+  - {credentialsId: 'ucx_harbor_credentials', usernameVariable: 'REPO_USER', passwordVariable: 'REPO_PASS'}
+
+env:
+  UCX_REPO: "https://github.com/openucx/ucx.git"
+  UCXX_REPO: "https://github.com/rapidsai/ucxx.git"
+  # Same ucxx commit as the Azure pipeline resource.
+  UCXX_REF: "89f564e522d042d62c52c40bdae226dba04b793f"
+  UCXX_PY_VERSION: "3.12"
+  CONDA_IMAGE: "${registry_host}#${registry_path}/x86_64/rapidsai-ci-conda:${UCXX_IMAGE_TAG}"
+  WHEEL_IMAGE: "${registry_host}#${registry_path}/x86_64/rapidsai-ci-wheel:${UCXX_IMAGE_TAG}-cuda${cuda}"
+  CONTAINER_NAME: "ucx-ci-ucxx-${BUILD_NUMBER}-${target}-cuda${cuda}"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_GRES: "gpu:1"
+  SLURM_HEAD_NODE: scctl
+  SLURM_JOB_TIMEOUT: '05:30:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  STORAGE_DRIVER: overlay
+  CI_IMAGE_TAG: "20260223-1"
+  UCXX_IMAGE_TAG: "26.12-1"
+
+# Podman storage for the large RAPIDS image builds.
+empty_volumes:
+  - {mountPath: /var/lib/containers/storage, memory: false}
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+  - {
+     file: 'buildlib/dockers/rapidsai-ci-conda.Dockerfile',
+     name: 'rapidsai-ci-conda',
+     tag: "${UCXX_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/rapidsai/ci-conda:26.12-latest'
+    }
+  # Wheel images are CUDA-pinned: one tag per CUDA version.
+  - {
+     file: 'buildlib/dockers/rapidsai-ci-wheel.Dockerfile',
+     name: 'rapidsai-ci-wheel-cuda12',
+     uri: 'x86_64/rapidsai-ci-wheel',
+     tag: "${UCXX_IMAGE_TAG}-cuda12.9.2",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/rapidsai/ci-wheel:26.12-cuda12.9.2-rockylinux8-py3.12'
+    }
+  - {
+     file: 'buildlib/dockers/rapidsai-ci-wheel.Dockerfile',
+     name: 'rapidsai-ci-wheel-cuda13',
+     uri: 'x86_64/rapidsai-ci-wheel',
+     tag: "${UCXX_IMAGE_TAG}-cuda13.3.0",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/rapidsai/ci-wheel:26.12-cuda13.3.0-rockylinux8-py3.12'
+    }
+
+# Wheel rows build and test in one allocation: only the conda image builds
+# UCX, so the wheel container takes it from the conda one on the same node.
+matrix:
+  axes:
+    arch:
+      - x86_64
+    cuda: ['12.9.2', '13.3.0']
+    target: [wheel, tests_gpu]
+  exclude:
+    - {cuda: '12.9.2', target: 'tests_gpu'}
+
+taskName: '${arch}/${target}/cuda${cuda}'
+
+# testScript runs via bash -c on the funk node. Jenkins substitutes $VAR and
+# ${VAR} for its own env names, so scripts use lowercase names.
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "${CONTAINER_NAME}"
+      # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      # Without a GPU gres the node's GPU is hidden from the job.
+      extraArgs: ["--gres=${SLURM_GRES}"]
+
+  # All conda steps share the container, so they find /ws and /tmp/ucx-pr.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 20
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; mkdir -p /ws/home; cd /ws;
+        git clone ${UCX_REPO} ucx; git -C ucx fetch --no-tags origin ${sha1}; git -C ucx checkout ${sha1};
+        git clone ${UCXX_REPO} ucxx; git -C ucxx checkout ${UCXX_REF}
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CONDA_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+
+  - name: Build UCX
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 40
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home RAPIDS_CUDA_VERSION=${cuda} UCX_PR_TARBALL=/tmp/ucx-pr.tar.gz;
+        bash /ws/ucx/buildlib/tools/build_ucxx.sh ucx_pr
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CONDA_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+
+  # The wheel container gets the UCX build through the node /tmp.
+  - name: Export UCX
+    containerSelector: "{name: 'build_helper_ucx', target: 'wheel'}"
+    timeout: 10
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: "set -eEx; cp /tmp/ucx-pr.tar.gz /host_tmp/${CONTAINER_NAME}-ucx-pr.tar.gz"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CONDA_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      extraArgs: ["--container-mounts=/tmp:/host_tmp"]
+
+  - name: Checkout wheel
+    containerSelector: "{name: 'build_helper_ucx', target: 'wheel'}"
+    timeout: 20
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; ucx_pr=/host_tmp/${CONTAINER_NAME}-ucx-pr.tar.gz;
+        tar -C /tmp -xzf $ucx_pr; rm -f $ucx_pr; /tmp/ucx-pr/bin/ucx_info -v;
+        mkdir -p /ws/home; cd /ws;
+        git clone ${UCX_REPO} ucx; git -C ucx fetch --no-tags origin ${sha1}; git -C ucx checkout ${sha1};
+        git clone ${UCXX_REPO} ucxx; git -C ucxx checkout ${UCXX_REF}
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${WHEEL_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}-wheel"
+      extraArgs: ["--container-mounts=/tmp:/host_tmp"]
+
+  - name: Wheel libucxx build
+    containerSelector: "{name: 'build_helper_ucx', target: 'wheel'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION} RAPIDS_BLD_OUTPUT_DIR=/ws/wheel-libucxx;
+        bash /ws/ucx/buildlib/tools/build_ucxx.sh wheel_libucxx
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${WHEEL_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}-wheel"
+
+  - name: Wheel ucxx build
+    containerSelector: "{name: 'build_helper_ucx', target: 'wheel'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION} RAPIDS_BLD_OUTPUT_DIR=/ws/wheel-ucxx
+        WHEEL_INPUT_DIR=/ws/wheel-libucxx;
+        bash /ws/ucx/buildlib/tools/build_ucxx.sh wheel_ucxx
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${WHEEL_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}-wheel"
+
+  - name: Wheel tests
+    containerSelector: "{name: 'build_helper_ucx', target: 'wheel'}"
+    timeout: 90
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=${UCXX_PY_VERSION}
+        LIBUCXX_WHL_DIR=/ws/wheel-libucxx UCXX_WHL_DIR=/ws/wheel-ucxx;
+        bash /ws/ucx/buildlib/tools/test_ucxx.sh test_wheel_ucxx
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${WHEEL_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}-wheel"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+  # GPU slice runs Python 3.13, as on Azure.
+  - name: Build UCXX GPU
+    containerSelector: "{name: 'build_helper_ucx', target: 'tests_gpu'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true;
+        bash /ws/ucx/buildlib/tools/test_ucxx.sh build
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CONDA_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+  - name: C++ tests GPU
+    containerSelector: "{name: 'build_helper_ucx', target: 'tests_gpu'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true;
+        bash /ws/ucx/buildlib/tools/test_ucxx.sh test_cpp
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CONDA_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+  - name: Python tests GPU
+    containerSelector: "{name: 'build_helper_ucx', target: 'tests_gpu'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${target}_cuda${cuda}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; source /ws/ucx/.ci/scripts/cap_output.sh;
+        export HOME=/ws/home UCXX_DIR=/ws/ucxx RAPIDS_CUDA_VERSION=${cuda} RAPIDS_PY_VERSION=3.13 IS_GPU=true;
+        bash /ws/ucx/buildlib/tools/test_ucxx.sh test_python
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CONDA_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+# Loads swx-jenkins-lib once before the parallel rows; /tmp has no job id files.
+pipeline_start:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "/tmp"
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
