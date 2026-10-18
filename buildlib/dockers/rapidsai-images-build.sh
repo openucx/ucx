@@ -87,6 +87,8 @@ docker buildx inspect "$BUILDER" --bootstrap >/dev/null
 # `build.platforms` key and would otherwise build only the local arch.
 printf '%s' "$HARBOR_UCX_PASSWORD" | docker login "$REGISTRY" -u "$HARBOR_UCX_USER" --password-stdin
 trap 'docker logout "$REGISTRY" >/dev/null 2>&1 || true' EXIT
+# bake resolves the compose build context against the cwd, not the compose dir
+cd "$basedir"
 RAPIDS_VER="$RAPIDS_VER" docker buildx bake \
   --builder "$BUILDER" -f "$basedir/docker-compose-rapidsai.yml" \
   --set '*.platform=linux/amd64,linux/arm64' --push
