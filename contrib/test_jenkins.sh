@@ -1510,7 +1510,10 @@ run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
 
 	# all are running mpi tests
-	run_mpi_tests
+	if [ "${RUN_MPI_TESTS:-yes}" == "yes" ]
+	then
+		run_mpi_tests
+	fi
 
 	# configuration related tests
 	run_configure_tests

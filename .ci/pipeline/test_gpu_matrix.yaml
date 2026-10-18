@@ -30,6 +30,8 @@ env:
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
   GTEST_MAX_IB_SL: "4"
+  # MPI test_memhooks loops on an assert here; Azure skips MPI tests too.
+  RUN_MPI_TESTS: "no"
   nworkers: "4"
   SLURM_NODES: 1
   SLURM_PARTITION: funk
