@@ -119,7 +119,7 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
       testScript: >-
-        cd /ws; source buildlib/az-helpers.sh; failed="";
+        cd /ws; source .ci/scripts/cap_output.sh; source buildlib/az-helpers.sh; failed="";
         for ucx_tag in v1.15.x v1.16.x v1.17.x v1.18.x; do
         (
         set -eEx;

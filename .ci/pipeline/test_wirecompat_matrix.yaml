@@ -62,6 +62,7 @@ steps:
     parallel: false
     timeout: 120
     run: |
+      source .ci/scripts/cap_output.sh
       source buildlib/az-helpers.sh
       export UCX_PR_LIB_PATH=${WORKSPACE}/ucx-install-current/lib
       failed=""

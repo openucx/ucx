@@ -93,6 +93,7 @@ steps:
     parallel: false
     timeout: "${STEP_TIMEOUT_MINUTES}"
     run: |
+      source .ci/scripts/cap_output.sh
       # Test dials IPv4 even from the RoCE IPv6 source address.
       if [[ "${name}" == hca-roce* ]]; then
         export GTEST_FILTER="${GTEST_FILTER}:rdmacm/test_uct_sockaddr_err_handle_non_exist_ip.*"

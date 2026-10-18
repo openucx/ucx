@@ -116,7 +116,7 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
-      testScript: "set -eEx; cd /ws; nvidia-smi -L | grep GPU; unshare --user whoami; ./contrib/test_namespace.sh"
+      testScript: "set -eEx; cd /ws; source .ci/scripts/cap_output.sh; nvidia-smi -L | grep GPU; unshare --user whoami; ./contrib/test_namespace.sh"
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"

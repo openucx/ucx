@@ -69,6 +69,7 @@ steps:
     parallel: false
     timeout: 290
     run: |
+      source .ci/scripts/cap_output.sh
       # Host network and CPUs are shared, so each pod gets its own ports and 2 CPUs.
       slot=$((SLOT_BASE + worker))
       export EXECUTOR_NUMBER=${slot}

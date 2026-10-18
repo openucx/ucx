@@ -128,7 +128,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
       # dlcluster presets UCX_NET_DEVICES, which breaks loopback; UCX needs
       # unlimited memlock.
-      testScript: "unset UCX_NET_DEVICES && ulimit -l unlimited && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
+      testScript: "source .ci/scripts/cap_output.sh && unset UCX_NET_DEVICES && ulimit -l unlimited && GTEST_FILTER=\"${GTEST_FILTER}\" ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
