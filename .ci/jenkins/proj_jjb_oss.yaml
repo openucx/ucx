@@ -206,6 +206,22 @@
       - "{jjb_proj}"
 
 - project:
+    name: ucx-test-ucxx
+    jjb_proj: "ucx-test-ucxx-oss"
+    jjb_conf_file: ".ci/pipeline/test_ucxx_matrix.yaml"
+    jjb_description: "UCXX builds and CPU tests against UCX (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
+    name: ucx-test-ucxx-gpu
+    jjb_proj: "ucx-test-ucxx-gpu-oss"
+    jjb_conf_file: ".ci/pipeline/test_ucxx_gpu_matrix.yaml"
+    jjb_description: "UCXX wheel and GPU tests against UCX on funk (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
+
+- project:
     name: ucx-test-namespace
     jjb_proj: "ucx-test-namespace-oss"
     jjb_conf_file: ".ci/pipeline/test_namespace_matrix.yaml"

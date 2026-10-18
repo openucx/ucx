@@ -98,6 +98,8 @@ def jobs = [
   'ucx-test-bindings-oss',
   'ucx-test-bindings-gpu-oss',
   'ucx-test-bindings-arm-oss',
+  'ucx-test-ucxx-oss',
+  'ucx-test-ucxx-gpu-oss',
   'ucx-test-namespace-oss',
   'ucx-test-wirecompat-oss',
   'ucx-test-wirecompat-gpu-oss',
