@@ -31,7 +31,7 @@ RUN apt update && \
 
 # Install scctl for slurm client management (x86_64 only, not available for ARM64)
 RUN if [ "$(uname -m)" = "x86_64" ]; then \
-        curl -s https://urm.nvidia.com/artifactory/sw-swx-lab-infra-generic/scctl/get-app.sh | bash -s -- --output-dir /usr/local/bin || echo "INFO: scctl installation failed, continuing..."; \
+        curl -s https://artifactory.nvidia.com/artifactory/sw-swx-lab-infra-generic/scctl/get-app.sh | bash -s -- --output-dir /usr/local/bin || echo "INFO: scctl installation failed, continuing..."; \
     else \
         echo "INFO: Skipping scctl installation on $(uname -m) architecture (not available)"; \
     fi
