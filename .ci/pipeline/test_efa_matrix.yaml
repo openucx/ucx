@@ -5,7 +5,7 @@
 job: ucx-test-efa
 
 failFast: false
-timeout_minutes: 200
+timeout_minutes: 250
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx

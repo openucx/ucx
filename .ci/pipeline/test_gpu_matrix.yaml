@@ -32,6 +32,8 @@ env:
   GTEST_MAX_IB_SL: "4"
   # MPI test_memhooks loops on an assert here; Azure skips MPI tests too.
   RUN_MPI_TESTS: "no"
+  # common.sh builds with make -j4 unless parallel_jobs is passed.
+  BUILD_JOBS: "16"
   nworkers: "4"
   SLURM_NODES: 1
   SLURM_PARTITION: funk
@@ -144,6 +146,7 @@ steps:
         "nworkers=${nworkers}",
         "RUN_TESTS=${RUN_TESTS}",
         "RUN_MPI_TESTS=${RUN_MPI_TESTS}",
+        "parallel_jobs=${BUILD_JOBS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}"

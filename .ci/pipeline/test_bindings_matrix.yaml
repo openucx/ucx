@@ -5,7 +5,7 @@
 job: ucx-test-bindings
 
 failFast: false
-timeout_minutes: 120
+timeout_minutes: 180
 
 kubernetes:
   cloud: il-ipp-blossom-prod-nbu-swx-ucx
