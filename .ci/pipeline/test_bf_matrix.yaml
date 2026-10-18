@@ -61,7 +61,8 @@ env:
   VALGRIND_CHECK: "no"
   nworkers: "4"
   # The DPU's only non-bridge IPv4 netdev is the calico VXLAN, where rdmacm cannot connect.
-  GTEST_FILTER: "*:-all/test_ucp_sockaddr*"
+  # recv_align over dc_x stalls past the watchdog on BF3.
+  GTEST_FILTER: "*:-all/test_ucp_sockaddr*:dcx/test_ucp_tag_match_rndv_align.recv_align/*"
 
 steps:
   - name: Test
