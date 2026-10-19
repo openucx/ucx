@@ -155,7 +155,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
     int local_fabric_supported, remote_fabric_supported;
-    int same_uuid;
+    int same_uuid, mnnvl_supported;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
@@ -178,17 +178,17 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!same_uuid &&
-        !uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
+    mnnvl_supported = uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr,
+                                                         dev_addr_len);
+    if (!same_uuid && !mnnvl_supported) {
         uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
         return 0;
     }
 
     /* Multi-node NVLINK connects only GPUs in the same NVLink domain */
-    if (!same_uuid &&
-        ((dev_addr_len < sizeof(uct_cuda_ipc_device_addr_t)) ||
-         memcmp(&dev_addr->nvlink_domain, &md->nvlink_domain,
-                sizeof(md->nvlink_domain)))) {
+    if (mnnvl_supported &&
+        memcmp(&dev_addr->nvlink_domain, &md->nvlink_domain,
+               sizeof(md->nvlink_domain))) {
         uct_iface_fill_info_str_buf(params, "different NVLink domain");
         return 0;
     }
