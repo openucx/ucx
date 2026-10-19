@@ -107,6 +107,13 @@ public:
             for (size_t i = 0; i < length; ++i) {
                 fill_sn_region(iov[i].buffer, iov[i].length, allocator, sn);
             }
+        } else if (datatype == UCP_PERF_DATATYPE_SGL) {
+            size_t offset = 0;
+            for (size_t i = 0; i < m_perf.params.msg_size_cnt; ++i) {
+                fill_sn_region(UCS_PTR_BYTE_OFFSET(buffer, offset),
+                               m_perf.params.msg_size_list[i], allocator, sn);
+                offset += sgl_element_step(i);
+            }
         } else {
             fill_sn_region(buffer, length, allocator, sn);
         }
@@ -136,10 +143,38 @@ public:
                                   host_buffer);
     }
 
+    ucs_status_t validate_sgl_sn(const void *buffer, ucs_memory_type_t mem_type,
+                                 const ucx_perf_allocator_t *allocator, PSN sn,
+                                 void *host_buffer)
+    {
+        size_t offset = 0;
+
+        for (size_t i = 0; i < m_perf.params.msg_size_cnt; ++i) {
+            ucs_status_t status = validate_sn_region(
+                    UCS_PTR_BYTE_OFFSET(buffer, offset), mem_type, allocator,
+                    m_perf.params.msg_size_list[i], sn, host_buffer);
+            if (status != UCS_OK) {
+                ucs_error("data validation failed in sgl element %zu", i);
+                return status;
+            }
+
+            offset += sgl_element_step(i);
+        }
+
+        return UCS_OK;
+    }
+
 protected:
     ucx_perf_context_t &m_perf;
 
+    size_t sgl_element_step(size_t i) const
+    {
+        return m_perf.params.iov_stride ? m_perf.params.iov_stride :
+                                          m_perf.params.msg_size_list[i];
+    }
+
 private:
+
     void fill_sn_region(void *buffer, size_t length, const ucx_perf_allocator_t *allocator,
                         PSN sn)
     {

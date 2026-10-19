@@ -178,8 +178,7 @@ public:
             sgl.remote_addrs[i] = m_perf.ucp.remote_addr + offset;
             sgl.rkeys[i]        = m_perf.ucp.rkey;
 
-            offset += m_perf.params.iov_stride ? m_perf.params.iov_stride :
-                                                 m_perf.params.msg_size_list[i];
+            offset += sgl_element_step(i);
         }
 
         sgl.local_sgl.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
@@ -1165,6 +1164,11 @@ private:
     {
         if (CMD == UCX_PERF_CMD_PUT) {
             fence();
+        }
+
+        if (is_sgl_put()) {
+            return validate_sgl_sn(recv_buffer, m_perf.params.recv_mem_type,
+                                   m_perf.recv_allocator, sn, host_buffer);
         }
 
         return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
