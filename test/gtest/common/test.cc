@@ -5,6 +5,7 @@
 */
 
 #include "test.h"
+#include "mem_buffer.h"
 
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>
@@ -430,6 +431,10 @@ void test_base::TearDownProxy() {
     if (m_initialized) {
         cleanup();
     }
+
+    /* A device left current by this test would silently change the behavior
+     * of later tests, so restore it and fail this test instead */
+    mem_buffer::check_and_restore_device_context();
 
     m_errors.clear();
 

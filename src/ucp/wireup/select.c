@@ -73,11 +73,13 @@ typedef struct {
 } ucp_wireup_select_bw_info_t;
 
 
+/* Lanes per device, at most UCP_MAX_LANES + 1, as asserted in
+ * ucp_wireup_add_bw_lanes_pairwise() */
 typedef struct {
-    unsigned local[UCP_MAX_RESOURCES];
-    unsigned remote[UCP_MAX_RESOURCES];
-    unsigned local_skip[UCP_MAX_RESOURCES];
-    unsigned remote_skip[UCP_MAX_RESOURCES];
+    uint8_t local[UCP_MAX_RESOURCES];
+    uint8_t remote[UCP_MAX_RESOURCES];
+    uint8_t local_skip[UCP_MAX_RESOURCES];
+    uint8_t remote_skip[UCP_MAX_RESOURCES];
 } ucp_wireup_dev_usage_count;
 
 
@@ -1332,6 +1334,27 @@ double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
             wiface->attr.overhead);
 }
 
+/* Failover has no replay path for NIC hardware atomics. */
+static void
+ucp_wireup_exclude_device_amo_tls(ucp_worker_h worker,
+                                  ucp_tl_bitmap_t *tl_bitmap)
+{
+    ucp_rsc_index_t rsc_index;
+
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
+        if (!(ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags &
+              UCT_IFACE_FLAG_ATOMIC_DEVICE)) {
+            continue;
+        }
+
+        ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                  " : disabled, failover does not use device atomics",
+                  UCT_TL_RESOURCE_DESC_ARG(
+                          &worker->context->tl_rscs[rsc_index].tl_rsc));
+        UCS_STATIC_BITMAP_RESET(tl_bitmap, rsc_index);
+    }
+}
+
 static ucs_status_t
 ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
                          ucp_wireup_select_context_t *select_ctx)
@@ -1369,6 +1392,10 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
         if (ucp_worker_is_tl_2iface(worker, rsc_index)) {
             UCS_STATIC_BITMAP_SET(&tl_bitmap, rsc_index);
         }
+    }
+
+    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_FAILOVER) {
+        ucp_wireup_exclude_device_amo_tls(worker, &tl_bitmap);
     }
 
     return ucp_wireup_add_memaccess_lanes(select_params, ep_init_flags,
@@ -1911,6 +1938,13 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     local_dev_bitmap      = bw_info->local_dev_bitmap;
     remote_dev_bitmap     = bw_info->remote_dev_bitmap;
     bw_info->criteria.arg = &dev_count;
+
+    /* Each dev_count entry counts at most the selected lanes plus excl_lane,
+     * so it can reach UCP_MAX_LANES + 1 */
+    UCS_STATIC_ASSERT(UCP_MAX_LANES + 1 <= UINT8_MAX);
+    ucs_assertv(bw_info->max_lanes <= UCP_MAX_LANES,
+                "max_lanes=%u exceeds UCP_MAX_LANES=%d", bw_info->max_lanes,
+                UCP_MAX_LANES);
 
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in

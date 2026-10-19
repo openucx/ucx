@@ -932,6 +932,8 @@ class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
 public:
     DISABLED_test_ucp_fault_tolerance_tf() {
         modify_config("FAILOVER_MODE", "token");
+        /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected. */
+        modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
     }
 };
 

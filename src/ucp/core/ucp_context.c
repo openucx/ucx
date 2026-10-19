@@ -482,11 +482,13 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Failover method for endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER.\n"
    " auto  - auto selected recovery protocol. Transport selection is\n"
-   "         unchanged.\n"
+   "         unchanged. Selects software PSN when UCX_IB_INDIRECT_ATOMIC\n"
+   "         is enabled.\n"
    " sw    - force software PSN based recovery protocol. Transport\n"
    "         selection is unchanged.\n"
    " token - force token based retransmits. Transports that do not support\n"
-   "         the required capabilities are disabled.",
+   "         the required capabilities are disabled. Rejected when\n"
+   "         UCX_IB_INDIRECT_ATOMIC is enabled.",
    ucs_offsetof(ucp_context_config_t, failover_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_failover_modes)},
 
@@ -2213,6 +2215,67 @@ static void ucp_fill_resources_reg_md_map_update(ucp_context_h context)
     }
 }
 
+/* Effective UCX_IB_INDIRECT_ATOMIC on a selected IB memory domain. IB MD
+ * default and environment, then cached ucp_config_modify() overrides.
+ * Returns 0 when no IB domain was selected. */
+static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
+{
+    int enabled = 1;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t cmpt_index;
+    uct_md_config_t *md_config;
+    ucs_status_t status;
+    char value[8];
+
+    for (md_index = 0; md_index < context->num_mds; ++md_index) {
+        cmpt_index = context->tl_mds[md_index].cmpt_index;
+        if (strcmp(context->tl_cmpts[cmpt_index].attr.name, "ib") != 0) {
+            continue;
+        }
+
+        status = uct_md_config_read(context->tl_cmpts[cmpt_index].cmpt,
+                                    NULL, NULL, &md_config);
+        if (status != UCS_OK) {
+            return 1;
+        }
+
+        ucp_apply_uct_config_list(context, md_config);
+        status = uct_config_get(md_config, "INDIRECT_ATOMIC", value,
+                                sizeof(value));
+        if ((status != UCS_OK) ||
+            (ucs_config_sscanf_bool(value, &enabled, NULL) == 0)) {
+            enabled = 1;
+        }
+
+        uct_config_release(md_config);
+        return enabled;
+    }
+
+    return 0;
+}
+
+/* Indirect atomics have no token replay. */
+static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
+{
+    int enabled = ucp_context_query_ib_indirect_atomic(context);
+
+    if (!enabled) {
+        return UCS_OK;
+    }
+
+    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
+        ucs_error("UCX_FAILOVER_MODE=token requires "
+                  "UCX_IB_INDIRECT_ATOMIC=n");
+        return UCS_ERR_INVALID_PARAM;
+    } else if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+        ucs_debug("ib indirect atomic is enabled, failover mode auto "
+                  "selects software psn recovery");
+        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 {
@@ -2368,6 +2431,11 @@ ucp_fill_resources(ucp_context_h context, const ucp_config_t *config)
 
     ucp_context_log_tl_info(context, &all_rscs);
 
+    status = ucp_context_adjust_failover_mode(context);
+    if (status != UCS_OK) {
+        goto err_free_resources;
+    }
+
 out_release_components:
     ucs_array_cleanup_dynamic(&all_rscs);
     uct_release_component_list(uct_components);
@@ -2496,6 +2564,20 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
     return 1;
 }
 
+static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
+                                      unsigned max_rails)
+{
+    const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+
+    if (max_rails > max_lanes) {
+        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
+                  name, max_rails, max_lanes);
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2578,6 +2660,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
+    }
+
+    if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
+                                    context->config.ext.max_eager_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
+                                    context->config.ext.max_rndv_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
+                                    context->config.ext.max_rma_lanes)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }
@@ -2731,13 +2823,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     } else {
         context->config.worker_fence_mode = context->config.ext.fence_mode;
-    }
-
-    /* Token based recovery is not implemented yet, so automatic selection
-     * uses the software PSN recovery protocol. */
-    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
-        context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
-        ucs_debug("failover mode auto selects software psn recovery");
     }
 
     context->config.progress_wrapper_enabled =
@@ -2894,6 +2979,25 @@ ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
     return UCS_ERR_INVALID_PARAM;
 }
 
+/* Handle an error during gpu-nic assignment initialization, when the
+ * assignment mode is AUTO then we log and continue without assignment. */
+static ucs_status_t
+ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
+                                           ucp_gpu_nic_assignment_mode_t mode,
+                                           const char *reason)
+{
+    if (context->config.ext.gpu_nic_assignment_mode ==
+        UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+        ucs_diag("gpu-nic assignment is disabled: %s", reason);
+        return UCS_OK;
+    }
+
+    ucs_error("%s for gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
+              reason, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -2921,20 +3025,18 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
+    /* GPUs hidden from this process are missing from the topology groups, so
+     * processes with different visible GPUs would not build the same groups */
+    if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
+        return ucp_context_gpu_nic_assignment_unavailable(
+                context, mode, "incomplete gpu discovery");
+    }
+
     ucp_context_gpu_nic_assignment_net_device_filter_init(context,
                                                           &net_device_filter);
     if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
-        if (context->config.ext.gpu_nic_assignment_mode ==
-            UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-            ucs_diag("gpu-nic assignment is disabled: no assignable network "
-                     "devices");
-            return UCS_OK;
-        }
-
-        ucs_error("no assignable network devices for gpu-nic assignment mode "
-                  "%s, set UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
-                  ucp_gpu_nic_assignment_modes[mode]);
-        return UCS_ERR_INVALID_PARAM;
+        return ucp_context_gpu_nic_assignment_unavailable(
+                context, mode, "no assignable network devices");
     }
 
     status = ucs_topo_build_groups(&net_device_filter, &groups);

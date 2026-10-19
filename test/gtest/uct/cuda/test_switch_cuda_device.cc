@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include <cuda_runtime.h>
+#include <memory>
 #include <thread>
 
 
@@ -38,17 +39,17 @@ void test_switch_cuda_device::detect_mem_type(ucs_memory_type_t mem_type) const
         UCS_TEST_SKIP_R("less than two cuda devices available");
     }
 
-    int current_device;
-    ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
-    ASSERT_EQ(cudaSetDevice((current_device + 1) % m_num_devices), cudaSuccess);
-
     const size_t size = 16;
-    T buffer(size, mem_type);
-
-    EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
+    std::unique_ptr<T> buffer;
+    {
+        /* Allocate on another device, and switch back before detection */
+        scoped_cuda_device device_guard((mem_buffer::get_device() + 1) %
+                                        m_num_devices);
+        buffer.reset(new T(size, mem_type));
+    }
 
     ucs_memory_type_t detected_mem_type;
-    ASSERT_EQ(uct_md_detect_memory_type(m_md, buffer.ptr(), size,
+    ASSERT_EQ(uct_md_detect_memory_type(m_md, buffer->ptr(), size,
                                         &detected_mem_type),
               UCS_OK);
     EXPECT_EQ(detected_mem_type, mem_type);
@@ -209,27 +210,26 @@ protected:
     void init() override {
         test_switch_cuda_device::init();
 
-        int current_device;
-        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+        {
+            scoped_cuda_device device_guard;
 
-        for (auto device = 0; device < m_num_devices; ++device) {
-            uct_md_mem_attr_t attr       = {
-                .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
-            };
-            static constexpr size_t size = 4096;
-            void *ptr;
+            for (auto device = 0; device < m_num_devices; ++device) {
+                uct_md_mem_attr_t attr       = {
+                    .field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV
+                };
+                static constexpr size_t size = 4096;
+                void *ptr;
 
-            ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
-            ASSERT_EQ(cudaSuccess, cudaMalloc(&ptr, size));
-            EXPECT_UCS_OK(uct_md_mem_query(md(), ptr, size, &attr));
-            ASSERT_EQ(cudaSuccess, cudaFree(ptr));
+                ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
+                ASSERT_EQ(cudaSuccess, cudaMalloc(&ptr, size));
+                EXPECT_UCS_OK(uct_md_mem_query(md(), ptr, size, &attr));
+                ASSERT_EQ(cudaSuccess, cudaFree(ptr));
 
-            UCS_TEST_MESSAGE << "CUDA device " << device << " sys_dev "
-                             << static_cast<int>(attr.sys_dev);
-            m_sys_dev.push_back(attr.sys_dev);
+                UCS_TEST_MESSAGE << "CUDA device " << device << " sys_dev "
+                                 << static_cast<int>(attr.sys_dev);
+                m_sys_dev.push_back(attr.sys_dev);
+            }
         }
-
-        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
 
         ASSERT_EQ(m_num_devices, m_sys_dev.size());
     }
@@ -273,10 +273,8 @@ protected:
 
     void test_per_device_alloc(ucs_memory_type_t mem_type)
     {
+        scoped_cuda_device device_guard;
         CUdevice current;
-
-        int current_device;
-        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
 
         // Ensure a valid context for each device
         for (auto device = 0; device < m_num_devices; ++device) {
@@ -294,15 +292,12 @@ protected:
             EXPECT_EQ(m_num_devices - 1, current);
             ASSERT_UCS_OK(uct_mem_free(&mem));
         }
-
-        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
     }
 
     void test_same_device_alloc(ucs_memory_type_t mem_type,
                                 bool set_sys_dev = true)
     {
-        int current_device;
-        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
+        scoped_cuda_device device_guard;
 
         for (auto device = 0; device < m_num_devices; ++device) {
             ASSERT_EQ(cudaSetDevice(device), cudaSuccess);
@@ -313,8 +308,6 @@ protected:
             EXPECT_EQ(m_sys_dev[device], sys_device);
             ASSERT_UCS_OK(uct_mem_free(&mem));
         }
-
-        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
     }
 
     void skip_if_no_fabric(ucs_memory_type_t mem_type)
@@ -787,17 +780,16 @@ public:
                           ucs_memory_type_t src_type,
                           ucs_memory_type_t dest_type)
     {
-        int current_device;
-        ASSERT_EQ(cudaGetDevice(&current_device), cudaSuccess);
-
         const size_t size = UCS_MBYTE;
         mem_src_t src_buf(size, src_type);
         mem_dest_t dest_buf(size, dest_type);
         rkey_mem_pair_t rkey_dest = rkey_unpack(sender(), dest_buf.ptr(),
                                                   size, dest_type);
 
-        // Set different device context and call send op
-        ASSERT_EQ(cudaSetDevice((current_device + 1) % m_num_devices), cudaSuccess);
+        /* Call the send ops from a different device, and switch back before
+         * the buffers are released */
+        scoped_cuda_device device_guard((mem_buffer::get_device() + 1) %
+                                        m_num_devices);
 
         for (const auto& send_func : send_funcs) {
             ASSERT_UCS_OK_OR_INPROGRESS(
@@ -807,9 +799,6 @@ public:
         }
 
         rkey_release(sender(), rkey_dest);
-
-        // Set back an original device to avoid test failures
-        EXPECT_EQ(cudaSetDevice(current_device), cudaSuccess);
     }
 
     template<typename mem_alloc_t1, typename mem_alloc_t2>

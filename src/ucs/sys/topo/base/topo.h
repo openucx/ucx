@@ -516,6 +516,15 @@ ucs_status_t
 ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class);
 
 /**
+ * Check whether a device class is marked as incomplete.
+ *
+ * @param [in]  device_class  Device class to check.
+ *
+ * @return Nonzero if the class inventory is incomplete, 0 otherwise.
+ */
+int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class);
+
+/**
  * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
  * among all unique BDFs of the same class.
  *
