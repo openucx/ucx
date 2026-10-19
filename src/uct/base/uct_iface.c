@@ -39,7 +39,6 @@ const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_RNDV_ZCOPY]   = "rndv_zcopy",
     [UCT_EP_OP_ATOMIC_POST]  = "atomic_post",
     [UCT_EP_OP_ATOMIC_FETCH] = "atomic_fetch",
-    [UCT_EP_OP_FLUSH]        = "flush",
     [UCT_EP_OP_LAST]         = NULL
 };
 
