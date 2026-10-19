@@ -6,6 +6,14 @@
 sgl_put_lat_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -n 10000
 sgl_put_bw_HH    -t ucp_put_bw  -D sgl -m host,host -s 1024,1024,1024,1024 -n 10000
 
+# host -> host, strided
+sgl_put_lat_stride_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -i 2048 -n 10000
+sgl_put_bw_stride_HH    -t ucp_put_bw  -D sgl -m host,host -s 1024,1024,1024,1024 -i 2048 -n 10000
+
+# host -> host, strided with zero-length elements
+sgl_put_lat_zero_HH     -t ucp_put_lat -D sgl -m host,host -s 1024,0,1024,0 -i 2048 -n 10000
+sgl_put_bw_zero_HH      -t ucp_put_bw  -D sgl -m host,host -s 1024,0,1024,0 -i 2048 -n 10000
+
 # cuda -> cuda
 sgl_put_lat_DD   -t ucp_put_lat -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -n 10000
 sgl_put_bw_DD    -t ucp_put_bw  -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -n 10000
