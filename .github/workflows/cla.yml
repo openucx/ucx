@@ -1,0 +1,104 @@
+# Check that the PR author and all commit authors are in the secret CLA team
+name: CLA
+
+# pull_request_target passes secrets to fork PRs; PR code is never checked out
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  cla:
+    name: CLA
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Get org members token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.CLA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-members: read
+
+      - name: Check CLA signers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORG_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORG: ${{ github.repository_owner }}
+          TEAM: ucf-cla-signed
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+        run: |
+          set -euo pipefail
+
+          # Succeeds if the login is an active member of the team or its child teams
+          is_signer() {
+              local state
+
+              if state=$(GH_TOKEN="$ORG_TOKEN" gh api \
+                             "orgs/$ORG/teams/$TEAM/memberships/$1" \
+                             --jq .state 2>api_err.txt); then
+                  [ "$state" = "active" ]
+                  return
+              fi
+
+              if grep -q "HTTP 404" api_err.txt; then
+                  return 1
+              fi
+
+              cat api_err.txt >&2
+              exit 1
+          }
+
+          # Fail loudly on a wrong team name or token, not as missing CLAs
+          GH_TOKEN="$ORG_TOKEN" gh api "orgs/$ORG/teams/$TEAM" --jq .slug
+
+          logins=()
+          unlinked=()
+          if [ "$PR_AUTHOR_TYPE" != "Bot" ]; then
+              logins+=("$PR_AUTHOR")
+          fi
+
+          while read -r kind value; do
+              case "$kind" in
+              user)     logins+=("$value") ;;
+              unlinked) unlinked+=("$value") ;;
+              esac
+          done < <(gh api --paginate "repos/$REPO/pulls/$PR/commits" --jq '.[] |
+                       if .author == null then "unlinked \(.sha[0:10])"
+                       elif .author.type == "Bot" then empty
+                       else "user \(.author.login)" end')
+
+          missing=()
+          for login in $(printf '%s\n' "${logins[@]}" | sort -u); do
+              if ! is_signer "$login"; then
+                  missing+=("@$login")
+              fi
+          done
+
+          if [ ${#missing[@]} -eq 0 ] && [ ${#unlinked[@]} -eq 0 ]; then
+              echo "All authors have a signed UCF CLA" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+          fi
+
+          {
+              echo "### UCF CLA check failed"
+              if [ ${#missing[@]} -gt 0 ]; then
+                  echo "No signed CLA on file for: ${missing[*]}"
+              fi
+              if [ ${#unlinked[@]} -gt 0 ]; then
+                  echo "Commits with an author email not linked to a GitHub account: ${unlinked[*]}"
+              fi
+              echo
+              echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
+              echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
+              echo "Once the CLA is countersigned, re-run this check."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::error::UCF CLA check failed, see the job summary"
+          exit 1
