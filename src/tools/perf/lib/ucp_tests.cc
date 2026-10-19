@@ -182,24 +182,24 @@ public:
             offset += sgl_element_step(i);
         }
 
-        sgl.local_sgl.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
-                                   UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
-        sgl.local_sgl.buffers    = sgl.buffers;
-        sgl.local_sgl.lengths    = sgl.lengths;
-        sgl.local_sgl.memhs      = NULL;
-        sgl.local_sgl.counts     = NULL;
-        sgl.local_sgl.strides    = NULL;
+        m_local_sgl.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                                 UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+        m_local_sgl.buffers    = sgl.buffers;
+        m_local_sgl.lengths    = sgl.lengths;
+        m_local_sgl.memhs      = NULL;
+        m_local_sgl.counts     = NULL;
+        m_local_sgl.strides    = NULL;
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_PREREG) {
-            sgl.local_sgl.field_mask |= UCP_DT_LOCAL_SGL_FIELD_MEMHS;
-            sgl.local_sgl.memhs       = sgl.memhs;
+            m_local_sgl.field_mask |= UCP_DT_LOCAL_SGL_FIELD_MEMHS;
+            m_local_sgl.memhs       = sgl.memhs;
         }
 
-        sgl.remote_sgl.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
-                                      UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
-                                      UCP_DT_REMOTE_SGL_FIELD_RKEYS;
-        sgl.remote_sgl.remote_addrs = sgl.remote_addrs;
-        sgl.remote_sgl.lengths      = sgl.lengths;
-        sgl.remote_sgl.rkeys        = sgl.rkeys;
+        m_remote_sgl.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                    UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                                    UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        m_remote_sgl.remote_addrs = sgl.remote_addrs;
+        m_remote_sgl.lengths      = sgl.lengths;
+        m_remote_sgl.rkeys        = sgl.rkeys;
     }
 
     void add_sgl_params(ucp_request_param_t &params)
@@ -211,7 +211,7 @@ public:
                                UCP_OP_ATTR_FIELD_REMOTE_COUNT;
         params.datatype        = ucp_dt_make_sgl();
         params.remote_datatype = ucp_dt_make_sgl();
-        params.remote          = &m_perf.ucp.sgl.remote_sgl;
+        params.remote          = &m_remote_sgl;
         params.remote_count    = m_perf.params.msg_size_cnt;
     }
 
@@ -266,10 +266,10 @@ public:
         fill_common_params(m_recv_params, m_perf.ucp.recv_memh);
 
         if (is_sgl_put()) {
-            m_perf.ucp.sgl.send_params          = m_send_params;
-            m_perf.ucp.sgl.send_get_info_params = m_send_get_info_params;
-            add_sgl_params(m_perf.ucp.sgl.send_params);
-            add_sgl_params(m_perf.ucp.sgl.send_get_info_params);
+            m_sgl_send_params          = m_send_params;
+            m_sgl_send_get_info_params = m_send_get_info_params;
+            add_sgl_params(m_sgl_send_params);
+            add_sgl_params(m_sgl_send_get_info_params);
         }
     }
 
@@ -516,8 +516,8 @@ public:
         ucs_status_t status;
 
         if (use_sgl) {
-            param = get_info ? &m_perf.ucp.sgl.send_get_info_params :
-                               &m_perf.ucp.sgl.send_params;
+            param = get_info ? &m_sgl_send_get_info_params :
+                               &m_sgl_send_params;
         } else {
             param = get_info ? &m_send_get_info_params : &m_send_params;
         }
@@ -558,7 +558,7 @@ public:
                 return UCS_ERR_INVALID_PARAM;
             }
             if (use_sgl) {
-                request = ucp_put_nbx(ep, &m_perf.ucp.sgl.local_sgl,
+                request = ucp_put_nbx(ep, &m_local_sgl,
                                       m_perf.params.msg_size_cnt,
                                       UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
                                       param);
@@ -722,11 +722,10 @@ public:
         switch (CMD) {
         case UCX_PERF_CMD_PUT:
             if (is_sgl_put()) {
-                status_p = ucp_put_nbx(ep, &m_perf.ucp.sgl.local_sgl,
+                status_p = ucp_put_nbx(ep, &m_local_sgl,
                                        m_perf.params.msg_size_cnt,
                                        UCP_REMOTE_ADDR_INVALID,
-                                       UCP_RKEY_INVALID,
-                                       &m_perf.ucp.sgl.send_params);
+                                       UCP_RKEY_INVALID, &m_sgl_send_params);
             } else {
                 status_p = ucp_put_nbx(ep, buffer, size, remote_addr, rkey,
                                        &m_send_params);
@@ -1222,6 +1221,10 @@ private:
     ucp_request_param_t m_am_rx_params;
     ucp_request_param_t m_send_params;
     ucp_request_param_t m_send_get_info_params;
+    ucp_request_param_t m_sgl_send_params;
+    ucp_request_param_t m_sgl_send_get_info_params;
+    ucp_dt_local_sgl_t  m_local_sgl;
+    ucp_dt_remote_sgl_t m_remote_sgl;
     ucp_request_param_t m_recv_params;
     ucp_atomic_op_t     m_atomic_op;
 };

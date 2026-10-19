@@ -167,10 +167,6 @@ typedef struct {
 } ucx_perf_exported_mem_t;
 
 typedef struct {
-    ucp_request_param_t send_params;
-    ucp_request_param_t send_get_info_params;
-    ucp_dt_local_sgl_t  local_sgl;
-    ucp_dt_remote_sgl_t remote_sgl;
     void                **buffers;
     size_t              *lengths;
     ucp_mem_h           *memhs;
