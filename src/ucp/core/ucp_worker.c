@@ -17,7 +17,6 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
-#include <ucp/rma/rma_bw.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
@@ -1245,7 +1244,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     worker->num_ifaces = num_ifaces;
     iface_id           = 0;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
         status = ucp_worker_iface_open(worker, tl_id,
                                        &worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1268,7 +1267,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     }
 
     UCS_STATIC_BITMAP_RESET_ALL(&worker->scalable_tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
         ucs_assert(ucp_worker_is_tl_p2p(worker, tl_id) ||
                    ucp_worker_is_tl_2iface(worker, tl_id) ||
                    ucp_worker_is_tl_2sockaddr(worker, tl_id));
@@ -1283,7 +1282,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
               UCS_STATIC_BITMAP_POPCOUNT(worker->scalable_tl_bitmap));
 
     iface_id = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
         status = ucp_worker_iface_init(worker, tl_id,
                                        worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1900,7 +1899,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucs_debug("worker %p: using device atomics", worker);
 
     /* Enable atomics on all resources using same device as the "best" resource */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         rsc = &context->tl_rscs[rsc_index];
         if (UCS_STATIC_BITMAP_GET(supp_tls, rsc_index) &&
             (rsc->md_index == best_rsc->md_index) &&
@@ -2891,16 +2890,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_tag_match_cleanup;
     }
 
-    if (context->config.ext.rma_bw_measure) {
-        worker->rma_bw_samples = ucs_calloc(UCP_RMA_BW_MAX_ACTIVE,
-                                            sizeof(*worker->rma_bw_samples),
-                                            "rma_bw_samples");
-        if (worker->rma_bw_samples == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err_am_cleanup;
-        }
-    }
-
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
 
@@ -2927,7 +2916,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     return UCS_OK;
 
 err_am_cleanup:
-    ucs_free(worker->rma_bw_samples);
     ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
@@ -3204,7 +3192,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
-    ucs_free(worker->rma_bw_samples);
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
@@ -3243,7 +3230,7 @@ ucp_worker_address_pack(ucp_worker_h worker, uint32_t address_flags,
     }
 
     if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
             if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE)) {
                 UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);

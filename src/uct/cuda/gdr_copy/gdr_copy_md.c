@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -116,11 +116,14 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
-    md_attr->reg_cost         = md->reg_cost;
+    md_attr->flags              = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types      = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->access_mem_types   = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->rkey_packed_size   = sizeof(uct_gdr_copy_key_t);
+    md_attr->reg_cost           = md->reg_cost;
+    /* Pinning goes through nvidia_p2p_get_pages, which the driver refuses
+     * for memory it did not allocate as GPUDirect RDMA capable */
+    md_attr->required_mem_flags = UCS_MEM_FLAG_GDR_CAPABLE;
 
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {

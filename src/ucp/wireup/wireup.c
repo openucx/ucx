@@ -1165,7 +1165,7 @@ ucp_wireup_augment_aux_tls(ucp_ep_h ep, ucp_lane_map_t lane_map,
             continue;
         }
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(aux_rsc, &context->tl_bitmap) {
             if (UCS_STATIC_BITMAP_GET(*tl_bitmap, aux_rsc)) {
                 continue;
             }
@@ -1313,26 +1313,32 @@ ucp_wireup_process_lanes_addr_request(
         const ucp_wireup_lane_token_t *tx_tokens,
         const ucp_unpacked_address_t *remote_address)
 {
-    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided;
+    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided, invalidated;
+    ucp_lane_map_t discard = 0;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    /* Hold a token-capable lane before deriving next_rcv_psn. Hold keeps
-     * that endpoint, so the query still finds it. */
+    /* A peer token means that lane already failed remotely. Take it off the
+     * endpoint so the reply can carry a rebuilt address. The old transport
+     * endpoint stays held until the ACK brings the receive token. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
+    invalidated = 0;
     if (request_id != 0) {
-        ucp_ep_tf_hold_lanes(ep, lanes_info->provided_lane_map, request_id);
+        invalidated = ucp_ep_tf_invalidate_lanes(ep,
+                                                 lanes_info->provided_lane_map,
+                                                 0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens);
+        discard = ucp_ep_tf_hold_invalidated_lanes(ep, invalidated);
     }
 
-    /* Asymmetric failure: lanes the peer declared broken but we don't yet
-     * see as failed go through local failover first, so subsequent rebuild
-     * steps encounter proper failed stubs and the reply rides the new
-     * am_lane. Lanes held above are already failed and stay out of this set. */
-    peer_unaware = lanes_info->provided_lane_map & ~ucp_ep_get_failed_lanes(ep);
+    /* Lanes still up take the software path. A held lane is already failed
+     * and waits for the ACK. */
+    peer_unaware = (lanes_info->provided_lane_map &
+                    ~ucp_ep_get_failed_lanes(ep) & ~invalidated) |
+                   discard;
     if (peer_unaware != 0) {
         ucs_debug("ep %p: LANES_ADDR_REQ triggering local failover for "
                   "asymmetric failure on lanes 0x%" PRIx64,
@@ -1367,6 +1373,87 @@ ucp_wireup_process_lanes_addr_request(
                                    lanes_info->provided_lane_map, peer_provided,
                                    request_id, rx_tokens);
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
+}
+
+static ucp_lane_map_t
+ucp_wireup_lanes_with_tokens(ucp_lane_map_t lane_map,
+                             const ucp_wireup_lane_token_t *tokens)
+{
+    ucp_lane_map_t lanes = 0;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lane_map) {
+        if ((tokens[lane].token != NULL) && (tokens[lane].len > 0)) {
+            lanes |= UCS_BIT(lane);
+        }
+    }
+
+    return lanes;
+}
+
+static void
+ucp_wireup_store_rx_tokens(ucp_ep_h ep,
+                           const ucp_wireup_msg_lanes_info_t *lanes_info,
+                           uint32_t request_id, int from_ack,
+                           const ucp_wireup_lane_token_t *rx_tokens)
+{
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes_info->requested_lane_map) {
+        if (rx_tokens[lane].len == 0) {
+            continue;
+        }
+
+        ucp_ep_tf_save_rx(ep, lane, request_id, from_ack,
+                          rx_tokens[lane].token, rx_tokens[lane].len);
+    }
+}
+
+/* A token in the reply means the remote side already failed that lane.
+ * Invalidate it, purge it, and take it off the lane. The queue pair stays
+ * alive in @a retired until the caller derives tokens. Lanes that cannot
+ * carry a token are discarded on the software path. */
+static void
+ucp_wireup_invalidate_unaware_failed_lanes(
+        ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *lanes_info,
+        uint32_t request_id, const ucp_wireup_lane_token_t *tx_tokens,
+        const ucp_wireup_lane_token_t *rx_tokens, uct_ep_h retired[])
+{
+    ucp_lane_map_t invalidated = 0;
+    ucp_lane_map_t lanes, leftover;
+    ucs_status_t status;
+
+    if (request_id == 0) {
+        return;
+    }
+
+    lanes = ucp_wireup_lanes_with_tokens(lanes_info->requested_lane_map,
+                                         rx_tokens) |
+            ucp_wireup_lanes_with_tokens(lanes_info->provided_lane_map,
+                                         tx_tokens);
+    lanes &= ~ucp_ep_get_failed_lanes(ep);
+    if (lanes != 0) {
+        invalidated = ucp_ep_tf_invalidate_lanes(ep, lanes, request_id, 0);
+    }
+
+    /* Reply RX token is the peer receive position. Store it before the live
+     * purge, and for already-held lanes that this reply does not retire. */
+    ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
+    if (invalidated != 0) {
+        /* Keep the queue pairs until the reply handler derives RX tokens. */
+        ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
+    }
+
+    leftover = lanes & ~invalidated;
+    if (leftover == 0) {
+        return;
+    }
+
+    status = ucp_ep_failover_reconfig(ep, leftover, UCS_ERR_CONNECTION_RESET);
+    if (status != UCS_OK) {
+        ucs_diag("ep %p: failover after reply tokens failed: %s", ep,
+                 ucs_status_string(status));
+    }
 }
 
 static UCS_F_NOINLINE void
@@ -1406,8 +1493,8 @@ ucp_wireup_process_lanes_addr_reply(
 
     ucs_assert(request_id != 0);
 
-    /* The reply's TX tokens name our QPs. The derived RX tokens go back on
-     * the ACK and are not the tokens stored for our own purge. */
+    /* Derive RX tokens from the reply TX tokens. They go back on the ACK and
+     * are not the tokens stored for our own purge. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
     ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map, tx_tokens,
                                 rx_tokens);
@@ -1415,6 +1502,8 @@ ucp_wireup_process_lanes_addr_reply(
                                    lanes_info->provided_lane_map, 0, request_id,
                                    rx_tokens);
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
+    ucp_ep_tf_lanes_purge_outstanding(ep, lanes_info->requested_lane_map,
+                                      request_id, 0);
 }
 
 /* Locate the lanes info and the optional token trailer of a LANES_ADDR
@@ -1502,26 +1591,6 @@ ucp_wireup_parse_lanes_addr(ucp_ep_h ep, const ucp_wireup_msg_t *msg,
     return UCS_OK;
 }
 
-/* -------------------------------------------------------------------------- */
-
-static void
-ucp_wireup_store_rx_tokens(ucp_ep_h ep,
-                           const ucp_wireup_msg_lanes_info_t *lanes_info,
-                           uint32_t request_id, int from_ack,
-                           const ucp_wireup_lane_token_t *rx_tokens)
-{
-    ucp_lane_index_t lane;
-
-    ucs_for_each_bit(lane, lanes_info->requested_lane_map) {
-        if (rx_tokens[lane].len == 0) {
-            continue;
-        }
-
-        ucp_ep_tf_save_rx(ep, lane, request_id, from_ack,
-                          rx_tokens[lane].token, rx_tokens[lane].len);
-    }
-}
-
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                            size_t length, unsigned flags)
 {
@@ -1532,6 +1601,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     const ucp_wireup_msg_lanes_info_t *lanes_info = NULL;
     ucp_wireup_lane_token_t tx_tokens[UCP_MAX_LANES];
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
+    uct_ep_h retired[UCP_MAX_LANES];
     const void *address_ptr;
     ucp_unpacked_address_t remote_address;
     ucs_status_t status;
@@ -1596,15 +1666,22 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
                                               &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_REPLY) {
         ucs_assert(lanes_info != NULL);
-        ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
+        memset(retired, 0, sizeof(retired));
+        ucp_wireup_invalidate_unaware_failed_lanes(ep, lanes_info,
+                                                   request_id, tx_tokens,
+                                                   rx_tokens, retired);
         ucp_wireup_process_lanes_addr_reply(worker, ep, msg, lanes_info,
                                             request_id, tx_tokens,
                                             &remote_address);
+        ucp_ep_tf_destroy_retired_lanes(ep, retired);
     } else if (msg->type == UCP_WIREUP_MSG_LANES_ADDR_ACK) {
         ucs_assert(lanes_info != NULL);
         ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 1, rx_tokens);
         ucs_debug("ep %p: LANES_ADDR_ACK request_id=0x%" PRIx32, ep,
                   request_id);
+        ucp_ep_tf_lanes_purge_outstanding(ep,
+                                          lanes_info->requested_lane_map,
+                                          request_id, 1);
     } else {
         ucs_bug("invalid wireup message");
     }
@@ -1981,7 +2058,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     char info_str[UCP_WIREUP_UCT_INFO_SIZE];
 
     ae_dst_md_map = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
             *info_str = '\0';
             if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae,
@@ -2412,6 +2489,7 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                             unsigned *addr_indices, ucp_ep_config_key_t *key,
                             ucp_rsc_index_t *dst_md_storage)
 {
+    unsigned select_ep_init_flags;
     ucs_status_t status;
 
     ucp_ep_config_key_reset(key);
@@ -2420,7 +2498,14 @@ ucp_wireup_try_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     key->dst_version  = remote_address->dst_version;
     key->dst_md_cmpts = dst_md_storage;
 
-    status = ucp_wireup_select_lanes(ep, ep_init_flags, *tl_bitmap,
+    select_ep_init_flags = ep_init_flags;
+    if ((key->err_mode == UCP_ERR_HANDLING_MODE_PEER) &&
+        (remote_address->uuid == ep->worker->uuid)) {
+        /* Same-worker PEER EPs do not require peer-failure transports. */
+        select_ep_init_flags &= ~UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
+    }
+
+    status = ucp_wireup_select_lanes(ep, select_ep_init_flags, *tl_bitmap,
                                      remote_address, addr_indices, key, 1);
     if (status != UCS_OK) {
         return status;
@@ -2860,7 +2945,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl, &context->tl_bitmap) {
             rsc = &context->tl_rscs[tl];
             if (ae->tl_name_csum == rsc->tl_name_csum) {
                 snprintf(p, end - p, " "UCT_TL_RESOURCE_DESC_FMT,

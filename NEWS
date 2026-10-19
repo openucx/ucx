@@ -10,6 +10,7 @@
 ## Current
 ### Features:
 #### UCT
+ * Outstanding purge can now be called before the endpoint error handler is invoked
  * Added flush operation to the device API
 #### ROCM
  * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
