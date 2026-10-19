@@ -170,8 +170,8 @@ ucp_gpu_nic_assignment_log_gpu(const ucp_gpu_nic_assignment_t *assignment,
     }
 
     if (nic_strbs.count == 0) {
-        ucs_debug("gpu %s is assigned 0 nics",
-                  ucs_string_buffer_cstr(&gpu_strb));
+        ucs_diag("gpu %s is assigned 0 nics",
+                 ucs_string_buffer_cstr(&gpu_strb));
     } else {
         ucs_debug("gpu %s is assigned %zu nics: [%s] sys_devs [%s]",
                   ucs_string_buffer_cstr(&gpu_strb), nic_strbs.count,
@@ -201,9 +201,9 @@ static void ucp_gpu_nic_assignment_log_unassigned_nics(
     if (nic_strbs.count == 0) {
         ucs_debug("all nics are assigned");
     } else {
-        ucs_debug("%zu nics are unassigned: [%s] sys_devs [%s]",
-                  nic_strbs.count, ucs_string_buffer_cstr(nic_strbs.names),
-                  ucs_string_buffer_cstr(nic_strbs.sys_devs));
+        ucs_diag("%zu nics are unassigned: [%s] sys_devs [%s]", nic_strbs.count,
+                 ucs_string_buffer_cstr(nic_strbs.names),
+                 ucs_string_buffer_cstr(nic_strbs.sys_devs));
     }
 }
 
@@ -215,7 +215,7 @@ ucp_gpu_nic_assignment_log(const ucp_gpu_nic_assignment_t *assignment,
     const ucs_topo_group_element_t *gpu;
     const ucs_topo_group_t *group;
 
-    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DIAG)) {
         return;
     }
 
