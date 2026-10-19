@@ -277,7 +277,9 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::remote_address */
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2)
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
+    /** Enables @ref uct_ep_attr::path_bandwidth_ratio */
+    UCT_EP_ATTR_FIELD_PATH_BW_RATIO   = UCS_BIT(3)
 };
 
 
@@ -426,6 +428,15 @@ struct uct_ep_attr {
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
+
+    /**
+     * Ratio of the measured path bandwidth to its baseline bandwidth.
+     * A value of 1.0 means no change. The transport returns
+     * UCS_ERR_NO_ELEM when a measurement is not yet available, and
+     * UCS_ERR_UNSUPPORTED when path measurement is not supported.
+     * Valid when @ref UCT_EP_ATTR_FIELD_PATH_BW_RATIO is requested.
+     */
+    double                  path_bandwidth_ratio;
 };
 
 
@@ -1209,6 +1220,8 @@ enum uct_iface_attr_field {
                                                                is supported. */
 /** Dedicated path-monitor endpoints are supported. */
 #define UCT_IFACE_FLAG_V2_PATH_MONITOR UCS_BIT(3)
+/** Endpoint path bandwidth can be queried on path-monitor endpoints. */
+#define UCT_IFACE_FLAG_V2_PATH_PERF    UCS_BIT(4)
 /**
  * @}
  */
