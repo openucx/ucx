@@ -49,7 +49,7 @@ runs_on_dockers:
   # ZE null driver, no GPU needed.
   - { name: "ubuntu2404-ze", url: "harbor.mellanox.com/ucx/x86_64/ubuntu24.04/builder:ze-oneapi-2026.0.0-l0-1.27.0", arch: x86_64, build_mode: ze, require_ze: "yes" }
   # ICC/PGI from /hpc/local.
-  - { name: "centos7-icc-pgi", url: "harbor.mellanox.com/ucx/centos7:4", arch: x86_64, build_mode: compilers }
+  - { name: "rocky89-icc-pgi", url: "harbor.mellanox.com/hpcx/x86_64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: x86_64, build_mode: compilers }
   # aarch64
   - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0", arch: aarch64, build_mode: long }
   - { name: "ubuntu2604-mofed26.04", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu26.04/builder:mofed-26.04-0.7.6.0", arch: aarch64, build_mode: short }
