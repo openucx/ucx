@@ -1005,11 +1005,17 @@ static void ucp_worker_iface_async_cb_event_v2(void *arg, unsigned flags,
             status = UCS_ERR_INVALID_PARAM;
         }
 
+        if ((status == UCS_OK) &&
+            !(wiface->attr_v2.cap.flags & UCT_IFACE_FLAG_V2_PATH_PERF)) {
+            status = UCS_ERR_UNSUPPORTED;
+        }
+
         if (status == UCS_OK) {
             ucs_debug("worker %p: path speed changed on ep %p "
                       "monitor lane[%u]=%p for data lane[%u]",
                       wiface->worker, ucp_ep, monitor_lane, uct_ep,
                       monitored_lane);
+            ucp_ep_path_bw_changed(ucp_ep, monitor_lane, monitored_lane);
         } else {
             ucs_debug("worker %p: ignore path speed change event for "
                       "UCT EP %p on " UCP_WIFACE_FMT ": %s",

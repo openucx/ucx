@@ -210,6 +210,9 @@ enum {
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
+/* Quantize path measurements so small fluctuations reuse EP configurations. */
+#define UCP_PATH_BW_RATIO_SCALE 32
+
 
 typedef struct ucp_ep_config_key_lane {
     ucp_rsc_index_t      rsc_index; /* Resource index */
@@ -219,6 +222,7 @@ typedef struct ucp_ep_config_key_lane {
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
     uint8_t              port_speed; /* Quantized port speed */
+    uint8_t              path_bw_ratio; /* Quantized path bandwidth ratio */
     ucp_lane_index_t     monitored_lane; /* Data lane measured by this
                                             path-monitor lane,
                                             or UCP_NULL_LANE. */
@@ -933,6 +937,9 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
 void ucp_ep_register_disconnect_progress(ucp_request_t *req);
 
 ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+
+void ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t monitor_lane,
+                            ucp_lane_index_t monitored_lane);
 
 void ucp_ep_peer_mem_destroy(ucp_context_h context,
                              ucp_ep_peer_mem_data_t *data);
