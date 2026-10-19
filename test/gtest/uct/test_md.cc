@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2016. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2016 - 2017. ALL RIGHTS RESERVED.
 * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -542,10 +542,16 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
             ASSERT_UCS_OK(status);
             EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
             if ((alloc_mem_type == UCS_MEMORY_TYPE_CUDA) ||
+                (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_HOST) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_DEVICE) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_MANAGED)) {
-                EXPECT_EQ(buffer_size, mem_attr.alloc_length);
+                /* ROCm HSA may round sizeInBytes up to a page */
+                if (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) {
+                    EXPECT_GE(mem_attr.alloc_length, buffer_size);
+                } else {
+                    EXPECT_EQ(buffer_size, mem_attr.alloc_length);
+                }
                 EXPECT_EQ(address, mem_attr.base_address);
             } else {
                 EXPECT_EQ(slice_length, mem_attr.alloc_length);
@@ -1277,6 +1283,31 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_md_dmabuf)
 
+class test_rocm_copy : public test_md {
+};
+
+UCS_TEST_P(test_rocm_copy, dmabuf_disable, "ROCM_COPY_DMABUF=no")
+{
+    if (!(md_attr().access_mem_types & UCS_BIT(UCS_MEMORY_TYPE_ROCM)) ||
+        !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_ROCM)) {
+        UCS_TEST_SKIP_R("ROCm memory is not supported");
+    }
+
+    const size_t size   = ucs_get_page_size();
+    const size_t offset = 128;
+    mem_buffer mem_buf(size, UCS_MEMORY_TYPE_ROCM);
+    uct_md_mem_attr_t mem_attr = {};
+    void *query_ptr            = UCS_PTR_BYTE_OFFSET(mem_buf.ptr(), offset);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD |
+                          UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), query_ptr, size - offset, &mem_attr));
+    EXPECT_EQ(UCT_DMABUF_FD_INVALID, mem_attr.dmabuf_fd);
+    EXPECT_EQ(0ul, mem_attr.dmabuf_offset);
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_rocm_copy, rocm_cpy)
+
 class test_cuda : public test_md
 {
 };
@@ -1345,20 +1376,36 @@ UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
 class test_gdr_copy : public test_md {
 protected:
+    static constexpr size_t REG_SIZE = 65536;
+
     ucs_status_t register_mem()
     {
-        constexpr size_t size = 65536;
-        void *address         = NULL;
+        void *address = NULL;
         uct_mem_h memh;
         ucs_status_t status;
 
-        alloc_memory(&address, size, NULL, UCS_MEMORY_TYPE_CUDA);
-        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, size, &memh);
+        alloc_memory(&address, REG_SIZE, NULL, UCS_MEMORY_TYPE_CUDA);
+        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, address, REG_SIZE, &memh);
         if (status == UCS_OK) {
             (void)uct_md_mem_dereg(md(), memh);
         }
 
         free_memory(address, UCS_MEMORY_TYPE_CUDA);
+        return status;
+    }
+
+    ucs_status_t register_async_mem()
+    {
+        mem_buffer buffer(REG_SIZE, UCS_MEMORY_TYPE_CUDA,
+                          mem_buffer::alloc_mode::ASYNC);
+        uct_mem_h memh;
+        ucs_status_t status;
+
+        status = reg_mem(UCT_MD_MEM_ACCESS_ALL, buffer.ptr(), REG_SIZE, &memh);
+        if (status == UCS_OK) {
+            (void)uct_md_mem_dereg(md(), memh);
+        }
+
         return status;
     }
 };
@@ -1390,6 +1437,24 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE=try")
 {
     ASSERT_UCS_OK(register_mem());
+}
+
+/* Pinning goes through nvidia_p2p_get_pages, so memory which is not GPUDirect
+ * RDMA capable must never be offered to this memory domain */
+UCS_TEST_P(test_gdr_copy, gdr_copy_requires_gdr_capable)
+{
+    EXPECT_TRUE(md_attr().required_mem_flags & UCS_MEM_FLAG_GDR_CAPABLE);
+}
+
+/* The reason for the requirement above: stream-ordered memory is only
+ * compatible with dma_buf mappings, so the pin itself fails */
+UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_async_cuda_fail,
+                     !check_caps(UCT_MD_FLAG_REG) ||
+                             !mem_buffer::is_async_supported(
+                                     UCS_MEMORY_TYPE_CUDA))
+{
+    scoped_log_handler slh(wrap_errors_logger);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, register_async_mem());
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)

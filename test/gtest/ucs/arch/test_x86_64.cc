@@ -1,6 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
-* Copyright (C) Advanced Micro Devices, Inc. 2024. ALL RIGHTS RESERVED.
+* Copyright (C) Advanced Micro Devices, Inc. 2024-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -185,9 +185,41 @@ UCS_TEST_SKIP_COND_F(test_arch, memcpy, RUNNING_ON_VALGRIND || !ucs::perf_retry_
     }
 }
 
+#if ENABLE_BUILTIN_MEMCPY
+UCS_TEST_F(test_arch, nt_buffer_transfer_explicit_threshold) {
+    const size_t configured_max = 8 * UCS_MBYTE;
+
+    ucs_global_opts.arch.builtin_memcpy_min     = UCS_KBYTE;
+    ucs_global_opts.arch.builtin_memcpy_max     = configured_max;
+    ucs_global_opts.arch.nt_buffer_transfer_min = 4 * UCS_MBYTE;
+    ucs_cpu_init();
+    EXPECT_EQ(static_cast<size_t>(0),
+              ucs_global_opts.arch.builtin_memcpy_max);
+
+    ucs_global_opts.arch.builtin_memcpy_max     = configured_max;
+    ucs_global_opts.arch.nt_buffer_transfer_min = UCS_MEMUNITS_INF;
+    ucs_cpu_init();
+    EXPECT_EQ(configured_max, ucs_global_opts.arch.builtin_memcpy_max);
+}
+#endif
+
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src) {
+    ucs_global_opts.arch.builtin_memcpy_min = UCS_MEMUNITS_INF;
+    ucs_global_opts.arch.nt_dest_threshold  = UCS_MEMUNITS_INF;
+
+    /* Exercise the vectorized NT_SOURCE path */
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
 }
+
+#if ENABLE_BUILTIN_MEMCPY
+UCS_TEST_F(test_arch, nt_buffer_transfer_nt_src_erms) {
+    ucs_global_opts.arch.builtin_memcpy_min = 0;
+    ucs_global_opts.arch.nt_dest_threshold  = UCS_MEMUNITS_INF;
+
+    /* Exercise the ERMS NT_SOURCE path */
+    nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_SOURCE);
+}
+#endif
 
 UCS_TEST_F(test_arch, nt_buffer_transfer_nt_dst) {
     nt_buffer_transfer_test(UCS_ARCH_MEMCPY_NT_DEST);

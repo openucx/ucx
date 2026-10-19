@@ -104,6 +104,7 @@ noinst_HEADERS = \
 	datastruct/bitmap.h \
 	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
+	datastruct/interval_map.h \
 	datastruct/interval_tree.h \
     datastruct/lru.h \
 	datastruct/mpmc.h \
@@ -111,6 +112,7 @@ noinst_HEADERS = \
 	datastruct/mpool_set.inl \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
+	datastruct/rbtree.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/conn_match.h \
@@ -181,6 +183,7 @@ libucs_la_SOURCES = \
 	datastruct/bitmap.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
+	datastruct/interval_map.c \
 	datastruct/interval_tree.c \
 	datastruct/lru.c \
 	datastruct/mpmc.c \
@@ -190,6 +193,7 @@ libucs_la_SOURCES = \
 	datastruct/piecewise_func.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
+	datastruct/rbtree.c \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \
