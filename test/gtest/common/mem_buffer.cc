@@ -242,9 +242,10 @@ void mem_buffer::set_device_context()
 
 #if HAVE_CUDA
     if (is_cuda_supported()) {
-        cudaSetDevice(0);
+        m_default_device = 0;
+        cudaSetDevice(m_default_device);
         /* need to call free as context maybe lazily initialized when calling
-         * cudaSetDevice(0) but calling cudaFree(0) should guarantee context
+         * cudaSetDevice() but calling cudaFree(0) should guarantee context
          * creation upon return */
         cudaFree(0);
     }
@@ -296,7 +297,31 @@ void mem_buffer::set_device(int device)
 #endif
 }
 
+void mem_buffer::check_and_restore_device_context()
+{
+#if HAVE_CUDA
+    cudaError_t cerr;
+    int device;
+
+    if ((m_default_device < 0) || (cudaGetDevice(&device) != cudaSuccess) ||
+        (device == m_default_device)) {
+        return;
+    }
+
+    ADD_FAILURE() << "test left CUDA device " << device
+                  << " as the current device";
+
+    cerr = cudaSetDevice(m_default_device);
+    if (cerr != cudaSuccess) {
+        ADD_FAILURE() << "cudaSetDevice(" << m_default_device
+                      << ") failed: " << cudaGetErrorString(cerr)
+                      << ", later tests run on CUDA device " << device;
+    }
+#endif
+}
+
 size_t mem_buffer::m_bar1_free_size = SIZE_MAX;
+int mem_buffer::m_default_device    = -1;
 
 void mem_buffer::get_bar1_free_size_nvml()
 {
@@ -950,4 +975,24 @@ void mem_buffer::pattern_check(uint64_t seed, size_t length) const {
 
 void mem_buffer::memset(int c) {
     memset(ptr(), size(), c, mem_type());
+}
+
+scoped_cuda_device::scoped_cuda_device(int device) :
+    m_saved_device(mem_buffer::get_device())
+{
+    if (device >= 0) {
+        mem_buffer::set_device(device);
+    }
+}
+
+scoped_cuda_device::~scoped_cuda_device()
+{
+#if HAVE_CUDA
+    /* Must not throw, so report a failure instead of using CUDA_CALL */
+    cudaError_t cerr = cudaSetDevice(m_saved_device);
+    if (cerr != cudaSuccess) {
+        ADD_FAILURE() << "cudaSetDevice(" << m_saved_device
+                      << ") failed: " << cudaGetErrorString(cerr);
+    }
+#endif
 }

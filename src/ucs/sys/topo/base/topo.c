@@ -1188,6 +1188,21 @@ ucs_topo_device_class_is_incomplete_nolock(ucs_topo_device_class_t device_class)
                        device_class);
 }
 
+int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class)
+{
+    int is_incomplete;
+
+    ucs_assertv((device_class > UCS_TOPO_DEVICE_CLASS_UNKNOWN) &&
+                (device_class < UCS_TOPO_DEVICE_CLASS_LAST),
+                "invalid device class %u", device_class);
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    is_incomplete = ucs_topo_device_class_is_incomplete_nolock(device_class);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return is_incomplete;
+}
+
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
     ucs_topo_device_class_t device_class;

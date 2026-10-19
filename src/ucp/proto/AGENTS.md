@@ -42,6 +42,8 @@ should plug in here rather than going through the legacy direct paths.
 - `proto_am.[ch]`/`.inl` — AM-specific shared bits (eager headers).
 - `proto_debug.[ch]` — `ucx_info -p` output, perf-curve dumps.
 - `proto_reconfig.c` — re-running selection on config change.
+- `proto_repost.[ch]` — repost an undelivered operation from one protocol
+  instance.
 - `lane_type.[ch]` — semantic lane identifiers used to map proto choices
   to actual UCT lanes on an ep.
 
