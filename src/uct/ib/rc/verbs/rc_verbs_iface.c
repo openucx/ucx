@@ -101,6 +101,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                   ep->txcnt.ci + count, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
+    uct_rc_ep_reset_reserve(&ep->super);
     uct_rc_verbs_update_tx_res(iface, ep, count);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
