@@ -1449,6 +1449,22 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
+        /* Check MUSA peer-memory drivers. The MUSA runtime and the IB
+         * registration path are intentionally independent: DMA-BUF can be
+         * used without these modules, while peer-memory needs an explicit
+         * kernel integration point. */
+#ifdef HAVE_MUSA
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/module/mt_peermem/version",
+                UCS_MEMORY_TYPE_MUSA);
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/module/mt_peer_mem/version",
+                UCS_MEMORY_TYPE_MUSA);
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/kernel/mm/memory_peers/mt_mem/version",
+                UCS_MEMORY_TYPE_MUSA);
+#endif
+
         /* Check if Intel Xe driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/sys/module/xe/srcversion",
                                       UCS_MEMORY_TYPE_ZE_DEVICE);

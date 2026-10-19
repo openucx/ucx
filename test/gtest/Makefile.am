@@ -118,6 +118,7 @@ gtest_SOURCES = \
 	uct/test_flush.cc \
 	uct/test_many2one_am.cc \
 	uct/test_md.cc \
+	uct/test_musa_contract.cc \
 	uct/test_mm.cc \
 	uct/sm/mm/test_mm_fifo_room.cc \
 	uct/test_mem.cc \
@@ -273,6 +274,20 @@ gtest_SOURCES += \
     uct/ib/test_srd.cc
 endif
 endif # HAVE_IB
+
+if HAVE_MUSA
+gtest_SOURCES += \
+	ucm/musa_hooks.cc \
+	uct/test_musa_copy_md.cc
+
+gtest_CPPFLAGS += \
+	$(MUSA_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(MUSA_LDFLAGS)
+gtest_LDADD += \
+	$(top_builddir)/src/uct/musa/libuct_musa.la \
+	$(MUSA_LIBS)
+endif
 
 if HAVE_CUDA
 gtest_SOURCES += \
