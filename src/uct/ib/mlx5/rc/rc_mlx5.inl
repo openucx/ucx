@@ -1759,7 +1759,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
     if (ucs_unlikely(desc == NULL)) {
         /* in case if no resources available - fallback to bcopy */
         UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
-        desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+        desc->super.handler = uct_rc_ep_short_dm_desc_handler;
         buffer = desc + 1;
 
         /* condition is static-evaluated, no performance penalty */
