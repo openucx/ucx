@@ -50,6 +50,11 @@ public:
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
         memset(&m_send_get_info_params, 0, sizeof(m_send_get_info_params));
+        memset(&m_sgl_send_params, 0, sizeof(m_sgl_send_params));
+        memset(&m_sgl_send_get_info_params, 0,
+               sizeof(m_sgl_send_get_info_params));
+        memset(&m_local_sgl, 0, sizeof(m_local_sgl));
+        memset(&m_remote_sgl, 0, sizeof(m_remote_sgl));
         memset(&m_recv_params, 0, sizeof(m_recv_params));
 
         ucs_assert_always(m_max_outstanding > 0);
