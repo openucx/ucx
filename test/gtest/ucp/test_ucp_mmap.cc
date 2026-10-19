@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -1439,7 +1439,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         UCS_TEST_SKIP_R("need at least 2 network MDs");
     }
 
-    int orig_dev = mem_buffer::get_device();
+    scoped_cuda_device device_guard;
 
     const size_t size = 4096;
     ucp_mem_map_params_t params;
@@ -1461,8 +1461,6 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         ASSERT_UCS_OK(ucp_mem_unmap(ctx, memh));
         mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
     }
-
-    mem_buffer::set_device(orig_dev);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")

@@ -2955,6 +2955,25 @@ ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
     return UCS_ERR_INVALID_PARAM;
 }
 
+/* Handle an error during gpu-nic assignment initialization, when the
+ * assignment mode is AUTO then we log and continue without assignment. */
+static ucs_status_t
+ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
+                                           ucp_gpu_nic_assignment_mode_t mode,
+                                           const char *reason)
+{
+    if (context->config.ext.gpu_nic_assignment_mode ==
+        UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+        ucs_diag("gpu-nic assignment is disabled: %s", reason);
+        return UCS_OK;
+    }
+
+    ucs_error("%s for gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
+              reason, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -2982,20 +3001,18 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
+    /* GPUs hidden from this process are missing from the topology groups, so
+     * processes with different visible GPUs would not build the same groups */
+    if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
+        return ucp_context_gpu_nic_assignment_unavailable(
+                context, mode, "incomplete gpu discovery");
+    }
+
     ucp_context_gpu_nic_assignment_net_device_filter_init(context,
                                                           &net_device_filter);
     if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
-        if (context->config.ext.gpu_nic_assignment_mode ==
-            UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-            ucs_diag("gpu-nic assignment is disabled: no assignable network "
-                     "devices");
-            return UCS_OK;
-        }
-
-        ucs_error("no assignable network devices for gpu-nic assignment mode "
-                  "%s, set UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
-                  ucp_gpu_nic_assignment_modes[mode]);
-        return UCS_ERR_INVALID_PARAM;
+        return ucp_context_gpu_nic_assignment_unavailable(
+                context, mode, "no assignable network devices");
     }
 
     status = ucs_topo_build_groups(&net_device_filter, &groups);
