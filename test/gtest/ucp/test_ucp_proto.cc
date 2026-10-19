@@ -1193,11 +1193,11 @@ protected:
                 << "mem_type=" << ucs_memory_type_names[mem_type];
     }
 
-    /* Eager bcopy protocols set a SHORT memtype operation, but pack the payload
-     * with ucp_dt_contig_pack(), which memcpy-s CPU-accessible memory instead of
+    /* Eager payload copies are estimated with a SHORT memtype operation, but
+     * ucp_dt_contig_pack()/unpack() memcpy CPU-accessible memory instead of
      * using the memtype endpoint. Estimating those copies with the copy
-     * interface bandwidth prices eager out of small messages, so rendezvous is
-     * selected from the very first byte. */
+     * interface bandwidth prices eager out of small messages, so rendezvous
+     * is selected from the very first byte. */
     void check_eager_proto_selected(ucs_memory_type_t mem_type,
                                     size_t msg_length)
     {
