@@ -36,7 +36,7 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
      ucs_offsetof(uct_rocm_copy_md_config_t, rcache),
      UCS_CONFIG_TYPE_TABLE(ucs_config_rcache_table)},
 
-    {"DMABUF", "no",
+    {"DMABUF", "try",
      "Enable using cross-device dmabuf file descriptor",
      ucs_offsetof(uct_rocm_copy_md_config_t, enable_dmabuf),
      UCS_CONFIG_TYPE_TERNARY},
@@ -282,6 +282,16 @@ static ucs_status_t uct_rocm_copy_mem_free(uct_md_h md, uct_mem_h memh)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_rocm_copy_mem_query(uct_md_h uct_md, const void *addr, size_t length,
+                        uct_md_mem_attr_v2_t *mem_attr_p)
+{
+    uct_rocm_copy_md_t *md = ucs_derived_of(uct_md, uct_rocm_copy_md_t);
+
+    return uct_rocm_base_mem_query(uct_md, addr, length, md->have_dmabuf,
+                                   mem_attr_p);
+}
+
 static uct_md_ops_t md_ops = {
     .close              = uct_rocm_copy_md_close,
     .query              = uct_rocm_copy_md_query,
@@ -290,7 +300,7 @@ static uct_md_ops_t md_ops = {
     .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_rocm_copy_mem_reg,
     .mem_dereg          = uct_rocm_copy_mem_dereg,
-    .mem_query          = uct_rocm_base_mem_query,
+    .mem_query          = uct_rocm_copy_mem_query,
     .mkey_pack          = uct_rocm_copy_mkey_pack,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_rocm_base_detect_memory_type,
@@ -351,7 +361,7 @@ static uct_md_ops_t md_rcache_ops = {
     .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_rocm_copy_mem_rcache_reg,
     .mem_dereg          = uct_rocm_copy_mem_rcache_dereg,
-    .mem_query          = uct_rocm_base_mem_query,
+    .mem_query          = uct_rocm_copy_mem_query,
     .mkey_pack          = uct_rocm_copy_mkey_pack,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_rocm_base_detect_memory_type,
@@ -428,7 +438,8 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
     have_dmabuf = uct_rocm_base_is_dmabuf_supported();
     if ((md_config->enable_dmabuf == UCS_YES) && !have_dmabuf) {
         ucs_error("ROCm dmabuf support requested but not found");
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
     }
 
     if (md_config->enable_dmabuf != UCS_NO) {

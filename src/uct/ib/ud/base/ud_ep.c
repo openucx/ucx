@@ -680,17 +680,21 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto err_ep_destroy;
     }
 
-    status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
-                                        conn_sn, ep);
+    peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
+    status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
+                                              ep->path_index, peer_address);
     if (status != UCS_OK) {
         goto err_ep_disconnect;
     }
 
-    peer_address = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
-                                             ep_get_peer_address, ep);
+    status = uct_ud_ep_resolve_peer_address(ep, ib_addr, peer_address);
+    if (status != UCS_OK) {
+        goto err_ep_disconnect;
+    }
 
-    status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
-                                              ep->path_index, peer_address);
+    /* Connection matching gets its removal key from the resolved endpoint. */
+    status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
+                                        conn_sn, ep);
     if (status != UCS_OK) {
         goto err_ep_disconnect;
     }
@@ -732,6 +736,7 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     const uct_ud_ep_addr_t *ep_addr = (const uct_ud_ep_addr_t*)uct_ep_addr;
     uct_ib_device_t *dev            = uct_ib_iface_device(&iface->super);
     void *peer_address;
+    ucs_status_t status;
     char buf[128];
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
@@ -750,11 +755,15 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num));
 
-    peer_address = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
-                                             ep_get_peer_address, ep);
-    return uct_ud_iface_unpack_peer_address(iface, ib_addr,
-                                            &ep_addr->iface_addr,
-                                            ep->path_index, peer_address);
+    peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
+    status = uct_ud_iface_unpack_peer_address(iface, ib_addr,
+                                              &ep_addr->iface_addr,
+                                              ep->path_index, peer_address);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ud_ep_resolve_peer_address(ep, ib_addr, peer_address);
 }
 
 static UCS_F_ALWAYS_INLINE void

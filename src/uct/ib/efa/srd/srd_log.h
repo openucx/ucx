@@ -17,8 +17,7 @@
 
 
 void uct_srd_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
-                         void *data, size_t length, size_t valid_length,
-                         char *buffer, size_t max);
+                         void *data, size_t length, char *buffer, size_t max);
 
 
 const char *uct_srd_ctl_id_to_string(uct_srd_ctl_id_t id);

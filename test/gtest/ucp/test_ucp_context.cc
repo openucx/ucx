@@ -74,6 +74,175 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
 
+class test_ucp_context_gpu_nic_assignment : public test_ucp_context {
+protected:
+    /* Run ucp_init() with the given assignment mode, and optionally one more
+     * configuration option */
+    void init_context(const char *mode, const char *name, const char *value,
+                      ucs_status_t *status_p, ucp_context_h *ucph_p)
+    {
+        ucs::handle<ucp_config_t*> config;
+
+        /* A failed assertion returns before ucp_init() */
+        *status_p = UCS_ERR_NO_PROGRESS;
+
+        UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                               ucp_config_read, NULL, NULL);
+        ASSERT_UCS_OK(ucp_config_modify(config.get(), "GPU_NIC_ASSIGNMENT_MODE",
+                                        mode));
+        if (name != NULL) {
+            ASSERT_UCS_OK(ucp_config_modify(config.get(), name, value));
+        }
+
+        const scoped_log_handler slh(hide_errors_logger);
+        *status_p = ucp_init(&get_variant_ctx_params(), config.get(), ucph_p);
+    }
+
+    void check_no_assignable_nic(const char *mode, const char *tls,
+                                 ucs_status_t exp_status)
+    {
+        ucp_context_h ucph;
+        ucs_status_t status;
+
+        init_context(mode, "TLS", tls, &status, &ucph);
+
+        EXPECT_EQ(exp_status, status);
+        if (status == UCS_OK) {
+            EXPECT_EQ(nullptr, ucph->gpu_nic_assignment);
+            ucp_cleanup(ucph);
+        }
+    }
+
+    /* Expect ucp_init() to fail when the assignment is combined with a
+     * conflicting configuration */
+    void expect_init_rejected(const char *name, const char *value)
+    {
+        ucp_context_h ucph;
+        ucs_status_t status;
+        bool has_assignment;
+
+        /* Without an assignment, ucp_init() fails or succeeds regardless of
+         * the conflicting configuration */
+        init_context("flip", NULL, NULL, &status, &ucph);
+        if (status == UCS_ERR_INVALID_PARAM) {
+            UCS_TEST_SKIP_R("no assignable network devices on this host");
+        }
+
+        ASSERT_UCS_OK(status);
+        has_assignment = (ucph->gpu_nic_assignment != nullptr);
+        ucp_cleanup(ucph);
+        if (!has_assignment) {
+            UCS_TEST_SKIP_R("no gpu-nic assignment on this host");
+        }
+
+        init_context("flip", name, value, &status, &ucph);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        if (status == UCS_OK) {
+            ucp_cleanup(ucph);
+        }
+    }
+};
+
+/* shm has no network devices, and the tcp md has no UCT_MD_FLAG_REG, so
+ * neither provides a assignable NICs */
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, auto_mode_shm)
+{
+    check_no_assignable_nic("auto", "shm", UCS_OK);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, auto_mode_tcp)
+{
+    check_no_assignable_nic("auto", "tcp", UCS_OK);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_shm)
+{
+    check_no_assignable_nic("flip", "shm", UCS_ERR_INVALID_PARAM);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_tcp)
+{
+    check_no_assignable_nic("flip", "tcp", UCS_ERR_INVALID_PARAM);
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, rejects_single_net_device)
+{
+    expect_init_rejected("SINGLE_NET_DEVICE", "y");
+}
+
+UCS_TEST_P(test_ucp_context_gpu_nic_assignment, rejects_old_protocols)
+{
+    expect_init_rejected("PROTO_ENABLE", "n");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context_gpu_nic_assignment, all, "all")
+
+class test_ucp_context_max_rails : public test_ucp_context {
+protected:
+    void expect_init_rejected(const char *name)
+    {
+        const std::string value = std::to_string(UCP_MAX_LANES + 1);
+        ucs::handle<ucp_config_t*> config;
+        ucp_context_h ucph;
+        ucs_status_t status;
+        size_t num_errors;
+
+        UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
+                               ucp_config_read, NULL, NULL);
+        ASSERT_UCS_OK(ucp_config_modify(config.get(), name, value.c_str()));
+
+        num_errors = m_errors.size();
+        {
+            const scoped_log_handler slh(hide_errors_logger);
+            status = ucp_init(&get_variant_ctx_params(), config.get(), &ucph);
+        }
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        if (status == UCS_OK) {
+            ucp_cleanup(ucph);
+        }
+
+        ASSERT_GT(m_errors.size(), num_errors);
+        EXPECT_NE(std::string::npos,
+                  m_errors.back().find(std::string("UCX_") + name + " " +
+                                       value + " exceeds"))
+                << m_errors.back();
+    }
+};
+
+UCS_TEST_P(test_ucp_context_max_rails, max_eager_rails_above_limit)
+{
+    expect_init_rejected("MAX_EAGER_RAILS");
+}
+
+UCS_TEST_P(test_ucp_context_max_rails, max_rndv_rails_above_limit)
+{
+    expect_init_rejected("MAX_RNDV_RAILS");
+}
+
+UCS_TEST_P(test_ucp_context_max_rails, max_rma_rails_above_limit)
+{
+    expect_init_rejected("MAX_RMA_RAILS");
+}
+
+UCS_TEST_P(test_ucp_context_max_rails, max_rails_at_limit)
+{
+    const unsigned max_lanes = UCP_MAX_LANES;
+    const std::string value  = std::to_string(max_lanes);
+
+    modify_config("MAX_EAGER_RAILS", value);
+    modify_config("MAX_RNDV_RAILS", value);
+    modify_config("MAX_RMA_RAILS", value);
+
+    entity *e = create_entity();
+    EXPECT_EQ(max_lanes, e->ucph()->config.ext.max_eager_lanes);
+    EXPECT_EQ(max_lanes, e->ucph()->config.ext.max_rndv_lanes);
+    EXPECT_EQ(max_lanes, e->ucph()->config.ext.max_rma_lanes);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context_max_rails, all, "all")
+
 class test_ucp_aliases : public test_ucp_context {
 };
 
@@ -534,10 +703,12 @@ protected:
             }
         }
 
-        if (count > 0) {
-            /* Assuming we have all devices from 0 to max_idx */
-            EXPECT_EQ(max_idx + 1, count) << "Expected " << (max_idx + 1)
-                                          << " mlx5 devices, found: " << count;
+         /* Range tests assume devices mlx5_0 .. mlx5_<max_idx>. This assumption
+         * can break in virtualized environments with devices that may use any
+         * idx. */
+        if ((count > 0) && ((max_idx + 1) != count)) {
+            UCS_TEST_SKIP_R("mlx5 devices are not numbered from 0 to " +
+                            std::to_string(max_idx));
         }
 
         return count;

@@ -232,14 +232,8 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         ucs_assert(iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
 #endif
 
-        /* Save last completed WQE. TX QP resources are reserved until purge. */
-        ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
-                                     (ep->tx.wq.bb_max -
-                                      uct_rc_txqp_available(&ep->super.txqp));
+        uct_rc_mlx5_ep_save_ft_ci(ep);
         ep->err_handler_inprogress = 1;
-
-        ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
-                  ep->tx.wq.sw_pi);
 
         log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, UCS_OK,
                                                    ep_status);
@@ -350,7 +344,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (attr->super.cap.max_send_wr) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                       iface->tx.mmio_mode, txwq,
+                                       iface->tx.mmio_mode,
+                                       iface->tx.bf_copy_mode, txwq,
                                        qp->verbs.qp);
         if (status != UCS_OK) {
             ucs_error("Failed to get mlx5 QP information");
@@ -865,6 +860,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
+    self->tx.bf_copy_mode     = mlx5_config->super.bf_copy_mode;
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
 
@@ -1072,15 +1068,6 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return status;
 }
 
-static void uct_rc_mlx5_iface_fill_ext_query_attr(
-        uct_iface_attr_v2_t *iface_attr,
-        uct_ib_mlx5_ext_iface_query_attr_t *ext_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        ext_attr->field_mask |= UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
-    }
-}
-
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
                                  uct_iface_attr_v2_t *iface_attr)
@@ -1116,8 +1103,9 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
 
     rc_ep = uct_rc_iface_lookup_ep(iface, remote_qpn);
     if (rc_ep == NULL) {
-        ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
-        return UCS_ERR_INVALID_PARAM;
+        /* A resent token can name a QP that failover already destroyed. */
+        ucs_debug("rc mlx5: no ep for QPN %u", remote_qpn);
+        return UCS_ERR_NO_ELEM;
     }
 
     ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_base_ep_t);
@@ -1143,7 +1131,6 @@ static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                            uct_iface_attr_v2_t *iface_attr)
 {
-    uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {0};
     uct_rc_mlx5_iface_common_t *mlx5_iface;
     uct_ib_mlx5_md_t *md;
     size_t max_sgl;
@@ -1164,6 +1151,10 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
     md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        }
+
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
             status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
             if (status != UCS_OK) {
@@ -1208,21 +1199,6 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
         }
     }
 
-    uct_rc_mlx5_iface_fill_ext_query_attr(iface_attr, &ext_attr);
-
-    if (ext_attr.field_mask == 0) {
-        return UCS_OK;
-    }
-
-    status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        iface_attr->cap.flags |= ext_attr.cap.flags;
-    }
-
     return UCS_OK;
 }
 
@@ -1239,7 +1215,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

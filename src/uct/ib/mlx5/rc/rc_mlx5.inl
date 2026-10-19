@@ -1759,7 +1759,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
     if (ucs_unlikely(desc == NULL)) {
         /* in case if no resources available - fallback to bcopy */
         UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
-        desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+        desc->super.handler = uct_rc_ep_short_dm_desc_handler;
         buffer = desc + 1;
 
         /* condition is static-evaluated, no performance penalty */
@@ -2019,9 +2019,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
                                                        uct_rc_mlx5_iface_common_t);
     uint8_t fm_ce_se                  = (comp == NULL) ? wqe_flags :
                                         (wqe_flags | MLX5_WQE_CTRL_CQ_UPDATE);
-    uint16_t sn;
 
-    sn = ep->tx.wq.sw_pi;
     uct_rc_mlx5_txqp_dptr_post_iov(iface, IBV_QPT_RC,
                                    &ep->super.txqp, &ep->tx.wq, opcode,
                                    iov, iovcnt,
@@ -2032,9 +2030,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_rc_mlx5_base_ep_zcopy_post(
                                    0, fm_ce_se, 0,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
-    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp, sn,
-                              op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
-                              iov, iovcnt, iov_total_length);
+    uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp,
+                              ep->tx.wq.sig_pi,
+                              op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, iov,
+                              iovcnt, iov_total_length);
 
     return UCS_INPROGRESS;
 }

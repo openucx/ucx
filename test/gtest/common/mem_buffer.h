@@ -97,6 +97,10 @@ public:
     /* Set the current CUDA device */
     static void set_device(int device);
 
+    /* If the current CUDA device is not the one set by set_device_context(),
+     * fail the current test and restore the device */
+    static void check_and_restore_device_context();
+
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
@@ -124,7 +128,7 @@ public:
     /* Allocation mode. */
     enum class alloc_mode {
         DEFAULT, /* Default allocation mode, using cudaMalloc */
-        ASYNC    /* Asynchronous allocation mode, using cudaMallocAsync */
+        ASYNC    /* Asynchronous CUDA allocation mode */
     };
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
@@ -178,6 +182,7 @@ private:
                                 const uint64_t mem_types);
 
     static size_t           m_bar1_free_size;
+    static int              m_default_device;
 
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;
@@ -205,6 +210,26 @@ public:
 
 private:
     void *m_ptr;
+};
+
+
+/**
+ * Restores the CUDA device that was current at construction, also when the
+ * scope is left early by a failed assertion or a skip.
+ */
+class scoped_cuda_device {
+public:
+    /* Save the current device, and switch to @a device unless it is -1 */
+    explicit scoped_cuda_device(int device = -1);
+
+    ~scoped_cuda_device();
+
+    /* Non-copyable, non-moveable */
+    scoped_cuda_device(const scoped_cuda_device&) = delete;
+    scoped_cuda_device &operator=(const scoped_cuda_device&) = delete;
+
+private:
+    int m_saved_device;
 };
 
 
