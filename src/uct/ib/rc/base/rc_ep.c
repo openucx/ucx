@@ -217,7 +217,10 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
 }
 
 #ifndef NVALGRIND
-static struct iovec *uct_rc_ep_send_op_alloc_elems(uct_rc_iface_send_op_t *op,
+/* Allocate op->iov, which keeps the buffer ranges of both IOV and SGL ops so
+ * they can be marked as defined on completion. Returns NULL if not running
+ * under Valgrind (nothing to save), or if the allocation failed. */
+static struct iovec *uct_rc_ep_send_op_alloc_iovec(uct_rc_iface_send_op_t *op,
                                                    size_t count,
                                                    const char *name)
 {
@@ -237,7 +240,7 @@ void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
     size_t op_iovcnt = iovcnt;
     ucs_iov_iter_t iov_iter;
 
-    if (uct_rc_ep_send_op_alloc_elems(op, iovcnt, "rc_get_zcopy_iov") == NULL) {
+    if (uct_rc_ep_send_op_alloc_iovec(op, iovcnt, "rc_get_zcopy_iov") == NULL) {
         return;
     }
 
@@ -255,7 +258,7 @@ void uct_rc_ep_send_op_set_sgl(uct_rc_iface_send_op_t *op,
 
     ucs_assert(count > 0);
 
-    if (uct_rc_ep_send_op_alloc_elems(op, count, "rc_get_sgl_zcopy_iov") ==
+    if (uct_rc_ep_send_op_alloc_iovec(op, count, "rc_get_sgl_zcopy_iov") ==
         NULL) {
         return;
     }
