@@ -1175,7 +1175,7 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, pipeline,
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_fc_pending,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=8K",
+           "RNDV_FRAG_WORKER_MAX_MEM=16K",
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
     rndv_fc_pending_abort_test(receiver(), UCP_WORKER_RNDV_FC_OP_RTR);
@@ -1184,7 +1184,7 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_fc_pending,
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_fc_pending,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
-           "RNDV_FRAG_WORKER_MAX_MEM=8K",
+           "RNDV_FRAG_WORKER_MAX_MEM=16K",
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
     rndv_fc_pending_abort_test(sender(), UCP_WORKER_RNDV_FC_OP_PUT);
@@ -1200,14 +1200,13 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, rtr_mtype_alloc_failure,
 }
 
 /* A single fragment, since the abort of a pipelined send does not report the
- * error to the send request (see ucp_proto_rndv_stub_abort()). No reserved
- * pool, which a single fragment would exhaust while the shared pool would be
- * created only after the allocation failure is set up. */
+ * error to the send request (see ucp_proto_rndv_stub_abort()). The one
+ * fragment of the reserved pool is held, so the request falls through to the
+ * shared pool and fails to grow it. */
 UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_alloc_failure,
            "RNDV_FRAG_SIZE=host:8K,cuda:8K",
            "RNDV_FRAG_ALLOC_COUNT=host:1,cuda:1",
            "RNDV_FRAG_WORKER_MAX_MEM=32K",
-           "RNDV_FRAG_RTR_RATIO=1",
            "RNDV_FRAG_MEM_TYPE=cuda")
 {
     rndv_fc_alloc_failure_abort_test(sender(), 8 * UCS_KBYTE);

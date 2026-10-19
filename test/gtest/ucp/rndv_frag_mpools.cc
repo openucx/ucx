@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
+#include <ucp/rndv/rndv.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
@@ -18,7 +19,30 @@ rndv_frag_mpools::rndv_frag_mpools(ucp_worker_h worker,
                                    ucs_memory_type_t mem_type) :
     m_worker(worker)
 {
+    std::vector<ucs_sys_device_t> sys_devs;
+    ucp_mem_desc_t *mdesc;
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    for (khiter_t iter = kh_begin(&worker->mpool_hash);
+         iter != kh_end(&worker->mpool_hash); ++iter) {
+        if (kh_exist(&worker->mpool_hash, iter) &&
+            (kh_key(&worker->mpool_hash, iter).mem_type == mem_type)) {
+            sys_devs.push_back(kh_key(&worker->mpool_hash, iter).sys_dev);
+        }
+    }
+
+    /* A pool is created by the first allocation from it, so the other pool
+     * of the same device may not exist yet */
+    for (ucs_sys_device_t sys_dev : sys_devs) {
+        for (unsigned pool : {UCP_WORKER_RNDV_FRAG_POOL_SHARED,
+                              UCP_WORKER_RNDV_FRAG_POOL_RESERVED}) {
+            if (ucp_rndv_mpool_get(worker, mem_type, sys_dev, pool, &mdesc) ==
+                UCS_OK) {
+                ucs_mpool_put_inline(mdesc);
+            }
+        }
+    }
 
     for (khiter_t iter = kh_begin(&worker->mpool_hash);
          iter != kh_end(&worker->mpool_hash); ++iter) {
@@ -106,13 +130,13 @@ void rndv_frag_mpools::restore_alloc()
 
 bool rndv_frag_mpools::can_grow() const
 {
-    bool can_grow = !m_mpools.empty();
+    bool can_grow = false;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(m_worker);
 
     for (ucs_mpool_t *mpool : m_mpools) {
         /* With no free fragment, empty means the quota is exhausted */
-        can_grow = can_grow && !ucs_mpool_is_empty(mpool);
+        can_grow = can_grow || !ucs_mpool_is_empty(mpool);
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(m_worker);

@@ -853,12 +853,13 @@ unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
     frag_size = context->config.ext.rndv_frag_size[frag_mem_type];
     ucs_assert_always(frag_size > 0);
 
+    /* One fragment is kept for PUT/GET and at least one is shared */
     max_frags = max_mem / frag_size;
-    if (max_frags == 0) {
-        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM %zu is smaller than one %s "
-                 "fragment (%zu), using one fragment",
+    if (max_frags < 2) {
+        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM %zu is smaller than two %s "
+                 "fragments (%zu each), using two fragments",
                  max_mem, ucs_memory_type_names[frag_mem_type], frag_size);
-        return 1;
+        return 2;
     }
 
     return ucs_min(max_frags, UINT_MAX);
@@ -870,11 +871,14 @@ unsigned ucp_proto_rndv_frag_shared_elems(ucp_context_h context,
     const double ratio = context->config.ext.rndv_frag_rtr_ratio;
     unsigned shared;
 
-    /* A reserve needs at least two fragments: one to keep and one to share */
-    if ((max_elems == UINT_MAX) || (ratio >= 1.0) || (max_elems < 2)) {
+    if (max_elems == UINT_MAX) {
         return max_elems;
     }
 
+    /* Keep at least one fragment for PUT/GET and share at least one, see
+     * ucp_proto_rndv_frag_max_elems() */
+    ucs_assert(ratio < 1.0);
+    ucs_assert(max_elems >= 2);
     shared = ucs_min((unsigned)(max_elems * ratio), max_elems - 1);
     return ucs_max(shared, 1);
 }

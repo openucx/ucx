@@ -19,8 +19,9 @@ extern "C" {
 
 /**
  * Controls the rendezvous fragment memory pools of one memory type on a
- * worker. Requires the pools to exist, i.e. a transfer which used fragments of
- * that memory type must have completed on the worker.
+ * worker. Requires a pool to exist, i.e. a transfer which used fragments of
+ * that memory type must have completed on the worker; the other pool of the
+ * same device is created if needed.
  */
 class rndv_frag_mpools {
 public:
@@ -38,8 +39,9 @@ public:
     void fail_alloc();
     void restore_alloc();
 
-    /* Whether every pool can still grow, so that fail_alloc() takes effect
-     * for the next allocation which finds no free fragment */
+    /* Whether some pool can still grow, so that fail_alloc() takes effect
+     * for the next allocation which finds no free fragment: a request which
+     * finds the quota of a pool exhausted tries the next one */
     bool can_grow() const;
 
     size_t num_pools() const

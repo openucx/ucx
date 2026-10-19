@@ -1045,23 +1045,28 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_mdesc_no_rcache)
 UCS_TEST_SKIP_COND_P(test_ucp_mmap, rndv_mpool_quota_exhausted,
                      (get_variant_value() == VARIANT_PROTO_DISABLE),
                      "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:2",
-                     "RNDV_FRAG_WORKER_MAX_MEM=8K", "RNDV_FRAG_RTR_RATIO=1")
+                     "RNDV_FRAG_WORKER_MAX_MEM=8K")
 {
-    ucp_mem_desc_t *mdesc1;
-    ucp_mem_desc_t *mdesc2;
-    ucp_mem_desc_t *mdesc3;
     ucp_worker_h worker = sender().worker();
+    ucp_mem_desc_t *shared;
+    ucp_mem_desc_t *reserved;
+    ucp_mem_desc_t *mdesc;
 
+    /* Two fragments: one in each pool */
     ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc1));
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &shared));
     ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc2));
+                                 UCP_WORKER_RNDV_FRAG_POOL_RESERVED,
+                                 &reserved));
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
-                             UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc3));
+                             UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                             UCP_WORKER_RNDV_FRAG_POOL_RESERVED, &mdesc));
 
-    ucs_mpool_put(mdesc2);
-    ucs_mpool_put(mdesc1);
+    ucs_mpool_put(reserved);
+    ucs_mpool_put(shared);
 }
 
 /* 4 fragments: 3 in the shared pool for any operation, 1 kept in the

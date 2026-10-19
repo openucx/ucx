@@ -93,8 +93,8 @@ ucp_proto_rndv_mtype_frag_has_reserve(ucp_context_h context)
 {
     const size_t max_mem = context->config.ext.rndv_frag_worker_max_mem;
 
-    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO) &&
-           (context->config.ext.rndv_frag_rtr_ratio < 1.0);
+    /* A reserved pool exists whenever the quota is limited */
+    return (max_mem != UCS_MEMUNITS_INF) && (max_mem != UCS_MEMUNITS_AUTO);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
