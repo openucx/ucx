@@ -5,6 +5,7 @@
 * See file LICENSE for terms.
 */
 
+#include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_memheap.h"
 
 extern "C" {
@@ -12,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
@@ -430,6 +432,216 @@ UCS_TEST_P(test_ucp_rma_dmabuf, put_registration_offset)
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_dmabuf, ib_cuda, "ib,cuda_copy")
 
 
+class test_ucp_rma_gpu_nic :
+    protected gpu_nic_assignment_checks,
+    public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_rma_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_assignment_modes)),
+                           gpu_nic_assignment_modes);
+    }
+
+    void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA is not supported");
+        }
+
+        modify_config("GPU_NIC_ASSIGNMENT_MODE",
+                      gpu_nic_assignment_modes[get_variant_value(1)]);
+        /* Enough lanes to use every NIC assigned to a GPU */
+        modify_config("MAX_RMA_LANES", "8");
+        modify_config("MAX_RNDV_LANES", "8");
+        /* Count protocol selections, which expect_assigned_lanes() checks */
+        modify_config("PROTO_INFO", "used");
+        test_ucp_rma::init();
+    }
+
+protected:
+    static void get_rma_variants(std::vector<ucp_test_variant> &variants)
+    {
+        /* The base flags stay clear: flush worker, no user memory handle */
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    void test_cuda_mem_types(send_func_t send_func,
+                             const std::string &proto_name,
+                             size_t max_size = 16 * UCS_MBYTE)
+    {
+        if (!is_buffer_gpu_assigned(sender().ucph())) {
+            UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
+        }
+
+        /* The assignment follows the local buffer, so it must be CUDA */
+        test_message_sizes(send_func, 128, max_size, UCS_MEMORY_TYPE_CUDA,
+                           UCS_MEMORY_TYPE_CUDA, 0);
+        expect_assigned_lanes(entities(), proto_name);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, put_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b),
+                        "put/offload/zcopy");
+}
+
+UCS_TEST_P(test_ucp_rma_gpu_nic, get_blocking)
+{
+    test_cuda_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b),
+                        "get/zcopy");
+}
+
+/* Network lanes only, since the assignment restricts only NIC lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_gpu_nic, rcx_cuda, "rc_x,cuda_copy")
+
+
+static const char *gpu_nic_rndv_schemes[] = {"put_zcopy", "put_ppln"};
+
+/* Run the RMA rendezvous protocols by the RTR flow: the side receiving the data
+ * sends RTR, and the other side writes the data by rndv/put/zcopy, or by
+ * rndv/put/mtype from host staging fragments. */
+class test_ucp_rma_rndv_gpu_nic : public test_ucp_rma_gpu_nic {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
+                           UCS_MASK(
+                                   ucs_static_array_size(gpu_nic_rndv_schemes)),
+                           gpu_nic_rndv_schemes);
+    }
+
+    test_ucp_rma_rndv_gpu_nic()
+    {
+        /* The RMA rendezvous put/get protocols are a fallback of the direct
+         * zcopy protocols; keep only the rendezvous ones so they are always
+         * selected. */
+        modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
+    }
+
+    void init() override
+    {
+        modify_config("RNDV_SCHEME",
+                      gpu_nic_rndv_schemes[get_variant_value(2)]);
+        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+            modify_config("RNDV_FRAG_MEM_TYPES", "host");
+            modify_config("RNDV_FRAG_SIZE", "host:512K");
+
+            /* TODO: Remove when rndv/put/mtype implements reset. CI exports
+             * UCX_PROTO_REQUEST_RESET=y, which restarts its pending requests */
+            modify_config("PROTO_REQUEST_RESET", "n");
+        }
+
+        test_ucp_rma_gpu_nic::init();
+    }
+
+protected:
+    static constexpr int RNDV_SCHEME_PUT_PPLN = 1;
+    static constexpr size_t PPLN_FRAG_SIZE    = 512 * UCS_KBYTE;
+
+    bool has_cuda_net_md()
+    {
+        const ucp_context_h context = sender().ucph();
+        const ucp_tl_resource_desc_t *rsc;
+
+        ucs_carray_for_each(rsc, context->tl_rscs, context->num_tls) {
+            if ((rsc->tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) &&
+                (context->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
+                 UCS_BIT(rsc->md_index))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void test_rtr_flow(send_func_t send_func)
+    {
+        if (get_variant_value(2) == RNDV_SCHEME_PUT_PPLN) {
+            /* Larger messages fall back to the zero-copy protocols */
+            test_cuda_mem_types(send_func, "rndv/put/mtype", PPLN_FRAG_SIZE);
+            return;
+        }
+
+        /* Includes registration by dmabuf, which the MD attributes miss */
+        if (!has_cuda_net_md()) {
+            UCS_TEST_SKIP_R(
+                    "no network memory domain can register CUDA memory");
+        }
+
+        test_cuda_mem_types(send_func, "rndv/put/zcopy");
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, put_blocking)
+{
+    test_rtr_flow(static_cast<send_func_t>(&test_ucp_rma::put_b));
+}
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic, get_blocking)
+{
+    test_rtr_flow(static_cast<send_func_t>(&test_ucp_rma::get_b));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic, rcx_cuda,
+                              "rc_x,cuda_copy")
+
+
+/* Without GPUDirect RDMA no NIC registers the responder's CUDA buffer, so the
+ * peer's rkey has no sys_dev, and the responder must detect the buffer's GPU
+ * locally to keep its host-staged rndv/put/mtype on the NICs assigned to it */
+class test_ucp_rma_rndv_gpu_nic_no_gdr : public test_ucp_rma_rndv_gpu_nic {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
+                           UCS_BIT(RNDV_SCHEME_PUT_PPLN), gpu_nic_rndv_schemes);
+    }
+
+    void init() override
+    {
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        test_ucp_rma_rndv_gpu_nic::init();
+    }
+
+    /* RTR_REQ carries this rkey's sys_dev, which must stay unknown so the
+     * responder has to detect its buffer's GPU locally */
+    void get_b_expect_empty_rkey(size_t size, void *expected_data,
+                                 ucp_mem_h memh, void *target_ptr,
+                                 ucp_rkey_h rkey, void *arg)
+    {
+        EXPECT_EQ(0, rkey->md_map);
+        EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+                  ucp_rkey_config(sender().worker(), rkey)->key.sys_dev);
+        get_b(size, expected_data, memh, target_ptr, rkey, arg);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_no_gdr, get_blocking)
+{
+    if (has_cuda_net_md()) {
+        UCS_TEST_SKIP_R("a network memory domain can register CUDA memory");
+    }
+
+    if (!is_buffer_gpu_assigned(receiver().ucph())) {
+        UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
+    }
+
+    /* The initiator's buffer is host memory, so the put can land */
+    test_message_sizes(
+            static_cast<send_func_t>(
+                    &test_ucp_rma_rndv_gpu_nic_no_gdr::get_b_expect_empty_rkey),
+            128, PPLN_FRAG_SIZE, UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA, 0);
+    expect_assigned_lanes(entities(), "rndv/put/mtype");
+}
+
+/* cuda_ipc is reachable intra-node and would resolve the sys_dev */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic_no_gdr, rcx_cuda,
+                              "rc_x,cuda_copy")
+
+
 class test_ucp_rma_rndv : public test_ucp_rma {
 public:
     static constexpr size_t SIZE = 512 * UCS_KBYTE;
@@ -442,10 +654,9 @@ public:
 
     test_ucp_rma_rndv()
     {
-        /* The RMA rendezvous put/get protocols are gated to NVIDIA Vera CPUs in
-         * ucp_proto_rma_rndv_probe_check(); force-enable them so the tests can
-         * run on any CPU. */
-        modify_config("RMA_PPLN_ENABLE", "y");
+        /* The RMA rendezvous put/get protocols are a fallback of the direct
+         * zcopy protocols; keep only the rendezvous ones so they are always
+         * selected. */
         modify_config("PROTOS", "put/rndv,get/rndv,rndv/*");
     }
 
