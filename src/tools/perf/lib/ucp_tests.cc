@@ -1229,13 +1229,19 @@ private:
     ucp_atomic_op_t     m_atomic_op;
 };
 
+template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
+static UCS_F_NOINLINE ucs_status_t ucp_perf_run_test(ucx_perf_context_t *perf)
+{
+    ucp_perf_test_runner<CMD, TYPE, FLAGS> r(*perf);
+    return r.run();
+}
+
 #define TEST_CASE(_perf, _cmd, _type, _flags, _mask) \
     if (((_perf)->params.command == (_cmd)) && \
         ((_perf)->params.test_type == (_type)) && \
         (((_perf)->params.flags & (_mask)) == (_flags))) \
     { \
-        ucp_perf_test_runner<_cmd, _type, _flags> r(*_perf); \
-        return r.run(); \
+        return ucp_perf_run_test<_cmd, _type, _flags>(_perf); \
     }
 
 #define TEST_CASE_ALL_STREAM(_perf, _case) \
