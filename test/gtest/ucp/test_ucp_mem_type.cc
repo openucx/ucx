@@ -295,7 +295,7 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
     const char *mem_type_name             =
             ucs_memory_type_names[send_mem_type];
     ucp_request_param_t param;
-    mem_handle_t send_memh, recv_memh;
+    mem_handle_t pad_memh, send_memh, recv_memh;
     std::unique_ptr<mem_buffer> app_buf;
     std::string proto_name, proto_desc;
     void *send_buf, *recv_buf;
@@ -351,6 +351,11 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
         app_buf.reset(new mem_buffer(length, send_mem_type));
         send_buf = app_buf->ptr();
     } else {
+        /* Keep another buffer of the same size allocated, so that a driver
+         * which sub-allocates both from one memory pool places the source at a
+         * nonzero offset in the pool, where a DMA-BUF exported for an
+         * allocation not created for export does not describe the source */
+        alloc_mem(sender(), length, send_mem_type, pad_memh);
         send_buf = alloc_mem(sender(), length, send_mem_type, send_memh);
     }
     recv_buf = alloc_mem(receiver(), length, UCS_MEMORY_TYPE_HOST, recv_memh);
@@ -397,16 +402,19 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
     mem_buffer::pattern_check(recv_buf, length, SEED, UCS_MEMORY_TYPE_HOST);
 }
 
+/* Small enough for a driver to sub-allocate from a memory pool */
+static constexpr size_t RNDV_ZCOPY_LENGTH = 64 * UCS_KBYTE;
+
 UCS_TEST_P(test_ucp_mem_type_rndv_zcopy, get_zcopy, "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy")
 {
-    test_xfer_from_mem_type(4 * UCS_MBYTE, true, XFER_ZCOPY, false);
+    test_xfer_from_mem_type(RNDV_ZCOPY_LENGTH, true, XFER_ZCOPY, false);
 }
 
 UCS_TEST_P(test_ucp_mem_type_rndv_zcopy, put_zcopy, "RNDV_THRESH=0",
            "RNDV_SCHEME=put_zcopy")
 {
-    test_xfer_from_mem_type(4 * UCS_MBYTE, false, XFER_ZCOPY, false);
+    test_xfer_from_mem_type(RNDV_ZCOPY_LENGTH, false, XFER_ZCOPY, false);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_rndv_zcopy, rcx,
