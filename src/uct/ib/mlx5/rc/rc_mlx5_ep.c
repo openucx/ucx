@@ -274,9 +274,12 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     size_t UCS_V_UNUSED total;
     int fence;
 
+    UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "put_sgl_zcopy");
+
     max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
-    UCT_RC_MLX5_CHECK_SGL_ZCOPY(count, counts, strides, max_count,
-                                "put_sgl_zcopy");
+    UCT_CHECK_PARAM(count <= max_count,
+                    "put_sgl_zcopy count(%zu) should be limited by %zu", count,
+                    max_count);
     UCT_SKIP_ZERO_LENGTH(count);
 
     status = uct_rc_mlx5_base_ep_sgl_zcopy_check(iface, ep, lengths, count, 0,
@@ -370,9 +373,12 @@ uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     ucs_status_t status;
     size_t total;
 
+    UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "get_sgl_zcopy");
+
     max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
-    UCT_RC_MLX5_CHECK_SGL_ZCOPY(count, counts, strides, max_count,
-                                "get_sgl_zcopy");
+    UCT_CHECK_PARAM(count <= max_count,
+                    "get_sgl_zcopy count(%zu) should be limited by %zu", count,
+                    max_count);
     UCT_SKIP_ZERO_LENGTH(count);
 
     status = uct_rc_mlx5_base_ep_sgl_zcopy_check(
