@@ -1191,11 +1191,20 @@ public:
     }
 
 protected:
+    /* Same check as protocol selection does, which also accounts for memory
+     * registration by DMA-BUF */
     void require_cuda_net_md()
     {
-        if (!check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
-            UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
+        ucp_ep_h ep = sender().ep();
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if (sender().ucph()->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
+                UCS_BIT(ucp_ep_md_index(ep, lane))) {
+                return;
+            }
         }
+
+        UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
     }
 
     /* Add the mocked device the test selects protocols on */
@@ -1319,47 +1328,37 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_no_get_zcopy, get, "IB_NUM_PATHS?=1",
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_no_get_zcopy, rcx_gpu,
                               "rc_x,cuda,rocm")
 
-/* Device with the default get_zcopy attributes, which leave small messages
- * without a get/zcopy protocol */
+/* Device whose get_zcopy minimal size leaves small messages without a
+ * get/zcopy protocol, like an IB device with inline responses enabled */
 class test_ucp_proto_mock_rcx_foreign_rkey :
     public test_ucp_proto_mock_rcx_cuda {
 protected:
     virtual void add_cuda_mock_iface() override
     {
-        add_mock_iface("mock", set_mock_iface_attr);
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            set_mock_iface_attr(iface_attr);
+            /* Fixed value, since the one of the real device depends on the
+             * host CQE size and on UCX_IB_TX_INLINE_RESP */
+            iface_attr.cap.get.min_zcopy = 65;
+        });
     }
 
-    /* Same check as protocol selection does, which also accounts for memory
-     * registration by DMA-BUF */
-    void require_cuda_reg_lane()
-    {
-        ucp_ep_h ep = sender().ep();
-
-        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-            if (sender().ucph()->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
-                UCS_BIT(ucp_ep_md_index(ep, lane))) {
-                return;
-            }
-        }
-
-        UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
-    }
-
-    static ucp_proto_select_param_t
-    find_select_param(const ucp_proto_select_t &proto_select,
-                      ucp_proto_select_key_t key)
+    static bool find_select_param(const ucp_proto_select_t &proto_select,
+                                  ucp_proto_select_key_t key,
+                                  ucp_proto_select_param_t *select_param_p)
     {
         ucp_proto_select_elem_t select_elem;
         ucp_proto_select_key_t select_key;
 
         kh_foreach(proto_select.hash, select_key.u64, select_elem, {
             if (key_match(key, select_key)) {
-                return select_key.param;
+                *select_param_p = select_key.param;
+                return true;
             }
         })
 
         ADD_FAILURE() << "Did not find matching protocol selection key";
-        return key.param;
+        return false;
     }
 
     /* Add a remote key configuration which differs from the given one only by
@@ -1380,8 +1379,10 @@ protected:
 
         /* Copy what is needed, since adding a configuration may reallocate
          * the configurations array */
-        select_param             = find_select_param(rkey_config->proto_select,
-                                                     key);
+        if (!find_select_param(rkey_config->proto_select, key, &select_param)) {
+            return UCP_WORKER_CFG_INDEX_NULL;
+        }
+
         rkey_config_key          = rkey_config->key;
         rkey_config_key.mem_type = mem_type;
         memcpy(lanes_distance, rkey_config->lanes_distance,
@@ -1414,7 +1415,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_foreign_rkey, get, "IB_NUM_PATHS?=1",
         {65, INF, "zero-copy", "rc_mlx5/mock"},
     };
 
-    require_cuda_reg_lane();
+    require_cuda_net_md();
     if (UCS_BIT_GET(sender().ucph()->supported_mem_type_mask,
                     UCS_MEMORY_TYPE_ZE_DEVICE)) {
         UCS_TEST_SKIP_R("ZE device memory is supported");
