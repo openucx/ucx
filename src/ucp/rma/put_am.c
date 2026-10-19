@@ -77,7 +77,7 @@ static size_t ucp_proto_put_sgl_am_bcopy_pack(void *dest, void *arg)
     ucp_dt_contig_pack(req->send.ep->worker, puth + 1, pack_ctx->buffer,
                        pack_ctx->length,
                        (ucs_memory_type_t)dt_iter->mem_info.type,
-                       pack_ctx->elem_length);
+                       &dt_iter->mem_info, pack_ctx->elem_length);
 
     return sizeof(*puth) + pack_ctx->length;
 }
