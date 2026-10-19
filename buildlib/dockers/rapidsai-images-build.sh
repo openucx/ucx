@@ -53,6 +53,15 @@ case "$(uname -m)" in
   *) echo "ERROR: unexpected host arch $(uname -m)" >&2; exit 1 ;;
 esac
 
+# The compose image: fields are the single source of the pushed tags; the
+# destination preflight and the final verify both iterate this list.
+images=()
+while read -r t; do
+  t="${t//\$\{RAPIDS_VER\}/$RAPIDS_VER}"
+  t="${t//\$\{IMAGE_REV\}/$IMAGE_REV}"
+  images+=("$REGISTRY/${t#*/}")
+done < <(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$basedir/docker-compose-rapidsai.yml")
+
 # 1. preflight - every BASE_IMAGE in the compose must exist. The compose is
 # the single source for the base tags; this parses them instead of keeping a
 # second copy that drifts when RAPIDS moves a cuda/py version.
@@ -70,15 +79,22 @@ done < <(sed -n 's/^[[:space:]]*BASE_IMAGE:[[:space:]]*//p' "$basedir/docker-com
 # fails to start containers on the builders' 5.4-era kernels
 # ("can't mask dir /proc/acpi ... invalid argument").
 BUILDKIT_IMAGE=${BUILDKIT_IMAGE:-moby/buildkit:v0.23.2}
+# Updated on every run so the remote node follows a changed ARM_NODE/X86_NODE.
+if docker context inspect "$REMOTE_CTX" >/dev/null 2>&1; then
+  docker context update "$REMOTE_CTX" --docker "host=$REMOTE_NODE"
+else
+  docker context create "$REMOTE_CTX" --docker "host=$REMOTE_NODE"
+fi
 if ! docker buildx inspect "$BUILDER" >/dev/null 2>&1; then
-  docker context inspect "$REMOTE_CTX" >/dev/null 2>&1 \
-    || docker context create "$REMOTE_CTX" --docker "host=$REMOTE_NODE"
   docker buildx create --name "$BUILDER" --driver docker-container \
     --driver-opt "image=$BUILDKIT_IMAGE" \
     --platform "$LOCAL_PLAT" --bootstrap                                                # local (host arch)
+  # A builder left with only the local node would be reused by later runs and
+  # build the foreign arch under QEMU, so drop it if the append fails.
   docker buildx create --name "$BUILDER" --append --node "${BUILDER}-remote" \
     --driver-opt "image=$BUILDKIT_IMAGE" \
-    --platform "$REMOTE_PLAT" "$REMOTE_CTX"                                             # remote (opposite arch)
+    --platform "$REMOTE_PLAT" "$REMOTE_CTX" \
+    || { docker buildx rm "$BUILDER"; exit 1; }                                         # remote (opposite arch)
 fi
 docker buildx inspect "$BUILDER" --bootstrap >/dev/null
 
@@ -87,20 +103,26 @@ docker buildx inspect "$BUILDER" --bootstrap >/dev/null
 # `build.platforms` key and would otherwise build only the local arch.
 printf '%s' "$HARBOR_UCX_PASSWORD" | docker login "$REGISTRY" -u "$HARBOR_UCX_USER" --password-stdin
 trap 'docker logout "$REGISTRY" >/dev/null 2>&1 || true' EXIT
+# A pushed tag is never overwritten: running CI pulls it by name.
+for img in "${images[@]}"; do
+  if out=$(docker manifest inspect "$img" 2>&1); then
+    echo "ERROR: $img already exists, use a new IMAGE_REV" >&2; exit 1
+  fi
+  grep -qiE 'not found|no such manifest' <<< "$out" \
+    || { echo "ERROR: cannot check $img: $out" >&2; exit 1; }
+done
 # bake resolves the compose build context against the cwd, not the compose dir
 cd "$basedir"
 RAPIDS_VER="$RAPIDS_VER" docker buildx bake \
   --builder "$BUILDER" -f "$basedir/docker-compose-rapidsai.yml" \
   --set '*.platform=linux/amd64,linux/arm64' --push
 
-# 4. verify the 3 manifests really carry both arches - a single-arch manifest is
+# 4. verify the manifests really carry both arches - a single-arch manifest is
 # the failure this script exists to prevent, so it has to be fatal, not printed.
 echo "=== pushed manifests ==="
-for img in rapidsai-ci-conda:${RAPIDS_VER}-${IMAGE_REV} \
-           rapidsai-ci-wheel:${RAPIDS_VER}-cuda12-${IMAGE_REV} \
-           rapidsai-ci-wheel:${RAPIDS_VER}-cuda13-${IMAGE_REV}; do
-  printf '%-42s ' "$img"
-  arches=$(docker manifest inspect "$REGISTRY/ucx/$img" \
+for img in "${images[@]}"; do
+  printf '%-42s ' "${img#*/ucx/}"
+  arches=$(docker manifest inspect "$img" \
            | grep -o '"architecture": "[a-z0-9]*"' | grep -o '[a-z0-9]*"$' | tr -d '"' | sort -u)
   echo "$arches" | tr '\n' ' '
   for want in amd64 arm64; do

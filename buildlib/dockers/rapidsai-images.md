@@ -78,7 +78,8 @@ HARBOR_UCX_USER=... HARBOR_UCX_PASSWORD=... \
 ./rapidsai-images-build.sh
 ```
 
-The script preflights the base tags, creates a 2-node buildx builder (each node
+The script preflights the base tags, refuses to overwrite an existing destination
+tag (pick a new `<REV>`), creates a 2-node buildx builder (each node
 pinned to its native arch so buildx never falls back to slow QEMU emulation),
 logs in to harbor, runs `docker buildx bake --push` (builds both arches on their
 native node and writes the manifest in one shot), logs out, and verifies each
@@ -90,10 +91,11 @@ builder. The script logs out on exit.
 ### 3. Point the pipelines at the new images
 
 Bump the old `<VER>`/`<REV>` to the new one in the only places that reference it
-(a same-version refresh only changes `<REV>` in the two pipeline files):
+(a same-version refresh only changes `<REV>` in the two pipeline files). The
+compose needs no edit here: it takes the version from `RAPIDS_VER`.
 
-- `buildlib/dockers/rapidsai-ci-conda.Dockerfile` (`BASE_IMAGE`)
-- `buildlib/dockers/rapidsai-ci-wheel.Dockerfile` (`BASE_IMAGE`)
+- `buildlib/dockers/rapidsai-ci-conda.Dockerfile` (`BASE_IMAGE` default, for a build without the compose)
+- `buildlib/dockers/rapidsai-ci-wheel.Dockerfile` (`BASE_IMAGE` default, for a build without the compose)
 - `buildlib/pr/main.yml` (image tags)
 - `buildlib/azure-pipelines-release.yml` (image tags)
 
