@@ -452,6 +452,14 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
 
 void ucp_worker_signal_internal(ucp_worker_h worker);
 
+/* Resolve an endpoint-specific path event. Must be called with the worker
+ * async lock held. */
+ucs_status_t
+ucp_worker_resolve_path_monitor_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+                                   ucp_ep_h *ucp_ep_p,
+                                   ucp_lane_index_t *monitor_lane_p,
+                                   ucp_lane_index_t *monitored_lane_p);
+
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags,
                                const char *reason);
 

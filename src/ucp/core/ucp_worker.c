@@ -527,6 +527,49 @@ static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
     return NULL;
 }
 
+ucs_status_t
+ucp_worker_resolve_path_monitor_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+                                   ucp_ep_h *ucp_ep_p,
+                                   ucp_lane_index_t *monitor_lane_p,
+                                   ucp_lane_index_t *monitored_lane_p)
+{
+    const ucp_ep_config_key_t *key;
+    ucp_lane_index_t monitor_lane;
+    ucp_lane_index_t monitored_lane;
+    ucp_ep_h ucp_ep;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
+
+    ucp_ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &monitor_lane);
+    if (ucp_ep == NULL) {
+        ucp_ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep,
+                                      &monitor_lane);
+        if (ucp_ep == NULL) {
+            return UCS_ERR_NO_ELEM;
+        }
+    }
+
+    if (ucp_ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    key = &ucp_ep_config(ucp_ep)->key;
+    if (!ucp_ep_config_is_path_keepalive_lane(key, monitor_lane)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    monitored_lane = key->lanes[monitor_lane].monitored_lane;
+    if ((monitored_lane >= key->num_lanes) ||
+        ucp_ep_config_is_path_keepalive_lane(key, monitored_lane)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    *ucp_ep_p         = ucp_ep;
+    *monitor_lane_p   = monitor_lane;
+    *monitored_lane_p = monitored_lane;
+    return UCS_OK;
+}
+
 /**
  * FLUSH_CANCEL operation might be on pending queue due to
  * UCS_ERR_NO_RESOURCES, so need to purge the queue to resubmit the
@@ -938,6 +981,48 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
 
     ucp_worker_iface_event_common(wiface);
+}
+
+static void ucp_worker_iface_async_cb_event_v2(void *arg, unsigned flags,
+                                                uct_ep_h uct_ep)
+{
+    ucp_worker_iface_t *wiface = arg;
+    ucp_lane_index_t monitor_lane, monitored_lane;
+    ucp_ep_h ucp_ep;
+    ucs_status_t status;
+
+    ucs_trace_func("async_cb_v2 for iface=%p ep=%p flags=%u", wiface->iface,
+                   uct_ep, flags);
+
+    if (flags & UCT_EVENT_PATH_SPEED_CHANGE) {
+        UCS_ASYNC_BLOCK(&wiface->worker->async);
+        status = ucp_worker_resolve_path_monitor_ep(
+                wiface->worker, uct_ep, &ucp_ep, &monitor_lane,
+                &monitored_lane);
+        if ((status == UCS_OK) &&
+            (ucp_ep_get_rsc_index(ucp_ep, monitor_lane) !=
+             wiface->rsc_index)) {
+            status = UCS_ERR_INVALID_PARAM;
+        }
+
+        if (status == UCS_OK) {
+            ucs_debug("worker %p: path speed changed on ep %p "
+                      "monitor lane[%u]=%p for data lane[%u]",
+                      wiface->worker, ucp_ep, monitor_lane, uct_ep,
+                      monitored_lane);
+        } else {
+            ucs_debug("worker %p: ignore path speed change event for "
+                      "UCT EP %p on " UCP_WIFACE_FMT ": %s",
+                      wiface->worker, uct_ep, UCP_WIFACE_ARG(wiface),
+                      ucs_status_string(status));
+        }
+        UCS_ASYNC_UNBLOCK(&wiface->worker->async);
+        flags &= ~UCT_EVENT_PATH_SPEED_CHANGE;
+    }
+
+    if (flags != 0) {
+        ucp_worker_iface_async_cb_event(arg, flags);
+    }
 }
 
 static void
@@ -1550,8 +1635,10 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     iface_params.async_event_arg   = wiface;
     iface_params.async_event_cb    = ucp_worker_iface_async_cb_event;
+    iface_params.async_event_cb_v2 = ucp_worker_iface_async_cb_event_v2;
     iface_params.field_mask       |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
-                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB  |
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB_V2;
 
     if (ucp_worker_keepalive_is_enabled(worker)) {
         iface_params.field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;

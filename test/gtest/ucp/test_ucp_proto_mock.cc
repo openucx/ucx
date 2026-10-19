@@ -1325,6 +1325,44 @@ UCS_TEST_P(test_ucp_proto_mock_path_monitor, periodic_probe,
     EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
 }
 
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, path_speed_change_event,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
+{
+    ucp_worker_h worker            = sender().worker();
+    ucp_ep_h event_ucp_ep          = NULL;
+    const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    ucp_lane_index_t event_monitor_lane, event_data_lane;
+    ucp_lane_index_t monitor_lane;
+    uct_ep_h monitor_ep;
+    uct_base_iface_t *base_iface;
+    ucs_status_t status;
+
+    ASSERT_NE(0, key.path_keepalive_lanes);
+    ucs_for_each_bit(monitor_lane, key.path_keepalive_lanes) {
+        monitor_ep = get_check_ep(ucp_ep_get_lane(sender().ep(),
+                                                  monitor_lane));
+        base_iface = ucs_derived_of(monitor_ep->iface, uct_base_iface_t);
+        ASSERT_NE(nullptr, base_iface->async_event_cb_v2);
+
+        UCS_ASYNC_BLOCK(&worker->async);
+        status = ucp_worker_resolve_path_monitor_ep(
+                worker, monitor_ep, &event_ucp_ep, &event_monitor_lane,
+                &event_data_lane);
+        UCS_ASYNC_UNBLOCK(&worker->async);
+
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(sender().ep(), event_ucp_ep);
+        EXPECT_EQ(monitor_lane, event_monitor_lane);
+        EXPECT_EQ(key.lanes[monitor_lane].monitored_lane, event_data_lane);
+
+        /* Exercise the complete UCT-to-UCP notification path. The handler
+         * validates the same monitor-to-data-lane association under the
+         * worker async lock. */
+        uct_iface_handle_ep_event(monitor_ep->iface, monitor_ep,
+                                  UCT_EVENT_PATH_SPEED_CHANGE);
+    }
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor, rcx, "rc_x")
 
 class test_ucp_proto_mock_path_monitor_keepalive :
