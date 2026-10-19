@@ -1,6 +1,6 @@
 /**
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -19,8 +19,9 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
 {
     hipError_t ret;
     unsigned group_index;
+    unsigned gpu_index;
     int num_gpus;
-    int gpu_index;
+    ucs_status_t status;
 
     group_index = rte_call(perf, group_index);
 
@@ -29,7 +30,11 @@ static ucs_status_t ucx_perf_rocm_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
-    gpu_index = group_index % num_gpus;
+    status = ucx_perf_get_device_index(perf, group_index, num_gpus,
+                                       "rocm", &gpu_index);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ret = hipSetDevice(gpu_index);
     if (ret != hipSuccess) {
@@ -142,29 +147,35 @@ static void* ucx_perf_rocm_memset(void *dst, int value, size_t count)
     return dst;
 }
 
-UCS_STATIC_INIT {
-    static ucx_perf_allocator_t rocm_allocator = {
-        .mem_type  = UCS_MEMORY_TYPE_ROCM,
-        .init      = ucx_perf_rocm_init,
-        .uct_alloc = uct_perf_rocm_alloc,
-        .uct_free  = uct_perf_rocm_free,
-        .memcpy    = ucx_perf_rocm_memcpy,
-        .memset    = ucx_perf_rocm_memset
-    };
-    static ucx_perf_allocator_t rocm_managed_allocator = {
-        .mem_type  = UCS_MEMORY_TYPE_ROCM_MANAGED,
-        .init      = ucx_perf_rocm_init,
-        .uct_alloc = uct_perf_rocm_managed_alloc,
-        .uct_free  = uct_perf_rocm_free,
-        .memcpy    = ucx_perf_rocm_memcpy,
-        .memset    = ucx_perf_rocm_memset
-    };
+static ucx_perf_allocator_t rocm_allocator = {
+    .name             = "rocm",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
+    .default_mem_type = UCS_MEMORY_TYPE_ROCM,
+    .init             = ucx_perf_rocm_init,
+    .uct_alloc        = uct_perf_rocm_alloc,
+    .uct_free         = uct_perf_rocm_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
+    .memcpy           = ucx_perf_rocm_memcpy,
+    .memset           = ucx_perf_rocm_memset
+};
 
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = &rocm_allocator;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = &rocm_managed_allocator;
+static ucx_perf_allocator_t rocm_managed_allocator = {
+    .name             = "rocm-managed",
+    .flags            = UCX_PERF_ALLOCATOR_FLAG_DEVICE_ID,
+    .default_mem_type = UCS_MEMORY_TYPE_ROCM_MANAGED,
+    .init             = ucx_perf_rocm_init,
+    .uct_alloc        = uct_perf_rocm_managed_alloc,
+    .uct_free         = uct_perf_rocm_free,
+    .resolve_mem_type = ucx_perf_allocator_default_resolve_mem_type,
+    .memcpy           = ucx_perf_rocm_memcpy,
+    .memset           = ucx_perf_rocm_memset
+};
+
+UCS_STATIC_INIT {
+    ucx_perf_allocator_register(&rocm_allocator);
+    ucx_perf_allocator_register(&rocm_managed_allocator);
 }
 UCS_STATIC_CLEANUP {
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM]         = NULL;
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] = NULL;
-
+    ucx_perf_allocator_unregister(&rocm_managed_allocator);
+    ucx_perf_allocator_unregister(&rocm_allocator);
 }

@@ -133,7 +133,8 @@ public:
                        const void *src_sn,
                        const ucx_perf_allocator_t *allocator) const
     {
-        if (ucs_likely(allocator->mem_type == UCS_MEMORY_TYPE_HOST)) {
+        if (ucs_likely(allocator->resolve_mem_type(allocator) ==
+                       UCS_MEMORY_TYPE_HOST)) {
             ucs_assert(dst_mem_type == UCS_MEMORY_TYPE_HOST);
             *reinterpret_cast<psn_t*>(dst_sn) = *reinterpret_cast<const psn_t*>(src_sn);
         }

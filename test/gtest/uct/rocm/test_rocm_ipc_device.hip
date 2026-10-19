@@ -182,8 +182,11 @@ UCS_TEST_P(test_rocm_ipc_rma, get_mem_elem_pack)
 
     mem_elem = static_cast<uct_device_mem_elem_t*>(malloc(mem_elem_size));
     ASSERT_NE(nullptr, mem_elem);
+    void *release_handle;
     EXPECT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), mem_elem));
+                                       recvbuf.rkey(), mem_elem,
+                                       &release_handle));
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
     free(mem_elem);
 }
 
@@ -218,9 +221,10 @@ UCS_TEST_P(test_rocm_ipc_rma_device, device_put)
                                  sizeof(uct_device_mem_elem_t);
     struct { uct_device_local_mem_elem_t hdr; uct_device_mem_elem_t tl; }
             src_elem_host = {};
+    void *release_handle;
     ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
                                        recvbuf.rkey(),
-                                       &src_elem_host.tl));
+                                       &src_elem_host.tl, &release_handle));
 
     uct_device_local_mem_elem_t *src_elem;
     ASSERT_EQ(hipSuccess, hipMalloc((void**)&src_elem, src_elem_size));
@@ -245,6 +249,7 @@ UCS_TEST_P(test_rocm_ipc_rma_device, device_put)
     recvbuf.pattern_check(SEED1);
     hipFree(src_elem);
     hipFree(mem_elem);
+    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rocm_ipc_rma_device, rocm_ipc)

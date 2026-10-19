@@ -17,6 +17,13 @@
 #include <malloc.h>
 #endif
 
+#if HAVE_IB
+#include <uct/ib/base/ib_md.h>
+#if HAVE_MLX5_DV
+#include <uct/ib/mlx5/ib_mlx5.h>
+#endif
+#endif
+
 
 std::string resource::name() const {
     std::stringstream ss;
@@ -506,10 +513,40 @@ bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
     return true;
 }
 
+bool uct_test::check_caps_v2(uint64_t required_flags) {
+    FOR_EACH_ENTITY(iter) {
+        if (!(*iter)->check_caps_v2(required_flags)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void uct_test::check_caps_skip(uint64_t required_flags, uint64_t invalid_flags) {
     if (!check_caps(required_flags, invalid_flags)) {
         UCS_TEST_SKIP_R("unsupported");
     }
+}
+
+/* flush(remote) on IB requires an indirect (KSM) mkey */
+void uct_test::check_skip_flush_remote()
+{
+#if HAVE_IB
+    uct_md_h md = m_entities.front()->md();
+    if (std::string(md->component->name) == "ib") {
+        auto ib_md = ucs_derived_of(md, uct_ib_md_t);
+        if (!(ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM)) {
+            UCS_TEST_SKIP_R("mlx5 PRM not supported");
+        }
+#if HAVE_MLX5_DV
+        auto mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+        if (!(mlx5_md->flags & UCT_IB_MLX5_MD_FLAG_KSM))
+#endif
+        {
+            UCS_TEST_SKIP_R("mlx5 KSM not supported");
+        }
+    }
+#endif
 }
 
 bool uct_test::check_event_caps(uint64_t required_flags, uint64_t invalid_flags) {
@@ -1096,6 +1133,16 @@ bool uct_test::entity::check_caps(uint64_t required_flags,
     uint64_t iface_flags = iface_attr().cap.flags;
     return (ucs_test_all_flags(iface_flags, required_flags) &&
             !(iface_flags & invalid_flags));
+}
+
+bool uct_test::entity::check_caps_v2(uint64_t required_flags)
+{
+    uct_iface_attr_v2_t attr = {};
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+    EXPECT_UCS_OK(uct_iface_query_v2(m_iface, &attr));
+
+    return ucs_test_all_flags(attr.cap.flags, required_flags);
 }
 
 bool uct_test::entity::check_event_caps(uint64_t required_flags,

@@ -65,7 +65,8 @@ typedef enum ucs_cpu_flag {
     UCS_CPU_FLAG_SSE41      = UCS_BIT(7),
     UCS_CPU_FLAG_SSE42      = UCS_BIT(8),
     UCS_CPU_FLAG_AVX        = UCS_BIT(9),
-    UCS_CPU_FLAG_AVX2       = UCS_BIT(10)
+    UCS_CPU_FLAG_AVX2       = UCS_BIT(10),
+    UCS_CPU_FLAG_LS64       = UCS_BIT(11)
 } ucs_cpu_flag_t;
 
 
@@ -158,6 +159,25 @@ static inline void ucs_clear_cache(void *start, void *end)
 #else
     ucs_arch_clear_cache(start, end);
 #endif
+}
+
+
+/**
+ * Check whether the CPU supports a given feature flag.
+ *
+ * Architectures which cannot detect CPU flags report @ref
+ * UCS_CPU_FLAG_UNKNOWN, which has all bits set, so the result of @ref
+ * ucs_arch_get_cpu_flag must not be tested by a plain bitwise AND.
+ *
+ * @param flag  Feature flag to check.
+ *
+ * @return Nonzero if the CPU is known to support the flag.
+ */
+static inline int ucs_cpu_has_flag(ucs_cpu_flag_t flag)
+{
+    int flags = ucs_arch_get_cpu_flag();
+
+    return (flags != UCS_CPU_FLAG_UNKNOWN) && (flags & flag);
 }
 
 

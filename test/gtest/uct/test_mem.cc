@@ -204,6 +204,9 @@ UCS_TEST_P(test_mem, md_fixed) {
                     memset(uct_mem.address, 'c', uct_mem.length);
                     EXPECT_EQ(*(char*)curr_addr, 'c');
                     status = uct_mem_free(&uct_mem);
+                    if (status == UCS_OK) {
+                        p_addr.mark_unmapped(uct_mem.address, uct_mem.length);
+                    }
                 } else {
                     EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
                 }
@@ -226,7 +229,6 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     const size_t            n_tryes     = 101;
     uct_alloc_method_t      meth;
     size_t                  length      = 1;
-    size_t                  n_success;
     ucs::mmap_fixed_address p_addr(page_size * 2 * (n_tryes + 1));
     void*                   curr_addr;
 
@@ -242,7 +244,6 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     params.name            = "test";
     params.mem_type        = UCS_MEMORY_TYPE_HOST;
 
-    n_success = 0;
     curr_addr = *p_addr;
 
     for (i = 0; i < n_tryes; ++i) {
@@ -251,7 +252,6 @@ UCS_TEST_P(test_mem, mmap_fixed) {
 
         status = uct_mem_alloc(length, &meth, 1, &params, &uct_mem);
         if (status == UCS_OK) {
-            ++n_success;
             EXPECT_EQ(meth, uct_mem.method);
             EXPECT_EQ(curr_addr, uct_mem.address);
             EXPECT_GE(uct_mem.length, (size_t)1);
@@ -262,6 +262,8 @@ UCS_TEST_P(test_mem, mmap_fixed) {
             if (status != UCS_OK) {
                 UCS_TEST_ABORT("uct_mem_free failed to release memory region");
             }
+
+            p_addr.mark_unmapped(uct_mem.address, uct_mem.length);
         } else {
             EXPECT_EQ(status, UCS_ERR_NO_MEMORY);
         }

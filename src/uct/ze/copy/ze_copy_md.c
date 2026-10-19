@@ -133,6 +133,13 @@ uct_ze_copy_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ze_copy_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    return UCS_OK;
+}
+
 static void uct_ze_copy_md_close(uct_md_h uct_md)
 {
     uct_ze_copy_md_t *md = ucs_derived_of(uct_md, uct_ze_copy_md_t);
@@ -275,12 +282,13 @@ static uct_md_ops_t md_ops = {
     .mem_free           = uct_ze_copy_mem_free,
     .mem_advise         = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
     .mem_reg            = uct_ze_copy_mem_reg,
-    .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_success,
+    .mem_dereg          = uct_ze_copy_mem_dereg,
     .mem_query          = uct_ze_copy_md_mem_query,
     .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
     .mem_attach         = (uct_md_mem_attach_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type = uct_ze_copy_md_detect_memory_type,
-    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported
+    .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function
 };
 
 static ucs_status_t
@@ -343,6 +351,7 @@ uct_component_t uct_ze_copy_component = {
     .rkey_unpack        = uct_ze_copy_rkey_unpack,
     .rkey_ptr           = (uct_component_rkey_ptr_func_t)ucs_empty_function_return_unsupported,
     .rkey_release       = (uct_component_rkey_release_func_t)ucs_empty_function_return_success,
+    .rkey_compare       = uct_base_rkey_compare,
     .name               = "ze_cpy",
     .md_config = {
         .name       = "ze-copy memory domain",
