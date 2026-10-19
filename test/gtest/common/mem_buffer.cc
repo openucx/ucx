@@ -52,6 +52,31 @@
 
 #endif
 
+#if HAVE_CUDA && CUDART_VERSION >= 13000
+static cudaError_t
+mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
+{
+    cudaMemLocation location = {};
+    int device;
+    cudaError_t cuda_status;
+
+    cuda_status = cudaGetDevice(&device);
+    if (cuda_status != cudaSuccess) {
+        return cuda_status;
+    }
+
+    location.type = cudaMemLocationTypeDevice;
+    location.id   = device;
+    cuda_status   = cudaMemGetDefaultMemPool(pool_p, &location,
+                                             cudaMemAllocationTypeManaged);
+    if (cuda_status != cudaSuccess) {
+        (void)cudaGetLastError(); /* do not leak the error to other tests */
+    }
+
+    return cuda_status;
+}
+#endif
+
 #if HAVE_ROCM
 #include <hip_runtime.h>
 #include <hip_version.h>
@@ -473,7 +498,22 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         }
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        CUDA_CALL(cudaMallocManaged(&ptr, size), ": size=" << size);
+        if (async) {
+#if CUDART_VERSION >= 13000
+            cudaMemPool_t pool;
+
+            CUDA_CALL(mem_buffer_cuda_get_default_managed_pool(&pool), "");
+            CUDA_CALL(cudaMallocFromPoolAsync(&ptr, size, pool, 0),
+                      ": size=" << size);
+            CUDA_CALL(cudaStreamSynchronize(0), "");
+#else
+            UCS_TEST_ABORT("asynchronous allocation for " +
+                           std::string(ucs_memory_type_names[mem_type]) +
+                           " memory type is not supported");
+#endif
+        } else {
+            CUDA_CALL(cudaMallocManaged(&ptr, size), ": size=" << size);
+        }
         return ptr;
 #endif
 #if HAVE_ROCM
@@ -549,6 +589,7 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
             break;
 #if HAVE_CUDA
         case UCS_MEMORY_TYPE_CUDA:
+        case UCS_MEMORY_TYPE_CUDA_MANAGED:
             if (async) {
 #if CUDART_VERSION >= 11020
                 cudaStreamSynchronize(0);
@@ -561,9 +602,6 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
             } else {
                 CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
             }
-            break;
-        case UCS_MEMORY_TYPE_CUDA_MANAGED:
-            CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
             break;
 #endif
 #if HAVE_ROCM
@@ -851,10 +889,21 @@ bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
     if (!is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
         return false;
     }
-    return mem_type == UCS_MEMORY_TYPE_CUDA;
-#else
-    return false;
+
+    if (mem_type == UCS_MEMORY_TYPE_CUDA) {
+        return true;
+    }
+
+#if CUDART_VERSION >= 13000
+    if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        cudaMemPool_t pool;
+
+        return mem_buffer_cuda_get_default_managed_pool(&pool) == cudaSuccess;
+    }
 #endif
+#endif
+
+    return false;
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :

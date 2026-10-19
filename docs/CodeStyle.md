@@ -16,6 +16,8 @@
   * Use `ucs_container_of` and `ucs_derived_of` instead of open-coded pointer
     arithmetic.
   * Use `ucs_assert*` for internal invariants, not user-input validation.
+  * Unless external linkage is required, functions used only within one source
+    file must be declared `static`.
 
 
 ## Comments

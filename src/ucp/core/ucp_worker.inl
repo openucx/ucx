@@ -171,6 +171,15 @@ ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 }
 
 /**
+ * @return worker's iface v2 attributes by resource index
+ */
+static UCS_F_ALWAYS_INLINE uct_iface_attr_v2_t*
+ucp_worker_iface_get_attr_v2(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return &ucp_worker_iface(worker, rsc_index)->attr_v2;
+}
+
+/**
  * @return worker's iface bandwidth resource index
  */
 static UCS_F_ALWAYS_INLINE double

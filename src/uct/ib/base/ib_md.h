@@ -219,7 +219,7 @@ typedef struct uct_ib_md_config {
     ucs_ternary_auto_value_t mr_relaxed_order; /**< Relaxed-ordering mode */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
     int                      xgvmi_umr_enable; /**< Enable UMR workflow for XGVMI */
-    ucs_time_t               ah_cache_ttl; /**< Address handle cache TTL */
+    ucs_time_t               ah_cache_ttl; /**< AH cache TTL; 0 disables it */
 } uct_ib_md_config_t;
 
 /**

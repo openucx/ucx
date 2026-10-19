@@ -30,7 +30,6 @@ private:
     void conn_match_init(size_t address_length) {
         ucs_conn_match_ops_t conn_match_ops;
 
-        conn_match_ops.get_address = get_address;
         conn_match_ops.get_conn_sn = get_conn_sn;
         conn_match_ops.address_str = address_str;
         conn_match_ops.purge_cb    = purge_cb;
@@ -51,10 +50,6 @@ protected:
     static inline conn_elem_t*
     conn_elem_from_match_elem(const ucs_conn_match_elem_t *conn_match) {
         return ucs_container_of(conn_match, conn_elem_t, elem);
-    }
-
-    static const void *get_address(const ucs_conn_match_elem_t *conn_match) {
-        return conn_elem_from_match_elem(conn_match)->dest_address;
     }
 
     static ucs_conn_sn_t get_conn_sn(const ucs_conn_match_elem_t *conn_match) {
@@ -149,7 +144,8 @@ protected:
     }
 
     void remove_conn(conn_elem_t &elem) {
-        ucs_conn_match_remove_elem(&m_conn_match_ctx, &elem.elem,
+        ucs_conn_match_remove_elem(&m_conn_match_ctx, elem.dest_address,
+                                   &elem.elem,
                                    elem.queue_type);
         m_removed_elems++;
     }

@@ -84,6 +84,13 @@ ucp_proto_put_offload_short_probe(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_PUT_SHORT
     };
 
+    /* TODO: no completion, so repost cannot reach the ucp_rkey a zcopy
+     * offload keeps on the origin request. */
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return;
+    }
+
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
         !ucp_proto_is_short_supported(init_params->select_param)) {
         return;
@@ -225,6 +232,13 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
+    /* TODO: no completion, so repost cannot reach the ucp_rkey a zcopy
+     * offload keeps on the origin request. */
+    if (init_params->ep_config_key->err_mode ==
+        UCP_ERR_HANDLING_MODE_FAILOVER) {
+        return;
+    }
+
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {
         return;
     }
@@ -346,15 +360,16 @@ ucp_proto_put_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
 }
 
 ucp_proto_t ucp_put_offload_zcopy_proto = {
-    .name     = "put/offload/zcopy",
-    .desc     = UCP_PROTO_ZCOPY_DESC,
-    .flags    = 0,
-    .dt_mask  = UCP_DT_MASK_CONTIG_IOV,
-    .probe    = ucp_proto_put_offload_zcopy_probe,
-    .query    = ucp_proto_multi_query,
-    .progress = {ucp_proto_put_offload_zcopy_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = ucp_proto_offload_zcopy_reset
+    .name           = "put/offload/zcopy",
+    .desc           = UCP_PROTO_ZCOPY_DESC,
+    .flags          = 0,
+    .fallback_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask        = UCP_DT_MASK_CONTIG_IOV,
+    .probe          = ucp_proto_put_offload_zcopy_probe,
+    .query          = ucp_proto_multi_query,
+    .progress       = {ucp_proto_put_offload_zcopy_progress},
+    .abort          = ucp_proto_request_zcopy_abort,
+    .reset          = ucp_proto_offload_zcopy_reset
 };
 
 static void
@@ -392,6 +407,14 @@ static UCS_F_ALWAYS_INLINE int
 ucp_proto_put_sgl_elem_fits(size_t length, size_t max_frag_length)
 {
     return (length > 0) && (length <= max_frag_length);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_put_sgl_max_elem_count(const ucp_proto_multi_lane_priv_t *lpriv,
+                                 size_t count)
+{
+    return ucs_min(lpriv->max_sgl_zcopy_count,
+                   ucp_proto_multi_scaled_length(lpriv->weight, count));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -446,8 +469,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     const size_t *lengths        = dt_iter->type.sgl.lengths;
     const uint64_t *remote_addrs = req->send.rma.sgl.remote_addrs;
     size_t start_index           = dt_iter->offset;
-    size_t max_elem_count        = ucs_min(lpriv->max_sgl_zcopy_count,
-                                           dt_iter->length - start_index);
+    size_t max_elem_count        = ucs_min(
+            ucp_proto_put_sgl_max_elem_count(lpriv, dt_iter->length),
+            dt_iter->length - start_index);
     size_t uct_rkeys_size        = max_elem_count * sizeof(uct_rkey_t);
     size_t uct_memhs_size        = max_elem_count * sizeof(uct_mem_h);
     uct_rkey_t *uct_rkeys;

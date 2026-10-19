@@ -20,6 +20,7 @@
 
 #define UCP_PROTO_FOR_EACH(_macro) \
     _macro(ucp_reconfig_proto) \
+    _macro(ucp_repost_proto) \
     _macro(ucp_get_amo_post_proto) \
     _macro(ucp_get_amo_fetch_proto) \
     _macro(ucp_get_am_bcopy_proto) \
@@ -101,6 +102,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
     [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
     [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
+    [UCP_OP_ID_REPOST]         = "repost",
     [UCP_OP_ID_LAST]           = NULL
 };
 
@@ -119,6 +121,7 @@ const char *ucp_operation_descs[] = {
     [UCP_OP_ID_RNDV_SEND]      = "rendezvous data send",
     [UCP_OP_ID_RNDV_RECV]      = "rendezvous data fetch",
     [UCP_OP_ID_RNDV_RECV_DROP] = "rendezvous data drop",
+    [UCP_OP_ID_REPOST]         = "repost an undelivered operation",
     [UCP_OP_ID_LAST]           = NULL
 };
 
