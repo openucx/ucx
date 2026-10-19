@@ -45,6 +45,9 @@ layer boundaries below.
 ## Runtime Notes
 
 - Follow `docs/OptimizationStyle.md` for latency-sensitive source paths.
+- Treat inline lookup, progress, send, and receive code as steady-state fast
+  paths until caller tracing proves otherwise; keep one-time work in existing
+  miss or initialization paths.
 - Check existing progress, async, callback queue, and worker locking patterns
   before changing concurrency behavior.
 - For UCX object-style code, keep `super` as the first member, call the super

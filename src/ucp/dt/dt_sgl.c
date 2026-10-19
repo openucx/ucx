@@ -76,3 +76,21 @@ ucs_status_t ucp_dt_sgl_check_same_rkey_config(const ucp_rkey_h *rkeys,
 
     return UCS_OK;
 }
+
+ucs_status_t ucp_dt_sgl_check_matching_lengths(const size_t *local_lengths,
+                                               const size_t *remote_lengths,
+                                               size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        if (ucs_unlikely(local_lengths[i] != remote_lengths[i])) {
+            ucs_error("sgl[%zu]: local length %zu does not match remote "
+                      "length %zu, the lengths of both sides must be equal",
+                      i, local_lengths[i], remote_lengths[i]);
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}

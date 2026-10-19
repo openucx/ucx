@@ -15,6 +15,10 @@
 #include <ucs/sys/math.h>
 
 
+/* Length of a packet description line */
+#define UCT_IB_LOG_LINE_LEN 256
+
+
 enum {
     UCT_IB_OPCODE_FLAG_HAS_RADDR       = UCS_BIT(0),
     UCT_IB_OPCODE_FLAG_HAS_ATOMIC      = UCS_BIT(1),
@@ -39,6 +43,15 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                              int num_sge, uint64_t inline_bitmap,
                              uct_log_data_dump_func_t data_dump,
                              int data_dump_sge, char *buf, size_t max);
+
+/**
+ * Stamp the end of a packet description line with an ellipsis, so that a
+ * description which was cut is not read as a complete one.
+ *
+ * @param buf Packet description.
+ * @param max Size of the description buffer.
+ */
+void uct_ib_log_mark_line_cut(char *buf, size_t max);
 
 void uct_ib_log_dump_remote_addr(uint64_t remote_addr, uint32_t rkey,
                                  char *buf, size_t max);

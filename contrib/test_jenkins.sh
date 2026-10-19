@@ -172,6 +172,24 @@ run_loopback_app() {
 	wait ${pid} || true
 }
 
+expect_failure() {
+	local expected_error=$1
+	local output
+	shift
+
+	if output=$("$@" 2>&1); then
+		printf '%s\n' "$output"
+		log_error "Command unexpectedly succeeded: $*"
+		return 1
+	fi
+
+	if ! grep -qF "$expected_error" <<< "$output"; then
+		printf '%s\n' "$output"
+		log_error "Expected error not found: $expected_error"
+		return 1
+	fi
+}
+
 run_client_server_app() {
 	test_exe=$1
 	test_args=$2
@@ -607,6 +625,13 @@ run_ucx_perftest() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_short_ucp \
 				-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
+	if [ $with_mpi -ne 1 ]; then
+		expect_failure "device id is not supported for memory allocator" \
+			"$ucx_perftest" -t tag_lat -m host:0 -l
+		expect_failure "device API is not supported for host" \
+			"$ucx_perftest" -t ucp_put_lat -a -m host -l
+	fi
+
 	# IP ifaces
 	ip_ifaces=$(get_active_ip_ifaces)
 
@@ -689,6 +714,25 @@ run_ucx_perftest() {
 		sed -s 's,-n [0-9]*,-n 10 -w 1,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
 
 		echo "==== Running ucx_perf with cuda memory ===="
+
+		expect_failure "device API is not supported for" \
+			"$ucx_perftest" -t ucp_put_lat -a -m cuda,host -l
+		"$ucx_perftest" -t tag_lat -m cuda:0,host -s 8 -n 1 -w 0 -l -f
+		expect_failure "device ids must match in loopback mode" \
+			"$ucx_perftest" -t tag_lat -m cuda:0,cuda:1 -l
+		expect_failure "cuda device index 2147483647 is invalid" \
+			"$ucx_perftest" -t tag_lat -m cuda:2147483647 -s 8 -l
+
+		if $ucx_perftest -h 2>&1 | grep -q "cuda-async"
+		then
+			echo "==== Running ucx_perf with cuda-async memory ===="
+			cuda_async_test_args="-t tag_lat -D contig,contig"
+			cuda_async_test_args+=" -m cuda-async,cuda-async:0 -s 8 -n 10 -w 1"
+			run_client_server_app "$ucx_perftest" "$cuda_async_test_args" \
+					      "$(hostname)" 0 0
+		else
+			echo "==== cuda-async memory is not supported, skipping ===="
+		fi
 
 		for memtype_cache in y n
 		do
@@ -823,10 +867,14 @@ run_ucx_perftest_cuda_device() {
 		return 0
 	fi
 
-	if [ "$(get_num_gpus)" -eq 0 ]; then
+	num_gpus=$(get_num_gpus)
+	if [ "$num_gpus" -eq 0 ]; then
 		echo "==== No NVIDIA GPUs found, skipping CUDA device tests ===="
 		return 0
 	fi
+
+	# Pin both peers without constraining the installed batch configuration
+	export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
 
     echo "==== Running ucx_perftest with cuda kernel ===="
 	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
@@ -834,7 +882,7 @@ run_ucx_perftest_cuda_device() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
 
 	# TODO: Run on all GPUs & NICs combinations
-	ucp_client_args="-a cuda:0 $(hostname)"
+	ucp_client_args="-a $(hostname)"
 	gda_tls="cuda_copy,rc,rc_gda"
 	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
 
@@ -845,6 +893,34 @@ run_ucx_perftest_cuda_device() {
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 	done
 	unset UCX_TLS
+	unset CUDA_VISIBLE_DEVICES
+}
+
+#
+# Run UCX one-sided performance test with IOV datatype
+#
+run_ucx_perftest_rma_iov() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+
+	if [ "X$have_cuda" != "Xno" ] && [ "$(get_num_gpus)" -gt 0 ]; then
+		cat $ucx_inst_ptest/test_types_ucp_rma_iov | \
+			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+	else
+		echo "==== CUDA not available, running host-only IOV RMA tests ===="
+		cat $ucx_inst_ptest/test_types_ucp_rma_iov | grep -v cuda | \
+			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+	fi
+
+	ucp_test_args="-b $ucx_inst_ptest/test_types_rma_iov_ucp -w 1"
+
+	for ucx_dev in $(get_active_ib_devices)
+	do
+		echo "==== Running ucx_perftest IOV RMA on $ucx_dev ===="
+		export UCX_NET_DEVICES=$ucx_dev
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_NET_DEVICES
+	done
 }
 
 #
@@ -1451,6 +1527,7 @@ run_tests() {
 	do_distributed_task 0 4 test_no_cuda_context
 	do_distributed_task 1 4 run_ucx_perftest_with_daemon
 	do_distributed_task 1 4 run_ucx_perftest_cuda_device
+	do_distributed_task 2 4 run_ucx_perftest_rma_iov
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello

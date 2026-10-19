@@ -320,9 +320,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     /* set iov to dptr */
     if (iovcnt > 0) {
         wqe_size  = ucs_align_up_pow2(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
-        wqe_size += uct_ib_mlx5_set_data_seg_iov(&iface->tx.wq,
-                                                 UCS_PTR_BYTE_OFFSET(ctrl, wqe_size),
-                                                 iov, iovcnt);
+        wqe_size += uct_ib_mlx5_set_data_seg_iov(
+                &iface->tx.wq, UCS_PTR_BYTE_OFFSET(ctrl, wqe_size), iov,
+                iovcnt, NULL);
     }
 
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size, neth,
@@ -666,10 +666,23 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     return UCS_OK;
 }
 
-static void *uct_ud_mlx5_ep_get_peer_address(uct_ud_ep_t *ud_ep)
+static ucs_status_t
+uct_ud_mlx5_ep_resolve_peer_address(uct_ud_ep_t *ud_ep,
+                                    const uct_ib_address_t *ib_addr UCS_V_UNUSED,
+                                    const void *address)
 {
     uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
-    return &ep->peer_address;
+
+    memcpy(&ep->peer_address, address, sizeof(ep->peer_address));
+    return UCS_OK;
+}
+
+static void
+uct_ud_mlx5_ep_get_peer_address(const uct_ud_ep_t *ud_ep, void *address_p)
+{
+    const uct_ud_mlx5_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_mlx5_ep_t);
+
+    memcpy(address_p, &ep->peer_address, sizeof(ep->peer_address));
 }
 
 static size_t uct_ud_mlx5_get_peer_address_length()
@@ -815,7 +828,8 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
     }
 
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                   iface->tx.mmio_mode, &iface->tx.wq,
+                                   iface->tx.mmio_mode,
+                                   iface->tx.bf_copy_mode, &iface->tx.wq,
                                    qp->verbs.qp);
     if (status != UCS_OK) {
         goto err_destroy_qp;
@@ -879,6 +893,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .create_qp               = uct_ud_mlx5_iface_create_qp,
     .destroy_qp              = uct_ud_mlx5_iface_destroy_qp,
     .unpack_peer_address     = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_resolve_peer_address = uct_ud_mlx5_ep_resolve_peer_address,
     .ep_get_peer_address     = uct_ud_mlx5_ep_get_peer_address,
     .get_peer_address_length = uct_ud_mlx5_get_peer_address_length,
     .peer_address_str        = uct_ud_mlx5_iface_peer_address_str,
@@ -1003,8 +1018,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t, uct_md_h tl_md,
 
     uct_ib_mlx5_parse_cqe_zipping(md, &config->mlx5_common, &init_attr);
 
-    self->tx.mmio_mode     = config->mlx5_common.mmio_mode;
-    self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    self->tx.mmio_mode        = config->mlx5_common.mmio_mode;
+    self->tx.bf_copy_mode     = config->mlx5_common.bf_copy_mode;
+    self->tx.wq.super.type    = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
                               &uct_ud_mlx5_iface_tl_ops, tl_md, worker, params,

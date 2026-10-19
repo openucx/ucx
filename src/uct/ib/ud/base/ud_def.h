@@ -74,29 +74,31 @@ E - explicit congestion notification (ecn)
 N - negative acknowledgement
 P - put emulation (will be disabled in the future)
 C - control packet extended header
+G - endpoint generation
 
 Active message packet header
 
- 3         2 2 2 2             1 1
- 1         6 5 4 3             6 5                             0
+ 3         2 2 2 2 2           1 1
+ 1         6 5 4 3 2           6 5                             0
 +---------------------------------------------------------------+
-| am_id   |E|A|1|            dest_ep_id (24 bit)                |
+| am_id   |E|A|1|GG|          ep_index (22 bit)                 |
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
 
 Control packet header
 
- 3   2 2 2 2 2 2 2             1 1
- 1   9 8 7 6 5 4 3             6 5                             0
+ 3   2 2 2 2 2 2 2 2           1 1
+ 1   9 8 7 6 5 4 3 2           6 5                             0
 +---------------------------------------------------------------+
-|rsv|C|P|N|E|A|0|            dest_ep_id (24 bit)                |
+|rsv|C|P|N|E|A|0|GG|          ep_index (22 bit)                 |
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
 
     // neth layout in human readable form
-    uint32_t           dest_ep_id:24;
+    uint32_t           ep_index:22;
+    uint8_t            gen_id:2;
     uint8_t            is_am:1;
     union {
         struct { // am false
