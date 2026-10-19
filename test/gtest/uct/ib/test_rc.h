@@ -83,6 +83,10 @@ public:
         rc_iface(e)->tx.cq_available = cq_num;
     }
 
+    virtual void dispatch_pending(entity *e) {
+        uct_rc_iface_arbiter_dispatch(rc_iface(e));
+    }
+
     virtual void set_tx_moderation(entity *e, int val) {
         rc_iface(e)->config.tx_moderation = val;
     }

@@ -1242,7 +1242,7 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
      * Can't send AM/PUT for that, because it is blocked while FC grant is
      * queued. */
     enable_entity(m_e2);
-    uct_rc_iface_arbiter_dispatch(rc_iface(m_e2));
+    dispatch_pending(m_e2);
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);
