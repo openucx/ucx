@@ -61,7 +61,7 @@ ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
            (mpool_key1.pool == mpool_key2.pool);
 }
 
-KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t,
+KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*,
            1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
 
 static UCS_F_ALWAYS_INLINE khint_t

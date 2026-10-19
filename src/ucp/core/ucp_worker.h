@@ -246,7 +246,9 @@ typedef struct ucp_worker_mpool_key {
 
 
 /* Hash map to find mpool by mpool key */
-KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
+/* Pools are allocated separately, since fragments point to their pool and the
+ * hash table moves its values when it grows */
+KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
 
 

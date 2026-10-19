@@ -1164,7 +1164,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
 
     khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash, key);
     if (ucs_likely(khiter != kh_end(&worker->mpool_hash))) {
-        mpool = &kh_val(&worker->mpool_hash, khiter);
+        mpool = kh_val(&worker->mpool_hash, khiter);
         goto out_mp_get;
     }
 
@@ -1186,15 +1186,21 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
         }
     }
 
-    khiter = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash, key, &khret);
-    if (khret == UCS_KH_PUT_FAILED) {
+    mpool = ucs_malloc(sizeof(*mpool), "ucp_rndv_frag_mpool");
+    if (mpool == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
+    khiter = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash, key, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_mpool;
+    }
+
     ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
 
-    mpool     = &kh_value(&worker->mpool_hash, khiter);
+    kh_value(&worker->mpool_hash, khiter) = mpool;
     num_frags = context->config.ext.rndv_num_frags[key.mem_type];
 
     ucs_mpool_params_reset(&mp_params);
@@ -1211,7 +1217,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,
         /* Callers retry on UCS_ERR_NO_RESOURCE, meaning quota exhaustion */
         ucs_assert(status != UCS_ERR_NO_RESOURCE);
         kh_del(ucp_worker_mpool_hash, &worker->mpool_hash, khiter);
-        goto err;
+        goto err_free_mpool;
     }
 
     mpriv           = ucs_mpool_priv(mpool);
@@ -1232,6 +1238,8 @@ out_mp_get:
     return ucs_mpool_is_empty(mpool) ? UCS_ERR_NO_RESOURCE :
                                        UCS_ERR_NO_MEMORY;
 
+err_free_mpool:
+    ucs_free(mpool);
 err:
     return status;
 }

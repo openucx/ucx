@@ -2209,7 +2209,8 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
         if (!kh_exist(&worker->mpool_hash, iter)) {
             continue;
         }
-        ucs_mpool_cleanup(&kh_val(&worker->mpool_hash, iter), 1);
+        ucs_mpool_cleanup(kh_val(&worker->mpool_hash, iter), 1);
+        ucs_free(kh_val(&worker->mpool_hash, iter));
     }
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);

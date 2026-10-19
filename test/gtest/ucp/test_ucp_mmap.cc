@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/datastruct/mpool.inl>
 #include <ucp/dt/dt.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/float8.h>
@@ -1102,6 +1103,58 @@ UCS_TEST_SKIP_COND_P(test_ucp_mmap, rndv_mpool_rtr_ratio,
     }
 }
 
+/* Fragments point to their pool, so the pool must stay in place when the hash
+ * table of pools grows */
+UCS_TEST_SKIP_COND_P(test_ucp_mmap, rndv_mpool_hash_growth,
+                     (get_variant_value() == VARIANT_PROTO_DISABLE),
+                     "RNDV_FRAG_SIZE=host:4K", "RNDV_FRAG_ALLOC_COUNT=host:1",
+                     "RNDV_FRAG_WORKER_MAX_MEM=8K")
+{
+    ucp_worker_h worker             = sender().worker();
+    ucp_worker_mpool_hash_t *mpools = &worker->mpool_hash;
+    std::vector<ucp_worker_mpool_key_t> placeholders;
+    ucp_worker_mpool_key_t key;
+    ucp_mem_desc_t *mdesc;
+    khint_t num_buckets;
+    khiter_t khiter;
+    int khret;
+
+    /* A fragment points to its pool */
+    ASSERT_UCS_OK(rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                 UCP_WORKER_RNDV_FRAG_POOL_SHARED, &mdesc));
+    const ucs_mpool_t *owner = ucs_mpool_obj_owner(mdesc);
+
+    /* Grow the hash table with placeholder entries for other devices */
+    key.mem_type = UCS_MEMORY_TYPE_HOST;
+    key.pool     = UCP_WORKER_RNDV_FRAG_POOL_SHARED;
+    num_buckets  = kh_n_buckets(mpools);
+    for (key.sys_dev = 0; kh_n_buckets(mpools) == num_buckets; ++key.sys_dev) {
+        khiter = kh_put(ucp_worker_mpool_hash, mpools, key, &khret);
+        ASSERT_NE(UCS_KH_PUT_FAILED, khret);
+        if (khret == UCS_KH_PUT_KEY_PRESENT) {
+            continue;
+        }
+
+        kh_val(mpools, khiter) = NULL;
+        placeholders.push_back(key);
+    }
+
+    /* The pool is still where its fragment points to */
+    key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    khiter      = kh_get(ucp_worker_mpool_hash, mpools, key);
+    ASSERT_NE(kh_end(mpools), khiter);
+    EXPECT_EQ(owner, kh_val(mpools, khiter))
+            << "the pool moved while its fragment was allocated";
+    ucs_mpool_put(mdesc);
+
+    /* The worker cleans up every pool in the hash table */
+    for (const auto &placeholder : placeholders) {
+        khiter = kh_get(ucp_worker_mpool_hash, mpools, placeholder);
+        ASSERT_NE(kh_end(mpools), khiter);
+        kh_del(ucp_worker_mpool_hash, mpools, khiter);
+    }
+}
+
 UCS_TEST_P(test_ucp_mmap, rndv_mpool_quota_disabled_with_proto_v1,
            "PROTO_ENABLE=n", "RNDV_FRAG_SIZE=host:4K",
            "RNDV_FRAG_ALLOC_COUNT=host:2", "RNDV_FRAG_WORKER_MAX_MEM=8K")
@@ -1147,7 +1200,7 @@ UCS_TEST_P(test_ucp_mmap, rndv_mpool_allocation_failure,
     const khiter_t khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash,
                                    key);
     ASSERT_NE(kh_end(&worker->mpool_hash), khiter);
-    ucs_mpool_t *mpool = &kh_val(&worker->mpool_hash, khiter);
+    ucs_mpool_t *mpool = kh_val(&worker->mpool_hash, khiter);
 
     /* The first chunk is exhausted, but the pool still has quota. Make the
      * next chunk allocation fail and verify it is not reported as quota

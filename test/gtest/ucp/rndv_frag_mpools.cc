@@ -48,7 +48,7 @@ rndv_frag_mpools::rndv_frag_mpools(ucp_worker_h worker,
          iter != kh_end(&worker->mpool_hash); ++iter) {
         if (kh_exist(&worker->mpool_hash, iter) &&
             (kh_key(&worker->mpool_hash, iter).mem_type == mem_type)) {
-            m_mpools.push_back(&kh_val(&worker->mpool_hash, iter));
+            m_mpools.push_back(kh_val(&worker->mpool_hash, iter));
         }
     }
 
