@@ -51,11 +51,11 @@ typedef struct ucs_memtype_cache_owner {
 } ucs_memtype_cache_owner_t;
 
 struct ucs_memtype_cache_region {
-    ucs_pgt_region_t  super;     /**< Base class - page table region */
-    ucs_list_link_t   list;      /**< List element */
-    ucs_memory_type_t mem_type;  /**< Memory type, use uint8 for compact size */
-    ucs_sys_device_t  sys_dev;   /**< System device index */
-    uint8_t           mem_flags; /**< UCS memory flags */
+    ucs_pgt_region_t  super;         /**< Base class - page table region */
+    ucs_list_link_t   list;          /**< List element */
+    ucs_memory_type_t mem_type;      /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t  sys_dev;       /**< System device index */
+    uint8_t           mem_flags;     /**< UCS memory flags */
     unsigned          explicit_refs; /**< Owners of an explicit region */
 };
 
@@ -80,7 +80,8 @@ ucs_memtype_cache_create_global()
         if (status != UCS_OK) {
             /* If we failed to create the memtype cache once, do not try again */
             ucs_memtype_cache_failed = 1;
-            if (ucs_global_opts.enable_memtype_cache == UCS_YES) {
+            if (ucs_global_opts.enable_memtype_cache ==
+                UCS_MEMTYPE_CACHE_YES) {
                 ucs_warn("failed to create memtype cache: %s",
                          ucs_status_string(status));
             }
@@ -104,14 +105,8 @@ ucs_memtype_cache_create_global()
 
 static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
 {
-    if (ucs_global_opts.enable_memtype_cache == UCS_NO) {
-        /* Explicit mappings remain available when automatic tracking is off. */
-        if ((ucs_memtype_cache_global_instance == NULL) ||
-            ucs_memtype_cache_global_instance->has_events) {
-            return NULL;
-        }
-
-        return ucs_memtype_cache_global_instance;
+    if (ucs_global_opts.enable_memtype_cache == UCS_MEMTYPE_CACHE_NO) {
+        return NULL;
     }
 
     return ucs_memtype_cache_create_global();
@@ -299,7 +294,8 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     ucs_memtype_cache_owner_t *owner, *other;
     ucs_memtype_cache_t *memtype_cache;
 
-    if ((size == 0) ||
+    if ((ucs_global_opts.enable_memtype_cache != UCS_MEMTYPE_CACHE_EXPLICIT) ||
+        (size == 0) ||
         (size > UINTPTR_MAX - start - (UCS_PGT_ADDR_ALIGN - 1)) ||
         (owner_token == NULL) || (mem_type == UCS_MEMORY_TYPE_HOST) ||
         (mem_type >= UCS_MEMORY_TYPE_LAST)) {
@@ -624,8 +620,8 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
 
     ucs_list_head_init(&self->owners);
     self->has_events = 0;
-    if ((ucs_global_opts.enable_memtype_cache != UCS_NO) &&
-        ucm_global_opts.enable_events) {
+    if ((ucs_global_opts.enable_memtype_cache !=
+         UCS_MEMTYPE_CACHE_EXPLICIT) || ucm_global_opts.enable_events) {
         status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC |
                                        UCM_EVENT_MEM_TYPE_FREE  |
                                        UCM_EVENT_FLAG_EXISTING_ALLOC,
@@ -634,9 +630,13 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
         if (status != UCS_OK) {
             ucs_diag("failed to set UCM memtype event handler: %s",
                      ucs_status_string(status));
-            goto err_cleanup_pgtable;
+            if (ucs_global_opts.enable_memtype_cache !=
+                UCS_MEMTYPE_CACHE_EXPLICIT) {
+                goto err_cleanup_pgtable;
+            }
+        } else {
+            self->has_events = 1;
         }
-        self->has_events = 1;
     }
 
     return UCS_OK;

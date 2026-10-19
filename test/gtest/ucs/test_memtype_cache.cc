@@ -578,14 +578,27 @@ INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class test_memtype_explicit : public ucs::test {
+protected:
+    virtual void init() {
+        ucs::test::init();
+        m_enable_events = ucm_global_opts.enable_events;
+        modify_config("MEMTYPE_CACHE", "explicit");
+        ucm_global_opts.enable_events = 0;
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+    }
+
+    virtual void cleanup() {
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+        ucm_global_opts.enable_events = m_enable_events;
+        ucs::test::cleanup();
+    }
+
+    int m_enable_events;
 };
 
 UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
-    if (ucm_global_opts.enable_events &&
-        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
-        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
-    }
-
     int owner = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x10000);
@@ -609,11 +622,6 @@ UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
 }
 
 UCS_TEST_F(test_memtype_explicit, overlapping_owners) {
-    if (ucm_global_opts.enable_events &&
-        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
-        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
-    }
-
     int first_owner = 0, second_owner = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x20000);
@@ -643,11 +651,6 @@ UCS_TEST_F(test_memtype_explicit, overlapping_owners) {
 }
 
 UCS_TEST_F(test_memtype_explicit, duplicate_owners_and_uncached_detection) {
-    if (ucm_global_opts.enable_events &&
-        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
-        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
-    }
-
     int first_owner = 0, second_owner = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x30000);
@@ -672,11 +675,6 @@ UCS_TEST_F(test_memtype_explicit, duplicate_owners_and_uncached_detection) {
 }
 
 UCS_TEST_F(test_memtype_explicit, unaligned_range) {
-    if (ucm_global_opts.enable_events &&
-        (ucs_global_opts.enable_memtype_cache != UCS_NO)) {
-        UCS_TEST_SKIP_R("requires explicit-only memtype cache");
-    }
-
     int owner = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x40000);
@@ -693,4 +691,59 @@ UCS_TEST_F(test_memtype_explicit, unaligned_range) {
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 3), 1000,
                                        &info));
+}
+
+UCS_TEST_F(test_memtype_explicit, disabled_cache) {
+    int owner = 0, disabled_owner = 0;
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x50000);
+    const void *disabled_base = reinterpret_cast<void*>(0x51000);
+
+    ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &owner);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
+
+    modify_config("MEMTYPE_CACHE", "n");
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+    ucs_memtype_cache_register(disabled_base, 0x1000, UCS_MEMORY_TYPE_CUDA,
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1,
+                               &disabled_owner);
+    ucs_memtype_cache_unregister(&owner);
+
+    modify_config("MEMTYPE_CACHE", "explicit");
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(disabled_base, 0x100, &info));
+}
+
+UCS_TEST_F(test_memtype_explicit, event_cache_when_available) {
+    ucm_event_t event;
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x60000);
+
+    ucs_memtype_cache_cleanup();
+    ucs_memtype_cache_global_init();
+    ucm_global_opts.enable_events = 1;
+    ucs_memtype_cache_global_create();
+    if (ucs_memtype_cache_global_instance == NULL) {
+        UCS_TEST_SKIP_R("UCM memory events are unavailable");
+    }
+    if (!ucs_memtype_cache_global_instance->has_events) {
+        UCS_TEST_SKIP_R("UCM memory event handler could not be installed");
+    }
+
+    event.mem_type.address   = const_cast<void*>(base);
+    event.mem_type.size      = 0x1000;
+    event.mem_type.mem_type  = UCS_MEMORY_TYPE_CUDA;
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = 1;
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+
+    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_memtype_cache_lookup(base, 0x100, &info));
 }

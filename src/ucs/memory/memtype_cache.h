@@ -51,7 +51,7 @@ void ucs_memtype_cache_global_init(void);
 
 
 /**
- * Create the global memory type cache and install its event handlers.
+ * Create the global memory type cache and install event handlers when available.
  */
 void ucs_memtype_cache_global_create(void);
 
@@ -70,8 +70,9 @@ void ucs_memtype_cache_cleanup(void);
  *                              memory, and should be detected in another way.
  *
  * @return UCS_OK              - an element was found and the memory info is valid.
- * @return UCS_ERR_NO_ELEM     - an element was not found.
- * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled.
+ * @return UCS_ERR_NO_ELEM     - an element was not found in the event cache.
+ * @return UCS_ERR_UNSUPPORTED - the cache is disabled or an explicit-only
+ *                               region was not found.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);

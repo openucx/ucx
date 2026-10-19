@@ -23,6 +23,13 @@ BEGIN_C_DECLS
 
 #define UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG    "WARN_UNUSED_ENV_VARS"
 
+typedef enum {
+    UCS_MEMTYPE_CACHE_NO       = UCS_NO,
+    UCS_MEMTYPE_CACHE_YES      = UCS_YES,
+    UCS_MEMTYPE_CACHE_TRY      = UCS_TRY,
+    UCS_MEMTYPE_CACHE_EXPLICIT = 3
+} ucs_memtype_cache_mode_t;
+
 /**
  * UCS global options.
  */
@@ -78,7 +85,7 @@ typedef struct {
     int                        warn_unused_env_vars;
 
     /** Memtype cache */
-    ucs_ternary_auto_value_t   enable_memtype_cache;
+    ucs_memtype_cache_mode_t   enable_memtype_cache;
 
     /* Destination for statistics: udp:host:port / file:path / stdout
      */
