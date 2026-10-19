@@ -298,6 +298,10 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, queue_follows_buffer_device,
     EXPECT_EQ(device, queue_device(queue_index));
     EXPECT_EQ(queue_index, get_queue(host_buf.data(), other_buf.ptr()));
 
+    /* Between two devices, the source device runs the copy */
+    EXPECT_EQ(queue_index, get_queue(other_buf.ptr(), md_buf.ptr()));
+    EXPECT_EQ(0u, get_queue(md_buf.ptr(), other_buf.ptr()));
+
     for (i = 0; i < length; ++i) {
         host_buf[i] = (uint8_t)(i * 7 + 1);
     }
