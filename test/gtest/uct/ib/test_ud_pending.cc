@@ -197,7 +197,6 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, window,
 UCS_TEST_SKIP_COND_P(test_ud_pending, tx_wqe,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
 {
-    int i;
     uct_pending_req_t r;
     ucs_status_t status;
 
@@ -208,10 +207,8 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, tx_wqe,
     connect();
     /* set big window */
     set_tx_win(m_e1, 8192);
-    i = 0;
     do {
        status = tx(m_e1);
-       i++;
     } while (status == UCS_OK);
 
     r.func = pending_cb_dispatch;
