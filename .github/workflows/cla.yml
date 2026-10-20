@@ -104,11 +104,11 @@ jobs:
           {
               echo "### UCF CLA check failed"
               if [ ${#missing[@]} -gt 0 ]; then
-                  echo "No signed CLA on file for: ${missing[*]}"
+                  echo "- No signed CLA on file for: ${missing[*]}"
               fi
               if [ ${#unlinked[@]} -gt 0 ]; then
-                  echo "Commits with an author email not linked to a GitHub account: ${unlinked[*]}"
-                  echo "Add that email to your GitHub account, or amend the commits to use a linked email."
+                  echo "- Commits with an author email not linked to a GitHub account: ${unlinked[*]}."
+                  echo "  Add that email to your GitHub account, or amend the commits to use a linked email."
               fi
               if [ ${#missing[@]} -gt 0 ]; then
                   echo
