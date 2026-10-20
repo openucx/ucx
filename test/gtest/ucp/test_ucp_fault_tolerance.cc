@@ -205,13 +205,12 @@ protected:
 
     /* Replay the rc_x/PUT|MSG_LARGE order that left lane 1 failed:
      * 4, 0, 2, 1, 3, then 5. The last lane stays healthy.
-     * A two-lane run keeps the sorted pair: the first is failed, the second
-     * stays healthy. */
+     * A three-lane run keeps the sorted lanes: the last stays healthy. */
     void order_put_lanes(std::vector<ucp_lane_index_t> &lanes,
                          const std::string &lane_type) {
         static const ucp_lane_index_t order[] = {4, 0, 2, 1, 3, 5};
 
-        if (lanes.size() == 2) {
+        if (lanes.size() == 3) {
             for (ucp_lane_index_t lane : lanes) {
                 UCS_TEST_MESSAGE << lane_type << ": " << size_t(lane) << "/"
                                  << lanes.size();
@@ -968,8 +967,8 @@ uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
 unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-/* First two IB devices, one path each, so a PUT case has two lanes. */
-static std::string two_ib_net_devices()
+/* First three IB devices, one path each, so a PUT case has three lanes. */
+static std::string three_ib_net_devices()
 {
     std::vector<std::string> names;
     DIR *dir;
@@ -991,11 +990,11 @@ static std::string two_ib_net_devices()
     closedir(dir);
 
     std::sort(names.begin(), names.end());
-    if (names.size() < 2) {
+    if (names.size() < 3) {
         return "";
     }
 
-    return names[0] + "," + names[1];
+    return names[0] + "," + names[1] + "," + names[2];
 }
 
 /* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
@@ -1015,7 +1014,7 @@ protected:
 
         if ((op_mask & TEST_OP_PUT) &&
             !(op_mask & (TEST_OP_GET | TEST_OP_AM))) {
-            const std::string devices = two_ib_net_devices();
+            const std::string devices = three_ib_net_devices();
 
             modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
             if (!devices.empty()) {
