@@ -1,10 +1,12 @@
 # Check that the PR author and all commit authors are in the secret CLA team
 name: CLA
 
-# pull_request_target passes secrets to fork PRs; PR code is never checked out
+# pull_request_target passes secrets to fork PRs; PR code is never checked out.
+# Master only: release branch backports cherry-pick commits already checked.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
+    branches: [master]
 
 permissions: {}
 
@@ -104,11 +106,14 @@ jobs:
               fi
               if [ ${#unlinked[@]} -gt 0 ]; then
                   echo "Commits with an author email not linked to a GitHub account: ${unlinked[*]}"
+                  echo "Add that email to your GitHub account, or amend the commits to use a linked email."
               fi
-              echo
-              echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
-              echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
-              echo "Once the CLA is countersigned, push a new commit or ask a maintainer to re-run this check."
+              if [ ${#missing[@]} -gt 0 ]; then
+                  echo
+                  echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
+                  echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
+                  echo "Once the CLA is countersigned, push a new commit or ask a maintainer to re-run this check."
+              fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::error::UCF CLA check failed, see the job summary"
           exit 1
