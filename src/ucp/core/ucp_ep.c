@@ -2274,22 +2274,23 @@ ucp_ep_recovery_prepare_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
     return lane_map;
 }
 
-/* Send a LANES_ADDR_REQUEST for the currently failed lanes. */
-static int ucp_ep_recovery_send_request(ucp_ep_h ep)
+/* Send a LANES_ADDR_REQUEST for @a lanes. Those lanes are recorded so a
+ * later failure does not publish them again before recovery retries. */
+static int ucp_ep_recovery_send_request(ucp_ep_h ep, ucp_lane_map_t lanes)
 {
-    ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
     ucp_lane_map_t recovery_lanes;
 
     ucs_assert(ucp_ep_config(ep)->key.am_lane != UCP_NULL_LANE);
 
-    recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, failed_lanes);
+    recovery_lanes = ucp_ep_recovery_prepare_lanes(ep, lanes);
     if (recovery_lanes == 0) {
         ucs_diag("ep %p: no lanes to recover", ep);
         return 0;
     }
 
-    ucs_debug("ep %p: sending recovery request, failed=0x%" PRIx64
-              " recovery=0x%" PRIx64, ep, failed_lanes, recovery_lanes);
+    ep->ext->recovery_arg->sent_lanes |= recovery_lanes;
+    ucs_debug("ep %p: sending recovery request, lanes=0x%" PRIx64
+              " recovery=0x%" PRIx64, ep, (uint64_t)lanes, recovery_lanes);
 
     /* A request answers no other message, so requested_lane_map is empty. */
     if (++ep->ext->recovery_arg->request_id == 0) {
@@ -2364,9 +2365,11 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
         ucp_ep_tf_arg_init(arg);
     }
 
-    /* Reset counter by new event. */
+    /* A new failure publishes only the lanes that just failed. Lanes already
+     * sent stay out of this round until recovery retries. */
     arg->retries_left = context->config.ext.recovery_retries;
     arg->state        = UCP_EP_RECOVERY_STATE_IDLE;
+    arg->resend       = 0;
     return UCS_OK;
 }
 
@@ -2406,7 +2409,8 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
     int ret             = 0;
-    ucp_lane_map_t failed, ready, held, recovered;
+    int resend;
+    ucp_lane_map_t failed, ready, held, recovered, lanes;
     ucp_lane_index_t lane;
     ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
@@ -2464,6 +2468,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     }
 
     failed &= ~recovered;
+    ep->ext->recovery_arg->sent_lanes &= failed;
     if (failed == 0) {
         /* All failed lanes recovered - drop the retry state so a later
          * round (failed == 0) does not trip the recovery_arg == NULL
@@ -2473,8 +2478,10 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     }
 
     if (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_WAIT_REPLY) {
-        /* No reply within a keepalive interval - count as a failed round. */
-        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        /* No reply within a keepalive interval - count as a failed round.
+         * The next idle round republishes the lanes already sent. */
+        ep->ext->recovery_arg->state  = UCP_EP_RECOVERY_STATE_IDLE;
+        ep->ext->recovery_arg->resend = 1;
         if (--ep->ext->recovery_arg->retries_left == 0) {
             goto exhausted;
         }
@@ -2509,12 +2516,14 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         if (ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK) {
             /* Consume a successful probe without burning a retry. The next
              * IDLE round re-enters address exchange so rebuild can connect. */
-            ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
-            ret                          = 1;
+            ep->ext->recovery_arg->state  = UCP_EP_RECOVERY_STATE_IDLE;
+            ep->ext->recovery_arg->resend = 1;
+            ret                           = 1;
             goto done;
         }
 
-        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        ep->ext->recovery_arg->state  = UCP_EP_RECOVERY_STATE_IDLE;
+        ep->ext->recovery_arg->resend = 1;
         if (--ep->ext->recovery_arg->retries_left == 0) {
             goto exhausted;
         }
@@ -2534,15 +2543,38 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
         goto done;
     }
 
-    ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64 ")",
-              ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed);
-
     ucs_assert(ep->ext->recovery_arg->state == UCP_EP_RECOVERY_STATE_IDLE);
+    resend = ep->ext->recovery_arg->resend;
+    ep->ext->recovery_arg->resend = 0;
+    if (resend) {
+        lanes = failed & ep->ext->recovery_arg->sent_lanes;
+        if (lanes == 0) {
+            lanes = failed & ~ep->ext->recovery_arg->sent_lanes;
+        }
+    } else {
+        /* A new failure publishes only lanes that no request has sent. */
+        lanes = failed & ~ep->ext->recovery_arg->sent_lanes;
+    }
+
+    if (lanes == 0) {
+        /* Nothing new. The next round retries the lanes already sent. */
+        ep->ext->recovery_arg->resend = 1;
+        ret                           = 1;
+        goto done;
+    }
+
+    ucs_debug("ep %p: recovery round (retries_left=%u, failed=0x%" PRIx64
+              " lanes=0x%" PRIx64 ")",
+              ep, ep->ext->recovery_arg->retries_left, (uint64_t)failed,
+              (uint64_t)lanes);
+
     ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_WAIT_REPLY;
-    if (ucp_ep_recovery_send_request(ep)) {
+    if (ucp_ep_recovery_send_request(ep, lanes)) {
         ret = 1;
     } else {
-        ep->ext->recovery_arg->state = UCP_EP_RECOVERY_STATE_IDLE;
+        ep->ext->recovery_arg->state  = UCP_EP_RECOVERY_STATE_IDLE;
+        ep->ext->recovery_arg->resend = resend;
+        ret                           = 1;
     }
 
     goto done;
