@@ -34,6 +34,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          PR_COMMITS: ${{ github.event.pull_request.commits }}
         run: |
           set -euo pipefail
 
@@ -63,6 +64,12 @@ jobs:
           unlinked=()
           if [ "$PR_AUTHOR_TYPE" != "Bot" ]; then
               logins+=("$PR_AUTHOR")
+          fi
+
+          # The PR commits API returns at most 250 commits
+          if [ "$PR_COMMITS" -gt 250 ]; then
+              echo "::error::PR has $PR_COMMITS commits, only 250 can be checked; please squash"
+              exit 1
           fi
 
           # Captured first so an API failure aborts the job under set -e
