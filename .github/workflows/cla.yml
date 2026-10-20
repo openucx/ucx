@@ -90,19 +90,17 @@ jobs:
           commits_json=$(gh api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100")
           # shellcheck disable=SC2016
           commits=$(jq -r --arg domains "$DOMAINS" '
-                    ($domains | ascii_downcase | split(" ") | map(select(. != ""))) as $doms |
-                    .[] |
+                    ($domains | ascii_downcase | [splits("\\s+")] | map(select(. != ""))) as $doms |
+                    .[] | select(.author.type != "Bot") |
                     (if .committer.login == "web-flow"
                      then {login: .author.login, email: .commit.author.email}
                      else {login: .committer.login, email: .commit.committer.email} end) as $signer |
-                    if .author.type == "Bot" then empty
-                    elif .commit.verification.verified and $signer.login != null and
-                         (($signer.email | ascii_downcase | split("@")[1]) | IN($doms[]))
+                    if .commit.verification.verified and $signer.login != null and
+                       (($signer.email | ascii_downcase | split("@")[1]) | IN($doms[]))
                     then "covered \($signer.login)" else empty end,
-                    if .author.type == "Bot" then empty
-                    elif .author == null then "unlinked \(.sha[0:10])"
+                    if .author == null then "unlinked \(.sha[0:10])"
                     else "user \(.author.login)" end,
-                    if .author.type == "Bot" or .commit.verification.verified then empty
+                    if .commit.verification.verified then empty
                     else "unsigned \(.sha[0:10])" end' <<< "$commits_json")
 
           while read -r kind value; do
