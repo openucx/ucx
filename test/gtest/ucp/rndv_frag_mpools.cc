@@ -17,7 +17,7 @@ unsigned rndv_frag_mpools::s_num_alloc_failures = 0;
 
 rndv_frag_mpools::rndv_frag_mpools(ucp_worker_h worker,
                                    ucs_memory_type_t mem_type) :
-    m_worker(worker)
+    m_worker(worker), m_fail_ops()
 {
     std::vector<ucs_sys_device_t> sys_devs;
     ucp_mem_desc_t *mdesc;
