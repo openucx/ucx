@@ -208,7 +208,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                 UCT_MD_FLAG_INVALIDATE |
                                 UCT_MD_FLAG_INVALIDATE_RMA |
                                 UCT_MD_FLAG_INVALIDATE_AMO |
-                                UCT_MD_FLAG_MEMTYPE_COPY |
+                                UCT_MD_FLAG_IPC_MEMTYPE_COPY |
                                 UCT_MD_FLAG_RKEY_PTR;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -401,7 +401,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 legacy_path:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
     status              = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr));
+            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)key->d_bptr));
     if (status != UCS_OK) {
         goto out_pop_ctx;
     }

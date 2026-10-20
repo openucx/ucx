@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -26,7 +26,7 @@
 
 
 /* Resources */
-#define UCP_MAX_RESOURCES            128
+#define UCP_MAX_RESOURCES            255
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
 
@@ -78,6 +78,7 @@ typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
 typedef struct ucp_rkey_config_key    ucp_rkey_config_key_t;
 typedef struct ucp_proto              ucp_proto_t;
 typedef struct ucp_mem_desc           ucp_mem_desc_t;
+typedef struct ucp_gpu_nic_assignment ucp_gpu_nic_assignment_t;
 
 
 /**
@@ -89,7 +90,7 @@ typedef ucs_static_bitmap_s(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
 
 
 /**
- * Max possible value of TL bitmap (all bits are 1)
+ * Max possible value of TL bitmap (all valid resource index bits are 1)
  */
 extern const ucp_tl_bitmap_t ucp_tl_bitmap_max;
 
@@ -100,8 +101,10 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_max;
 extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
 
 
-#define UCT_TL_BITMAP_FMT          "0x%lx 0x%lx"
-#define UCT_TL_BITMAP_ARG(_bitmap) (_bitmap)->bits[0], (_bitmap)->bits[1]
+#define UCT_TL_BITMAP_FMT "0x%lx 0x%lx 0x%lx 0x%lx"
+#define UCT_TL_BITMAP_ARG(_bitmap) \
+    (_bitmap)->bits[0], (_bitmap)->bits[1], (_bitmap)->bits[2], \
+            (_bitmap)->bits[3]
 
 
 /**
@@ -114,6 +117,43 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
  */
 #define UCP_TL_BITMAP_AND_NOT(_bitmap1, _bitmap2) \
     UCS_STATIC_BITMAP_AND(_bitmap1, UCS_STATIC_BITMAP_NOT(_bitmap2))
+
+
+/**
+ * Find the first set bit of a TL bitmap, starting from a given index.
+ *
+ * Bits from UCP_MAX_RESOURCES and up exist only because the bitmap is rounded
+ * up to whole words, so the search stops at UCP_MAX_RESOURCES. This keeps the
+ * result within ucp_rsc_index_t.
+ *
+ * @param tl_bitmap    Search this TL bitmap.
+ * @param start_index  First bit index to check.
+ *
+ * @return Index of the first set bit, or UCP_MAX_RESOURCES if none is set.
+ */
+static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
+ucp_tl_bitmap_ffs(const ucp_tl_bitmap_t *tl_bitmap, size_t start_index)
+{
+    /* UCP_NULL_RESOURCE must not be a valid resource index */
+    UCS_STATIC_ASSERT(UCP_NULL_RESOURCE >= UCP_MAX_RESOURCES);
+
+    return (ucp_rsc_index_t)
+            ucs_min(ucs_bitmap_bits_ffs(UCS_STATIC_BITMAP_BITS_CARGS(tl_bitmap),
+                                        start_index),
+                    (size_t)UCP_MAX_RESOURCES);
+}
+
+
+/**
+ * Iterate over the set bits of a TL bitmap.
+ *
+ * @param _rsc_index  Resource index (ucp_rsc_index_t) of the current bit.
+ * @param _tl_bitmap  Pointer to the TL bitmap to iterate over.
+ */
+#define UCP_TL_BITMAP_FOR_EACH_BIT(_rsc_index, _tl_bitmap) \
+    for ((_rsc_index) = ucp_tl_bitmap_ffs(_tl_bitmap, 0); \
+         (_rsc_index) < UCP_MAX_RESOURCES; \
+         (_rsc_index) = ucp_tl_bitmap_ffs(_tl_bitmap, (_rsc_index) + 1))
 
 
 #define UCS_FP8_MIN_BW  (512 * UCS_MBYTE)
@@ -158,7 +198,10 @@ typedef enum {
     UCP_OP_ID_RNDV_RECV_DROP,
     UCP_OP_ID_RNDV_LAST,
 
-    UCP_OP_ID_LAST = UCP_OP_ID_RNDV_LAST
+    /* Internal key for the single repost protocol instance. */
+    UCP_OP_ID_REPOST,
+
+    UCP_OP_ID_LAST
 } ucp_operation_id_t;
 
 
@@ -231,6 +274,54 @@ typedef enum {
     UCP_FENCE_MODE_EP_BASED, /* Use EP-based fence mode */
     UCP_FENCE_MODE_LAST
 } ucp_fence_mode_t;
+
+
+/**
+ * Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints.
+ */
+typedef enum {
+    UCP_FAILOVER_MODE_AUTO,  /* Automatic recovery protocol selection */
+    UCP_FAILOVER_MODE_SW,    /* Force software PSN recovery */
+    UCP_FAILOVER_MODE_TOKEN, /* Token based failover and recovery;
+                              * disable unsupported transports */
+    UCP_FAILOVER_MODE_LAST
+} ucp_failover_mode_t;
+
+
+/**
+ * GPU-to-NIC assignment mode.
+ */
+typedef enum {
+    /** Use flip on hardware with a known GPU-NIC topology, otherwise off */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO,
+
+    /** Do not assign NICs to GPUs, select lanes from all NICs */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_OFF,
+
+    /**
+     * Assign each NIC, with all of its ports, going forward and then backward
+     * across the N GPUs of the group.
+     * The group's NICs are assigned to the following GPU indices in order:
+     * 0, 1, ..., N-1, N-1, ..., 1, 0, 0, 1, ...
+     * This targets architectures where only some of the NICs share a PCIe
+     * switch with a local SSD, so that each GPU gets NICs both with and without
+     * direct SSD access.
+     */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_FLIP,
+
+    /**
+     * Assign each NIC, with all of its ports, to the N GPUs of the group
+     * repeatedly in ascending order.
+     * The group's NICs are assigned to the following GPU indices in order:
+     * 0, 1, ..., N-1, 0, 1, ..., N-1, 0, 1, ...
+     */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+
+    /** Assign every NIC, with all of its ports, to every GPU in the group */
+    UCP_GPU_NIC_ASSIGNMENT_MODE_SHARED,
+
+    UCP_GPU_NIC_ASSIGNMENT_MODE_LAST
+} ucp_gpu_nic_assignment_mode_t;
 
 
 /**

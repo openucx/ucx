@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -267,7 +267,7 @@ ucp_ep_flush_restart_remove_filter(const ucs_callbackq_elem_t *elem,
            (elem->arg == arg);
 }
 
-static void ucp_ep_flush_mem_completion(uct_completion_t *self)
+void ucp_ep_flush_mem_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.flush.mem.uct_comp);
@@ -949,7 +949,7 @@ static ucs_status_t ucp_worker_fence_weak(ucp_worker_h worker)
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
         wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->iface == NULL) {
             continue;

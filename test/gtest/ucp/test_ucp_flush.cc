@@ -596,7 +596,9 @@ UCS_TEST_P(test_ucp_flush,
     ASSERT_UCS_OK(ucp_ep_resolve_remote_id(sender().ep(), 0));
     flush_ep(sender());
     ep          = sender().ep();
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
     ASSERT_TRUE(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
+#endif
     flush_state = ucp_ep_flush_state(ep);
     send_sn     = flush_state->send_sn;
     ++flush_state->send_sn;
@@ -840,7 +842,9 @@ UCS_TEST_P(test_ucp_flush_failover,
     ASSERT_UCS_OK(ucp_ep_resolve_remote_id(sender().ep(), 0));
     flush_ep(sender());
     ep          = sender().ep();
+#if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
     ASSERT_TRUE(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
+#endif
     flush_state = ucp_ep_flush_state(ep);
     send_sn     = flush_state->send_sn;
     ++flush_state->send_sn;

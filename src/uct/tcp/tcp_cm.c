@@ -258,15 +258,6 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
     return status;
 }
 
-static const void*
-uct_tcp_cm_conn_match_get_address(const ucs_conn_match_elem_t *elem)
-{
-    const uct_tcp_ep_t *ep = ucs_container_of(elem, uct_tcp_ep_t, elem);
-
-    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP));
-    return &ep->peer_addr;
-}
-
 static ucs_conn_sn_t
 uct_tcp_cm_conn_match_get_conn_sn(const ucs_conn_match_elem_t *elem)
 {
@@ -302,7 +293,6 @@ uct_tcp_cm_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
 }
 
 const ucs_conn_match_ops_t uct_tcp_cm_conn_match_ops = {
-    .get_address = uct_tcp_cm_conn_match_get_address,
     .get_conn_sn = uct_tcp_cm_conn_match_get_conn_sn,
     .address_str = uct_tcp_cm_conn_match_address_str,
     .purge_cb    = uct_tcp_cm_conn_match_purge_cb
@@ -408,7 +398,8 @@ void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX);
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP));
 
-    ucs_conn_match_remove_elem(&iface->conn_match_ctx, &ep->elem,
+    ucs_conn_match_remove_elem(&iface->conn_match_ctx, &ep->peer_addr,
+                               &ep->elem,
                                (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
                                UCS_CONN_MATCH_QUEUE_EXP :
                                UCS_CONN_MATCH_QUEUE_UNEXP);
