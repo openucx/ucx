@@ -1001,3 +1001,75 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
     expect_sibling(gpu_dev1);
     expect_sibling(gpu_dev2);
 }
+
+// Several network devices (e.g. planes of a multiplane NIC) can share a single
+// auxiliary (Direct NIC) device. All of them must be able to access the memory
+// device which sits behind the same bridge as the auxiliary device.
+class test_topo_multi_dev_sibling : public test_topo {
+protected:
+    static constexpr int num_planes = 3;
+
+    // Test both registration orders: memory device first (matched by
+    // set_sys_dev_aux), or network devices first (matched by enable_aux_path)
+    void run_test(bool mem_first)
+    {
+        read_pcie_devices();
+        if ((m_hcas.size() < (num_planes + 1)) || m_gpus.empty() ||
+            m_dmas.empty()) {
+            UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+        }
+
+        std::string sibling_gpu, sibling_dma;
+        get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+        if (sibling_dma.empty()) {
+            UCS_TEST_SKIP_R("No sibling DMA device found");
+        }
+
+        auto gpu_dev = register_device("gpu0", sibling_gpu);
+        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+        auto dma_dev = register_device("dma", sibling_dma);
+        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+
+        if (mem_first) {
+            ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+        }
+
+        // All planes report the same auxiliary device
+        std::vector<ucs_sys_device_t> planes;
+        for (int i = 0; i < num_planes; ++i) {
+            auto plane = register_device("plane" + std::to_string(i),
+                                         m_hcas[i]);
+            ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, plane);
+            ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+            planes.push_back(plane);
+        }
+
+        // A device whose auxiliary device is not behind the GPU's bridge
+        auto other = register_device("other", m_hcas[num_planes]);
+        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, other);
+        ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
+
+        if (!mem_first) {
+            ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+        }
+
+        EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+        for (auto plane : planes) {
+            EXPECT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+            EXPECT_TRUE(ucs_topo_is_reachable(plane, gpu_dev));
+        }
+
+        EXPECT_FALSE(ucs_topo_is_sibling(other, gpu_dev));
+        EXPECT_FALSE(ucs_topo_is_reachable(other, gpu_dev));
+    }
+};
+
+UCS_TEST_F(test_topo_multi_dev_sibling, mem_first)
+{
+    run_test(true);
+}
+
+UCS_TEST_F(test_topo_multi_dev_sibling, devs_first)
+{
+    run_test(false);
+}
