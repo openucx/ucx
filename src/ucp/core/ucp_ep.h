@@ -589,6 +589,9 @@ typedef struct ucp_ep_ext {
                                                     1) recovery is not supported for connected to sockaddr EPs
                                                     2) it does not make sense to recover lanes during close protocol */
     };
+    /* Highest peer LANES_ADDR request id accepted for each lane. 0 means
+     * that lane has not been named. Kept after the lane is released. */
+    uint32_t                      *seen_peer_id;
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
@@ -1095,6 +1098,27 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep);
  */
 ucs_status_t
 ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
+
+
+/**
+ * Lanes in @a lanes whose peer request id is newer than the one already
+ * accepted for that lane. Those lanes are recorded. A smaller id is left out.
+ *
+ * @return UCS_ERR_NO_MEMORY when the per-lane record cannot be allocated.
+ *         @a accepted is 0 until UCS_OK.
+ */
+ucs_status_t
+ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
+                          uint32_t request_id, ucp_lane_map_t *accepted);
+
+
+/**
+ * Forget invalidated lanes in @a lanes whose error completion will not arrive.
+ * A held lane is left alone.
+ *
+ * @return Lanes whose token state was dropped.
+ */
+ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes);
 
 
 /**
