@@ -556,7 +556,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_debug("worker %p: error handler called for UCT EP %p: %s",
+    ucs_error("worker %p: error handler called for UCT EP %p: %s",
               worker, uct_ep, ucs_status_string(status));
 
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {

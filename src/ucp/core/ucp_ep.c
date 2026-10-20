@@ -2889,6 +2889,7 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
         return;
     }
 
+    ucs_error("ep %p: lane %d: purging cancel on uct_ep %p", ep, lane, tf->uct_ep);
     uct_ep_pending_purge(tf->uct_ep, ucp_request_purge_enqueue_cb,
                          &ep->ext->recovery_arg->tf_pending_q);
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
@@ -2926,6 +2927,7 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
             continue;
         }
 
+        ucs_error("ep %p: lane %d: purging outstanding on uct_ep %p with rx token %p", ep, lane, tf->uct_ep, tf->rx_token);
         params.field_mask = UCT_EP_OUTSTANDING_FIELD_RX_TOKEN |
                             UCT_EP_OUTSTANDING_FIELD_CB |
                             UCT_EP_OUTSTANDING_FIELD_ARG;
@@ -3553,6 +3555,12 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
         if ((uct_ep == ucp_ep_get_lane(ucp_ep, lane)) ||
             ucp_wireup_ep_is_owner(ucp_ep_get_lane(ucp_ep, lane), uct_ep)) {
+            return lane;
+        }
+
+        if((ucp_ep_config(ucp_ep)->key.lanes[lane].lane_types & UCP_LANE_TYPE_FAILED) &&
+           (ucp_ep->ext->recovery_arg != NULL) &&
+           (ucp_ep->ext->recovery_arg->tf[lane].uct_ep == uct_ep)) {
             return lane;
         }
     }
