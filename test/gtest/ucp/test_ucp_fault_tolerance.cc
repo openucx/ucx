@@ -7,9 +7,7 @@
 #include "test_ucp_memheap.h"
 #include <common/test_helpers.h>
 #include <algorithm>
-#include <dirent.h>
 #include <string>
-#include <vector>
 
 extern "C" {
 #include <ucp/core/ucp_ep.h>
@@ -204,19 +202,10 @@ protected:
     }
 
     /* Replay the rc_x/PUT|MSG_LARGE order that left lane 1 failed:
-     * 4, 0, 2, 1, 3, then 5. The last lane stays healthy.
-     * A three-lane run keeps the sorted lanes: the last stays healthy. */
+     * 4, 0, 2, 1, 3, then 5. The last lane stays healthy. */
     void order_put_lanes(std::vector<ucp_lane_index_t> &lanes,
                          const std::string &lane_type) {
         static const ucp_lane_index_t order[] = {4, 0, 2, 1, 3, 5};
-
-        if (lanes.size() == 3) {
-            for (ucp_lane_index_t lane : lanes) {
-                UCS_TEST_MESSAGE << lane_type << ": " << size_t(lane) << "/"
-                                 << lanes.size();
-            }
-            return;
-        }
 
         if (lanes.size() != (sizeof(order) / sizeof(order[0]))) {
             UCS_TEST_SKIP_R(lane_type + "lane count is " +
@@ -967,36 +956,6 @@ uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
 unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-/* First three IB devices, one path each, so a PUT case has three lanes. */
-static std::string three_ib_net_devices()
-{
-    std::vector<std::string> names;
-    DIR *dir;
-    struct dirent *ent;
-
-    dir = opendir("/sys/class/infiniband");
-    if (dir == NULL) {
-        return "";
-    }
-
-    while ((ent = readdir(dir)) != NULL) {
-        if (ent->d_name[0] == '.') {
-            continue;
-        }
-
-        names.push_back(ent->d_name);
-    }
-
-    closedir(dir);
-
-    std::sort(names.begin(), names.end());
-    if (names.size() < 3) {
-        return "";
-    }
-
-    return names[0] + "," + names[1] + "," + names[2];
-}
-
 /* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
  * Disabled until token failover is complete. Enable with
  * --gtest_also_run_disabled_tests. */
@@ -1006,23 +965,6 @@ public:
         modify_config("FAILOVER_MODE", "token");
         /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected. */
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
-    }
-
-protected:
-    void init() override {
-        const unsigned op_mask = get_variant_value();
-
-        if ((op_mask & TEST_OP_PUT) &&
-            !(op_mask & (TEST_OP_GET | TEST_OP_AM))) {
-            const std::string devices = three_ib_net_devices();
-
-            modify_config("IB_NUM_PATHS", "1", SETENV_IF_NOT_EXIST);
-            if (!devices.empty()) {
-                modify_config("NET_DEVICES", devices, SETENV_IF_NOT_EXIST);
-            }
-        }
-
-        test_ucp_fault_tolerance::init();
     }
 };
 
