@@ -16,6 +16,7 @@ extern "C" {
 #include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_multi.h>
 #include <ucp/proto/proto_select.inl>
+#include <ucp/wireup/wireup_ep.h>
 #include <ucp/rndv/proto_rndv.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/memory/numa.h>
@@ -28,6 +29,7 @@ extern "C" {
 #endif
 }
 
+#include <cctype>
 #include <set>
 
 class mock_iface {
@@ -1065,6 +1067,240 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_path_speed_change :
+    public test_ucp_proto_mock_rcx {
+protected:
+    virtual void cleanup() override
+    {
+        m_path_perf_mock.cleanup();
+        m_path_perfs.clear();
+        test_ucp_proto_mock_rcx::cleanup();
+    }
+
+    static uct_ep_h get_tl_ep(uct_ep_h ep)
+    {
+        while (ucp_wireup_ep_test(ep)) {
+            ep = ucp_wireup_ep(ep)->super.uct_ep;
+            ucs_assert(ep != NULL);
+        }
+
+        return ep;
+    }
+
+    static ucs_status_t path_perf_query_mock(uct_ep_h ep,
+                                              uct_ep_attr_t *attr)
+    {
+        auto iter = m_path_perfs.find(ep);
+
+        if (!(attr->field_mask & UCT_EP_ATTR_FIELD_PATH_PERF)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        if (iter == m_path_perfs.end()) {
+            return UCS_ERR_NO_ELEM;
+        }
+
+        attr->path_perf = iter->second;
+        return UCS_OK;
+    }
+
+    ucp_lane_index_t setup_path_perf_mock(ucp_lane_type_t lane_type)
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+        std::set<uct_ep_query_func_t*> mocked_ops;
+        ucp_lane_index_t event_lane = UCP_NULL_LANE;
+        unsigned num_data_lanes     = 0;
+        uct_base_iface_t *base_iface;
+        ucp_lane_index_t lane;
+        uct_ep_h uct_ep;
+
+        m_path_perfs.clear();
+        for (lane = 0; lane < key.num_lanes; ++lane) {
+            if (!(key.lanes[lane].lane_types & UCS_BIT(lane_type))) {
+                continue;
+            }
+
+            uct_ep = get_tl_ep(ucp_ep_get_lane(sender().ep(), lane));
+            m_path_perfs[uct_ep] = {1.0, 1, 0};
+            base_iface = ucs_derived_of(uct_ep->iface, uct_base_iface_t);
+            if (mocked_ops.insert(&base_iface->internal_ops->ep_query).second) {
+                m_path_perf_mock.setup(&base_iface->internal_ops->ep_query,
+                                       path_perf_query_mock);
+            }
+
+            if (event_lane == UCP_NULL_LANE) {
+                event_lane = lane;
+            }
+            ++num_data_lanes;
+        }
+
+        EXPECT_GT(num_data_lanes, 1u);
+        EXPECT_NE(UCP_NULL_LANE, event_lane);
+        return event_lane;
+    }
+
+    static std::string lane_name(ucp_ep_h ep, ucp_lane_index_t lane)
+    {
+        const uct_tl_resource_desc_t *tl_rsc = ucp_ep_get_tl_rsc(ep, lane);
+        std::string result                   = tl_rsc->tl_name;
+        const uct_iface_attr_t *iface_attr   = ucp_worker_iface_get_attr(
+                ep->worker, ucp_ep_get_rsc_index(ep, lane));
+
+        result += "/";
+        result += tl_rsc->dev_name;
+        if (iface_attr->dev_num_paths > 1) {
+            result += "/path";
+            result += std::to_string(ucp_ep_get_path_index(ep, lane));
+        }
+        return result;
+    }
+
+    std::string selected_rma_config(ucp_worker_cfg_index_t rkey_cfg_index,
+                                    ucp_operation_id_t op_id)
+    {
+        ucp_rkey_config_t *config = ucp_worker_rkey_config(sender().worker(),
+                                                            rkey_cfg_index);
+        ucp_proto_select_elem_t select_elem;
+        ucp_proto_select_key_t key;
+        std::string result;
+
+        kh_foreach(config->proto_select.hash, key.u64, select_elem, {
+            if ((key.param.op_id_flags == op_id) &&
+                (key.param.mem_type == UCS_MEMORY_TYPE_HOST)) {
+                result = select_data_for_range(sender().worker(), select_elem,
+                                               64 * UCS_KBYTE).config;
+            }
+        })
+        return result;
+    }
+
+    std::string selected_am_config()
+    {
+        ucp_ep_config_t *config = ucp_ep_config(sender().ep());
+        ucp_proto_select_elem_t select_elem;
+        ucp_proto_select_key_t key;
+        std::string result;
+
+        kh_foreach(config->proto_select.hash, key.u64, select_elem, {
+            if ((key.param.op_id_flags == UCP_OP_ID_AM_SEND) &&
+                (key.param.mem_type == UCS_MEMORY_TYPE_HOST)) {
+                result = select_data_for_range(sender().worker(), select_elem,
+                                               64 * UCS_KBYTE).config;
+            }
+        })
+        return result;
+    }
+
+    static unsigned path_weight(const std::string &config,
+                                const std::string &name)
+    {
+        size_t end = config.find("% on " + name);
+        size_t begin;
+
+        if (end == std::string::npos) {
+            return 0;
+        }
+
+        begin = end;
+        while ((begin > 0) &&
+               std::isdigit(static_cast<unsigned char>(config[begin - 1]))) {
+            --begin;
+        }
+
+        return std::stoul(config.substr(begin, end - begin));
+    }
+
+    void notify_path_speed_change(ucp_lane_index_t lane, double ratio,
+                                  uint64_t generation, uint64_t flags = 0)
+    {
+        uct_ep_h uct_ep = get_tl_ep(ucp_ep_get_lane(sender().ep(), lane));
+
+        m_path_perfs.at(uct_ep) = {ratio, generation, flags};
+        uct_iface_handle_ep_event(uct_ep->iface, uct_ep,
+                                  UCT_EVENT_PATH_SPEED_CHANGE);
+        while (progress());
+    }
+
+    ucs::mock m_path_perf_mock;
+    static std::map<uct_ep_h, uct_ep_path_perf_t> m_path_perfs;
+};
+
+std::map<uct_ep_h, uct_ep_path_perf_t>
+        test_ucp_proto_mock_path_speed_change::m_path_perfs;
+
+UCS_TEST_P(test_ucp_proto_mock_path_speed_change, rma_reweight,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    ucp_ep_h ep = sender().ep();
+    ucp_worker_cfg_index_t initial_cfg_index = ep->cfg_index;
+    ucp_worker_cfg_index_t changed_cfg_index;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_lane_index_t lane;
+    std::string name, before, after;
+
+    rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    before         = selected_rma_config(rkey_cfg_index, UCP_OP_ID_PUT);
+    ASSERT_FALSE(before.empty());
+
+    lane = setup_path_perf_mock(UCP_LANE_TYPE_RMA_BW);
+    name = lane_name(ep, lane);
+    ASSERT_GT(path_weight(before, name), 0u);
+
+    notify_path_speed_change(lane, 0.25, 2,
+                             UCT_EP_PATH_PERF_FLAG_DEGRADED);
+    changed_cfg_index = ep->cfg_index;
+    EXPECT_NE(initial_cfg_index, changed_cfg_index);
+    EXPECT_EQ(UCP_PATH_BW_RATIO_SCALE / 4,
+              ucp_ep_config(ep)->key.lanes[lane].path_bw_ratio);
+
+    rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    after          = selected_rma_config(rkey_cfg_index, UCP_OP_ID_PUT);
+    ASSERT_FALSE(after.empty());
+    EXPECT_LT(path_weight(after, name), path_weight(before, name));
+
+    /* A change in the same quantization bucket reuses the configuration. */
+    notify_path_speed_change(lane, 0.251, 3,
+                             UCT_EP_PATH_PERF_FLAG_DEGRADED);
+    EXPECT_EQ(changed_cfg_index, ep->cfg_index);
+
+    /* Recovery returns to the original endpoint and protocol configs. */
+    notify_path_speed_change(lane, 1.0, 4);
+    EXPECT_EQ(initial_cfg_index, ep->cfg_index);
+    rkey_cfg_index = send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+    EXPECT_EQ(before,
+              selected_rma_config(rkey_cfg_index, UCP_OP_ID_PUT));
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_speed_change, am_reweight,
+           "IB_NUM_PATHS?=1", "MAX_EAGER_LANES=2", "RNDV_THRESH=inf",
+           "ZCOPY_THRESH=0")
+{
+    ucp_ep_h ep = sender().ep();
+    ucp_lane_index_t lane;
+    std::string name, before, after;
+
+    send_recv_am(64 * UCS_KBYTE);
+    before = selected_am_config();
+    ASSERT_FALSE(before.empty());
+
+    lane = setup_path_perf_mock(UCP_LANE_TYPE_AM_BW);
+    name = lane_name(ep, lane);
+    ASSERT_GT(path_weight(before, name), 0u);
+
+    notify_path_speed_change(lane, 0.25, 2,
+                             UCT_EP_PATH_PERF_FLAG_DEGRADED);
+    EXPECT_EQ(UCP_PATH_BW_RATIO_SCALE / 4,
+              ucp_ep_config(ep)->key.lanes[lane].path_bw_ratio);
+
+    send_recv_am(64 * UCS_KBYTE);
+    after = selected_am_config();
+    ASSERT_FALSE(after.empty());
+    EXPECT_LT(path_weight(after, name), path_weight(before, name));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_speed_change, rcx,
+                              "rc_x")
 
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:
