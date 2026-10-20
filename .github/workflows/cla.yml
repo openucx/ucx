@@ -65,15 +65,18 @@ jobs:
               logins+=("$PR_AUTHOR")
           fi
 
+          # Captured first so an API failure aborts the job under set -e
+          commits=$(gh api --paginate "repos/$REPO/pulls/$PR/commits" --jq '.[] |
+                        if .author == null then "unlinked \(.sha[0:10])"
+                        elif .author.type == "Bot" then empty
+                        else "user \(.author.login)" end')
+
           while read -r kind value; do
               case "$kind" in
               user)     logins+=("$value") ;;
               unlinked) unlinked+=("$value") ;;
               esac
-          done < <(gh api --paginate "repos/$REPO/pulls/$PR/commits" --jq '.[] |
-                       if .author == null then "unlinked \(.sha[0:10])"
-                       elif .author.type == "Bot" then empty
-                       else "user \(.author.login)" end')
+          done <<< "$commits"
 
           missing=()
           for login in $(printf '%s\n' "${logins[@]}" | sort -u); do
@@ -98,7 +101,7 @@ jobs:
               echo
               echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
               echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
-              echo "Once the CLA is countersigned, re-run this check."
+              echo "Once the CLA is countersigned, push a new commit or ask a maintainer to re-run this check."
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::error::UCF CLA check failed, see the job summary"
           exit 1
