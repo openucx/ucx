@@ -231,6 +231,7 @@ static void ucp_ep_deallocate(ucp_ep_h ep)
 {
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ep->ext->uct_eps);
+    ucs_free(ep->ext->seen_peer_id);
     ucs_free(ep->ext);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
@@ -272,6 +273,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->remote_ep_id                 = UCS_PTR_MAP_KEY_INVALID;
     ep->ext->err_cb                       = NULL;
     ep->ext->close_req                    = NULL;
+    ep->ext->seen_peer_id                 = NULL;
 #if UCS_ENABLE_ASSERT
     ep->ext->ka_last_round                = 0;
 #endif
@@ -2685,6 +2687,52 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     return (tx_len > 0) && (tx_len <= UINT8_MAX);
 }
 
+/* 0 is unseen. A wrapped id stays newer until half the counter space. */
+static int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id)
+{
+    if (seen == 0) {
+        return 1;
+    }
+
+    return (int32_t)(request_id - seen) > 0;
+}
+
+ucs_status_t
+ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
+                          uint32_t request_id, ucp_lane_map_t *accepted)
+{
+    ucp_lane_map_t fresh = 0;
+
+    ucp_lane_index_t lane;
+
+    *accepted = 0;
+    if ((request_id == 0) || (lanes == 0)) {
+        return UCS_OK;
+    }
+
+    if (ep->ext->seen_peer_id == NULL) {
+        ep->ext->seen_peer_id = ucs_calloc(UCP_MAX_LANES,
+                                           sizeof(*ep->ext->seen_peer_id),
+                                           "ucp_ep_seen_peer_id");
+        if (ep->ext->seen_peer_id == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+    }
+
+    ucs_for_each_bit(lane, lanes) {
+        if (!ucp_ep_tf_peer_req_is_newer(ep->ext->seen_peer_id[lane],
+                                         request_id)) {
+            continue;
+        }
+
+        ep->ext->seen_peer_id[lane] = request_id;
+        fresh                      |= UCS_BIT(lane);
+    }
+
+    *accepted = fresh;
+    return UCS_OK;
+}
+
 ucp_lane_map_t
 ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                            uint32_t request_id, uint32_t peer_id)
@@ -2944,6 +2992,27 @@ static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
                                                tf->deactivate_cfg_index);
         tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     }
+}
+
+ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    ucp_lane_map_t dropped = 0;
+
+    ucp_lane_index_t lane;
+    ucp_ep_lane_tf_t *tf;
+
+    ucs_for_each_bit(lane, lanes) {
+        tf = ucp_ep_tf_get(ep, lane);
+        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
+            (tf->uct_ep != NULL)) {
+            continue;
+        }
+
+        ucp_ep_tf_lane_release(ep, tf);
+        dropped |= UCS_BIT(lane);
+    }
+
+    return dropped;
 }
 
 static void
