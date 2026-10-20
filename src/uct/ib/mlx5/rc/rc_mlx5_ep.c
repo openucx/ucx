@@ -1847,49 +1847,21 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
     }
 }
 
-void uct_rc_mlx5_ep_save_ft_ci(uct_rc_mlx5_base_ep_t *ep)
-{
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-
-    /* Last completed WQE among credits already applied. */
-    txwq->ft_ci = txwq->prev_sw_pi - (txwq->bb_max -
-                                      uct_rc_txqp_available(&ep->super.txqp));
-    ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, txwq->ft_ci,
-              txwq->sw_pi);
-}
-
-static void uct_rc_mlx5_ep_purge_finish_tx(uct_rc_mlx5_base_ep_t *ep)
-{
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-
-    /* The deferred error completion skipped this update. A live purge leaves
-     * credits for the completion poll, so an earlier success is applied
-     * before the error completion. */
-    if (ep->err_handler_inprogress) {
-        uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
-    }
-
-    txwq->ft_ci = txwq->prev_sw_pi;
-}
-
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-    uint32_t first_failed_psn              = 0;
-    uint32_t receiver_next_psn             = 0;
-    int delivered                          = 0;
-    const uct_rc_mlx5_rx_token_t *rx_token = NULL;
+    const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_rc_mlx5_op_callback_data_t callback_data;
     uct_ep_op_info_t info;
     uint16_t pi, end_pi, start_pi;
-    uint32_t wqe_first_psn;
-    uint32_t psn_diff;
+    uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
+    int delivered;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1900,83 +1872,44 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     callback_arg = (params->field_mask & UCT_EP_OUTSTANDING_FIELD_ARG) ?
                    params->arg : NULL;
 
-    if (!ep->err_handler_inprogress) {
-        /* Flush cancel completes outstanding operations on the error
-         * completion. Walking those WQEs would report them again. */
-        if (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) {
-            return UCS_OK;
-        }
-
-        if (ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) {
-            /* A previous purge closed the transmit range. */
-            if (txwq->ft_ci == txwq->prev_sw_pi) {
-                return UCS_OK;
-            }
-
-            /* The error handler already released these operations. */
-            ucs_error("ep %p: outstanding purge after a completed error "
-                      "handler", ep);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        /* Range for the token check. A rejected token leaves the endpoint
-         * usable. */
-        uct_rc_mlx5_ep_save_ft_ci(ep);
-    }
+    ucs_assertv_always(ep->err_handler_inprogress,
+                       "ep %p is not in deferred error handling", ep);
 
     end_pi   = txwq->sw_pi;
     ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
 
-    if (start_pi != end_pi) {
-        num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
-                &iface->super.super, txwq, start_pi, end_pi);
+    ucs_assertv_always(start_pi != end_pi,
+                       "ep %p qp 0x%x unexpected empty outstanding queue", ep,
+                       txwq->super.qp_num);
 
-        first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
-                            num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
-        if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
-            rx_token = params->rx_token;
-            if (rx_token == NULL) {
-                ucs_error("rc mlx5: rx token is NULL");
-                return UCS_ERR_INVALID_PARAM;
-            }
+    num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
+            &iface->super.super, txwq, start_pi, end_pi);
 
-            receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
-            psn_diff          = (receiver_next_psn - first_failed_psn) &
-                                UCT_IB_MLX5_PSN_MASK;
-            if (psn_diff > num_outstanding_packets) {
-                return UCS_ERR_INVALID_PARAM;
-            }
-
-            delivered = 1;
-        }
-    }
-
-    if (!ep->err_handler_inprogress &&
-        !(ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED)) {
-        status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
-                                             &ep->tx.wq.super,
-                                             IBV_QPS_ERR);
-        if (status != UCS_OK) {
-            return status;
+    first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
+                        num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
+    if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
+        rx_token = params->rx_token;
+        if (rx_token == NULL) {
+            ucs_error("rc mlx5: rx token is NULL");
+            return UCS_ERR_INVALID_PARAM;
         }
 
-        ucs_arbiter_group_purge(&iface->super.tx.arbiter,
-                                &ep->super.arb_group,
-                                uct_rc_ep_arbiter_purge_internal_cb, NULL);
-        uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
-        uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
+        receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
+        psn_diff          = (receiver_next_psn - first_failed_psn) &
+                            UCT_IB_MLX5_PSN_MASK;
+        if (psn_diff > num_outstanding_packets) {
+            return UCS_ERR_INVALID_PARAM;
+        }
 
-        /* Suppress the error handler. The completion poll releases credits
-         * in completion order. */
-        ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-    }
-
-    /* An idle queue has nothing to report. */
-    if (start_pi == end_pi) {
-        uct_rc_mlx5_ep_purge_finish_tx(ep);
-        return UCS_OK;
+        delivered = 1;
+    } else {
+        /* No peer receive position: every outstanding operation is
+         * undelivered. */
+        rx_token          = NULL;
+        receiver_next_psn = 0;
+        delivered         = 0;
     }
 
 #if HAVE_IBV_DM
@@ -2045,7 +1978,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
     ucs_free(callback_data.dm_data);
-    uct_rc_mlx5_ep_purge_finish_tx(ep);
+    uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
+    txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;
 }
 
