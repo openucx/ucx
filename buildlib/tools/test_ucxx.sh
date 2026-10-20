@@ -3,15 +3,17 @@
 # Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # See file LICENSE for terms.
 #
-# Usage: test_ucxx.sh <build|test_cpp|test_python|test_wheel_ucxx>
+# Usage: test_ucxx.sh <test_cpp|test_python|test_wheel_ucxx>
 # Env: RAPIDS_CUDA_VERSION, RAPIDS_PY_VERSION, UCXX_DIR
-#   build|test_cpp|test_python:  also IS_GPU
-#   test_wheel_ucxx:             also LIBUCXX_WHL_DIR, UCXX_WHL_DIR
+#   test_cpp|test_python:  also IS_GPU, CONDA_CHANNEL_DIR (the conda-python
+#                          build artifact: a channel with both the libucxx and
+#                          the ucxx packages)
+#   test_wheel_ucxx:       also LIBUCXX_WHL_DIR, UCXX_WHL_DIR
 #
 # Everything runs against the UCX built from this checkout (the PR under
 # test): the released ucx/libucx dependencies are stripped from the ucxx tree
-# (see ucxx_ucx_pr.sh), the packages build against UCX_PR_PREFIX, and the
-# tests load its libraries.
+# (see ucxx_ucx_pr.sh), the packages under test were built against
+# UCX_PR_PREFIX by the UCXX_build jobs, and the tests load its libraries.
 
 # The pipeline runs this as `bash <path>`, which ignores the shebang options,
 # so the shell flags have to be set here for the fail-loud guards to bite.
@@ -19,7 +21,9 @@ set -eE -o pipefail
 
 phase=${1:?phase required}
 case "$phase" in
-  build|test_cpp|test_python) : "${IS_GPU:?IS_GPU required}" ;;
+  test_cpp|test_python)
+    : "${IS_GPU:?IS_GPU required}"
+    : "${CONDA_CHANNEL_DIR:?CONDA_CHANNEL_DIR required}" ;;
 esac
 : "${RAPIDS_CUDA_VERSION:?RAPIDS_CUDA_VERSION required}"
 : "${RAPIDS_PY_VERSION:?RAPIDS_PY_VERSION required}"
@@ -39,15 +43,15 @@ export RAPIDS_CUDA_VERSION RAPIDS_PY_VERSION
 export RAPIDS_DEPENDENCIES=${RAPIDS_DEPENDENCIES:-latest}
 # persistent pip cache (host volume); pip disables caching itself if unwritable
 [ -d /pip-cache ] && export PIP_CACHE_DIR=/pip-cache
-export RAPIDS_CONDA_BLD_OUTPUT_DIR=/tmp/conda-bld-output
-mkdir -p "$RAPIDS_CONDA_BLD_OUTPUT_DIR" "$HOME/.local/bin"
-
-# The ucxx test scripts fetch the packages built by the previous step through
-# rapids-download-from-github; shim it to the locally built channel.
-printf '#!/bin/bash\necho "%s"\n' "$RAPIDS_CONDA_BLD_OUTPUT_DIR" \
-  > "$HOME/.local/bin/rapids-download-from-github"
-chmod +x "$HOME/.local/bin/rapids-download-from-github"
+mkdir -p "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
+
+# The ucxx test scripts fetch the packages of the build jobs through
+# rapids-download-from-github; shim it to the staged artifact dir.
+shim_download_helper() {
+  printf '#!/bin/bash\necho "%s"\n' "$1" > "$HOME/.local/bin/rapids-download-from-github"
+  chmod +x "$HOME/.local/bin/rapids-download-from-github"
+}
 
 cd "$UCXX_DIR"
 
@@ -87,20 +91,8 @@ export_host_driver_override() {
 }
 
 case "$phase" in
-  build)
-    if [ "${IS_GPU,,}" = "true" ]; then
-      # sccache wrapper crashes CMake's compiler probe on the GPU build hosts; no-op it.
-      cat > "$HOME/.local/bin/rapids-configure-sccache" <<'EOF'
-#!/bin/bash
-export CMAKE_C_COMPILER_LAUNCHER= CMAKE_CXX_COMPILER_LAUNCHER= CMAKE_CUDA_COMPILER_LAUNCHER= RUSTC_WRAPPER=
-EOF
-      chmod +x "$HOME/.local/bin/rapids-configure-sccache"
-    fi
-    bash ci/build_cpp.sh
-    bash ci/build_python.sh
-    ;;
-
   test_cpp)
+    shim_download_helper "$CONDA_CHANNEL_DIR"
     export_host_driver_override
     # CPU slices have no GPU device bound; CUDA-touching gtests would crash.
     if [ "${IS_GPU,,}" = "true" ]; then
@@ -112,6 +104,7 @@ EOF
     ;;
 
   test_python)
+    shim_download_helper "$CONDA_CHANNEL_DIR"
     export_host_driver_override
     bash ci/test_python.sh
     ;;
@@ -129,12 +122,10 @@ EOF
     # The wheel test installs from both the libucxx and ucxx wheelhouses via
     # the download helpers; stage both wheels in one dir and point the helpers
     # there so the libucxx_*.whl / ucxx_*.whl globs resolve.
-    wheelhouse="$RAPIDS_CONDA_BLD_OUTPUT_DIR/ucxx-wheelhouse"
+    wheelhouse=/tmp/ucxx-wheelhouse
     mkdir -p "$wheelhouse"
     cp "$LIBUCXX_WHL_DIR"/*.whl "$UCXX_WHL_DIR"/*.whl "$wheelhouse"/
-    printf '#!/bin/bash\necho "%s"\n' "$wheelhouse" \
-      > "$HOME/.local/bin/rapids-download-from-github"
-    chmod +x "$HOME/.local/bin/rapids-download-from-github"
+    shim_download_helper "$wheelhouse"
     export_host_driver_override
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$UCX_PR_PREFIX/lib"
     bash ci/test_wheel_ucxx.sh

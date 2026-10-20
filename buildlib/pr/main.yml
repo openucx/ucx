@@ -427,16 +427,14 @@ stages:
             demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
       devcontainer_slices:
         - { name: x86_64_cuda13_py312, demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
-
-  - template: ucxx_tests.yml
-    parameters:
-      dependsOn: [UCXX_ucx]
-      slices:
-        - { name: x86_64_cuda13_py313,  gpu: true,  demands: ucx_gpu,    rapids_cuda_version: '13.3.0', rapids_py_version: '3.13' }
-        - { name: x86_64_cuda12_py312,  gpu: false, demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
-        - { name: x86_64_cuda13_py312,  gpu: false, demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
-        - { name: aarch64_cuda12_py312, gpu: false, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
-        - { name: aarch64_cuda13_py312, gpu: false, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+      # Conda tests run the packages of conda_slice; the ucxx package is abi3,
+      # so the GPU slice tests the py312 build on py313.
+      conda_tests_slices:
+        - { name: x86_64_cuda13_py313,  gpu: true,  conda_slice: x86_64_cuda13_py312,  demands: ucx_gpu,    rapids_cuda_version: '13.3.0', rapids_py_version: '3.13' }
+        - { name: x86_64_cuda12_py312,  gpu: false, conda_slice: x86_64_cuda12_py312,  demands: ucx_docker, rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: x86_64_cuda13_py312,  gpu: false, conda_slice: x86_64_cuda13_py312,  demands: ucx_docker, rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda12_py312, gpu: false, conda_slice: aarch64_cuda12_py312, demands: ucx_arm64,  rapids_cuda_version: '12.9.2', rapids_py_version: '3.12' }
+        - { name: aarch64_cuda13_py312, gpu: false, conda_slice: aarch64_cuda13_py312, demands: ucx_arm64,  rapids_cuda_version: '13.3.0', rapids_py_version: '3.12' }
 
   - stage: Tests
     dependsOn: [Basic_compile]

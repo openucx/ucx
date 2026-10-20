@@ -19,13 +19,16 @@ ucxx_ucx_pr_sh=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_
 build_ucx_pr() {
   [ -x "$UCX_PR_PREFIX/bin/ucx_info" ] && return 0
   # CUDA comes from the env's conda-forge cuda dev packages, pinned to
-  # RAPIDS_CUDA_VERSION; headers and stubs live under targets/<arch>-linux.
-  local cuda_opt="" conda_cuda="${CONDA_PREFIX:-}/targets/$(uname -m)-linux"
-  [ -e "$conda_cuda/include/cuda.h" ] && cuda_opt="--with-cuda=$conda_cuda"
-  echo "UCX-PR configure cuda: ${cuda_opt:-NONE (no cuda headers found)}"
+  # RAPIDS_CUDA_VERSION; headers and stubs live under targets/<triplet>-linux,
+  # where the triplet is x86_64 on x86 and sbsa on aarch64.
+  local cuda_h cuda_dir
+  cuda_h=$(ls "${CONDA_PREFIX:?CONDA_PREFIX required}"/targets/*-linux/include/cuda.h 2>&1) \
+    || { echo "ERROR: no cuda.h under $CONDA_PREFIX/targets/*-linux: $cuda_h" >&2; return 1; }
+  cuda_dir=${cuda_h%/include/cuda.h}
+  echo "UCX-PR configure cuda: --with-cuda=$cuda_dir"
   (cd "$ucx_dir" \
    && ./autogen.sh \
-   && ./contrib/configure-release --prefix="$UCX_PR_PREFIX" $cuda_opt \
+   && ./contrib/configure-release --prefix="$UCX_PR_PREFIX" --with-cuda="$cuda_dir" \
         --enable-mt --without-java --without-go --disable-doxygen-doc \
    && make -j"$(nproc)" install) > /tmp/ucx-pr-build.log 2>&1 \
     || { tail -50 /tmp/ucx-pr-build.log >&2; echo "ERROR: UCX (PR) build failed" >&2; return 1; }
@@ -62,8 +65,15 @@ use_pr_ucx() {
     sed -i -E '/^\s*- ucx(\s*|\s+[<>=].*)$/d' "$f"
     grep -qE '^\s*- ucx(\s|$)' "$f" \
       && { echo "ERROR: ucx dep strip did not apply to $f" >&2; return 1; }
-    # linking against a lib outside the recipe deps is now intended
-    sed -i 's#overlinking_behavior: "error"#overlinking_behavior: "ignore"#' "$f"
+    # Linking against the PR's UCX, which no recipe dep provides, is intended:
+    # allowlist its libraries in every output that runs the linker check, and
+    # keep the check itself. Outputs without an allowlist get one.
+    if ! grep -q 'libucp.so' "$f"; then
+      sed -i -E '/^\s*overlinking_behavior: "error"$/{N;/missing_dso_allowlist:/!s#^(\s*)(overlinking_behavior: "error")\n#\1\2\n\1missing_dso_allowlist:\n#}' "$f"
+      sed -i -E 's#^(\s*)missing_dso_allowlist:$#&\n\1  - "**/libucp.so*"\n\1  - "**/libucs.so*"\n\1  - "**/libuct.so*"\n\1  - "**/libucm.so*"#' "$f"
+    fi
+    [ "$(grep -c 'overlinking_behavior: "error"' "$f")" = "$(grep -c 'libucp.so' "$f")" ] \
+      || { echo "ERROR: missing_dso_allowlist patch did not apply to every output of $f" >&2; return 1; }
     # the builds find the PR's UCX via CMake, and the build-time imports of
     # the fresh python module load its libraries via LD_LIBRARY_PATH
     grep -q "CMAKE_PREFIX_PATH=$UCX_PR_PREFIX" "$f" \
@@ -87,14 +97,14 @@ use_pr_ucx() {
     grep -q "ucx-pr" "$f" \
       || { echo "ERROR: UCX-PR wheel patch did not apply to $f" >&2; return 1; }
   done
-  # 4. The recipe package self-tests import ucxx in a fresh ephemeral env that
-  #    has no ucx (by design now) - skip them; the pipeline's test jobs are
-  #    the real coverage.
-  for f in ci/build_cpp.sh ci/build_python.sh; do
-    grep -q "test skip" "$f" \
-      || sed -i "s#rattler-build build#rattler-build build --test skip#" "$f"
-    grep -q "test skip" "$f" \
-      || { echo "ERROR: rattler test-skip patch did not apply to $f" >&2; return 1; }
-  done
+  # 4. The recipe import tests run in a fresh ephemeral env that has no ucx
+  #    (by design now), so the modules cannot load there - drop those test
+  #    blocks and keep the file and package-contents checks. The pipeline's
+  #    test jobs cover the imports. A `tests:` key left empty is dropped too.
+  f=conda/recipes/ucxx/recipe.yaml
+  sed -i -E '/^\s*- python:$/,/^\s*pip_check: false$/d' "$f"
+  sed -i -E '/^\s*tests:$/{N;s#^\s*tests:\n(\s*about:)#\1#}' "$f"
+  grep -qE '^\s*imports:' "$f" \
+    && { echo "ERROR: import test strip did not apply to $f" >&2; return 1; }
   return 0
 }

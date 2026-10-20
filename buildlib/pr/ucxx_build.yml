@@ -6,6 +6,7 @@ parameters:
   wheel_libucxx_slices: []
   wheel_ucxx_slices: []
   wheel_tests_ucxx_slices: []
+  conda_tests_slices: []
   docs_slices: []
   devcontainer_slices: []
 
@@ -264,6 +265,11 @@ stages:
               displayName: Stage wheels
             - bash: bash $(UCX_DIR)/buildlib/tools/test_ucxx.sh test_wheel_ucxx
               displayName: Run UCXX wheel tests
+
+      - template: ucxx_tests.yml
+        parameters:
+          cpu_container: ${{ parameters.conda_container }}
+          slices: ${{ parameters.conda_tests_slices }}
 
       - ${{ each slice in parameters.devcontainer_slices }}:
         - job: ucxx_devcontainer_${{ slice.name }}
