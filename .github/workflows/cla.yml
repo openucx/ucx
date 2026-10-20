@@ -14,6 +14,8 @@ jobs:
   cla:
     name: CLA
     runs-on: ubuntu-latest
+    # Forks have no CLA app secrets or team
+    if: github.repository == 'openucx/ucx'
     permissions:
       pull-requests: read
     steps:
