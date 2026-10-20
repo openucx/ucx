@@ -193,6 +193,19 @@ static uct_tl_t *uct_find_tl(uct_component_h component, const char *tl_name)
     return NULL;
 }
 
+ucs_sys_device_t
+uct_md_get_tl_device_ctl_sys_dev(uct_md_h md, const char *tl_name,
+                                const char *dev_name)
+{
+    uct_tl_t *tl = uct_find_tl(md->component, tl_name);
+
+    if ((tl == NULL) || (tl->get_device_ctl_sys_dev == NULL)) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    return tl->get_device_ctl_sys_dev(md, dev_name);
+}
+
 ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
                                       const char *env_prefix, const char *filename,
                                       uct_iface_config_t **config_p)

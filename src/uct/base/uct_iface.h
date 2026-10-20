@@ -434,6 +434,10 @@ typedef struct uct_tl {
                                             uct_tl_device_resource_t **tl_devices_p,
                                             unsigned *num_tl_devices_p);
 
+    /* Optional controller, matching uct_iface_attr_t::ctl_device. */
+    ucs_sys_device_t       (*get_device_ctl_sys_dev)(uct_md_h md,
+                                                    const char *dev_name);
+
     ucs_status_t           (*iface_open)(uct_md_h md, uct_worker_h worker,
                                          const uct_iface_params_t *params,
                                          const uct_iface_config_t *config,

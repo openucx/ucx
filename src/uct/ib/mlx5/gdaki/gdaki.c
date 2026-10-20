@@ -1290,6 +1290,16 @@ typedef struct {
 } uct_gdaki_dev_matrix_elem_t;
 
 typedef struct {
+    ucs_list_link_t              list;
+    unsigned long                max_hca_per_gpu;
+    uct_gdaki_dev_matrix_elem_t *dmat;
+    size_t                       length;
+} uct_gdaki_dev_matrix_cache_t;
+
+static UCS_LIST_HEAD(uct_gdaki_dev_matrix_cache);
+static pthread_mutex_t uct_gdaki_dev_matrix_lock = PTHREAD_MUTEX_INITIALIZER;
+
+typedef struct {
     ucs_sys_device_t sys_dev;
     ucs_sys_bus_id_t bus_id;
     int              cuda_idx; /* CUDA driver index, -1 if not CUDA-visible */
@@ -1616,25 +1626,70 @@ out_dev:
     return dmat;
 }
 
+static const uct_gdaki_dev_matrix_elem_t *
+uct_gdaki_dev_matrix_get(const uct_ib_md_t *ib_md, size_t *length_p)
+{
+    uct_gdaki_dev_matrix_elem_t *dmat = NULL;
+    uct_gdaki_dev_matrix_cache_t *entry;
+
+    pthread_mutex_lock(&uct_gdaki_dev_matrix_lock);
+    ucs_list_for_each(entry, &uct_gdaki_dev_matrix_cache, list) {
+        if (entry->max_hca_per_gpu == ib_md->config.gda_max_hca_per_gpu) {
+            dmat      = entry->dmat;
+            *length_p = entry->length;
+            goto out_unlock;
+        }
+    }
+
+    entry = ucs_malloc(sizeof(*entry), "gdaki matrix cache");
+    if (entry == NULL) {
+        goto out_unlock;
+    }
+
+    dmat = uct_gdaki_dev_matrix_init(ib_md, &entry->length);
+    if (dmat == NULL) {
+        ucs_free(entry);
+        goto out_unlock;
+    }
+
+    /* The MD configuration can differ between UCP contexts. */
+    entry->max_hca_per_gpu = ib_md->config.gda_max_hca_per_gpu;
+    entry->dmat            = dmat;
+    *length_p              = entry->length;
+    ucs_list_add_tail(&uct_gdaki_dev_matrix_cache, &entry->list);
+
+out_unlock:
+    pthread_mutex_unlock(&uct_gdaki_dev_matrix_lock);
+    return dmat;
+}
+
+static void uct_gdaki_dev_matrix_cleanup(void)
+{
+    uct_gdaki_dev_matrix_cache_t *entry;
+
+    while (!ucs_list_is_empty(&uct_gdaki_dev_matrix_cache)) {
+        entry = ucs_list_extract_head(&uct_gdaki_dev_matrix_cache,
+                                     uct_gdaki_dev_matrix_cache_t, list);
+        ucs_free(entry->dmat);
+        ucs_free(entry);
+    }
+}
+
 ucs_status_t
 uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
                                uct_tl_device_resource_t **tl_devices_p,
                                unsigned *num_tl_devices_p)
 {
-    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
-    static uct_gdaki_dev_matrix_elem_t *dmat;
-    static size_t dmat_length;
+    const uct_gdaki_dev_matrix_elem_t *dmat;
     const uct_gdaki_dev_matrix_elem_t *ibdesc;
+    size_t dmat_length;
     uct_tl_device_resource_t *tl_devices;
     unsigned num_tl_devices;
     ucs_status_t status;
     CUdevice device;
     int i;
 
-    UCS_INIT_ONCE(&once) {
-        dmat = uct_gdaki_dev_matrix_init(ib_md, &dmat_length);
-    }
-
+    dmat = uct_gdaki_dev_matrix_get(ib_md, &dmat_length);
     if (dmat == NULL) {
         ucs_debug("%s: device matrix initialization failed",
                   uct_ib_device_name(&ib_md->dev));
@@ -1708,9 +1763,19 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
                                           num_tl_devices_p);
 }
 
+static ucs_sys_device_t
+uct_gdaki_get_device_ctl_sys_dev(uct_md_h UCS_V_UNUSED md, const char *dev_name)
+{
+    /* The device name was produced by uct_gdaki_fill_cuda_tl_devices(). */
+    return uct_cuda_get_sys_dev(atoi(dev_name + UCT_DEVICE_CUDA_NAME_LEN));
+}
+
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_gda, uct_gdaki_query_tl_devices,
                     uct_rc_gdaki_iface_t, "RC_GDA_",
                     uct_rc_gdaki_iface_config_table,
                     uct_rc_gdaki_iface_config_t);
 
-UCT_TL_INIT(&uct_ib_component, rc_gda, ctor, , )
+UCT_TL_INIT(&uct_ib_component, rc_gda, ctor,
+            UCT_TL_NAME(rc_gda).get_device_ctl_sys_dev =
+                    uct_gdaki_get_device_ctl_sys_dev,
+            uct_gdaki_dev_matrix_cleanup())

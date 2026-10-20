@@ -15,6 +15,7 @@
 #include "ucp_request.h"
 #include "ucp_tl_info.h"
 
+#include <uct/base/uct_md.h>
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/algorithm/crc.h>
@@ -683,6 +684,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MAX_HCA_PER_GPU", "inf",
    "Maximum number of HCAs to register GPU memory on.\n"
+   "With UCP_FEATURE_DEVICE, prefer HCAs assigned to the GPU by the device\n"
+   "transport. The transport's own HCA limit controls that assignment.\n"
    " - inf  : register on all HCAs (default).\n"
    " - auto : register only on HCAs closest to the GPU.\n"
    " - <N>  : register on up to N closest HCAs.",
@@ -1406,6 +1409,9 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     context->tl_rscs[context->num_tls].tl_name_csum = ucs_crc16_string(
             resource->tl_name);
     context->tl_rscs[context->num_tls].flags        = rsc_flags;
+    context->tl_rscs[context->num_tls].ctl_device   =
+            uct_md_get_tl_device_ctl_sys_dev(md->md, resource->tl_name,
+                                              resource->dev_name);
 
     dev_index = 0;
     for (i = 0; i < context->num_tls; ++i) {
@@ -1981,6 +1987,7 @@ typedef struct ucp_reg_select_md {
     ucp_md_index_t         md_index;
     const char             *name;
     ucs_sys_dev_distance_t distance;
+    int                    is_device;
 } ucp_reg_select_md_t;
 
 static int
@@ -1989,6 +1996,10 @@ ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
     const ucp_reg_select_md_t *a = pa;
     const ucp_reg_select_md_t *b = pb;
     int cmp;
+
+    if (a->is_device != b->is_device) {
+        return b->is_device - a->is_device;
+    }
 
     cmp = ucs_topo_distance_cmp(&a->distance, &b->distance);
     if (cmp != 0) {
@@ -2012,22 +2023,31 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     unsigned select_count, i;
     ucp_md_index_t md_index;
     ucp_rsc_index_t tl_idx;
-    int reachable;
+    int reachable, is_device;
 
     if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
         return md_map;
     }
 
     ucs_for_each_bit(md_index, md_map) {
-        /* TODO: rc_gda has the gpu in the sys_dev_map so we need to skip it.
-         * This should be fixed in the tl. */
         sys_dev_map = 0;
+        is_device   = 0;
         for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
-            if ((context->tl_rscs[tl_idx].md_index == md_index) &&
-                (context->tl_rscs[tl_idx].tl_rsc.sys_device <
-                 UCP_MAX_SYS_DEVICES) &&
-                (strncmp(context->tl_rscs[tl_idx].tl_rsc.dev_name,
-                         "cuda", 4) != 0)) {
+            if (context->tl_rscs[tl_idx].md_index != md_index) {
+                continue;
+            }
+
+            if ((context->config.features & UCP_FEATURE_DEVICE) &&
+                (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                !(context->tl_rscs[tl_idx].flags & UCP_TL_RSC_FLAG_AUX) &&
+                (context->tl_rscs[tl_idx].ctl_device == mem_sys_dev)) {
+                /* Follow the transport's published assignment rather than
+                 * independently assigning a different NIC to this GPU. */
+                is_device = 1;
+            }
+
+            if (context->tl_rscs[tl_idx].tl_rsc.sys_device <
+                UCP_MAX_SYS_DEVICES) {
                 sys_dev_map |=
                     UCS_BIT(context->tl_rscs[tl_idx].tl_rsc.sys_device);
             }
@@ -2056,9 +2076,10 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
             continue;
         }
 
-        select_mds[count].md_index = md_index;
-        select_mds[count].name     = context->tl_mds[md_index].rsc.md_name;
-        select_mds[count].distance = best;
+        select_mds[count].md_index  = md_index;
+        select_mds[count].name      = context->tl_mds[md_index].rsc.md_name;
+        select_mds[count].distance  = best;
+        select_mds[count].is_device = is_device;
         ucs_trace("reg_select: mem_sys_dev=%d md[%d]=%s lat=%.2e bw=%.2e",
                   mem_sys_dev, md_index, select_mds[count].name,
                   best.latency, best.bandwidth);
@@ -2076,8 +2097,9 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     case UCP_REG_DEVICES_CLOSEST:
         select_count = count;
         for (i = 1; i < count; i++) {
-            if (ucs_topo_distance_cmp(&select_mds[i].distance,
-                                      &select_mds[0].distance) != 0) {
+            if ((select_mds[i].is_device != select_mds[0].is_device) ||
+                (ucs_topo_distance_cmp(&select_mds[i].distance,
+                                      &select_mds[0].distance) != 0)) {
                 select_count = i;
                 break;
             }

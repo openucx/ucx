@@ -12,7 +12,10 @@
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <uct/base/uct_iface.h>
+#include <uct/base/uct_md.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/topo/base/topo.h>
 }
 
 class test_ucp_lib_query : public ucs::test {
@@ -72,7 +75,202 @@ UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
     EXPECT_EQ(2u, ucp_reg_devices_count(e->ucph()->config.ext.max_hca_per_gpu));
 }
 
+UCS_TEST_P(test_ucp_context, controller_device_metadata)
+{
+    ucp_test_param param = GetParam();
+    uct_tl_t *tl         = nullptr;
+    uct_tl_t *candidate;
+
+    param.transports      = {"self"};
+    entity *plain         = create_entity(false, param);
+    ucp_context_h context = plain->ucph();
+    ASSERT_EQ(1, context->num_tls);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, context->tl_rscs[0].ctl_device);
+    uct_md_h md = context->tl_mds[context->tl_rscs[0].md_index].md;
+
+    ucs_list_for_each(candidate, &md->component->tl_list, list) {
+        if (!strcmp(candidate->name, "self")) {
+            tl = candidate;
+            break;
+        }
+    }
+    ASSERT_NE(nullptr, tl);
+    EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+              uct_md_get_tl_device_ctl_sys_dev(md, "missing", "memory0"));
+
+    ucs::mock mock;
+    auto controller = +[](uct_md_h, const char *) -> ucs_sys_device_t {
+        return 42;
+    };
+    mock.setup(&tl->get_device_ctl_sys_dev, controller);
+    context = create_entity(false, param)->ucph();
+    ASSERT_EQ(1, context->num_tls);
+    EXPECT_EQ(42, context->tl_rscs[0].ctl_device);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
+
+class test_ucp_context_reg_device : public ucs::test {
+public:
+    virtual void init() override
+    {
+        ucs::test::init();
+        m_topo_state = ucs_topo_extract_state();
+        ASSERT_NE(nullptr, m_topo_state);
+        s_self = this;
+
+        for (unsigned i = 0; i < ucs_static_array_size(m_devices); ++i) {
+            const ucs_sys_bus_id_t bus_id = {0xffff, 0, uint8_t(i), 0};
+            ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id(&bus_id,
+                                                         &m_devices[i]));
+        }
+
+        m_context.config.features = UCP_FEATURE_DEVICE;
+        m_context.tl_mds           = m_mds;
+        m_context.num_mds          = ucs_static_array_size(m_mds);
+        m_context.tl_rscs          = m_resources;
+        m_context.num_tls          = ucs_static_array_size(m_resources);
+        for (unsigned i = 0; i < ucs_static_array_size(m_mds); ++i) {
+            ucs_snprintf_safe(m_mds[i].rsc.md_name,
+                              sizeof(m_mds[i].rsc.md_name), "md%u", i);
+            m_distances[i] = {10e-9, 20e9};
+            for (unsigned j = 0; j < 2; ++j) {
+                auto &resource            = m_resources[2 * i + j];
+                resource.md_index         = i;
+                resource.ctl_device       = (j == 0) ?
+                        UCS_SYS_DEVICE_ID_UNKNOWN : m_devices[i];
+                resource.tl_rsc.sys_device = m_devices[2 + i];
+                resource.tl_rsc.dev_type   = UCT_DEVICE_TYPE_NET;
+                ucs_snprintf_safe(resource.tl_rsc.dev_name,
+                                  sizeof(resource.tl_rsc.dev_name),
+                                  (j == 0) ? "nic%u" : "cuda%u", i);
+            }
+        }
+
+        const ucs_sys_topo_ops_t ops = {
+            get_distance, get_memory_distance, get_memory_distance_for_cpuset
+        };
+        ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops));
+        m_provider_pushed = true;
+    }
+
+    virtual void cleanup() override
+    {
+        if (m_provider_pushed) {
+            ucs_sys_topo_provider_pop();
+        }
+        if (m_topo_state != nullptr) {
+            ucs_topo_restore_state(m_topo_state);
+        }
+        s_self = nullptr;
+        ucs::test::cleanup();
+    }
+
+protected:
+    ucp_md_map_t select(unsigned gpu, unsigned long limit,
+                         ucp_md_map_t md_map = UCS_BIT(0) | UCS_BIT(1))
+    {
+        m_context.config.ext.max_hca_per_gpu = limit;
+        return ucp_context_select_reg_mds(&m_context, md_map, m_devices[gpu]);
+    }
+
+    static ucs_status_t get_distance(ucs_sys_device_t, ucs_sys_device_t device,
+                                     ucs_sys_dev_distance_t *distance)
+    {
+        *distance = s_self->m_distances[device == s_self->m_devices[3]];
+        return UCS_OK;
+    }
+
+    static void get_memory_distance(ucs_sys_device_t,
+                                     ucs_sys_dev_distance_t *distance)
+    {
+        *distance = ucs_topo_default_distance;
+    }
+
+    static void get_memory_distance_for_cpuset(
+            ucs_sys_device_t device, const ucs_cpu_set_t *,
+            ucs_sys_dev_distance_t *distance)
+    {
+        get_memory_distance(device, distance);
+    }
+
+    ucp_context_t m_context              = {};
+    ucp_tl_md_t m_mds[2]                 = {};
+    ucp_tl_resource_desc_t m_resources[4] = {};
+    ucs_sys_device_t m_devices[4]        = {};
+    ucs_sys_dev_distance_t m_distances[2];
+    ucs_global_state_t *m_topo_state      = nullptr;
+    bool m_provider_pushed               = false;
+    static test_ucp_context_reg_device *s_self;
+};
+
+test_ucp_context_reg_device *test_ucp_context_reg_device::s_self = nullptr;
+
+UCS_TEST_F(test_ucp_context_reg_device, symmetric_assignment_stays_stable)
+{
+    /* Querying another GPU or registering another buffer must not rebalance. */
+    for (unsigned gpu : {1u, 0u, 0u, 1u, 1u, 0u}) {
+        EXPECT_EQ(UCS_BIT(gpu), select(gpu, 1));
+    }
+}
+
+UCS_TEST_F(test_ucp_context_reg_device, assignment_precedes_distance)
+{
+    m_distances[0].bandwidth = 40e9;
+    EXPECT_EQ(UCS_BIT(1), select(1, 1));
+    m_distances[1].latency = 20e-9;
+    EXPECT_EQ(UCS_BIT(1), select(1, 1));
+    EXPECT_EQ(UCS_BIT(1), select(1, UCS_ULUNITS_AUTO));
+}
+
+UCS_TEST_F(test_ucp_context_reg_device, registration_limits)
+{
+    const ucp_md_map_t both = UCS_BIT(0) | UCS_BIT(1);
+
+    EXPECT_EQ(0, select(1, 0));
+    EXPECT_EQ(UCS_BIT(1), select(1, 1));
+    EXPECT_EQ(both, select(1, 2));
+    EXPECT_EQ(UCS_BIT(1), select(1, UCS_ULUNITS_AUTO));
+    EXPECT_EQ(both, select(1, UCS_ULUNITS_INF));
+
+    /* GDA may assign more NICs than the registration limit. */
+    m_resources[1].ctl_device = m_devices[1];
+    EXPECT_EQ(UCS_BIT(0), select(1, 1));
+    EXPECT_EQ(both, select(1, UCS_ULUNITS_AUTO));
+    m_distances[1].bandwidth = 40e9;
+    EXPECT_EQ(UCS_BIT(1), select(1, 1));
+    EXPECT_EQ(UCS_BIT(1), select(1, UCS_ULUNITS_AUTO));
+    EXPECT_EQ(both, select(1, 2));
+}
+
+UCS_TEST_F(test_ucp_context_reg_device, unassigned_candidates_use_distance)
+{
+    EXPECT_EQ(UCS_BIT(0), select(1, 1, UCS_BIT(0)));
+    m_resources[3].flags = UCP_TL_RSC_FLAG_AUX;
+    EXPECT_EQ(UCS_BIT(0), select(1, 1));
+    m_resources[3].flags      = 0;
+    m_resources[3].ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    EXPECT_EQ(UCS_BIT(0), select(1, 1));
+    m_distances[1].bandwidth = 40e9;
+    EXPECT_EQ(UCS_BIT(1), select(1, 1));
+}
+
+UCS_TEST_F(test_ucp_context_reg_device, no_device_feature_uses_distance)
+{
+    m_context.config.features = UCP_FEATURE_TAG;
+    EXPECT_EQ(UCS_BIT(0), select(1, 1));
+    m_distances[1].bandwidth = 40e9;
+    EXPECT_EQ(UCS_BIT(1), select(0, 1));
+}
+
+UCS_TEST_F(test_ucp_context_reg_device, unknown_device_uses_distance)
+{
+    m_resources[0].ctl_device = m_devices[0];
+    m_resources[3].ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    m_distances[0].bandwidth  = 40e9;
+    m_devices[1]             = UCS_SYS_DEVICE_ID_UNKNOWN;
+    EXPECT_EQ(UCS_BIT(0), select(1, 1));
+}
 
 class test_ucp_context_gpu_nic_assignment : public test_ucp_context {
 protected:
