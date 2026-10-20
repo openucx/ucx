@@ -76,8 +76,9 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
     uct_ib_mlx5_md_t *md;
 
-    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
-                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+    if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR  |
+                               UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR |
+                               UCT_EP_ATTR_FIELD_PATH_PERF)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

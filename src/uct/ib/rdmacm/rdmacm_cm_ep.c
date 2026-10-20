@@ -173,6 +173,10 @@ ucs_status_t uct_rdmacm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
     struct sockaddr *local_saddr, *remote_saddr;
     ucs_status_t status;
 
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_PATH_PERF) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
         local_saddr = rdma_get_local_addr(rdmacm_ep->id);
         status = ucs_sockaddr_copy((struct sockaddr*)&ep_attr->local_address,

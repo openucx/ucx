@@ -902,4 +902,19 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
 typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
 
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process asynchronous events associated with an endpoint.
+ *
+ * @param [in]  arg      User argument to be passed to the callback.
+ * @param [in]  events   Event flags from @ref uct_iface_event_types.
+ * @param [in]  ep       Endpoint associated with the event.
+ *
+ * The transport must keep @a ep valid for the duration of this callback. The
+ * callback may be invoked from an asynchronous context.
+ */
+typedef void (*uct_async_event_cb_v2_t)(void *arg, unsigned events,
+                                        uct_ep_h ep);
+
+
 #endif
