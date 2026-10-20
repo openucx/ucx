@@ -15,7 +15,6 @@
 #include "ucp_request.h"
 #include "ucp_tl_info.h"
 
-#include <uct/base/uct_md.h>
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/algorithm/crc.h>
@@ -1384,9 +1383,11 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 
 static ucs_status_t
 ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
-                    const uct_tl_resource_desc_t *resource, uint8_t rsc_flags)
+                    const uct_tl_resource_desc_v2_t *resource_v2,
+                    uint8_t rsc_flags)
 {
-    ucp_tl_md_t *md = &context->tl_mds[md_index];
+    const uct_tl_resource_desc_t *resource = &resource_v2->resource;
+    ucp_tl_md_t *md                       = &context->tl_mds[md_index];
     ucp_rsc_index_t dev_index, i;
 
     if (context->num_tls >= UCP_MAX_RESOURCES) {
@@ -1409,9 +1410,7 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     context->tl_rscs[context->num_tls].tl_name_csum = ucs_crc16_string(
             resource->tl_name);
     context->tl_rscs[context->num_tls].flags        = rsc_flags;
-    context->tl_rscs[context->num_tls].ctl_device   =
-            uct_md_get_tl_device_ctl_sys_dev(md->md, resource->tl_name,
-                                              resource->dev_name);
+    context->tl_rscs[context->num_tls].ctl_device   = resource_v2->ctl_device;
 
     dev_index = 0;
     for (i = 0; i < context->num_tls; ++i) {
@@ -1445,7 +1444,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     ucp_tl_md_t *md                 = &context->tl_mds[md_index];
     ucp_tl_info_entry_t *added_rscs = NULL;
     unsigned num_tl_resources, all_rscs_prev_len;
-    uct_tl_resource_desc_t *tl_resources;
+    uct_tl_resource_desc_v2_t *tl_resources;
+    const uct_tl_resource_desc_t *resource;
     ucp_tl_resource_desc_t *tmp;
     ucs_status_t status;
     uint8_t rsc_flags;
@@ -1454,7 +1454,10 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     *num_resources_p = 0;
 
     /* check what are the available uct resources */
-    status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
+    status = uct_md_query_tl_resources_v2(
+            md->md, UCT_TL_RESOURCE_DESC_FIELD_RESOURCE |
+                            UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE,
+            sizeof(*tl_resources), &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto out;
@@ -1477,7 +1480,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                  all_rscs_prev_len + num_tl_resources);
             added_rscs = &ucs_array_elem(all_rscs, all_rscs_prev_len);
             for (i = 0; i < num_tl_resources; ++i) {
-                added_rscs[i].rsc        = tl_resources[i];
+                added_rscs[i].rsc        = tl_resources[i].resource;
                 added_rscs[i].cmpt_index = md->cmpt_index;
                 added_rscs[i].enabled    = 0;
             }
@@ -1502,12 +1505,13 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
-                            "'%s'(%s)", tl_resources[i].dev_name,
+        resource = &tl_resources[i].resource;
+        ucs_string_set_addf(&avail_devices[resource->dev_type],
+                            "'%s'(%s)", resource->dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
-        ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
+        ucs_string_set_add(avail_tls, resource->tl_name);
 
-        if (!ucp_is_resource_enabled(&tl_resources[i], config, aux_tls,
+        if (!ucp_is_resource_enabled(resource, config, aux_tls,
                                      &rsc_flags, dev_cfg_masks, tl_cfg_mask)) {
             continue;
         }
@@ -1527,7 +1531,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
 
     status = UCS_OK;
 free_resources:
-    uct_release_tl_resource_list(tl_resources);
+    uct_release_tl_resource_list_v2(tl_resources);
 out:
     return status;
 }

@@ -1333,6 +1333,7 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
                           "%s:%d", uct_ib_device_name(dev), port_num);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
         tl_devices[num_tl_devices].sys_device = dev->sys_dev;
+        tl_devices[num_tl_devices].ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
         ++num_tl_devices;
     }
 

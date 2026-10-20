@@ -26,6 +26,7 @@
 #include <ucs/time/time.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <limits.h>
 
 
 #define UCT_MD_ATTR_V2_FIELD_COPY(_md_attr_dst, _md_attr_src, _field_name, \
@@ -77,18 +78,32 @@ void uct_md_close(uct_md_h md)
     md->ops->close(md);
 }
 
-ucs_status_t uct_md_query_tl_resources(uct_md_h md,
-                                       uct_tl_resource_desc_t **resources_p,
-                                       unsigned *num_resources_p)
+ucs_status_t uct_md_query_tl_resources_v2(
+        uct_md_h md, uint64_t field_mask, size_t resource_size,
+        uct_tl_resource_desc_v2_t **resources_p, unsigned *num_resources_p)
 {
     uct_component_t *component = md->component;
-    uct_tl_resource_desc_t *resources, *tmp;
+    uct_tl_resource_desc_v2_t resource = {0};
+    void *resources = NULL, *tmp;
     uct_tl_device_resource_t *tl_devices;
     unsigned i, num_resources, num_tl_devices;
     ucs_status_t status;
     uct_tl_t *tl;
 
-    resources     = NULL;
+    if ((resource_size < sizeof(resource.field_mask)) ||
+        ((field_mask & UCT_TL_RESOURCE_DESC_FIELD_RESOURCE) &&
+         (resource_size < ucs_offsetof(uct_tl_resource_desc_v2_t, resource) +
+                          sizeof(resource.resource))) ||
+        ((field_mask & UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE) &&
+         (resource_size < ucs_offsetof(uct_tl_resource_desc_v2_t, ctl_device) +
+                          sizeof(resource.ctl_device)))) {
+        ucs_error("resource descriptor size %zu omits requested fields",
+                  resource_size);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    resource.field_mask = field_mask & (UCT_TL_RESOURCE_DESC_FIELD_RESOURCE |
+                                        UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE);
     num_resources = 0;
 
     ucs_list_for_each(tl, &component->tl_list, list) {
@@ -104,8 +119,16 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
             continue;
         }
 
+        if ((num_tl_devices > UINT_MAX - num_resources) ||
+            (num_tl_devices > (SIZE_MAX / resource_size) - num_resources)) {
+            ucs_error("transport resource array size overflow");
+            ucs_free(tl_devices);
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
+
         tmp = ucs_realloc(resources,
-                          sizeof(*resources) * (num_resources + num_tl_devices),
+                          resource_size * (num_resources + num_tl_devices),
                           "md_resources");
         if (tmp == NULL) {
             ucs_free(tl_devices);
@@ -115,12 +138,22 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
 
         /* add tl devices to overall list of resources */
         for (i = 0; i < num_tl_devices; ++i) {
-            ucs_strncpy_zero(tmp[num_resources + i].tl_name, tl->name,
-                             sizeof(tmp[num_resources + i].tl_name));
-            ucs_strncpy_zero(tmp[num_resources + i].dev_name, tl_devices[i].name,
-                             sizeof(tmp[num_resources + i].dev_name));
-            tmp[num_resources + i].dev_type   = tl_devices[i].type;
-            tmp[num_resources + i].sys_device = tl_devices[i].sys_device;
+            if (field_mask & UCT_TL_RESOURCE_DESC_FIELD_RESOURCE) {
+                ucs_strncpy_zero(resource.resource.tl_name, tl->name,
+                                 sizeof(resource.resource.tl_name));
+                ucs_strncpy_zero(resource.resource.dev_name, tl_devices[i].name,
+                                 sizeof(resource.resource.dev_name));
+                resource.resource.dev_type   = tl_devices[i].type;
+                resource.resource.sys_device = tl_devices[i].sys_device;
+            }
+
+            if (field_mask & UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE) {
+                resource.ctl_device = tl_devices[i].ctl_device;
+            }
+
+            memcpy(UCS_PTR_BYTE_OFFSET(tmp,
+                                      (num_resources + i) * resource_size),
+                   &resource, ucs_min(resource_size, sizeof(resource)));
         }
 
         resources      = tmp;
@@ -137,7 +170,40 @@ err:
     return status;
 }
 
+ucs_status_t uct_md_query_tl_resources(uct_md_h md,
+                                       uct_tl_resource_desc_t **resources_p,
+                                       unsigned *num_resources_p)
+{
+    uct_tl_resource_desc_v2_t *resources;
+    uct_tl_resource_desc_t *legacy_resources;
+    unsigned i, num_resources;
+    ucs_status_t status;
+
+    status = uct_md_query_tl_resources_v2(
+            md, UCT_TL_RESOURCE_DESC_FIELD_RESOURCE, sizeof(*resources),
+            &resources, &num_resources);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    legacy_resources = (uct_tl_resource_desc_t*)resources;
+    /* Each destination precedes the next unread descriptor. */
+    for (i = 0; i < num_resources; ++i) {
+        memmove(&legacy_resources[i], &resources[i].resource,
+                sizeof(*legacy_resources));
+    }
+
+    *resources_p     = legacy_resources;
+    *num_resources_p = num_resources;
+    return UCS_OK;
+}
+
 void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources)
+{
+    ucs_free(resources);
+}
+
+void uct_release_tl_resource_list_v2(uct_tl_resource_desc_v2_t *resources)
 {
     ucs_free(resources);
 }
@@ -191,19 +257,6 @@ static uct_tl_t *uct_find_tl(uct_component_h component, const char *tl_name)
         }
     }
     return NULL;
-}
-
-ucs_sys_device_t
-uct_md_get_tl_device_ctl_sys_dev(uct_md_h md, const char *tl_name,
-                                const char *dev_name)
-{
-    uct_tl_t *tl = uct_find_tl(md->component, tl_name);
-
-    if ((tl == NULL) || (tl->get_device_ctl_sys_dev == NULL)) {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
-
-    return tl->get_device_ctl_sys_dev(md, dev_name);
 }
 
 ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,

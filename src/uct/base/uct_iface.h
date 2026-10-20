@@ -420,6 +420,7 @@ typedef struct uct_tl_device_resource {
                                               (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
     ucs_sys_device_t         sys_device; /**< The identifier associated with the device
                                               bus_id as captured in ucs_sys_bus_id_t struct */
+    ucs_sys_device_t         ctl_device; /**< Device controlling transport */
 } uct_tl_device_resource_t;
 
 
@@ -433,10 +434,6 @@ typedef struct uct_tl {
     ucs_status_t           (*query_devices)(uct_md_h md,
                                             uct_tl_device_resource_t **tl_devices_p,
                                             unsigned *num_tl_devices_p);
-
-    /* Optional controller, matching uct_iface_attr_t::ctl_device. */
-    ucs_sys_device_t       (*get_device_ctl_sys_dev)(uct_md_h md,
-                                                    const char *dev_name);
 
     ucs_status_t           (*iface_open)(uct_md_h md, uct_worker_h worker,
                                          const uct_iface_params_t *params,

@@ -270,13 +270,4 @@ void uct_md_vfs_init(uct_component_h component, uct_md_h md,
 
 void uct_md_base_md_query(uct_md_attr_v2_t *md_attr);
 
-
-/**
- * Return the controller system device of a previously queried TL resource,
- * or UCS_SYS_DEVICE_ID_UNKNOWN when the transport does not report one.
- */
-ucs_sys_device_t
-uct_md_get_tl_device_ctl_sys_dev(uct_md_h md, const char *tl_name,
-                                const char *dev_name);
-
 #endif
