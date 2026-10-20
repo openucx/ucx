@@ -231,7 +231,8 @@ enum uct_component_attr_field {
     UCT_COMPONENT_ATTR_FIELD_NAME              = UCS_BIT(0), /**< Component name */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT = UCS_BIT(1), /**< MD resource count */
     UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES      = UCS_BIT(2), /**< MD resources array */
-    UCT_COMPONENT_ATTR_FIELD_FLAGS             = UCS_BIT(3)  /**< Capability flags */
+    UCT_COMPONENT_ATTR_FIELD_FLAGS             = UCS_BIT(3), /**< Capability flags */
+    UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT    = UCS_BIT(4)  /**< MD alloc count */
 };
 
 
@@ -268,7 +269,8 @@ typedef struct uct_component_attr {
      * by specifying @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT in
      * field_mask. Then the array could be allocated with the returned number of
      * entries, and passed to a second call to @ref uct_component_query, this
-     * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES.
+     * time setting field_mask to @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES and
+     * optionally @ref UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT.
      */
     uct_md_resource_desc_t *md_resources;
 
@@ -276,6 +278,16 @@ typedef struct uct_component_attr {
      * Flags as defined by UCT_COMPONENT_FLAG_xx.
      */
     uint64_t               flags;
+
+    /**
+     * Number of entries allocated in @a md_resources. Since memory domain
+     * resources may change after the array was allocated, when this field is
+     * set together with @ref UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES,
+     * @ref uct_component_query returns @ref UCS_ERR_NO_RESOURCE if the
+     * current number of memory domain resources is different than the capacity
+     * of @a md_resources.
+     */
+    unsigned               md_resource_alloc_count;
 } uct_component_attr_t;
 
 

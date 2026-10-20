@@ -331,9 +331,12 @@ static ucs_status_t dev_tl_lookup(const cmd_args_t *cmd_args,
         CHKERR_JUMP(UCS_OK != status, "query component attributes",
                     release_component_list);
 
-        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+        component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
+                                      UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT;
         component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
                                              component_attr.md_resource_count);
+        component_attr.md_resource_alloc_count =
+                component_attr.md_resource_count;
         status = uct_component_query(components[cmpt_index], &component_attr);
         CHKERR_JUMP(UCS_OK != status, "query for memory domain resources",
                     release_component_list);

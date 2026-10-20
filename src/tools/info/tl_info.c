@@ -630,9 +630,11 @@ static void print_uct_component_info(uct_component_h component,
         return;
     }
 
-    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
+                                  UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT;
     component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
                                          component_attr.md_resource_count);
+    component_attr.md_resource_alloc_count = component_attr.md_resource_count;
     status = uct_component_query(component, &component_attr);
     if (status != UCS_OK) {
         printf("#   < failed to query component md resources >\n");

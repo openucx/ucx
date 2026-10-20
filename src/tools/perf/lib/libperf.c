@@ -1831,9 +1831,12 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
             goto out_release_components_list;
         }
 
-        component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+        component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
+                                      UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT;
         component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
                                              component_attr.md_resource_count);
+        component_attr.md_resource_alloc_count =
+                component_attr.md_resource_count;
         status = uct_component_query(uct_components[cmpt_index], &component_attr);
         if (status != UCS_OK) {
             goto out_release_components_list;

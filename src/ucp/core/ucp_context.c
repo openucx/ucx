@@ -1853,11 +1853,13 @@ ucp_add_component_resources(ucp_context_h context, ucp_rsc_index_t cmpt_index,
     unsigned i;
 
     /* List memory domain resources */
-    uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
-                                      UCT_COMPONENT_ATTR_FIELD_NAME;
+    uct_component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES |
+                                    UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT |
+                                    UCT_COMPONENT_ATTR_FIELD_NAME;
     uct_component_attr.md_resources =
                     ucs_alloca(tl_cmpt->attr.md_resource_count *
                                sizeof(*uct_component_attr.md_resources));
+    uct_component_attr.md_resource_alloc_count = tl_cmpt->attr.md_resource_count;
     status = uct_component_query(tl_cmpt->cmpt, &uct_component_attr);
     if (status != UCS_OK) {
         goto out;

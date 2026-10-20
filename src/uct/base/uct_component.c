@@ -98,6 +98,17 @@ ucs_status_t uct_component_query(uct_component_h component,
                     "component=%s", component->name);
     }
 
+    if ((component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES) &&
+        (component_attr->field_mask &
+         UCT_COMPONENT_ATTR_FIELD_MD_ALLOC_COUNT) &&
+        (num_resources != component_attr->md_resource_alloc_count)) {
+        ucs_error("component %s has %u md resources instead of %u",
+                  component->name, num_resources,
+                  component_attr->md_resource_alloc_count);
+        ucs_free(resources);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     if (component_attr->field_mask & UCT_COMPONENT_ATTR_FIELD_NAME) {
         ucs_snprintf_zero(component_attr->name, sizeof(component_attr->name),
                           "%s", component->name);
