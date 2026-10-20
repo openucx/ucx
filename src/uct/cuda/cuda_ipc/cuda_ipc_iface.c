@@ -34,8 +34,14 @@ typedef enum {
 typedef struct {
     uint64_t                     system_uuid;
     uint8_t                      flags; /* uct_cuda_ipc_device_addr_flags_t */
-    uct_cuda_ipc_nvlink_domain_t nvlink_domain; /* Valid if FLAG_MNNVL */
 } UCS_S_PACKED uct_cuda_ipc_device_addr_t;
+
+
+/* Device address extended with the NVLink domain, sent if FLAG_MNNVL is set */
+typedef struct {
+    uct_cuda_ipc_device_addr_t   super;
+    uct_cuda_ipc_nvlink_domain_t nvlink_domain;
+} UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
 
 
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
@@ -88,7 +94,9 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
-    uct_cuda_ipc_device_addr_t *dev_addr = (uct_cuda_ipc_device_addr_t*)addr;
+    uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr =
+            (uct_cuda_ipc_mnnvl_device_addr_t*)addr;
+    uct_cuda_ipc_device_addr_t *dev_addr = &mnnvl_addr->super;
     uct_cuda_ipc_iface_t *iface          = ucs_derived_of(tl_iface,
                                                           uct_cuda_ipc_iface_t);
     uct_cuda_ipc_md_t *md                = ucs_derived_of(iface->super.super.md,
@@ -97,14 +105,13 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
     if (md->enable_mnnvl || md->fabric_supported) {
         dev_addr->flags = 0;
         if (md->enable_mnnvl) {
-            dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+            dev_addr->flags          |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+            mnnvl_addr->nvlink_domain = md->nvlink_domain;
         }
 
         if (md->fabric_supported) {
             dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
         }
-
-        dev_addr->nvlink_domain = md->nvlink_domain;
     }
 
     dev_addr->system_uuid = ucs_get_system_id();
@@ -144,6 +151,17 @@ uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
             UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
 }
 
+static const uct_cuda_ipc_nvlink_domain_t *
+uct_cuda_ipc_iface_dev_addr_nvlink_domain(const uct_device_addr_t *addr,
+                                          size_t dev_addr_len)
+{
+    if (dev_addr_len < sizeof(uct_cuda_ipc_mnnvl_device_addr_t)) {
+        return NULL;
+    }
+
+    return &((const uct_cuda_ipc_mnnvl_device_addr_t*)addr)->nvlink_domain;
+}
+
 static int
 uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
@@ -152,6 +170,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
                                                  uct_cuda_ipc_md_t);
     const uct_cuda_ipc_device_addr_t *dev_addr;
+    const uct_cuda_ipc_nvlink_domain_t *nvlink_domain;
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
     int local_fabric_supported, remote_fabric_supported;
@@ -186,11 +205,14 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     /* Multi-node NVLINK connects only GPUs in the same NVLink domain */
-    if (mnnvl_supported &&
-        memcmp(&dev_addr->nvlink_domain, &md->nvlink_domain,
-               sizeof(md->nvlink_domain))) {
-        uct_iface_fill_info_str_buf(params, "different NVLink domain");
-        return 0;
+    if (mnnvl_supported) {
+        nvlink_domain = uct_cuda_ipc_iface_dev_addr_nvlink_domain(
+                params->device_addr, dev_addr_len);
+        if ((nvlink_domain != NULL) &&
+            memcmp(nvlink_domain, &md->nvlink_domain, sizeof(*nvlink_domain))) {
+            uct_iface_fill_info_str_buf(params, "different NVLink domain");
+            return 0;
+        }
     }
 
     /* Legacy CUDA IPC handles cannot be exchanged across PID namespaces;
@@ -336,6 +358,17 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
     return ULONG_MAX;
 }
 
+static size_t uct_cuda_ipc_iface_device_addr_length(const uct_cuda_ipc_md_t *md)
+{
+    if (md->enable_mnnvl) {
+        return sizeof(uct_cuda_ipc_mnnvl_device_addr_t);
+    } else if (md->fabric_supported) {
+        return sizeof(uct_cuda_ipc_device_addr_t);
+    }
+
+    return sizeof(uint64_t);
+}
+
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
@@ -345,21 +378,18 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
-    iface_attr->iface_addr_len          = uct_cuda_ipc_iface_address_length();
-    iface_attr->device_addr_len         = (md->enable_mnnvl ||
-                                           md->fabric_supported) ?
-                                          sizeof(uct_cuda_ipc_device_addr_t) :
-                                          sizeof(uint64_t);
-    iface_attr->ep_addr_len             = 0;
-    iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
-                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                          UCT_IFACE_FLAG_PENDING          |
-                                          UCT_IFACE_FLAG_GET_ZCOPY        |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY        |
-                                          UCT_IFACE_FLAG_DEVICE_EP;
+    iface_attr->iface_addr_len  = uct_cuda_ipc_iface_address_length();
+    iface_attr->device_addr_len = uct_cuda_ipc_iface_device_addr_length(md);
+    iface_attr->ep_addr_len     = 0;
+    iface_attr->max_conn_priv   = 0;
+    iface_attr->cap.flags       = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                  UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
+                                  UCT_IFACE_FLAG_PENDING                |
+                                  UCT_IFACE_FLAG_GET_ZCOPY              |
+                                  UCT_IFACE_FLAG_PUT_ZCOPY              |
+                                  UCT_IFACE_FLAG_DEVICE_EP;
 
-    iface_attr->ctl_device              = UCS_SYS_DEVICE_ID_UNKNOWN;
+    iface_attr->ctl_device      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     if (md->enable_mnnvl) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_INTER_NODE;

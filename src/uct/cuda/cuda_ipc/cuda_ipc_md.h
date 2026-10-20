@@ -51,8 +51,10 @@ typedef struct uct_cuda_ipc_md_handle {
  * reach each other over multi-node NVLINK only if both are equal.
  */
 typedef struct {
-    uint8_t  cluster_uuid[UCT_CUDA_IPC_CLUSTER_UUID_LEN]; /**< Fabric cluster UUID */
-    uint32_t clique_id;                                   /**< Fabric clique ID */
+    /**< Fabric cluster UUID */
+    uint8_t  cluster_uuid[UCT_CUDA_IPC_CLUSTER_UUID_LEN];
+    /**< Fabric clique ID */
+    uint32_t clique_id;
 } UCS_S_PACKED uct_cuda_ipc_nvlink_domain_t;
 
 
@@ -60,10 +62,13 @@ typedef struct {
  * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
-    uct_md_t                     super;            /**< Domain info */
-    int                          enable_mnnvl;     /**< Multi-node NVLINK support status */
-    int                          fabric_supported; /**< CUDA fabric support status */
-    uct_cuda_ipc_nvlink_domain_t nvlink_domain;    /**< Valid if enable_mnnvl */
+    uct_md_t                     super; /**< Domain info */
+    /**< Multi-node NVLINK support status */
+    int                          enable_mnnvl;
+    /**< CUDA fabric support status */
+    int                          fabric_supported;
+    /**< Valid if enable_mnnvl */
+    uct_cuda_ipc_nvlink_domain_t nvlink_domain;
 } uct_cuda_ipc_md_t;
 
 
@@ -126,7 +131,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t enable_mnnvl;
-    unsigned long            nvlink_domain;     /**< NVLink domain override, or auto */
+    /** NVLink domain override, or auto */
+    unsigned long            nvlink_domain;
     unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
     /** Enable remote IPC memory handle mapping cache */

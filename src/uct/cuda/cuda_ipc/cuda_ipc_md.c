@@ -60,9 +60,9 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"NVLINK_DOMAIN", "auto",
      "NVLink domain used to check multi-node NVLINK reachability.\n"
      " auto - use the fabric cluster UUID and clique ID reported by NVML.\n"
-     " <id> - replace the detected domain with the given number, so that peers\n"
-     "        with different values are unreachable even on the same node.\n"
-     "        Used for testing purposes only.",
+     " <id> - replace the detected domain with the given number, so that\n"
+     "        peers with different values are unreachable even on the same\n"
+     "        node. Used for testing purposes only.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
      UCS_CONFIG_TYPE_ULUNITS},
 
