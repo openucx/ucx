@@ -769,6 +769,14 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
  * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
  * @a lane_mask are initially flushed. If the endpoint topology changes while
  * the flush is active, current live lanes are added conservatively.
+ *
+ * Device visibility state is shared by all lanes of the endpoint. A partial
+ * flush can clear this state while an excluded lane still has writes in
+ * flight, causing a later flush to skip the visibility work for those writes.
+ *
+ * Callers must include every lane with outstanding writes that require a
+ * device flush, and defer new such writes on excluded lanes until this
+ * flush completes.
  */
 ucs_status_ptr_t
 ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
