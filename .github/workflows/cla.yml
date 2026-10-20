@@ -1,4 +1,6 @@
-# Check that the PR author and all commit authors are in the secret CLA team
+# Check that the PR author and all commit authors are covered by a UCF CLA:
+# either a member of the secret CLA team, or the committer of a commit whose
+# verified signature ties a corporate-CLA email domain to a GitHub account
 name: CLA
 
 # pull_request_target passes secrets to fork PRs; PR code is never checked out.
@@ -34,6 +36,8 @@ jobs:
           ORG_TOKEN: ${{ steps.app-token.outputs.token }}
           ORG: ${{ github.repository_owner }}
           TEAM: ucf-cla-signed
+          # Space separated email domains of corporate CLA signers
+          DOMAINS: ${{ vars.CLA_DOMAINS }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -65,6 +69,7 @@ jobs:
           GH_TOKEN="$ORG_TOKEN" gh api "orgs/$ORG/teams/$TEAM" --jq .slug
 
           logins=()
+          covered=()
           unlinked=()
           if [ "$PR_AUTHOR_TYPE" != "Bot" ]; then
               logins+=("$PR_AUTHOR")
@@ -76,14 +81,28 @@ jobs:
               exit 1
           fi
 
+          # A verified signature proves the committer email is verified on the
+          # committer's GitHub account. Web UI commits are signed by GitHub for
+          # the author, who can only pick a verified email there.
           # Captured first so an API failure aborts the job under set -e
-          commits=$(gh api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100" --jq '.[] |
-                        if .author == null then "unlinked \(.sha[0:10])"
-                        elif .author.type == "Bot" then empty
-                        else "user \(.author.login)" end')
+          commits_json=$(gh api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100")
+          # shellcheck disable=SC2016
+          commits=$(jq -r --arg domains "$DOMAINS" '
+                    ($domains | ascii_downcase | split(" ") | map(select(. != ""))) as $doms |
+                    .[] |
+                    (if .committer.login == "web-flow"
+                     then {login: .author.login, email: .commit.author.email}
+                     else {login: .committer.login, email: .commit.committer.email} end) as $signer |
+                    if .author.type == "Bot" then empty
+                    elif .commit.verification.verified and $signer.login != null and
+                         (($signer.email | ascii_downcase | split("@")[1]) | IN($doms[]))
+                    then "covered \($signer.login)"
+                    elif .author == null then "unlinked \(.sha[0:10])"
+                    else "user \(.author.login)" end' <<< "$commits_json")
 
           while read -r kind value; do
               case "$kind" in
+              covered)  covered+=("$value") ;;
               user)     logins+=("$value") ;;
               unlinked) unlinked+=("$value") ;;
               esac
@@ -91,6 +110,7 @@ jobs:
 
           missing=()
           for login in $(printf '%s\n' "${logins[@]}" | sort -u); do
+              case " ${covered[*]} " in *" $login "*) continue ;; esac
               if ! is_signer "$login"; then
                   missing+=("@$login")
               fi
@@ -116,6 +136,9 @@ jobs:
                   echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
                   echo "Once the CLA is countersigned, ask a maintainer to add you to the CLA team (accept the"
                   echo "org invitation if you get one), then push a new commit or ask for a re-run of this check."
+                  echo
+                  echo "If your employer has a corporate CLA, you can instead sign your commits with a GPG or SSH"
+                  echo "key registered on your GitHub account, using your verified company email as the committer."
               fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::error::UCF CLA check failed, see the job summary"
