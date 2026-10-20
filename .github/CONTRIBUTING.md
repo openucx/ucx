@@ -3,7 +3,8 @@
    Once it is countersigned, ask a maintainer to add you to the CLA team;
    the `CLA` check on your pull request stays red until then. If your employer
    has a corporate CLA, signing your commits with a key registered on your
-   GitHub account, using your verified company email, passes the check too.
+   GitHub account, using your verified company email, passes the check too
+   (a maintainer has to register the company's email domain first).
 
 1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/docs/CodeStyle.md)
    and [logging style](https://github.com/openucx/ucx/blob/master/docs/LoggingStyle.md).

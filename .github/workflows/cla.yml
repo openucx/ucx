@@ -96,7 +96,8 @@ jobs:
                     if .author.type == "Bot" then empty
                     elif .commit.verification.verified and $signer.login != null and
                          (($signer.email | ascii_downcase | split("@")[1]) | IN($doms[]))
-                    then "covered \($signer.login)"
+                    then "covered \($signer.login)" else empty end,
+                    if .author.type == "Bot" then empty
                     elif .author == null then "unlinked \(.sha[0:10])"
                     else "user \(.author.login)" end' <<< "$commits_json")
 
@@ -138,7 +139,8 @@ jobs:
                   echo "org invitation if you get one), then push a new commit or ask for a re-run of this check."
                   echo
                   echo "If your employer has a corporate CLA, you can instead sign your commits with a GPG or SSH"
-                  echo "key registered on your GitHub account, using your verified company email as the committer."
+                  echo "key registered on your GitHub account, using your verified company email as the committer"
+                  echo "(ask a maintainer to register your company's email domain if it is not yet)."
               fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::error::UCF CLA check failed, see the job summary"
