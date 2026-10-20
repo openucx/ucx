@@ -77,7 +77,7 @@ jobs:
           fi
 
           # Captured first so an API failure aborts the job under set -e
-          commits=$(gh api --paginate "repos/$REPO/pulls/$PR/commits" --jq '.[] |
+          commits=$(gh api --paginate "repos/$REPO/pulls/$PR/commits?per_page=100" --jq '.[] |
                         if .author == null then "unlinked \(.sha[0:10])"
                         elif .author.type == "Bot" then empty
                         else "user \(.author.login)" end')
@@ -114,7 +114,8 @@ jobs:
                   echo
                   echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
                   echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
-                  echo "Once the CLA is countersigned, push a new commit or ask a maintainer to re-run this check."
+                  echo "Once the CLA is countersigned, ask a maintainer to add you to the CLA team (accept the"
+                  echo "org invitation if you get one), then push a new commit or ask for a re-run of this check."
               fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "::error::UCF CLA check failed, see the job summary"
