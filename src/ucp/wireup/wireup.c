@@ -1343,12 +1343,31 @@ static void ucp_wireup_tf_reply_free(ucp_wireup_tf_reply_t *reply)
     ucs_free(reply);
 }
 
+/* Lanes whose replacement queue pair is already stored in the wireup proxy.
+ * The proxy is not ready, so the data path still skips them. */
+static ucp_lane_map_t
+ucp_wireup_lanes_with_next(ucp_ep_h ep, ucp_lane_map_t lanes)
+{
+    ucp_lane_map_t with_next = 0;
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_lane_index_t lane;
+
+    ucs_for_each_bit(lane, lanes) {
+        wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
+        if ((wireup_ep != NULL) && ucp_wireup_ep_has_next_ep(wireup_ep)) {
+            with_next |= UCS_BIT(lane);
+        }
+    }
+
+    return with_next;
+}
+
 static void
 ucp_wireup_lanes_addr_request_reply(
         ucp_ep_h ep, ucp_wireup_tf_reply_t *reply,
         const ucp_unpacked_address_t *remote_address)
 {
-    ucp_lane_map_t peer_unaware, to_rebuild, rebuilt;
+    ucp_lane_map_t peer_unaware, to_rebuild, rebuilt, provided;
     ucs_status_t status;
 
     /* Lanes still up take the software path. A lane invalidated for this
@@ -1370,6 +1389,10 @@ ucp_wireup_lanes_addr_request_reply(
 
     to_rebuild = reply->provided_lane_map & ucp_ep_get_failed_lanes(ep);
     rebuilt    = ucp_ep_recovery_rebuild_lanes(ep, to_rebuild, remote_address);
+    /* Publish a lane as soon as its replacement queue pair exists. A lane
+     * whose aux probe is still running is not ready, and is not switched
+     * onto the data path. */
+    provided   = rebuilt | ucp_wireup_lanes_with_next(ep, to_rebuild);
     ucs_diag("ep %p: LANES_ADDR_REQ requested=0x%" PRIx64
              " provided=0x%" PRIx64 " to_rebuild=0x%" PRIx64
              " rebuilt=0x%" PRIx64,
@@ -1381,11 +1404,11 @@ ucp_wireup_lanes_addr_request_reply(
         ucp_wireup_eps_progress_sched(ep);
     }
 
-    /* Always reply, even if rebuilt == 0, so the initiator knows the peer
+    /* Always reply, even if provided == 0, so the initiator knows the peer
      * handled the request. The reply answers the lanes the request provided,
      * so its RX tokens belong to them. */
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_REPLY,
-                                   reply->provided_lane_map, rebuilt,
+                                   reply->provided_lane_map, provided,
                                    reply->request_id, reply->rx_tokens);
 }
 
