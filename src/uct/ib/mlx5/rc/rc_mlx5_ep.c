@@ -854,6 +854,20 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
 
+    /* An idle queue pair produces no completion after the transition to ERR.
+     * A signaled NOP posted while the queue pair can still accept a send
+     * becomes that completion. A full send queue already has one. */
+    if ((uct_rc_txqp_available(&ep->super.txqp) > 0) &&
+        uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
+        uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
+                                     &ep->super.txqp, &ep->tx.wq,
+                                     MLX5_OPCODE_NOP, NULL, 0,
+                                     0, 0, 0,
+                                     0, 0,
+                                     0, 0,
+                                     0, INT_MAX);
+    }
+
     return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
                                        IBV_QPS_ERR);
 }
