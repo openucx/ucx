@@ -549,10 +549,16 @@ typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
     uint8_t                 state;
+    /* The next idle round republishes lanes already sent. A new failure
+     * clears this and publishes only lanes that have not been sent. */
+    uint8_t                 resend;
     /* Generation of the LANES_ADDR exchange, pre-incremented by every request
      * and echoed by the peer. Copied into held lanes as request_id before the
      * request is sent. */
     uint32_t                request_id;
+    /* Lanes a request already published. A later failure leaves them out
+     * until recovery retries. */
+    ucp_lane_map_t          sent_lanes;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
     ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
     /* Pending requests from held lanes, replayed after all of their
