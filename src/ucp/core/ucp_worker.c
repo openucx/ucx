@@ -939,6 +939,64 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_event_common(wiface);
 }
 
+static void ucp_worker_iface_async_cb_event_v2(void *arg, unsigned events,
+                                                uct_ep_h uct_ep)
+{
+    ucp_worker_iface_t *wiface = arg;
+    ucp_worker_h worker         = wiface->worker;
+    ucp_lane_type_mask_t lane_types;
+    ucp_lane_index_t lane;
+    ucp_ep_h ep;
+
+    ucs_trace_func(UCP_WIFACE_FMT " ep %p events 0x%x",
+                   UCP_WIFACE_ARG(wiface), uct_ep, events);
+
+    if (events & UCT_EVENT_PATH_SPEED_CHANGE) {
+        UCS_ASYNC_BLOCK(&worker->async);
+
+        ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &lane);
+        if (ep == NULL) {
+            ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep, &lane);
+        }
+
+        if ((ep == NULL) ||
+            (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
+            (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_FAILED))) {
+            ucs_debug(UCP_WIFACE_FMT " ignores path speed event for stale "
+                      "UCT ep %p", UCP_WIFACE_ARG(wiface), uct_ep);
+            goto out_unlock;
+        }
+
+        if (ucp_ep_get_rsc_index(ep, lane) != wiface->rsc_index) {
+            ucs_debug(UCP_WIFACE_FMT " ignores path speed event for UCP ep "
+                      "%p lane %u on resource %u", UCP_WIFACE_ARG(wiface),
+                      ep, lane, ucp_ep_get_rsc_index(ep, lane));
+            goto out_unlock;
+        }
+
+        lane_types = ucp_ep_config(ep)->key.lanes[lane].lane_types;
+        if (!(lane_types & (UCS_BIT(UCP_LANE_TYPE_AM_BW) |
+                            UCS_BIT(UCP_LANE_TYPE_RMA_BW)))) {
+            ucs_debug("ep %p: ignore path speed event on non-bandwidth lane "
+                      "%u (types=0x%x)", ep, lane, lane_types);
+            goto out_unlock;
+        }
+
+        ucs_debug("ep %p: schedule path performance query for lane %u", ep,
+                  lane);
+        ucp_ep_path_perf_changed(ep, lane);
+
+out_unlock:
+        UCS_ASYNC_UNBLOCK(&worker->async);
+        events &= ~UCT_EVENT_PATH_SPEED_CHANGE;
+    }
+
+    if (events != 0) {
+        ucs_debug(UCP_WIFACE_FMT " ignores unsupported endpoint events 0x%x",
+                  UCP_WIFACE_ARG(wiface), events);
+    }
+}
+
 static void
 ucp_worker_iface_async_fd_event(int fd, ucs_event_set_types_t events, void *arg)
 {
@@ -1549,8 +1607,10 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     iface_params.async_event_arg   = wiface;
     iface_params.async_event_cb    = ucp_worker_iface_async_cb_event;
+    iface_params.async_event_cb_v2 = ucp_worker_iface_async_cb_event_v2;
     iface_params.field_mask       |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
-                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB  |
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB_V2;
 
     if (ucp_worker_keepalive_is_enabled(worker)) {
         iface_params.field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
