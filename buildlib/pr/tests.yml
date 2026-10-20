@@ -7,9 +7,52 @@ parameters:
   run_tests: yes
   asan_check: no
   valgrind_check: no
+  # Build once in a separate job and hand the tree to the workers. Only for
+  # container jobs: the build tree holds absolute paths and the container
+  # workspace path is the same on every agent.
+  prebuild: no
 
 jobs:
+  - ${{ if eq(parameters.prebuild, 'yes') }}:
+    - job: build_${{ parameters.name }}
+      pool:
+        name: MLNX
+        demands: ${{ parameters.demands }}
+      displayName: ${{ parameters.name }} prebuild
+      timeoutInMinutes: 120
+      container: ${{ parameters.container }}
+      workspace:
+        clean: all
+      steps:
+        - checkout: self
+          clean: true
+          fetchDepth: 100
+          retryCountOnTaskFailure: 5
+
+        - bash: |
+            source ./buildlib/az-helpers.sh
+            check_gpu ${{ parameters.name }}
+            az_init_modules
+            ./contrib/test_jenkins.sh
+            exit $?
+          displayName: Build for tests
+          env:
+            BUILD_NUMBER: "$(Build.BuildId)-$(Build.BuildNumber)"
+            JOB_URL: "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
+            EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+            RUN_TESTS: ${{ parameters.run_tests }}
+            ASAN_CHECK: ${{ parameters.asan_check }}
+            BUILD_ONLY_TARBALL: $(Build.ArtifactStagingDirectory)/ucx-build.tar
+            RUNNING_IN_AZURE: yes
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: $(Build.ArtifactStagingDirectory)/ucx-build.tar
+            artifact: ucx-build-$(System.StageName)-${{ parameters.name }}
+
   - job: tests_${{ parameters.name }}
+    ${{ if eq(parameters.prebuild, 'yes') }}:
+      dependsOn: build_${{ parameters.name }}
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
@@ -30,6 +73,12 @@ jobs:
         fetchDepth: 100
         retryCountOnTaskFailure: 5
 
+      - ${{ if eq(parameters.prebuild, 'yes') }}:
+        - task: DownloadPipelineArtifact@2
+          inputs:
+            artifact: ucx-build-$(System.StageName)-${{ parameters.name }}
+            path: $(Pipeline.Workspace)/prebuilt
+
       - bash: |
           source ./buildlib/az-helpers.sh
           check_gpu ${{ parameters.name }}
@@ -49,3 +98,5 @@ jobs:
           ASAN_CHECK: ${{ parameters.asan_check }}
           VALGRIND_CHECK: ${{ parameters.valgrind_check }}
           RUNNING_IN_AZURE: yes
+          ${{ if eq(parameters.prebuild, 'yes') }}:
+            PREBUILT_TARBALL: $(Pipeline.Workspace)/prebuilt/ucx-build.tar
