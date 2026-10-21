@@ -68,24 +68,21 @@ ucp_ep_flush_lane_state_update(ucp_request_t *req, ucp_lane_map_t live_lanes,
     ucp_lane_map_t new_lanes;
     int diff;
 
+    unstarted_lanes = req->send.flush.all_lanes &
+                      req->send.flush.lane_mask &
+                      ~req->send.flush.started_lanes;
     if (lane_generation_changed) {
-        unstarted_lanes = req->send.flush.all_lanes &
-                          req->send.flush.lane_mask &
-                          ~req->send.flush.started_lanes;
-        req->send.flush.all_lanes        = live_lanes;
         req->send.flush.lane_mask       |= live_lanes;
         req->send.flush.started_lanes    = 0;
         diff = ucs_popcount(live_lanes) - ucs_popcount(unstarted_lanes);
     } else {
-        destroyed_lanes = req->send.flush.all_lanes &
-                          req->send.flush.lane_mask & ~live_lanes &
-                          ~req->send.flush.started_lanes;
+        destroyed_lanes = unstarted_lanes & ~live_lanes;
         new_lanes       = live_lanes & ~req->send.flush.all_lanes;
-        req->send.flush.all_lanes        = live_lanes;
         req->send.flush.lane_mask       |= new_lanes;
         diff = ucs_popcount(new_lanes) - ucs_popcount(destroyed_lanes);
     }
 
+    req->send.flush.all_lanes = live_lanes;
     ucp_ep_flush_request_update_uct_comp(req, diff, 0);
     req->send.flush.lane_generation = req->send.ep->ext->lane_generation;
 }

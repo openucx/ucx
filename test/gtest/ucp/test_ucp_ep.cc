@@ -111,7 +111,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage, lane_generation_updates_on_pointer_change)
     uct_ep_h lane = reinterpret_cast<uct_ep_h>(1);
     uint32_t lane_generation;
 
-    UCS_ASYNC_BLOCK(&worker->async);
+    ucs::scoped_async_lock lock(worker->async);
     ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
                                      "lane-generation", "lane-generation", &ep));
 
@@ -129,7 +129,6 @@ UCS_TEST_P(test_ucp_ep_lane_storage, lane_generation_updates_on_pointer_change)
     EXPECT_EQ(lane_generation + 3, ep->ext->lane_generation);
 
     ucp_ep_delete(ep);
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 UCS_TEST_P(test_ucp_ep_lane_storage, recycled_ep_lane_storage_initialization)
@@ -140,7 +139,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage, recycled_ep_lane_storage_initialization)
 
     ucp_worker_h worker = sender().worker();
 
-    UCS_ASYNC_BLOCK(&worker->async);
+    ucs::scoped_async_lock lock(worker->async);
     ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
                                      "lane-init", "lane-init", &ep));
 
@@ -162,7 +161,6 @@ UCS_TEST_P(test_ucp_ep_lane_storage, recycled_ep_lane_storage_initialization)
     }
 
     ucp_ep_delete(recycled_ep);
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 UCS_TEST_P(test_ucp_ep_lane_storage, slow_lane_storage_initialization)
@@ -173,7 +171,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage, slow_lane_storage_initialization)
     const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 2;
     ucp_worker_h worker      = sender().worker();
 
-    UCS_ASYNC_BLOCK(&worker->async);
+    ucs::scoped_async_lock lock(worker->async);
     ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
                                      "lane-init", "lane-init", &ep));
     ASSERT_UCS_OK(ucp_ep_realloc_lanes(ep, num_lanes));
@@ -192,7 +190,6 @@ UCS_TEST_P(test_ucp_ep_lane_storage, slow_lane_storage_initialization)
     }
 
     ucp_ep_delete(ep);
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 UCS_TEST_P(test_ucp_ep_lane_storage,
@@ -203,7 +200,7 @@ UCS_TEST_P(test_ucp_ep_lane_storage,
     const unsigned num_lanes = UCP_MAX_FAST_PATH_LANES + 1;
     ucp_worker_h worker      = sender().worker();
 
-    UCS_ASYNC_BLOCK(&worker->async);
+    ucs::scoped_async_lock lock(worker->async);
     ASSERT_UCS_OK(ucp_ep_create_base(worker, UCP_EP_INIT_FLAG_INTERNAL,
                                      "lane-init", "lane-init", &ep));
 
@@ -215,7 +212,6 @@ UCS_TEST_P(test_ucp_ep_lane_storage,
     EXPECT_EQ(NULL, ep->uct_eps[0]);
 
     ucp_ep_delete(ep);
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_ep);
