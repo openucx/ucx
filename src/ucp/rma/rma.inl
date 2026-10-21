@@ -160,11 +160,22 @@ ucp_ep_rma_get_fence_flag(ucp_ep_h ep)
     return 0;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_fence_normalize_lanes(ucp_ep_h ep)
+{
+    ep->ext->unflushed_lanes = ucp_ep_fence_lane_map_normalize(
+            ep->ext->unflushed_lanes, ucp_ep_get_live_lanes(ep),
+            ep->ext->fence_lanes_dirty);
+    ep->ext->fence_lanes_dirty = 0;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rma_handle_fence(ucp_ep_h ep, ucp_request_t *req,
                         ucp_lane_map_t lane_map)
 {
     ucs_status_t status;
+
+    ucp_ep_fence_normalize_lanes(ep);
 
     /* Apply a fence if EP's sequence is behind worker's */
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_FENCE_REQUIRED)) {
