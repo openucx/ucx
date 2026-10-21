@@ -1264,7 +1264,8 @@ ucp_wireup_skip_token_section(ucp_lane_map_t lane_map, const void *section,
 static void
 ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
                             const ucp_wireup_lane_token_t *tx_tokens,
-                            ucp_wireup_lane_token_t *rx_tokens)
+                            ucp_wireup_lane_token_t *rx_tokens,
+                            int require_open)
 {
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -1277,7 +1278,13 @@ ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         }
 
         status = ucp_ep_tf_derive_rx(ep, lane, tx_tokens[lane].token,
-                                     tx_tokens[lane].len, &rx_token, &rx_len);
+                                     tx_tokens[lane].len, require_open,
+                                     &rx_token, &rx_len);
+        if (status == UCS_ERR_NO_ELEM) {
+            ucs_diag("ep %p: lane %d: peer qp is gone", ep, lane);
+            continue;
+        }
+
         if (status != UCS_OK) {
             ucs_debug("ep %p: lane %d: rx token was not derived: %s", ep, lane,
                       ucs_status_string(status));
@@ -1648,7 +1655,7 @@ ucp_wireup_process_lanes_addr_request(
                                                  req_lanes->provided_lane_map,
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, req_lanes->provided_lane_map,
-                                    tx_tokens, rx_tokens);
+                                    tx_tokens, rx_tokens, 1);
         /* The initiator timed out and sent a newer request. Drop the parked
          * reply. Lanes still waiting were already moved to error and will not
          * complete, so fail them and let this request rebuild. */
@@ -1825,11 +1832,12 @@ ucp_wireup_process_lanes_addr_reply(
 
     ucs_assert(request_id != 0);
 
-    /* Derive RX tokens from the reply TX tokens. They go back on the ACK and
-     * are not the tokens stored for our own purge. */
+    /* Derive RX tokens from the reply TX tokens, including a lane whose
+     * exchange is already closed. They go back on the ACK. A destroyed
+     * queue pair leaves a hole. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
     ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map, tx_tokens,
-                                rx_tokens);
+                                rx_tokens, 0);
     acked = ucp_wireup_lanes_with_tokens(lanes_info->provided_lane_map,
                                          rx_tokens);
     ucp_wireup_send_lanes_addr_msg(ep, UCP_WIREUP_MSG_LANES_ADDR_ACK,

@@ -1203,12 +1203,15 @@ uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
 
 
 /**
- * Derive an RX token from a peer TX token while the local UCT ep still exists.
- * The returned buffer is allocated and owned by the caller.
+ * Derive an RX token from a peer TX token. The returned buffer is allocated
+ * and owned by the caller. @a require_open rejects a lane that is not held
+ * or invalidated. A reply passes 0 so a released lane is still looked up by
+ * QPN; a destroyed queue pair returns @ref UCS_ERR_NO_ELEM.
  */
 ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const void *tx_token, uint8_t tx_len,
-                                 void **rx_token_p, uint8_t *rx_len_p);
+                                 int require_open, void **rx_token_p,
+                                 uint8_t *rx_len_p);
 
 
 /**
