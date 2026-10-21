@@ -5,11 +5,11 @@
 name: CLA
 
 # pull_request_target passes secrets to fork PRs; PR code is never checked out.
-# Master only: release branch backports cherry-pick commits already checked.
+# Runs from the base branch, so release branches need this file too.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
-    branches: [master]
+    branches: [master, 'v*.x']
 
 permissions: {}
 
@@ -36,7 +36,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ORG_TOKEN: ${{ steps.app-token.outputs.token }}
           ORG: ${{ github.repository_owner }}
-          TEAM: ucf-cla-signed
+          # Slug of the secret team of individual CLA signers
+          TEAM: ${{ vars.CLA_TEAM }}
           # Space separated email domains of corporate CLA signers
           DOMAINS: ${{ vars.CLA_DOMAINS }}
           REPO: ${{ github.repository }}
