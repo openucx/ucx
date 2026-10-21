@@ -275,6 +275,9 @@ void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                                 const void *resp);
 
+void uct_rc_ep_get_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp);
+
 void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
                                         const void *resp);
 
@@ -479,22 +482,6 @@ uct_rc_txqp_add_send_comp_sgl_always(uct_rc_iface_t *iface,
         uct_rc_ep_send_op_set_sgl(op, buffers, lengths, count);
     }
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_add_send_comp_sgl(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                              uct_rc_send_handler_t handler,
-                              uct_completion_t *comp, uint16_t sn,
-                              uint16_t flags, void *const *buffers,
-                              const size_t *lengths, size_t count,
-                              size_t length)
-{
-    if (comp == NULL) {
-        return;
-    }
-
-    uct_rc_txqp_add_send_comp_sgl_always(iface, txqp, handler, comp, sn, flags,
-                                         buffers, lengths, count, length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
