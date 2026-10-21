@@ -181,6 +181,49 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
 }
 
+/* A transport which fails to initialize an endpoint must remove it from
+ * iface->ep_list, or uct_rc_iface_flush() would touch freed memory. */
+UCS_TEST_SKIP_COND_P(test_rc, ep_init_failure_removed_from_ep_list,
+                     GetParam()->tl_name != "rc_verbs")
+{
+    /* rx.max_bufs bounds the receive pool below rx.queue_len, and pinning
+     * rx.bufs_grow keeps the pool valid regardless of rx.queue_len. */
+    if (uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS", "8") != UCS_OK) {
+        UCS_TEST_SKIP_R("cannot limit the receive buffer pool");
+    }
+
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_BUFS_GROW", "8"));
+
+    ucs::handle<uct_iface_h> new_iface;
+    UCS_TEST_CREATE_HANDLE(uct_iface_h, new_iface, uct_iface_close,
+                           uct_iface_open, m_e1->md(), m_e1->worker(),
+                           &m_e1->iface_params(), m_iface_config);
+
+    uct_rc_iface_t *rc = ucs_derived_of(new_iface.get(), uct_rc_iface_t);
+    if (rc->rx.srq.quota == 0) {
+        UCS_TEST_SKIP_R("SRQ is disabled");
+    }
+
+    /* Compare the entry rather than walk the list, to not read freed memory. */
+    ucs_list_link_t *first = rc->ep_list.next;
+
+    uct_ep_params_t ep_params;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = new_iface.get();
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    scoped_log_handler wrap_warn(wrap_warns_logger);
+    uct_ep_h ep          = NULL;
+    ucs_status_t status  = uct_ep_create(&ep_params, &ep);
+
+    if (ep != NULL) {
+        uct_ep_destroy(ep); /* an unexpected ep would add a cleanup warning */
+    }
+
+    ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+    EXPECT_EQ(first, rc->ep_list.next);
+}
+
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 #ifdef HAVE_MLX5_DV
