@@ -83,7 +83,7 @@ export_host_driver_override() {
   local arch hostlib
   arch=$(uname -m)
   for hostlib in "/usr/lib/$arch-linux-gnu" /usr/lib64; do
-    [ -d "$hostlib" ] && export LD_LIBRARY_PATH="$hostlib:${LD_LIBRARY_PATH:-}"
+    [ -d "$hostlib" ] && export LD_LIBRARY_PATH="$hostlib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   done
   # arm64 images carry no /usr/lib64, so the loop ends non-zero there; the
   # caller runs under errexit and must not treat that as a failure.
@@ -114,9 +114,10 @@ case "$phase" in
     : "${UCXX_WHL_DIR:?UCXX_WHL_DIR required}"
     # The ucxx wheel carries no libucx dependency - the loader resolves the
     # UCX libraries from UCX_PR_PREFIX via LD_LIBRARY_PATH, and the injected
-    # check asserts the runtime UCX version is the PR's.
+    # check asserts the runtime UCX version is the PR's. ucxx reports only
+    # MAJOR.MINOR.PATCH, so the check drops any extra version suffix.
     grep -q "ucx-pr" ci/test_wheel_ucxx.sh \
-      || sed -i '/^print_system_stats$/i want=$(/tmp/ucx-pr/bin/ucx_info -v | sed -n "s/^# Library version: //p")\ngot=$(python -c "import ucxx; print(*ucxx.get_ucx_version(), sep=chr(46))")\n[ "$got" = "$want" ] || { echo "ERROR: UCX version mismatch: $got != $want" >\&2; exit 1; }\necho "UCXX runs UCX-PR $got"' ci/test_wheel_ucxx.sh
+      || sed -i '/^print_system_stats$/i want=$(/tmp/ucx-pr/bin/ucx_info -v | sed -n "s/^# Library version: //p" | grep -oE "^[0-9]+[.][0-9]+[.][0-9]+")\ngot=$(python -c "import ucxx; print(*ucxx.get_ucx_version(), sep=chr(46))")\n[ "$got" = "$want" ] || { echo "ERROR: UCX version mismatch: $got != $want" >\&2; exit 1; }\necho "UCXX runs UCX-PR $got"' ci/test_wheel_ucxx.sh
     grep -q "ucx-pr" ci/test_wheel_ucxx.sh \
       || { echo "ERROR: UCX-PR version check did not apply to ci/test_wheel_ucxx.sh" >&2; exit 1; }
     # The wheel test installs from both the libucxx and ucxx wheelhouses via
