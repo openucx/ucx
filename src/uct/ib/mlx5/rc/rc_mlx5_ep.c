@@ -981,12 +981,6 @@ static int uct_rc_mlx5_send_op_is_get_zcopy(const uct_rc_iface_send_op_t *op)
     return op->handler == uct_rc_ep_get_zcopy_completion_handler;
 }
 
-static int
-uct_rc_mlx5_send_op_is_get_sgl_zcopy(const uct_rc_iface_send_op_t *op)
-{
-    return op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler;
-}
-
 static int uct_rc_mlx5_send_op_is_am_zcopy(const uct_rc_iface_send_op_t *op)
 {
     return op->handler == uct_rc_ep_am_zcopy_completion_handler;
@@ -1751,7 +1745,6 @@ uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_t *iface,
                uct_rc_mlx5_send_op_is_put_zcopy(op) ||
                uct_rc_mlx5_send_op_is_get_bcopy(op) ||
                uct_rc_mlx5_send_op_is_get_zcopy(op) ||
-               uct_rc_mlx5_send_op_is_get_sgl_zcopy(op) ||
                uct_rc_mlx5_send_op_is_am_zcopy(op) ||
                uct_rc_mlx5_send_op_is_flush(op) ||
                uct_rc_mlx5_send_op_is_flush_remote(op) ||
@@ -1760,8 +1753,7 @@ uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_t *iface,
     if (uct_rc_mlx5_send_op_is_get_bcopy(op)) {
         uct_rc_op_release_get_bcopy(op);
         uct_rc_iface_update_reads(iface);
-    } else if (uct_rc_mlx5_send_op_is_get_zcopy(op) ||
-               uct_rc_mlx5_send_op_is_get_sgl_zcopy(op)) {
+    } else if (uct_rc_mlx5_send_op_is_get_zcopy(op)) {
         uct_rc_op_release_reads_get_zcopy(op);
         uct_rc_iface_update_reads(iface);
     }
@@ -1771,7 +1763,6 @@ uct_rc_mlx5_ep_outstanding_release_send_op(uct_rc_iface_t *iface,
 
     if (uct_rc_mlx5_send_op_is_put_zcopy(op) ||
         uct_rc_mlx5_send_op_is_get_zcopy(op) ||
-        uct_rc_mlx5_send_op_is_get_sgl_zcopy(op) ||
         uct_rc_mlx5_send_op_is_am_zcopy(op) ||
         uct_rc_mlx5_send_op_is_ep_check(op)) {
         uct_rc_iface_put_send_op(op);
@@ -1794,7 +1785,6 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
                                    uct_rc_mlx5_send_op_is_put_zcopy(op) ||
                                    uct_rc_mlx5_send_op_is_get_bcopy(op) ||
                                    uct_rc_mlx5_send_op_is_get_zcopy(op) ||
-                                   uct_rc_mlx5_send_op_is_get_sgl_zcopy(op) ||
                                    uct_rc_mlx5_send_op_is_am_zcopy(op) ||
                                    uct_rc_mlx5_send_op_is_flush(op) ||
                                    uct_rc_mlx5_send_op_is_flush_remote(op) ||
@@ -1804,9 +1794,7 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
                            ucs_debug_get_symbol_name(op->handler));
         if (status == UCS_OK) {
             ucs_assertv_always(!uct_rc_mlx5_send_op_is_get_bcopy(op) &&
-                                       !uct_rc_mlx5_send_op_is_get_zcopy(op) &&
-                                       !uct_rc_mlx5_send_op_is_get_sgl_zcopy(
-                                               op),
+                                       !uct_rc_mlx5_send_op_is_get_zcopy(op),
                                "ep %p qp 0x%x delivered get op sn %u", ep,
                                ep->tx.wq.super.qp_num, op->sn);
             uct_rc_txqp_completion_op(op, NULL);
