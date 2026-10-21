@@ -95,7 +95,7 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
         }
     }
 
-    dev_addr->system_uuid = ucs_get_system_id();
+    dev_addr->system_uuid = md->system_uuid;
 
     return UCS_OK;
 }
@@ -155,7 +155,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
     int local_fabric_supported, remote_fabric_supported;
-    int same_uuid, mnnvl_supported;
+    int same_uuid;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
@@ -165,7 +165,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    device_addr_length, DEVICE_ADDR_LENGTH,
                                    sizeof(dev_addr->system_uuid));
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
-    same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
+    same_uuid    = (md->system_uuid == dev_addr->system_uuid);
 
     iface_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                      iface_addr_length, IFACE_ADDR_LENGTH,
@@ -178,17 +178,18 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    mnnvl_supported = uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr,
-                                                         dev_addr_len);
-    if (!same_uuid && !mnnvl_supported) {
-        uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
-        return 0;
-    }
+    if (!same_uuid) {
+        if (!uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
+            uct_iface_fill_info_str_buf(params,
+                                        "different machine and no MNNVL");
+            return 0;
+        }
 
-    /* Multi-node NVLINK connects only GPUs in the same NVLink domain */
-    if (mnnvl_supported) {
+        /* Multi-node NVLINK connects only GPUs in the same NVLink domain. All
+         * GPUs of a host are assumed to be in the same domain (it is probed
+         * from GPU 0), so the domain is checked only against other hosts. */
         nvlink_domain = uct_cuda_ipc_iface_dev_addr_nvlink_domain(
-                params->device_addr, dev_addr_len);
+                                            params->device_addr, dev_addr_len);
         if ((nvlink_domain != NULL) &&
             memcmp(nvlink_domain, &md->nvlink_domain, sizeof(*nvlink_domain))) {
             uct_iface_fill_info_str_buf(params, "different NVLink domain");

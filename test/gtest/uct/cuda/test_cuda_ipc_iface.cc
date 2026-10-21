@@ -16,9 +16,9 @@ extern "C" {
 }
 
 
-/* The reachability decision depends only on the bytes of the peer's device
- * address, so a peer on another host or in another NVLink domain is emulated
- * by editing the address of a local entity before passing it to the check. */
+/* UCX_CUDA_IPC_NVLINK_DOMAIN makes an entity emulate a host in the given
+ * NVLink domain, with MNNVL enabled even without a GPU fabric. Entities with
+ * different values see each other as hosts in different domains. */
 class test_cuda_ipc_iface_nvlink_domain : public uct_test {
 protected:
     void init() override
@@ -27,15 +27,13 @@ protected:
         uct_test::init();
     }
 
-    entity *create_mnnvl_entity()
+    entity *create_entity_in_domain(const std::string &nvlink_domain)
     {
+        modify_config("CUDA_IPC_NVLINK_DOMAIN", nvlink_domain);
         entity *e = uct_test::create_entity(0);
         m_entities.push_back(e);
 
-        if (!ucs_derived_of(e->md(), uct_cuda_ipc_md_t)->enable_mnnvl) {
-            UCS_TEST_SKIP_R("MNNVL is not supported");
-        }
-
+        EXPECT_TRUE(ucs_derived_of(e->md(), uct_cuda_ipc_md_t)->enable_mnnvl);
         return e;
     }
 
@@ -49,27 +47,13 @@ protected:
         return dev_addr;
     }
 
-    static uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr(std::string &dev_addr)
+    /* Device address as sent by a UCX which does not support NVLink domains */
+    static std::string get_older_peer_device_address(entity &e)
     {
-        return (uct_cuda_ipc_mnnvl_device_addr_t*)&dev_addr[0];
-    }
+        std::string dev_addr = get_device_address(e);
 
-    /* Same peer, but on another host */
-    static void set_remote_host(std::string &dev_addr)
-    {
-        mnnvl_addr(dev_addr)->super.system_uuid ^= 0xDEADBEEFDEADBEEFULL;
-    }
-
-    /* Same peer, but in another NVLink domain */
-    static void set_other_domain(std::string &dev_addr)
-    {
-        mnnvl_addr(dev_addr)->nvlink_domain.cluster_uuid[0] ^= 1;
-    }
-
-    /* Same peer, but running a UCX which does not send the NVLink domain */
-    static void set_older_peer(std::string &dev_addr)
-    {
         dev_addr.resize(sizeof(uct_cuda_ipc_device_addr_t));
+        return dev_addr;
     }
 
     bool is_reachable(entity &sender, entity &receiver,
@@ -101,60 +85,46 @@ protected:
         info        = info_str;
         return result;
     }
+
+    bool is_reachable(entity &sender, entity &receiver, std::string &info)
+    {
+        return is_reachable(sender, receiver, get_device_address(receiver),
+                            info);
+    }
 };
 
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_domain)
 {
-    entity *e1 = create_mnnvl_entity();
-    entity *e2 = create_mnnvl_entity();
+    entity *e1 = create_entity_in_domain("1");
+    entity *e2 = create_entity_in_domain("1");
     std::string info;
 
-    EXPECT_TRUE(is_reachable(*e1, *e2, get_device_address(*e2), info))
-            << info;
-    EXPECT_TRUE(is_reachable(*e2, *e1, get_device_address(*e1), info))
-            << info;
+    EXPECT_TRUE(is_reachable(*e1, *e2, info)) << info;
+    EXPECT_TRUE(is_reachable(*e2, *e1, info)) << info;
 }
 
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, different_domain)
 {
-    entity *e1           = create_mnnvl_entity();
-    entity *e2           = create_mnnvl_entity();
-    std::string dev_addr = get_device_address(*e2);
+    entity *e1 = create_entity_in_domain("1");
+    entity *e2 = create_entity_in_domain("2");
     std::string info;
 
-    set_other_domain(dev_addr);
-    EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info));
+    EXPECT_FALSE(is_reachable(*e1, *e2, info));
+    EXPECT_EQ("different NVLink domain", info);
+    EXPECT_FALSE(is_reachable(*e2, *e1, info));
     EXPECT_EQ("different NVLink domain", info);
 }
 
-/* A peer that does not send its NVLink domain must keep the previous
- * behavior: reachable whenever both sides support MNNVL. */
+/* A peer that does not send its NVLink domain keeps the previous behavior:
+ * reachable whenever both sides support MNNVL */
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, older_peer)
 {
-    entity *e1           = create_mnnvl_entity();
-    entity *e2           = create_mnnvl_entity();
-    std::string dev_addr = get_device_address(*e2);
+    entity *e1 = create_entity_in_domain("1");
+    entity *e2 = create_entity_in_domain("2");
     std::string info;
 
-    set_other_domain(dev_addr);
-    set_older_peer(dev_addr);
-    EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
-}
-
-/* Peers on another host are reachable only within the same NVLink domain */
-UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host)
-{
-    entity *e1           = create_mnnvl_entity();
-    entity *e2           = create_mnnvl_entity();
-    std::string dev_addr = get_device_address(*e2);
-    std::string info;
-
-    set_remote_host(dev_addr);
-    EXPECT_TRUE(is_reachable(*e1, *e2, dev_addr, info)) << info;
-
-    set_other_domain(dev_addr);
-    EXPECT_FALSE(is_reachable(*e1, *e2, dev_addr, info));
-    EXPECT_EQ("different NVLink domain", info);
+    EXPECT_TRUE(is_reachable(*e1, *e2, get_older_peer_device_address(*e2),
+                             info)) << info;
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_iface_nvlink_domain, cuda_ipc)
