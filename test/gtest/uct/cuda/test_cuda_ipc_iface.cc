@@ -5,7 +5,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include <uct/uct_test.h>
@@ -117,8 +117,8 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_domain)
 
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, different_domain)
 {
-    entity *e1 = create_mnnvl_entity();
-    entity *e2 = create_mnnvl_entity();
+    entity *e1           = create_mnnvl_entity();
+    entity *e2           = create_mnnvl_entity();
     std::string dev_addr = get_device_address(*e2);
     std::string info;
 
@@ -131,8 +131,8 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, different_domain)
  * behavior: reachable whenever both sides support MNNVL. */
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, older_peer)
 {
-    entity *e1 = create_mnnvl_entity();
-    entity *e2 = create_mnnvl_entity();
+    entity *e1           = create_mnnvl_entity();
+    entity *e2           = create_mnnvl_entity();
     std::string dev_addr = get_device_address(*e2);
     std::string info;
 
@@ -144,8 +144,8 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, older_peer)
 /* Peers on another host are reachable only within the same NVLink domain */
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, remote_host)
 {
-    entity *e1 = create_mnnvl_entity();
-    entity *e2 = create_mnnvl_entity();
+    entity *e1           = create_mnnvl_entity();
+    entity *e2           = create_mnnvl_entity();
     std::string dev_addr = get_device_address(*e2);
     std::string info;
 

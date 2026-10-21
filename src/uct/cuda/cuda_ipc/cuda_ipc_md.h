@@ -51,9 +51,9 @@ typedef struct uct_cuda_ipc_md_handle {
  * reach each other over multi-node NVLINK only if both are equal.
  */
 typedef struct {
-    /**< Fabric cluster UUID */
+    /** Fabric cluster UUID */
     uint8_t  cluster_uuid[UCT_CUDA_IPC_CLUSTER_UUID_LEN];
-    /**< Fabric clique ID */
+    /** Fabric clique ID */
     uint32_t clique_id;
 } UCS_S_PACKED uct_cuda_ipc_nvlink_domain_t;
 
@@ -63,11 +63,11 @@ typedef struct {
  */
 typedef struct uct_cuda_ipc_md {
     uct_md_t                     super; /**< Domain info */
-    /**< Multi-node NVLINK support status */
+    /** Multi-node NVLINK support status */
     int                          enable_mnnvl;
-    /**< CUDA fabric support status */
+    /** CUDA fabric support status */
     int                          fabric_supported;
-    /**< Valid if enable_mnnvl */
+    /** Valid if enable_mnnvl */
     uct_cuda_ipc_nvlink_domain_t nvlink_domain;
 } uct_cuda_ipc_md_t;
 

@@ -26,8 +26,8 @@ typedef enum {
 
 
 typedef struct {
-    uint64_t                     system_uuid;
-    uint8_t                      flags; /* uct_cuda_ipc_device_addr_flags_t */
+    uint64_t system_uuid;
+    uint8_t  flags; /* uct_cuda_ipc_device_addr_flags_t */
 } UCS_S_PACKED uct_cuda_ipc_device_addr_t;
 
 
