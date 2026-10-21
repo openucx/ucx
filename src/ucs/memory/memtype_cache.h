@@ -9,6 +9,7 @@
 
 #include "memory_type.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats_fwd.h>
@@ -23,6 +24,10 @@ BEGIN_C_DECLS
 
 typedef struct ucs_memtype_cache         ucs_memtype_cache_t;
 typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
+typedef struct ucs_memtype_cache_registration ucs_memtype_cache_registration_t;
+
+KHASH_TYPE(ucs_memtype_cache_tokens, const void*,
+           ucs_memtype_cache_registration_t*);
 
 
 /* The single global instance of memory type cache */
@@ -43,6 +48,7 @@ struct ucs_memtype_cache {
     ucs_spinlock_t  lock;          /**< Protects the page table and registrations */
     ucs_pgtable_t   pgtable;       /**< Page table to hold the regions */
     ucs_list_link_t registrations; /**< Explicitly managed memory */
+    khash_t(ucs_memtype_cache_tokens) token_hash; /**< Token index */
     int             has_events;    /**< Allocation/free events are active */
 };
 

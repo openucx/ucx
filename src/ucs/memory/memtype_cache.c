@@ -39,16 +39,21 @@ typedef enum {
     UCS_MEMTYPE_CACHE_ACTION_REMOVE
 } ucs_memtype_cache_action_t;
 
-typedef struct ucs_memtype_cache_registration {
+struct ucs_memtype_cache_registration {
     ucs_list_link_t            list;
     ucs_pgt_addr_t             start;
     ucs_pgt_addr_t             end;
     ucs_memory_type_t          mem_type;
     ucs_sys_device_t           sys_dev;
     uint8_t                    mem_flags;
-    const void                 *token;
     ucs_memtype_cache_region_t *region;
-} ucs_memtype_cache_registration_t;
+};
+
+#define UCS_MEMTYPE_CACHE_TOKEN_HASH_KEY(_token) \
+    kh_int64_hash_func((uintptr_t)(_token))
+KHASH_IMPL(ucs_memtype_cache_tokens, const void*,
+           ucs_memtype_cache_registration_t*, 1,
+           UCS_MEMTYPE_CACHE_TOKEN_HASH_KEY, kh_int64_hash_equal);
 
 struct ucs_memtype_cache_region {
     ucs_pgt_region_t  super;         /**< Base class - page table region */
@@ -299,6 +304,8 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     ucs_pgt_addr_t start = (ucs_pgt_addr_t)address;
     ucs_memtype_cache_registration_t *registration, *other;
     ucs_memtype_cache_t *memtype_cache;
+    khiter_t hash_it;
+    int ret;
 
     if ((ucs_global_opts.enable_memtype_cache != UCS_MEMTYPE_CACHE_EXPLICIT) ||
         (size == 0) ||
@@ -327,15 +334,16 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     registration->mem_type  = mem_type;
     registration->sys_dev   = sys_dev;
     registration->mem_flags = mem_flags;
-    registration->token     = token;
     registration->region    = NULL;
 
     ucs_spin_lock(&memtype_cache->lock);
-    ucs_list_for_each(other, &memtype_cache->registrations, list) {
-        if (other->token == token) {
-            goto out_unlock;
-        }
+    hash_it = kh_put(ucs_memtype_cache_tokens, &memtype_cache->token_hash,
+                     token, &ret);
+    if ((ret == UCS_KH_PUT_FAILED) ||
+        (ret == UCS_KH_PUT_KEY_PRESENT)) {
+        goto out_unlock;
     }
+    kh_value(&memtype_cache->token_hash, hash_it) = registration;
 
     ucs_list_for_each(other, &memtype_cache->registrations, list) {
         if (ucs_memtype_cache_registrations_conflict(registration, other) &&
@@ -357,32 +365,34 @@ out_unlock:
 void ucs_memtype_cache_unregister(const void *token)
 {
     ucs_memtype_cache_t *memtype_cache = ucs_memtype_cache_global_instance;
-    ucs_memtype_cache_registration_t *registration, *other, *found = NULL;
+    ucs_memtype_cache_registration_t *other, *found;
+    khiter_t hash_it;
 
     if (memtype_cache == NULL) {
         return;
     }
 
     ucs_spin_lock(&memtype_cache->lock);
-    ucs_list_for_each(registration, &memtype_cache->registrations, list) {
-        if (registration->token == token) {
-            found = registration;
-            break;
-        }
+    hash_it = kh_get(ucs_memtype_cache_tokens, &memtype_cache->token_hash,
+                     token);
+    if (hash_it == kh_end(&memtype_cache->token_hash)) {
+        goto out_unlock;
     }
 
-    if (found != NULL) {
-        if ((found->region != NULL) &&
-            (--found->region->explicit_refs == 0)) {
-            ucs_memtype_cache_remove_explicit(memtype_cache, found->region);
-        }
-        ucs_list_del(&found->list);
-        ucs_free(found);
-
-        ucs_list_for_each(other, &memtype_cache->registrations, list) {
-            ucs_memtype_cache_restore_registration(memtype_cache, other);
-        }
+    found = kh_value(&memtype_cache->token_hash, hash_it);
+    kh_del(ucs_memtype_cache_tokens, &memtype_cache->token_hash, hash_it);
+    if ((found->region != NULL) &&
+        (--found->region->explicit_refs == 0)) {
+        ucs_memtype_cache_remove_explicit(memtype_cache, found->region);
     }
+    ucs_list_del(&found->list);
+    ucs_free(found);
+
+    ucs_list_for_each(other, &memtype_cache->registrations, list) {
+        ucs_memtype_cache_restore_registration(memtype_cache, other);
+    }
+
+out_unlock:
     ucs_spin_unlock(&memtype_cache->lock);
 }
 
@@ -556,6 +566,7 @@ static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
         ucs_list_del(&registration->list);
         ucs_free(registration);
     }
+    kh_destroy_inplace(ucs_memtype_cache_tokens, &memtype_cache->token_hash);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
@@ -628,6 +639,7 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
     }
 
     ucs_list_head_init(&self->registrations);
+    kh_init_inplace(ucs_memtype_cache_tokens, &self->token_hash);
     self->has_events = 0;
     if ((ucs_global_opts.enable_memtype_cache !=
          UCS_MEMTYPE_CACHE_EXPLICIT) || ucm_global_opts.enable_events) {
@@ -651,6 +663,7 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
     return UCS_OK;
 
 err_cleanup_pgtable:
+    kh_destroy_inplace(ucs_memtype_cache_tokens, &self->token_hash);
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_rwlock:
     ucs_spinlock_destroy(&self->lock);
