@@ -341,12 +341,12 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_DOUBLE     {ucs_config_sscanf_double,    ucs_config_sprintf_double, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     ucs_config_doc_nop, \
-                                    "floating point number"}
+                                    "floating-point number"}
 
 #define UCS_CONFIG_TYPE_POS_DOUBLE {ucs_config_sscanf_pos_double, ucs_config_sprintf_pos_double, \
                                     ucs_config_clone_double,      ucs_config_release_nop, \
                                     ucs_config_help_generic,      ucs_config_doc_nop, \
-                                    "positive floating point number or \"auto\""}
+                                    "positive floating-point number or \"auto\""}
 
 #define UCS_CONFIG_TYPE_HEX        {ucs_config_sscanf_hex,       ucs_config_sprintf_hex, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
