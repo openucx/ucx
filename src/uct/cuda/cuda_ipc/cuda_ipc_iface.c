@@ -25,25 +25,6 @@
 
 #include <pthread.h>
 
-typedef enum {
-    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL  = UCS_BIT(0),
-    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC = UCS_BIT(1)
-} uct_cuda_ipc_device_addr_flags_t;
-
-
-typedef struct {
-    uint64_t                     system_uuid;
-    uint8_t                      flags; /* uct_cuda_ipc_device_addr_flags_t */
-} UCS_S_PACKED uct_cuda_ipc_device_addr_t;
-
-
-/* Device address extended with the NVLink domain, sent if FLAG_MNNVL is set */
-typedef struct {
-    uct_cuda_ipc_device_addr_t   super;
-    uct_cuda_ipc_nvlink_domain_t nvlink_domain;
-} UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
-
-
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
     {"", "", NULL,

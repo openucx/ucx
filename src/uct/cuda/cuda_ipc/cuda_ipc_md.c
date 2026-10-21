@@ -57,15 +57,6 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
 
-    {"NVLINK_DOMAIN", "auto",
-     "NVLink domain used to check multi-node NVLINK reachability.\n"
-     " auto - use the fabric cluster UUID and clique ID reported by NVML.\n"
-     " <id> - replace the detected domain with the given number, so that\n"
-     "        peers with different values are unreachable even on the same\n"
-     "        node. Used for testing purposes only.",
-     ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
-     UCS_CONFIG_TYPE_ULUNITS},
-
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
      "Each remote peer has a separate cache; this limit applies independently\n"
@@ -881,16 +872,6 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
-
-    if (md->enable_mnnvl && (ipc_config->nvlink_domain != UCS_ULUNITS_AUTO)) {
-        UCS_STATIC_ASSERT(sizeof(ipc_config->nvlink_domain) <=
-                          UCT_CUDA_IPC_CLUSTER_UUID_LEN);
-        memset(&md->nvlink_domain, 0, sizeof(md->nvlink_domain));
-        memcpy(md->nvlink_domain.cluster_uuid, &ipc_config->nvlink_domain,
-               sizeof(ipc_config->nvlink_domain));
-        ucs_debug("NVLink domain is overridden to %lu",
-                  ipc_config->nvlink_domain);
-    }
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
