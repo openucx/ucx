@@ -1377,7 +1377,7 @@ UCS_TEST_P(test_cuda, sparse_regions)
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
 
-#if HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2
+#if HAVE_CUDA && HAVE_GDR_COPY
 
 class test_gdr_copy : public test_md {
 protected:
@@ -1415,6 +1415,8 @@ protected:
     }
 };
 
+#if HAVE_DECL_GDR_PIN_BUFFER_V2
+
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
 {
@@ -1443,6 +1445,8 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
 {
     ASSERT_UCS_OK(register_mem());
 }
+
+#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no")
@@ -1517,6 +1521,8 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_qualification,
               detect(ucs_derived_of(md(), uct_gdr_copy_md_t)->gdrcpy_ctx));
 }
 
+#if HAVE_DECL_GDR_PIN_BUFFER_V2
+
 /* Pinning goes through nvidia_p2p_get_pages, so memory which is not GPUDirect
  * RDMA capable must never be offered to this memory domain */
 UCS_TEST_P(test_gdr_copy, gdr_copy_requires_gdr_capable)
@@ -1535,6 +1541,8 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_async_cuda_fail,
     ASSERT_UCS_STATUS_EQ(UCS_ERR_IO_ERROR, register_async_mem());
 }
 
+#endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_gdr_copy, gdr_copy)
 
-#endif /* HAVE_CUDA && HAVE_GDR_COPY && HAVE_DECL_GDR_PIN_BUFFER_V2 */
+#endif /* HAVE_CUDA && HAVE_GDR_COPY */

@@ -80,6 +80,7 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
 
     /* Resolve the optional query in the runtime which created this context. */
     if (dladdr(gdr_open, &lib_info) == 0) {
+        ucs_debug("could not identify GDRCopy runtime providing gdr_open");
         return 0;
     }
 
@@ -93,11 +94,23 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
 
     get_attribute = (uct_gdr_get_attribute_func_t)dlsym(dl_handle,
                                                        "gdr_get_attribute");
-    if ((get_attribute == NULL) ||
-        (dladdr(get_attribute, &attr_info) == 0) ||
-        (attr_info.dli_fbase != lib_info.dli_fbase)) {
-        dlclose(dl_handle);
-        return 0;
+    if (get_attribute == NULL) {
+        ucs_debug("gdr_get_attribute is not available in loaded GDRCopy "
+                  "runtime");
+        goto err_dlclose;
+    }
+
+    if (dladdr(get_attribute, &attr_info) == 0) {
+        ucs_debug("could not identify GDRCopy runtime providing "
+                  "gdr_get_attribute");
+        goto err_dlclose;
+    }
+
+    if (attr_info.dli_fbase != lib_info.dli_fbase) {
+        ucs_debug("gdr_get_attribute library %p differs from gdr_open "
+                  "library %p",
+                  attr_info.dli_fbase, lib_info.dli_fbase);
+        goto err_dlclose;
     }
 
     ret = get_attribute(gdr_ctx, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dmabuf);
@@ -108,6 +121,10 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
     }
 
     return using_dmabuf;
+
+err_dlclose:
+    dlclose(dl_handle);
+    return 0;
 #else
     return 0;
 #endif
@@ -342,7 +359,7 @@ static ucs_status_t
 uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
-    uint64_t flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     uct_gdr_copy_mem_t *mem_hndl = NULL;
     ucs_status_t status;
 
