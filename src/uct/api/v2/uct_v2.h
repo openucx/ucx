@@ -735,7 +735,7 @@ typedef struct uct_ep_connect_to_ep_params {
  * @ingroup UCT_RESOURCE
  * @brief Parameters for invalidating a UCT endpoint by @ref uct_ep_invalidate.
  */
- typedef struct {
+typedef struct {
     /**
      * Mask of valid fields in this structure. Must currently be equal to zero.
      * Fields not specified in this mask will be ignored. Provides ABI

@@ -855,9 +855,9 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
 
     /* An idle queue pair produces no completion after the transition to ERR.
-     * A signaled NOP posted while the queue pair can still accept a send
-     * becomes that completion. A full send queue already has one. */
-    if ((uct_rc_txqp_available(&ep->super.txqp) > 0) &&
+     * A signaled NOP is required only when no send operation is outstanding.
+     * Any queued operation already supplies that completion. */
+    if (ucs_queue_is_empty(&ep->super.txqp.outstanding) &&
         uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
         uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                      &ep->super.txqp, &ep->tx.wq,
@@ -1861,16 +1861,27 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
     }
 }
 
-/* 1 when every WQE in [start_pi, end_pi) is a NOP. An empty range is 1. */
+/* 1 when every walked WQE is a NOP. [start_pi, end_pi) is the ft window.
+ * An empty window still has to walk WQEs covered by unreleased credits,
+ * including the completed WQE at ft_ci. */
 static int
-uct_rc_mlx5_txwq_outstanding_is_nop(const uct_ib_mlx5_txwq_t *txwq,
-                                    uint16_t start_pi, uint16_t end_pi)
+uct_rc_mlx5_ep_outstanding_is_nop(uct_rc_mlx5_base_ep_t *ep,
+                                  uint16_t start_pi, uint16_t end_pi)
 {
+    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
+    uct_rc_txqp_t *txqp      = &ep->super.txqp;
     const struct mlx5_wqe_ctrl_seg *ctrl;
-    uint16_t pi;
+    uint16_t pi, walk_pi;
     size_t wqe_size;
 
-    for (pi = start_pi; pi != end_pi;
+    walk_pi = start_pi;
+    if (start_pi == end_pi) {
+        uint16_t outstanding_bb = txwq->bb_max - uct_rc_txqp_available(txqp);
+
+        walk_pi = txwq->prev_sw_pi - outstanding_bb;
+    }
+
+    for (pi = walk_pi; pi != end_pi;
          pi = uct_ib_mlx5_txwq_next_wqe_index(pi, wqe_size)) {
         ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
         wqe_size = uct_ib_mlx5_wqe_size(ctrl);
@@ -1896,7 +1907,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
-    int delivered;
+    int delivered, nop_only;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1907,35 +1918,27 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     callback_arg = (params->field_mask & UCT_EP_OUTSTANDING_FIELD_ARG) ?
                    params->arg : NULL;
 
-    /* Sometimes the NOP posted before the QP moves to ERR produces no
-     * error completion, so err_handler_inprogress stays clear.
-     * Temporarily disabled. */
-#if 0
-    ucs_assertv_always(ep->err_handler_inprogress,
-                       "ep %p is not in deferred error handling", ep);
-#endif
-
     end_pi   = txwq->sw_pi;
     ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
+    nop_only = uct_rc_mlx5_ep_outstanding_is_nop(ep, start_pi, end_pi);
+
+    /* A NOP-only range can complete without an error CQE, so the error
+     * handler never starts. Any other outstanding work must be in that
+     * handler. */
+    ucs_assertv_always(ep->err_handler_inprogress || nop_only,
+                       "ep %p qp 0x%x is not in deferred error handling",
+                       ep, txwq->super.qp_num);
 
     if (start_pi == end_pi) {
-        uint16_t outstanding_bb = txwq->bb_max -
-                                  uct_rc_txqp_available(&ep->super.txqp);
-        uint16_t posted_pi      = txwq->prev_sw_pi - outstanding_bb;
-
-        /* The NOP posted before ERR can be the only WQE, and its completion
-         * may already have been consumed. Nothing else is outstanding. */
-
-        if (uct_rc_mlx5_txwq_outstanding_is_nop(txwq, posted_pi, end_pi) &&
-            ucs_queue_is_empty(&ep->super.txqp.outstanding)) {
+        if (nop_only && ucs_queue_is_empty(&ep->super.txqp.outstanding)) {
             return UCS_OK;
         }
 
-        ucs_assertv_always(start_pi != end_pi,
-                           "ep %p qp 0x%x unexpected empty outstanding queue",
-                           ep, txwq->super.qp_num);
+        ucs_error("ep %p qp 0x%x unexpected empty outstanding queue",
+                  ep, txwq->super.qp_num);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
