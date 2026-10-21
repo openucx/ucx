@@ -2863,7 +2863,8 @@ uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
 
 ucs_status_t
 ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
-                    uint8_t tx_len, void **rx_token_p, uint8_t *rx_len_p)
+                    uint8_t tx_len, int require_open, void **rx_token_p,
+                    uint8_t *rx_len_p)
 {
     ucp_worker_iface_t *wiface;
     uct_iface_attr_v2_t attr;
@@ -2874,8 +2875,9 @@ ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
     *rx_token_p = NULL;
     *rx_len_p   = 0;
 
-    /* Held, or invalidated until the error handler holds the lane. */
-    if (!ucp_ep_tf_exchange_open(ep, lane)) {
+    /* The request path derives only while the lane is held or invalidated.
+     * A reply looks the queue pair up by QPN after that record is released. */
+    if (require_open && !ucp_ep_tf_exchange_open(ep, lane)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -3101,8 +3103,7 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
             continue;
         }
 
-        if ((tf->state != UCP_EP_TF_LANE_HELD) || (tf->uct_ep == NULL) ||
-            (tf->rx_token == NULL)) {
+        if ((tf->state != UCP_EP_TF_LANE_HELD) || (tf->uct_ep == NULL)) {
             ucs_diag("ep %p: lane %d skip purge state %u uct_ep %p rx %p",
                      ep, lane, (unsigned)tf->state, tf->uct_ep, tf->rx_token);
             continue;
@@ -3119,6 +3120,31 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
         if (tf->purged) {
             ucs_diag("ep %p: lane %d already purged uct_ep %p", ep, lane,
                      tf->uct_ep);
+        } else if (tf->rx_token == NULL) {
+            /* A reply still owes the peer its receive position. An ACK that
+             * names this held lane and carries no token means that queue pair
+             * is gone, so every outstanding send is undelivered. */
+            if (!from_ack) {
+                ucs_diag("ep %p: lane %d skip purge state %u uct_ep %p rx %p",
+                         ep, lane, (unsigned)tf->state, tf->uct_ep,
+                         tf->rx_token);
+                continue;
+            }
+
+            ucs_diag("ep %p: lane %d: purge without rx token on uct_ep %p",
+                     ep, lane, tf->uct_ep);
+            params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
+                                UCT_EP_OUTSTANDING_FIELD_ARG;
+            params.cb         = ucp_ep_tf_outstanding_purge_cb;
+            params.arg        = ep;
+            status            = uct_ep_outstanding_purge(tf->uct_ep, &params);
+            if (status != UCS_OK) {
+                ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep,
+                          lane, ucs_status_string(status));
+                continue;
+            }
+
+            tf->purged = 1;
         } else {
             ucs_diag("ep %p: lane %d: purging outstanding on uct_ep %p"
                      " rx token %p",

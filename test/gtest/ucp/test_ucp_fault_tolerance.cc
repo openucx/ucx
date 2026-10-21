@@ -201,6 +201,31 @@ protected:
         }
     }
 
+    /* Replay the rc_x/PUT order 4, 0, 2, 1, 3, then 5. The last lane stays
+     * healthy. */
+    void order_put_lanes(std::vector<ucp_lane_index_t> &lanes,
+                         const std::string &lane_type) {
+        static const ucp_lane_index_t order[] = {4, 0, 2, 1, 3, 5};
+
+        if (lanes.size() != (sizeof(order) / sizeof(order[0]))) {
+            UCS_TEST_SKIP_R(lane_type + "lane count is " +
+                            std::to_string(lanes.size()));
+        }
+
+        for (ucp_lane_index_t lane : order) {
+            if (std::find(lanes.begin(), lanes.end(), lane) == lanes.end()) {
+                UCS_TEST_SKIP_R(lane_type + "lane " + std::to_string(lane) +
+                                " is missing");
+            }
+        }
+
+        lanes.assign(std::begin(order), std::end(order));
+        for (ucp_lane_index_t lane : lanes) {
+            UCS_TEST_MESSAGE << lane_type << ": " << size_t(lane) << "/"
+                             << lanes.size();
+        }
+    }
+
     ucp_ep_h get_ucp_ep_for_err_injection(failure_side_t failure_side) {
         return (failure_side == FAILURE_SIDE_INITIATOR) ? sender().ep(0, INJECTED_EP_INDEX) :
                receiver().ep(0, INJECTED_EP_INDEX);
@@ -254,7 +279,12 @@ protected:
         }
 
         std::vector<ucp_lane_index_t> lanes(tmp_lanes.begin(), tmp_lanes.end());
-        shuffle_lanes(lanes, lane_type_str);
+        if ((op_mask & TEST_OP_PUT) &&
+            !(op_mask & (TEST_OP_GET | TEST_OP_AM))) {
+            order_put_lanes(lanes, lane_type_str);
+        } else {
+            shuffle_lanes(lanes, lane_type_str);
+        }
 
         check_proto_coverage(op_mask);
         return lanes;
