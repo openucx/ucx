@@ -189,7 +189,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
          * GPUs of a host are assumed to be in the same domain (it is probed
          * from GPU 0), so the domain is checked only against other hosts. */
         nvlink_domain = uct_cuda_ipc_iface_dev_addr_nvlink_domain(
-                                            params->device_addr, dev_addr_len);
+                params->device_addr, dev_addr_len);
         if ((nvlink_domain != NULL) &&
             memcmp(nvlink_domain, &md->nvlink_domain, sizeof(*nvlink_domain))) {
             uct_iface_fill_info_str_buf(params, "different NVLink domain");
