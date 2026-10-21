@@ -40,10 +40,10 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    ucs_spinlock_t        lock;       /**< Protects the page table and owners */
-    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
-    ucs_list_link_t       owners;     /**< Explicitly managed memory */
-    int                   has_events; /**< Allocation/free events are active */
+    ucs_spinlock_t  lock;          /**< Protects the page table and registrations */
+    ucs_pgtable_t   pgtable;       /**< Page table to hold the regions */
+    ucs_list_link_t registrations; /**< Explicitly managed memory */
+    int             has_events;    /**< Allocation/free events are active */
 };
 
 
@@ -111,8 +111,8 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
  * Add memory with a known lifetime to the memory type cache. Used when the
  * cache is not tracking allocations by UCM events; otherwise the call has no effect.
  *
- * The range is extended to UCS_PGT_ADDR_ALIGN. The owner must call
- * @ref ucs_memtype_cache_unregister before the memory is released, since
+ * The range is extended to UCS_PGT_ADDR_ALIGN. The caller must unregister it
+ * with @ref ucs_memtype_cache_unregister before the memory is released, since
  * without free events the cache cannot detect that it became invalid.
  *
  * @param [in]  address         Start address of the memory.
@@ -121,23 +121,23 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
  *                              registered.
  * @param [in]  sys_dev         System device of the range.
  * @param [in]  mem_flags       UCS memory flags of the range.
- * @param [in]  owner_token     Unique token identifying the registration, used
+ * @param [in]  token           Unique token identifying the registration, used
  *                              to unregister it. Must not be NULL. A second
  *                              registration with the same token is ignored.
  */
 void ucs_memtype_cache_register(const void *address, size_t size,
                                 ucs_memory_type_t mem_type,
                                 ucs_sys_device_t sys_dev, uint8_t mem_flags,
-                                const void *owner_token);
+                                const void *token);
 
 
 /**
  * Remove a registration made by @ref ucs_memtype_cache_register. Does nothing
  * if the token is not registered.
  *
- * @param [in]  owner_token     Token passed to @ref ucs_memtype_cache_register.
+ * @param [in]  token           Token passed to @ref ucs_memtype_cache_register.
  */
-void ucs_memtype_cache_unregister(const void *owner_token);
+void ucs_memtype_cache_unregister(const void *token);
 
 
 /**

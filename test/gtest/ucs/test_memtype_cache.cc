@@ -599,12 +599,12 @@ protected:
 };
 
 UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
-    int owner = 0;
+    int token = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x10000);
 
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
-                               UCS_SYS_DEVICE_ID_UNKNOWN, 5, &owner);
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 5, &token);
     EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
                       UCS_PTR_BYTE_OFFSET(base, 0x100), 0x100, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
@@ -616,22 +616,22 @@ UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
                       UCS_PTR_BYTE_OFFSET(base, 0xff0), 0x20, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
 
-    ucs_memtype_cache_unregister(&owner);
+    ucs_memtype_cache_unregister(&token);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
 }
 
-UCS_TEST_F(test_memtype_explicit, overlapping_owners) {
-    int first_owner = 0, second_owner = 0;
+UCS_TEST_F(test_memtype_explicit, overlapping_registrations) {
+    int first_token = 0, second_token = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x20000);
 
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
-                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &first_owner);
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &first_token);
     ucs_memtype_cache_register(UCS_PTR_BYTE_OFFSET(base, 0x800), 0x100,
                                UCS_MEMORY_TYPE_CUDA_MANAGED,
                                UCS_SYS_DEVICE_ID_UNKNOWN, 2,
-                                &second_owner);
+                                &second_token);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, ucs_memtype_cache_lookup(
@@ -641,29 +641,30 @@ UCS_TEST_F(test_memtype_explicit, overlapping_owners) {
                                UCS_PTR_BYTE_OFFSET(base, 0x800), 0x80,
                                &info));
 
-    ucs_memtype_cache_unregister(&second_owner);
+    ucs_memtype_cache_unregister(&second_token);
     EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
                       UCS_PTR_BYTE_OFFSET(base, 0x800), 0x80, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-    ucs_memtype_cache_unregister(&first_owner);
+    ucs_memtype_cache_unregister(&first_token);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
 }
 
-UCS_TEST_F(test_memtype_explicit, duplicate_owners_and_uncached_detection) {
-    int first_owner = 0, second_owner = 0;
+UCS_TEST_F(test_memtype_explicit,
+           duplicate_registrations_and_uncached_detection) {
+    int first_token = 0, second_token = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x30000);
 
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
-                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &first_owner);
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &first_token);
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
-                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &second_owner);
-    ucs_memtype_cache_unregister(&first_owner);
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &second_token);
+    ucs_memtype_cache_unregister(&first_token);
     EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(base, 0x100, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
 
-    ucs_memtype_cache_unregister(&second_owner);
+    ucs_memtype_cache_unregister(&second_token);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
 
@@ -675,32 +676,32 @@ UCS_TEST_F(test_memtype_explicit, duplicate_owners_and_uncached_detection) {
 }
 
 UCS_TEST_F(test_memtype_explicit, unaligned_range) {
-    int owner = 0;
+    int token = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x40000);
 
     /* Neither the start nor the length is aligned */
     ucs_memtype_cache_register(UCS_PTR_BYTE_OFFSET(base, 3), 1000,
                                UCS_MEMORY_TYPE_CUDA, UCS_SYS_DEVICE_ID_UNKNOWN,
-                               1, &owner);
+                               1, &token);
     EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
                       UCS_PTR_BYTE_OFFSET(base, 3), 1000, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
 
-    ucs_memtype_cache_unregister(&owner);
+    ucs_memtype_cache_unregister(&token);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 3), 1000,
                                        &info));
 }
 
 UCS_TEST_F(test_memtype_explicit, disabled_cache) {
-    int owner = 0, disabled_owner = 0;
+    int token = 0, disabled_token = 0;
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x50000);
     const void *disabled_base = reinterpret_cast<void*>(0x51000);
 
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
-                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &owner);
+                               UCS_SYS_DEVICE_ID_UNKNOWN, 1, &token);
     ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
 
     modify_config("MEMTYPE_CACHE", "n");
@@ -708,8 +709,8 @@ UCS_TEST_F(test_memtype_explicit, disabled_cache) {
               ucs_memtype_cache_lookup(base, 0x100, &info));
     ucs_memtype_cache_register(disabled_base, 0x1000, UCS_MEMORY_TYPE_CUDA,
                                UCS_SYS_DEVICE_ID_UNKNOWN, 1,
-                               &disabled_owner);
-    ucs_memtype_cache_unregister(&owner);
+                               &disabled_token);
+    ucs_memtype_cache_unregister(&token);
 
     modify_config("MEMTYPE_CACHE", "explicit");
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
