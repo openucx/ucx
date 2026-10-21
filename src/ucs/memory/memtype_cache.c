@@ -348,6 +348,10 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     ucs_list_for_each(other, &memtype_cache->registrations, list) {
         if (ucs_memtype_cache_registrations_conflict(registration, other) &&
             (other->region != NULL)) {
+            ucs_trace("memtype_cache: registration [0x%lx..0x%lx] conflicts with "
+                UCS_MEMTYPE_CACHE_REGION_FMT,
+                registration->start, registration->end,
+                UCS_MEMTYPE_CACHE_REGION_ARG(other->region));
             ucs_memtype_cache_remove_explicit(memtype_cache, other->region);
         }
     }
