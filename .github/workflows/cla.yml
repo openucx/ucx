@@ -5,7 +5,7 @@
 name: CLA
 
 # pull_request_target passes secrets to fork PRs; PR code is never checked out.
-# Runs from the base branch, so release branches need this file too.
+# Always runs the default branch copy of this file, for release branch PRs too.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
