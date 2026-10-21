@@ -49,6 +49,21 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                          ucs_netlink_parse_cb_t parse_cb, void *arg);
 
 
+/*
+ * Receive and parse the response to a netlink request. For a dump request,
+ * keep receiving datagrams until one of them contains NLMSG_DONE or
+ * NLMSG_ERROR.
+ *
+ * @param [in]  fd               Socket to receive the response from.
+ * @param [in]  nlmsg_flags      Flags of the request (e.g. NLM_F_DUMP).
+ * @param [in]  parse_cb         Callback function to parse the response.
+ * @param [in]  arg              User-provided argument for the parse callback.
+ */
+ucs_status_t ucs_netlink_recv_response(int fd, unsigned short nlmsg_flags,
+                                       ucs_netlink_parse_cb_t parse_cb,
+                                       void *arg);
+
+
 /**
  * Check whether a route exists for a given network interface and
  * destination address.
