@@ -31,6 +31,7 @@ if [ -s $cs_errors ]; then
     cat $cs_errors
     echo "##vso[task.logissue type=error]static checkers found errors"
     echo "##vso[task.complete result=Failed;]"
+    exit 1
 else
     echo "No errors reported by static checkers"
 fi
