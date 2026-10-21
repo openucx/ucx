@@ -32,6 +32,12 @@ Before editing or judging code:
 6. Report the build/test commands used and any hardware, optional dependency,
    or coverage gaps.
 
+## Pull Requests
+
+PR and commit titles should match `^[0-9A-Z/_-]+: \w`: The title should start
+with module path, followed by a semicolon, and an imperative description of
+the change. For example: "UCP/WIREUP: consider NUMA locality for lane selection".
+
 ## Build
 
 The two main helpers are `configure-devel` and `configure-release`: pick `configure-devel` for failure investigation, debug-oriented and feature work (logging, assertions, gtest, and valgrind enabled), `configure-release` for performance work (those checks disabled and optimized for speed).
