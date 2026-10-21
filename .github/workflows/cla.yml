@@ -1,5 +1,5 @@
 # Check that the PR author and all commit authors are covered by a UCF CLA:
-# either a member of the secret CLA team, or the committer of a commit whose
+# either listed in the CLA_SIGNERS secret, or the committer of a commit whose
 # verified signature ties a corporate-CLA email domain to a GitHub account.
 # Informational: findings are reported as warnings, the check does not fail.
 name: CLA
@@ -17,28 +17,17 @@ jobs:
   cla:
     name: CLA
     runs-on: ubuntu-latest
-    # Forks have no CLA app secrets or team
+    # Forks have no CLA signers secret
     if: github.repository == 'openucx/ucx'
     permissions:
       pull-requests: read
     steps:
-      - name: Get org members token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ vars.CLA_APP_CLIENT_ID }}
-          private-key: ${{ secrets.CLA_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          permission-members: read
-
       - name: Check CLA signers
         env:
           GH_TOKEN: ${{ github.token }}
-          ORG_TOKEN: ${{ steps.app-token.outputs.token }}
-          ORG: ${{ github.repository_owner }}
-          # Slug of the secret team of individual CLA signers
-          TEAM: ${{ vars.CLA_TEAM }}
-          # Space separated email domains of corporate CLA signers
+          # Whitespace separated GitHub logins of individual CLA signers
+          SIGNERS: ${{ secrets.CLA_SIGNERS }}
+          # Whitespace separated email domains of corporate CLA signers
           DOMAINS: ${{ vars.CLA_DOMAINS }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
@@ -48,27 +37,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Succeeds if the login is an active member of the team or its child teams
-          is_signer() {
-              local state
-
-              if state=$(GH_TOKEN="$ORG_TOKEN" gh api \
-                             "orgs/$ORG/teams/$TEAM/memberships/$1" \
-                             --jq .state 2>api_err.txt); then
-                  [ "$state" = "active" ]
-                  return
-              fi
-
-              if grep -q "HTTP 404" api_err.txt; then
-                  return 1
-              fi
-
-              cat api_err.txt >&2
+          # Fail loudly on a missing secret, not as missing CLAs
+          if [ -z "${SIGNERS//[[:space:]]/}" ]; then
+              echo "::error::CLA_SIGNERS secret is not set"
               exit 1
-          }
+          fi
 
-          # Fail loudly on a wrong team name or token, not as missing CLAs
-          GH_TOKEN="$ORG_TOKEN" gh api "orgs/$ORG/teams/$TEAM" --jq .slug
+          # GitHub logins are case insensitive; never print this list
+          signers=$(tr -s '[:space:]' '\n' <<< "$SIGNERS" | sed 's/^@//' |
+                    tr '[:upper:]' '[:lower:]')
+
+          is_signer() {
+              grep -qxF -- "${1,,}" <<< "$signers"
+          }
 
           logins=()
           covered=()
@@ -144,8 +125,8 @@ jobs:
                   echo
                   echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
                   echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
-                  echo "Once the CLA is countersigned, ask a maintainer to add you to the CLA team (accept the"
-                  echo "org invitation if you get one), then push a new commit or ask for a re-run of this check."
+                  echo "Once the CLA is countersigned, ask a maintainer to add you to the CLA signers list,"
+                  echo "then push a new commit or ask for a re-run of this check."
                   echo
                   echo "If your employer has a corporate CLA, you can instead sign your commits with a GPG or SSH"
                   echo "key registered on your GitHub account, using your verified company email as the committer"

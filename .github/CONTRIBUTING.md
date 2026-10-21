@@ -1,6 +1,6 @@
 
 1. Please sign the [UCX contributors agreement](http://www.openucx.org/license).
-   Once it is countersigned, ask a maintainer to add you to the CLA team;
+   Once it is countersigned, ask a maintainer to add you to the CLA signers list;
    the `CLA` check on your pull request shows a warning until then. Please sign
    your commits with a key registered on your GitHub account. If your employer
    has a corporate CLA, signed commits using your verified company email pass
