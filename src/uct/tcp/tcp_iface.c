@@ -270,9 +270,9 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
      * option). We currently assume here that with or without src address bind,
      * kernel is going to anyway use the best route. So we make UCX refuse other
      * interfaces. */
-    if (!ucs_netlink_route_matches(ndev_index,
-                                   (const struct sockaddr*)&remote_addr,
-                                   UCS_NETLINK_ROUTE_CHECK_BEST)) {
+    if (!ucs_netlink_route_matches_by_table(
+                ndev_index, (const struct sockaddr*)&remote_addr,
+                UCS_NETLINK_ROUTE_CHECK_BEST, iface->vrf_info.table_id)) {
         uct_iface_fill_info_str_buf(
                     params, "no route to %s",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
@@ -579,9 +579,10 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
 
 static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 {
-    struct sockaddr_storage bind_addr = iface->config.ifaddr;
-    unsigned port_range_start         = iface->port_range.first;
-    unsigned port_range_end           = iface->port_range.last;
+    struct sockaddr_storage bind_addr  = iface->config.ifaddr;
+    unsigned port_range_start          = iface->port_range.first;
+    unsigned port_range_end            = iface->port_range.last;
+    ucs_socket_options_t socket_params = {0};
     ucs_status_t status;
     size_t addr_len;
     int port, retry;
@@ -589,6 +590,10 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
     /* retry is 1 for a range of ports or when port value is zero.
      * retry is 0 for a single value port that is not zero */
     retry = (port_range_start == 0) || (port_range_start < port_range_end);
+
+    if (iface->vrf_info.master_if_index > 0) {
+        socket_params.bind_device = iface->vrf_info.master_name;
+    }
 
     do {
         if (port_range_end != 0) {
@@ -610,9 +615,10 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
             return status;
         }
 
-        status = ucs_socket_server_init((struct sockaddr*)&bind_addr, addr_len,
-                                        ucs_socket_max_conn(), retry, 0,
-                                        &iface->listen_fd);
+        status = ucs_socket_server_init_v2((struct sockaddr*)&bind_addr,
+                                           addr_len, ucs_socket_max_conn(),
+                                           retry, &socket_params,
+                                           &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
     return status;
@@ -706,6 +712,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_status_t status;
     int i;
     ucs_mpool_params_t mp_params;
+    unsigned if_index;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -862,6 +869,22 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
         goto err_cleanup_rx_mpool;
+    }
+
+    status = ucs_ifname_to_ndev_index(self->if_name, &if_index);
+    if (status != UCS_OK) {
+        goto err_cleanup_event_set;
+    }
+
+    ucs_netlink_get_vrf_master_info(if_index, &self->vrf_info);
+    if (self->vrf_info.master_if_index > 0) {
+        if (if_indextoname(self->vrf_info.master_if_index,
+                           self->vrf_info.master_name) == NULL) {
+            ucs_error("if_indextoname(%u) failed: %m",
+                      self->vrf_info.master_if_index);
+            status = UCS_ERR_IO_ERROR;
+            goto err_cleanup_event_set;
+        }
     }
 
     status = uct_tcp_iface_listener_init(self);

@@ -10,9 +10,31 @@
 #include <ucs/type/status.h>
 
 #include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 #include <netinet/in.h>
+#include <net/if.h>
 
 BEGIN_C_DECLS
+
+/**
+ * Information about the VRF associated with a network interface.
+ */
+typedef struct {
+    /**
+     * VRF master index, or 0 if not a VRF slave.
+     */
+    unsigned master_if_index;
+
+    /**
+     * VRF master table index, or RT_TABLE_UNSPEC if none.
+     */
+    uint32_t table_id;
+
+    /**
+     * VRF master if name.
+     */
+    char master_name[IFNAMSIZ];
+} ucs_netlink_vrf_info_t;
 
 typedef enum {
     UCS_NETLINK_ROUTE_CHECK_BEST,
@@ -91,6 +113,38 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
  */
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
+
+/**
+ * Check whether a route to a given destination address through a network
+ * interface matches the requested policy.
+ *
+ * @param [in] if_index         Network interface index.
+ * @param [in] sa_remote        Pointer to the destination address.
+ * @param [in] route_check      When set to UCS_NETLINK_ROUTE_CHECK_RELAXED,
+ *                              accept any non-default route, or a default
+ *                              route if nothing better exists. Otherwise,
+ *                              accept only the best route.
+ * @param [in] table_id         Routing table ID, or RT_TABLE_UNSPEC to search
+ *                              all routing tables.
+ *
+ * @return 1 if the route is accepted by the requested policy, or 0 otherwise.
+ */
+int ucs_netlink_route_matches_by_table(int if_index,
+                                       const struct sockaddr *sa_remote,
+                                       ucs_netlink_route_check_t route_check,
+                                       uint32_t table_id);
+
+/**
+ * Get VRF information associated with a network interface.
+ *
+ * @param [in]  if_index         Network interface index to query.
+ * @param [out] vrf_info_p       VRF information.
+ *
+ * @return UCS_OK if the query succeeded, otherwise an error status.
+ */
+ucs_status_t
+ucs_netlink_get_vrf_master_info(unsigned if_index,
+                                ucs_netlink_vrf_info_t *vrf_info_p);
 
 END_C_DECLS
 
