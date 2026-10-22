@@ -766,6 +766,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
         break;
 #endif
 #if HAVE_ROCM
+    case UCS_MEMORY_TYPE_ROCM_VMM:
     case UCS_MEMORY_TYPE_ROCM:
         if (length <= 8) {
             ::memset(buffer, c, length);
@@ -822,7 +823,8 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
 #if HAVE_ROCM
     const uint64_t rocm_mem_types = host_mem_types |
                                     UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
-                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED);
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
 #endif
 #if HAVE_ZE
     const uint64_t ze_cpu_mem_types = host_mem_types |

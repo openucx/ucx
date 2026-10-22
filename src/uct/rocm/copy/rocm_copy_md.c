@@ -53,13 +53,17 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
                                 UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
     md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
+    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
     if (md->have_dmabuf) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     }
@@ -79,6 +83,7 @@ uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
 
     packed->vaddr   = (uint64_t) mem_hndl->vaddr;
     packed->dev_ptr = mem_hndl->dev_ptr;
+    packed->is_vmm  = mem_hndl->is_vmm;
 
     return UCS_OK;
 }
@@ -99,6 +104,7 @@ uct_rocm_copy_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 
     key->vaddr   = packed->vaddr;
     key->dev_ptr = packed->dev_ptr;
+    key->is_vmm  = packed->is_vmm;
 
     *handle_p = NULL;
     *rkey_p   = (uintptr_t)key;
@@ -133,6 +139,7 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         int pg_align_addr, uct_rocm_copy_mem_t *mem_hndl)
 {
     void *dev_addr = NULL;
+    int is_vmm     = 0;
     hsa_status_t status;
     hsa_amd_pointer_type_t mem_type;
 
@@ -145,9 +152,13 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         return UCS_ERR_IO_ERROR;
     }
 
-    if (mem_type == HSA_EXT_POINTER_TYPE_HSA) {
-        /* This covers device memory and memory allocated
-           with hipHostMalloc */
+#ifdef HAVE_ROCM_VMM_TYPE
+    is_vmm = (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM);
+#endif
+
+    if ((mem_type == HSA_EXT_POINTER_TYPE_HSA) || is_vmm) {
+        /* This covers device memory, hipHostMalloc, and VMM-mapped memory.
+         * VMM memory is already device-accessible; hsa_amd_memory_lock hangs on it. */
         dev_addr = address;
     } else {
         if (pg_align_addr) {
@@ -163,6 +174,7 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
     mem_hndl->vaddr    = address;
     mem_hndl->dev_ptr  = dev_addr;
     mem_hndl->reg_size = length;
+    mem_hndl->is_vmm   = is_vmm;
 
     ucs_trace("Registered addr %p len %zu dev addr %p", address, length, dev_addr);
     return UCS_OK;
@@ -249,7 +261,7 @@ uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
     hsa_status_t hsa_status;
     hsa_amd_memory_pool_t pool;
 
-    if (mem_type != UCS_MEMORY_TYPE_ROCM) {
+    if (!uct_rocm_base_is_gpu_mem_type(mem_type)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

@@ -46,6 +46,7 @@ typedef enum ucs_memory_type {
     UCS_MEMORY_TYPE_ZE_DEVICE,     /**< Intel ZE memory (USM device) */
     UCS_MEMORY_TYPE_ZE_MANAGED,    /**< Intel ZE managed memory (USM shared) */
     UCS_MEMORY_TYPE_GAUDI,         /**< HabanaLabs Gaudi memory */
+    UCS_MEMORY_TYPE_ROCM_VMM,      /**< AMD ROCM VMM-allocated GPU memory */
     UCS_MEMORY_TYPE_LAST,
     UCS_MEMORY_TYPE_UNKNOWN = UCS_MEMORY_TYPE_LAST
 } ucs_memory_type_t;

@@ -113,6 +113,10 @@ AS_IF([test "x$with_rocm" != "xno"],
         [AC_DEFINE([HAVE_ROCM_RESERVED_ADDR_TYPE], [1],
                     [ROCm 7.0+ has HSA_EXT_POINTER_TYPE_RESERVED_ADDR])])
 
+    AS_IF([test "$hip_version" -ge 70100000],
+        [AC_DEFINE([HAVE_ROCM_VMM_TYPE], [1],
+                    [ROCm 7.1+ has HSA_EXT_POINTER_TYPE_HSA_VMEM])])
+
    AC_CHECK_FUNCS([hsa_amd_portable_export_dmabuf])
 
     CPPFLAGS="$SAVE_CPPFLAGS"

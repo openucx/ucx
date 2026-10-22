@@ -2652,7 +2652,8 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA),
                                            UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                                    UCS_BIT(UCS_MEMORY_TYPE_HOST),
-                                           UCS_BIT(UCS_MEMORY_TYPE_ROCM)};
+                                           UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                                   UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM)};
     int found_lane                      = 0;
     size_t i;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
