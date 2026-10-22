@@ -70,7 +70,6 @@ protected:
         device.device_class    = device_class;
         device.class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device.sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
-        device.sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         sys_dev = static_cast<ucs_sys_device_t>(m_devices.size());
         m_devices.push_back(device);
