@@ -1560,6 +1560,14 @@ public:
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
     }
+
+    virtual void inject_error(unsigned idx = 0) override
+    {
+        /* Allow inject on a disabled sender. */
+        rc_iface(m_sender)->tx.cq_available++;
+        test_uct_peer_failure::inject_error(idx);
+        rc_iface(m_sender)->tx.cq_available--;
+    }
 };
 
 /* this test is quite tricky: it emulates missing iface resources

@@ -48,7 +48,7 @@ public:
     static ucs_status_t pending_cb(uct_pending_req_t *self);
     static void purge_cb(uct_pending_req_t *self, void *arg);
     static ucs_status_t err_cb(void *arg, uct_ep_h ep, ucs_status_t status);
-    void inject_error(unsigned idx = 0);
+    virtual void inject_error(unsigned idx = 0);
     void kill_receiver(unsigned idx = 0);
     void new_receiver();
     void set_am_handlers();
