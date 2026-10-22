@@ -244,6 +244,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     if (remote != NULL) {
         req->send.rma.sgl.remote_addrs = remote->remote_addrs;
         req->send.rma.sgl.rkeys        = remote->rkeys;
+        req->send.rma.sgl.length       = ucp_dt_sgl_length(
+                ((const ucp_dt_local_sgl_t*)buffer)->lengths, count);
     }
 
     ret = ucp_proto_request_send_op_rma(
