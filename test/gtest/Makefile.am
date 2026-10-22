@@ -279,6 +279,7 @@ gtest_SOURCES += \
 	ucm/cuda_hooks.cc \
 	uct/cuda/test_cuda_ctx_cleanup.cc \
 	uct/cuda/test_switch_cuda_device.cc \
+	uct/cuda/test_cuda_ipc_iface.cc \
 	uct/cuda/test_cuda_ipc_md.cc \
 	uct/cuda/test_cuda_nvml.cc
 
