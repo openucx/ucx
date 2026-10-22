@@ -16,9 +16,9 @@ extern "C" {
 }
 
 
-/* UCX_CUDA_IPC_NVLINK_DOMAIN makes an entity emulate a host in the given
- * NVLink domain, with MNNVL enabled even without a GPU fabric. Entities with
- * different values see each other as hosts in different domains. */
+/* UCX_CUDA_IPC_NVLINK_DOMAIN="<domain>[:<host>]" makes an entity emulate the
+ * given host in the given NVLink domain, with MNNVL enabled even without a
+ * GPU fabric. <host> defaults to <domain>. */
 class test_cuda_ipc_iface_nvlink_domain : public uct_test {
 protected:
     void init() override
@@ -93,6 +93,7 @@ protected:
     }
 };
 
+/* Same host, same domain */
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_domain)
 {
     entity *e1 = create_entity_in_domain("1");
@@ -103,6 +104,7 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_domain)
     EXPECT_TRUE(is_reachable(*e2, *e1, info)) << info;
 }
 
+/* Different hosts, different domains: not reachable over MNNVL */
 UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, different_domain)
 {
     entity *e1 = create_entity_in_domain("1");
@@ -113,6 +115,28 @@ UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, different_domain)
     EXPECT_EQ("different NVLink domain", info);
     EXPECT_FALSE(is_reachable(*e2, *e1, info));
     EXPECT_EQ("different NVLink domain", info);
+}
+
+/* Different hosts, same domain: reachable over MNNVL */
+UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, different_host_same_domain)
+{
+    entity *e1 = create_entity_in_domain("1:1");
+    entity *e2 = create_entity_in_domain("1:2");
+    std::string info;
+
+    EXPECT_TRUE(is_reachable(*e1, *e2, info)) << info;
+    EXPECT_TRUE(is_reachable(*e2, *e1, info)) << info;
+}
+
+/* Same host, different domains: the domain is a property of the host and is
+ * not checked between peers on the same host */
+UCS_TEST_P(test_cuda_ipc_iface_nvlink_domain, same_host_different_domain)
+{
+    entity *e1 = create_entity_in_domain("1:1");
+    entity *e2 = create_entity_in_domain("2:1");
+    std::string info;
+
+    EXPECT_TRUE(is_reachable(*e1, *e2, info)) << info;
 }
 
 /* A peer that does not send its NVLink domain keeps the previous behavior:

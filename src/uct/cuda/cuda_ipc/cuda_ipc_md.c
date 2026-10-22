@@ -24,6 +24,7 @@
 #include <uct/api/device/uct_device_types.h>
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -36,7 +37,7 @@
 #define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
     "/dev/nvidia-caps-imex-channels"
 
-/* Multiplier used to derive an emulated host id from the NVLink domain id */
+/* Multiplier used to derive an emulated host id from the configured host */
 #define UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX 0x9E3779B97F4A7C15ull
 
 typedef struct {
@@ -62,14 +63,16 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
 
     {"NVLINK_DOMAIN", "auto",
      "NVLink domain used to check multi-node NVLINK reachability.\n"
-     " auto - fabric cluster UUID and clique ID reported by NVML.\n"
-     " <id> - emulate a host in NVLink domain <id>: enable multi-node NVLINK\n"
-     "        even without a GPU fabric, and treat peers configured with a\n"
-     "        different value as hosts in another domain, also when they run\n"
-     "        on the same machine. Intended for testing the fallback to other\n"
-     "        transports.",
+     " auto              - fabric cluster UUID and clique ID from NVML.\n"
+     " <domain>[:<host>] - emulate host <host> in NVLink domain <domain>:\n"
+     "                     enable multi-node NVLINK even without a GPU\n"
+     "                     fabric, and treat peers configured with another\n"
+     "                     <host> as different hosts, also when they run on\n"
+     "                     the same machine. <host> defaults to <domain>.\n"
+     "                     Intended for testing the fallback to other\n"
+     "                     transports.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
-     UCS_CONFIG_TYPE_ULUNITS},
+     UCS_CONFIG_TYPE_STRING},
 
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
@@ -782,6 +785,36 @@ out:
     return mnnvl_supported;
 }
 
+/* Parse "<domain>[:<host>]", <host> defaults to <domain> */
+static ucs_status_t
+uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
+                                    unsigned long *host_p)
+{
+    char *end;
+
+    *domain_p = strtoul(str, &end, 0);
+    if (end == str) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (*end == '\0') {
+        *host_p = *domain_p;
+        return UCS_OK;
+    }
+
+    if (*end != ':') {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    str     = end + 1;
+    *host_p = strtoul(str, &end, 0);
+    if ((end == str) || (*end != '\0')) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
     ucs_free(md);
@@ -862,7 +895,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     uct_cuda_ipc_md_config_t *ipc_config = ucs_derived_of(config,
                                                           uct_cuda_ipc_md_config_t);
     static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
+    unsigned long domain, host;
     uct_cuda_ipc_md_t* md;
+    ucs_status_t status;
 
     UCS_INIT_ONCE(&init_enable_remote_cache) {
         uct_cuda_ipc_component.enable_remote_cache =
@@ -888,20 +923,26 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
     md->system_uuid      = ucs_get_system_id();
 
-    if ((ipc_config->nvlink_domain != UCS_ULUNITS_AUTO) &&
+    if (strcmp(ipc_config->nvlink_domain, "auto") &&
         (ipc_config->enable_mnnvl != UCS_NO)) {
-        UCS_STATIC_ASSERT(sizeof(ipc_config->nvlink_domain) <=
-                          UCT_CUDA_IPC_CLUSTER_UUID_LEN);
+        status = uct_cuda_ipc_md_parse_nvlink_domain(ipc_config->nvlink_domain,
+                                                     &domain, &host);
+        if (status != UCS_OK) {
+            ucs_error("invalid NVLink domain '%s', expected "
+                      "\"<domain>[:<host>]\" or \"auto\"",
+                      ipc_config->nvlink_domain);
+            ucs_free(md);
+            return status;
+        }
+
+        UCS_STATIC_ASSERT(sizeof(domain) <= UCT_CUDA_IPC_CLUSTER_UUID_LEN);
         memset(&md->nvlink_domain, 0, sizeof(md->nvlink_domain));
-        memcpy(md->nvlink_domain.cluster_uuid, &ipc_config->nvlink_domain,
-               sizeof(ipc_config->nvlink_domain));
+        memcpy(md->nvlink_domain.cluster_uuid, &domain, sizeof(domain));
         md->enable_mnnvl = 1;
-        /* Processes with different domain ids look like different hosts to
-         * each other, while real hosts stay distinguishable */
-        md->system_uuid ^= (ipc_config->nvlink_domain + 1) *
-                           UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX;
-        ucs_debug("emulating a host in NVLink domain %lu",
-                  ipc_config->nvlink_domain);
+        /* Processes with different emulated hosts look like different hosts
+         * to each other, while real hosts stay distinguishable */
+        md->system_uuid ^= (host + 1) * UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX;
+        ucs_debug("emulating host %lu in NVLink domain %lu", host, domain);
     }
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
