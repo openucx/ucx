@@ -300,10 +300,6 @@ static void ucp_proto_multi_select_bw_lanes(
         ucp_proto_select_add_lane(selection, params, lanes[lane_index]);
         index_map &= ~UCS_BIT(lane_index);
     }
-
-    /* TODO: Aggregate performance:
-     * Split full iface bandwidth between selected paths, according to the total
-     * path ratio */
 }
 
 static ucp_sys_dev_map_t ucp_proto_multi_init_flush_sys_dev_mask(
@@ -699,6 +695,42 @@ ucp_proto_multi_select_lanes(const ucp_proto_multi_init_params_t *params,
               ucp_proto_id_field(params->super.super.proto_id, name));
 }
 
+static void ucp_proto_multi_limit_iface_bandwidth(
+        const ucp_proto_init_params_t *params,
+        const ucp_proto_lane_selection_t *selection,
+        const ucp_proto_common_tl_perf_t *lanes_perf,
+        ucp_proto_common_tl_perf_t *perf)
+{
+    ucp_lane_map_t lane_map = selection->lane_map;
+    double bandwidth       = perf->bandwidth;
+    ucp_rsc_index_t rsc_index;
+    ucp_lane_index_t lane, iface_lane;
+    double iface_bandwidth, iface_weight;
+
+    /* Paths on one iface share its bandwidth. Preserve the existing data
+     * distribution and limit the estimate by its busiest iface. */
+    ucs_for_each_bit(lane, lane_map) {
+        rsc_index       = ucp_proto_common_get_rsc_index(params, lane);
+        iface_bandwidth = 0;
+        iface_weight    = 0;
+
+        ucs_for_each_bit(iface_lane, lane_map) {
+            if (ucp_proto_common_get_rsc_index(params, iface_lane) != rsc_index) {
+                continue;
+            }
+
+            iface_bandwidth = ucs_max(iface_bandwidth,
+                                      lanes_perf[iface_lane].bandwidth);
+            iface_weight   += lanes_perf[iface_lane].bandwidth / perf->bandwidth;
+            lane_map       &= ~UCS_BIT(iface_lane);
+        }
+
+        bandwidth = ucs_min(bandwidth, iface_bandwidth / iface_weight);
+    }
+
+    perf->bandwidth = bandwidth;
+}
+
 /* Calculate the aggregate performance of the selected lanes. */
 static void
 ucp_proto_multi_aggregate_perf(const ucp_proto_multi_init_params_t *params,
@@ -1019,6 +1051,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     if (status != UCS_OK) {
         goto out_cleanup_lanes;
     }
+
+    ucp_proto_multi_limit_iface_bandwidth(init_params, &selection, lanes_perf,
+                                          &perf);
 
     status = ucp_proto_multi_init_perf(params, perf_name, &selection,
                                        lanes_perf, mpriv, reg_md_map, &perf,
