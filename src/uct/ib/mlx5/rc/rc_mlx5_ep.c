@@ -861,12 +861,8 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
         return status;
     }
 
-    /* Posted WQEs are flushed by the ERR transition. An empty send queue has
-     * nothing to flush, so a signaled NOP posted now completes in error.
-     * The failed-queue flag stays clear until the error completion: the lane
-     * can still post until that completion detaches it. */
-    if (uct_rc_txqp_available(&ep->super.txqp) !=
-        (int16_t)ep->tx.wq.bb_max) {
+    /* The send queue is full, so a posted WQE supplies the CQE. */
+    if (uct_rc_txqp_available(&ep->super.txqp) == 0) {
         return UCS_OK;
     }
 

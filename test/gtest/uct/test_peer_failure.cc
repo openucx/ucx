@@ -806,15 +806,20 @@ protected:
         ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
 
         /*
-         * Nothing progresses the sender after the posts, so the flush
-         * completion is never polled and the flush operation is still
-         * outstanding when purge runs. The sentinel proves all prior
-         * requests were executed at the receiver, so purge itself must
-         * classify the flush as delivered and complete it.
+         * Invalidate before the sentinel is observed. The sender is not
+         * progressed while it arrives, so the flush stays outstanding.
+         * Wait for the error callback, then purge. The sentinel proves
+         * all prior requests were executed at the receiver.
          */
         const uint8_t *tail = (uint8_t*)recvbuf.ptr() + sentinel_offset;
+        uct_ep_invalidate_params_t invalidate_params = {};
+
+        ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
         wait_for_value(tail, *(uint8_t*)sentinel_buf.ptr(), false);
         ASSERT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
+
+        wait_for_flag(&m_err_count);
+        ASSERT_EQ(1u, m_err_count);
 
         purge_outstanding(&ctx, true);
 
@@ -822,7 +827,6 @@ protected:
         EXPECT_EQ(0, ctx.comp.count);
         EXPECT_UCS_OK(ctx.comp.status);
         EXPECT_EQ(1u, ctx.num_completions);
-        EXPECT_EQ(0u, m_err_count);
     }
 
     void test_am_short(bool with_rx_token)
