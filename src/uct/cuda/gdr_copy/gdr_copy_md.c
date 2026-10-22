@@ -93,7 +93,7 @@ static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
     }
 
     get_attribute = (uct_gdr_get_attribute_func_t)dlsym(dl_handle,
-                                                       "gdr_get_attribute");
+                                                        "gdr_get_attribute");
     if (get_attribute == NULL) {
         ucs_debug("gdr_get_attribute is not available in loaded GDRCopy "
                   "runtime");

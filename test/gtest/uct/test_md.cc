@@ -1449,18 +1449,12 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
 #endif /* HAVE_DECL_GDR_PIN_BUFFER_V2 */
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
-                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no")
-{
+                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no") {
     void *address;
-    ucs::handle<void*> buffer;
-    uct_mem_h memh;
-    int ret;
 
-    ret = posix_memalign(&address, REG_SIZE, REG_SIZE);
-    if (ret == 0) {
-        buffer.reset(address, free);
-    }
+    const int ret = posix_memalign(&address, REG_SIZE, REG_SIZE);
     ASSERT_EQ(0, ret);
+    ucs::handle<void*> buffer(address, free);
 
     for (unsigned flags : {0u, unsigned(UCT_MD_MEM_FLAG_HIDE_ERRORS)}) {
         ucs_status_t status;
@@ -1468,6 +1462,8 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
         m_errors.clear();
         {
             scoped_log_handler slh(hide_errors_logger);
+            uct_mem_h memh;
+
             status = reg_mem(UCT_MD_MEM_ACCESS_ALL | flags, address, REG_SIZE,
                              &memh);
         }
@@ -1481,35 +1477,39 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
 }
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, cuda_async_qualification,
-                     !check_caps(UCT_MD_FLAG_REG))
-{
+                     !check_caps(UCT_MD_FLAG_REG)) {
     using detect_func_t = int (*)(gdr_t);
     Dl_info plugin_info;
     int expected = 0;
 
     ASSERT_NE(0, dladdr(reinterpret_cast<void*>(md()->ops->mem_reg),
-                       &plugin_info));
-    ucs::handle<void*> plugin(
-            dlopen(plugin_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD),
-            [](void *handle) { if (handle != nullptr) { dlclose(handle); } });
+                        &plugin_info));
+    ucs::handle<void*> plugin(dlopen(plugin_info.dli_fname,
+                                     RTLD_LAZY | RTLD_NOLOAD),
+                              [](void *handle) {
+                                  if (handle != nullptr) {
+                                      dlclose(handle);
+                                  }
+                              });
     ASSERT_NE(nullptr, plugin.get());
     auto detect = reinterpret_cast<detect_func_t>(
             dlsym(plugin.get(), "uct_gdr_copy_cuda_async_detect"));
     ASSERT_NE(nullptr, detect);
 
 #if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
-    using version_func_t = void (*)(int*, int*);
+    using version_func_t   = void (*)(int*, int*);
     using attribute_func_t = int (*)(gdr_t, gdr_attr_t, int*);
-    auto version = reinterpret_cast<version_func_t>(
+    auto version           = reinterpret_cast<version_func_t>(
             dlsym(plugin.get(), "gdr_runtime_get_version"));
-    auto attribute = reinterpret_cast<attribute_func_t>(
+    auto attribute         = reinterpret_cast<attribute_func_t>(
             dlsym(plugin.get(), "gdr_get_attribute"));
     int major, minor, backend, driver;
 
     ASSERT_NE(nullptr, version);
     version(&major, &minor);
     if (((major > 2) || ((major == 2) && (minor >= 6))) &&
-        (attribute != nullptr) && (cuDriverGetVersion(&driver) == CUDA_SUCCESS) &&
+        (attribute != nullptr) &&
+        (cuDriverGetVersion(&driver) == CUDA_SUCCESS) &&
         (driver >= UCT_GDR_COPY_CUDA_ASYNC_MIN_DRIVER_VERSION) &&
         (attribute(ucs_derived_of(md(), uct_gdr_copy_md_t)->gdrcpy_ctx,
                    GDR_ATTR_USING_DMA_BUF_MMAP, &backend) == 0)) {
