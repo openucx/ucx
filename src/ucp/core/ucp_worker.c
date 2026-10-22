@@ -1258,6 +1258,22 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         ucp_worker_select_best_ifaces(worker, &tl_bitmap);
         ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(tl_bitmap));
 
+        /* Unified mode packs only the selected resources, so fail if any of
+         * them has an index the address cannot hold. Check it before caching
+         * the selection, so that the next workers fail as well */
+        if (UCS_STATIC_BITMAP_FLS(tl_bitmap) >=
+            UCP_ADDRESS_UNIFIED_MAX_RESOURCES) {
+            ucs_error("%sUNIFIED_MODE supports up to %d transport resources, "
+                      "but %u were found; set %sUNIFIED_MODE=n or limit "
+                      "%sTLS/%sNET_DEVICES",
+                      context->config.env_prefix,
+                      UCP_ADDRESS_UNIFIED_MAX_RESOURCES, context->num_tls,
+                      context->config.env_prefix, context->config.env_prefix,
+                      context->config.env_prefix);
+            status = UCS_ERR_EXCEEDS_LIMIT;
+            goto err_cleanup_ifaces;
+        }
+
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
         context->tl_bitmap = tl_bitmap;
