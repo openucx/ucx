@@ -219,7 +219,7 @@ In addition to the built-in transports it's possible to use aliases which specif
 <tr><td>ud_x</td><td>Same as "ud", but using accelerated transports only</td></tr>
 <tr><td>ud_v</td><td>Same as "ud", but using Verbs-based transports only</td></tr>
 <tr><td>cuda</td><td>CUDA (NVIDIA GPU) memory support: cuda_copy, cuda_ipc, gdr_copy</td></tr>
-<tr><td>rocm</td><td>ROCm (AMD GPU) memory support: rocm_copy, rocm_ipc, rocm_gdr</td></tr>
+<tr><td>rocm</td><td>ROCm (AMD GPU) memory support: rocm_copy, rocm_ipc</td></tr>
 <tr><td>tcp</td><td>TCP over SOCK_STREAM sockets</td></tr>
 <tr><td>self</td><td>Loopback transport to communicate within the same process</td></tr>
 </table>
