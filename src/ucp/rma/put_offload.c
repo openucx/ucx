@@ -546,7 +546,7 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     /* A long batch is not redirected, to keep posting the user arrays without
      * copying them */
     if (ucs_unlikely((total_length < max_payload) &&
-                     ((elem_count + 1) < max_frag_count) &&
+                     (elem_count < max_frag_count) &&
                      ((start_index + elem_count) < dt_iter->length))) {
         ucs_free_on_stack(uct_memhs, uct_memhs_size);
         ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
