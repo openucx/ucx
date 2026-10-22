@@ -899,30 +899,49 @@ run_ucx_perftest_cuda_device() {
 }
 
 #
-# Run UCX one-sided performance test with IOV datatype
+# Run UCX performance test from a config file on all active IB devices
 #
-run_ucx_perftest_rma_iov() {
+run_ucx_perftest_config() {
+	config_name=$1
+	tmp_name=$2
+	test_label=$3
+
 	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 
 	if [ "X$have_cuda" != "Xno" ] && [ "$(get_num_gpus)" -gt 0 ]; then
-		cat $ucx_inst_ptest/test_types_ucp_rma_iov | \
-			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+		cat $ucx_inst_ptest/$config_name | \
+			sort -R > $ucx_inst_ptest/$tmp_name
 	else
-		echo "==== CUDA not available, running host-only IOV RMA tests ===="
-		cat $ucx_inst_ptest/test_types_ucp_rma_iov | grep -v cuda | \
-			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+		echo "==== CUDA not available, running host-only $test_label tests ===="
+		cat $ucx_inst_ptest/$config_name | grep -v cuda | \
+			sort -R > $ucx_inst_ptest/$tmp_name
 	fi
 
-	ucp_test_args="-b $ucx_inst_ptest/test_types_rma_iov_ucp -w 1"
+	ucp_test_args="-b $ucx_inst_ptest/$tmp_name -w 1"
 
 	for ucx_dev in $(get_active_ib_devices)
 	do
-		echo "==== Running ucx_perftest IOV RMA on $ucx_dev ===="
+		echo "==== Running ucx_perftest $test_label on $ucx_dev ===="
 		export UCX_NET_DEVICES=$ucx_dev
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 		unset UCX_NET_DEVICES
 	done
+}
+
+#
+# Run UCX scatter-gather list (SGL) performance test
+#
+run_ucx_perftest_sgl() {
+	run_ucx_perftest_config test_types_ucp_sgl test_types_sgl_ucp SGL
+}
+
+#
+# Run UCX one-sided performance test with IOV datatype
+#
+run_ucx_perftest_rma_iov() {
+	run_ucx_perftest_config test_types_ucp_rma_iov test_types_rma_iov_ucp \
+		"IOV RMA"
 }
 
 #
@@ -1542,7 +1561,8 @@ run_tests() {
 	do_distributed_task 0 4 test_no_cuda_context
 	do_distributed_task 1 4 run_ucx_perftest_with_daemon
 	do_distributed_task 1 4 run_ucx_perftest_cuda_device
-	do_distributed_task 2 4 run_ucx_perftest_rma_iov
+	do_distributed_task 2 4 run_ucx_perftest_sgl
+	do_distributed_task 3 4 run_ucx_perftest_rma_iov
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
