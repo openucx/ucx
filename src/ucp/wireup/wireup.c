@@ -1329,14 +1329,27 @@ typedef struct {
 } ucp_wireup_tf_reply_t;
 
 
-static ucp_wireup_tf_reply_t *ucp_wireup_tf_reply_get(ucp_ep_h ep)
+/* recovery_arg shares storage with the close request. A sockaddr endpoint
+ * does not support failover, so that pointer is not recovery state. */
+static ucp_ep_recovery_arg_t *ucp_wireup_tf_recovery_arg(ucp_ep_h ep)
 {
-    if ((ep->ext->recovery_arg == NULL) ||
-        (ep->ext->recovery_arg->tf_reply == NULL)) {
+    if (!ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
+        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE)) {
         return NULL;
     }
 
-    return ep->ext->recovery_arg->tf_reply;
+    return ep->ext->recovery_arg;
+}
+
+static ucp_wireup_tf_reply_t *ucp_wireup_tf_reply_get(ucp_ep_h ep)
+{
+    ucp_ep_recovery_arg_t *arg = ucp_wireup_tf_recovery_arg(ep);
+
+    if ((arg == NULL) || (arg->tf_reply == NULL)) {
+        return NULL;
+    }
+
+    return arg->tf_reply;
 }
 
 static void ucp_wireup_tf_reply_free(ucp_wireup_tf_reply_t *reply)
@@ -1444,7 +1457,7 @@ static void ucp_wireup_tf_reply_schedule(ucp_ep_h ep)
 
 static void ucp_wireup_tf_reply_finish(ucp_ep_h ep)
 {
-    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_ep_recovery_arg_t *arg = ucp_wireup_tf_recovery_arg(ep);
     ucp_unpacked_address_t remote_address;
     ucp_wireup_tf_reply_t *reply;
     ucs_status_t status;
@@ -1499,7 +1512,7 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
                           ucp_wireup_lane_token_t *rx_tokens,
                           const void *address, size_t address_length)
 {
-    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_ep_recovery_arg_t *arg = ucp_wireup_tf_recovery_arg(ep);
     ucp_wireup_tf_reply_t *reply;
     void *copy = NULL;
 
@@ -1574,7 +1587,7 @@ void ucp_wireup_tf_lane_errored(ucp_ep_h ep, ucp_lane_index_t lane)
 
 void ucp_wireup_tf_reply_discard(ucp_ep_h ep)
 {
-    ucp_ep_recovery_arg_t *arg = ep->ext->recovery_arg;
+    ucp_ep_recovery_arg_t *arg = ucp_wireup_tf_recovery_arg(ep);
     ucp_wireup_tf_reply_t *reply;
 
     if ((arg == NULL) || (arg->tf_reply == NULL)) {
