@@ -155,9 +155,7 @@ typedef enum {
  *
  * The levels are ordered from the highest priority to the lowest, so a
  * transport which distinguishes fewer levels than are defined here maps the
- * levels it cannot represent to the lowest priority it supports. The ordering
- * is therefore part of the contract: a new level must be declared at the
- * position which places it correctly in this order.
+ * levels it cannot represent to the lowest priority it supports.
  */
 typedef enum {
     /**
