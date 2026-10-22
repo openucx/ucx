@@ -145,6 +145,41 @@ typedef enum {
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief Quality of service level for the UCP endpoint.
+ *
+ * Specifies the relative priority of the endpoint's traffic. The level is
+ * abstract: each transport maps it to whatever prioritization mechanism the
+ * underlying fabric provides, and transports which do not support
+ * prioritization ignore it.
+ *
+ * The levels are ordered from the highest priority to the lowest, so a
+ * transport which distinguishes fewer levels than are defined here maps the
+ * levels it cannot represent to the lowest priority it supports. The ordering
+ * is therefore part of the contract: a new level must be declared at the
+ * position which places it correctly in this order.
+ */
+typedef enum {
+    /**
+     * Highest priority. Traffic of this endpoint is served before traffic of
+     * endpoints at any other level.
+     */
+    UCP_QOS_LEVEL_HIGH,
+
+    /**
+     * Intermediate priority.
+     */
+    UCP_QOS_LEVEL_MEDIUM,
+
+    /**
+     * Lowest priority. Traffic of this endpoint yields to traffic of
+     * endpoints at any other level.
+     */
+    UCP_QOS_LEVEL_LOW
+} ucp_qos_level_t;
+
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP Remote memory handle
  *
@@ -789,19 +824,17 @@ typedef struct ucp_ep_params {
     ucs_sock_addr_t         local_sockaddr;
 
     /**
-     * Quality of service level of this endpoint, where 0 is the highest
-     * priority and larger values denote lower priority. This is an abstract
-     * level: each transport maps it to the prioritization mechanism provided
-     * by the underlying fabric.
-     *
-     * The number of levels a transport can distinguish is limited. Levels
-     * which exceed that number are mapped to the lowest priority available,
-     * and transports which do not support prioritization ignore this value.
+     * Quality of service level of this endpoint, as defined by
+     * @ref ucp_qos_level_t. Each transport maps the level to the
+     * prioritization mechanism provided by the underlying fabric, and
+     * transports which do not support prioritization ignore it.
      *
      * This setting is optional. To enable it, the corresponding @ref
-     * UCP_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must be set.
+     * UCP_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must be set. When it
+     * is not set, the endpoint keeps the transport's default priority, which
+     * is not necessarily any of the levels above.
      */
-    uint8_t                 qos_level;
+    ucp_qos_level_t         qos_level;
 } ucp_ep_params_t;
 
 
