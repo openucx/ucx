@@ -2688,7 +2688,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
 }
 
 /* 0 is unseen. A wrapped id stays newer until half the counter space. */
-static int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id)
+int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id)
 {
     if (seen == 0) {
         return 1;

@@ -1101,6 +1101,13 @@ ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
+ * @return Nonzero when @a request_id is newer than @a seen. 0 is unseen.
+ *         A wrapped id stays newer until half the counter space.
+ */
+int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id);
+
+
+/**
  * Lanes in @a lanes whose peer request id is newer than the one already
  * accepted for that lane. Those lanes are recorded. A smaller id is left out.
  *
