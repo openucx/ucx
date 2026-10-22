@@ -1604,16 +1604,6 @@ void ucp_wireup_tf_reply_discard(ucp_ep_h ep)
     arg->tf_reply = NULL;
 }
 
-/* 0 is unseen. A wrapped id stays newer until half the counter space. */
-static int ucp_wireup_tf_req_is_newer(uint32_t seen, uint32_t request_id)
-{
-    if (seen == 0) {
-        return 1;
-    }
-
-    return (int32_t)(request_id - seen) > 0;
-}
-
 static UCS_F_NOINLINE void
 ucp_wireup_process_lanes_addr_request(
         ucp_worker_h worker, ucp_ep_h ep, const ucp_wireup_msg_t *msg,
@@ -1674,7 +1664,7 @@ ucp_wireup_process_lanes_addr_request(
          * complete, so fail them and let this request rebuild. */
         parked = ucp_wireup_tf_reply_get(ep);
         if ((parked != NULL) && (parked->waiting != 0) &&
-            ucp_wireup_tf_req_is_newer(parked->request_id, request_id)) {
+            ucp_ep_tf_peer_req_is_newer(parked->request_id, request_id)) {
             stuck = parked->waiting;
             ucs_diag("ep %p: LANES_ADDR_REQ id 0x%x restarts reply id 0x%x"
                      " waiting 0x%" PRIx64, ep, request_id, parked->request_id,
