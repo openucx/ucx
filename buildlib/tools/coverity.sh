@@ -108,6 +108,10 @@ run_coverity() {
 		# Needed to suppress false positives in std::function
 		COV_OPT="$COV_OPT --checker-option UNINIT_CTOR:ctor_func:swap"
 	fi
+	# Exclude bundled GoogleTest header findings that cannot be removed by the
+	# translation-unit filter above.
+	cov_format_opts=(--dir "$cov_build" --emacs-style
+	                 --exclude-files '/test/gtest/common/googletest/internal/gtest-param-util\.h$')
 	cov-analyze --jobs $parallel_jobs $COV_OPT --disable PARSE_ERROR --security --concurrency --dir $cov_build
 	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 	# Fail on empty output (e.g. license expiration)
