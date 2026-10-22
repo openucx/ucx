@@ -298,6 +298,11 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
         ) && (dev_type == HSA_DEVICE_TYPE_GPU)) {
         uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         *mem_type_p = UCS_MEMORY_TYPE_ROCM;
+#ifdef HAVE_ROCM_VMM_TYPE
+        if (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+            *mem_type_p = UCS_MEMORY_TYPE_ROCM_VMM;
+        }
+#endif
     }
 
     return UCS_OK;
@@ -467,6 +472,11 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
 #endif
         ) && (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
+#ifdef HAVE_ROCM_VMM_TYPE
+        if (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+            mem_type = UCS_MEMORY_TYPE_ROCM_VMM;
+        }
+#endif
         uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);
         if (ucs_status != UCS_OK) {
@@ -517,7 +527,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         }
     }
 
-    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
+    if (uct_rocm_base_is_gpu_mem_type(mem_type)) {
         ucs_memtype_cache_update(base_addr, base_size, mem_type, sys_dev,
                                  UCS_MEM_FLAG_REGISTRABLE);
     }

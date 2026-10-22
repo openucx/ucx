@@ -12,6 +12,16 @@
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 
+
+/* Both ROCm GPU memory variants (pool-allocated and VMM-allocated) are device
+ * memory and share the same data-path handling. */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_base_is_gpu_mem_type(ucs_memory_type_t mem_type)
+{
+    return (mem_type == UCS_MEMORY_TYPE_ROCM) ||
+           (mem_type == UCS_MEMORY_TYPE_ROCM_VMM);
+}
+
 /* First one is used as the default value */
 typedef enum uct_rocm_amd_gpu_product {
     UCT_ROCM_AMD_GPU_UNDEFINED = -1,

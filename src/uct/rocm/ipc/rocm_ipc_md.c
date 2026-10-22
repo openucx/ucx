@@ -35,9 +35,12 @@ static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
                                 UCT_MD_FLAG_INVALIDATE_RMA |
                                 UCT_MD_FLAG_INVALIDATE_AMO |
                                 UCT_MD_FLAG_IPC_MEMTYPE_COPY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
+    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
 
     /* TODO: get accurate number */
     md_attr->reg_cost         = ucs_linear_func_make(9e-9, 0);

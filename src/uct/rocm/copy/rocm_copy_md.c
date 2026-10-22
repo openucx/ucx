@@ -53,13 +53,17 @@ uct_rocm_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY |
                                 UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
     md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
-                                UCS_BIT(UCS_MEMORY_TYPE_ROCM);
-    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
+    md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                UCS_BIT(UCS_MEMORY_TYPE_ROCM_VMM);
     if (md->have_dmabuf) {
         md_attr->dmabuf_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     }
@@ -253,7 +257,7 @@ uct_rocm_copy_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
     hsa_status_t hsa_status;
     hsa_amd_memory_pool_t pool;
 
-    if (mem_type != UCS_MEMORY_TYPE_ROCM) {
+    if (!uct_rocm_base_is_gpu_mem_type(mem_type)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
