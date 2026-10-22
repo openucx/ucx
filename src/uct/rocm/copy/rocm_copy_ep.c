@@ -27,27 +27,17 @@
 #define uct_rocm_memcpy_h2d(_d,_s,_l)  memcpy((_d),(_s),(_l))
 #define uct_rocm_memcpy_d2h(_d,_s,_l)  ucs_memcpy_nontemporal((_d),(_s),(_l))
 
-#ifdef HAVE_ROCM_VMM_TYPE
-/* VMM device memory (HSA_EXT_POINTER_TYPE_HSA_VMEM) is GPU-only and cannot
- * be accessed via CPU memcpy. Returns 1 if addr must use async HSA copy.
- * Calls hsa_amd_pointer_info directly to avoid logging errors for non-ROCM
- * addresses (e.g. plain host buffers), which is a normal and expected case. */
+/* VMM-allocated GPU memory is device-only and cannot be accessed via CPU
+ * memcpy. The VMM flag is resolved once at registration time and carried in
+ * the remote key, so the short-path fast path avoids a per-operation
+ * hsa_amd_pointer_info probe. A missing rkey defaults to non-VMM, since VMM
+ * memory exposed as a remote target is always registered. */
 static UCS_F_ALWAYS_INLINE int
-uct_rocm_is_vmm_addr(const void *addr, size_t length)
+uct_rocm_copy_rkey_is_vmm(uct_rkey_t rkey)
 {
-    hsa_amd_pointer_info_t info = {.size = sizeof(info)};
-
-    return (hsa_amd_pointer_info((void*)addr, &info, NULL, NULL, NULL) ==
-            HSA_STATUS_SUCCESS) &&
-           (info.type == HSA_EXT_POINTER_TYPE_HSA_VMEM);
+    return (rkey != UCT_INVALID_RKEY) &&
+           ((const uct_rocm_copy_key_t*)rkey)->is_vmm;
 }
-#else
-static UCS_F_ALWAYS_INLINE int
-uct_rocm_is_vmm_addr(const void *addr, size_t length)
-{
-    return 0;
-}
-#endif
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
 {
@@ -269,7 +259,7 @@ ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     ucs_status_t status;
 
     if ((size < iface->config.d2h_thresh) &&
-        !uct_rocm_is_vmm_addr((void*)remote_addr, size)) {
+        !uct_rocm_copy_rkey_is_vmm(rkey)) {
         uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
         status = UCS_OK;
     } else {
@@ -293,7 +283,7 @@ ucs_status_t uct_rocm_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     ucs_status_t status;
 
     if ((size < iface->config.h2d_thresh) &&
-        !uct_rocm_is_vmm_addr((void*)remote_addr, size)) {
+        !uct_rocm_copy_rkey_is_vmm(rkey)) {
         uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
         status = UCS_OK;
     } else {
@@ -318,7 +308,7 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_iov_t *iov;
 
     if ((length <= iface->config.h2d_thresh) &&
-        !uct_rocm_is_vmm_addr((void*)remote_addr, length)) {
+        !uct_rocm_copy_rkey_is_vmm(rkey)) {
         uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
@@ -355,7 +345,7 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     uct_iov_t *iov;
 
     if ((length <= iface->config.d2h_thresh) &&
-        !uct_rocm_is_vmm_addr((void*)remote_addr, length)) {
+        !uct_rocm_copy_rkey_is_vmm(rkey)) {
         uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
