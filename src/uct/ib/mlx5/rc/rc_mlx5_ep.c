@@ -853,23 +853,31 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                             const uct_ep_invalidate_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    ucs_status_t status;
 
-    /* An idle queue pair produces no completion after the transition to ERR.
-     * A signaled NOP is required only when no send operation is outstanding.
-     * Any queued operation already supplies that completion. */
-    if (ucs_queue_is_empty(&ep->super.txqp.outstanding) &&
-        uct_rc_iface_have_tx_cqe_avail(&iface->super)) {
-        uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
-                                     &ep->super.txqp, &ep->tx.wq,
-                                     MLX5_OPCODE_NOP, NULL, 0,
-                                     0, 0, 0,
-                                     0, 0,
-                                     0, 0,
-                                     0, INT_MAX);
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
+                                         IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                       IBV_QPS_ERR);
+    /* The send queue is full, so a posted WQE supplies the CQE. */
+    if (uct_rc_txqp_available(&ep->super.txqp) == 0) {
+        return UCS_OK;
+    }
+
+    ucs_assertv(uct_rc_iface_have_tx_cqe_avail(&iface->super),
+                "ep %p qp 0x%x: no CQ credit for the invalidate NOP, "
+                "cq_available=%d",
+                ep, ep->tx.wq.super.qp_num, iface->super.tx.cq_available);
+    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
+                                 &ep->super.txqp, &ep->tx.wq,
+                                 MLX5_OPCODE_NOP, NULL, 0,
+                                 0, 0, 0,
+                                 0, 0,
+                                 0, 0,
+                                 0, INT_MAX);
+    return UCS_OK;
 }
 
 static ucs_status_t
