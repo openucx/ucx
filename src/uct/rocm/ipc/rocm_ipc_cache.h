@@ -20,10 +20,10 @@ typedef struct {
     void                    *mapped_addr; /**< Local mapped address */
 } uct_rocm_ipc_cache_region_t;
 
-typedef struct uct_rocm_ipc_cache {
+struct uct_rocm_ipc_cache {
     ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
     char                  *name;      /**< Name */
-} uct_rocm_ipc_cache_t;
+};
 
 ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
                                        const char *name);
