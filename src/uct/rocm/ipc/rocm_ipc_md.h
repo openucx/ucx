@@ -32,8 +32,9 @@ typedef struct uct_rocm_ipc_key {
     union {
         hsa_amd_ipc_memory_t ipc; /* pool-allocated memory IPC handle */
         struct {
-            int   fd;             /* VMM memory: shareable dmabuf fd (sender) */
-            pid_t pid;            /* sender PID for pidfd_open/pidfd_getfd */
+            int      fd;     /* VMM memory: shareable dmabuf fd (sender) */
+            pid_t    pid;    /* sender PID for pidfd_open/pidfd_getfd */
+            uint64_t reg_id; /* unique per registration; survives fd reuse */
         } vmm;
     };
     uintptr_t    address;

@@ -14,6 +14,7 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/api/device/uct_device_types.h>
+#include <ucs/arch/atomic.h>
 
 #include <unistd.h>
 
@@ -57,6 +58,9 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     return UCS_OK;
 }
 
+/* Unique per-registration id; survives fd reuse for cache matching. */
+static volatile uint64_t uct_rocm_ipc_vmm_reg_id_gen = 0;
+
 static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
 {
@@ -92,8 +96,9 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
             return status;
         }
 
-        key->vmm.pid = getpid();
-        key->address = (uintptr_t)base_ptr;
+        key->vmm.pid    = getpid();
+        key->vmm.reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
+        key->address    = (uintptr_t)base_ptr;
         key->length  = size;
         key->dev_num = uct_rocm_base_get_dev_num(agent);
         key->is_vmm  = 1;
@@ -152,6 +157,11 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     mem_hndl = params->memh;
+#ifdef HAVE_ROCM_VMM_TYPE
+    if (mem_hndl->is_vmm) {
+        close(mem_hndl->vmm.fd);
+    }
+#endif
     ucs_free(mem_hndl);
     return UCS_OK;
 }

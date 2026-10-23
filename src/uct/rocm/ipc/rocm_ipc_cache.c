@@ -221,6 +221,20 @@ static void uct_rocm_ipc_cache_invalidate_regions(uct_rocm_ipc_cache_t *cache,
               cache->name, from, to);
 }
 
+/* VMM keys match on owner pid and registration id; vmm.fd is reused after dereg. */
+static int uct_rocm_ipc_key_equal(const uct_rocm_ipc_key_t *key1,
+                                  const uct_rocm_ipc_key_t *key2)
+{
+#ifdef HAVE_ROCM_VMM_TYPE
+    if (key1->is_vmm || key2->is_vmm) {
+        return (key1->is_vmm == key2->is_vmm) &&
+               (key1->vmm.pid == key2->vmm.pid) &&
+               (key1->vmm.reg_id == key2->vmm.reg_id);
+    }
+#endif
+    return memcmp(&key1->ipc, &key2->ipc, sizeof(key1->ipc)) == 0;
+}
+
 static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                                                   uct_rocm_ipc_key_t *key,
                                                   void **mapped_addr)
@@ -238,16 +252,7 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                                   &cache->pgtable, key->address);
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_rocm_ipc_cache_region_t);
-        if (
-#ifdef HAVE_ROCM_VMM_TYPE
-            (key->is_vmm && region->key.is_vmm &&
-             (key->vmm.fd == region->key.vmm.fd) &&
-             (key->vmm.pid == region->key.vmm.pid)) ||
-            (!key->is_vmm && !region->key.is_vmm &&
-#else
-            (
-#endif
-             memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0)) {
+        if (uct_rocm_ipc_key_equal(key, &region->key)) {
             /*cache hit */
             ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
                       UCS_PGT_REGION_FMT, cache->name, (void *)key->address,
