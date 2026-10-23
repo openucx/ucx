@@ -878,8 +878,8 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
 }
 
 /* Apply UCX_MAX_HCA_PER_GPU policy.
- * The network MDs are ranked by distance (latency, then bandwidth) to the
- * buffer's sys_dev and the closest N selected. */
+ * Prefer MDs assigned to the buffer's device by a device transport, then rank
+ * by distance (latency, then bandwidth) and select the closest N. */
 static ucp_md_map_t
 ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
                           ucp_md_map_t reg_md_map)

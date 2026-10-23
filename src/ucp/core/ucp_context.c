@@ -683,6 +683,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
 
   {"MAX_HCA_PER_GPU", "inf",
    "Maximum number of HCAs to register GPU memory on.\n"
+   "With UCP_FEATURE_DEVICE, prefer HCAs assigned to the GPU by the device\n"
+   "transport. The transport's own HCA limit controls that assignment.\n"
    " - inf  : register on all HCAs (default).\n"
    " - auto : register only on HCAs closest to the GPU.\n"
    " - <N>  : register on up to N closest HCAs.",
@@ -1381,9 +1383,11 @@ static int ucp_tl_resource_is_same_device(const uct_tl_resource_desc_t *resource
 
 static ucs_status_t
 ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
-                    const uct_tl_resource_desc_t *resource, uint8_t rsc_flags)
+                    const uct_tl_resource_desc_v2_t *resource_v2,
+                    uint8_t rsc_flags)
 {
-    ucp_tl_md_t *md = &context->tl_mds[md_index];
+    const uct_tl_resource_desc_t *resource = &resource_v2->resource;
+    ucp_tl_md_t *md                       = &context->tl_mds[md_index];
     ucp_rsc_index_t dev_index, i;
 
     if (context->num_tls >= UCP_MAX_RESOURCES) {
@@ -1406,6 +1410,7 @@ ucp_add_tl_resource(ucp_context_h context, ucp_md_index_t md_index,
     context->tl_rscs[context->num_tls].tl_name_csum = ucs_crc16_string(
             resource->tl_name);
     context->tl_rscs[context->num_tls].flags        = rsc_flags;
+    context->tl_rscs[context->num_tls].ctl_device   = resource_v2->ctl_device;
 
     dev_index = 0;
     for (i = 0; i < context->num_tls; ++i) {
@@ -1439,7 +1444,8 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     ucp_tl_md_t *md                 = &context->tl_mds[md_index];
     ucp_tl_info_entry_t *added_rscs = NULL;
     unsigned num_tl_resources, all_rscs_prev_len;
-    uct_tl_resource_desc_t *tl_resources;
+    uct_tl_resource_desc_v2_t *tl_resources;
+    const uct_tl_resource_desc_t *resource;
     ucp_tl_resource_desc_t *tmp;
     ucs_status_t status;
     uint8_t rsc_flags;
@@ -1448,7 +1454,10 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     *num_resources_p = 0;
 
     /* check what are the available uct resources */
-    status = uct_md_query_tl_resources(md->md, &tl_resources, &num_tl_resources);
+    status = uct_md_query_tl_resources_v2(
+            md->md, UCT_TL_RESOURCE_DESC_FIELD_RESOURCE |
+                            UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE,
+            sizeof(*tl_resources), &tl_resources, &num_tl_resources);
     if (status != UCS_OK) {
         ucs_error("Failed to query resources: %s", ucs_status_string(status));
         goto out;
@@ -1471,7 +1480,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
                                  all_rscs_prev_len + num_tl_resources);
             added_rscs = &ucs_array_elem(all_rscs, all_rscs_prev_len);
             for (i = 0; i < num_tl_resources; ++i) {
-                added_rscs[i].rsc        = tl_resources[i];
+                added_rscs[i].rsc        = tl_resources[i].resource;
                 added_rscs[i].cmpt_index = md->cmpt_index;
                 added_rscs[i].enabled    = 0;
             }
@@ -1496,12 +1505,13 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
-                            "'%s'(%s)", tl_resources[i].dev_name,
+        resource = &tl_resources[i].resource;
+        ucs_string_set_addf(&avail_devices[resource->dev_type],
+                            "'%s'(%s)", resource->dev_name,
                             context->tl_cmpts[md->cmpt_index].attr.name);
-        ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
+        ucs_string_set_add(avail_tls, resource->tl_name);
 
-        if (!ucp_is_resource_enabled(&tl_resources[i], config, aux_tls,
+        if (!ucp_is_resource_enabled(resource, config, aux_tls,
                                      &rsc_flags, dev_cfg_masks, tl_cfg_mask)) {
             continue;
         }
@@ -1521,7 +1531,7 @@ ucp_add_tl_resources(ucp_context_h context, ucp_md_index_t md_index,
 
     status = UCS_OK;
 free_resources:
-    uct_release_tl_resource_list(tl_resources);
+    uct_release_tl_resource_list_v2(tl_resources);
 out:
     return status;
 }
@@ -1981,6 +1991,7 @@ typedef struct ucp_reg_select_md {
     ucp_md_index_t         md_index;
     const char             *name;
     ucs_sys_dev_distance_t distance;
+    int                    is_device;
 } ucp_reg_select_md_t;
 
 static int
@@ -1989,6 +2000,10 @@ ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
     const ucp_reg_select_md_t *a = pa;
     const ucp_reg_select_md_t *b = pb;
     int cmp;
+
+    if (a->is_device != b->is_device) {
+        return b->is_device - a->is_device;
+    }
 
     cmp = ucs_topo_distance_cmp(&a->distance, &b->distance);
     if (cmp != 0) {
@@ -2012,22 +2027,31 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     unsigned select_count, i;
     ucp_md_index_t md_index;
     ucp_rsc_index_t tl_idx;
-    int reachable;
+    int reachable, is_device;
 
     if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
         return md_map;
     }
 
     ucs_for_each_bit(md_index, md_map) {
-        /* TODO: rc_gda has the gpu in the sys_dev_map so we need to skip it.
-         * This should be fixed in the tl. */
         sys_dev_map = 0;
+        is_device   = 0;
         for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
-            if ((context->tl_rscs[tl_idx].md_index == md_index) &&
-                (context->tl_rscs[tl_idx].tl_rsc.sys_device <
-                 UCP_MAX_SYS_DEVICES) &&
-                (strncmp(context->tl_rscs[tl_idx].tl_rsc.dev_name,
-                         "cuda", 4) != 0)) {
+            if (context->tl_rscs[tl_idx].md_index != md_index) {
+                continue;
+            }
+
+            if ((context->config.features & UCP_FEATURE_DEVICE) &&
+                (mem_sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                !(context->tl_rscs[tl_idx].flags & UCP_TL_RSC_FLAG_AUX) &&
+                (context->tl_rscs[tl_idx].ctl_device == mem_sys_dev)) {
+                /* Follow the transport's published assignment rather than
+                 * independently assigning a different NIC to this GPU. */
+                is_device = 1;
+            }
+
+            if (context->tl_rscs[tl_idx].tl_rsc.sys_device <
+                UCP_MAX_SYS_DEVICES) {
                 sys_dev_map |=
                     UCS_BIT(context->tl_rscs[tl_idx].tl_rsc.sys_device);
             }
@@ -2056,9 +2080,10 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
             continue;
         }
 
-        select_mds[count].md_index = md_index;
-        select_mds[count].name     = context->tl_mds[md_index].rsc.md_name;
-        select_mds[count].distance = best;
+        select_mds[count].md_index  = md_index;
+        select_mds[count].name      = context->tl_mds[md_index].rsc.md_name;
+        select_mds[count].distance  = best;
+        select_mds[count].is_device = is_device;
         ucs_trace("reg_select: mem_sys_dev=%d md[%d]=%s lat=%.2e bw=%.2e",
                   mem_sys_dev, md_index, select_mds[count].name,
                   best.latency, best.bandwidth);
@@ -2076,8 +2101,9 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     case UCP_REG_DEVICES_CLOSEST:
         select_count = count;
         for (i = 1; i < count; i++) {
-            if (ucs_topo_distance_cmp(&select_mds[i].distance,
-                                      &select_mds[0].distance) != 0) {
+            if ((select_mds[i].is_device != select_mds[0].is_device) ||
+                (ucs_topo_distance_cmp(&select_mds[i].distance,
+                                      &select_mds[0].distance) != 0)) {
                 select_count = i;
                 break;
             }

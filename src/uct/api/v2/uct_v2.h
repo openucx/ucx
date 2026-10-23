@@ -20,6 +20,69 @@ BEGIN_C_DECLS
 /** @file uct_v2.h */
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Valid fields in @ref uct_tl_resource_desc_v2_t.
+ */
+enum uct_tl_resource_desc_field {
+    UCT_TL_RESOURCE_DESC_FIELD_RESOURCE   = UCS_BIT(0), /**< Resource */
+    UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE = UCS_BIT(1)  /**< Controller */
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Transport resource descriptor with optional device information.
+ */
+typedef struct {
+    /** Valid returned fields from @ref uct_tl_resource_desc_field. */
+    uint64_t               field_mask;
+
+    /** Transport resource information. */
+    uct_tl_resource_desc_t  resource;
+
+    /**
+     * System device controlling this transport, matching
+     * @ref uct_iface_attr_t::ctl_device. UCS_SYS_DEVICE_ID_UNKNOWN if the
+     * transport does not report a controller.
+     */
+    ucs_sys_device_t        ctl_device;
+} uct_tl_resource_desc_v2_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Query transport resources and their controlling devices.
+ *
+ * @param [in]  md              Memory domain to query.
+ * @param [in]  field_mask      Requested fields from
+ *                              @ref uct_tl_resource_desc_field. Unsupported
+ *                              bits are ignored.
+ * @param [in]  resource_size   Size in bytes of each returned array entry.
+ *                              Must include field_mask and requested fields.
+ *                              Pass sizeof(uct_tl_resource_desc_v2_t) to use
+ *                              a typed array.
+ * @param [out] resources_p     Allocated array, with resource_size byte stride.
+ *                              Valid fields are reported in each field_mask.
+ * @param [out] num_resources_p Number of entries in the array.
+ *
+ * @return UCS_OK on success, UCS_ERR_INVALID_PARAM if resource_size is too
+ *         small, or another error code on failure. Outputs are unchanged on
+ *         failure.
+ */
+ucs_status_t uct_md_query_tl_resources_v2(
+        uct_md_h md, uint64_t field_mask, size_t resource_size,
+        uct_tl_resource_desc_v2_t **resources_p, unsigned *num_resources_p);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Release resources returned by @ref uct_md_query_tl_resources_v2.
+ * @param [in] resources Array of resource descriptors to release.
+ */
+void uct_release_tl_resource_list_v2(uct_tl_resource_desc_v2_t *resources);
+
+
+/**
 * @defgroup UCT_RESOURCE   UCT Communication Resource
 * @ingroup UCT_API
 * @{

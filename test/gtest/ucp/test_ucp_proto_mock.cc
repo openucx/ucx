@@ -291,7 +291,8 @@ private:
                 ucs_assert_always(sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN);
             }
 
-            mock_devices[dev_count].sys_device   = sys_dev;
+            mock_devices[dev_count].sys_device  = sys_dev;
+            mock_devices[dev_count].ctl_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
             m_self->m_sys_devs_by_name[it.first] = sys_dev;
             ++dev_count;
         }

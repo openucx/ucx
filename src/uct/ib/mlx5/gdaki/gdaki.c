@@ -1678,6 +1678,12 @@ uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
                  ib_md->dev.first_port);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
         tl_devices[num_tl_devices].sys_device = ib_md->dev.sys_dev;
+        status = uct_cuda_get_sys_dev_and_bus_id(
+                device, &tl_devices[num_tl_devices].ctl_device, NULL);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
         num_tl_devices++;
     }
 
