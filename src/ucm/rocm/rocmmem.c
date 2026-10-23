@@ -154,7 +154,7 @@ hsa_status_t ucm_hsa_amd_vmem_map(void* va, size_t size, size_t in_offset,
     status = ucm_orig_hsa_amd_vmem_map(va, size, in_offset, handle, flags);
     if (status == HSA_STATUS_SUCCESS) {
         ucm_trace("ucm_hsa_amd_vmem_map(va=%p size:%lu)", va, size);
-        ucm_dispatch_mem_type_alloc(va, size, UCS_MEMORY_TYPE_ROCM);
+        ucm_dispatch_mem_type_alloc(va, size, UCS_MEMORY_TYPE_UNKNOWN);
     }
 
     ucm_event_leave();
