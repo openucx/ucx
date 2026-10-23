@@ -44,6 +44,27 @@ UCS_CLASS_DEFINE(uct_rocm_copy_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_copy_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_copy_ep_t, uct_ep_t);
 
+/* Whether the CPU can access device memory at remote_addr directly, as the
+ * small-copy fast paths do. hipMalloc device memory is mapped for CPU access,
+ * but memory mapped with hipMemMap is only accessible to the agents granted
+ * access with hipMemSetAccess, so it must be copied by the GPU. */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_copy_ep_is_cpu_accessible(uint64_t remote_addr)
+{
+#if HAVE_DECL_HSA_EXT_POINTER_TYPE_HSA_VMEM
+    hsa_amd_pointer_info_t info;
+
+    /* Not an error if it fails: zero-length copies may pass a NULL address */
+    info.size = sizeof(info);
+    if ((hsa_amd_pointer_info((void*)remote_addr, &info, NULL, NULL, NULL) ==
+         HSA_STATUS_SUCCESS) &&
+        (info.type == HSA_EXT_POINTER_TYPE_HSA_VMEM)) {
+        return 0;
+    }
+#endif
+    return 1;
+}
+
 #define uct_rocm_copy_trace_data(_remote_addr, _rkey, _fmt, ...) \
      ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
@@ -108,7 +129,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (remote_addr_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+    if (uct_rocm_base_is_hsa_mem_type(remote_addr_mem_type)) {
         remote_addr_mod = (void*)remote_addr;
         if (dev_type == HSA_DEVICE_TYPE_GPU) {
             /* UCS_MEMORY_TYPE_ROCM */
@@ -143,7 +164,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (iov_buffer_mem_type == HSA_EXT_POINTER_TYPE_HSA) {
+    if (uct_rocm_base_is_hsa_mem_type(iov_buffer_mem_type)) {
         iov_buffer_mod = iov->buffer;
         if (dev_type == HSA_DEVICE_TYPE_GPU) {
             /* UCS_MEMORY_TYPE_ROCM */
@@ -238,7 +259,8 @@ ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
     ucs_status_t status;
 
-    if (size < iface->config.d2h_thresh) {
+    if ((size < iface->config.d2h_thresh) &&
+        uct_rocm_copy_ep_is_cpu_accessible(remote_addr)) {
         uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
         status = UCS_OK;
     } else {
@@ -261,7 +283,8 @@ ucs_status_t uct_rocm_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     uct_rocm_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_copy_iface_t);
     ucs_status_t status;
 
-    if (size < iface->config.h2d_thresh) {
+    if ((size < iface->config.h2d_thresh) &&
+        uct_rocm_copy_ep_is_cpu_accessible(remote_addr)) {
         uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
         status = UCS_OK;
     } else {
@@ -285,7 +308,8 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     ucs_status_t status          = UCS_OK;
     uct_iov_t *iov;
 
-    if (length <= iface->config.h2d_thresh) {
+    if ((length <= iface->config.h2d_thresh) &&
+        uct_rocm_copy_ep_is_cpu_accessible(remote_addr)) {
         uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
@@ -321,7 +345,8 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     ucs_status_t status          = UCS_OK;
     uct_iov_t *iov;
 
-    if (length <= iface->config.d2h_thresh) {
+    if ((length <= iface->config.d2h_thresh) &&
+        uct_rocm_copy_ep_is_cpu_accessible(remote_addr)) {
         uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
