@@ -96,7 +96,6 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
             return status;
         }
 
-        key->vmm.pid    = getpid();
         key->vmm.reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
         key->address    = (uintptr_t)base_ptr;
         key->length  = size;

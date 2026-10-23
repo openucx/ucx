@@ -102,7 +102,7 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
     hsa_status_t status;
     void *va     = NULL;
     int num_gpu, i;
-    int pidfd       = syscall(__NR_pidfd_open, key->vmm.pid, 0);
+    int pidfd       = syscall(__NR_pidfd_open, key->pid, 0);
     int local_fd    = (pidfd >= 0) ?
                       syscall(__NR_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
     int saved_errno = errno; /* capture before close(pidfd) clobbers errno */
@@ -112,7 +112,7 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
     if (local_fd < 0) {
         errno = saved_errno;
         ucs_error("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
-                  key->vmm.pid, key->vmm.fd);
+                  key->pid, key->vmm.fd);
         return NULL;
     }
 
@@ -228,7 +228,7 @@ static int uct_rocm_ipc_key_equal(const uct_rocm_ipc_key_t *key1,
 #ifdef HAVE_ROCM_VMM_TYPE
     if (key1->is_vmm || key2->is_vmm) {
         return (key1->is_vmm == key2->is_vmm) &&
-               (key1->vmm.pid == key2->vmm.pid) &&
+               (key1->pid == key2->pid) &&
                (key1->vmm.reg_id == key2->vmm.reg_id);
     }
 #endif
