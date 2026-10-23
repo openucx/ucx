@@ -683,83 +683,10 @@ typedef struct ucp_ep {
 } ucp_ep_t;
 
 
-/* Low bit set: the ext slot holds a peer request id, not a pointer. */
-#define UCP_EP_SLOT_PEER_ID_BIT ((uintptr_t)1)
+ucp_ep_recovery_arg_t *ucp_ep_recovery_arg(ucp_ep_h ep);
 
 
-static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_ext_slot(ucp_ep_h ep)
-{
-    return (uintptr_t)ep->ext->recovery_arg;
-}
-
-
-static UCS_F_ALWAYS_INLINE int ucp_ep_ext_slot_is_peer_id(uintptr_t slot)
-{
-    return (slot & UCP_EP_SLOT_PEER_ID_BIT) != 0;
-}
-
-
-static UCS_F_ALWAYS_INLINE ucp_ep_recovery_arg_t*
-ucp_ep_recovery_arg(ucp_ep_h ep)
-{
-    uintptr_t slot = ucp_ep_ext_slot(ep);
-
-    if ((slot == 0) || ucp_ep_ext_slot_is_peer_id(slot)) {
-        return NULL;
-    }
-
-    return (ucp_ep_recovery_arg_t*)slot;
-}
-
-
-static UCS_F_ALWAYS_INLINE ucp_request_t *ucp_ep_close_req(ucp_ep_h ep)
-{
-    uintptr_t slot = ucp_ep_ext_slot(ep);
-
-    if ((slot == 0) || ucp_ep_ext_slot_is_peer_id(slot)) {
-        return NULL;
-    }
-
-    return (ucp_request_t*)slot;
-}
-
-
-static UCS_F_ALWAYS_INLINE uint32_t ucp_ep_tf_seen_peer_id(ucp_ep_h ep)
-{
-    uintptr_t slot = ucp_ep_ext_slot(ep);
-
-    if (ucp_ep_ext_slot_is_peer_id(slot)) {
-        return (uint32_t)(slot >> 1);
-    }
-
-    if (slot == 0) {
-        return 0;
-    }
-
-    return ((ucp_ep_recovery_arg_t*)slot)->seen_peer_id;
-}
-
-
-static UCS_F_ALWAYS_INLINE void
-ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint32_t peer_id)
-{
-    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
-
-    if (arg != NULL) {
-        arg->seen_peer_id = peer_id;
-        return;
-    }
-
-    if (peer_id == 0) {
-        ep->ext->recovery_arg = NULL;
-        return;
-    }
-
-    /* A bare id can share a pointer's alignment, so the low bit marks it. */
-    ep->ext->recovery_arg =
-            (ucp_ep_recovery_arg_t*)(((uintptr_t)peer_id << 1) |
-                                     UCP_EP_SLOT_PEER_ID_BIT);
-}
+ucp_request_t *ucp_ep_close_req(ucp_ep_h ep);
 
 
 enum {
