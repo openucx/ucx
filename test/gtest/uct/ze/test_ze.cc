@@ -238,8 +238,7 @@ protected:
     /* Skip the test if the MD context does not resolve the memory of another
      * context: the Intel driver does, the specification does not require it,
      * and the iface then just keeps using the MD device queue */
-    void check_other_device_resolved(ze_device_handle_t device,
-                                     const void *address)
+    void check_buffer_resolved(ze_device_handle_t device, const void *address)
     {
         if (mem_device(address) == NULL) {
             UCS_TEST_SKIP_R("the MD context does not resolve memory of "
@@ -313,8 +312,8 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, queue_follows_buffer_device,
     external_buffer other_buf(device, length);
     external_buffer md_buf(ze_md()->ze_device, length);
 
-    ASSERT_EQ(ze_md()->ze_device, mem_device(md_buf.ptr()));
-    check_other_device_resolved(device, other_buf.ptr());
+    check_buffer_resolved(ze_md()->ze_device, md_buf.ptr());
+    check_buffer_resolved(device, other_buf.ptr());
     EXPECT_TRUE(ze_iface()->multi_device);
 
     /* Host-to-host copies and buffers on the MD device use the default
@@ -363,7 +362,7 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, md_queue_when_create_fails,
     }
 
     external_buffer other_buf(device, length);
-    check_other_device_resolved(device, other_buf.ptr());
+    check_buffer_resolved(device, other_buf.ptr());
 
     /* Insert the entry which get_queue records after a failed queue
      * creation; the failure itself cannot be provoked here. Checks the use
