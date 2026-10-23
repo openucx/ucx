@@ -1,0 +1,154 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-namespace-gpu
+
+failFast: false
+timeout_minutes: 90
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 2Gi, cpu: 1000m}"
+  requests: "{memory: 2Gi, cpu: 1000m}"
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+
+env:
+  UCX_REPO: "https://github.com/openucx/ucx.git"
+  # Needs CUDA 12+ in /usr/local/cuda: funk has no /hpc/local modules.
+  DOCKER_IMAGE: "harbor.mellanox.com#ucx/x86_64/ubuntu24.04-mofed24.10-cuda13:1"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_GRES: "gpu:1"
+  SLURM_HEAD_NODE: scctl
+  SLURM_JOB_TIMEOUT: '01:00:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  CI_IMAGE_TAG: "20260223-1"
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+
+matrix:
+  axes:
+    arch:
+      - x86_64
+
+taskName: '${arch}/gpu'
+
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "ucx-ci-gpuns-${BUILD_NUMBER}"
+      # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      # Without a GPU gres the node's GPU is hidden from the job.
+      extraArgs: ["--gres=${SLURM_GRES}"]
+
+  # Root in the container user namespace runs the script's sudo and unshare --pid.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
+      testScript: "mkdir -p /ws && cd /ws && git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuns-${BUILD_NUMBER}"
+      extraArgs: ["--container-remap-root"]
+
+  # The CUDA image has no sudo; apt's sandbox user is not mapped in the container.
+  - name: Install sudo
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
+      testScript: "apt-get -o APT::Sandbox::User=root update && apt-get -o APT::Sandbox::User=root install -y sudo"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuns-${BUILD_NUMBER}"
+      extraArgs: ["--container-remap-root"]
+      slurmEnv: ["DEBIAN_FRONTEND=noninteractive"]
+
+  - name: Run namespace test
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
+      testScript: "set -eEx; cd /ws; source .ci/scripts/cap_output.sh; nvidia-smi -L | grep GPU; unshare --user whoami; ./contrib/test_namespace.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuns-${BUILD_NUMBER}"
+      extraArgs: ["--container-remap-root"]
+      # test_namespace.sh runs "sudo -u $USER"; only root is mapped.
+      slurmEnv: [
+        "NVIDIA_VISIBLE_DEVICES=all",
+        "USER=root",
+        "EXECUTOR_NUMBER=0",
+        "RUNNING_IN_AZURE=no"
+      ]
+
+  # Frees the node once the row passes; pipeline_stop covers failed rows.
+  - name: Release Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: stop
+    args:
+      headNode: "${SLURM_HEAD_NODE}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuns_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
