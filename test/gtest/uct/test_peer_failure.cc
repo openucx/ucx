@@ -8,6 +8,7 @@
 
 #include "test_peer_failure.h"
 
+#include <cstring>
 #include <functional>
 
 #if HAVE_TL_RC
