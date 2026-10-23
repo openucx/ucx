@@ -722,7 +722,7 @@ UCS_TEST_F(test_memtype_explicit, disabled_cache) {
 UCS_TEST_F(test_memtype_explicit, event_cache_when_available) {
     ucm_event_t event;
     ucs_memory_info_t info;
-    const void *base = reinterpret_cast<void*>(0x60000);
+    void *base = reinterpret_cast<void*>(0x60000);
 
     ucs_memtype_cache_cleanup();
     ucs_memtype_cache_global_init();
@@ -735,7 +735,7 @@ UCS_TEST_F(test_memtype_explicit, event_cache_when_available) {
         UCS_TEST_SKIP_R("UCM memory event handler could not be installed");
     }
 
-    event.mem_type.address   = const_cast<void*>(base);
+    event.mem_type.address   = base;
     event.mem_type.size      = 0x1000;
     event.mem_type.mem_type  = UCS_MEMORY_TYPE_CUDA;
     event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;

@@ -71,10 +71,14 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t);
 UCS_CLASS_DEFINE(ucs_memtype_cache_t, void);
 
 static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *
-ucs_memtype_cache_create_global()
+ucs_memtype_cache_get_global()
 {
     ucs_memtype_cache_t *memtype_cache = NULL;
     ucs_status_t status;
+
+    if (ucs_global_opts.enable_memtype_cache == UCS_MEMTYPE_CACHE_NO) {
+        return NULL;
+    }
 
     /* Double-check lock scheme */
     if (ucs_unlikely(ucs_memtype_cache_global_instance == NULL) &&
@@ -106,15 +110,6 @@ ucs_memtype_cache_create_global()
     }
 
     return ucs_memtype_cache_global_instance;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
-{
-    if (ucs_global_opts.enable_memtype_cache == UCS_MEMTYPE_CACHE_NO) {
-        return NULL;
-    }
-
-    return ucs_memtype_cache_create_global();
 }
 
 void ucs_memtype_cache_global_create()
@@ -315,7 +310,7 @@ void ucs_memtype_cache_register(const void *address, size_t size,
         return;
     }
 
-    memtype_cache = ucs_memtype_cache_create_global();
+    memtype_cache = ucs_memtype_cache_get_global();
     if ((memtype_cache == NULL) || memtype_cache->has_events) {
         return;
     }
