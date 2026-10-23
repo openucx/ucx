@@ -184,6 +184,7 @@ Java_org_openucx_jucx_ucp_UcpWorker_getEventFDNative(JNIEnv *env, jclass cls, jl
 
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
+        return -1;
     }
 
     return fd;

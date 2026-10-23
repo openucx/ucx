@@ -248,6 +248,7 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
         goto err_free;
     }
 
+    ucs_rcache_set_default_params(&rcache_params);
     rcache_params.region_struct_size = sizeof(uct_xpmem_remote_region_t);
     rcache_params.ucm_events         = 0;
     rcache_params.ucm_event_priority = 0;
