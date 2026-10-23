@@ -85,7 +85,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    if (iface->config.enable_ipc_handle_cache) {
+    if (iface->config.enable_ipc_handle_cache || key->is_vmm) {
         ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
@@ -161,7 +161,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     rocm_ipc_signal->comp = comp;
-    if (iface->config.enable_ipc_handle_cache) {
+    if (iface->config.enable_ipc_handle_cache || key->is_vmm) {
         rocm_ipc_signal->mapped_addr = NULL;
     } else {
         rocm_ipc_signal->mapped_addr = remote_base_addr;
