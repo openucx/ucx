@@ -254,7 +254,7 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc,
                                &queue->cmdq);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_error("ze_copy_iface: zeCommandQueueCreate(device=%p) failed "
+        ucs_debug("ze_copy_iface: zeCommandQueueCreate failed for device %p "
                   "with 0x%x", device, ret);
         goto err_pop;
     }
@@ -262,7 +262,7 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ret = zeCommandListCreate(ze_md->ze_context, device, &cl_desc,
                               &queue->cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_error("ze_copy_iface: zeCommandListCreate(device=%p) failed "
+        ucs_debug("ze_copy_iface: zeCommandListCreate failed for device %p "
                   "with 0x%x", device, ret);
         goto err_destroy_cmdq;
     }
@@ -303,8 +303,16 @@ ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
                                          const void *src, const void *dst,
                                          unsigned *queue_index_p)
 {
+    uct_ze_copy_queue_t *queue;
     ze_device_handle_t device;
+    ucs_status_t status;
     unsigned i;
+
+    /* With one device every device buffer is on the MD device */
+    if (!iface->multi_device) {
+        *queue_index_p = 0;
+        return UCS_OK;
+    }
 
     /* Run the copy on the device which owns the source buffer, so it reads
      * locally, or else on the owner of the destination. A queue on an
@@ -319,13 +327,31 @@ ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
     }
 
     for (i = 0; i < ucs_array_length(&iface->queues); ++i) {
-        if (ucs_array_elem(&iface->queues, i).device == device) {
-            *queue_index_p = i;
+        queue = &ucs_array_elem(&iface->queues, i);
+        if (queue->device == device) {
+            /* A device without a queue of its own uses the MD device queue */
+            *queue_index_p = (queue->cmdq == NULL) ? 0 : i;
             return UCS_OK;
         }
     }
 
-    return uct_ze_copy_iface_queue_create(iface, device, queue_index_p);
+    status = uct_ze_copy_iface_queue_create(iface, device, queue_index_p);
+    if (status == UCS_OK) {
+        return UCS_OK;
+    }
+
+    /* The MD device queue can copy any buffer, as it did before queues per
+     * device existed. Record the device without a queue, so that the next
+     * copy does not try to create one again. */
+    queue         = ucs_array_append(&iface->queues, return UCS_ERR_NO_MEMORY);
+    queue->device = device;
+    queue->cmdq   = NULL;
+    queue->cmdl   = NULL;
+    ucs_warn("ze_copy_iface: could not create a queue on device %p, using "
+             "the queue of the MD device", device);
+
+    *queue_index_p = 0;
+    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
@@ -354,14 +380,18 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     status = uct_ze_copy_iface_queue_create(self, ze_md->ze_device,
                                             &queue_index);
     if (status != UCS_OK) {
+        ucs_error("ze_copy_iface: could not create a queue on the MD device "
+                  "%p", ze_md->ze_device);
         ucs_array_cleanup_dynamic(&self->queues);
         return status;
     }
 
-    self->id = ucs_generate_uuid((uintptr_t)self);
+    self->id           = ucs_generate_uuid((uintptr_t)self);
+    self->multi_device = (uct_ze_base_get_subdevice_by_global_id(1) != NULL);
 
-    ucs_debug("ze_copy_iface: initialized iface on device %p",
-              ze_md->ze_device);
+    ucs_debug("ze_copy_iface: initialized iface on device %p, %s",
+              ze_md->ze_device,
+              self->multi_device ? "queues per device" : "single device");
 
     return UCS_OK;
 }
@@ -371,6 +401,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ze_copy_iface_t)
     uct_ze_copy_queue_t *queue;
 
     ucs_array_for_each(queue, &self->queues) {
+        if (queue->cmdq == NULL) {
+            /* Device whose queue could not be created */
+            continue;
+        }
+
         zeCommandListDestroy(queue->cmdl);
         zeCommandQueueDestroy(queue->cmdq);
     }

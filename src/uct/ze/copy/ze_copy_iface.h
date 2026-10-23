@@ -17,7 +17,8 @@
 typedef uint64_t uct_ze_copy_iface_addr_t;
 
 
-/* Command queue and list which run copies on one device */
+/* Command queue and list which run copies on one device; both handles are
+ * NULL for a device whose queue could not be created */
 typedef struct {
     ze_device_handle_t        device;
     ze_command_queue_handle_t cmdq;
@@ -38,6 +39,9 @@ typedef struct uct_ze_copy_iface {
      * one iface (UCS_THREAD_MODE_MULTI); UCP opens UCT workers in SINGLE or
      * SERIALIZED mode only. */
     uct_ze_copy_queue_array_t queues;
+    /* More than one ZE device is visible, so a buffer may belong to a
+     * device other than the MD device */
+    int                       multi_device;
 } uct_ze_copy_iface_t;
 
 
