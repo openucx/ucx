@@ -17,6 +17,7 @@
 #include <hsa_ext_amd.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <errno.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/ptr_arith.h>
@@ -101,22 +102,26 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
     hsa_status_t status;
     void *va     = NULL;
     int num_gpu, i;
-    int pidfd    = syscall(__NR_pidfd_open, key->vmm.pid, 0);
-    int local_fd = (pidfd >= 0) ?
-                   syscall(__NR_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
+    int pidfd       = syscall(__NR_pidfd_open, key->vmm.pid, 0);
+    int local_fd    = (pidfd >= 0) ?
+                      syscall(__NR_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
+    int saved_errno = errno; /* capture before close(pidfd) clobbers errno */
     if (pidfd >= 0) {
         close(pidfd);
     }
     if (local_fd < 0) {
-        ucs_fatal("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
+        errno = saved_errno;
+        ucs_error("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
                   key->vmm.pid, key->vmm.fd);
+        return NULL;
     }
 
     status = hsa_amd_vmem_import_shareable_handle(local_fd, &vmem_handle);
     close(local_fd);
     if (status != HSA_STATUS_SUCCESS) {
-        ucs_fatal("failed to import vmm handle. addr:%p len:%lu",
+        ucs_error("failed to import vmm handle. addr:%p len:%lu",
                   (void *)key->address, key->length);
+        return NULL;
     }
 
     status = hsa_amd_vmem_address_reserve(&va, key->length, 0, 0);
@@ -149,7 +154,7 @@ err_free_va:
     hsa_amd_vmem_address_free(va, key->length);
 err_release_handle:
     hsa_amd_vmem_handle_release(vmem_handle);
-    ucs_fatal("failed to map vmm handle. addr:%p len:%lu",
+    ucs_error("failed to map vmm handle. addr:%p len:%lu",
               (void *)key->address, key->length);
     return NULL; /* unreachable */
 }
@@ -271,6 +276,10 @@ static ucs_status_t uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
 #ifdef HAVE_ROCM_VMM_TYPE
     if (key->is_vmm) {
         *mapped_addr = uct_rocm_ipc_vmm_map(key);
+        if (*mapped_addr == NULL) {
+            status = UCS_ERR_INVALID_ADDR;
+            goto err;
+        }
     } else
 #endif
     {
