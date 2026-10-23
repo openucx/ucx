@@ -387,7 +387,7 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     }
 
     self->id           = ucs_generate_uuid((uintptr_t)self);
-    self->multi_device = (uct_ze_base_get_subdevice_by_global_id(1) != NULL);
+    self->multi_device = (uct_ze_base_get_num_subdevices() > 1);
 
     ucs_debug("ze_copy_iface: initialized iface on device %p, %s",
               ze_md->ze_device,

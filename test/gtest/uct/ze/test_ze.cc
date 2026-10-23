@@ -123,7 +123,9 @@ protected:
     }
 
     /* Device memory allocated outside UCX in its own context, as an
-     * application such as a framework would allocate it */
+     * application such as a framework allocates it. ze_copy has to resolve
+     * such memory through the MD context, as the MD mem_query already does,
+     * so this deliberately does not allocate from the MD context. */
     class external_buffer {
     public:
         external_buffer(ze_device_handle_t device, size_t length)
@@ -179,23 +181,23 @@ protected:
         ze_device_handle_t md_device            = ze_md()->ze_device;
         const uct_ze_subdevice_t *md_subdevice  = NULL;
         ze_device_handle_t other_tile           = NULL;
+        int num_subdevices                      =
+                uct_ze_base_get_num_subdevices();
         const uct_ze_subdevice_t *subdevice;
         ze_device_handle_t device;
         int id;
 
-        for (id = 0;
-             (subdevice = uct_ze_base_get_subdevice_by_global_id(id)) != NULL;
-             ++id) {
+        for (id = 0; id < num_subdevices; ++id) {
+            subdevice = uct_ze_base_get_subdevice_by_global_id(id);
             if (uct_ze_base_get_device_handle_from_subdevice(subdevice) ==
                 md_device) {
                 md_subdevice = subdevice;
             }
         }
 
-        for (id = 0;
-             (subdevice = uct_ze_base_get_subdevice_by_global_id(id)) != NULL;
-             ++id) {
-            device = uct_ze_base_get_device_handle_from_subdevice(subdevice);
+        for (id = 0; id < num_subdevices; ++id) {
+            subdevice = uct_ze_base_get_subdevice_by_global_id(id);
+            device    = uct_ze_base_get_device_handle_from_subdevice(subdevice);
             if ((device == NULL) || (device == md_device)) {
                 continue;
             }
@@ -342,11 +344,22 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, md_queue_when_create_fails,
 {
     const size_t length       = 64 * UCS_KBYTE;
     ze_device_handle_t device = other_device();
+    ze_bool_t can_access_peer = false;
     std::vector<uint8_t> host_buf(length);
     uct_ze_copy_queue_t *queue;
 
     if (device == NULL) {
         UCS_TEST_SKIP_R("needs a second ZE device");
+    }
+
+    /* The MD device queue can move the data only if it reaches the memory
+     * of the other device */
+    ASSERT_EQ(ZE_RESULT_SUCCESS,
+              zeDeviceCanAccessPeer(ze_md()->ze_device, device,
+                                    &can_access_peer));
+    if (!can_access_peer) {
+        UCS_TEST_SKIP_R("the MD device has no peer access to the other "
+                        "device");
     }
 
     external_buffer other_buf(device, length);

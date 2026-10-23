@@ -34,10 +34,8 @@ typedef struct uct_ze_copy_iface {
     uct_base_iface_t          super;
     uct_ze_copy_iface_addr_t  id;
     /* Element 0 is on the MD device, the rest are created on first use.
-     * Growth may move the elements and nothing here locks, so like the
-     * single command list before it this is not safe for concurrent use of
-     * one iface (UCS_THREAD_MODE_MULTI); UCP opens UCT workers in SINGLE or
-     * SERIALIZED mode only. */
+     * Growth may relocate the elements and nothing here locks, so one iface
+     * must not be used concurrently. */
     uct_ze_copy_queue_array_t queues;
     /* More than one ZE device is visible, so a buffer may belong to a
      * device other than the MD device */
