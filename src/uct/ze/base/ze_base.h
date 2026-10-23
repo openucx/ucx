@@ -65,6 +65,13 @@ ze_device_handle_t uct_ze_base_get_device_handle_from_subdevice(
 
 ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device);
 
+/* Find the queue group to run memory copies on a device: a dedicated copy
+ * engine group if the device has one, or else any group which can copy.
+ * num_queues_p may be NULL. */
+ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
+                                          uint32_t *ordinal_p,
+                                          uint32_t *num_queues_p);
+
 /* Get root device handle by ordinal, returns NULL if out of range */
 ze_device_handle_t uct_ze_base_get_device(int ordinal);
 
