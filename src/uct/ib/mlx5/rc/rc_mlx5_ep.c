@@ -1862,38 +1862,6 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
     }
 }
 
-/* 1 when every walked WQE is a NOP. [start_pi, end_pi) is the ft window.
- * An empty window still has to walk WQEs covered by unreleased credits,
- * including the completed WQE at ft_ci. */
-static int
-uct_rc_mlx5_ep_outstanding_is_nop(uct_rc_mlx5_base_ep_t *ep,
-                                  uint16_t start_pi, uint16_t end_pi)
-{
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-    uct_rc_txqp_t *txqp      = &ep->super.txqp;
-    const struct mlx5_wqe_ctrl_seg *ctrl;
-    uint16_t pi, walk_pi;
-    size_t wqe_size;
-
-    walk_pi = start_pi;
-    if (start_pi == end_pi) {
-        uint16_t outstanding_bb = txwq->bb_max - uct_rc_txqp_available(txqp);
-
-        walk_pi = txwq->prev_sw_pi - outstanding_bb;
-    }
-
-    for (pi = walk_pi; pi != end_pi;
-         pi = uct_ib_mlx5_txwq_next_wqe_index(pi, wqe_size)) {
-        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
-        wqe_size = uct_ib_mlx5_wqe_size(ctrl);
-        if (uct_ib_mlx5_wqe_opcode(ctrl) != MLX5_OPCODE_NOP) {
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
@@ -1908,7 +1876,7 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
-    int delivered, nop_only;
+    int delivered;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1923,21 +1891,14 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
-    nop_only = uct_rc_mlx5_ep_outstanding_is_nop(ep, start_pi, end_pi);
 
-    /* A NOP-only range can complete without an error CQE, so the error
-     * handler never starts. Any other outstanding work must be in that
-     * handler. */
-    ucs_assertv_always(ep->err_handler_inprogress || nop_only,
-                       "ep %p qp 0x%x is not in deferred error handling",
-                       ep, txwq->super.qp_num);
-
+    /* An empty range has no packets, so the RX-token check does not apply. */
     if (start_pi == end_pi) {
-        if (nop_only && ucs_queue_is_empty(&ep->super.txqp.outstanding)) {
+        if (ucs_queue_is_empty(&ep->super.txqp.outstanding)) {
             return UCS_OK;
         }
 
-        ucs_error("ep %p qp 0x%x unexpected empty outstanding queue",
+        ucs_error("ep %p qp 0x%x: send ops remain for an empty WQE range",
                   ep, txwq->super.qp_num);
         return UCS_ERR_INVALID_PARAM;
     }
