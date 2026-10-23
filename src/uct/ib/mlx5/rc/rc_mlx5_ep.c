@@ -855,21 +855,14 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     ucs_status_t status;
 
+    UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
+
     status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
                                          IBV_QPS_ERR);
     if (status != UCS_OK) {
         return status;
     }
 
-    /* The send queue is full, so a posted WQE supplies the CQE. */
-    if (uct_rc_txqp_available(&ep->super.txqp) == 0) {
-        return UCS_OK;
-    }
-
-    ucs_assertv(uct_rc_iface_have_tx_cqe_avail(&iface->super),
-                "ep %p qp 0x%x: no CQ credit for the invalidate NOP, "
-                "cq_available=%d",
-                ep, ep->tx.wq.super.qp_num, iface->super.tx.cq_available);
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_NOP, NULL, 0,
