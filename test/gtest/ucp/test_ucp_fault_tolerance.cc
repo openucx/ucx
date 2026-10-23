@@ -912,7 +912,7 @@ protected:
         while (ucs_get_time() < deadline) {
             short_progress_loop();
 
-            arg = ep->ext->recovery_arg;
+            arg = ucp_ep_recovery_arg(ep);
             if (arg == NULL) {
                 continue;
             }
@@ -1102,13 +1102,13 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
         UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
     }
 
-    ASSERT_NE(nullptr, ep->ext->recovery_arg);
+    ASSERT_NE(nullptr, ucp_ep_recovery_arg(ep));
     wait_for_cond([ep]() {
-        return ep->ext->recovery_arg == NULL;
+        return ucp_ep_recovery_arg(ep) == NULL;
     }, [this]() {
         short_progress_loop();
     });
-    ASSERT_EQ(nullptr, ep->ext->recovery_arg)
+    ASSERT_EQ(nullptr, ucp_ep_recovery_arg(ep))
             << "recovery retries were not exhausted";
 
     EXPECT_EQ(0, total_err_count())

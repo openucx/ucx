@@ -1338,7 +1338,7 @@ static ucp_ep_recovery_arg_t *ucp_wireup_tf_recovery_arg(ucp_ep_h ep)
         return NULL;
     }
 
-    return ep->ext->recovery_arg;
+    return ucp_ep_recovery_arg(ep);
 }
 
 static ucp_wireup_tf_reply_t *ucp_wireup_tf_reply_get(ucp_ep_h ep)
