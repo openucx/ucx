@@ -27,7 +27,7 @@ typedef enum {
     UCS_MEMTYPE_CACHE_NO       = UCS_NO,
     UCS_MEMTYPE_CACHE_YES      = UCS_YES,
     UCS_MEMTYPE_CACHE_TRY      = UCS_TRY,
-    UCS_MEMTYPE_CACHE_EXPLICIT = 3
+    UCS_MEMTYPE_CACHE_EXPLICIT = UCS_TERNARY_LAST
 } ucs_memtype_cache_mode_t;
 
 /**

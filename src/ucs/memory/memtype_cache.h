@@ -45,7 +45,8 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    ucs_spinlock_t  lock;          /**< Protects the page table and registrations */
+    ucs_spinlock_t  lock;          /**< Protects the page table and
+                                        registrations */
     ucs_pgtable_t   pgtable;       /**< Page table to hold the regions */
     ucs_list_link_t registrations; /**< Explicitly managed memory */
     khash_t(ucs_memtype_cache_tokens) token_hash; /**< Token index */
@@ -57,7 +58,8 @@ void ucs_memtype_cache_global_init(void);
 
 
 /**
- * Create the global memory type cache and install event handlers when available.
+ * Create the global memory type cache and install event handlers when
+ * available.
  */
 void ucs_memtype_cache_global_create(void);
 
@@ -75,7 +77,8 @@ void ucs_memtype_cache_cleanup(void);
  *                              means the memory type is an unknown non-host
  *                              memory, and should be detected in another way.
  *
- * @return UCS_OK              - an element was found and the memory info is valid.
+ * @return UCS_OK              - an element was found and the memory info is
+ *                               valid.
  * @return UCS_ERR_NO_ELEM     - an element was not found in the event cache.
  * @return UCS_ERR_UNSUPPORTED - the cache is disabled or an explicit-only
  *                               region was not found.
@@ -115,7 +118,8 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
 
 /**
  * Add memory with a known lifetime to the memory type cache. Used when the
- * cache is not tracking allocations by UCM events; otherwise the call has no effect.
+ * cache is not tracking allocations by UCM events; otherwise the call has no
+ * effect.
  *
  * The range is extended to UCS_PGT_ADDR_ALIGN. The caller must unregister it
  * with @ref ucs_memtype_cache_unregister before the memory is released, since
