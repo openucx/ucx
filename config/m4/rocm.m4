@@ -114,6 +114,16 @@ AS_IF([test "x$with_rocm" != "xno"],
                     [ROCm 7.0+ has HSA_EXT_POINTER_TYPE_RESERVED_ADDR])])
 
    AC_CHECK_FUNCS([hsa_amd_portable_export_dmabuf])
+   AC_CHECK_FUNCS([hsa_amd_vmem_map hsa_amd_vmem_unmap \
+                   hsa_amd_vmem_retain_alloc_handle \
+                   hsa_amd_vmem_export_shareable_handle \
+                   hsa_amd_vmem_import_shareable_handle])
+
+    # ROCr reports memory mapped through its virtual memory API (hipMemMap)
+    # as HSA_EXT_POINTER_TYPE_HSA_VMEM
+    CPPFLAGS="$ROCM_CPPFLAGS $SAVE_CPPFLAGS"
+    AC_CHECK_DECLS([HSA_EXT_POINTER_TYPE_HSA_VMEM], [], [],
+                   [[#include <hsa_ext_amd.h>]])
 
     CPPFLAGS="$SAVE_CPPFLAGS"
     LDFLAGS="$SAVE_LDFLAGS"

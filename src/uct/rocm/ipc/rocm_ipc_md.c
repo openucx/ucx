@@ -10,11 +10,13 @@
 
 #include "rocm_ipc_md.h"
 #include "rocm_ipc_cache.h"
+#include "rocm_ipc_fd.h"
 
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/api/device/uct_device_types.h>
 
+#include <inttypes.h>
 #include <unistd.h>
 
 
@@ -57,6 +59,58 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     return UCS_OK;
 }
 
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+static hsa_status_t uct_rocm_ipc_pack_vmem_key(void *base_ptr, size_t size,
+                                               uct_rocm_ipc_key_t *key)
+{
+    hsa_amd_vmem_alloc_handle_t handle;
+    ucs_status_t ucs_status;
+    hsa_status_t status;
+    int fd;
+
+    if (!uct_rocm_ipc_vmem_ipc_supported()) {
+        return HSA_STATUS_ERROR;
+    }
+
+    /* The allocation is mapped whole at base_ptr, so offsets within the
+     * mapping are offsets within the exported allocation */
+    status = hsa_amd_vmem_retain_alloc_handle(&handle, base_ptr);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_debug("hsa_amd_vmem_retain_alloc_handle(%p) failed: 0x%x", base_ptr,
+                  status);
+        return status;
+    }
+
+    status = hsa_amd_vmem_export_shareable_handle(&fd, handle, 0);
+    hsa_amd_vmem_handle_release(handle);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_debug("hsa_amd_vmem_export_shareable_handle(%p) failed: 0x%x",
+                  base_ptr, status);
+        return status;
+    }
+
+    ucs_status = uct_rocm_ipc_fd_export(fd, (uintptr_t)base_ptr, size,
+                                        &key->server_id, &key->fd_id);
+    if (ucs_status != UCS_OK) {
+        close(fd);
+        return HSA_STATUS_ERROR;
+    }
+
+    key->handle_type = UCT_ROCM_IPC_KEY_HANDLE_TYPE_VMEM_FD;
+    key->address     = (uintptr_t)base_ptr;
+    key->length      = size;
+    ucs_trace("exported vmem %p/%lx as fd %d (id %" PRIu64 ")", base_ptr, size,
+              fd, key->fd_id);
+    return HSA_STATUS_SUCCESS;
+}
+#elif HAVE_DECL_HSA_EXT_POINTER_TYPE_HSA_VMEM
+static hsa_status_t uct_rocm_ipc_pack_vmem_key(void *base_ptr, size_t size,
+                                               uct_rocm_ipc_key_t *key)
+{
+    return HSA_STATUS_ERROR;
+}
+#endif
+
 static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
 {
@@ -75,17 +129,36 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         return status;
     }
 
+    memset(key, 0, sizeof(*key));
+    key->dev_num = uct_rocm_base_get_dev_num(agent);
+    key->pid     = getpid();
+    key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+
+#if HAVE_DECL_HSA_EXT_POINTER_TYPE_HSA_VMEM
+    if (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
+        /* hsa_amd_ipc_memory_create does not support memory mapped with
+         * hipMemMap. Export its allocation instead, or register it without
+         * an IPC handle, so that peers fall back to another transport
+         * instead of failing the registration. */
+        if (uct_rocm_ipc_pack_vmem_key(base_ptr, size, key) !=
+            HSA_STATUS_SUCCESS) {
+            ucs_debug("no ipc handle for vmem address %p/%lx", address, length);
+            key->handle_type = UCT_ROCM_IPC_KEY_HANDLE_TYPE_NONE;
+            key->address     = (uintptr_t)address;
+        }
+        return HSA_STATUS_SUCCESS;
+    }
+#endif
+
     status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to create ipc for %p/%lx", address, length);
         return status;
     }
 
-    key->address = (uintptr_t)base_ptr;
-    key->length  = size;
-    key->dev_num = uct_rocm_base_get_dev_num(agent);
-    key->pid     = getpid();
-    key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    key->handle_type = UCT_ROCM_IPC_KEY_HANDLE_TYPE_IPC;
+    key->address     = (uintptr_t)base_ptr;
+    key->length      = size;
 
     return HSA_STATUS_SUCCESS;
 }
@@ -123,6 +196,11 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     mem_hndl = params->memh;
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+    if (mem_hndl->handle_type == UCT_ROCM_IPC_KEY_HANDLE_TYPE_VMEM_FD) {
+        uct_rocm_ipc_fd_unexport(mem_hndl->fd_id);
+    }
+#endif
     ucs_free(mem_hndl);
     return UCS_OK;
 }
@@ -196,6 +274,21 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 {
     uct_rocm_ipc_key_t *packed = (uct_rocm_ipc_key_t *)rkey_buffer;
     uct_rocm_ipc_key_t *key;
+
+    switch (packed->handle_type) {
+    case UCT_ROCM_IPC_KEY_HANDLE_TYPE_IPC:
+        break;
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+    case UCT_ROCM_IPC_KEY_HANDLE_TYPE_VMEM_FD:
+        if (uct_rocm_ipc_vmem_check_import(packed) != UCS_OK) {
+            return UCS_ERR_UNREACHABLE;
+        }
+        break;
+#endif
+    default:
+        ucs_debug("remote address 0x%lx has no ipc handle", packed->address);
+        return UCS_ERR_UNREACHABLE;
+    }
 
     key = ucs_malloc(sizeof(uct_rocm_ipc_key_t), "uct_rocm_ipc_key_t");
     if (NULL == key) {
