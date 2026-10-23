@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intel Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -557,7 +557,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_ipc_iface_t, uct_md_h md, uct_worker_h worker,
     self->next_cmd_list = 0;
 
     /* Find copy engine queue group ordinal and available queue count */
-    status = uct_ze_base_get_copy_ordinal(self->ze_device, &copy_ordinal,
+    status = uct_ze_base_get_copy_ordinal(self->ze_device,
+                                          UCS_LOG_LEVEL_ERROR, &copy_ordinal,
                                           &num_queues);
     if (status != UCS_OK) {
         return status;
