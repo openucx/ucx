@@ -552,10 +552,9 @@ typedef struct ucp_ep_recovery_arg {
     /* The next idle round republishes lanes already sent. A new failure
      * clears this and publishes only lanes that have not been sent. */
     uint8_t                 resend;
-    /* Generation of the LANES_ADDR exchange, pre-incremented by every request
-     * and echoed by the peer. Copied into held lanes as request_id before the
-     * request is sent. */
-    uint32_t                request_id;
+    /* Highest peer LANES_ADDR request id accepted while this object is
+     * alive. 0 means none. Moved into the ext slot when the object is freed. */
+    uint32_t                seen_peer_id;
     /* Lanes a request already published. A later failure leaves them out
      * until recovery retries. */
     ucp_lane_map_t          sent_lanes;
@@ -579,6 +578,9 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    /* LANES_ADDR request id this endpoint sends. Kept across recovery so the
+     * next failure does not restart at 1. */
+    uint32_t                      tf_request_id;
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -587,11 +589,10 @@ typedef struct ucp_ep_ext {
         ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
                                                     United with close request since:
                                                     1) recovery is not supported for connected to sockaddr EPs
-                                                    2) it does not make sense to recover lanes during close protocol */
+                                                    2) it does not make sense to recover lanes during close protocol
+                                                    The low bit set means there is no pointer: the remaining bits
+                                                    are the last accepted peer request id. */
     };
-    /* Highest peer LANES_ADDR request id accepted for each lane. 0 means
-     * that lane has not been named. Kept after the lane is released. */
-    uint32_t                      *seen_peer_id;
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
     /* List of requests which are waiting for remote completion */
@@ -680,6 +681,85 @@ typedef struct ucp_ep {
 
     UCS_STATS_NODE_DECLARE(stats)
 } ucp_ep_t;
+
+
+/* Low bit set: the ext slot holds a peer request id, not a pointer. */
+#define UCP_EP_SLOT_PEER_ID_BIT ((uintptr_t)1)
+
+
+static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_ext_slot(ucp_ep_h ep)
+{
+    return (uintptr_t)ep->ext->recovery_arg;
+}
+
+
+static UCS_F_ALWAYS_INLINE int ucp_ep_ext_slot_is_peer_id(uintptr_t slot)
+{
+    return (slot & UCP_EP_SLOT_PEER_ID_BIT) != 0;
+}
+
+
+static UCS_F_ALWAYS_INLINE ucp_ep_recovery_arg_t*
+ucp_ep_recovery_arg(ucp_ep_h ep)
+{
+    uintptr_t slot = ucp_ep_ext_slot(ep);
+
+    if ((slot == 0) || ucp_ep_ext_slot_is_peer_id(slot)) {
+        return NULL;
+    }
+
+    return (ucp_ep_recovery_arg_t*)slot;
+}
+
+
+static UCS_F_ALWAYS_INLINE ucp_request_t *ucp_ep_close_req(ucp_ep_h ep)
+{
+    uintptr_t slot = ucp_ep_ext_slot(ep);
+
+    if ((slot == 0) || ucp_ep_ext_slot_is_peer_id(slot)) {
+        return NULL;
+    }
+
+    return (ucp_request_t*)slot;
+}
+
+
+static UCS_F_ALWAYS_INLINE uint32_t ucp_ep_tf_seen_peer_id(ucp_ep_h ep)
+{
+    uintptr_t slot = ucp_ep_ext_slot(ep);
+
+    if (ucp_ep_ext_slot_is_peer_id(slot)) {
+        return (uint32_t)(slot >> 1);
+    }
+
+    if (slot == 0) {
+        return 0;
+    }
+
+    return ((ucp_ep_recovery_arg_t*)slot)->seen_peer_id;
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint32_t peer_id)
+{
+    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
+
+    if (arg != NULL) {
+        arg->seen_peer_id = peer_id;
+        return;
+    }
+
+    if (peer_id == 0) {
+        ep->ext->recovery_arg = NULL;
+        return;
+    }
+
+    /* A bare id can share a pointer's alignment, so the low bit marks it. */
+    ep->ext->recovery_arg =
+            (ucp_ep_recovery_arg_t*)(((uintptr_t)peer_id << 1) |
+                                     UCP_EP_SLOT_PEER_ID_BIT);
+}
 
 
 enum {
@@ -1108,11 +1188,10 @@ int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id);
 
 
 /**
- * Lanes in @a lanes whose peer request id is newer than the one already
- * accepted for that lane. Those lanes are recorded. A smaller id is left out.
+ * @a lanes when @a request_id is newer than the last peer id accepted for this
+ * endpoint. A smaller or equal id leaves @a accepted empty.
  *
- * @return UCS_ERR_NO_MEMORY when the per-lane record cannot be allocated.
- *         @a accepted is 0 until UCS_OK.
+ * @return UCS_OK. @a accepted is 0 when the request is stale.
  */
 ucs_status_t
 ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
