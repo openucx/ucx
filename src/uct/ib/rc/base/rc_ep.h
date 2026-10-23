@@ -245,6 +245,10 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
 void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
                                size_t iovcnt);
 
+void uct_rc_ep_send_op_set_sgl(uct_rc_iface_send_op_t *op,
+                               void *const *buffers, const size_t *lengths,
+                               size_t count);
+
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
@@ -269,6 +273,9 @@ void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
                                            const void *resp);
 
 void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp);
+
+void uct_rc_ep_get_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                                 const void *resp);
 
 void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
@@ -452,6 +459,29 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
     uct_rc_txqp_add_send_comp_always(iface, txqp, handler, comp, sn, flags, iov,
                                      iovcnt, length);
+}
+
+/* Same as uct_rc_txqp_add_send_comp_always(), but the operation buffers are
+ * given as an SGL (buffers/lengths arrays) rather than a uct_iov_t array. */
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_add_send_comp_sgl_always(uct_rc_iface_t *iface,
+                                     uct_rc_txqp_t *txqp,
+                                     uct_rc_send_handler_t handler,
+                                     uct_completion_t *comp, uint16_t sn,
+                                     uint16_t flags, void *const *buffers,
+                                     const size_t *lengths, size_t count,
+                                     size_t length)
+{
+    uct_rc_iface_send_op_t *op = uct_rc_iface_get_send_op(iface);
+
+    uct_rc_ep_init_send_op(op, flags | UCT_RC_IFACE_SEND_OP_FLAG_IFACE, comp,
+                           handler, length);
+
+    if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV) {
+        /* coverity[dead_error_line] */
+        uct_rc_ep_send_op_set_sgl(op, buffers, lengths, count);
+    }
+    uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
