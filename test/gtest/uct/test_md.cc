@@ -1451,10 +1451,14 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
 UCS_TEST_SKIP_COND_P(test_gdr_copy, hide_registration_error,
                      !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_RCACHE?=no") {
     void *address;
+    ucs::handle<void*> buffer;
 
     const int ret = posix_memalign(&address, REG_SIZE, REG_SIZE);
+    if (ret == 0) {
+        buffer.reset(address, free);
+    }
+
     ASSERT_EQ(0, ret);
-    ucs::handle<void*> buffer(address, free);
 
     for (unsigned flags : {0u, unsigned(UCT_MD_MEM_FLAG_HIDE_ERRORS)}) {
         ucs_status_t status;
