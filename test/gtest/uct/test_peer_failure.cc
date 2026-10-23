@@ -10,6 +10,12 @@
 
 #include <functional>
 
+#if HAVE_TL_RC
+extern "C" {
+#include <uct/ib/rc/base/rc_ep.h>
+}
+#endif
+
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
                                                         UCT_IFACE_FLAG_PENDING   |
                                                         UCT_IFACE_FLAG_CB_SYNC   |
@@ -233,12 +239,37 @@ ucs_status_t test_uct_peer_failure::add_pending(uct_ep_h ep,
     return uct_ep_pending_add(ep, &req.uct, 0);
 }
 
+/* True when posting one more AM would consume the invalidate NOP credit. */
+bool test_uct_peer_failure::invalidate_credit_left()
+{
+#if HAVE_TL_RC
+    uct_rc_ep_t    *rc_ep;
+    uct_rc_iface_t *iface;
+
+    if ((!has_transport("rc_mlx5")) && (!has_transport("gga_mlx5"))) {
+        return false;
+    }
+
+    rc_ep = ucs_derived_of(ep0(), uct_rc_ep_t);
+    iface = ucs_derived_of(rc_ep->super.super.iface, uct_rc_iface_t);
+    return (uct_rc_txqp_available(&rc_ep->txqp) <= 1) ||
+           (iface->tx.cq_available <= 1);
+#else
+    return false;
+#endif
+}
+
 void test_uct_peer_failure::fill_resources(bool expect_error,
                                            ucs_time_t loop_end_limit)
 {
     const uint64_t send_data = 0;
     ucs_status_t status;
+
     do {
+        if (invalidate_credit_left()) {
+            return;
+        }
+
         status = uct_ep_am_short(ep0(), 0, 0, &send_data,
                                  sizeof(send_data));
     } while ((status == UCS_OK) && (ucs_get_time() < loop_end_limit));

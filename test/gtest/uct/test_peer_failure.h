@@ -56,6 +56,7 @@ public:
     void send_recv_am(int index, ucs_status_t exp_status = UCS_OK);
     ucs_status_t flush_ep(size_t index, ucs_time_t deadline = ULONG_MAX);
     ucs_status_t add_pending(uct_ep_h ep, pending_send_request_t &req);
+    bool invalidate_credit_left();
     void fill_resources(bool expect_error, ucs_time_t loop_end_limit);
 
 protected:
