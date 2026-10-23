@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct/test_p2p_rma.h"
 
 #include <common/mem_buffer.h>
@@ -243,6 +247,7 @@ protected:
         return ucs_array_elem(&ze_iface()->queues, queue_index).device;
     }
 
+#if HAVE_DECL_ZECOMMANDQUEUEGETORDINAL && HAVE_DECL_ZECOMMANDLISTGETORDINAL
     /* Check that the queue runs on a copy group, and on a dedicated copy
      * group when its device has one */
     void check_copy_engine(const uct_ze_copy_queue_t &queue)
@@ -252,11 +257,11 @@ protected:
         const ze_command_queue_group_property_flags_t copy_compute =
                 ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY |
                 ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE;
-        std::vector<ze_command_queue_group_properties_t> groups;
         uint32_t num_groups   = 0;
         bool has_copy_only    = false;
         uint32_t cmdq_ordinal = UINT32_MAX;
         uint32_t cmdl_ordinal = UINT32_MAX;
+        std::vector<ze_command_queue_group_properties_t> groups;
 
         ASSERT_EQ(ZE_RESULT_SUCCESS,
                   zeDeviceGetCommandQueueGroupProperties(queue.device,
@@ -295,6 +300,13 @@ protected:
             EXPECT_EQ(copy_only, groups[cmdq_ordinal].flags & copy_compute);
         }
     }
+#else
+    void check_copy_engine(const uct_ze_copy_queue_t &queue)
+    {
+        UCS_TEST_SKIP_R("needs Level Zero API 1.9 "
+                        "(zeCommandQueueGetOrdinal)");
+    }
+#endif
 
     void zcopy(void *buffer, void *remote_addr, size_t length, bool is_put)
     {

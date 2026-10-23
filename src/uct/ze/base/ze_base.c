@@ -12,6 +12,7 @@
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 
 
@@ -451,25 +452,46 @@ ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
                                           uint32_t *ordinal_p,
                                           uint32_t *num_queues_p)
 {
-    ze_command_queue_group_properties_t queue_props[16];
-    uint32_t num_queue_groups = 16;
-    uint32_t i;
+    uint32_t num_queue_groups = 0;
+    ze_command_queue_group_properties_t *queue_props;
+    ucs_status_t status;
     ze_result_t ret;
+    uint32_t i;
 
-    /* Initialize structure types */
-    for (i = 0; i < 16; i++) {
-        queue_props[i].stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
-        queue_props[i].pNext = NULL;
+    /* Query the group count first: the driver fills at most the given count
+     * and may leave the count itself unchanged */
+    ret = zeDeviceGetCommandQueueGroupProperties(device, &num_queue_groups,
+                                                 NULL);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_error("zeDeviceGetCommandQueueGroupProperties(device=%p) failed: "
+                  "0x%x",
+                  device, ret);
+        return UCS_ERR_IO_ERROR;
     }
 
-    /* Get queue group properties */
+    if (num_queue_groups == 0) {
+        ucs_error("device %p: no command queue groups", device);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    queue_props = ucs_calloc(num_queue_groups, sizeof(*queue_props),
+                             "ze_queue_group_props");
+    if (queue_props == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < num_queue_groups; i++) {
+        queue_props[i].stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
+    }
+
     ret = zeDeviceGetCommandQueueGroupProperties(device, &num_queue_groups,
                                                  queue_props);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_error("zeDeviceGetCommandQueueGroupProperties(device=%p) failed: "
                   "0x%x",
                   device, ret);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto out;
     }
 
     /* First pass: find dedicated copy engine (COPY flag but NOT COMPUTE) */
@@ -478,29 +500,36 @@ ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
              ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) &&
             !(queue_props[i].flags &
               ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
-            *ordinal_p    = i;
-            *num_queues_p = queue_props[i].numQueues;
             ucs_debug("device %p: using dedicated copy engine queue group "
                       "%u (numQueues=%u)",
                       device, i, queue_props[i].numQueues);
-            return UCS_OK;
+            goto out_found;
         }
     }
 
     /* Second pass: find any queue group that supports COPY */
     for (i = 0; i < num_queue_groups; i++) {
         if (queue_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
-            *ordinal_p    = i;
-            *num_queues_p = queue_props[i].numQueues;
             ucs_debug("device %p: using copy-capable queue group %u "
                       "(numQueues=%u)",
                       device, i, queue_props[i].numQueues);
-            return UCS_OK;
+            goto out_found;
         }
     }
 
     ucs_error("device %p: no copy-capable queue group found", device);
-    return UCS_ERR_NO_DEVICE;
+    status = UCS_ERR_NO_DEVICE;
+    goto out;
+
+out_found:
+    *ordinal_p = i;
+    if (num_queues_p != NULL) {
+        *num_queues_p = queue_props[i].numQueues;
+    }
+    status = UCS_OK;
+out:
+    ucs_free(queue_props);
+    return status;
 }
 
 /**
