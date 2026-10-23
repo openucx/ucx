@@ -456,6 +456,62 @@ ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device)
     return UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
+ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
+                                          uint32_t *ordinal_p,
+                                          uint32_t *num_queues_p)
+{
+    ze_command_queue_group_properties_t queue_props[16];
+    uint32_t num_queue_groups = 16;
+    uint32_t i;
+    ze_result_t ret;
+
+    /* Initialize structure types */
+    for (i = 0; i < 16; i++) {
+        queue_props[i].stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
+        queue_props[i].pNext = NULL;
+    }
+
+    /* Get queue group properties */
+    ret = zeDeviceGetCommandQueueGroupProperties(device, &num_queue_groups,
+                                                 queue_props);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_error("zeDeviceGetCommandQueueGroupProperties(device=%p) failed: "
+                  "0x%x",
+                  device, ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* First pass: find dedicated copy engine (COPY flag but NOT COMPUTE) */
+    for (i = 0; i < num_queue_groups; i++) {
+        if ((queue_props[i].flags &
+             ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) &&
+            !(queue_props[i].flags &
+              ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
+            *ordinal_p    = i;
+            *num_queues_p = queue_props[i].numQueues;
+            ucs_debug("device %p: using dedicated copy engine queue group "
+                      "%u (numQueues=%u)",
+                      device, i, queue_props[i].numQueues);
+            return UCS_OK;
+        }
+    }
+
+    /* Second pass: find any queue group that supports COPY */
+    for (i = 0; i < num_queue_groups; i++) {
+        if (queue_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
+            *ordinal_p    = i;
+            *num_queues_p = queue_props[i].numQueues;
+            ucs_debug("device %p: using copy-capable queue group %u "
+                      "(numQueues=%u)",
+                      device, i, queue_props[i].numQueues);
+            return UCS_OK;
+        }
+    }
+
+    ucs_error("device %p: no copy-capable queue group found", device);
+    return UCS_ERR_NO_DEVICE;
+}
+
 /**
  * Query MD resources - returns one MD per sub-device
  * This is correct because each sub-device has separate memory

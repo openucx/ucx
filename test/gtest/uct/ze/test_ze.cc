@@ -276,6 +276,59 @@ protected:
         return ucs_array_elem(&ze_iface()->queues, queue_index).device;
     }
 
+    /* Check that the queue runs on a copy group, and on a dedicated copy
+     * group when its device has one */
+    void check_copy_engine(const uct_ze_copy_queue_t &queue)
+    {
+        const ze_command_queue_group_property_flags_t copy_only =
+                ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY;
+        const ze_command_queue_group_property_flags_t copy_compute =
+                ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY |
+                ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE;
+        std::vector<ze_command_queue_group_properties_t> groups;
+        uint32_t num_groups   = 0;
+        bool has_copy_only    = false;
+        uint32_t cmdq_ordinal = UINT32_MAX;
+        uint32_t cmdl_ordinal = UINT32_MAX;
+
+        ASSERT_EQ(ZE_RESULT_SUCCESS,
+                  zeDeviceGetCommandQueueGroupProperties(queue.device,
+                                                         &num_groups, NULL));
+        groups.resize(num_groups);
+        for (auto &group : groups) {
+            group       = {};
+            group.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
+        }
+        ASSERT_EQ(ZE_RESULT_SUCCESS,
+                  zeDeviceGetCommandQueueGroupProperties(queue.device,
+                                                         &num_groups,
+                                                         groups.data()));
+
+        for (const auto &group : groups) {
+            if ((group.flags & copy_compute) == copy_only) {
+                has_copy_only = true;
+            }
+        }
+
+        ASSERT_EQ(ZE_RESULT_SUCCESS,
+                  zeCommandQueueGetOrdinal(queue.cmdq, &cmdq_ordinal));
+        ASSERT_EQ(ZE_RESULT_SUCCESS,
+                  zeCommandListGetOrdinal(queue.cmdl, &cmdl_ordinal));
+        UCS_TEST_MESSAGE << "device " << queue.device << ": queue group "
+                         << cmdq_ordinal << " of " << num_groups
+                         << (has_copy_only ? ", device has a copy engine" :
+                                             "");
+
+        /* The list must be submitted to the group of its queue */
+        EXPECT_EQ(cmdq_ordinal, cmdl_ordinal);
+        ASSERT_LT(cmdq_ordinal, num_groups);
+        EXPECT_TRUE(groups[cmdq_ordinal].flags &
+                    ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY);
+        if (has_copy_only) {
+            EXPECT_EQ(copy_only, groups[cmdq_ordinal].flags & copy_compute);
+        }
+    }
+
     void zcopy(void *buffer, void *remote_addr, size_t length, bool is_put)
     {
         uct_iov_t iov;
@@ -483,6 +536,24 @@ UCS_TEST_SKIP_COND_P(test_ze_copy_rma, ze_caps_and_mem_types,
                 UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST));
     EXPECT_TRUE(sender().md_attr().reg_mem_types &
                 UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST));
+}
+
+UCS_TEST_P(test_ze_copy_rma, queue_on_copy_engine)
+{
+    ze_device_handle_t device = other_device();
+    std::vector<uint8_t> host_buf(64);
+    const uct_ze_copy_queue_t *queue;
+
+    /* Also create the queue of another device, if there is one; the queue
+     * stays in the iface after the buffer is released */
+    if (device != NULL) {
+        external_buffer other_buf(device, host_buf.size());
+        EXPECT_NE(0u, get_queue(other_buf.ptr(), host_buf.data()));
+    }
+
+    ucs_array_for_each(queue, &ze_iface()->queues) {
+        check_copy_engine(*queue);
+    }
 }
 
 UCT_INSTANTIATE_ZE_TEST_CASE(test_ze_copy_rma)

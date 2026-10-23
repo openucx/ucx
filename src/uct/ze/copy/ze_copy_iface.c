@@ -249,8 +249,23 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                                                      uct_ze_copy_md_t);
     ze_command_queue_desc_t cq_desc = {};
     ze_command_list_desc_t cl_desc  = {};
+    uint32_t ordinal, num_queues;
     uct_ze_copy_queue_t *queue;
+    ucs_status_t status;
     ze_result_t ret;
+
+    /* Run on a copy engine rather than the default compute group: the
+     * driver recommends it for copies to a peer or to host, and the copies
+     * then do not compete with the application's kernels */
+    status = uct_ze_base_get_copy_ordinal(device, &ordinal, &num_queues);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    cq_desc.stype                    = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC;
+    cq_desc.ordinal                  = ordinal;
+    cl_desc.stype                    = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC;
+    cl_desc.commandQueueGroupOrdinal = ordinal;
 
     queue = ucs_array_append(&iface->queues,
                              ucs_log(log_level, "ze_copy_iface: could not "
