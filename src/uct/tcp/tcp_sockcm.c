@@ -137,6 +137,10 @@ ucs_status_t uct_tcp_sockcm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
     ucs_status_t status;
     socklen_t addr_len;
 
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_PATH_PERF) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
         status = ucs_socket_getname(cep->fd, &ep_attr->local_address,
                                     &addr_len);

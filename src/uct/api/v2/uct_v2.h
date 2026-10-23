@@ -276,8 +276,33 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::remote_address */
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2)
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
+    /** Enables @ref uct_ep_attr::path_perf */
+    UCT_EP_ATTR_FIELD_PATH_PERF       = UCS_BIT(3)
 };
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Endpoint path performance flags.
+ */
+enum uct_ep_path_perf_flags {
+    /** Path performance is below the transport-defined healthy threshold. */
+    UCT_EP_PATH_PERF_FLAG_DEGRADED = UCS_BIT(0),
+    /** Path performance is recovered from the degradation. */
+    UCT_EP_PATH_PERF_FLAG_RECOVERED = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Cached performance measurement of an endpoint path.
+ */
+typedef struct uct_ep_path_perf {
+    double   bandwidth_ratio; /**< Ratio to baseline bandwidth. */
+    uint64_t generation;      /**< Cached measurement generation. */
+    uint64_t flags;           /**< @ref uct_ep_path_perf_flags. */
+} uct_ep_path_perf_t;
 
 
 /**
@@ -425,6 +450,15 @@ struct uct_ep_attr {
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
+
+    /**
+     * Cached endpoint path performance. A bandwidth ratio of 1.0 represents
+     * the baseline performance. The transport returns UCS_ERR_NO_ELEM when a
+     * measurement is not available and UCS_ERR_UNSUPPORTED when endpoint path
+     * performance is not supported. Valid when
+     * @ref UCT_EP_ATTR_FIELD_PATH_PERF is requested.
+     */
+    uct_ep_path_perf_t      path_perf;
 };
 
 
@@ -1206,6 +1240,8 @@ enum uct_iface_attr_field {
                                                                support token query, and
                                                                @ref uct_ep_outstanding_purge
                                                                is supported. */
+/** Endpoint path performance events and queries are supported. */
+#define UCT_IFACE_FLAG_V2_PATH_PERF           UCS_BIT(3)
 /**
  * @}
  */

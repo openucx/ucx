@@ -360,6 +360,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     uct_perf_attr_t perf_attr;
     ucs_sys_device_t sys_dev;
     ucs_status_t status;
+    uint8_t path_bw_ratio;
     char bdf_name[32];
 
     if (lane == UCP_NULL_LANE) {
@@ -445,6 +446,12 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                 tl_perf, &distance, "remote system", "sys-dev %d %s",
                 rkey_config->key.sys_dev,
                 ucs_memory_type_names[rkey_config->key.mem_type]);
+    }
+
+    path_bw_ratio = params->super.ep_config_key->lanes[lane].path_bw_ratio;
+    if (path_bw_ratio != 0) {
+        tl_perf->bandwidth *= path_bw_ratio /
+                              (double)UCP_PATH_BW_RATIO_SCALE;
     }
 
     ucs_assert(tl_perf->bandwidth > 1.0);
