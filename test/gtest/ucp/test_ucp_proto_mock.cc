@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -842,19 +843,29 @@ protected:
         return nullptr;
     }
 
-    void test_cuda_rma(ucp_operation_id_t op_id,
-                       const proto_select_data_vec_t &data_vec)
+    static ucp_proto_select_key_t cuda_rma_key(ucp_operation_id_t op_id)
     {
-        auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
-                                            UCS_MEMORY_TYPE_CUDA);
-        ASSERT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
-
         ucp_proto_select_key_t key = any_key();
         key.param.op_id_flags      = op_id;
         key.param.op_attr          = 0;
         key.param.mem_type         = UCS_MEMORY_TYPE_CUDA;
+        return key;
+    }
 
-        check_rkey_config(sender(), data_vec, key, rkey_cfg_index);
+    /* Returns the remote key configuration the operation was done with */
+    ucp_worker_cfg_index_t
+    test_cuda_rma(ucp_operation_id_t op_id,
+                  const proto_select_data_vec_t &data_vec)
+    {
+        auto rkey_cfg_index = send_recv_rma(UCS_MBYTE, op_id,
+                                            UCS_MEMORY_TYPE_CUDA);
+        EXPECT_NE(rkey_cfg_index, UCP_WORKER_CFG_INDEX_NULL);
+        if (rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+            check_rkey_config(sender(), data_vec, cuda_rma_key(op_id),
+                              rkey_cfg_index);
+        }
+
+        return rkey_cfg_index;
     }
 
     sys_dev_set_t lane_map_sys_devs(ucp_lane_map_t lane_map)
@@ -1180,11 +1191,20 @@ public:
     }
 
 protected:
+    /* Same check as protocol selection does, which also accounts for memory
+     * registration by DMA-BUF */
     void require_cuda_net_md()
     {
-        if (!check_reg_mem_types(sender(), UCS_MEMORY_TYPE_CUDA)) {
-            UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
+        ucp_ep_h ep = sender().ep();
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if (sender().ucph()->reg_md_map[UCS_MEMORY_TYPE_CUDA] &
+                UCS_BIT(ucp_ep_md_index(ep, lane))) {
+                return;
+            }
         }
+
+        UCS_TEST_SKIP_R("No endpoint lane can register CUDA memory");
     }
 
     /* Add the mocked device the test selects protocols on */
@@ -1307,6 +1327,119 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_no_get_zcopy, get, "IB_NUM_PATHS?=1",
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_no_get_zcopy, rcx_gpu,
                               "rc_x,cuda,rocm")
+
+/* Device whose get_zcopy minimal size leaves small messages without a
+ * get/zcopy protocol, like an IB device with inline responses enabled */
+class test_ucp_proto_mock_rcx_foreign_rkey :
+    public test_ucp_proto_mock_rcx_cuda {
+protected:
+    virtual void add_cuda_mock_iface() override
+    {
+        add_mock_iface("mock", [](uct_iface_attr_t &iface_attr) {
+            set_mock_iface_attr(iface_attr);
+            /* Fixed value, since the one of the real device depends on the
+             * host CQE size and on UCX_IB_TX_INLINE_RESP */
+            iface_attr.cap.get.min_zcopy = 65;
+        });
+    }
+
+    static bool find_select_param(const ucp_proto_select_t &proto_select,
+                                  ucp_proto_select_key_t key,
+                                  ucp_proto_select_param_t *select_param_p)
+    {
+        ucp_proto_select_elem_t select_elem;
+        ucp_proto_select_key_t select_key;
+
+        kh_foreach(proto_select.hash, select_key.u64, select_elem, {
+            if (key_match(key, select_key)) {
+                *select_param_p = select_key.param;
+                return true;
+            }
+        })
+
+        ADD_FAILURE() << "Did not find matching protocol selection key";
+        return false;
+    }
+
+    /* Add a remote key configuration which differs from the given one only by
+     * the remote memory type, and select its protocols for the given key */
+    ucp_worker_cfg_index_t
+    add_rkey_config(ucp_worker_cfg_index_t rkey_cfg_index,
+                    ucs_memory_type_t mem_type, ucp_proto_select_key_t key)
+    {
+        ucp_worker_h worker                  = sender().worker();
+        const ucp_rkey_config_t *rkey_config = ucp_worker_rkey_config(
+                worker, rkey_cfg_index);
+        ucp_proto_select_param_t select_param;
+        ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+        ucp_rkey_config_key_t rkey_config_key;
+        ucp_worker_cfg_index_t new_rkey_cfg_index;
+        ucp_rkey_config_t *new_rkey_config;
+        ucs_status_t status;
+
+        /* Copy what is needed, since adding a configuration may reallocate
+         * the configurations array */
+        if (!find_select_param(rkey_config->proto_select, key, &select_param)) {
+            return UCP_WORKER_CFG_INDEX_NULL;
+        }
+
+        rkey_config_key          = rkey_config->key;
+        rkey_config_key.mem_type = mem_type;
+        memcpy(lanes_distance, rkey_config->lanes_distance,
+               sizeof(lanes_distance));
+
+        status = ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                            lanes_distance,
+                                            &new_rkey_cfg_index);
+        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            return UCP_WORKER_CFG_INDEX_NULL;
+        }
+
+        new_rkey_config = ucp_worker_rkey_config(worker, new_rkey_cfg_index);
+        EXPECT_NE(nullptr,
+                  ucp_proto_select_lookup(worker,
+                                          &new_rkey_config->proto_select,
+                                          ep_config_index(sender()),
+                                          new_rkey_cfg_index, &select_param,
+                                          1));
+        return new_rkey_cfg_index;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_foreign_rkey, get, "IB_NUM_PATHS?=1",
+           "RNDV_SCHEME=put_zcopy")
+{
+    const proto_select_data_vec_t data_vec = {
+        {1, 64, "rndv using zero-copy fenced write to remote", "rc_mlx5/mock"},
+        {65, INF, "zero-copy", "rc_mlx5/mock"},
+    };
+
+    require_cuda_net_md();
+    if (UCS_BIT_GET(sender().ucph()->supported_mem_type_mask,
+                    UCS_MEMORY_TYPE_ZE_DEVICE)) {
+        UCS_TEST_SKIP_R("ZE device memory is supported");
+    }
+
+    /* Messages smaller than the get_zcopy minimal size are read by get/rndv,
+     * which makes the remote side write the data */
+    auto rkey_cfg_index = test_cuda_rma(UCP_OP_ID_GET, data_vec);
+    ASSERT_NE(UCP_WORKER_CFG_INDEX_NULL, rkey_cfg_index);
+
+    /* The same protocols must be selected on remote memory of a type which is
+     * not supported by the local context, like GPU memory of another vendor,
+     * since the remote side is then estimated as if its buffer were of the
+     * local memory type */
+    auto key                    = cuda_rma_key(UCP_OP_ID_GET);
+    auto foreign_rkey_cfg_index = add_rkey_config(rkey_cfg_index,
+                                                  UCS_MEMORY_TYPE_ZE_DEVICE,
+                                                  key);
+    ASSERT_NE(UCP_WORKER_CFG_INDEX_NULL, foreign_rkey_cfg_index);
+    check_rkey_config(sender(), data_vec, key, foreign_rkey_cfg_index);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_foreign_rkey, rcx_cuda,
+                              "rc_x,cuda")
 
 class test_ucp_proto_mock_rcx_numa : public test_ucp_proto_mock {
 public:
