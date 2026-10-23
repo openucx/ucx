@@ -115,6 +115,12 @@ AS_IF([test "x$with_rocm" != "xno"],
 
    AC_CHECK_FUNCS([hsa_amd_portable_export_dmabuf])
 
+    # ROCr reports memory mapped through its virtual memory API (hipMemMap)
+    # as HSA_EXT_POINTER_TYPE_HSA_VMEM
+    CPPFLAGS="$ROCM_CPPFLAGS $SAVE_CPPFLAGS"
+    AC_CHECK_DECLS([HSA_EXT_POINTER_TYPE_HSA_VMEM], [], [],
+                   [[#include <hsa_ext_amd.h>]])
+
     CPPFLAGS="$SAVE_CPPFLAGS"
     LDFLAGS="$SAVE_LDFLAGS"
     LIBS="$SAVE_LIBS"
