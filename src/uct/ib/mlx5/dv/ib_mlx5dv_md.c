@@ -32,11 +32,6 @@
      UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
 
 
-static uint32_t uct_ib_mlx5_flush_rkey_make()
-{
-    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
-}
-
 ucs_sys_device_t
 uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 {
@@ -100,6 +95,11 @@ typedef struct uct_ib_mlx5_dbrec_page {
     uct_ib_mlx5_devx_umem_t    mem;
 } uct_ib_mlx5_dbrec_page_t;
 
+
+static uint32_t uct_ib_mlx5_flush_rkey_make()
+{
+    return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
+}
 
 /* Should be called after DDP is initialized */
 static int
@@ -3437,7 +3437,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->super.name = UCT_IB_MD_NAME(mlx5);
 
-    status = uct_ib_md_parse_relaxed_order(&md->super, md_config, 0, 0);
+    status = uct_ib_md_parse_relaxed_order(&md->super, md_config, 1, 0);
     if (status != UCS_OK) {
         goto err_md_close;
     }
@@ -3446,7 +3446,9 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     md->direct_nic_sys_dev =
             uct_ib_mlx5dv_check_direct_nic(dev, md_config->ext.direct_nic);
 
-    md->super.flush_rkey = uct_ib_mlx5_flush_rkey_make();
+    /* Clear atomic_mr_id (flush_rkey bits 8-15): verbs companion keys use
+     * the original address, so atomic_mr_offset must be zero. */
+    md->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;
