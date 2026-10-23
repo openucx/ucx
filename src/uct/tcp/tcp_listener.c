@@ -31,6 +31,7 @@ uct_tcp_listener_conn_req_handler(int fd, ucs_event_set_types_t events,
     ucs_assert(fd == listener->listen_fd);
 
     addrlen   = sizeof(struct sockaddr_storage);
+    /* coverity[uninit_use_in_call] */
     status    = ucs_socket_accept(listener->listen_fd,
                                   (struct sockaddr*)&client_addr,
                                   &addrlen, &conn_fd);
