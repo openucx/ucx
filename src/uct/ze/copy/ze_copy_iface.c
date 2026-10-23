@@ -237,9 +237,12 @@ static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
+/* Create the queue and list of a device; a failure is logged at log_level,
+ * as the caller may be able to continue without them */
 static ucs_status_t
 uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                                ze_device_handle_t device,
+                               ucs_log_level_t log_level,
                                unsigned *queue_index_p)
 {
     uct_ze_copy_md_t *ze_md         = ucs_derived_of(iface->super.md,
@@ -249,21 +252,25 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     uct_ze_copy_queue_t *queue;
     ze_result_t ret;
 
-    queue = ucs_array_append(&iface->queues, return UCS_ERR_NO_MEMORY);
+    queue = ucs_array_append(&iface->queues,
+                             ucs_log(log_level, "ze_copy_iface: could not "
+                                     "allocate a queue entry for device %p",
+                                     device);
+                             return UCS_ERR_NO_MEMORY);
 
     ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc,
                                &queue->cmdq);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_debug("ze_copy_iface: zeCommandQueueCreate failed for device %p "
-                  "with 0x%x", device, ret);
+        ucs_log(log_level, "ze_copy_iface: zeCommandQueueCreate failed for "
+                "device %p with 0x%x", device, ret);
         goto err_pop;
     }
 
     ret = zeCommandListCreate(ze_md->ze_context, device, &cl_desc,
                               &queue->cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
-        ucs_debug("ze_copy_iface: zeCommandListCreate failed for device %p "
-                  "with 0x%x", device, ret);
+        ucs_log(log_level, "ze_copy_iface: zeCommandListCreate failed for "
+                "device %p with 0x%x", device, ret);
         goto err_destroy_cmdq;
     }
 
@@ -335,7 +342,8 @@ ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
         }
     }
 
-    status = uct_ze_copy_iface_queue_create(iface, device, queue_index_p);
+    status = uct_ze_copy_iface_queue_create(iface, device, UCS_LOG_LEVEL_DEBUG,
+                                            queue_index_p);
     if (status == UCS_OK) {
         return UCS_OK;
     }
@@ -378,10 +386,8 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     ucs_array_init_dynamic(&self->queues);
 
     status = uct_ze_copy_iface_queue_create(self, ze_md->ze_device,
-                                            &queue_index);
+                                            UCS_LOG_LEVEL_ERROR, &queue_index);
     if (status != UCS_OK) {
-        ucs_error("ze_copy_iface: could not create a queue on the MD device "
-                  "%p", ze_md->ze_device);
         ucs_array_cleanup_dynamic(&self->queues);
         return status;
     }
