@@ -48,6 +48,7 @@ typedef struct {
     ucs_sys_ns_t pid_ns;
     uintptr_t    d_bptr;
     const void   *mapped_addr;
+    CUuuid       uuid;
 } uct_cuda_ipc_sgl_entry_t;
 
 
@@ -68,6 +69,7 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
                                      mapping->entries[i].pid_ns,
                                      mapping->entries[i].d_bptr,
                                      mapping->entries[i].mapped_addr,
+                                     &mapping->entries[i].uuid,
                                      cuda_device, enable_cache);
     }
 
@@ -83,6 +85,7 @@ typedef struct {
     pid_t                 pid;
     ucs_sys_ns_t          pid_ns;
     CUdevice              cuda_device;
+    CUuuid                uuid;
     uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
 } uct_cuda_ipc_event_desc_t;
 

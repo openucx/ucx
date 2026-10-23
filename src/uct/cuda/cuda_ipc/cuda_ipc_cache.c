@@ -661,19 +661,21 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     pthread_rwlock_unlock(&cache->lock);
 }
 
-void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
-                                  uintptr_t d_bptr, const void *mapped_addr,
-                                  CUdevice cu_dev, int cache_enabled)
+ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
+                                          uintptr_t d_bptr,
+                                          const void *mapped_addr,
+                                          const CUuuid *uuid, CUdevice cu_dev,
+                                          int cache_enabled)
 {
     const uct_cuda_ipc_cache_hash_key_t key = {pid, pid_ns, cu_dev};
     uct_cuda_ipc_cache_t *cache;
+    ucs_status_t status;
+    int is_local;
 
-    /* checking if the mapped address is the same as the d_bptr
-     * this is true for the case of single process memory mapping
-     * see uct_cuda_ipc_map_memhandle for more details */
-    if ((d_bptr == (uintptr_t)mapped_addr) &&
-        uct_cuda_ipc_is_rkey_local(pid, pid_ns)) {
-        return;
+    /* Match the cache bypass in uct_cuda_ipc_map_memhandle. */
+    status = uct_cuda_ipc_is_local_mapping(pid, pid_ns, uuid, cu_dev, &is_local);
+    if ((status != UCS_OK) || is_local) {
+        return status;
     }
 
     ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
@@ -687,6 +689,7 @@ void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     }
 
     ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -837,15 +840,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                                                     cu_dev};
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;
-    CUuuid uuid;
+    int is_local;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+    status = uct_cuda_ipc_is_local_mapping(key->pid, ext_key->pid_ns,
+                                          &key->uuid, cu_dev, &is_local);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns) &&
-        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
+    if (is_local) {
         /* TODO: added for test purpose to enable cuda_ipc tests in gtest
          * mapped addrr is set to be same as d_bptr avoiding any calls to
          * uct_cuda_ipc_open_memhandle which would fail with invalid argument

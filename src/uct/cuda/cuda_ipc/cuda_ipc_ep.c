@@ -220,6 +220,7 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     cuda_ipc_event->pid         = key->super.super.pid;
     cuda_ipc_event->pid_ns      = key->super.pid_ns;
     cuda_ipc_event->cuda_device = cuda_device;
+    cuda_ipc_event->uuid        = key->super.super.uuid;
     cuda_ipc_event->sgl_mapping = NULL;
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
@@ -356,6 +357,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         mapping->entries[i].pid_ns      = key->super.pid_ns;
         mapping->entries[i].d_bptr      = (uintptr_t)key->super.super.d_bptr;
         mapping->entries[i].mapped_addr = mapped_base_addr;
+        mapping->entries[i].uuid        = key->super.super.uuid;
         mapped_addrs[i]                 = (CUdeviceptr)mapped_addr;
         mapping->count++;
     }

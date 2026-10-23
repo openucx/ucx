@@ -45,6 +45,44 @@ protected:
         return sizeof(uct_cuda_ipc_md_device_mem_element_t);
     }
 
+    struct rkey_completion {
+        rkey_completion(entity &owner, const mapped_buffer &buffer) :
+            owner(&owner), called(false), ctx_result(CUDA_ERROR_UNKNOWN)
+        {
+            uct_allocated_memory_t mem = {};
+
+            uct.count   = 1;
+            uct.status  = UCS_OK;
+            uct.func    = complete;
+            mem.address = buffer.ptr();
+            mem.length  = buffer.length();
+            mem.memh    = buffer.memh();
+            rkey.rkey   = UCT_INVALID_RKEY;
+            owner.rkey_unpack(&mem, &rkey);
+        }
+
+        ~rkey_completion()
+        {
+            owner->rkey_release(&rkey);
+        }
+
+        static void complete(uct_completion_t *self)
+        {
+            auto *comp = ucs_container_of(self, rkey_completion, uct);
+
+            comp->owner->rkey_release(&comp->rkey);
+            comp->rkey.rkey  = UCT_INVALID_RKEY;
+            comp->ctx_result = cuCtxSetCurrent(NULL);
+            comp->called     = true;
+        }
+
+        uct_completion_t  uct;
+        entity            *owner;
+        uct_rkey_bundle_t rkey;
+        bool              called;
+        CUresult          ctx_result;
+    };
+
     entity * m_sender;
     entity * m_receiver;
 
@@ -75,6 +113,35 @@ UCS_TEST_P(test_cuda_ipc_rma, put_zcopy)
                                                  (uint64_t)recvbuf.ptr(),
                                                  recvbuf.rkey(), NULL));
     m_sender->flush();
+    recvbuf.pattern_check(SEED1);
+}
+
+UCS_TEST_P(test_cuda_ipc_rma, put_zcopy_completion_releases_rkey)
+{
+    const size_t length = 1024;
+    CUcontext saved_ctx, completed_ctx;
+
+    mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
+    mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
+    rkey_completion comp(*m_receiver, recvbuf);
+
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetCurrent(&saved_ctx));
+    ASSERT_NE(nullptr, saved_ctx);
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(m_sender->ep(0), sendbuf.iov(), 1,
+                               recvbuf.addr(), comp.rkey.rkey, &comp.uct));
+
+    /* User completion runs before the transport releases its event metadata. */
+    m_sender->flush();
+    CUresult ctx_result = cuCtxGetCurrent(&completed_ctx);
+    ASSERT_EQ(CUDA_SUCCESS, cuCtxSetCurrent(saved_ctx));
+
+    EXPECT_TRUE(comp.called);
+    EXPECT_EQ(0, comp.uct.count);
+    EXPECT_UCS_OK(comp.uct.status);
+    EXPECT_EQ(CUDA_SUCCESS, comp.ctx_result);
+    ASSERT_EQ(CUDA_SUCCESS, ctx_result);
+    EXPECT_EQ(nullptr, completed_ctx);
     recvbuf.pattern_check(SEED1);
 }
 

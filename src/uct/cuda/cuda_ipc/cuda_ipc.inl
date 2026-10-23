@@ -10,6 +10,7 @@
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_ctx.inl>
+#include <string.h>
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -93,6 +94,25 @@ uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 
     return (pid == rkey_pid) &&
            (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == rkey_pid_ns);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_ipc_is_local_mapping(pid_t pid, ucs_sys_ns_t pid_ns,
+                             const CUuuid *uuid, CUdevice cu_dev,
+                             int *is_local_p)
+{
+    CUuuid local_uuid;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&local_uuid, cu_dev));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *is_local_p = uct_cuda_ipc_is_rkey_local(pid, pid_ns) &&
+                  (memcmp(local_uuid.bytes, uuid->bytes,
+                          sizeof(local_uuid.bytes)) == 0);
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void *

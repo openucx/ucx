@@ -70,9 +70,11 @@ ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
                                         ucs_log_level_t log_level);
 
 
-void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
-                                  uintptr_t d_bptr, const void *mapped_addr,
-                                  CUdevice cu_dev, int cache_enabled);
+ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
+                                          uintptr_t d_bptr,
+                                          const void *mapped_addr,
+                                          const CUuuid *uuid, CUdevice cu_dev,
+                                          int cache_enabled);
 
 
 /**
