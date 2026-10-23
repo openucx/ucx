@@ -8,6 +8,12 @@
 
 #include <common/mem_buffer.h>
 
+extern "C" {
+#include <uct/ze/base/ze_base.h>
+#include <uct/ze/copy/ze_copy_iface.h>
+#include <uct/ze/copy/ze_copy_md.h>
+}
+
 
 class test_ze_copy_rma : public uct_p2p_rma_test {
 public:
@@ -115,7 +121,266 @@ protected:
             UCS_TEST_SKIP_R("No supported ZE memory types");
         }
     }
+
+    /* Device memory allocated outside UCX in its own context, as an
+     * application such as a framework allocates it. ze_copy has to resolve
+     * such memory through the MD context, as the MD mem_query already does,
+     * so this deliberately does not allocate from the MD context. */
+    class external_buffer {
+    public:
+        external_buffer(ze_device_handle_t device, size_t length)
+        {
+            ze_context_desc_t ctx_desc            = {};
+            ze_device_mem_alloc_desc_t alloc_desc = {};
+
+            ctx_desc.stype   = ZE_STRUCTURE_TYPE_CONTEXT_DESC;
+            alloc_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+
+            if (zeContextCreate(uct_ze_base_get_driver(), &ctx_desc,
+                                &m_context) != ZE_RESULT_SUCCESS) {
+                UCS_TEST_ABORT("zeContextCreate failed");
+            }
+
+            if (zeMemAllocDevice(m_context, &alloc_desc, length, 64, device,
+                                 &m_ptr) != ZE_RESULT_SUCCESS) {
+                zeContextDestroy(m_context);
+                UCS_TEST_ABORT("zeMemAllocDevice failed");
+            }
+        }
+
+        ~external_buffer()
+        {
+            zeMemFree(m_context, m_ptr);
+            zeContextDestroy(m_context);
+        }
+
+        void *ptr() const
+        {
+            return m_ptr;
+        }
+
+    private:
+        ze_context_handle_t m_context;
+        void                *m_ptr;
+    };
+
+    uct_ze_copy_md_t *ze_md()
+    {
+        return ucs_derived_of(sender().md(), uct_ze_copy_md_t);
+    }
+
+    uct_ze_copy_iface_t *ze_iface()
+    {
+        return ucs_derived_of(sender().iface(), uct_ze_copy_iface_t);
+    }
+
+    /* Return a device other than the MD device, preferring one on another
+     * card over another tile of the same card, or NULL if there is none */
+    ze_device_handle_t other_device()
+    {
+        ze_device_handle_t md_device            = ze_md()->ze_device;
+        const uct_ze_subdevice_t *md_subdevice  = NULL;
+        ze_device_handle_t other_tile           = NULL;
+        int num_subdevices                      =
+                uct_ze_base_get_num_subdevices();
+        const uct_ze_subdevice_t *subdevice;
+        ze_device_handle_t device;
+        int id;
+
+        for (id = 0; id < num_subdevices; ++id) {
+            subdevice = uct_ze_base_get_subdevice_by_global_id(id);
+            if (uct_ze_base_get_device_handle_from_subdevice(subdevice) ==
+                md_device) {
+                md_subdevice = subdevice;
+            }
+        }
+
+        for (id = 0; id < num_subdevices; ++id) {
+            subdevice = uct_ze_base_get_subdevice_by_global_id(id);
+            device    = uct_ze_base_get_device_handle_from_subdevice(subdevice);
+            if ((device == NULL) || (device == md_device)) {
+                continue;
+            }
+
+            if ((md_subdevice == NULL) ||
+                (subdevice->device != md_subdevice->device)) {
+                UCS_TEST_MESSAGE << "using a device on another card";
+                return device;
+            }
+
+            other_tile = device;
+        }
+
+        if (other_tile != NULL) {
+            UCS_TEST_MESSAGE << "using another tile of the MD card";
+        }
+
+        return other_tile;
+    }
+
+    /* Device which owns the allocation, as seen from the MD context, or NULL
+     * if the context does not resolve the address */
+    ze_device_handle_t mem_device(const void *address)
+    {
+        ze_memory_allocation_properties_t props = {};
+        ze_device_handle_t device               = NULL;
+
+        props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
+        if ((zeMemGetAllocProperties(ze_md()->ze_context, address, &props,
+                                     &device) != ZE_RESULT_SUCCESS) ||
+            (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
+            return NULL;
+        }
+
+        return device;
+    }
+
+    /* Skip the test if the MD context does not resolve the memory of another
+     * context: the Intel driver does, the specification does not require it,
+     * and the iface then just keeps using the MD device queue */
+    void check_buffer_resolved(ze_device_handle_t device, const void *address)
+    {
+        if (mem_device(address) == NULL) {
+            UCS_TEST_SKIP_R("the MD context does not resolve memory of "
+                            "another context");
+        }
+
+        ASSERT_EQ(device, mem_device(address));
+    }
+
+    void fill_and_copy_through(void *remote_addr, size_t length)
+    {
+        std::vector<uint8_t> host_buf(length), check_buf(length, 0);
+        size_t i;
+
+        for (i = 0; i < length; ++i) {
+            host_buf[i] = (uint8_t)(i * 7 + 1);
+        }
+
+        zcopy(host_buf.data(), remote_addr, length, true);
+        zcopy(check_buf.data(), remote_addr, length, false);
+        EXPECT_EQ(host_buf, check_buf);
+    }
+
+    unsigned get_queue(const void *src, const void *dst)
+    {
+        unsigned queue_index = UINT_MAX;
+
+        EXPECT_EQ(UCS_OK, uct_ze_copy_iface_get_queue(ze_iface(), src, dst,
+                                                      &queue_index));
+        return queue_index;
+    }
+
+    ze_device_handle_t queue_device(unsigned queue_index)
+    {
+        return ucs_array_elem(&ze_iface()->queues, queue_index).device;
+    }
+
+    void zcopy(void *buffer, void *remote_addr, size_t length, bool is_put)
+    {
+        uct_iov_t iov;
+
+        iov.buffer = buffer;
+        iov.length = length;
+        iov.memh   = UCT_MEM_HANDLE_NULL;
+        iov.stride = 0;
+        iov.count  = 1;
+
+        if (is_put) {
+            ASSERT_UCS_OK(uct_ep_put_zcopy(sender().ep(0), &iov, 1,
+                                           (uintptr_t)remote_addr, 0, NULL));
+        } else {
+            ASSERT_UCS_OK(uct_ep_get_zcopy(sender().ep(0), &iov, 1,
+                                           (uintptr_t)remote_addr, 0, NULL));
+        }
+    }
 };
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, queue_follows_buffer_device,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const size_t length       = UCS_MBYTE;
+    ze_device_handle_t device = other_device();
+    std::vector<uint8_t> host_buf(length), check_buf(length);
+    unsigned queue_index;
+
+    if (device == NULL) {
+        UCS_TEST_SKIP_R("needs a second ZE device");
+    }
+
+    external_buffer other_buf(device, length);
+    external_buffer md_buf(ze_md()->ze_device, length);
+
+    check_buffer_resolved(ze_md()->ze_device, md_buf.ptr());
+    check_buffer_resolved(device, other_buf.ptr());
+    EXPECT_TRUE(ze_iface()->multi_device);
+
+    /* Host-to-host copies and buffers on the MD device use the default
+     * queue */
+    EXPECT_EQ(0u, get_queue(host_buf.data(), check_buf.data()));
+    EXPECT_EQ(0u, get_queue(md_buf.ptr(), host_buf.data()));
+    EXPECT_EQ(0u, get_queue(host_buf.data(), md_buf.ptr()));
+    EXPECT_EQ(ze_md()->ze_device, queue_device(0));
+
+    /* Both directions select one queue on the buffer device */
+    queue_index = get_queue(other_buf.ptr(), host_buf.data());
+    ASSERT_LT(queue_index, ucs_array_length(&ze_iface()->queues));
+    EXPECT_NE(0u, queue_index);
+    EXPECT_EQ(device, queue_device(queue_index));
+    EXPECT_EQ(queue_index, get_queue(host_buf.data(), other_buf.ptr()));
+
+    /* Between two devices, the source device runs the copy */
+    EXPECT_EQ(queue_index, get_queue(other_buf.ptr(), md_buf.ptr()));
+    EXPECT_EQ(0u, get_queue(md_buf.ptr(), other_buf.ptr()));
+
+    fill_and_copy_through(other_buf.ptr(), length);
+}
+
+UCS_TEST_SKIP_COND_P(test_ze_copy_rma, md_queue_when_create_fails,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const size_t length       = 64 * UCS_KBYTE;
+    ze_device_handle_t device = other_device();
+    ze_bool_t can_access_peer = false;
+    std::vector<uint8_t> host_buf(length);
+    uct_ze_copy_queue_t *queue;
+
+    if (device == NULL) {
+        UCS_TEST_SKIP_R("needs a second ZE device");
+    }
+
+    /* The MD device queue can move the data only if it reaches the memory
+     * of the other device */
+    ASSERT_EQ(ZE_RESULT_SUCCESS,
+              zeDeviceCanAccessPeer(ze_md()->ze_device, device,
+                                    &can_access_peer));
+    if (!can_access_peer) {
+        UCS_TEST_SKIP_R("the MD device has no peer access to the other "
+                        "device");
+    }
+
+    external_buffer other_buf(device, length);
+    check_buffer_resolved(device, other_buf.ptr());
+
+    /* Insert the entry which get_queue records after a failed queue
+     * creation; the failure itself cannot be provoked here. Checks the use
+     * of the entry and that iface cleanup skips it, not its creation. */
+    queue = ucs_array_append(&ze_iface()->queues,
+                             UCS_TEST_ABORT("cannot append a queue"));
+    queue->device = device;
+    queue->cmdq   = NULL;
+    queue->cmdl   = NULL;
+
+    /* Copies with the buffer of that device fall back to the MD device
+     * queue, in both directions, and still move the data */
+    EXPECT_EQ(0u, get_queue(other_buf.ptr(), host_buf.data()));
+    EXPECT_EQ(0u, get_queue(host_buf.data(), other_buf.ptr()));
+    EXPECT_EQ(ze_md()->ze_device, queue_device(0));
+
+    fill_and_copy_through(other_buf.ptr(), length);
+}
 
 UCS_TEST_SKIP_COND_P(test_ze_copy_rma, put_zcopy,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
