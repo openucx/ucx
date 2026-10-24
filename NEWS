@@ -7,15 +7,139 @@
 ##
 #
 
-## Current
+## 1.23.0 (TBD)
 ### Features:
-#### ROCM
- * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
+#### UCP
+ * Split an SGL put between the lanes by bytes
+ * Increased the maximum number of transport resources to 255
+ * Set default rendezvous fragment size for Vera Rubin platforms
+ * Allowed 32 memory domains per component by default on Vera Rubin platforms
+ * Added topology-aware GPU-to-NIC assignment in UCP contexts on supported platforms, configured by UCX_GPU_NIC_ASSIGNMENT_MODE
+ * Applied GPU-NIC assignment to RMA and rendezvous lane selection
+ * Excluded DPU devices from GPU-NIC assignment
+ * Improved GPU-NIC load distribution by spreading equal-bandwidth GPU assignments across NICs
+ * Increased default UCX_DISTANCE_BW for Vera Rubin platforms
+ * Made RMA PUT and GET rendezvous protocols a fallback for zcopy
+ * Improved small SGL PUT performance by splitting batches across multiple lanes
+ * Added device name filter for worker address query
+ * Improved UCX_SINGLE_NET_DEVICE selection by matching NICs to the local device ordinal
+ * Added probe-gated recovery of failed lanes using auxiliary endpoint checks
+ * Added opt-in intra-node CUDA staging policy for tag rendezvous (UCX_RNDV_PIPELINE_SHM_CUDA_STAGING_FORCE)
+ * Added fault-tolerance recovery that rebuilds failed lanes via LANES_ADDR exchange
+ * Added software emulation protocol for SGL PUT
+ * Widened protocol bitmap to support more than 64 protocols
+#### UCT
+ * Enabled GDAKI to use VMM fabric allocations when available with cuMemAlloc fallback
+ * Added uct_ep_get_sgl_zcopy API
+ * Added UCT support to extract outstanding operations for failover recovery
 #### RDMA CORE (IB, ROCE, etc.)
- * UCX_IB_PCI_RELAXED_ORDERING=yes now requires all memory keys to use relaxed ordering and omits strict-order companion keys; the former "only" value is removed
-### Bugfixes:
+ * Added AArch64 ST64B BlueFlame copy mode for MLX5
+ * Added UCX_IB_AH_CACHE_TTL to configure the address handle cache TTL
+ * Added multi-channel D2P support with per-endpoint DPA addresses and doorbell control flag
+ * Exposed the GDAKI device-affinity matrix for use by external transports
+ * UCX_IB_PCI_RELAXED_ORDERING=yes now requires all memory keys to use relaxed ordering and omits strict-order companion keys
+ * Added SGL PUT zcopy support to MLX5 RC transport
+ * Added ConnectX-10 device support
+ * Added RoCE fabric plane detection for GDAKI GPU-to-HCA assignment, enabled by default through UCX_IB_GDA_FABRIC_DETECT
+#### CUDA
+ * Assigned stable UNKN<n> names to non-visible GPUs
+ * Restored the CUDA IPC ENABLE_SAME_PROCESS option
+ * Added detection support for device-local CUDA memory
+ * Set CUDA IPC bandwidth for Blackwell RTX GPUs
+ * Added SGL GET zcopy support to CUDA IPC transport
+ * Added CUDA 13.4 sm_107 compilation support and Vera Rubin CUDA copy bandwidth estimates
+ * Optimized CUDA memory queries by checking cached memory flags before querying attributes
+ * Added SGL PUT zcopy support to CUDA IPC transport
 #### ROCM
+ * Added BISTRO memory hooks for ROCm
+ * Added peer failure error handling to ROCm IPC transport
+ * Enabled dmabuf by default for GPU-direct transfers, falling back to peermem when unavailable
+ * Added device-initiated IPC PUT for ROCm
+#### UCS
+ * Added ucs_array_for_each_index utility
+ * Added PCI vendor and device IDs to topology information
+#### Tools
+ * Added perftest failover endpoint-failure mode and fault-tolerance CI coverage
+ * Added data validation mode to perftest ping-pong tests, including CUDA and IOV datatypes
+#### Build
+ * Added logging of git branch, revision, and configuration flags
+#### Documentation
+ * Added third-party license and attribution notices
+ * Clarified the difference between IOV and SGL datatypes in UCP API documentation
+### Bugfixes:
+#### UCP
+ * Fixed post-wireup freezes by keeping active-message lane interfaces active while endpoint configurations use them
+ * Fixed configuration validation to reject eager, rendezvous, and RMA rail counts above the maximum number of lanes
+ * Disabled GPU-NIC assignment when GPU device class information is incomplete
+ * Fixed rendezvous RTR_REQ responder to use local memory detection
+ * Fixed rendezvous to skip inter-node memtype-copy protocols when CUDA memory is not exportable
+ * Fixed AM bcopy multi-fragment send treating byte counts as error status
+ * Fixed rkey configurations to remain at stable addresses as the configuration table grows
+ * Fixed Direct NIC rendezvous protocol selection when local and remote system-device IDs use separate namespaces
+ * Fixed race condition by lazily initializing short-message thresholds outside the async thread
+ * Fixed device endpoint connection check to run only when peer-to-peer lanes exist
+ * Fixed registration of user-supplied SGL memory handles on all required memory domains
+ * Fixed errors for large SGL PUT elements by fragmenting them at the maximum zero-copy size
+ * Fixed fast single-lane protocols selecting lanes outside the fast-path lane array
+ * Fixed SGL PUT validation for remote lengths and descriptor arrays
+ * Fixed device lane selection to prioritize high-bandwidth lanes that do not require local keys
+ * Fixed SGL PUT validation to reject missing or invalid remote datatypes
+ * Fixed async-lock assertions while handling IB port speed changes
+ * Fixed a potentially uninitialized protocol-selection range limit
+ * Fixed port speed handling for interfaces that report zero shared bandwidth
+ * Fixed configuration parsing for the self-transport device count and dynamic transport-progress factor
+ * Fixed protocol-reconfiguration races during lane-failure scheduling
+ * Fixed wireup failures with many devices by preferring message lanes with larger segments
+#### UCM
+ * Fixed CUDA device symbols to be detected as managed memory
+ * Fixed undefined-symbol failures in CUDA and ROCm memory hooks when UCX is loaded with RTLD_LOCAL
+#### ZE
+ * Fixed ZE copy remote-key comparison and memory deregistration
+#### CUDA
+ * Fixed gdr_copy being used for memory that is not GDR-capable
+ * Fixed CUDA IPC atomic operations to wait for preceding device PUT operations
+ * Fixed duplicate devices during CUDA initialization
+ * Suppressed spurious CUDA IPC error messages during static destruction at process exit
+ * Fixed a CUDA deadlock by setting CU_CTX_SYNC_MEMOPS once per context rather than during every memory detection
+ * Fixed CUDA IPC memory handle unmapping on device memory list release
+ * Fixed registration extent for multi-handle CUDA VMM allocations
+ * Fixed CUDA IPC memory handle unmapping of handles mapped during rkey unpack and rkey_ptr lookup
+ * Fixed CUDA IPC reachability across different PID namespaces
+ * Fixed a crash during rkey packing by caching CUDA allocation flags while a context is active
+ * Fixed crashes during CUDA async managed-memory detection when DMA-BUF probing is enabled
+#### ROCM
+ * Fixed ROCm IPC handle caching to avoid cross-peer virtual-address collisions
  * Fixed dmabuf base address and offset for interior ROCm pointers
+ * Fixed ROCm dmabuf capability detection on Fedora CoreOS and other distributions
+#### RDMA CORE (IB, ROCE, etc.)
+ * Fixed GDAKI device matrix to include only usable IB HCAs
+ * Fixed MLX5 to use the configured MMIO mode when using a verbs SRQ
+ * Fixed UD to release stale private endpoints after peer failure
+ * Fixed GDAKI RoCE reachability when a GPU-associated NIC does not own the most-specific route
+ * Fixed RoCE LAG PUT bandwidth estimate
+ * Fixed stale UD destination ID reuse by adding generation identifiers
+ * Fixed GDAKI reachability reporting for unreachable RoCE peers
+ * Improved GDAKI endpoint initialization by removing a redundant CUDA buffer initialization
+ * Fixed DC request memory pool leak in MLX5
+ * Fixed rdma-core IB device speed-change event handling
+ * Fixed a stale RC fence after rendezvous PUT by consuming the pending fence on send
+ * Improved RC/DC protocol selection by correcting DC full-handshake latency estimates
+ * Fixed GDA memory fence ordering and removed unnecessary heavy fences
+ * Fixed GDAKI endpoint reconnection by resetting pooled queue pairs before reuse
+#### Shared Memory
+ * Fixed CMA reachability probe to avoid using a stack address
+#### UCS
+ * Fixed topology device ordinals after NVML errors by marking GPU discovery incomplete
+ * Fixed off-by-one error in topology maximum device ID check
+ * Fixed sysfs numeric parsing of whitespace and malformed values
+ * Fixed topology class ordinals for devices sharing the same PCI BDF
+ * Fixed NUMA distance parsing for sparse NUMA node IDs
+ * Fixed ucx_info -c -C incorrectly marking configuration-file values as defaults
+#### Build
+ * Fixed perftest builds with GCC 16 by replacing the deprecated OpenMP master construct
+ * Fixed empty Git branch and revision fields in build metadata
+ * Fixed compilation when configured without GDA
+ * Fixed UCS time-header compilation by including the UCS_INFINITY declaration
 
 ## 1.22.0 (August 2, 2026)
 ### Features:
