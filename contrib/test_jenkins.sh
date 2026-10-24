@@ -736,15 +736,21 @@ run_ucx_perftest() {
 			echo "==== cuda-async memory is not supported, skipping ===="
 		fi
 
-		for memtype_cache in y n
+		for memtype_cache in y n explicit
 		do
 			for gdr in $gdr_options
 			do
 				export UCX_MEMTYPE_CACHE=$memtype_cache
 				export UCX_IB_GPU_DIRECT_RDMA=$gdr
+				if [ "$memtype_cache" = explicit ]; then
+					export UCX_MEM_EVENTS=n
+				fi
 				run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 				unset UCX_MEMTYPE_CACHE
 				unset UCX_IB_GPU_DIRECT_RDMA
+				if [ "$memtype_cache" = explicit ]; then
+					unset UCX_MEM_EVENTS
+				fi
 			done
 		done
 

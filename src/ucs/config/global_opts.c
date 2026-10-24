@@ -19,6 +19,7 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 #include <sys/signal.h>
+#include <strings.h>
 
 
 ucs_global_opts_t ucs_global_opts = {
@@ -38,7 +39,7 @@ ucs_global_opts_t ucs_global_opts = {
     .debug_signo           = SIGHUP,
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
-    .enable_memtype_cache  = UCS_TRY,
+    .enable_memtype_cache  = UCS_MEMTYPE_CACHE_TRY,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
     .tuning_path           = "",
@@ -69,6 +70,32 @@ static const char *ucs_handle_error_modes[] = {
     [UCS_HANDLE_ERROR_NONE]      = "none",
     [UCS_HANDLE_ERROR_LAST]      = NULL
 };
+
+static int ucs_config_sscanf_memtype_cache(const char *buf, void *dest,
+                                           const void *arg)
+{
+    if (!strcasecmp(buf, "explicit")) {
+        *(int*)dest = UCS_MEMTYPE_CACHE_EXPLICIT;
+        return 1;
+    }
+
+    return ucs_config_sscanf_ternary(buf, dest, arg);
+}
+
+static int ucs_config_sprintf_memtype_cache(char *buf, size_t max,
+                                            const void *src, const void *arg)
+{
+    if (*(const int*)src == UCS_MEMTYPE_CACHE_EXPLICIT) {
+        return snprintf(buf, max, "explicit");
+    }
+
+    return ucs_config_sprintf_ternary_auto(buf, max, src, arg);
+}
+
+#define UCS_CONFIG_TYPE_MEMTYPE_CACHE \
+    {ucs_config_sscanf_memtype_cache, ucs_config_sprintf_memtype_cache, \
+     ucs_config_clone_int, ucs_config_release_nop, \
+     ucs_config_help_generic, ucs_config_doc_nop, "<yes|no|try|explicit>"}
 
 
 static UCS_CONFIG_DEFINE_ARRAY(signo,
@@ -166,8 +193,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
 
   {"MEMTYPE_CACHE", "try",
-   "Enable memory type (cuda/rocm) cache",
-   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_TERNARY},
+   "Enable memory type (cuda/rocm) cache. 'n' disables it completely; "
+   "'explicit' uses UCM events when available and otherwise caches only "
+   "explicitly registered memory.",
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache),
+   UCS_CONFIG_TYPE_MEMTYPE_CACHE},
 
  {"ASYNC_MAX_EVENTS", "1024",
   "The configuration parameter is deprecated.\n"
