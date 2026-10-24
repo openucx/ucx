@@ -20,7 +20,184 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucm/api/ucm.h>
+#include <string.h>
 
+
+/* Explicit mappings remain valid without allocation/free event hooks. */
+typedef struct {
+    uintptr_t         start;
+    uintptr_t         end;
+    ucs_memory_type_t mem_type;
+    ucs_sys_device_t  sys_dev;
+    uint8_t           mem_flags;
+    const void        *owner;
+} ucs_memtype_explicit_region_t;
+
+static ucs_spinlock_t ucs_memtype_explicit_lock;
+static ucs_memtype_explicit_region_t *ucs_memtype_explicit_regions;
+static size_t ucs_memtype_explicit_count;
+static size_t ucs_memtype_explicit_capacity;
+static int ucs_memtype_explicit_has_overlap;
+
+static size_t ucs_memtype_explicit_lower_bound(uintptr_t address)
+{
+    size_t lo = 0, hi = ucs_memtype_explicit_count, mid;
+
+    while (lo < hi) {
+        mid = lo + (hi - lo) / 2;
+        if (ucs_memtype_explicit_regions[mid].start < address) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+void ucs_memtype_explicit_register(const void *address, size_t size,
+                                   ucs_memory_type_t mem_type,
+                                   ucs_sys_device_t sys_dev, uint8_t mem_flags,
+                                   const void *owner)
+{
+    ucs_memtype_explicit_region_t *region, *regions;
+    uintptr_t start = (uintptr_t)address;
+    uintptr_t end;
+    size_t index, capacity;
+
+    if ((size == 0) || (size > UINTPTR_MAX - start) || (owner == NULL)) {
+        return;
+    }
+    end = start + size;
+
+    ucs_spin_lock(&ucs_memtype_explicit_lock);
+    for (index = 0; index < ucs_memtype_explicit_count; ++index) {
+        if (ucs_memtype_explicit_regions[index].owner == owner) {
+            goto out;
+        }
+    }
+
+    index = ucs_memtype_explicit_lower_bound(start);
+    if (ucs_memtype_explicit_count == ucs_memtype_explicit_capacity) {
+        capacity = ucs_memtype_explicit_capacity ?
+                   2 * ucs_memtype_explicit_capacity : 8;
+        regions = ucs_realloc(ucs_memtype_explicit_regions,
+                              capacity * sizeof(*regions),
+                              "memtype_explicit_regions");
+        if (regions == NULL) {
+            goto out;
+        }
+        ucs_memtype_explicit_regions  = regions;
+        ucs_memtype_explicit_capacity = capacity;
+    }
+
+    if (((index > 0) &&
+         (ucs_memtype_explicit_regions[index - 1].end > start)) ||
+        ((index < ucs_memtype_explicit_count) &&
+         (ucs_memtype_explicit_regions[index].start < end))) {
+        ucs_memtype_explicit_has_overlap = 1;
+    }
+    region = &ucs_memtype_explicit_regions[index];
+    memmove(region + 1, region,
+            (ucs_memtype_explicit_count - index) * sizeof(*region));
+    region->start     = start;
+    region->end       = end;
+    region->mem_type  = mem_type;
+    region->sys_dev   = sys_dev;
+    region->mem_flags = mem_flags;
+    region->owner     = owner;
+    ++ucs_memtype_explicit_count;
+out:
+    ucs_spin_unlock(&ucs_memtype_explicit_lock);
+}
+
+void ucs_memtype_explicit_unregister(const void *owner)
+{
+    uintptr_t max_end = 0;
+    size_t index;
+
+    ucs_spin_lock(&ucs_memtype_explicit_lock);
+    for (index = 0; index < ucs_memtype_explicit_count; ++index) {
+        if (ucs_memtype_explicit_regions[index].owner == owner) {
+            memmove(&ucs_memtype_explicit_regions[index],
+                    &ucs_memtype_explicit_regions[index + 1],
+                    (ucs_memtype_explicit_count - index - 1) *
+                    sizeof(*ucs_memtype_explicit_regions));
+            --ucs_memtype_explicit_count;
+            break;
+        }
+    }
+
+    ucs_memtype_explicit_has_overlap = 0;
+    for (index = 0; index < ucs_memtype_explicit_count; ++index) {
+        if ((index > 0) &&
+            (ucs_memtype_explicit_regions[index].start < max_end)) {
+            ucs_memtype_explicit_has_overlap = 1;
+            break;
+        }
+        max_end = ucs_max(max_end, ucs_memtype_explicit_regions[index].end);
+    }
+    ucs_spin_unlock(&ucs_memtype_explicit_lock);
+}
+
+ucs_status_t ucs_memtype_explicit_lookup(const void *address, size_t size,
+                                         ucs_memory_info_t *mem_info)
+{
+    ucs_memtype_explicit_region_t *region;
+    uintptr_t start = (uintptr_t)address;
+    uintptr_t end;
+    ucs_status_t status = UCS_ERR_NO_ELEM;
+    size_t index, match = SIZE_MAX;
+
+    if ((size == 0) || (size > UINTPTR_MAX - start)) {
+        return UCS_ERR_NO_ELEM;
+    }
+    end = start + size;
+
+    ucs_spin_lock(&ucs_memtype_explicit_lock);
+    if (ucs_memtype_explicit_has_overlap) {
+        /* Multiple owners may cover the same address with different metadata.
+         * Do not guess which one the caller intended. */
+        for (index = 0; index < ucs_memtype_explicit_count; ++index) {
+            region = &ucs_memtype_explicit_regions[index];
+            if (region->start >= end) {
+                break;
+            }
+            if (region->end > start) {
+                if (match != SIZE_MAX) {
+                    goto out;
+                }
+                match = index;
+            }
+        }
+        if (match == SIZE_MAX) {
+            goto out;
+        }
+        index = match;
+    } else {
+        index = ucs_memtype_explicit_lower_bound(start);
+        if ((index == ucs_memtype_explicit_count) ||
+            (ucs_memtype_explicit_regions[index].start > start)) {
+            if (index == 0) {
+                goto out;
+            }
+            --index;
+        }
+    }
+
+    region = &ucs_memtype_explicit_regions[index];
+    if ((start >= region->start) && (start < region->end) &&
+        (size <= region->end - start)) {
+        mem_info->type         = region->mem_type;
+        mem_info->sys_dev      = region->sys_dev;
+        mem_info->base_address = (void*)region->start;
+        mem_info->alloc_length = region->end - region->start;
+        mem_info->mem_flags    = region->mem_flags;
+        status                 = UCS_OK;
+    }
+out:
+    ucs_spin_unlock(&ucs_memtype_explicit_lock);
+    return status;
+}
 
 static ucs_spinlock_t ucs_memtype_cache_global_instance_lock;
 static int ucs_memtype_cache_failed                    = 0;
@@ -443,10 +620,17 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
 void ucs_memtype_cache_global_init()
 {
     ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock, 0);
+    ucs_spinlock_init(&ucs_memtype_explicit_lock, 0);
 }
 
 void ucs_memtype_cache_cleanup()
 {
+    ucs_free(ucs_memtype_explicit_regions);
+    ucs_memtype_explicit_regions  = NULL;
+    ucs_memtype_explicit_count    = 0;
+    ucs_memtype_explicit_capacity = 0;
+    ucs_memtype_explicit_has_overlap = 0;
+    ucs_spinlock_destroy(&ucs_memtype_explicit_lock);
     ucs_spinlock_destroy(&ucs_memtype_cache_global_instance_lock);
 
     if (ucs_memtype_cache_global_instance) {

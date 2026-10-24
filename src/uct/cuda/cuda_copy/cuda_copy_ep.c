@@ -85,6 +85,11 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
         goto out_host;
     }
 
+    if ((status == UCS_ERR_UNSUPPORTED) &&
+        (ucs_memtype_explicit_lookup(address, length, &mem_info) == UCS_OK)) {
+        goto out_info;
+    }
+
     if (ucs_unlikely((status == UCS_ERR_UNSUPPORTED) ||
                      (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN) ||
                      ((mem_info.sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) &&
@@ -101,6 +106,7 @@ uct_cuda_copy_get_mem_type(uct_md_h md, const void *address, size_t length,
         mem_info.sys_dev = mem_attr.sys_dev;
     }
 
+out_info:
     *sys_dev = mem_info.sys_dev;
     return mem_info.type;
 
