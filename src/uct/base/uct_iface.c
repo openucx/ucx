@@ -506,6 +506,18 @@ ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
     return status;
 }
 
+void uct_iface_handle_ep_event(uct_iface_h iface, uct_ep_h ep,
+                               unsigned flags)
+{
+    uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
+
+    ucs_assert(ep != NULL);
+    ucs_assert(ep->iface == iface);
+    if (base_iface->async_event_cb_v2 != NULL) {
+        base_iface->async_event_cb_v2(base_iface->async_event_arg, flags, ep);
+    }
+}
+
 void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(*iface_attr));
@@ -714,6 +726,10 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
                                                     ERR_HANDLER_FLAGS, 0);
     self->err_handler_arg   = UCT_IFACE_PARAM_VALUE(params, err_handler_arg,
                                                     ERR_HANDLER_ARG, NULL);
+    self->async_event_cb_v2 = UCT_IFACE_PARAM_VALUE(params, async_event_cb_v2,
+                                                    ASYNC_EVENT_CB_V2, NULL);
+    self->async_event_arg   = UCT_IFACE_PARAM_VALUE(params, async_event_arg,
+                                                    ASYNC_EVENT_ARG, NULL);
     self->progress_flags    = 0;
 
     uct_worker_progress_init(&self->prog);

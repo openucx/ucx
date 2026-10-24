@@ -1206,6 +1206,8 @@ enum uct_iface_attr_field {
                                                                support token query, and
                                                                @ref uct_ep_outstanding_purge
                                                                is supported. */
+/** Dedicated path-monitor endpoints are supported. */
+#define UCT_IFACE_FLAG_V2_PATH_MONITOR UCS_BIT(3)
 /**
  * @}
  */

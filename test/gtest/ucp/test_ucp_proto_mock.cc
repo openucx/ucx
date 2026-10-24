@@ -17,6 +17,7 @@ extern "C" {
 #include <ucp/proto/proto_multi.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/rndv/proto_rndv.h>
+#include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
@@ -1065,6 +1066,468 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_path_monitor : public test_ucp_proto_mock_rcx {
+protected:
+    virtual void cleanup() override
+    {
+        m_path_probe_mock.cleanup();
+        test_ucp_proto_mock_rcx::cleanup();
+    }
+
+    virtual void post_ucp_init() override
+    {
+        ucp_worker_h worker;
+        unsigned iface_id;
+
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter) {
+            worker = (*iter)->worker();
+            for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+                worker->ifaces[iface_id]->attr_v2.cap.flags |=
+                        UCT_IFACE_FLAG_V2_PATH_MONITOR;
+            }
+        }
+    }
+
+    void check_lane_mapping()
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+        const ucp_lane_type_mask_t data_types =
+                UCS_BIT(UCP_LANE_TYPE_AM_BW) |
+                UCS_BIT(UCP_LANE_TYPE_RMA_BW);
+        ucp_lane_map_t monitored_data_lanes = 0;
+        ucp_lane_map_t data_lanes           = 0;
+        ucp_lane_map_t monitor_lanes        = 0;
+        ucp_lane_index_t lane, data_lane;
+
+        for (lane = 0; lane < key.num_lanes; ++lane) {
+            if (ucp_ep_config_is_path_keepalive_lane(&key, lane)) {
+                data_lane = key.lanes[lane].monitored_lane;
+                ASSERT_LT(data_lane, key.num_lanes);
+                EXPECT_FALSE(ucp_ep_config_is_path_keepalive_lane(&key,
+                                                                   data_lane));
+                EXPECT_TRUE(key.lanes[data_lane].lane_types & data_types);
+                EXPECT_EQ(UCS_BIT(UCP_LANE_TYPE_KEEPALIVE),
+                          key.lanes[lane].lane_types);
+                EXPECT_EQ(key.lanes[data_lane].rsc_index,
+                          key.lanes[lane].rsc_index);
+                EXPECT_EQ(key.lanes[data_lane].path_index,
+                          key.lanes[lane].path_index);
+                EXPECT_EQ(key.lanes[data_lane].dst_md_index,
+                          key.lanes[lane].dst_md_index);
+                EXPECT_EQ(key.lanes[data_lane].dst_sys_dev,
+                          key.lanes[lane].dst_sys_dev);
+                EXPECT_FALSE(monitored_data_lanes & UCS_BIT(data_lane));
+                monitored_data_lanes |= UCS_BIT(data_lane);
+                monitor_lanes        |= UCS_BIT(lane);
+            } else if (key.lanes[lane].lane_types & data_types) {
+                data_lanes |= UCS_BIT(lane);
+            }
+        }
+
+        EXPECT_GT(ucs_popcount(data_lanes), 1);
+        EXPECT_EQ(data_lanes, monitored_data_lanes);
+        EXPECT_EQ(key.path_keepalive_lanes, monitor_lanes);
+        EXPECT_EQ(ucs_popcount(data_lanes), ucs_popcount(monitor_lanes));
+        if (key.wireup_msg_lane != UCP_NULL_LANE) {
+            EXPECT_FALSE(monitor_lanes & UCS_BIT(key.wireup_msg_lane));
+        }
+    }
+
+    static void check_no_path_monitor_lanes(const entity &e)
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(e.ep())->key;
+
+        EXPECT_EQ(0, key.path_keepalive_lanes);
+    }
+
+    static ucs_status_t path_probe_mock(uct_ep_h ep, unsigned flags,
+                                        uct_completion_t *comp)
+    {
+        std::map<uct_ep_h, unsigned>::iterator iter =
+                m_path_probe_counts.find(ep);
+
+        if (iter != m_path_probe_counts.end()) {
+            ++iter->second;
+        } else if (ep == m_keepalive_ep) {
+            ++m_keepalive_count;
+        }
+
+        if ((ep == m_no_resource_ep) && !m_no_resource_returned) {
+            m_no_resource_returned = true;
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        return UCS_OK;
+    }
+
+    static uct_ep_h get_check_ep(uct_ep_h ep)
+    {
+        while (ucp_wireup_ep_test(ep)) {
+            ep = ucp_wireup_ep(ep)->super.uct_ep;
+            ucs_assert(ep != NULL);
+        }
+
+        return ep;
+    }
+
+    void setup_keepalive_mock()
+    {
+        const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+        std::set<uct_ep_check_func_t*> mocked_ops;
+        uct_ep_check_func_t *ep_check;
+        ucp_lane_index_t lane;
+        uct_ep_h uct_ep;
+
+        m_path_probe_counts.clear();
+        m_no_resource_ep       = NULL;
+        m_no_resource_returned = false;
+        m_keepalive_ep         = NULL;
+        m_keepalive_count      = 0;
+
+        ucs_for_each_bit(lane, key.path_keepalive_lanes) {
+            uct_ep = get_check_ep(ucp_ep_get_lane(sender().ep(), lane));
+            m_path_probe_counts[uct_ep] = 0;
+            if (mocked_ops.insert(&uct_ep->iface->ops.ep_check).second) {
+                m_path_probe_mock.setup(&uct_ep->iface->ops.ep_check,
+                                        path_probe_mock);
+            }
+        }
+
+        if (key.keepalive_lane != UCP_NULL_LANE) {
+            m_keepalive_ep = get_check_ep(
+                    ucp_ep_get_lane(sender().ep(), key.keepalive_lane));
+            ep_check       = &m_keepalive_ep->iface->ops.ep_check;
+            if (mocked_ops.insert(ep_check).second) {
+                m_path_probe_mock.setup(ep_check, path_probe_mock);
+            }
+        }
+
+        ASSERT_FALSE(m_path_probe_counts.empty());
+        ASSERT_EQ(ucs_popcount(key.path_keepalive_lanes),
+                  m_path_probe_counts.size());
+    }
+
+    void setup_path_probe_mock()
+    {
+        setup_keepalive_mock();
+        m_no_resource_ep = m_path_probe_counts.begin()->first;
+    }
+
+    void setup_ordinary_keepalive_mock()
+    {
+        setup_keepalive_mock();
+        ASSERT_NE(nullptr, m_keepalive_ep);
+        m_no_resource_ep = m_keepalive_ep;
+    }
+
+    static unsigned total_path_probe_count()
+    {
+        std::map<uct_ep_h, unsigned>::const_iterator iter;
+        unsigned count = 0;
+
+        for (iter = m_path_probe_counts.begin();
+             iter != m_path_probe_counts.end(); ++iter) {
+            count += iter->second;
+        }
+
+        return count;
+    }
+
+    static void check_path_probe_counts(unsigned no_resource_count,
+                                        unsigned other_count)
+    {
+        std::map<uct_ep_h, unsigned>::const_iterator iter;
+
+        for (iter = m_path_probe_counts.begin();
+             iter != m_path_probe_counts.end(); ++iter) {
+            if (iter->first == m_no_resource_ep) {
+                EXPECT_EQ(no_resource_count, iter->second);
+            } else {
+                EXPECT_EQ(other_count, iter->second);
+            }
+        }
+    }
+
+    void progress_until_path_probe_count(ucp_worker_h worker,
+                                         unsigned expected_count)
+    {
+        static const unsigned max_progress = 64;
+        unsigned count;
+
+        for (count = 0;
+             (count < max_progress) &&
+             (total_path_probe_count() < expected_count);
+             ++count) {
+            worker->keepalive.last_round = 0;
+            worker->keepalive.iter_count = 0;
+#if UCS_ENABLE_ASSERT
+            sender().ep()->ext->ka_last_round = 0;
+#endif
+            ucp_worker_progress(worker);
+        }
+
+        ASSERT_EQ(expected_count, total_path_probe_count());
+    }
+
+    ucs::mock                           m_path_probe_mock;
+    static std::map<uct_ep_h, unsigned> m_path_probe_counts;
+    static uct_ep_h                    m_no_resource_ep;
+    static bool                        m_no_resource_returned;
+    static uct_ep_h                    m_keepalive_ep;
+    static unsigned                    m_keepalive_count;
+};
+
+std::map<uct_ep_h, unsigned>
+        test_ucp_proto_mock_path_monitor::m_path_probe_counts;
+uct_ep_h test_ucp_proto_mock_path_monitor::m_no_resource_ep = NULL;
+bool test_ucp_proto_mock_path_monitor::m_no_resource_returned = false;
+uct_ep_h test_ucp_proto_mock_path_monitor::m_keepalive_ep = NULL;
+unsigned test_ucp_proto_mock_path_monitor::m_keepalive_count = 0;
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, lane_mapping_v1,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
+{
+    check_lane_mapping();
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, lane_mapping_v2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
+           "ADDRESS_VERSION=v2")
+{
+    check_lane_mapping();
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, periodic_probe,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
+           "KEEPALIVE_INTERVAL=1ms")
+{
+    ucp_worker_h worker            = sender().worker();
+    const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    unsigned num_path_probes;
+
+    ASSERT_EQ(UCP_NULL_LANE, key.keepalive_lane);
+    ASSERT_NE(0, key.path_keepalive_lanes);
+    ASSERT_NE(UCS_CALLBACKQ_ID_NULL, worker->keepalive.cb_id);
+    setup_path_probe_mock();
+    num_path_probes = m_path_probe_counts.size();
+
+    /* The first path KA round retries the lane that returns NO_RESOURCE. */
+    progress_until_path_probe_count(worker, num_path_probes + 1);
+    EXPECT_TRUE(m_no_resource_returned);
+    check_path_probe_counts(2, 1);
+    EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
+
+    /* The next round must probe every path again exactly once. */
+    progress_until_path_probe_count(worker, (2 * num_path_probes) + 1);
+    check_path_probe_counts(3, 2);
+    EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor, path_speed_change_event,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
+{
+    ucp_worker_h worker            = sender().worker();
+    ucp_ep_h event_ucp_ep          = NULL;
+    const ucp_ep_config_key_t &key = ucp_ep_config(sender().ep())->key;
+    ucp_lane_index_t event_monitor_lane, event_data_lane;
+    ucp_lane_index_t monitor_lane;
+    uct_ep_h monitor_ep;
+    uct_base_iface_t *base_iface;
+    ucs_status_t status;
+
+    ASSERT_NE(0, key.path_keepalive_lanes);
+    ucs_for_each_bit(monitor_lane, key.path_keepalive_lanes) {
+        monitor_ep = get_check_ep(ucp_ep_get_lane(sender().ep(),
+                                                  monitor_lane));
+        base_iface = ucs_derived_of(monitor_ep->iface, uct_base_iface_t);
+        ASSERT_NE(nullptr, base_iface->async_event_cb_v2);
+
+        UCS_ASYNC_BLOCK(&worker->async);
+        status = ucp_worker_resolve_path_monitor_ep(
+                worker, monitor_ep, &event_ucp_ep, &event_monitor_lane,
+                &event_data_lane);
+        UCS_ASYNC_UNBLOCK(&worker->async);
+
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(sender().ep(), event_ucp_ep);
+        EXPECT_EQ(monitor_lane, event_monitor_lane);
+        EXPECT_EQ(key.lanes[monitor_lane].monitored_lane, event_data_lane);
+
+        /* Exercise the complete UCT-to-UCP notification path. The handler
+         * validates the same monitor-to-data-lane association under the
+         * worker async lock. */
+        uct_iface_handle_ep_event(monitor_ep->iface, monitor_ep,
+                                  UCT_EVENT_PATH_SPEED_CHANGE);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor, rcx, "rc_x")
+
+class test_ucp_proto_mock_path_monitor_keepalive :
+    public test_ucp_proto_mock_path_monitor {
+protected:
+    virtual ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_proto_mock::get_ep_params();
+
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>(
+                                         ucs_empty_function);
+        params.err_handler.arg = reinterpret_cast<void*>(this);
+
+        return params;
+    }
+
+    virtual void post_ucp_init() override
+    {
+        ucp_worker_h worker;
+        unsigned iface_id;
+
+        test_ucp_proto_mock_path_monitor::post_ucp_init();
+        for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+             iter != entities().end(); ++iter) {
+            worker = (*iter)->worker();
+            for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+                worker->ifaces[iface_id]->attr.cap.flags &=
+                        ~UCT_IFACE_FLAG_EP_KEEPALIVE;
+                worker->ifaces[iface_id]->attr.cap.flags |=
+                        UCT_IFACE_FLAG_EP_CHECK |
+                        UCT_IFACE_FLAG_CONNECT_TO_EP |
+                        UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+            }
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor_keepalive,
+           ordinary_keepalive_no_resource, "IB_NUM_PATHS?=1",
+           "MAX_RMA_RAILS=2", "MAX_RNDV_LANES=2",
+           "KEEPALIVE_INTERVAL=1ms")
+{
+    ucp_worker_h worker                = sender().worker();
+    const ucp_ep_config_key_t &key     = ucp_ep_config(sender().ep())->key;
+    static const unsigned max_progress = 64;
+    ucp_rsc_index_t keepalive_rsc_index;
+    unsigned count;
+
+    ASSERT_NE(UCP_NULL_LANE, key.keepalive_lane);
+    ASSERT_NE(0, key.path_keepalive_lanes);
+    ASSERT_NE(UCS_CALLBACKQ_ID_NULL, worker->keepalive.cb_id);
+    flush_workers();
+    keepalive_rsc_index = ucp_ep_get_rsc_index(sender().ep(),
+                                                key.keepalive_lane);
+    ucp_worker_iface(worker, keepalive_rsc_index)->attr.cap.flags &=
+            ~UCT_IFACE_FLAG_AM_BCOPY;
+    ASSERT_FALSE(ucp_ep_is_am_keepalive(
+            sender().ep(), keepalive_rsc_index,
+            ucp_ep_is_lane_p2p(sender().ep(), key.keepalive_lane)));
+    sender().ep()->ext->path_ka_next_lane = 0;
+    setup_ordinary_keepalive_mock();
+    ASSERT_TRUE(m_path_probe_counts.find(m_keepalive_ep) ==
+                m_path_probe_counts.end());
+
+#if UCS_ENABLE_ASSERT
+    sender().ep()->ext->ka_last_round = 0;
+#endif
+    for (count = 0; (count < max_progress) && (m_keepalive_count < 2);
+         ++count) {
+        worker->keepalive.last_round = 0;
+        worker->keepalive.iter_count = 0;
+        ucp_worker_progress(worker);
+    }
+
+    EXPECT_TRUE(m_no_resource_returned);
+    EXPECT_EQ(2, m_keepalive_count);
+    for (const auto &entry : m_path_probe_counts) {
+        EXPECT_EQ(1, entry.second);
+    }
+    EXPECT_EQ(0, sender().ep()->ext->path_ka_next_lane);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor_keepalive, rcx,
+                              "rc_x")
+
+class test_ucp_proto_mock_path_monitor_asymmetric :
+    public test_ucp_proto_mock_path_monitor {
+public:
+    enum {
+        KEEPALIVE_DISABLED_LOCAL,
+        KEEPALIVE_DISABLED_REMOTE,
+        EP_CHECK_DISABLED_LOCAL,
+        EP_CHECK_DISABLED_REMOTE
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        const uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_AM |
+                                  UCP_FEATURE_RMA;
+
+        add_variant_with_value(variants, features, KEEPALIVE_DISABLED_LOCAL,
+                               "local_disabled");
+        add_variant_with_value(variants, features, KEEPALIVE_DISABLED_REMOTE,
+                               "remote_disabled");
+        add_variant_with_value(variants, features, EP_CHECK_DISABLED_LOCAL,
+                               "local_no_ep_check");
+        add_variant_with_value(variants, features, EP_CHECK_DISABLED_REMOTE,
+                               "remote_no_ep_check");
+    }
+
+protected:
+    void post_ucp_init() override
+    {
+        ucp_worker_h disabled_worker;
+        unsigned iface_id;
+
+        test_ucp_proto_mock_path_monitor::post_ucp_init();
+        ASSERT_TRUE(ucp_worker_keepalive_is_enabled(sender().worker()));
+        ASSERT_TRUE(ucp_worker_keepalive_is_enabled(receiver().worker()));
+
+        switch (get_variant_value()) {
+        case KEEPALIVE_DISABLED_LOCAL:
+        case KEEPALIVE_DISABLED_REMOTE:
+            disabled_worker =
+                    (get_variant_value() == KEEPALIVE_DISABLED_LOCAL) ?
+                            sender().worker() : receiver().worker();
+            disabled_worker->context->config.ext.keepalive_interval =
+                    UCS_TIME_INFINITY;
+            ASSERT_FALSE(ucp_worker_keepalive_is_enabled(disabled_worker));
+            break;
+        case EP_CHECK_DISABLED_LOCAL:
+        case EP_CHECK_DISABLED_REMOTE:
+            disabled_worker =
+                    (get_variant_value() == EP_CHECK_DISABLED_LOCAL) ?
+                            sender().worker() : receiver().worker();
+            for (iface_id = 0; iface_id < disabled_worker->num_ifaces;
+                 ++iface_id) {
+                disabled_worker->ifaces[iface_id]->attr.cap.flags &=
+                        ~UCT_IFACE_FLAG_EP_CHECK;
+            }
+            break;
+        default:
+            UCS_TEST_ABORT("unexpected test variant");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor_asymmetric, lane_mapping_v1,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4")
+{
+    check_no_path_monitor_lanes(sender());
+}
+
+UCS_TEST_P(test_ucp_proto_mock_path_monitor_asymmetric, lane_mapping_v2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=4", "MAX_RNDV_LANES=4",
+           "ADDRESS_VERSION=v2")
+{
+    check_no_path_monitor_lanes(sender());
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_path_monitor_asymmetric, rcx,
+                              "rc_x")
 
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:
