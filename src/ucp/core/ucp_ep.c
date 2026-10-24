@@ -200,27 +200,29 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
     for (i = 0; i < UCP_MAX_LANES; ++i) {
-        key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
-        key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
-        key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
-        key->lanes[i].path_index   = 0;
-        key->lanes[i].lane_types   = 0;
-        key->lanes[i].port_speed   = 0;
-        key->lanes[i].seg_size     = 0;
+        key->lanes[i].rsc_index      = UCP_NULL_RESOURCE;
+        key->lanes[i].dst_md_index   = UCP_NULL_RESOURCE;
+        key->lanes[i].dst_sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
+        key->lanes[i].path_index     = 0;
+        key->lanes[i].lane_types     = 0;
+        key->lanes[i].port_speed     = 0;
+        key->lanes[i].monitored_lane = UCP_NULL_LANE;
+        key->lanes[i].seg_size       = 0;
     }
-    key->am_lane          = UCP_NULL_LANE;
-    key->wireup_msg_lane  = UCP_NULL_LANE;
-    key->cm_lane          = UCP_NULL_LANE;
-    key->keepalive_lane   = UCP_NULL_LANE;
-    key->rkey_ptr_lane    = UCP_NULL_LANE;
-    key->tag_lane         = UCP_NULL_LANE;
-    key->rma_bw_md_map    = 0;
-    key->rma_md_map       = 0;
-    key->reachable_md_map = 0;
-    key->dst_md_cmpts     = NULL;
-    key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
-    key->flags            = 0;
-    key->dst_version      = UCP_API_MINOR;
+    key->am_lane              = UCP_NULL_LANE;
+    key->wireup_msg_lane      = UCP_NULL_LANE;
+    key->cm_lane              = UCP_NULL_LANE;
+    key->keepalive_lane       = UCP_NULL_LANE;
+    key->rkey_ptr_lane        = UCP_NULL_LANE;
+    key->tag_lane             = UCP_NULL_LANE;
+    key->rma_bw_md_map        = 0;
+    key->rma_md_map           = 0;
+    key->reachable_md_map     = 0;
+    key->dst_md_cmpts         = NULL;
+    key->err_mode             = UCP_ERR_HANDLING_MODE_NONE;
+    key->flags                = 0;
+    key->dst_version          = UCP_API_MINOR;
+    key->path_keepalive_lanes = 0;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -3574,8 +3576,11 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
 {
     const ucp_ep_config_key_lane_t *config_lane1 = &key1->lanes[lane1];
     const ucp_ep_config_key_lane_t *config_lane2 = &key2->lanes[lane2];
+    int is_path_monitor1 = ucp_ep_config_is_path_keepalive_lane(key1, lane1);
+    int is_path_monitor2 = ucp_ep_config_is_path_keepalive_lane(key2, lane2);
 
-    return (config_lane1->rsc_index == config_lane2->rsc_index) &&
+    return (is_path_monitor1 == is_path_monitor2) &&
+           (config_lane1->rsc_index == config_lane2->rsc_index) &&
            (config_lane1->path_index == config_lane2->path_index) &&
            ucp_ep_lane_is_dst_index_match(config_lane1->dst_md_index,
                                           config_lane2->dst_md_index);
@@ -3668,6 +3673,8 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
            (config_lane1->port_speed == config_lane2->port_speed) &&
+           (config_lane1->monitored_lane ==
+            config_lane2->monitored_lane) &&
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 
@@ -3688,6 +3695,7 @@ static int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
         (key1->wireup_msg_lane != key2->wireup_msg_lane) ||
         (key1->cm_lane != key2->cm_lane) ||
         (key1->keepalive_lane != key2->keepalive_lane) ||
+        (key1->path_keepalive_lanes != key2->path_keepalive_lanes) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane)) {
         return 0;
     }
@@ -4809,6 +4817,11 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 
     if (key->keepalive_lane == lane) {
         ucs_string_buffer_appendf(strbuf, " keepalive");
+    }
+
+    if (ucp_ep_config_is_path_keepalive_lane(key, lane)) {
+        ucs_string_buffer_appendf(strbuf, " path_monitor->lane[%u]",
+                                  key->lanes[lane].monitored_lane);
     }
 
     if (key->wireup_msg_lane == lane) {
