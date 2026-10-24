@@ -39,6 +39,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/callbackq.h \
 	datastruct/callbackq_compat.h \
 	datastruct/hlist.h \
+	datastruct/interval_map.h \
 	datastruct/khash.h \
 	datastruct/linear_func.h \
 	datastruct/list.h \
@@ -47,6 +48,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/pgtable.h \
 	datastruct/piecewise_func.h \
 	datastruct/queue_types.h \
+	datastruct/rbtree.h \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \
 	datastruct/string_set.h \
@@ -104,7 +106,6 @@ noinst_HEADERS = \
 	datastruct/bitmap.h \
 	datastruct/dynamic_bitmap.h \
 	datastruct/frag_list.h \
-	datastruct/interval_map.h \
 	datastruct/interval_tree.h \
     datastruct/lru.h \
 	datastruct/mpmc.h \
@@ -112,7 +113,6 @@ noinst_HEADERS = \
 	datastruct/mpool_set.inl \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
-	datastruct/rbtree.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/conn_match.h \

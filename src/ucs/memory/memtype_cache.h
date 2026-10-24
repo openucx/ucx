@@ -10,6 +10,7 @@
 #include "memory_type.h"
 
 #include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/interval_map.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats_fwd.h>
@@ -48,7 +49,7 @@ struct ucs_memtype_cache {
     ucs_spinlock_t  lock;          /**< Protects the page table and
                                         registrations */
     ucs_pgtable_t   pgtable;       /**< Page table to hold the regions */
-    ucs_list_link_t registrations; /**< Explicitly managed memory */
+    ucs_interval_map_t registrations; /**< All explicit registrations */
     khash_t(ucs_memtype_cache_tokens) token_hash; /**< Token index */
     int             has_events;    /**< Allocation/free events are active */
 };
