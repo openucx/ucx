@@ -39,6 +39,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <math.h>
 #include <string.h>
 
 __KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
@@ -62,6 +63,12 @@ typedef struct {
     ucp_lane_map_t lanes;  /**< Bitmask of failed lanes. */
     ucs_status_t   status; /**< Failure status for failed lanes. */
 } ucp_ep_set_lanes_failed_arg_t;
+
+typedef struct {
+    ucp_ep_h         ep;
+    ucp_lane_index_t monitor_lane;
+    ucp_lane_index_t monitored_lane;
+} ucp_ep_path_bw_event_t;
 
 
 /**
@@ -109,6 +116,7 @@ static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg);
 static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane);
 static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
                                      uint32_t request_id);
+static unsigned ucp_ep_path_bw_progress(void *arg);
 static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
@@ -200,27 +208,30 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
     for (i = 0; i < UCP_MAX_LANES; ++i) {
-        key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
-        key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
-        key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
-        key->lanes[i].path_index   = 0;
-        key->lanes[i].lane_types   = 0;
-        key->lanes[i].port_speed   = 0;
-        key->lanes[i].seg_size     = 0;
+        key->lanes[i].rsc_index      = UCP_NULL_RESOURCE;
+        key->lanes[i].dst_md_index   = UCP_NULL_RESOURCE;
+        key->lanes[i].dst_sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
+        key->lanes[i].path_index     = 0;
+        key->lanes[i].lane_types     = 0;
+        key->lanes[i].port_speed     = 0;
+        key->lanes[i].path_bw_ratio  = UCP_PATH_BW_RATIO_SCALE;
+        key->lanes[i].monitored_lane = UCP_NULL_LANE;
+        key->lanes[i].seg_size       = 0;
     }
-    key->am_lane          = UCP_NULL_LANE;
-    key->wireup_msg_lane  = UCP_NULL_LANE;
-    key->cm_lane          = UCP_NULL_LANE;
-    key->keepalive_lane   = UCP_NULL_LANE;
-    key->rkey_ptr_lane    = UCP_NULL_LANE;
-    key->tag_lane         = UCP_NULL_LANE;
-    key->rma_bw_md_map    = 0;
-    key->rma_md_map       = 0;
-    key->reachable_md_map = 0;
-    key->dst_md_cmpts     = NULL;
-    key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
-    key->flags            = 0;
-    key->dst_version      = UCP_API_MINOR;
+    key->am_lane              = UCP_NULL_LANE;
+    key->wireup_msg_lane      = UCP_NULL_LANE;
+    key->cm_lane              = UCP_NULL_LANE;
+    key->keepalive_lane       = UCP_NULL_LANE;
+    key->rkey_ptr_lane        = UCP_NULL_LANE;
+    key->tag_lane             = UCP_NULL_LANE;
+    key->rma_bw_md_map        = 0;
+    key->rma_md_map           = 0;
+    key->reachable_md_map     = 0;
+    key->dst_md_cmpts         = NULL;
+    key->err_mode             = UCP_ERR_HANDLING_MODE_NONE;
+    key->flags                = 0;
+    key->dst_version          = UCP_API_MINOR;
+    key->path_keepalive_lanes = 0;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -271,6 +282,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->local_ep_id                  = UCS_PTR_MAP_KEY_INVALID;
     ep->ext->remote_ep_id                 = UCS_PTR_MAP_KEY_INVALID;
     ep->ext->err_cb                       = NULL;
+    ep->ext->path_ka_next_lane            = 0;
     ep->ext->close_req                    = NULL;
 #if UCS_ENABLE_ASSERT
     ep->ext->ka_last_round                = 0;
@@ -531,6 +543,12 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
         ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        return 1;
+    }
+
+    if ((elem->cb == ucp_ep_path_bw_progress) &&
+        (((ucp_ep_path_bw_event_t*)elem->arg)->ep == arg)) {
+        ucs_free(elem->arg);
         return 1;
     }
 
@@ -1780,6 +1798,117 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
     ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
 out:
     return UCS_OK;
+}
+
+static unsigned ucp_ep_path_bw_progress(void *arg)
+{
+    ucp_ep_path_bw_event_t *event = arg;
+    ucp_ep_h ep                    = event->ep;
+    ucp_worker_h worker            = ep->worker;
+    ucp_ep_config_key_t cfg_key;
+    ucp_worker_cfg_index_t cfg_index;
+    uct_ep_attr_t ep_attr;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+    double ratio;
+    uint8_t quantized_ratio;
+    unsigned result = 0;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
+        (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_FAILED))) {
+        goto out_unlock;
+    }
+
+    cfg_key = ucp_ep_config(ep)->key;
+    if ((event->monitor_lane >= cfg_key.num_lanes) ||
+        !ucp_ep_config_is_path_keepalive_lane(&cfg_key, event->monitor_lane) ||
+        (cfg_key.lanes[event->monitor_lane].monitored_lane !=
+         event->monitored_lane)) {
+        goto out_unlock;
+    }
+
+    uct_ep = ucp_ep_get_lane(ep, event->monitor_lane);
+    if (uct_ep == NULL) {
+        goto out_unlock;
+    }
+
+    if (ucp_wireup_ep_test(uct_ep)) {
+        uct_ep = ucp_wireup_ep(uct_ep)->super.uct_ep;
+        if (uct_ep == NULL) {
+            goto out_unlock;
+        }
+    }
+
+    ep_attr.field_mask = UCT_EP_ATTR_FIELD_PATH_BW_RATIO;
+    status             = uct_ep_query(uct_ep, &ep_attr);
+    if (status == UCS_OK) {
+        ratio = ep_attr.path_bandwidth_ratio;
+        if (!isfinite(ratio) || (ratio < 0.0)) {
+            ucs_warn("ep %p: invalid path bandwidth ratio %f on lane %u",
+                     ep, ratio, event->monitor_lane);
+            goto out_unlock;
+        }
+
+        ratio = ucs_min(ucs_max(ratio, 1.0 / UCP_PATH_BW_RATIO_SCALE),
+                        UINT8_MAX / (double)UCP_PATH_BW_RATIO_SCALE);
+        quantized_ratio = (uint8_t)(ratio * UCP_PATH_BW_RATIO_SCALE + 0.5);
+    } else if ((status == UCS_ERR_NO_ELEM) ||
+               (status == UCS_ERR_UNSUPPORTED)) {
+        quantized_ratio = UCP_PATH_BW_RATIO_SCALE;
+    } else {
+        ucs_debug("ep %p: path bandwidth query on lane %u failed: %s", ep,
+                  event->monitor_lane, ucs_status_string(status));
+        goto out_unlock;
+    }
+
+    if (cfg_key.lanes[event->monitored_lane].path_bw_ratio == quantized_ratio) {
+        goto out_unlock;
+    }
+
+    ucs_debug("ep %p: data lane %u path bandwidth ratio %u -> %u", ep,
+              event->monitored_lane,
+              cfg_key.lanes[event->monitored_lane].path_bw_ratio,
+              quantized_ratio);
+    cfg_key.lanes[event->monitored_lane].path_bw_ratio = quantized_ratio;
+    status = ucp_worker_get_ep_config(worker, &cfg_key,
+                                      (ep->flags & UCP_EP_FLAG_INTERNAL) ?
+                                      UCP_EP_INIT_FLAG_INTERNAL : 0,
+                                      &cfg_index);
+    if (status != UCS_OK) {
+        ucs_warn("ep %p: cannot update path bandwidth: %s", ep,
+                 ucs_status_string(status));
+        goto out_unlock;
+    }
+
+    ucp_ep_set_cfg_index(ep, cfg_index, 1);
+    result = 1;
+
+out_unlock:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    ucs_free(event);
+    return result;
+}
+
+void ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t monitor_lane,
+                            ucp_lane_index_t monitored_lane)
+{
+    ucp_ep_path_bw_event_t *event;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
+
+    event = ucs_malloc(sizeof(*event), "path bandwidth event");
+    if (event == NULL) {
+        ucs_warn("ep %p: cannot schedule path bandwidth update", ep);
+        return;
+    }
+
+    event->ep             = ep;
+    event->monitor_lane   = monitor_lane;
+    event->monitored_lane = monitored_lane;
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                              ucp_ep_path_bw_progress, event);
+    ucp_worker_signal_internal(ep->worker);
 }
 
 ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
@@ -3574,8 +3703,11 @@ int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
 {
     const ucp_ep_config_key_lane_t *config_lane1 = &key1->lanes[lane1];
     const ucp_ep_config_key_lane_t *config_lane2 = &key2->lanes[lane2];
+    int is_path_monitor1 = ucp_ep_config_is_path_keepalive_lane(key1, lane1);
+    int is_path_monitor2 = ucp_ep_config_is_path_keepalive_lane(key2, lane2);
 
-    return (config_lane1->rsc_index == config_lane2->rsc_index) &&
+    return (is_path_monitor1 == is_path_monitor2) &&
+           (config_lane1->rsc_index == config_lane2->rsc_index) &&
            (config_lane1->path_index == config_lane2->path_index) &&
            ucp_ep_lane_is_dst_index_match(config_lane1->dst_md_index,
                                           config_lane2->dst_md_index);
@@ -3668,6 +3800,9 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
            (config_lane1->port_speed == config_lane2->port_speed) &&
+           (config_lane1->path_bw_ratio == config_lane2->path_bw_ratio) &&
+           (config_lane1->monitored_lane ==
+            config_lane2->monitored_lane) &&
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 
@@ -3688,6 +3823,7 @@ static int ucp_ep_config_lanes_layout_is_equal(const ucp_ep_config_key_t *key1,
         (key1->wireup_msg_lane != key2->wireup_msg_lane) ||
         (key1->cm_lane != key2->cm_lane) ||
         (key1->keepalive_lane != key2->keepalive_lane) ||
+        (key1->path_keepalive_lanes != key2->path_keepalive_lanes) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane)) {
         return 0;
     }
@@ -4809,6 +4945,11 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 
     if (key->keepalive_lane == lane) {
         ucs_string_buffer_appendf(strbuf, " keepalive");
+    }
+
+    if (ucp_ep_config_is_path_keepalive_lane(key, lane)) {
+        ucs_string_buffer_appendf(strbuf, " path_monitor->lane[%u]",
+                                  key->lanes[lane].monitored_lane);
     }
 
     if (key->wireup_msg_lane == lane) {

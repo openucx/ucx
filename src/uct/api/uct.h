@@ -499,11 +499,14 @@ typedef enum {
  *       on the receiver. Otherwise, UCT_EVENT_RECV should be triggered.
  */
 enum uct_iface_event_types {
-    UCT_EVENT_SEND_COMP     = UCS_BIT(0), /**< Send completion event */
-    UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
-    UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
+    UCT_EVENT_SEND_COMP         = UCS_BIT(0), /**< Send completion event */
+    UCT_EVENT_RECV              = UCS_BIT(1), /**< Tag or active message received */
+    UCT_EVENT_RECV_SIG          = UCS_BIT(2), /**< Signaled tag or active message
                                                received */
-    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3)  /**< Speed change event */
+    UCT_EVENT_SPEED_CHANGE      = UCS_BIT(3), /**< Speed change event */
+    UCT_EVENT_PATH_SPEED_CHANGE = UCS_BIT(4)  /**< Endpoint path speed change,
+                                                   delivered through
+                                                   @ref uct_async_event_cb_v2_t.*/
 };
 
 
@@ -690,7 +693,10 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17),
 
     /** Enables @ref uct_iface_params_t::features */
-    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18)
+    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18),
+
+    /** Enables @ref uct_iface_params_t::async_event_cb_v2 */
+    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB_V2  = UCS_BIT(19)
 };
 
 /**
@@ -1313,6 +1319,14 @@ struct uct_iface_params {
      * initialization.
      */
     uint64_t                                     features;
+
+    /**
+     * Endpoint-aware asynchronous event callback. This callback is used for
+     * events which identify a specific endpoint, such as
+     * @ref UCT_EVENT_PATH_SPEED_CHANGE. @ref async_event_arg is passed as its
+     * user argument.
+     */
+    uct_async_event_cb_v2_t                      async_event_cb_v2;
 };
 
 
