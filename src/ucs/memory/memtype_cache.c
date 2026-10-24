@@ -234,11 +234,9 @@ ucs_memtype_cache_remove_explicit(ucs_memtype_cache_t *memtype_cache,
     ucs_status_t status;
 
     status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
-    if (status != UCS_OK) {
-        ucs_error("failed to remove explicit memtype region: %s",
-                  ucs_status_string(status));
-        return;
-    }
+    ucs_assertv_always(status == UCS_OK,
+                "failed to remove explicit memtype region: %s",
+                ucs_status_string(status));
 
     ucs_list_for_each(registration, &memtype_cache->registrations, list) {
         if (registration->region == region) {
@@ -365,6 +363,7 @@ void ucs_memtype_cache_unregister(const void *token)
 {
     ucs_memtype_cache_t *memtype_cache = ucs_memtype_cache_global_instance;
     ucs_memtype_cache_registration_t *other, *found;
+    int restore_registrations;
     khiter_t hash_it;
 
     if (memtype_cache == NULL || memtype_cache->has_events) {
@@ -379,6 +378,7 @@ void ucs_memtype_cache_unregister(const void *token)
     }
 
     found = kh_value(&memtype_cache->token_hash, hash_it);
+    restore_registrations = (found->region == NULL);
     kh_del(ucs_memtype_cache_tokens, &memtype_cache->token_hash, hash_it);
     if ((found->region != NULL) &&
         (--found->region->explicit_refs == 0)) {
@@ -387,8 +387,10 @@ void ucs_memtype_cache_unregister(const void *token)
     ucs_list_del(&found->list);
     ucs_free(found);
 
-    ucs_list_for_each(other, &memtype_cache->registrations, list) {
-        ucs_memtype_cache_restore_registration(memtype_cache, other);
+    if (restore_registrations) {
+        ucs_list_for_each(other, &memtype_cache->registrations, list) {
+            ucs_memtype_cache_restore_registration(memtype_cache, other);
+        }
     }
 
 out_unlock:
@@ -640,23 +642,20 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
     ucs_list_head_init(&self->registrations);
     kh_init_inplace(ucs_memtype_cache_tokens, &self->token_hash);
     self->has_events = 0;
-    if ((ucs_global_opts.enable_memtype_cache !=
-         UCS_MEMTYPE_CACHE_EXPLICIT) || ucm_global_opts.enable_events) {
-        status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC |
-                                       UCM_EVENT_MEM_TYPE_FREE  |
-                                       UCM_EVENT_FLAG_EXISTING_ALLOC,
-                                       1000, ucs_memtype_cache_event_callback,
-                                       self);
-        if (status != UCS_OK) {
-            ucs_diag("failed to set UCM memtype event handler: %s",
-                     ucs_status_string(status));
-            if (ucs_global_opts.enable_memtype_cache !=
-                UCS_MEMTYPE_CACHE_EXPLICIT) {
-                goto err_cleanup_pgtable;
-            }
-        } else {
-            self->has_events = 1;
+    status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC |
+                                   UCM_EVENT_MEM_TYPE_FREE  |
+                                   UCM_EVENT_FLAG_EXISTING_ALLOC,
+                                   1000, ucs_memtype_cache_event_callback,
+                                   self);
+    if (status != UCS_OK) {
+        ucs_diag("failed to set UCM memtype event handler: %s",
+                 ucs_status_string(status));
+        if (ucs_global_opts.enable_memtype_cache !=
+            UCS_MEMTYPE_CACHE_EXPLICIT) {
+            goto err_cleanup_pgtable;
         }
+    } else {
+        self->has_events = 1;
     }
 
     return UCS_OK;
