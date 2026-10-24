@@ -3683,11 +3683,57 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     worker->keepalive.round_count++;
 }
 
+static ucs_status_t
+ucp_worker_do_ep_path_keepalive(ucp_worker_h worker, ucp_ep_h ep)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+    uct_ep_h uct_ep;
+
+    if (ep->ext->path_ka_next_lane == UCP_NULL_LANE ||
+        (key->path_keepalive_lanes == 0)) {
+        return UCS_OK;
+    }
+
+    if (ep->ext->path_ka_next_lane >= key->num_lanes) {
+        ep->ext->path_ka_next_lane = 0;
+    }
+
+    for (lane = ep->ext->path_ka_next_lane; lane < key->num_lanes; ++lane) {
+        if (!ucp_ep_config_is_path_keepalive_lane(key, lane)) {
+            continue;
+        }
+
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        ucs_trace("ep %p: do path keepalive on lane[%u]=%p for lane[%u]", ep,
+                  lane, uct_ep, key->lanes[lane].monitored_lane);
+        status = uct_ep_check(uct_ep, 0, NULL);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            ep->ext->path_ka_next_lane = lane;
+            return status;
+        } else if (UCS_STATUS_IS_ERR(status)) {
+            ucs_diag("worker %p: path keepalive failed on ep %p "
+                     "lane[%u]=%p: %s", worker, ep, lane, uct_ep,
+                     ucs_status_string(status));
+        }
+
+        ep->ext->path_ka_next_lane = lane + 1;
+    }
+
+    /* UCP_NULL_LANE indicates that all path KA lanes were processed and an
+     * endpoint-level KA retry, if needed, must not repeat them. */
+    ep->ext->path_ka_next_lane = UCP_NULL_LANE;
+    return UCS_OK;
+}
+
 static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
 {
+    const ucp_ep_config_key_t *key;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
+    ucs_status_t path_status;
     ucp_ep_h ep;
     uct_ep_h uct_ep;
 
@@ -3700,43 +3746,58 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
         (ep->flags & UCP_EP_FLAG_FAILED)) {
+        ep->ext->path_ka_next_lane = 0;
         goto out_done;
     }
 
     if (ucp_ep_recovery_progress(ep)) {
+        ep->ext->path_ka_next_lane = 0;
         goto out_done;
     }
 
-    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
+    key = &ucp_ep_config(ep)->key;
+    if ((key->keepalive_lane == UCP_NULL_LANE) &&
+        (key->path_keepalive_lanes == 0)) {
+        ep->ext->path_ka_next_lane = 0;
         goto out_done;
     }
 
-    lane      = ucp_ep_config(ep)->key.keepalive_lane;
-    uct_ep    = ucp_ep_get_lane(ep, lane);
-    rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    path_status = ucp_worker_do_ep_path_keepalive(worker, ep);
 
-    ucs_assertv((rsc_index != UCP_NULL_RESOURCE) ||
-                (lane == ucp_ep_get_cm_lane(ep)),
-                "ep=%p cm_lane=%u lane=%u rsc_index=%u",
-                ep, ucp_ep_get_cm_lane(ep), lane, rsc_index);
+    if (key->keepalive_lane != UCP_NULL_LANE) {
+        lane      = key->keepalive_lane;
+        uct_ep    = ucp_ep_get_lane(ep, lane);
+        rsc_index = ucp_ep_get_rsc_index(ep, lane);
 
-    ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
-              uct_ep, ep->flags);
+        ucs_assertv((rsc_index != UCP_NULL_RESOURCE) ||
+                    (lane == ucp_ep_get_cm_lane(ep)),
+                    "ep=%p cm_lane=%u lane=%u rsc_index=%u",
+                    ep, ucp_ep_get_cm_lane(ep), lane, rsc_index);
 
-    if (ucp_ep_is_am_keepalive(ep, rsc_index, ucp_ep_is_lane_p2p(ep, lane))) {
-        status = ucp_ep_do_uct_ep_am_keepalive(ep, uct_ep, rsc_index);
-    } else {
-        status = uct_ep_check(uct_ep, 0, NULL);
+        ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep,
+                  lane, uct_ep, ep->flags);
+
+        if (ucp_ep_is_am_keepalive(ep, rsc_index,
+                                   ucp_ep_is_lane_p2p(ep, lane))) {
+            status = ucp_ep_do_uct_ep_am_keepalive(ep, uct_ep, rsc_index);
+        } else {
+            status = uct_ep_check(uct_ep, 0, NULL);
+        }
+
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return 0;
+        } else if (UCS_STATUS_IS_ERR(status)) {
+            ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s",
+                     worker, ep, lane, uct_ep, ucs_status_string(status));
+        } else {
+            ucs_trace("worker %p: keepalive done on ep %p lane[%d]=%p, "
+                      "now: <%lf sec>", worker, ep, lane, uct_ep,
+                      ucs_time_to_sec(now));
+        }
     }
 
-    if (status == UCS_ERR_NO_RESOURCE) {
-        return 0;
-    } else if (UCS_STATUS_IS_ERR(status)) {
-        ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s", worker,
-                 ep, lane, uct_ep, ucs_status_string(status));
-    } else {
-        ucs_trace("worker %p: keepalive done on ep %p lane[%d]=%p, now: <%lf"
-                  " sec>", worker, ep, lane, uct_ep, ucs_time_to_sec(now));
+    if (path_status != UCS_ERR_NO_RESOURCE) {
+        ep->ext->path_ka_next_lane = 0;
     }
 
 #if UCS_ENABLE_ASSERT
@@ -3829,18 +3890,21 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
 
 void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 {
-    ucp_worker_h worker = ep->worker;
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_worker_h worker            = ep->worker;
 
-    if (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) {
-        ucs_trace("ep %p flags 0x%x cfg_index %d err_mode %d: keepalive lane"
-                  " is not set", ep, ep->flags, ep->cfg_index,
-                  ucp_ep_config(ep)->key.err_mode);
+    if ((key->keepalive_lane == UCP_NULL_LANE) &&
+        (key->path_keepalive_lanes == 0)) {
+        ucs_trace("ep %p flags 0x%x cfg_index %d err_mode %d: keepalive "
+                  "lanes are not set", ep, ep->flags, ep->cfg_index,
+                  key->err_mode);
         return;
     }
 
     ucp_worker_keepalive_timerfd_init(worker);
-    ucs_trace("ep %p flags 0x%x: set keepalive lane to %u", ep,
-              ep->flags, ucp_ep_config(ep)->key.keepalive_lane);
+    ucs_trace("ep %p flags 0x%x: set keepalive lane to %u path lanes "
+              "0x%" PRIx64, ep, ep->flags, key->keepalive_lane,
+              (uint64_t)key->path_keepalive_lanes);
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_worker_keepalive_progress, worker, 0,
                                       &worker->keepalive.cb_id);
@@ -3851,8 +3915,12 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
 
-    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        return;
+    }
+
+    if ((ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE) &&
+        (ucp_ep_config(ep)->key.path_keepalive_lanes == 0)) {
         return;
     }
 
