@@ -101,6 +101,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                   ep->txcnt.ci + count, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
+    uct_rc_ep_reset_reserve(&ep->super);
     uct_rc_verbs_update_tx_res(iface, ep, count);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
@@ -156,8 +157,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
 
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci + count);
-        ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
-                                   &ep->super.arb_group);
+        uct_rc_ep_schedule_pending(&iface->super, &ep->super);
         uct_rc_verbs_update_tx_res(&iface->super, ep, count);
         ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
                              NULL);
