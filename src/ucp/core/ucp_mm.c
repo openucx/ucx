@@ -764,7 +764,8 @@ static void ucp_memh_init(ucp_mem_h memh, ucp_context_h context,
 static ucs_status_t
 ucp_memh_create(ucp_context_h context, void *address, size_t length,
                 ucs_memory_type_t mem_type, uct_alloc_method_t method,
-                uint8_t memh_flags, unsigned uct_flags, ucp_mem_h *memh_p)
+                uint8_t memh_flags, unsigned uct_flags, ucp_mem_h *memh_p,
+                ucp_memory_info_t *detected_info_p)
 {
     ucp_memory_info_t info;
     ucp_mem_h memh;
@@ -779,6 +780,9 @@ ucp_memh_create(ucp_context_h context, void *address, size_t length,
     ucp_memory_detect(context, address, length, &info);
     ucp_memh_init(memh, context, memh_flags, uct_flags, method, mem_type,
                   info.sys_dev, info.flags);
+    if (detected_info_p != NULL) {
+        *detected_info_p = info;
+    }
 
     *memh_p = memh;
     return UCS_OK;
@@ -840,7 +844,7 @@ ucp_memh_create_from_mem(ucp_context_h context,
     ucp_mem_h memh;
 
     status = ucp_memh_create(context, mem->address, mem->length, mem->mem_type,
-                             mem->method, memh_flags, uct_flags, &memh);
+                             mem->method, memh_flags, uct_flags, &memh, NULL);
     if (status != UCS_OK) {
         return status;
     }
@@ -998,7 +1002,8 @@ ucp_memh_find_slow(ucp_context_h context, void *address, size_t length,
 
     if (context->rcache == NULL) {
         return ucp_memh_create(context, address, length, mem_type,
-                               UCT_ALLOC_METHOD_LAST, 0, uct_flags, memh_p);
+                               UCT_ALLOC_METHOD_LAST, 0, uct_flags, memh_p,
+                               NULL);
     }
 
     for (;;) {
@@ -1247,7 +1252,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                                 alloc_name, &memh);
     } else {
         status = ucp_memh_create(context, address, length, mem_type,
-                                 UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh);
+                                 UCT_ALLOC_METHOD_LAST, 0, uct_flags, &memh,
+                                 &mem_info);
         if (status != UCS_OK) {
             goto out;
         }
@@ -1262,9 +1268,16 @@ out:
     if (status == UCS_OK) {
         ucs_assert(ucp_memh_is_user_memh(memh));
         if (!(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+            if (flags & UCP_MEM_MAP_ALLOCATE) {
+                /* The allocator reports the type of the memory it created. */
+                mem_info.type    = memh->mem_type;
+                mem_info.sys_dev = memh->sys_dev;
+                mem_info.flags   = memh->mem_flags;
+            }
+
             ucs_memtype_cache_register(ucp_memh_address(memh),
-                                       ucp_memh_length(memh), memh->mem_type,
-                                       memh->sys_dev, memh->mem_flags, memh);
+                                       ucp_memh_length(memh), mem_info.type,
+                                       mem_info.sys_dev, mem_info.flags, memh);
         }
         *memh_p = memh;
     }
@@ -2091,7 +2104,7 @@ ucp_memh_import(ucp_context_h context, const void *export_mkey_buffer,
 
     status = ucp_memh_create(context, unpacked_memh.address,
                              unpacked_memh.length, unpacked_memh.mem_type,
-                             UCT_ALLOC_METHOD_LAST, 0, 0, &memh);
+                             UCT_ALLOC_METHOD_LAST, 0, 0, &memh, NULL);
     if (status != UCS_OK) {
         goto out;
     }
