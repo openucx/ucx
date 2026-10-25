@@ -95,7 +95,7 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
         }
     }
 
-    dev_addr->system_uuid = ucs_get_system_id();
+    dev_addr->system_uuid = md->system_uuid;
 
     return UCS_OK;
 }
@@ -167,7 +167,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    device_addr_length, DEVICE_ADDR_LENGTH,
                                    sizeof(dev_addr->system_uuid));
     dev_addr     = (const uct_cuda_ipc_device_addr_t *)params->device_addr;
-    same_uuid    = (ucs_get_system_id() == dev_addr->system_uuid);
+    same_uuid    = (md->system_uuid == dev_addr->system_uuid);
 
     iface_addr_len = UCS_PARAM_VALUE(UCT_IFACE_IS_REACHABLE_FIELD, params,
                                      iface_addr_length, IFACE_ADDR_LENGTH,

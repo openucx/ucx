@@ -202,6 +202,40 @@ protected:
     }
 
 #endif
+
+    /* Open another MD with the given NVLink domain and MNNVL configuration */
+    ucs_status_t open_md(const std::string &nvlink_domain,
+                         const std::string &enable_mnnvl,
+                         ucs::handle<uct_md_h> &md_h)
+    {
+        uct_md_config_t *config;
+        ucs_status_t status;
+        uct_md_h md;
+
+        status = uct_md_config_read(GetParam().component, NULL, NULL, &config);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        EXPECT_UCS_OK(uct_config_modify(config, "CUDA_IPC_NVLINK_DOMAIN",
+                                        nvlink_domain.c_str()));
+        EXPECT_UCS_OK(uct_config_modify(config, "CUDA_IPC_ENABLE_MNNVL",
+                                        enable_mnnvl.c_str()));
+
+        status = uct_md_open(GetParam().component, GetParam().md_name.c_str(),
+                             config, &md);
+        uct_config_release(config);
+        if (status == UCS_OK) {
+            md_h.reset(md, uct_md_close);
+        }
+
+        return status;
+    }
+
+    static uct_cuda_ipc_md_t *ipc_md(const ucs::handle<uct_md_h> &md_h)
+    {
+        return ucs_derived_of(md_h.get(), uct_cuda_ipc_md_t);
+    }
 };
 
 UCS_TEST_P(test_cuda_ipc_md, mpack_legacy)
@@ -343,6 +377,65 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
                   cuda_ipc_md->nvlink_domain);
     }
 #endif
+    EXPECT_EQ(ucs_get_system_id(), cuda_ipc_md->system_uuid);
+}
+
+/* The NVLink domain knob enables MNNVL without a GPU fabric, and different
+ * emulated hosts get different system UUIDs */
+UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_emulation)
+{
+    ucs::handle<uct_md_h> md_5, md_5_5, md_5_7, md_6_7;
+
+    ASSERT_UCS_OK(open_md("5", "try", md_5));
+    ASSERT_UCS_OK(open_md("5:5", "try", md_5_5));
+    ASSERT_UCS_OK(open_md("5:7", "try", md_5_7));
+    ASSERT_UCS_OK(open_md("0x6:7", "try", md_6_7));
+
+    EXPECT_TRUE(ipc_md(md_5)->enable_mnnvl);
+    EXPECT_TRUE(ipc_md(md_5_7)->enable_mnnvl);
+    EXPECT_EQ(5u, ipc_md(md_5)->nvlink_domain);
+    EXPECT_EQ(5u, ipc_md(md_5_7)->nvlink_domain);
+    EXPECT_EQ(6u, ipc_md(md_6_7)->nvlink_domain);
+
+    /* <host> defaults to <domain> */
+    EXPECT_EQ(ipc_md(md_5)->system_uuid, ipc_md(md_5_5)->system_uuid);
+    /* The host is independent of the domain */
+    EXPECT_EQ(ipc_md(md_5_7)->system_uuid, ipc_md(md_6_7)->system_uuid);
+    EXPECT_NE(ipc_md(md_5)->system_uuid, ipc_md(md_5_7)->system_uuid);
+    EXPECT_NE(ucs_get_system_id(), ipc_md(md_5_7)->system_uuid);
+}
+
+/* Requiring MNNVL does not fail when it is emulated without a GPU fabric */
+UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_mnnvl_required)
+{
+    ucs::handle<uct_md_h> md_h;
+
+    ASSERT_UCS_OK(open_md("5:7", "y", md_h));
+    EXPECT_TRUE(ipc_md(md_h)->enable_mnnvl);
+    EXPECT_EQ(5u, ipc_md(md_h)->nvlink_domain);
+}
+
+/* Disabling MNNVL overrides the NVLink domain knob */
+UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_mnnvl_disabled)
+{
+    ucs::handle<uct_md_h> md_h;
+
+    ASSERT_UCS_OK(open_md("5:7", "n", md_h));
+    EXPECT_FALSE(ipc_md(md_h)->enable_mnnvl);
+    EXPECT_EQ(ucs_get_system_id(), ipc_md(md_h)->system_uuid);
+}
+
+UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_invalid)
+{
+    static const char *values[] = {"", "abc", "5:", "5:x", "5;7", "5:7:9",
+                                   ":7"};
+    ucs::handle<uct_md_h> md_h;
+
+    for (const char *value : values) {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, open_md(value, "try", md_h))
+                << "'" << value << "'";
+    }
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)

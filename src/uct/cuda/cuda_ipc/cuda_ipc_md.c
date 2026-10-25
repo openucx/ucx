@@ -24,6 +24,7 @@
 #include <uct/api/device/uct_device_types.h>
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -35,6 +36,9 @@
 
 #define UCT_CUDA_IPC_IMEX_CHANNELS_PATH \
     "/dev/nvidia-caps-imex-channels"
+
+/* Multiplier used to derive an emulated host id from the configured host */
+#define UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX 0x9E3779B97F4A7C15ull
 
 typedef struct {
     const void *mapped_addr;
@@ -56,6 +60,19 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"ENABLE_MNNVL", "try",
      "Enable multi-node NVLINK capabilities.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_mnnvl), UCS_CONFIG_TYPE_TERNARY},
+
+    {"NVLINK_DOMAIN", "auto",
+     "NVLink domain used to check multi-node NVLINK reachability.\n"
+     " auto              - fabric cluster UUID and clique ID from NVML.\n"
+     " <domain>[:<host>] - emulate host <host> in NVLink domain <domain>:\n"
+     "                     enable multi-node NVLINK even without a GPU\n"
+     "                     fabric, and treat peers configured with another\n"
+     "                     <host> as different hosts, also when they run on\n"
+     "                     the same machine. <host> defaults to <domain>.\n"
+     "                     Intended for testing the fallback to other\n"
+     "                     transports.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
+     UCS_CONFIG_TYPE_STRING},
 
     {"CACHE_MAX_REGIONS", "inf",
      "Maximum number of regions in each per-peer CUDA IPC remote handle cache.\n"
@@ -769,6 +786,62 @@ out:
     }
 }
 
+/* Parse "<domain>[:<host>]", <host> defaults to <domain> */
+static ucs_status_t
+uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
+                                    unsigned long *host_p)
+{
+    char *end;
+
+    *domain_p = strtoul(str, &end, 0);
+    if (end == str) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (*end == '\0') {
+        *host_p = *domain_p;
+        return UCS_OK;
+    }
+
+    if (*end != ':') {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    str     = end + 1;
+    *host_p = strtoul(str, &end, 0);
+    if ((end == str) || (*end != '\0')) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+/* Enable MNNVL and set the NVLink domain and host of the MD from the
+ * "<domain>[:<host>]" configuration, instead of the GPU fabric info */
+static ucs_status_t
+uct_cuda_ipc_md_emulate_nvlink_domain(uct_cuda_ipc_md_t *md,
+                                      const char *nvlink_domain)
+{
+    unsigned long domain, host;
+    ucs_status_t status;
+
+    status = uct_cuda_ipc_md_parse_nvlink_domain(nvlink_domain, &domain,
+                                                 &host);
+    if (status != UCS_OK) {
+        ucs_error("invalid NVLink domain '%s', expected "
+                  "\"<domain>[:<host>]\" or \"auto\"", nvlink_domain);
+        return status;
+    }
+
+    md->nvlink_domain = domain;
+    md->enable_mnnvl  = 1;
+    /* Processes with different emulated hosts look like different hosts to
+     * each other, while real hosts stay distinguishable */
+    md->system_uuid  ^= (host + 1) * UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX;
+    ucs_debug("emulating host %lu in NVLink domain %lu", host, domain);
+    return UCS_OK;
+}
+
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
     ucs_free(md);
@@ -850,6 +923,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                                                           uct_cuda_ipc_md_config_t);
     static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
     uct_cuda_ipc_md_t* md;
+    ucs_status_t status;
 
     UCS_INIT_ONCE(&init_enable_remote_cache) {
         uct_cuda_ipc_component.enable_remote_cache =
@@ -871,12 +945,24 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.ops        = &md_ops;
     md->super.component  = &uct_cuda_ipc_component.super;
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
-    uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+    md->system_uuid      = ucs_get_system_id();
+
+    if (!strcmp(ipc_config->nvlink_domain, "auto") ||
+        (ipc_config->enable_mnnvl == UCS_NO)) {
+        uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+    } else {
+        status = uct_cuda_ipc_md_emulate_nvlink_domain(
+                md, ipc_config->nvlink_domain);
+        if (status != UCS_OK) {
+            ucs_free(md);
+            return status;
+        }
+    }
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
 
-    *md_p                 = &md->super;
+    *md_p = &md->super;
 
     return UCS_OK;
 }
