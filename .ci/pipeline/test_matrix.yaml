@@ -98,4 +98,6 @@ steps:
       if [[ "${name}" == hca-roce* ]]; then
         export GTEST_FILTER="${GTEST_FILTER}:rdmacm/test_uct_sockaddr_err_handle_non_exist_ip.*"
       fi
+      # Adds /hpc/local modules for the MPI tests.
+      source ./buildlib/az-helpers.sh && az_init_modules
       ./contrib/test_jenkins.sh
