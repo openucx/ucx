@@ -816,6 +816,34 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_rc_mlx5_iface_check_odp_ddp(const uct_ib_mlx5_md_t *md,
+                                const uct_rc_mlx5_iface_common_t *iface,
+                                const uct_ib_iface_init_attr_t *init_attr)
+{
+    const uint64_t devx_flags = (init_attr->qp_type == IBV_QPT_RC) ?
+                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP :
+                                       (UCT_IB_MLX5_MD_FLAG_DEVX_DCI |
+                                        UCT_IB_MLX5_MD_FLAG_DEVX_DCT);
+    const int ddp_enabled     =
+            (((md->flags & devx_flags) != 0) &&
+             (iface->config.dp_ordering_devx ==
+              UCT_IB_MLX5_DP_ORDERING_OOO_ALL)) ||
+            (!ucs_test_all_flags(md->flags, devx_flags) &&
+             iface->config.ddp_enabled_dv);
+
+    if (ddp_enabled &&
+        (md->super.reg_nonblock_mem_types &
+         UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED))) {
+        ucs_error("%s: ODP with DDP is not supported for CUDA managed memory; "
+                  "set UCX_IB_ODP_MEM_TYPES=host",
+                  init_attr->dev_name);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -826,6 +854,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev;
     ucs_status_t status;
+
+    status = uct_rc_mlx5_iface_check_odp_ddp(md, self, init_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (rc_config->super.seg_size > UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK) {
         ucs_error("IB segment size is too big %ld, it must not exceed %d",

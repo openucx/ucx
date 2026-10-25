@@ -866,6 +866,95 @@ UCS_TEST_F(test_uct_ib_utils, fw_ver_release_at_least) {
     EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("bogus", 48, 1000));
     EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("", 48, 1000));
 }
+
+#ifdef HAVE_TL_RC
+UCS_TEST_F(test_uct_ib_utils, odp_ddp_config)
+{
+    struct test_case {
+        const char *name;
+        int qp_type;
+        uint64_t devx_flags;
+        uct_ib_mlx5_dp_ordering_t devx_ordering;
+        uint8_t ddp_enabled_dv;
+        ucs_status_t managed_status;
+    };
+    const uint64_t rc_devx       = UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP;
+    const uint64_t dci_devx      = UCT_IB_MLX5_MD_FLAG_DEVX_DCI;
+    const uint64_t dct_devx      = UCT_IB_MLX5_MD_FLAG_DEVX_DCT;
+    const uint64_t managed_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    const test_case cases[]      = {
+        {"rc dv ddp", IBV_QPT_RC, 0, UCT_IB_MLX5_DP_ORDERING_IBTA, 1,
+         UCS_ERR_INVALID_PARAM},
+        {"rc dv unused devx ddp", IBV_QPT_RC, 0,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_OK},
+        {"rc devx ddp", IBV_QPT_RC, rc_devx,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_ERR_INVALID_PARAM},
+        {"rc devx unused dv ddp", IBV_QPT_RC, rc_devx,
+         UCT_IB_MLX5_DP_ORDERING_IBTA, 1, UCS_OK},
+        {"rc unrelated devx flags", IBV_QPT_RC, dci_devx | dct_devx,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_OK},
+        {"dc dv ddp", UCT_IB_QPT_DCI, 0, UCT_IB_MLX5_DP_ORDERING_IBTA, 1,
+         UCS_ERR_INVALID_PARAM},
+        {"dc dv unused devx ddp", UCT_IB_QPT_DCI, 0,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_OK},
+        {"dc devx ddp", UCT_IB_QPT_DCI, dci_devx | dct_devx,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_ERR_INVALID_PARAM},
+        {"dc devx unused dv ddp", UCT_IB_QPT_DCI, dci_devx | dct_devx,
+         UCT_IB_MLX5_DP_ORDERING_IBTA, 1, UCS_OK},
+        {"dc devx dci ddp", UCT_IB_QPT_DCI, dci_devx,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_ERR_INVALID_PARAM},
+        {"dc dv dct ddp", UCT_IB_QPT_DCI, dci_devx,
+         UCT_IB_MLX5_DP_ORDERING_IBTA, 1, UCS_ERR_INVALID_PARAM},
+        {"dc devx dct ddp", UCT_IB_QPT_DCI, dct_devx,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_ERR_INVALID_PARAM},
+        {"dc dv dci ddp", UCT_IB_QPT_DCI, dct_devx,
+         UCT_IB_MLX5_DP_ORDERING_IBTA, 1, UCS_ERR_INVALID_PARAM},
+        {"dc mixed without ddp", UCT_IB_QPT_DCI, dci_devx,
+         UCT_IB_MLX5_DP_ORDERING_IBTA, 0, UCS_OK},
+        {"dc unrelated devx flags", UCT_IB_QPT_DCI, rc_devx,
+         UCT_IB_MLX5_DP_ORDERING_OOO_ALL, 0, UCS_OK}
+    };
+    uct_ib_mlx5_md_t md{};
+    uct_rc_mlx5_iface_common_t iface{};
+    uct_ib_iface_init_attr_t init_attr{};
+    scoped_log_handler handler(wrap_errors_logger);
+
+    init_attr.dev_name = "mlx5_mock:1";
+    for (const auto &test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        md.flags                      = test_case.devx_flags;
+        iface.config.dp_ordering_devx = test_case.devx_ordering;
+        iface.config.ddp_enabled_dv   = test_case.ddp_enabled_dv;
+        init_attr.qp_type             = test_case.qp_type;
+        m_errors.clear();
+
+        md.super.reg_nonblock_mem_types = 0;
+        EXPECT_EQ(UCS_OK, uct_rc_mlx5_iface_check_odp_ddp(&md, &iface,
+                                                         &init_attr));
+        md.super.reg_nonblock_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+        EXPECT_EQ(UCS_OK, uct_rc_mlx5_iface_check_odp_ddp(&md, &iface,
+                                                         &init_attr));
+        EXPECT_TRUE(m_errors.empty());
+
+        md.super.reg_nonblock_mem_types = managed_types;
+        EXPECT_EQ(test_case.managed_status,
+                  uct_rc_mlx5_iface_check_odp_ddp(&md, &iface, &init_attr));
+        md.super.reg_nonblock_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_HOST);
+        EXPECT_EQ(test_case.managed_status,
+                  uct_rc_mlx5_iface_check_odp_ddp(&md, &iface, &init_attr));
+
+        ASSERT_EQ((test_case.managed_status == UCS_OK) ? 0u : 2u,
+                  m_errors.size());
+        for (const auto &message : m_errors) {
+            EXPECT_NE(std::string::npos, message.find(init_attr.dev_name));
+            EXPECT_NE(std::string::npos, message.find("ODP with DDP"));
+            EXPECT_NE(std::string::npos, message.find("CUDA managed memory"));
+            EXPECT_NE(std::string::npos,
+                      message.find("UCX_IB_ODP_MEM_TYPES=host"));
+        }
+    }
+}
+#endif
 #endif
 
 
