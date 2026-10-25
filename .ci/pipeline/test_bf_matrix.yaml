@@ -57,6 +57,8 @@ taskName: '${name}/${arch}/w${worker}'
 
 env:
   RUN_TESTS: "yes"
+  # No MPI on the BlueField hosts yet.
+  RUN_MPI_TESTS: "no"
   TEST_PERF: "0"
   VALGRIND_CHECK: "no"
   nworkers: "4"
