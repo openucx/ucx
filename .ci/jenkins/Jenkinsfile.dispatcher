@@ -84,9 +84,15 @@ def pipelineOverviewUrl = "${env.BUILD_URL}pipeline-overview/"
 githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI started", GitHubCommitState.PENDING)
 currentBuild.description = githubHelper.getBuildDescription()
 
+// Basic compile gates every leaf but codestyle, as on Azure: a PR that does
+// not build must not take GPU, BlueField or Slurm slots.
+def gateJob = 'UCX-OSS/ucx-basic-compile-oss'
+
 // Leaf jobs to dispatch, keyed by parallel-branch name
-def leafJobs = [
+def gateStageJobs = [
   'codestyle':      'UCX-OSS/ucx-codestyle-oss',
+]
+def leafJobs = [
   'static-checks':  'UCX-OSS/ucx-static-checks-oss',
   'coverity':       'UCX-OSS/ucx-coverity-oss',
   'build':          'UCX-OSS/ucx-build-oss',
@@ -111,21 +117,40 @@ def leafJobs = [
 try {
   // Compute the merged SHA once so all leaf jobs test the same commit
   def mergedSHA = githubHelper.getMergedSHA()
+  def leafParams = [
+    string(name: 'sha1', value: mergedSHA),
+    string(name: 'githubData', value: VARIABLE_FROM_POST)
+  ]
 
   // Leaf jobs report their own GitHub statuses; the dispatcher build stays
   // SUCCESS unless dispatching itself fails. catchError paints a failed
   // leaf's branch red without failing the build, and all branches run to
   // completion regardless of sibling failures.
-  parallel(leafJobs.collectEntries { branchName, jobName ->
-    [(branchName): {
-      catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-        build job: jobName, parameters: [
-          string(name: 'sha1', value: mergedSHA),
-          string(name: 'githubData', value: VARIABLE_FROM_POST)
-        ], wait: true
+  def leafBranches = { jobs ->
+    jobs.collectEntries { branchName, jobName ->
+      [(branchName): {
+        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+          build job: jobName, parameters: leafParams, wait: true
+        }
+      }]
+    }
+  }
+
+  // Any non-SUCCESS gate result, an abort included, skips the leaf jobs.
+  def gate = null
+  parallel(leafBranches(gateStageJobs) + ['basic-compile': {
+    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+      gate = build job: gateJob, parameters: leafParams, wait: true, propagate: false
+      if (gate.result != 'SUCCESS') {
+        error("Basic compile ${gate.result}: ${gate.absoluteUrl}")
       }
-    }]
-  })
+    }
+  }])
+  if (gate?.result != 'SUCCESS') {
+    error("Basic compile did not pass, skipping the other jobs: ${gate?.absoluteUrl}")
+  }
+
+  parallel(leafBranches(leafJobs))
 
   githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI ended", GitHubCommitState.SUCCESS)
 } catch(Exception ex) {
