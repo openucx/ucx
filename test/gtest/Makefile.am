@@ -302,6 +302,11 @@ endif
 
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
+
+if HAVE_GDR_COPY
+gtest_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
+endif
+
 gtest_LDFLAGS += \
 	$(CUDA_LDFLAGS)
 gtest_LDADD += \
