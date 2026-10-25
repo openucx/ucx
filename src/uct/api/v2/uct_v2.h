@@ -10,6 +10,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/type/qos_level.h>
 #include <uct/api/uct.h>
 #include <ucs/sys/topo/base/topo.h>
 
@@ -383,31 +384,6 @@ typedef enum {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Quality of service level
- *
- * Specifies the relative priority of the endpoint's traffic. The level is
- * abstract: the transport maps it to whatever prioritization mechanism the
- * underlying fabric provides, and transports which do not support
- * prioritization ignore it.
- *
- * The levels are ordered from the highest priority to the lowest, so a
- * transport which distinguishes fewer levels than are defined here maps the
- * levels it cannot represent to the lowest priority it supports.
- */
-typedef enum {
-    /** Highest priority */
-    UCT_QOS_LEVEL_HIGH,
-
-    /** Intermediate priority */
-    UCT_QOS_LEVEL_MEDIUM,
-
-    /** Lowest priority */
-    UCT_QOS_LEVEL_LOW
-} uct_qos_level_t;
-
-
-/**
- * @ingroup UCT_RESOURCE
  * @brief field mask of @ref uct_ep_is_connected_params_t
  *
  * The enumeration allows specifying which fields in @ref
@@ -760,16 +736,14 @@ typedef struct uct_ep_connect_to_ep_params {
 
     /**
      * Quality of service level of this endpoint, as defined by
-     * @ref uct_qos_level_t. The transport maps the level to the
-     * prioritization mechanism provided by the underlying fabric, and
-     * transports which do not support prioritization ignore it.
+     * @ref ucs_qos_level_t.
      *
      * This setting is optional. To enable it, the corresponding @ref
      * UCT_EP_CONNECT_TO_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must
      * be set. When it is not set, the endpoint keeps the transport's default
-     * priority, which is not necessarily any of the levels above.
+     * priority, which is not necessarily any of those levels.
      */
-    uct_qos_level_t               qos_level;
+    ucs_qos_level_t               qos_level;
 } uct_ep_connect_to_ep_params_t;
 
 
