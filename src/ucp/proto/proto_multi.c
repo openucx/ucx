@@ -710,6 +710,11 @@ static void ucp_proto_multi_limit_iface_bandwidth(
     /* Paths on one iface share its bandwidth. Preserve the existing data
      * distribution and limit the estimate by its busiest iface. */
     ucs_for_each_bit(lane, lane_map) {
+        if (!(lanes_perf[lane].flags &
+              UCT_PERF_ATTR_FLAGS_SHARED_PATH_BANDWIDTH)) {
+            continue;
+        }
+
         rsc_index       = ucp_proto_common_get_rsc_index(params, lane);
         iface_bandwidth = 0;
         iface_weight    = 0;

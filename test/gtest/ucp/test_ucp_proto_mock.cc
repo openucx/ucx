@@ -74,6 +74,11 @@ public:
                        sys_device);
     }
 
+    void set_perf_mock(const std::string &dev_name, perf_attr_func_t perf_cb)
+    {
+        m_perf_attrs_funcs.at(dev_name) = std::move(perf_cb);
+    }
+
     void add_mock_iface_on_real_device(
             const std::string &dev_name,
             iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
@@ -1038,8 +1043,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rndv_4_paths,
     check_ep_config(sender(), {
         {1,       477,    "rendezvous fragmented copy-in copy-out",
          "rc_mlx5/mock_1:1/path0"},
-        {478,     4159,   "rendezvous zero-copy", "rc_mlx5/mock_1:1/path0"},
-        {4160,    INF,    "rendezvous zero-copy read from remote",
+        {478,     3813,   "rendezvous zero-copy", "rc_mlx5/mock_1:1/path0"},
+        {3814,    283699, "rendezvous zero-copy read from remote",
+         "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
+         "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
+        {283700,  INF,    "rendezvous zero-copy fenced write to remote",
          "12% on rc_mlx5/mock_1:1/path0, 14% on rc_mlx5/mock_0:1/path0, "
          "14% on rc_mlx5/mock_0:1/path1, 12% on rc_mlx5/mock_1:1/path1, 14%"},
     }, key);
@@ -1099,8 +1107,19 @@ protected:
     }
 
     void check_put_bandwidth(const std::map<std::string, unsigned> &paths,
-                             double bandwidth)
+                             double bandwidth,
+                             const std::set<std::string> &shared_ifaces =
+                                     {"mock:1", "mock:2"})
     {
+        for (unsigned port = 1; port <= num_ports(); ++port) {
+            std::string name = "mock:" + std::to_string(port);
+            bool shared      = shared_ifaces.count(name) != 0;
+            set_perf_mock(name, [shared](uct_perf_attr_t &perf) {
+                perf.flags = shared ?
+                             UCT_PERF_ATTR_FLAGS_SHARED_PATH_BANDWIDTH : 0;
+            });
+        }
+
         auto index = send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
         const ucp_memory_info_t mem_info = {UCS_MEMORY_TYPE_HOST,
                                            UCS_SYS_DEVICE_ID_UNKNOWN,
@@ -1176,6 +1195,18 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, shared_paths_4,
     check_put_bandwidth({{"mock:1", 4}}, 28e9);
 }
 
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, legacy_paths_2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=2")
+{
+    check_put_bandwidth({{"mock:1", 2}}, 56e9, {});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, legacy_paths_4,
+           "IB_NUM_PATHS?=4", "MAX_RMA_RAILS=4")
+{
+    check_put_bandwidth({{"mock:1", 4}}, 112e9, {});
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_bandwidth, rcx, "rc_x")
 
 class test_ucp_proto_mock_rcx_bandwidth_multi_port :
@@ -1198,6 +1229,12 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth_multi_port, asymmetric_paths,
 {
     /* Two 28GB/s paths carry 70% of the data on one shared interface. */
     check_put_bandwidth({{"mock:1", 2}, {"mock:2", 1}}, 40e9);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth_multi_port, mixed_paths,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=3")
+{
+    check_put_bandwidth({{"mock:1", 2}, {"mock:2", 1}}, 80e9, {"mock:2"});
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_bandwidth_multi_port, rcx,
@@ -2357,11 +2394,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_0,
             {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
              {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
              {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
-             {8247, 21607, "multi-frag eager zero-copy copy-out",
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
               "rc_mlx5/mock_0:1/path0"},
              // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=0
              // Use two paths of the zero network device in 50/50 ratio
-             {21608, INF, "rendezvous zero-copy read from remote",
+             {18543, INF, "rendezvous zero-copy read from remote",
               "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"}});
 }
 
@@ -2372,11 +2409,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_1,
             {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
              {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
              {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
-             {8247, 21607, "multi-frag eager zero-copy copy-out",
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
               "rc_mlx5/mock_0:1/path0"},
              // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=1
              // Use two paths of the second network device in 50/50
-             {21608, INF, "rendezvous zero-copy read from remote",
+             {18543, INF, "rendezvous zero-copy read from remote",
               "rc_mlx5/mock_2:1 50% on path0 and 50% on path1"}});
 }
 
@@ -2387,11 +2424,11 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_twins_tag, use_single_net_device_2,
             {{0, 200, "eager short", "rc_mlx5/mock_0:1/path0"},
              {201, 404, "eager copy-in copy-out", "rc_mlx5/mock_0:1/path0"},
              {405, 8246, "eager zero-copy copy-out", "rc_mlx5/mock_0:1/path0"},
-             {8247, 21607, "multi-frag eager zero-copy copy-out",
+             {8247, 18542, "multi-frag eager zero-copy copy-out",
               "rc_mlx5/mock_0:1/path0"},
              // SINGLE_NET_DEVICE=y, NODE_LOCAL_ID=2
              // Use two paths of the zero network device in 50/50 ratio
-             {21608, INF, "rendezvous zero-copy read from remote",
+             {18543, INF, "rendezvous zero-copy read from remote",
               "rc_mlx5/mock_0:1 50% on path0 and 50% on path1"}});
 }
 
