@@ -1199,6 +1199,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         return status;
     }
 
+    uct_cuda_driver_init();
     cuda_id = atoi(gpu_name + UCT_DEVICE_CUDA_NAME_LEN);
     status  = UCT_CUDADRV_FUNC_LOG_ERR(
             cuDeviceGetPCIBusId(pci_addr, UCS_SYS_BDF_NAME_MAX, cuda_id));
@@ -1697,6 +1698,9 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
 {
     uct_ib_mlx5_md_t *ib_mlx5_md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_md_t *ib_md           = &ib_mlx5_md->super;
+
+    /* libuct_cuda may be linked here without its module init having run */
+    uct_cuda_driver_init();
 
     if (!(uct_gdaki_get_driver_features(ib_md) & UCT_GDAKI_SUPPORTED)) {
         ucs_debug("%s: GDAKI is not supported",

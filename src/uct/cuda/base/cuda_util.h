@@ -100,6 +100,13 @@ CUdevice uct_cuda_get_cuda_device(ucs_sys_device_t sys_dev);
 
 
 /**
+ * Initialize the CUDA driver once. Must not be called from a library
+ * constructor, since the first cuInit() can call dlopen().
+ */
+void uct_cuda_driver_init(void);
+
+
+/**
  * Initialize CUDA devices in the system topology.
  *
  * Register and name all CUDA-visible devices, then use NVML to register
