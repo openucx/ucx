@@ -1044,12 +1044,14 @@ run_mpi_tests() {
 
 			make_clean distclean
 		else
-			echo "==== Not running MPI tests ===="
+			log_error "mpirun not found after loading ${mpi_module}"
+			exit 1
 		fi
 
 		module unload ${mpi_module}
 	else
-		echo "==== Not running MPI tests ===="
+		log_error "MPI module ${mpi_module} cannot be loaded"
+		exit 1
 	fi
 }
 
