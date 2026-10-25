@@ -9,7 +9,7 @@ job: ucx-test-bindings-arm
 
 failFast: false
 # Covers the allocation wait plus the step timeouts.
-timeout_minutes: 180
+timeout_minutes: 240
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -32,12 +32,13 @@ env:
   SLURM_ACCOUNT: oberon-gb-ci
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
-  SLURM_JOB_TIMEOUT: '01:30:00'
+  # Checkout and the five JUCX step timeouts plus slack.
+  SLURM_JOB_TIMEOUT: '03:00:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   CONTAINER_NAME: "ucx-ci-jucx-${BUILD_NUMBER}"
-  CI_IMAGE_TAG: "20260906-1"
+  CI_IMAGE_TAG: "20261018-1"
 
 pvc_volumes:
   - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
@@ -95,8 +96,8 @@ steps:
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
-      # dl-base has JDK 8 and 21; JDK 11 and ip (used by get_ip) come from apt.
-      testScript: "set -xe; apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openjdk-11-jdk-headless iproute2; git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      # dl-base has JDK 8 and 21; JDK 11 comes from apt.
+      testScript: "set -xe; apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openjdk-11-jdk-headless; git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
       headNode: "${SLURM_HEAD_NODE}"
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
@@ -199,6 +200,7 @@ steps:
     run: stop
     args:
       headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
       credentialsId: "${SSH_CREDENTIALS_ID}"
 
