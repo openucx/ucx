@@ -44,9 +44,9 @@ struct ucs_memtype_cache_registration {
     ucs_list_link_t             list;
     ucs_memory_type_t           mem_type;
     ucs_sys_device_t            sys_dev;
-    uint8_t                    mem_flags;
+    uint8_t                     mem_flags;
     ucs_memtype_cache_region_t *region;
-    size_t                     conflicts; /**< Incompatible overlaps */
+    size_t                      conflicts; /**< Incompatible overlaps */
 };
 
 typedef struct {
@@ -65,7 +65,7 @@ KHASH_IMPL(ucs_memtype_cache_tokens, const void*,
 struct ucs_memtype_cache_region {
     ucs_pgt_region_t  super;         /**< Base class - page table region */
     ucs_list_link_t   list;          /**< List element */
-    ucs_memory_type_t mem_type;      /**< Memory type, use uint8 for compact size */
+    ucs_memory_type_t mem_type;      /**< Memory type (uint8 for compactness) */
     ucs_sys_device_t  sys_dev;       /**< System device index */
     uint8_t           mem_flags;     /**< UCS memory flags */
     ucs_list_link_t   registrations; /**< Registrations sharing this region */
@@ -78,8 +78,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t);
 
 UCS_CLASS_DEFINE(ucs_memtype_cache_t, void);
 
-static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *
-ucs_memtype_cache_get_global()
+static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
 {
     ucs_memtype_cache_t *memtype_cache = NULL;
     ucs_status_t status;
@@ -271,15 +270,15 @@ ucs_memtype_cache_attach_registration(
  * their cached entry cleared when a conflicting registration arrives. */
 static void
 ucs_memtype_cache_remove_explicit(ucs_memtype_cache_t *memtype_cache,
-                                 ucs_memtype_cache_region_t *region)
+                                  ucs_memtype_cache_region_t *region)
 {
     ucs_memtype_cache_registration_t *registration, *tmp;
     ucs_status_t status;
 
     status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
     ucs_assertv_always(status == UCS_OK,
-                      "failed to remove explicit memtype region: %s",
-                      ucs_status_string(status));
+                       "failed to remove explicit memtype region: %s",
+                       ucs_status_string(status));
 
     ucs_list_for_each_safe(registration, tmp, &region->registrations, list) {
         ucs_list_del(&registration->list);
@@ -318,11 +317,11 @@ ucs_memtype_cache_restore_registration(
     }
 
     pgt_region = ucs_pgtable_lookup(&memtype_cache->pgtable,
-                                   registration->interval.start);
+                                    registration->interval.start);
     if (pgt_region != NULL) {
         region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
         if (ucs_memtype_cache_region_covers_registration(region,
-                                                        registration)) {
+                                                         registration)) {
             ucs_memtype_cache_attach_registration(region, registration);
             return;
         }
@@ -374,7 +373,7 @@ ucs_memtype_cache_restore_overlap_callback(ucs_interval_map_node_t *node,
 
 static void
 ucs_memtype_cache_registration_add_overlap(ucs_interval_map_node_t *node,
-                                         void *arg)
+                                           void *arg)
 {
     ucs_memtype_cache_registration_ctx_t *ctx = arg;
     ucs_memtype_cache_registration_t *other = ucs_container_of(
@@ -403,7 +402,7 @@ ucs_memtype_cache_registration_add_overlap(ucs_interval_map_node_t *node,
 
 static void
 ucs_memtype_cache_registration_remove_overlap(ucs_interval_map_node_t *node,
-                                            void *arg)
+                                              void *arg)
 {
     ucs_memtype_cache_registration_ctx_t *ctx = arg;
     ucs_memtype_cache_registration_t *other = ucs_container_of(
@@ -451,9 +450,9 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     /* The page table requires aligned regions, so cover the whole aligned
      * range. Neighboring allocations cannot share an aligned granule. */
     registration->interval.start = ucs_align_down_pow2(start,
-                                                      UCS_PGT_ADDR_ALIGN);
+                                                       UCS_PGT_ADDR_ALIGN);
     registration->interval.end   = ucs_align_up_pow2(start + size,
-                                                    UCS_PGT_ADDR_ALIGN);
+                                                     UCS_PGT_ADDR_ALIGN);
     registration->mem_type       = mem_type;
     registration->sys_dev        = sys_dev;
     registration->mem_flags      = mem_flags;
@@ -501,7 +500,7 @@ void ucs_memtype_cache_unregister(const void *token)
     khiter_t hash_it;
     int region_was_removed = 0;
 
-    if (memtype_cache == NULL || memtype_cache->has_events) {
+    if ((memtype_cache == NULL) || memtype_cache->has_events) {
         return;
     }
 

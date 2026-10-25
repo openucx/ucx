@@ -1267,7 +1267,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 out:
     if (status == UCS_OK) {
         ucs_assert(ucp_memh_is_user_memh(memh));
-        if (!(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+        if (!(memh_flags & UCP_MEMH_FLAG_IMPORTED)) {
             if (flags & UCP_MEM_MAP_ALLOCATE) {
                 /* The allocator reports the type of the memory it created. */
                 mem_info.type    = memh->mem_type;

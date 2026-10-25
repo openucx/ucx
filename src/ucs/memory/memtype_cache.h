@@ -46,12 +46,11 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    ucs_spinlock_t  lock;          /**< Protects the page table and
-                                        registrations */
-    ucs_pgtable_t   pgtable;       /**< Page table to hold the regions */
-    ucs_interval_map_t registrations; /**< All explicit registrations */
+    ucs_spinlock_t                    lock; /**< Protects cache state */
+    ucs_pgtable_t                     pgtable; /**< Cached regions */
+    ucs_interval_map_t                registrations; /**< Explicit mappings */
     khash_t(ucs_memtype_cache_tokens) token_hash; /**< Token index */
-    int             has_events;    /**< Allocation/free events are active */
+    int                               has_events; /**< UCM events active */
 };
 
 
@@ -90,8 +89,9 @@ ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
 
 /**
  * Update the memory type of an address range.
- * Can be used after @ucs_memtype_cache_lookup returns UCM_MEM_TYPE_LAST, to
- * set the memory type after it was detected.
+ * Can be used after ucs_memtype_cache_lookup() reports
+ * UCS_MEMORY_TYPE_UNKNOWN to cache the detected type. This function has no
+ * effect if the cache is unavailable or UCM memory type events are inactive.
  *
  * @param [in]  address         Start address to update.
  * @param [in]  size            Size of the memory to update.
@@ -110,6 +110,8 @@ void ucs_memtype_cache_update(const void *address, size_t size,
 
 /**
  * Remove the address range from a memtype cache.
+ * Has no effect if the cache is unavailable or UCM memory type events are
+ * inactive.
  *
  * @param [in]  address         Start address to remove.
  * @param [in]  size            Size of the memory to remove.
