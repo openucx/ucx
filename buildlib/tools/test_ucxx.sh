@@ -80,7 +80,7 @@ export_host_driver_override() {
   local arch hostlib
   arch=$(uname -m)
   for hostlib in "/usr/lib/$arch-linux-gnu" /usr/lib64; do
-    [ -d "$hostlib" ] && export LD_LIBRARY_PATH="$hostlib:${LD_LIBRARY_PATH:-}"
+    [ -d "$hostlib" ] && export LD_LIBRARY_PATH="$hostlib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   done
   # arm64 images carry no /usr/lib64, so the loop ends non-zero there; the
   # caller runs under errexit and must not treat that as a failure.

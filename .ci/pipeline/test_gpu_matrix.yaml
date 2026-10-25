@@ -70,6 +70,7 @@ runs_on_dockers:
      uri: 'x86_64/build_helper_ucx',
      tag: "${CI_IMAGE_TAG}",
      DOCKER_IMAGE: "harbor.mellanox.com#ucx/centos8-mofed23-cuda11_asan:1",
+     TEST_PERF: "0",
      ASAN_CHECK: "yes"
     }
 

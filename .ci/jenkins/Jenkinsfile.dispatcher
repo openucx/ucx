@@ -129,7 +129,7 @@ try {
   def leafBranches = { jobs ->
     jobs.collectEntries { branchName, jobName ->
       [(branchName): {
-        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE', catchInterruptions: false) {
           build job: jobName, parameters: leafParams, wait: true
         }
       }]
@@ -139,7 +139,7 @@ try {
   // Any non-SUCCESS gate result, an abort included, skips the leaf jobs.
   def gate = null
   parallel(leafBranches(gateStageJobs) + ['basic-compile': {
-    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE', catchInterruptions: false) {
       gate = build job: gateJob, parameters: leafParams, wait: true, propagate: false
       if (gate.result != 'SUCCESS') {
         error("Basic compile ${gate.result}: ${gate.absoluteUrl}")
