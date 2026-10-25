@@ -30,8 +30,7 @@ env:
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
   GTEST_MAX_IB_SL: "4"
-  # MPI test_memhooks loops on an assert here; Azure skips MPI tests too.
-  RUN_MPI_TESTS: "no"
+  RUN_MPI_TESTS: "yes"
   # common.sh builds with make -j4 unless parallel_jobs is passed.
   BUILD_JOBS: "16"
   nworkers: "4"
