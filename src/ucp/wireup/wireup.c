@@ -581,10 +581,10 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         lanes2remote[lane] = remote_lane;
 
         if (used_remote_lanes & UCS_BIT(remote_lane)) {
-            ucs_fatal(UCP_EP_LANE_FMT " -> addr[%u]: remote lane %d is"
-                      " used more than once",
+            ucs_fatal(UCP_EP_LANE_FMT " -> addr[%u].ep_addr[%u]: invalid wireup"
+                      " address: remote lane %d is used more than once",
                       UCP_EP_LANE_ARG(ep, lane, &lane_strb), address_index,
-                      remote_lane);
+                      ep_addr_index, remote_lane);
         }
 
         used_remote_lanes |= UCS_BIT(remote_lane);
