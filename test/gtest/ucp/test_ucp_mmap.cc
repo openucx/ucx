@@ -1357,12 +1357,16 @@ public:
     {
         add_variant(variants, UCP_FEATURE_TAG);
     }
+
+protected:
+    void test_limits_memh_md_map(ucs_memory_type_t mem_type);
 };
 
-UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
+void test_ucp_mmap_max_hca::test_limits_memh_md_map(ucs_memory_type_t mem_type)
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA is not supported");
+    if (!mem_buffer::is_mem_type_supported(mem_type)) {
+        UCS_TEST_SKIP_R(mem_buffer::mem_type_name(mem_type) +
+                        " is not supported");
     }
 
     modify_config("MAX_HCA_PER_GPU", "inf");
@@ -1376,7 +1380,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
     }
 
     const size_t size = 4096;
-    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+    void *ptr         = mem_buffer::allocate(size, mem_type);
 
     ucp_mem_map_params_t params;
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -1409,13 +1413,23 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
     ucp_md_map_t net_close = memh->md_map & net_md_map;
     ASSERT_UCS_OK(ucp_mem_unmap(ctx_close, memh));
 
-    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::release(ptr, mem_type);
 
     EXPECT_GT(ucs_popcount(net_all), 0);
     EXPECT_LE(ucs_popcount(net_lim), 1);
     EXPECT_GT(ucs_popcount(net_close), 0);
     EXPECT_LE(ucs_popcount(net_close), ucs_popcount(net_all));
     EXPECT_EQ(non_net_all, non_net_lim);
+}
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
+{
+    test_limits_memh_md_map(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map_rocm)
+{
+    test_limits_memh_md_map(UCS_MEMORY_TYPE_ROCM);
 }
 
 UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
