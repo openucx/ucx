@@ -132,6 +132,11 @@ function az_module_load() {
         ((retries--))
     done
     module load $module
+    # Modules 3.2 returns 0 even when the modulefile fails
+    if ! module list -t 2>&1 | grep -q "^$module\$"; then
+        azure_log_warning "Module $module failed to load"
+        return 1
+    fi
     return 0
 }
 

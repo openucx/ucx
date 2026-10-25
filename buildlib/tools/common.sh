@@ -154,8 +154,11 @@ module_load() {
 	if module avail -t 2>&1 | grep -q "^$module\$"
 	then
 		module load $module
+		# Modules 3.2 returns 0 even when the modulefile fails
+		module list -t 2>&1 | grep -q "^$module\$"
+		rc=$?
 		set -x
-		return 0
+		return $rc
 	else
 		set -x
 		return 1
