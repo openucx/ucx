@@ -1,5 +1,10 @@
 
 1. Please sign the [UCX contributors agreement](http://www.openucx.org/license).
+   Once it is countersigned, a maintainer adds the email named on it, or your
+   company's email domain for a corporate CLA, to the CLA list; the `CLA`
+   check on your pull request fails until then. Every commit must be signed
+   with a key registered on your GitHub account, and its author and committer
+   emails must be covered by a CLA.
 
 1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/docs/CodeStyle.md)
    and [logging style](https://github.com/openucx/ucx/blob/master/docs/LoggingStyle.md).
