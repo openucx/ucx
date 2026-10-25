@@ -20,6 +20,7 @@ extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <ucs/datastruct/pgtable.h>
@@ -315,7 +316,20 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 
 UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
 {
-    /* Currently MNNVL is always disabled in CI */
+#if HAVE_NVML_FABRIC_INFO
+    nvmlGpuFabricInfoV_t fabric_info;
+    nvmlDevice_t device;
+
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    if ((UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device) ==
+         UCS_OK) &&
+        (UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV, device,
+                                 &fabric_info) == UCS_OK) &&
+        (fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED)) {
+        UCS_TEST_SKIP_R("GPU fabric is available");
+    }
+#endif
+
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
     EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
 }
