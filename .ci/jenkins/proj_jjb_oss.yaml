@@ -52,6 +52,7 @@
             refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*"
             browser: githubweb
             browser-url: "https://github.com/openucx/ucx"
+            wipe-workspace: false
       script-path: ".ci/jenkins/Jenkinsfile.dispatcher"
 
 - job-template:
@@ -101,6 +102,7 @@
             refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*"
             browser: githubweb
             browser-url: "https://github.com/openucx/ucx"
+            wipe-workspace: false
       script-path: ".ci/jenkins/Jenkinsfile.github"
 
 - project:
