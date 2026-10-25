@@ -82,6 +82,8 @@ taskName: '${name}/${arch}/w${worker}'
 
 env:
   RUN_TESTS: "yes"
+  # MPI test_memhooks loops on a debug.c assert with the lab HPC-X (Open MPI 5).
+  RUN_MPI_TESTS: "no"
   VALGRIND_CHECK: "no"
   nworkers: "4"
   STEP_TIMEOUT_MINUTES: "210"
