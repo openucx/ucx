@@ -386,6 +386,9 @@ ucp_datatype_iter_sgl_check(const ucp_datatype_iter_t *dt_iter)
                 "offset=%zu length=%zu", dt_iter->offset, dt_iter->length);
     if (dt_iter->offset < dt_iter->length) {
         elem_length = dt_iter->type.sgl.lengths[dt_iter->offset];
+        if (dt_iter->type.sgl.counts != NULL) {
+            elem_length *= dt_iter->type.sgl.counts[dt_iter->offset];
+        }
         ucs_assertv((elem_length > 0) ?
                     (dt_iter->type.sgl.frag_offset < elem_length) :
                     (dt_iter->type.sgl.frag_offset == 0),
@@ -649,7 +652,8 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
     size_t elem_index  = dt_iter->offset;
     size_t frag_offset = dt_iter->type.sgl.frag_offset;
     size_t desc_count  = 0;
-    size_t elem_length, frag_length;
+    size_t elem_length, row_length, row_index, row_offset, frag_length;
+    size_t local_offset, remote_offset;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
     ucs_assert(max_frag_count >= 1);
@@ -657,16 +661,30 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
     ucp_datatype_iter_sgl_check(dt_iter);
 
     while ((desc_count < max_frag_count) && (elem_index < dt_iter->length)) {
-        elem_length = dt_iter->type.sgl.lengths[elem_index];
+        row_length  = dt_iter->type.sgl.lengths[elem_index];
+        elem_length = row_length;
+        if (dt_iter->type.sgl.counts != NULL) {
+            elem_length *= dt_iter->type.sgl.counts[elem_index];
+        }
         if (elem_length > 0) {
             ucs_assert(elem_length > frag_offset);
-            frag_length = ucs_min(elem_length - frag_offset, max_frag_length);
+            row_index   = frag_offset / row_length;
+            row_offset  = frag_offset % row_length;
+            frag_length = ucs_min(row_length - row_offset, max_frag_length);
+            local_offset  = row_offset;
+            remote_offset = row_offset;
+            if (dt_iter->type.sgl.counts != NULL) {
+                local_offset  += row_index *
+                                 dt_iter->type.sgl.strides[elem_index];
+                remote_offset += row_index *
+                                 dt_iter->type.sgl.remote_strides[elem_index];
+            }
 
             out_buffers[desc_count]      = UCS_PTR_BYTE_OFFSET(
-                    dt_iter->type.sgl.buffers[elem_index], frag_offset);
+                    dt_iter->type.sgl.buffers[elem_index], local_offset);
             out_lengths[desc_count]      = frag_length;
             out_remote_addrs[desc_count] = remote_addrs[elem_index] +
-                                           frag_offset;
+                                           remote_offset;
             out_elem_indices[desc_count] = elem_index;
             ++desc_count;
 

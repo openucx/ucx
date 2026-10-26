@@ -7,6 +7,7 @@
 
 #include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_memheap.h"
+#include <cstring>
 
 extern "C" {
 #include <ucp/core/ucp_context.h>
@@ -1226,7 +1227,9 @@ public:
 
     virtual void init() override {
         /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
+        if ((mem_type() == UCS_MEMORY_TYPE_CUDA) &&
+            (std::strstr(::testing::UnitTest::GetInstance()->current_test_info()->name(),
+                         "put_asymmetric_strides") == NULL)) {
             UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
         }
 
@@ -1624,6 +1627,59 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_memhs) {
 
 UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
     test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_asymmetric_strides) {
+    static constexpr size_t BUF_SIZE = 128;
+    static constexpr size_t ROW_SIZE = 8;
+    static constexpr size_t ROWS     = 4;
+    size_t counts[]        = {ROWS};
+    size_t local_strides[] = {32};
+    size_t remote_strides[] = {ROW_SIZE};
+    sgl_ctx ctx;
+    uint8_t src[BUF_SIZE] = {};
+    uint8_t dst[BUF_SIZE];
+
+    init_sgl_ctx(ctx, 1, BUF_SIZE);
+    ctx.dst[0].memset(0xa5);
+    for (size_t row = 0; row < ROWS; ++row) {
+        std::memset(src + row * local_strides[0], row + 1, ROW_SIZE);
+    }
+    mem_buffer::copy_to(ctx.src[0].ptr(), src, BUF_SIZE, mem_type());
+    ctx.lengths[0]        = ROW_SIZE;
+    ctx.remote_lengths[0] = ROW_SIZE;
+
+    ucp_dt_local_sgl_t local = make_local_sgl(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    local.field_mask |= UCP_DT_LOCAL_SGL_FIELD_COUNTS |
+                        UCP_DT_LOCAL_SGL_FIELD_STRIDES;
+    local.counts  = counts;
+    local.strides = local_strides;
+
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    remote.field_mask |= UCP_DT_REMOTE_SGL_FIELD_STRIDES;
+    remote.strides = remote_strides;
+    ucp_request_param_t param = make_sgl_param(&remote, 1);
+
+    ucs_status_ptr_t sptr = sgl_op_nbx(SGL_OP_PUT, &local, 1,
+                                       UCP_REMOTE_ADDR_INVALID,
+                                       UCP_RKEY_INVALID, &param);
+    ASSERT_FALSE(UCS_PTR_IS_ERR(sptr));
+    if (UCS_PTR_IS_PTR(sptr)) {
+        while (!ucp_request_is_completed(sptr)) {
+            ucp_worker_progress(sender().worker());
+            ucp_worker_progress(receiver().worker());
+        }
+        ucp_request_release(sptr);
+    }
+    flush_ep(sender());
+
+    mem_buffer::copy_from(dst, ctx.dst[0].ptr(), BUF_SIZE, mem_type());
+    for (size_t i = 0; i < BUF_SIZE; ++i) {
+        uint8_t expected = (i < ROWS * ROW_SIZE) ?
+                           static_cast<uint8_t>(i / ROW_SIZE + 1) : 0xa5;
+        EXPECT_EQ(expected, dst[i]) << "byte " << i;
+    }
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {

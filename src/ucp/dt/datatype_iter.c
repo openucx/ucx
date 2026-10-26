@@ -290,16 +290,59 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         size_t count,
                                         const ucp_request_param_t *param)
 {
+    int has_counts         = !!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_COUNTS);
+    int has_strides        = !!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_STRIDES);
+    int has_remote_strides = !!(remote->field_mask &
+                                UCP_DT_REMOTE_SGL_FIELD_STRIDES);
+    size_t i;
     ucs_status_t status;
 
     /* For Coverity */
     ucs_assert(remote != NULL);
+
+    if ((has_counts != has_strides) ||
+        (has_counts != has_remote_strides) ||
+        (has_counts && ((local->counts == NULL) ||
+                        (local->strides == NULL) ||
+                        (remote->strides == NULL)))) {
+        ucs_error("sgl repetition requires local counts and both strides");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (has_counts) {
+        for (i = 0; i < count; ++i) {
+            size_t rows = local->counts[i];
+            size_t len  = local->lengths[i];
+            size_t local_span, remote_span;
+
+            if ((rows == 0) || ((rows > 1) &&
+                ((len == 0) || (local->strides[i] < len) ||
+                 (remote->strides[i] < len) ||
+                 (rows > SIZE_MAX / len) ||
+                 ((rows - 1) > (SIZE_MAX - len) / local->strides[i]) ||
+                 ((rows - 1) > (SIZE_MAX - len) / remote->strides[i])))) {
+                ucs_error("sgl[%zu]: invalid repetition count or stride", i);
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            local_span  = len + (rows - 1) * local->strides[i];
+            remote_span = len + (rows - 1) * remote->strides[i];
+            if (((uintptr_t)local->buffers[i] > UINTPTR_MAX - local_span) ||
+                (remote->remote_addrs[i] > UINT64_MAX - remote_span)) {
+                ucs_error("sgl[%zu]: repeated address overflows", i);
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+    }
 
     dt_iter->dt_class             = UCP_DATATYPE_SGL;
     dt_iter->length               = count;
     dt_iter->offset               = 0;
     dt_iter->type.sgl.buffers     = local->buffers;
     dt_iter->type.sgl.lengths     = local->lengths;
+    dt_iter->type.sgl.counts      = has_counts ? local->counts : NULL;
+    dt_iter->type.sgl.strides     = has_counts ? local->strides : NULL;
+    dt_iter->type.sgl.remote_strides = has_counts ? remote->strides : NULL;
     dt_iter->type.sgl.frag_offset = 0;
 
     if (ucs_unlikely(count == 0)) {
@@ -370,9 +413,14 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
     }
 
     for (i = 0; i < count; ++i) {
+        size_t length = dt_iter->type.sgl.lengths[i];
+        if (dt_iter->type.sgl.counts != NULL) {
+            length += (dt_iter->type.sgl.counts[i] - 1) *
+                      dt_iter->type.sgl.strides[i];
+        }
         status = ucp_datatype_iter_mem_reg_single(
                 context, dt_iter->type.sgl.buffers[i],
-                dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
+                length, dt_iter->mem_info.type,
                 md_map, uct_flags, &memhs[i]);
         if (status != UCS_OK) {
             if (dt_iter->type.sgl.memhs == NULL) {

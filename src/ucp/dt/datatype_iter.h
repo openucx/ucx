@@ -77,7 +77,10 @@ typedef struct {
             void * const     *buffers;
             const size_t     *lengths;
             ucp_mem_h        *memhs;
-            size_t           frag_offset; /* Offset in the current element */
+            const size_t     *counts;
+            const size_t     *strides;
+            const size_t     *remote_strides;
+            size_t           frag_offset; /* Logical byte offset in the current element */
             /* length = element count, offset = current element index */
         } sgl;
     } type;
