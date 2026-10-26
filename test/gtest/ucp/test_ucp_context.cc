@@ -283,7 +283,7 @@ protected:
         return UCS_OK;
     }
 
-    ucp_context_t m_context              = {};
+    ucp_context_t m_context               = {};
     ucp_tl_md_t m_mds[2]                  = {};
     ucp_tl_resource_desc_t m_resources[4] = {};
     ucs_sys_device_t m_devices[4]         = {};
