@@ -182,7 +182,7 @@ protected:
         int c = 1;
         completion comp[2];
 
-        auto noop = [](void *arg, void *data, size_t length, unsigned flags) {
+        auto noop = [](void *arg, void *data, size_t length, unsigned) {
             return UCS_OK;
         };
 
@@ -329,15 +329,16 @@ UCS_TEST_P(test_srd, am_short_iov_failure)
     scoped_log_handler slh(wrap_errors_logger);
     char payload[64];
     ucs_status_t status;
-    uct_iov_t iov;
+    uct_iov_t iov[2] = {};
 
-    status = uct_ep_am_short_iov(m_e1->ep(0), 32, &iov, 1);
+    status = uct_ep_am_short_iov(m_e1->ep(0), 32, iov, 1);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
-    status     = uct_ep_am_short_iov(m_e1->ep(0), 14, &iov, 2);
-    iov.length = sizeof(payload);
-    iov.buffer = payload;
-    iov.count  = 1;
-    status     = uct_ep_am_short_iov(m_e1->ep(0), 14, &iov, 1);
+    status = uct_ep_am_short_iov(m_e1->ep(0), 14, iov, 2);
+    ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+    iov[0].length = sizeof(payload);
+    iov[0].buffer = payload;
+    iov[0].count  = 1;
+    status        = uct_ep_am_short_iov(m_e1->ep(0), 14, iov, 1);
     ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 }
 
@@ -362,7 +363,7 @@ UCS_TEST_P(test_srd, am_zcopy_failure)
 {
     scoped_log_handler slh(wrap_errors_logger);
     ucs_status_t status;
-    uct_iov_t iov[3];
+    uct_iov_t iov[3] = {};
 
     for (auto i = 0; i < 3; ++i) {
         iov[i].length = 64;
@@ -394,7 +395,7 @@ UCS_TEST_P(test_srd, get_bcopy_failure)
 UCS_TEST_P(test_srd, get_zcopy_failure)
 {
     scoped_log_handler slh(wrap_errors_logger);
-    uct_iov_t iov[3];
+    uct_iov_t iov[3] = {};
     ucs_status_t status;
 
     for (auto i = 0; i < 3; ++i) {
