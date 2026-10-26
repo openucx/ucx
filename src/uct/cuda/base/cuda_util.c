@@ -286,8 +286,9 @@ static unsigned uct_cuda_init_devices_internal(void)
     ucs_status_t nvml_status, topo_status;
     unsigned num_visible_gpus;
 
-    /* Init visible devices first using the CUDA driver */
     uct_cuda_driver_init();
+
+    /* Init visible devices first using the CUDA driver */
     num_visible_gpus = uct_cuda_init_devices_cu(visible_gpu_bus_ids);
 
     /* Init the remaining non-visible devices using NVML */
