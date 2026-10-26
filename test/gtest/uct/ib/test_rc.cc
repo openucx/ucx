@@ -543,7 +543,7 @@ UCS_TEST_F(test_rc_sgl_api, legacy_compatibility)
     comp.status = UCS_OK;
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, call(nullptr));
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, call(&comp));
-    EXPECT_EQ(completion_cb, comp.func);
+    EXPECT_EQ(&completion_cb, comp.func);
     EXPECT_EQ(17, comp.count);
     EXPECT_EQ(UCS_OK, comp.status);
 }
