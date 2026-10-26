@@ -31,8 +31,6 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 UCS_MODULE_INIT() {
     /* TODO make gdrcopy independent of cuda */
     UCS_MODULE_FRAMEWORK_DECLARE(uct_cuda);
-
-    uct_cuda_driver_init();
     UCS_MODULE_FRAMEWORK_LOAD(uct_cuda, 0);
     return UCS_OK;
 }
