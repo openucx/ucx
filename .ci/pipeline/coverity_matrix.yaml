@@ -39,10 +39,13 @@ env:
   COV_AGGRESSIVENESS: "high"
   # Coverity 2026 ships no compiler configuration.
   COV_CONFIGURE: "yes"
+  # common.sh builds and analyzes with 4 jobs unless set; match the pod CPUs.
+  parallel_jobs: "6"
 
 steps:
   - name: Coverity
     parallel: false
-    timeout: 30
+    # Coverity 2026 devel capture and analysis run past 30 minutes.
+    timeout: 75
     run: |
       ./buildlib/tools/coverity.sh ${type} --clean --with-cuda --with-gdrcopy --with-java
