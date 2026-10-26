@@ -82,18 +82,19 @@ UCS_TEST_F(test_rc_extension, invalid_registration)
 
 UCS_TEST_F(test_rc_extension, bandwidth_query)
 {
-    uct_rc_mlx5_iface_common_t iface = {};
+    std::unique_ptr<uct_rc_mlx5_iface_common_t> iface(
+            new uct_rc_mlx5_iface_common_t());
     uct_rc_mlx5_base_ep_t ep        = {};
     uct_rc_mlx5_ext_ops_t ops       = {};
     uct_ep_attr_t attr             = {};
     double bandwidth               = 12345.0;
     uct_ep_h tl_ep                 = &ep.super.super.super;
 
-    tl_ep->iface    = &iface.super.super.super.super;
+    tl_ep->iface    = &iface->super.super.super.super;
     ep.ext_ctx      = &bandwidth;
     attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, uct_rc_mlx5_base_ep_query(tl_ep, &attr));
-    iface.ext_ops = &ops;
+    iface->ext_ops = &ops;
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, uct_rc_mlx5_base_ep_query(tl_ep, &attr));
     ops.ep_query = query_cb;
     ASSERT_UCS_OK(uct_rc_mlx5_base_ep_query(tl_ep, &attr));
