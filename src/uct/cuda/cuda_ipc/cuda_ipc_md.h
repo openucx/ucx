@@ -102,6 +102,8 @@ typedef struct {
     pthread_mutex_t             lock;
     /** Enable remote IPC memory handle mapping cache */
     int                         enable_remote_cache;
+    /** Peers are allowed to import POSIX FD handles */
+    int                         ptrace_peers_allowed;
 } uct_cuda_ipc_component_t;
 
 extern uct_cuda_ipc_component_t uct_cuda_ipc_component;

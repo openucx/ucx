@@ -242,10 +242,6 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
         return status;
     }
 
-    /* Peers import the file descriptor with pidfd_getfd(), which requires them
-     * to pass the ptrace access check against this process */
-    ucs_sys_ptrace_enable_peers();
-
     key->ph.handle_type               = UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD;
     key->ph.handle.posix_fd.system_id = ucs_get_system_id();
     ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64,
@@ -391,7 +387,10 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 #endif /* HAVE_CUDA_FABRIC */
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
-    if (allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
+    /* Peers import POSIX FD handles with pidfd_getfd(), which requires them to
+     * pass the ptrace access check against this process */
+    if ((allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) &&
+        uct_cuda_ipc_component.ptrace_peers_allowed) {
         status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
         if (status == UCS_OK) {
             goto common_path;
@@ -868,6 +867,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    uct_cuda_ipc_component.ptrace_peers_allowed = ucs_sys_ptrace_enable_peers();
+#endif
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
@@ -919,7 +921,8 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     },
     .uuid_hash              = KHASH_STATIC_INITIALIZER,
     .lock                   = PTHREAD_MUTEX_INITIALIZER,
-    .enable_remote_cache    = 0
+    .enable_remote_cache    = 0,
+    .ptrace_peers_allowed   = 0
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_ipc_component.super);
 

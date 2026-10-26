@@ -860,7 +860,7 @@ ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 #endif
 }
 
-static int ucs_sys_ptrace_check_peers()
+int ucs_sys_ptrace_enable_peers()
 {
     static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
     const char *extra_info_str;
@@ -920,18 +920,6 @@ static int ucs_sys_ptrace_check_peers()
     ucs_log(allowed ? UCS_LOG_LEVEL_TRACE : UCS_LOG_LEVEL_DEBUG,
             "ptrace_scope is %s%s, ptrace access from peers is %sallowed",
             value, extra_info_str, allowed ? "" : "not ");
-    return allowed;
-}
-
-int ucs_sys_ptrace_enable_peers()
-{
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
-    static int allowed;
-
-    UCS_INIT_ONCE(&init_once) {
-        allowed = ucs_sys_ptrace_check_peers();
-    }
-
     return allowed;
 }
 
