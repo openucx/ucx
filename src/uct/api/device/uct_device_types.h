@@ -23,10 +23,25 @@
 
 
 /**
+ * @brief Invalid logical endpoint id of a CUDA IPC device memory element.
+ */
+#define UCT_CUDA_IPC_LE_ID_INVALID UINT32_MAX
+
+
+/**
  * @brief Device memory element for CUDA IPC.
+ *
+ * Remote memory is accessed either through a local mapping, or through a CUDA
+ * logical endpoint using fabric operations when @a le_id is valid.
  */
 typedef struct {
-    ptrdiff_t mapped_offset;
+    union {
+        /* Mapped address minus remote address, when le_id is invalid */
+        ptrdiff_t mapped_offset;
+        /* Logical endpoint offset minus remote address, when le_id is valid */
+        ptrdiff_t le_offset_delta;
+    };
+    uint32_t      le_id;
 } uct_cuda_ipc_md_device_mem_element_t;
 
 

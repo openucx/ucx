@@ -79,7 +79,7 @@ AC_DEFUN([UCX_CUDA_CHECK_NVCC], [
                                      [# offline compilation support for architectures before '<compute/sm/lto>_75' is discontinued
                                       NVCC_ARCH="${ARCH10_CODE} ${ARCH110_CODE} ${ARCH111_CODE} ${ARCH120_CODE} ${ARCH124_CODE} ${ARCH128_CODE} ${ARCH130_CODE} ${ARCH130_PTX}"
                                       AS_CASE([$CUDA_MINOR_VERSION],
-                                              [4], [NVCC_ARCH="${NVCC_ARCH} ${ARCH134_CODE} ${ARCH134_PTX}"])],
+                                              [4|5|6|7|8|9], [NVCC_ARCH="${NVCC_ARCH} ${ARCH134_CODE} ${ARCH134_PTX}"])],
                                  [12],
                                      [AS_CASE([$CUDA_MINOR_VERSION],
                                               [0|1|2|3],
@@ -257,6 +257,11 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
          AC_CHECK_DECLS([CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE],
                         [], [], [[#include <cuda.h>]])
+
+         AC_CHECK_DECLS([cuLogicalEndpointCreate],
+                        [AC_DEFINE([HAVE_CUDA_LOGICAL_ENDPOINT], 1,
+                                   [Enable CUDA logical endpoint (fabric transport) support])],
+                        [], [[#include <cuda.h>]])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"

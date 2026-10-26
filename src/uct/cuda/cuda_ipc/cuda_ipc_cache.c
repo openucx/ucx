@@ -76,18 +76,10 @@ uct_cuda_ipc_rem_mpool_cache_hash_equal(CUmemFabricHandle key1,
     return !memcmp(&key1, &key2, sizeof(key1));
 }
 
-/* djb2 hash function */
 static UCS_F_ALWAYS_INLINE khint_t
 uct_cuda_ipc_rem_mpool_cache_hash_func(CUmemFabricHandle key)
 {
-    khint_t hash = 5381;
-    int i;
-
-    for (i = 0; i < sizeof(key.data); i++) {
-        hash = ((hash << 5) + hash) + key.data[i];
-    }
-
-    return hash;
+    return uct_cuda_ipc_fabric_handle_hash(key.data, sizeof(key.data));
 }
 
 KHASH_INIT(cuda_ipc_rem_mpool_cache, CUmemFabricHandle, CUmemoryPool, 1,
@@ -540,6 +532,10 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
         return uct_cuda_ipc_open_memhandle_posix_fd(ext_key, cu_dev, mapped_addr,
                                                     log_level);
 #endif
+    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT:
+        ucs_log(log_level, "memory bound to a logical endpoint is accessible "
+                "only by device operations");
+        return UCS_ERR_UNSUPPORTED;
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC:
         level = UCS_LOG_LEVEL_DEBUG;
         break;
@@ -837,15 +833,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                                                     cu_dev};
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;
-    CUuuid uuid;
+    int is_on_device;
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+    status = uct_cuda_ipc_rkey_is_on_device(key, cu_dev, &is_on_device);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns) &&
-        (memcmp(uuid.bytes, key->uuid.bytes, sizeof(uuid.bytes)) == 0)) {
+    if (uct_cuda_ipc_is_rkey_local(key->pid, ext_key->pid_ns) && is_on_device) {
         /* TODO: added for test purpose to enable cuda_ipc tests in gtest
          * mapped addrr is set to be same as d_bptr avoiding any calls to
          * uct_cuda_ipc_open_memhandle which would fail with invalid argument

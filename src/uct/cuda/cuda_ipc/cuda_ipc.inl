@@ -7,6 +7,7 @@
 #define UCT_CUDA_IPC_INL
 
 #include <uct/cuda/base/cuda_iface.h>
+#include <string.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_ctx.inl>
@@ -93,6 +94,23 @@ uct_cuda_ipc_is_rkey_local(pid_t rkey_pid, ucs_sys_ns_t rkey_pid_ns)
 
     return (pid == rkey_pid) &&
            (ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) == rkey_pid_ns);
+}
+
+/* Check whether the memory of @a rkey belongs to device @a cu_dev */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_cuda_ipc_rkey_is_on_device(const uct_cuda_ipc_rkey_t *rkey, CUdevice cu_dev,
+                               int *is_on_device_p)
+{
+    ucs_status_t status;
+    CUuuid uuid;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *is_on_device_p = !memcmp(uuid.bytes, rkey->uuid.bytes, sizeof(uuid.bytes));
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void *

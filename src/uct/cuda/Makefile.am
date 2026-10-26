@@ -18,7 +18,8 @@ libuct_cuda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_cuda_ladir       = $(includedir)/uct/cuda
 
 nobase_dist_libuct_cuda_la_HEADERS = \
-	cuda_ipc/cuda_ipc.cuh
+	cuda_ipc/cuda_ipc.cuh \
+	cuda_ipc/cuda_ipc_cft.cuh
 
 noinst_HEADERS = \
 	base/cuda_ctx.h \
@@ -35,6 +36,7 @@ noinst_HEADERS = \
 	cuda_ipc/cuda_ipc_iface.h \
 	cuda_ipc/cuda_ipc_ep.h \
 	cuda_ipc/cuda_ipc_cache.h \
+	cuda_ipc/cuda_ipc_cft.h \
 	cuda_ipc/cuda_ipc.inl
 
 libuct_cuda_la_SOURCES = \
@@ -50,7 +52,8 @@ libuct_cuda_la_SOURCES = \
 	cuda_ipc/cuda_ipc_iface_address.c \
 	cuda_ipc/cuda_ipc_iface.c \
 	cuda_ipc/cuda_ipc_ep.c \
-	cuda_ipc/cuda_ipc_cache.c
+	cuda_ipc/cuda_ipc_cache.c \
+	cuda_ipc/cuda_ipc_cft.c
 
 PKG_CONFIG_NAME=cuda
 
