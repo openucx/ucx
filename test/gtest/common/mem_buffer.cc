@@ -180,6 +180,28 @@ bool mem_buffer::is_rocm_managed_supported()
 #endif
 }
 
+bool mem_buffer::is_rocm_vmm_supported()
+{
+#if HAVE_ROCM && defined(HAVE_ROCM_VMM_TYPE)
+    int dev       = 0;
+    int supported = 0;
+
+    if (!is_rocm_supported() || (hipGetDevice(&dev) != hipSuccess)) {
+        return false;
+    }
+
+    if (hipDeviceGetAttribute(&supported,
+                              hipDeviceAttributeVirtualMemoryManagementSupported,
+                              dev) != hipSuccess) {
+        return false;
+    }
+
+    return supported != 0;
+#else
+    return false;
+#endif
+}
+
 bool mem_buffer::is_rocm_malloc_pitch_supported()
 {
 #if HAVE_ROCM

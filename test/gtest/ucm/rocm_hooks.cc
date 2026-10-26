@@ -136,6 +136,49 @@ UCS_TEST_F(rocm_hooks, test_hipMallocManaged) {
     }
 }
 
+#ifdef HAVE_ROCM_VMM_TYPE
+UCS_TEST_F(rocm_hooks, test_hipMem_vmm_map_unmap) {
+    hipMemGenericAllocationHandle_t handle;
+    hipMemAllocationProp prop = {};
+    hipMemAccessDesc access   = {};
+    size_t granularity;
+    int dev = 0;
+    void *ptr;
+
+    if (!mem_buffer::is_rocm_vmm_supported()) {
+        UCS_TEST_SKIP_R("ROCm VMM is not supported");
+    }
+
+    ASSERT_EQ(hipGetDevice(&dev), hipSuccess);
+    prop.type          = hipMemAllocationTypePinned;
+    prop.location.type = hipMemLocationTypeDevice;
+    prop.location.id   = dev;
+
+    /* allocate a granularity-aligned size so the mapped size matches the
+     * size reported by the vmem_map/unmap hooks */
+    ASSERT_EQ(hipMemGetAllocationGranularity(&granularity, &prop,
+                  hipMemAllocationGranularityMinimum), hipSuccess);
+
+    ASSERT_EQ(hipMemCreate(&handle, granularity, &prop, 0), hipSuccess);
+    ASSERT_EQ(hipMemAddressReserve(&ptr, granularity, 0, 0, 0), hipSuccess);
+
+    /* hipMemMap drives hsa_amd_vmem_map, which fires the alloc hook. VMM is
+     * reported as ROCM (the map hook dispatches UNKNOWN, resolved later). */
+    ASSERT_EQ(hipMemMap(ptr, granularity, 0, handle, 0), hipSuccess);
+    access.location = prop.location;
+    access.flags    = hipMemAccessFlagsProtReadWrite;
+    ASSERT_EQ(hipMemSetAccess(ptr, granularity, &access, 1), hipSuccess);
+    check_mem_alloc_events(ptr, granularity);
+
+    /* hipMemUnmap drives hsa_amd_vmem_unmap, which fires the free hook */
+    ASSERT_EQ(hipMemUnmap(ptr, granularity), hipSuccess);
+    check_mem_free_events(ptr, granularity);
+
+    ASSERT_EQ(hipMemAddressFree(ptr, granularity), hipSuccess);
+    ASSERT_EQ(hipMemRelease(handle), hipSuccess);
+}
+#endif
+
 UCS_TEST_F(rocm_hooks, test_hipMallocPitch) {
     hipError_t ret;
     void * dptr;
