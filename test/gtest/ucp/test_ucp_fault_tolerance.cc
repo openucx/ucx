@@ -1168,6 +1168,7 @@ void test_ucp_fault_tolerance::run_lanes_degradation()
 
     ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
     EXPECT_EQ(nullptr, ep->ext->recovery_arg);
+    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep));
     EXPECT_EQ(0, total_err_count());
 }
 
