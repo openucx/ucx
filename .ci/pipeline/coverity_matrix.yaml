@@ -18,7 +18,8 @@ volumes:
   - {mountPath: /auto/sw_tools/Commercial, hostPath: /auto/sw_tools/Commercial}
 
 runs_on_dockers:
-  - { name: "cov", url: "harbor.mellanox.com/ucx/coverity:mofed-5.1-2.3.8.0", arch: x86_64 }
+  # Coverity 2026 needs glibc 2.18+.
+  - { name: "cov", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64 }
 
 matrix:
   axes:
@@ -33,6 +34,11 @@ taskName: '${arch}/${name}/${type}'
 env:
   # Set Azure built-ins expected by the script
   BUILD_ID: "${BUILD_NUMBER}"
+  # Module name of the lab modulefiles tree.
+  COV_MODULE: "tools/cov-2026.03"
+  COV_AGGRESSIVENESS: "high"
+  # Coverity 2026 ships no compiler configuration.
+  COV_CONFIGURE: "yes"
 
 steps:
   - name: Coverity
