@@ -13,12 +13,16 @@
 
 #include <string.h>
 #include <limits.h>
+#include <dlfcn.h>
+#include <pthread.h>
 #include <ucm/api/ucm.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/type/class.h>
+#include <ucs/type/init_once.h>
 #include <ucs/memory/memtype_cache.h>
 
 
@@ -31,8 +35,353 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
      ucs_offsetof(uct_ze_copy_md_config_t, device_ordinal),
      UCS_CONFIG_TYPE_INT},
 
+    {"HOST_IMPORT", "y",
+     "Import host memory into the Level Zero driver when it is registered, so\n"
+     "that copies to and from it reuse one driver allocation instead of\n"
+     "mapping the range again for every copy.",
+     ucs_offsetof(uct_ze_copy_md_config_t, host_import),
+     UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
+
+
+/* Registration handle of a range that was not imported */
+#define UCT_ZE_COPY_DUMMY_MEMH ((uct_mem_h)0xdeadbeef)
+
+/* zel_handle_type_t value of a driver handle (level_zero/loader/ze_loader.h) */
+#define UCT_ZE_COPY_ZEL_HANDLE_DRIVER 0
+
+
+typedef ze_result_t (*uct_ze_copy_translate_handle_func_t)(int handle_type,
+                                                           void *handle_in,
+                                                           void **handle_out_p);
+
+
+/* Host memory range imported into the driver through this registry */
+typedef struct {
+    void   *address;
+    size_t length;
+    int    refcount; /* Registrations that resolved to this import */
+} uct_ze_copy_import_t;
+
+
+KHASH_INIT(ze_copy_import, uintptr_t, uct_ze_copy_import_t*, 1,
+           kh_int64_hash_func, kh_int64_hash_equal)
+
+
+/*
+ * The driver keeps imports per driver handle and does not count references:
+ * importing a range inside an existing import succeeds without recording it,
+ * and releasing any address inside an import drops the whole import. All MDs
+ * therefore share one registry of the imports owned by this process, keyed by
+ * base address, and release an import only with its last registration.
+ */
+typedef struct {
+    ucs_init_once_t           init_once;
+    pthread_mutex_t           lock;      /* Protects the fields below; held
+                                            across the driver calls, which
+                                            take milliseconds for large
+                                            ranges */
+    khash_t(ze_copy_import)   hash;
+    uct_ze_copy_host_import_t funcs;
+    int                       available; /* Entry points were resolved */
+    int                       enabled;   /* Driver did not reject imports */
+    unsigned long             num_fallbacks; /* Ranges left unimported because
+                                                they overlap an import */
+} uct_ze_copy_import_registry_t;
+
+
+static uct_ze_copy_import_registry_t uct_ze_copy_imports = {
+    .init_once = UCS_INIT_ONCE_INITIALIZER,
+    .lock      = PTHREAD_MUTEX_INITIALIZER,
+    .hash      = KHASH_STATIC_INITIALIZER
+};
+
+
+static ucs_status_t
+uct_ze_copy_import_get_func(ze_driver_handle_t driver, const char *name,
+                            void **func_p)
+{
+    ze_result_t ret;
+
+    ret = zeDriverGetExtensionFunctionAddress(driver, name, func_p);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_debug("zeDriverGetExtensionFunctionAddress(%s) failed: 0x%x", name,
+                  ret);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
+static void uct_ze_copy_import_registry_init(ze_driver_handle_t driver)
+{
+    uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
+    uct_ze_copy_host_import_t *funcs        = &registry->funcs;
+    uct_ze_copy_translate_handle_func_t translate;
+    void *driver_handle, *import, *release, *get_base;
+    ze_result_t ret;
+
+    /* The extension bypasses the loader, so it needs the driver's own handle.
+       The translation exists since loader 1.7 and is resolved at runtime to
+       keep older loaders working without the import. */
+    translate = (uct_ze_copy_translate_handle_func_t)
+            dlsym(RTLD_DEFAULT, "zelLoaderTranslateHandle");
+    if (translate == NULL) {
+        ucs_debug("zelLoaderTranslateHandle not found, host memory import is "
+                  "disabled");
+        return;
+    }
+
+    ret = translate(UCT_ZE_COPY_ZEL_HANDLE_DRIVER, driver, &driver_handle);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_debug("zelLoaderTranslateHandle(driver %p) failed: 0x%x", driver,
+                  ret);
+        return;
+    }
+
+    if ((uct_ze_copy_import_get_func(driver, "zexDriverImportExternalPointer",
+                                     &import) != UCS_OK) ||
+        (uct_ze_copy_import_get_func(driver, "zexDriverReleaseImportedPointer",
+                                     &release) != UCS_OK) ||
+        (uct_ze_copy_import_get_func(driver,
+                                     "zexDriverGetHostPointerBaseAddress",
+                                     &get_base) != UCS_OK)) {
+        return;
+    }
+
+    funcs->driver       = driver_handle;
+    funcs->import       = (uct_ze_copy_import_ptr_func_t)import;
+    funcs->release      = (uct_ze_copy_release_ptr_func_t)release;
+    funcs->get_base     = (uct_ze_copy_get_base_func_t)get_base;
+    registry->available = 1;
+    registry->enabled   = 1;
+}
+
+const uct_ze_copy_host_import_t *uct_ze_copy_md_get_host_import(void)
+{
+    ze_driver_handle_t driver = uct_ze_base_get_driver();
+
+    if (driver == NULL) {
+        return NULL;
+    }
+
+    UCS_INIT_ONCE(&uct_ze_copy_imports.init_once) {
+        uct_ze_copy_import_registry_init(driver);
+    }
+
+    return uct_ze_copy_imports.available ? &uct_ze_copy_imports.funcs : NULL;
+}
+
+/* Returns in base_p the base of the import containing ptr, or NULL */
+static ucs_status_t uct_ze_copy_import_get_base(void *ptr, void **base_p)
+{
+    const uct_ze_copy_host_import_t *funcs = &uct_ze_copy_imports.funcs;
+    void *base                             = NULL;
+    ze_result_t ret;
+
+    ret = funcs->get_base(funcs->driver, ptr, &base);
+    if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
+        return UCS_ERR_UNSUPPORTED;
+    } else if ((ret != ZE_RESULT_SUCCESS) &&
+               (ret != ZE_RESULT_ERROR_INVALID_ARGUMENT)) {
+        /* INVALID_ARGUMENT means that the pointer is not imported */
+        ucs_debug("zexDriverGetHostPointerBaseAddress(%p) failed: 0x%x", ptr,
+                  ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *base_p = (ret == ZE_RESULT_SUCCESS) ? base : NULL;
+    return UCS_OK;
+}
+
+/* Called with the registry lock held */
+static void uct_ze_copy_import_disable(void)
+{
+    uct_ze_copy_imports.enabled = 0;
+    ucs_diag("level zero driver does not support host pointer import, "
+             "registered host memory will not be imported");
+}
+
+/* Called with the registry lock held */
+static uct_ze_copy_import_t *uct_ze_copy_import_lookup(void *base)
+{
+    khash_t(ze_copy_import) *hash = &uct_ze_copy_imports.hash;
+    khiter_t iter;
+
+    iter = kh_get(ze_copy_import, hash, (uintptr_t)base);
+    return (iter == kh_end(hash)) ? NULL : kh_val(hash, iter);
+}
+
+/* Called with the registry lock held */
+static ucs_status_t
+uct_ze_copy_import_create(void *address, size_t length,
+                          ucs_log_level_t log_level,
+                          uct_ze_copy_import_t **import_p)
+{
+    const uct_ze_copy_host_import_t *funcs = &uct_ze_copy_imports.funcs;
+    khash_t(ze_copy_import) *hash          = &uct_ze_copy_imports.hash;
+    uct_ze_copy_import_t *import;
+    ucs_status_t status;
+    khiter_t iter;
+    ze_result_t ret;
+    int khret;
+
+    import = ucs_malloc(sizeof(*import), "ze_copy_import");
+    if (import == NULL) {
+        ucs_error("failed to allocate ze_copy import record");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    iter = kh_put(ze_copy_import, hash, (uintptr_t)address, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to add host memory %p to the ze_copy import registry",
+                  address);
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free;
+    }
+
+    /* Neither end of the range is imported, so its base cannot be a key */
+    ucs_assert(khret != UCS_KH_PUT_KEY_PRESENT);
+
+    ret = funcs->import(funcs->driver, address, length);
+    if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_del;
+    } else if (ret != ZE_RESULT_SUCCESS) {
+        ucs_log(log_level, "zexDriverImportExternalPointer(%p, %zu) failed: "
+                "0x%x", address, length, ret);
+        status = UCS_ERR_IO_ERROR;
+        goto err_del;
+    }
+
+    import->address    = address;
+    import->length     = length;
+    import->refcount   = 1;
+    kh_val(hash, iter) = import;
+    *import_p          = import;
+    return UCS_OK;
+
+err_del:
+    kh_del(ze_copy_import, hash, iter);
+err_free:
+    ucs_free(import);
+    return status;
+}
+
+/*
+ * Resolve a registered host range to an import. The driver rejects a range
+ * that shares only one end with an existing import, so such a range stays
+ * unimported: copies still work, the driver just maps the range per copy.
+ */
+static void uct_ze_copy_import_register(void *address, size_t length,
+                                        uint64_t flags, uct_mem_h *memh_p)
+{
+    uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
+    void *end                               = UCS_PTR_BYTE_OFFSET(address,
+                                                                  length - 1);
+    ucs_status_t status                     = UCS_OK;
+    ucs_log_level_t log_level;
+    uct_ze_copy_import_t *import;
+    void *base_start, *base_end;
+
+    *memh_p   = UCT_ZE_COPY_DUMMY_MEMH;
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                                                        UCS_LOG_LEVEL_WARN;
+
+    pthread_mutex_lock(&registry->lock);
+    if (!registry->enabled) {
+        goto out_unlock;
+    }
+
+    status = uct_ze_copy_import_get_base(address, &base_start);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_ze_copy_import_get_base(end, &base_end);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if ((base_start == NULL) && (base_end == NULL)) {
+        status = uct_ze_copy_import_create(address, length, log_level,
+                                           &import);
+        if (status == UCS_OK) {
+            *memh_p = import;
+        }
+    } else if (base_start == base_end) {
+        import = uct_ze_copy_import_lookup(base_start);
+        if (import != NULL) {
+            ++import->refcount;
+            *memh_p = import;
+        } else {
+            /* Imported by the application: usable, but not ours to release */
+            ucs_trace("host memory %p length %zu is inside a foreign import "
+                      "at %p", address, length, base_start);
+        }
+    } else {
+        ++registry->num_fallbacks;
+        ucs_debug("host memory %p length %zu partially overlaps the imports "
+                  "at %p and %p, left unimported (%lu such ranges so far)",
+                  address, length, base_start, base_end,
+                  registry->num_fallbacks);
+    }
+
+out:
+    if (status == UCS_ERR_UNSUPPORTED) {
+        uct_ze_copy_import_disable();
+    }
+out_unlock:
+    pthread_mutex_unlock(&registry->lock);
+}
+
+static ucs_status_t uct_ze_copy_import_release(uct_ze_copy_import_t *import)
+{
+    uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
+    const uct_ze_copy_host_import_t *funcs  = &registry->funcs;
+    ucs_status_t status                     = UCS_OK;
+    khiter_t iter;
+    ze_result_t ret;
+
+    pthread_mutex_lock(&registry->lock);
+    ucs_assert(import->refcount > 0);
+    if (--import->refcount > 0) {
+        pthread_mutex_unlock(&registry->lock);
+        return UCS_OK;
+    }
+
+    iter = kh_get(ze_copy_import, &registry->hash, (uintptr_t)import->address);
+    ucs_assert(iter != kh_end(&registry->hash));
+    kh_del(ze_copy_import, &registry->hash, iter);
+
+    /* The driver fails a release only when no import contains the address
+       (already released) or when it has no host pointer manager at all, so
+       the import is gone either way and the record goes with it */
+    ret = funcs->release(funcs->driver, import->address);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_diag("zexDriverReleaseImportedPointer(%p) failed: 0x%x",
+                 import->address, ret);
+        status = UCS_ERR_IO_ERROR;
+    }
+    pthread_mutex_unlock(&registry->lock);
+
+    ucs_free(import);
+    return status;
+}
+
+static int
+uct_ze_copy_md_is_ze_memory(uct_ze_copy_md_t *md, const void *address)
+{
+    ze_memory_allocation_properties_t props = {
+        .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
+    };
+    ze_result_t ret;
+
+    ret = zeMemGetAllocProperties(md->ze_context, address, &props, NULL);
+    return (ret == ZE_RESULT_SUCCESS) && (props.type != ZE_MEMORY_TYPE_UNKNOWN);
+}
 
 static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
@@ -125,11 +474,22 @@ uct_ze_copy_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 }
 
 static ucs_status_t
-uct_ze_copy_mem_reg(uct_md_h md, void *address, size_t length,
+uct_ze_copy_mem_reg(uct_md_h tl_md, void *address, size_t length,
                     const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
-    /* memory registration it not needed for ZE */
-    *memh_p = (uct_mem_h)0xdeadbeef;
+    uct_ze_copy_md_t *md = ucs_derived_of(tl_md, uct_ze_copy_md_t);
+    uint64_t flags;
+
+    /* Level Zero allocations are mapped for the device already; the import
+       applies to host memory that comes from outside Level Zero */
+    if (!md->host_import || (length == 0) ||
+        uct_ze_copy_md_is_ze_memory(md, address)) {
+        *memh_p = UCT_ZE_COPY_DUMMY_MEMH;
+        return UCS_OK;
+    }
+
+    flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    uct_ze_copy_import_register(address, length, flags, memh_p);
     return UCS_OK;
 }
 
@@ -137,7 +497,12 @@ static ucs_status_t
 uct_ze_copy_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
-    return UCS_OK;
+
+    if (params->memh == UCT_ZE_COPY_DUMMY_MEMH) {
+        return UCS_OK;
+    }
+
+    return uct_ze_copy_import_release(params->memh);
 }
 
 static void uct_ze_copy_md_close(uct_md_h uct_md)
@@ -337,8 +702,12 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
         return UCS_ERR_NO_DEVICE;
     }
 
+    md->host_import     = config->host_import &&
+                          (uct_ze_copy_md_get_host_import() != NULL);
     md->super.ops       = &md_ops;
     md->super.component = &uct_ze_copy_component;
+    ucs_debug("ze_copy md %p: host memory import %s", md,
+              md->host_import ? "enabled" : "disabled");
 
     *md_p = (uct_md_h)md;
     return UCS_OK;
