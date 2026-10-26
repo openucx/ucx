@@ -28,10 +28,22 @@ ucs_status_t uct_rc_mlx5_ext_register(const uct_rc_mlx5_ext_ops_t *ops)
     size_t min_size = ucs_offsetof(uct_rc_mlx5_ext_ops_t, progress) +
                       sizeof(ops->progress);
     ucs_status_t status = UCS_OK;
+    uint64_t event_flags;
 
-    if ((ops == NULL) || (ops->name == NULL) || (ops->name[0] == '\0') ||
+    if ((ops == NULL) || (ops->struct_size < min_size)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    event_flags = (ops->struct_size >=
+                   (ucs_offsetof(uct_rc_mlx5_ext_ops_t, event_flags) +
+                    sizeof(ops->event_flags))) ? ops->event_flags : 0;
+    if ((ops->name == NULL) || (ops->name[0] == '\0') ||
         (ops->api_version != UCT_RC_MLX5_EXT_API_VERSION) ||
-        (ops->struct_size < min_size) || (ops->ep_addr_len > UINT16_MAX) ||
+        (ops->ep_addr_len > UINT16_MAX) ||
+        ((ops->ep_addr_len != 0) &&
+         ((ops->ep_pack_addr == NULL) || (ops->ep_connect == NULL))) ||
+        (event_flags & ~UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE) ||
+        ((event_flags != 0) && (ops->ep_query == NULL)) ||
         (ops->requirements & ~UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP)) {
         return UCS_ERR_INVALID_PARAM;
     }
@@ -46,6 +58,7 @@ ucs_status_t uct_rc_mlx5_ext_register(const uct_rc_mlx5_ext_ops_t *ops)
     memcpy(&uct_rc_mlx5_ext_ops, ops,
            ucs_min(ops->struct_size, sizeof(uct_rc_mlx5_ext_ops)));
     uct_rc_mlx5_ext_ops.struct_size = sizeof(uct_rc_mlx5_ext_ops);
+    uct_rc_mlx5_ext_ops.event_flags = event_flags;
     uct_rc_mlx5_ext_owner           = ops;
     ucs_debug("rc_mlx5 extension '%s' registered", ops->name);
 
@@ -92,17 +105,6 @@ void uct_rc_mlx5_ext_release(const uct_rc_mlx5_ext_ops_t *ops)
     ucs_assert(uct_rc_mlx5_ext_refcount > 0);
     --uct_rc_mlx5_ext_refcount;
     pthread_mutex_unlock(&uct_rc_mlx5_ext_lock);
-}
-
-uint64_t uct_rc_mlx5_ext_get_requirements(void)
-{
-    uint64_t requirements;
-
-    pthread_mutex_lock(&uct_rc_mlx5_ext_lock);
-    requirements = (uct_rc_mlx5_ext_owner == NULL) ?
-                   0 : uct_rc_mlx5_ext_ops.requirements;
-    pthread_mutex_unlock(&uct_rc_mlx5_ext_lock);
-    return requirements;
 }
 
 uint32_t uct_rc_mlx5_ext_provider_id(const uct_rc_mlx5_ext_ops_t *ops)

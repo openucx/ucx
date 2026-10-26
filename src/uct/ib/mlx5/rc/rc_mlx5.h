@@ -69,6 +69,23 @@ typedef struct uct_rc_mlx5_base_ep {
 typedef __be32 uct_rc_mlx5_tx_token_t;
 typedef __be32 uct_rc_mlx5_rx_token_t;
 
+typedef struct uct_rc_mlx5_sgl_context uct_rc_mlx5_sgl_context_t;
+
+typedef struct uct_rc_mlx5_sgl_checkpoint {
+    uct_rc_iface_send_op_with_info_t op;
+    uct_rc_mlx5_sgl_context_t        *context;
+    unsigned                         index;
+} uct_rc_mlx5_sgl_checkpoint_t;
+
+struct uct_rc_mlx5_sgl_context {
+    uct_sgl_zcopy_completion_cb_t callback;
+    void                         *arg;
+    unsigned                      remaining;
+    uint16_t                      first_sn;
+    uint16_t                      count;
+    uct_rc_mlx5_sgl_checkpoint_t  checkpoints[];
+};
+
 
 /**
  * Generic RC remote endpoint with HW TM support
@@ -89,9 +106,6 @@ typedef struct {
     uct_ib_mlx5_qp_t              tm_qp; /* TM Rendezvous QP */
     uct_ib_mlx5_mmio_reg_t        *reg; /* Doorbell register */
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
-
-void uct_rc_mlx5_iface_qp_cleanup(
-        uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx);
 
 typedef struct uct_rc_mlx5_base_ep_address {
     uct_ib_uint24_t qp_num;
@@ -158,8 +172,6 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
                                       uct_ib_mlx5_cq_t *cq,
                                       struct mlx5_cqe64 *cqe, int poll_flags);
 
-unsigned uct_rc_mlx5_iface_progress_tx_with_info(void *arg);
-
 ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                            unsigned length,
                                            uint64_t remote_addr,
@@ -181,6 +193,14 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   uct_rkey_t const *rkeys, const size_t *counts,
                                   const size_t *strides, size_t count,
                                   uct_completion_t *comp);
+
+ucs_status_t
+uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
+        uct_ep_h tl_ep, void * const *buffers, const size_t *lengths,
+        uct_mem_h const *memhs, const uint64_t *remote_addrs,
+        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
+        size_t count, uct_completion_t *comp,
+        const uct_sgl_zcopy_params_t *params);
 
 ucs_status_t
 uct_rc_mlx5_base_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,

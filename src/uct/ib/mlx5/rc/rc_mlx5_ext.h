@@ -32,6 +32,11 @@ typedef struct uct_rc_mlx5_path_identity {
  * The provider has to remain loaded until all interfaces which acquired it
  * are destroyed. Hooks run under the same worker serialization as the stock
  * RC transport. The address payload is appended to the stock RC EP address.
+ * Init hooks publish their context only on success and unwind their own
+ * resources on failure; cleanup hooks are called only after successful init.
+ * A nonempty address payload requires both pack and connect hooks. The legacy
+ * connect API requires matching provider configuration on both peers; use
+ * connect-to-ep v2 for length-checked exchange with a potentially unlike peer.
  */
 typedef struct uct_rc_mlx5_ext_ops {
     size_t          struct_size;
@@ -55,8 +60,13 @@ typedef struct uct_rc_mlx5_ext_ops {
     ucs_status_t (*ep_query)(uct_ep_h ep, void *ep_ctx,
                              uct_ep_attr_t *ep_attr);
 
-    /** Called after ordinary stock RC RX and TX progress. */
+    /** Optional hook after stock RC progress; NULL adds no provider call. */
     unsigned (*progress)(uct_iface_h iface, void *iface_ctx);
+
+    /** Optional event capabilities; absent in shorter structures means none.
+     * Only UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE is supported, and requires
+     * an ep_query hook. */
+    uint64_t event_flags;
 } uct_rc_mlx5_ext_ops_t;
 
 ucs_status_t uct_rc_mlx5_ext_register(const uct_rc_mlx5_ext_ops_t *ops);
@@ -68,7 +78,6 @@ ucs_status_t uct_rc_mlx5_ep_get_path_identity(
 /* Internal transport helpers. */
 const uct_rc_mlx5_ext_ops_t *uct_rc_mlx5_ext_acquire(void);
 void uct_rc_mlx5_ext_release(const uct_rc_mlx5_ext_ops_t *ops);
-uint64_t uct_rc_mlx5_ext_get_requirements(void);
 uint32_t uct_rc_mlx5_ext_provider_id(const uct_rc_mlx5_ext_ops_t *ops);
 
 END_C_DECLS

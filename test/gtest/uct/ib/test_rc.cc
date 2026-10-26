@@ -27,7 +27,7 @@ extern "C" {
 #ifdef HAVE_MLX5_DV
 class test_rc_extension : public ucs::test {
 protected:
-    static ucs_status_t query_cb(uct_ep_h ep, void *ctx, uct_ep_attr_t *attr)
+    static ucs_status_t query_cb(uct_ep_h, void *ctx, uct_ep_attr_t *attr)
     {
         attr->bandwidth = *static_cast<double*>(ctx);
         return UCS_OK;
@@ -45,14 +45,31 @@ UCS_TEST_F(test_rc_extension, registration)
     ops.requirements = UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP;
     ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
     EXPECT_EQ(UCS_ERR_BUSY, uct_rc_mlx5_ext_register(&ops));
-    EXPECT_EQ(ops.requirements, uct_rc_mlx5_ext_get_requirements());
     acquired = uct_rc_mlx5_ext_acquire();
     EXPECT_NE(nullptr, acquired);
     EXPECT_EQ(ops.requirements, acquired->requirements);
     uct_rc_mlx5_ext_release(acquired);
     uct_rc_mlx5_ext_unregister(&ops);
     EXPECT_EQ(nullptr, uct_rc_mlx5_ext_acquire());
-    EXPECT_EQ(0ul, uct_rc_mlx5_ext_get_requirements());
+
+    /* A provider built before the optional event field opts into no events. */
+    ops.struct_size = ucs_offsetof(uct_rc_mlx5_ext_ops_t, event_flags);
+    ops.event_flags = UINT64_MAX;
+    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
+    acquired = uct_rc_mlx5_ext_acquire();
+    EXPECT_EQ(0ul, acquired->event_flags);
+    uct_rc_mlx5_ext_release(acquired);
+    uct_rc_mlx5_ext_unregister(&ops);
+
+    ops.struct_size = sizeof(ops);
+    ops.event_flags = UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
+    ops.ep_query = query_cb;
+    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
+    acquired = uct_rc_mlx5_ext_acquire();
+    EXPECT_EQ(ops.event_flags, acquired->event_flags);
+    uct_rc_mlx5_ext_release(acquired);
+    uct_rc_mlx5_ext_unregister(&ops);
 }
 
 UCS_TEST_F(test_rc_extension, invalid_registration)
@@ -72,8 +89,8 @@ UCS_TEST_F(test_rc_extension, bandwidth_query)
     double bandwidth               = 12345.0;
     uct_ep_h tl_ep                 = &ep.super.super.super;
 
-    tl_ep->iface   = &iface.super.super.super.super;
-    ep.ext_ctx     = &bandwidth;
+    tl_ep->iface    = &iface.super.super.super.super;
+    ep.ext_ctx      = &bandwidth;
     attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, uct_rc_mlx5_base_ep_query(tl_ep, &attr));
     iface.ext_ops = &ops;
@@ -83,6 +100,66 @@ UCS_TEST_F(test_rc_extension, bandwidth_query)
     EXPECT_EQ(bandwidth, attr.bandwidth);
 }
 #endif
+
+class test_rc_sgl_api : public ucs::test {
+protected:
+    static void checkpoint_cb(void*, unsigned, ucs_status_t, uint64_t)
+    {
+    }
+
+    static ucs_status_t legacy_cb(
+            uct_ep_h, void *const*, const size_t*, uct_mem_h const*,
+            const uint64_t*, uct_rkey_t const*, const size_t*, const size_t*,
+            size_t, uct_completion_t*)
+    {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucs_status_t call(const uct_sgl_zcopy_params_t *params,
+                      uct_completion_t *comp = nullptr)
+    {
+        uct_iface_internal_ops_t ops = {};
+        uct_base_iface_t iface       = {};
+        uct_ep_t ep                  = {};
+
+        ep.iface              = &iface.super;
+        iface.internal_ops    = &ops;
+        ops.ep_put_sgl_zcopy   = legacy_cb;
+        return uct_ep_put_sgl_zcopy_v2(&ep, nullptr, nullptr, nullptr, nullptr,
+                                        nullptr, nullptr, nullptr, 1, comp,
+                                        params);
+    }
+};
+
+UCS_TEST_F(test_rc_sgl_api, legacy_compatibility)
+{
+    uct_sgl_zcopy_params_t params = {};
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, call(nullptr));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, call(&params));
+}
+
+UCS_TEST_F(test_rc_sgl_api, checkpoint_validation)
+{
+    uint8_t checkpoint             = 1;
+    uct_completion_t comp          = {};
+    uct_sgl_zcopy_params_t params = {};
+
+    params.field_mask  = UCT_SGL_ZCOPY_PARAM_FIELD_CHECKPOINTS |
+                         UCT_SGL_ZCOPY_PARAM_FIELD_CALLBACK;
+    params.checkpoints = &checkpoint;
+    params.callback    = checkpoint_cb;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, call(&params));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, call(&params, &comp));
+    checkpoint = 0;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, call(&params));
+    checkpoint      = 1;
+    params.callback = nullptr;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, call(&params));
+    params.callback   = checkpoint_cb;
+    params.field_mask |= UCS_BIT(63);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, call(&params));
+}
 
 class test_rc_completion_info : public ucs::test {
 protected:

@@ -525,7 +525,9 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
                                    uint8_t opcode, uint8_t fence_flag,
                                    int resolve_atomic_rkey,
                                    uct_rc_send_handler_t handler,
-                                   uint16_t op_flags, uct_completion_t *comp)
+                                   uint16_t op_flags, uct_completion_t *comp,
+                                   uct_rc_mlx5_sgl_checkpoint_t *checkpoints,
+                                   unsigned num_checkpoints)
 {
     uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
     size_t total                   = 0;
@@ -544,6 +546,8 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
     uint64_t addr;
     uct_rkey_t rkey;
     void *curr;
+    unsigned checkpoint_index = 0;
+    int checkpoint;
 
     ucs_assert(count > 0);
 
@@ -555,8 +559,11 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
     curr = txwq->curr;
 
     for (i = 0; i < count; i++) {
+        checkpoint = (checkpoint_index < num_checkpoints) &&
+                     (checkpoints[checkpoint_index].index == i);
         fm_ce_se = ((i == 0) ? fence_flag : 0) |
-                   ((i == count - 1) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
+                   (((num_checkpoints == 0) ? (i == count - 1) : checkpoint) ?
+                    MLX5_WQE_CTRL_CQ_UPDATE : 0);
         ctrl     = curr;
 
         addr = remote_addrs[i];
@@ -585,6 +592,12 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
         uct_ib_mlx5_set_ctrl_seg(ctrl, pi, opcode, 0, txwq->super.qp_num,
                                  fm_ce_se, 0, wqe_size);
 
+        if (checkpoint) {
+            uct_rc_txqp_add_send_op_sn(
+                    &ep->super.txqp, &checkpoints[checkpoint_index++].op.super,
+                    pi);
+        }
+
         curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
         curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
         pi++;
@@ -603,10 +616,12 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
     uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
     uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
-    uct_rc_txqp_add_send_comp_sgl_always(
-            &iface->super, &ep->super.txqp, handler, comp, txwq->sig_pi,
-            UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY | op_flags, buffers, lengths,
-            count, total);
+    if (num_checkpoints == 0) {
+        uct_rc_txqp_add_send_comp_sgl_always(
+                &iface->super, &ep->super.txqp, handler, comp, txwq->sig_pi,
+                UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY | op_flags, buffers, lengths,
+                count, total);
+    }
     return total;
 }
 
