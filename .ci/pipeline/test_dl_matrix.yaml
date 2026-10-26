@@ -49,7 +49,7 @@ env:
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   CHECKOUT_TIMEOUT: 10
   TEST_TIMEOUT: 180
-  CI_IMAGE_TAG: "20260906-1"
+  CI_IMAGE_TAG: "20261018-1"
 
 pvc_volumes:
   - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
