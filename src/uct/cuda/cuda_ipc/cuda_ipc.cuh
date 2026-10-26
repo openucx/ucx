@@ -9,6 +9,7 @@
 
 #include <uct/api/uct_def.h>
 #include <uct/api/device/uct_device_types.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cft.cuh>
 #include <ucs/sys/device_code.h>
 #include <ucs/type/status.h>
 #include <assert.h>
@@ -301,6 +302,12 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_put(
                     mem_elem);
     void *mapped_rem_addr;
 
+    if (ucs_unlikely(cuda_ipc_mem_element->le_id !=
+                     UCT_CUDA_IPC_LE_ID_INVALID)) {
+        return uct_cuda_ipc_cft_ep_put<level>(cuda_ipc_mem_element, address,
+                                              remote_address, length);
+    }
+
     mapped_rem_addr = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
     uct_cuda_ipc_copy_level<level>(mapped_rem_addr, address, length);
     uct_cuda_ipc_level_sync<level>();
@@ -320,6 +327,12 @@ uct_cuda_ipc_ep_atomic_add(uct_device_ep_h device_ep,
     uint64_t *mapped_rem_addr;
     unsigned int lane_id, num_lanes;
 
+    if (ucs_unlikely(cuda_ipc_mem_element->le_id !=
+                     UCT_CUDA_IPC_LE_ID_INVALID)) {
+        return uct_cuda_ipc_cft_ep_atomic_add<level>(cuda_ipc_mem_element,
+                                                     inc_value, remote_address);
+    }
+
     uct_cuda_ipc_get_lane<level>(lane_id, num_lanes);
     if (lane_id == 0) {
         mapped_rem_addr = reinterpret_cast<uint64_t *>(uct_cuda_ipc_map_remote(cuda_ipc_mem_element,
@@ -338,6 +351,12 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_ep_get_ptr(
     auto cuda_ipc_mem_element =
             reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
                     mem_elem);
+
+    /* Memory accessed through a logical endpoint is not mapped */
+    if (cuda_ipc_mem_element->le_id != UCT_CUDA_IPC_LE_ID_INVALID) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     *addr_p = uct_cuda_ipc_map_remote(cuda_ipc_mem_element, remote_address);
     return UCS_OK;
 }

@@ -9,10 +9,10 @@
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cft.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/config/types.h>
-
 
 typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
@@ -20,6 +20,7 @@ typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT, /* CUDA logical endpoint */
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -35,6 +36,13 @@ typedef struct uct_cuda_ipc_md_handle {
             uint64_t          system_id;     /* Machine identifier for
                                                 same-machine verification */
         } posix_fd;
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+        struct {
+            CUlogicalEndpointFabricHandle handle; /* Logical endpoint handle */
+            uint64_t                      offset; /* Allocation offset in the
+                                                     logical endpoint */
+        } cft;
+#endif
     } handle;
 #if HAVE_CUDA_FABRIC
     CUmemPoolPtrExportData    ptr;
@@ -50,6 +58,7 @@ typedef struct uct_cuda_ipc_md {
     uct_md_t                 super;             /**< Domain info */
     int                      enable_mnnvl;      /**< Multi-node NVLINK support status */
     int                      fabric_supported;  /**< CUDA fabric support status */
+    int                      cft_enabled;       /**< CUDA fabric transport status */
 } uct_cuda_ipc_md_t;
 
 
@@ -88,6 +97,21 @@ uct_cuda_ipc_uuid_hash_func(uct_cuda_ipc_uuid_hash_key_t key)
 }
 
 
+/* djb2 hash of a fabric handle */
+static UCS_F_ALWAYS_INLINE khint_t
+uct_cuda_ipc_fabric_handle_hash(const unsigned char *data, size_t size)
+{
+    khint_t hash = 5381;
+    size_t i;
+
+    for (i = 0; i < size; i++) {
+        hash = ((hash << 5) + hash) + data[i];
+    }
+
+    return hash;
+}
+
+
 KHASH_INIT(cuda_ipc_uuid_hash, uct_cuda_ipc_uuid_hash_key_t,
            uct_cuda_ipc_dev_cache_t*, 1, uct_cuda_ipc_uuid_hash_func,
            uct_cuda_ipc_uuid_equals);
@@ -116,8 +140,9 @@ typedef struct uct_cuda_ipc_md_config {
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
     /** Enable remote IPC memory handle mapping cache */
     int                      enable_remote_cache;
+    ucs_ternary_auto_value_t enable_cft;        /**< Enable CUDA fabric transport */
+    size_t                   cft_le_size;       /**< Logical endpoint size */
 } uct_cuda_ipc_md_config_t;
-
 
 /**
  * @brief list of cuda ipc regions registered for memh

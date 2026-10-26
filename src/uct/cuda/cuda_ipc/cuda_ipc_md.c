@@ -75,6 +75,18 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_remote_cache),
      UCS_CONFIG_TYPE_BOOL},
 
+    {"ENABLE_CFT", "no",
+     "Enable CUDA fabric transport: bind memory to CUDA logical endpoints\n"
+     "instead of exporting IPC handles. Such memory cannot be mapped by peers,\n"
+     "it is accessible only by device operations using fabric operations.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, enable_cft), UCS_CONFIG_TYPE_TERNARY},
+
+    {"CFT_LE_SIZE", "256g",
+     "Size of the CUDA logical endpoint created on each device. It limits the\n"
+     "total size of memory exposed through CUDA fabric transport per device.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, cft_le_size),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -374,6 +386,17 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto legacy_path;
     }
 
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+    /* Memory which cannot be bound falls back to the other handle types */
+    if (uct_cuda_ipc_cft_is_enabled() &&
+        (uct_cuda_ipc_cft_bind(cuda_device, key->d_bptr, key->b_len,
+                               &key->ph.handle.cft.handle,
+                               &key->ph.handle.cft.offset) == UCS_OK)) {
+        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT;
+        goto common_path;
+    }
+#endif
+
 #if HAVE_CUDA_FABRIC
     if (allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC) {
         status = uct_cuda_ipc_mem_export_fabric(addr, key, mempool);
@@ -594,6 +617,17 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         unpacked->super.pid_ns = ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
     }
 
+    /* Memory bound to a logical endpoint cannot be mapped, it is accessible
+     * only by device operations */
+    if (packed->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT) {
+        if (!uct_cuda_ipc_cft_is_enabled()) {
+            status = UCS_ERR_UNREACHABLE;
+            goto err_free_rkey_handle;
+        }
+
+        goto out;
+    }
+
     status = uct_cuda_ctx_primary_push_avail(0, sys_dev, &cuda_device,
                                              &avail_cuda_device,
                                              UCS_LOG_LEVEL_DEBUG);
@@ -609,10 +643,12 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
+
     if (status != UCS_OK) {
         goto err_free_rkey_handle;
     }
 
+out:
     *handle_p = rkey_handle;
     *rkey_p   = (uintptr_t) unpacked;
     return UCS_OK;
@@ -690,6 +726,12 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
         if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {
             close(key->ph.handle.posix_fd.fd);
         }
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+        if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT) {
+            uct_cuda_ipc_cft_unbind(memh->dev_num, key->ph.handle.cft.offset,
+                                    key->b_len);
+        }
+#endif
         ucs_free(key);
     }
 
@@ -766,10 +808,52 @@ static void uct_cuda_ipc_md_close(uct_md_h md)
 }
 
 static ucs_status_t
+uct_cuda_ipc_md_mem_elem_pack_cft(const uct_cuda_ipc_md_t *md,
+                                  const uct_cuda_ipc_rkey_t *rkey,
+                                  CUdevice cuda_device,
+                                  uct_cuda_ipc_md_device_mem_element_t *elem)
+{
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+    ucs_status_t status;
+    int same_device;
+
+    if (!md->cft_enabled) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = uct_cuda_ipc_rkey_is_on_device(rkey, cuda_device, &same_device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Fabric operations cannot target memory of the issuing device */
+    if (same_device) {
+        ucs_debug("rkey d_bptr 0x%llx is on the issuing device %d",
+                  rkey->d_bptr, cuda_device);
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = uct_cuda_ipc_cft_import(&rkey->ph.handle.cft.handle,
+                                     &elem->le_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    elem->le_offset_delta = rkey->ph.handle.cft.offset - rkey->d_bptr;
+    ucs_trace("rkey d_bptr 0x%llx uses logical endpoint %u", rkey->d_bptr,
+              elem->le_id);
+    return UCS_OK;
+#else
+    return UCS_ERR_UNREACHABLE;
+#endif
+}
+
+static ucs_status_t
 uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
                               uct_device_mem_elem_t *mem_elem,
                               void **release_handle_p)
 {
+    uct_cuda_ipc_md_t *ipc_md         = ucs_derived_of(md, uct_cuda_ipc_md_t);
     uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t*)rkey;
     uct_cuda_ipc_md_device_mem_element_t *cuda_ipc_md_mem_element =
             (uct_cuda_ipc_md_device_mem_element_t*)mem_elem;
@@ -788,15 +872,24 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device, &mapped_addr,
-                                        UCS_LOG_LEVEL_ERROR);
-    if (ucs_unlikely(status != UCS_OK)) {
-        ucs_free(release_handle);
-        return status;
+    mapped_addr = NULL;
+    if (key->super.super.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT) {
+        status = uct_cuda_ipc_md_mem_elem_pack_cft(ipc_md, &key->super.super,
+                                                   cuda_device,
+                                                   cuda_ipc_md_mem_element);
+    } else {
+        status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
+                                            &mapped_addr, UCS_LOG_LEVEL_ERROR);
+        if (status == UCS_OK) {
+            cuda_ipc_md_mem_element->mapped_offset =
+                    UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
+            cuda_ipc_md_mem_element->le_id         = UCT_CUDA_IPC_LE_ID_INVALID;
+        }
     }
 
-    cuda_ipc_md_mem_element->mapped_offset =
-            UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
 
     release_handle->pid         = key->super.super.pid;
     release_handle->pid_ns      = key->super.pid_ns;
@@ -804,17 +897,24 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     release_handle->mapped_addr = mapped_addr;
     release_handle->cu_dev      = cuda_device;
     *release_handle_p           = release_handle;
-
     return UCS_OK;
+
+err_free:
+    ucs_free(release_handle);
+    return status;
 }
 
 static void uct_cuda_ipc_md_mem_elem_release(uct_md_h md, void *release_handle)
 {
     uct_cuda_ipc_mem_elem_release_handle_t *handle = release_handle;
 
-    uct_cuda_ipc_unmap_memhandle(handle->pid, handle->pid_ns, handle->d_bptr,
-                                 handle->mapped_addr, handle->cu_dev,
-                                 uct_cuda_ipc_component.enable_remote_cache);
+    /* Logical endpoints stay imported until the process exits */
+    if (handle->mapped_addr != NULL) {
+        uct_cuda_ipc_unmap_memhandle(handle->pid, handle->pid_ns,
+                                     handle->d_bptr, handle->mapped_addr,
+                                     handle->cu_dev,
+                                     uct_cuda_ipc_component.enable_remote_cache);
+    }
     ucs_free(handle);
 }
 
@@ -841,6 +941,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                                                           uct_cuda_ipc_md_config_t);
     static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
     uct_cuda_ipc_md_t* md;
+    ucs_status_t status;
 
     UCS_INIT_ONCE(&init_enable_remote_cache) {
         uct_cuda_ipc_component.enable_remote_cache =
@@ -864,6 +965,17 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
                                                   md, ipc_config->enable_mnnvl);
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
+
+    if (ipc_config->enable_cft != UCS_NO) {
+        status = uct_cuda_ipc_cft_init(ipc_config->cft_le_size);
+        if ((status != UCS_OK) && (ipc_config->enable_cft == UCS_YES)) {
+            ucs_error("CUDA fabric transport support is requested but not "
+                      "supported");
+        }
+        md->cft_enabled = (status == UCS_OK);
+    } else {
+        md->cft_enabled = 0;
+    }
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);

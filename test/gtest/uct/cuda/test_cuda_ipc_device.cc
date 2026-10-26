@@ -4,11 +4,17 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <uct/uct_test.h>
 #include <uct/api/device/uct_device_types.h>
 #include <uct/api/v2/uct_v2.h>
 #include "test_kernels_uct.h"
+#include "cuda_vmm_mem_buffer.h"
 #include <cuda.h>
+#include <cuda_runtime.h>
 #include <common/cuda.h>
 #include <memory>
 #include <vector>
@@ -101,6 +107,64 @@ class test_cuda_ipc_rma_device : public test_cuda_ipc_rma {
     int get_offset() const {
         return GetParam()->variant & 0xFFF;
     }
+
+    void skip_unsupported_level()
+    {
+        if (get_device_level() == UCS_DEVICE_LEVEL_GRID) {
+            UCS_TEST_SKIP_R("Grid level is not supported");
+        }
+
+        if ((get_device_level() == UCS_DEVICE_LEVEL_WARP) &&
+            (get_num_threads() < WARP_SIZE)) {
+            UCS_TEST_SKIP_R("Warp level requires at least 32 threads");
+        }
+    }
+
+    /* Sender memory element for a remote key, copied to device memory */
+    class device_elem {
+    public:
+        device_elem(uct_md_h md, uct_rkey_t rkey)
+            : m_md(md), m_release(nullptr), m_dev_ptr(0)
+        {
+            create(rkey);
+        }
+
+        ~device_elem()
+        {
+            if (m_dev_ptr != 0) {
+                cuMemFree(m_dev_ptr);
+            }
+            if (m_release != nullptr) {
+                uct_md_mem_elem_release(m_md, m_release);
+            }
+        }
+
+        const uct_device_mem_elem_t *ptr() const
+        {
+            return reinterpret_cast<const uct_device_mem_elem_t*>(m_dev_ptr);
+        }
+
+        uint32_t le_id() const
+        {
+            return reinterpret_cast<const uct_cuda_ipc_md_device_mem_element_t*>(
+                           &m_host)->le_id;
+        }
+
+    private:
+        void create(uct_rkey_t rkey)
+        {
+            ASSERT_UCS_OK(uct_md_mem_elem_pack(m_md, nullptr, rkey, &m_host,
+                                               &m_release));
+            ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&m_dev_ptr, sizeof(m_host)));
+            ASSERT_EQ(CUDA_SUCCESS,
+                      cuMemcpyHtoD(m_dev_ptr, &m_host, sizeof(m_host)));
+        }
+
+        uct_md_h              m_md;
+        uct_device_mem_elem_t m_host;
+        void                  *m_release;
+        CUdeviceptr           m_dev_ptr;
+    };
 
     static const unsigned base_length = 1024;
 
@@ -209,95 +273,269 @@ _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_rma, cuda_ipc)
 
 UCS_TEST_P(test_cuda_ipc_rma_device, put_device)
 {
-    size_t length                   = base_length + get_offset();
-    ucs_device_level_t device_level = get_device_level();
-    unsigned num_threads            = get_num_threads();
-    unsigned num_blocks             = get_num_blocks();
+    size_t length = base_length + get_offset();
+    uct_device_ep_h device_ep;
 
-    if (device_level == UCS_DEVICE_LEVEL_GRID) {
-        GTEST_SKIP() << "Grid level is not supported";
-    }
-
-    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
-        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
-    }
+    skip_unsupported_level();
 
     mapped_buffer sendbuf(length, SEED1, *m_sender, 0, UCS_MEMORY_TYPE_CUDA);
     mapped_buffer recvbuf(length, SEED2, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
+    device_elem elem(m_sender->md(), recvbuf.rkey());
 
-    uct_device_mem_elem_t src_elem_host;
-    void *release_handle;
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), sendbuf.memh(),
-                                       recvbuf.rkey(), &src_elem_host,
-                                       &release_handle));
-
-
-    uct_device_mem_elem_t *src_elem;
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&src_elem,
-                                       sizeof(uct_device_mem_elem_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)src_elem, &src_elem_host,
-                                         sizeof(uct_device_mem_elem_t)));
-
-    uct_device_mem_elem_t *mem_elem;
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem,
-                                       sizeof(uct_device_mem_elem_t)));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &src_elem_host,
-                                         sizeof(uct_device_mem_elem_t)));
-
-    uct_device_ep_h device_ep;
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
-    ASSERT_UCS_OK(cuda_uct::launch_uct_put(device_ep, src_elem, mem_elem,
+    ASSERT_UCS_OK(cuda_uct::launch_uct_put(device_ep, elem.ptr(), elem.ptr(),
                                            sendbuf.ptr(),
                                            (uintptr_t)recvbuf.ptr(), length,
-                                           device_level, num_threads,
-                                           num_blocks));
+                                           get_device_level(),
+                                           get_num_threads(),
+                                           get_num_blocks()));
     recvbuf.pattern_check(SEED1);
-    cuMemFree((CUdeviceptr)src_elem);
-    cuMemFree((CUdeviceptr)mem_elem);
-    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 UCS_TEST_P(test_cuda_ipc_rma_device, atomic_add_device)
 {
-    size_t             inc_value     = get_offset();
-    size_t             mem_elem_size = get_mem_elem_size();
-    ucs_device_level_t device_level  = get_device_level();
-    unsigned           num_threads   = get_num_threads();
-    unsigned           num_blocks    = get_num_blocks();
+    size_t inc_value = get_offset();
     uct_device_ep_h device_ep;
-    uct_device_mem_elem_t *mem_elem;
 
-    if (device_level == UCS_DEVICE_LEVEL_GRID) {
-        GTEST_SKIP() << "Grid level is not supported";
-    }
-
-    if ((device_level == UCS_DEVICE_LEVEL_WARP) && (num_threads < 32)) {
-        GTEST_SKIP() << "Warp level is not supported for less than 32 threads";
-    }
+    skip_unsupported_level();
 
     mapped_buffer signal(sizeof(uint64_t), 0, *m_receiver, 0, UCS_MEMORY_TYPE_CUDA);
+    device_elem elem(m_sender->md(), signal.rkey());
+
     ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
-
-    uct_device_mem_elem_t mem_elem_host;
-    void *release_handle;
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc((CUdeviceptr*)&mem_elem, mem_elem_size));
-    ASSERT_UCS_OK(uct_md_mem_elem_pack(m_sender->md(), nullptr, signal.rkey(),
-                                       &mem_elem_host, &release_handle));
-    ASSERT_EQ(CUDA_SUCCESS, cuMemcpyHtoD((CUdeviceptr)mem_elem, &mem_elem_host,
-                                         mem_elem_size));
-
-    cuda_uct::launch_uct_atomic(device_ep, mem_elem, (uint64_t)signal.ptr(),
-                                inc_value, device_level, num_threads,
-                                num_blocks);
+    cuda_uct::launch_uct_atomic(device_ep, elem.ptr(), (uint64_t)signal.ptr(),
+                                inc_value, get_device_level(),
+                                get_num_threads(), get_num_blocks());
     uint64_t signal_val = inc_value;
     ASSERT_EQ(mem_buffer::compare(&signal_val, signal.ptr(), sizeof(signal_val),
                                   UCS_MEMORY_TYPE_CUDA),
               1);
-    cuMemFree((CUdeviceptr)mem_elem);
-    uct_md_mem_elem_release(m_sender->md(), release_handle);
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_rma_device, cuda_ipc)
+
+
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+
+/* Device operations through CUDA fabric transport (CFT): memory of another
+ * device is bound to a CUDA logical endpoint and written by fabric operations
+ * instead of being mapped */
+class test_cuda_ipc_cft : public test_cuda_ipc_rma_device {
+protected:
+    static const int    SEND_DEVICE = 0;
+    static const int    RECV_DEVICE = 1;
+    /* Multiple of the logical endpoint bind alignment */
+    static const size_t REMOTE_SIZE = 2 * UCS_MBYTE;
+    static const int    GUARD       = 0xa5;
+    static const size_t GUARD_SIZE  = 32;
+
+    /* Run @a func with @a device as the current CUDA device */
+    template<typename F> static void on_device(int device, F func)
+    {
+        int prev_device = mem_buffer::get_device();
+
+        mem_buffer::set_device(device);
+        func();
+        mem_buffer::set_device(prev_device);
+    }
+
+    /* Fabric-exportable VMM memory on @a device, registered with the receiver
+     * and unpacked by the sender */
+    class remote_buffer {
+    public:
+        remote_buffer(const test_cuda_ipc_cft &test, int device)
+            : m_receiver(*test.m_receiver), m_device(device), m_mem{}
+        {
+            m_rkey.rkey = UCT_INVALID_RKEY;
+            create();
+        }
+
+        ~remote_buffer()
+        {
+            m_receiver.rkey_release(&m_rkey);
+            m_receiver.mem_type_dereg(&m_mem);
+        }
+
+        uint8_t *ptr() const
+        {
+            return static_cast<uint8_t*>(m_vmm->ptr());
+        }
+
+        uct_rkey_t rkey() const
+        {
+            return m_rkey.rkey;
+        }
+
+        void fill(size_t offset, size_t length, int value)
+        {
+            on_device(m_device, [&]() {
+                mem_buffer::memset(ptr() + offset, length, value,
+                                   UCS_MEMORY_TYPE_CUDA);
+            });
+        }
+
+        std::vector<uint8_t> read(size_t offset, size_t length) const
+        {
+            std::vector<uint8_t> data(length);
+
+            on_device(m_device, [&]() {
+                mem_buffer::copy_from(data.data(), ptr() + offset, length,
+                                      UCS_MEMORY_TYPE_CUDA);
+            });
+            return data;
+        }
+
+    private:
+        void create()
+        {
+            on_device(m_device, [&]() {
+                m_vmm.reset(new cuda_fabric_mem_buffer(REMOTE_SIZE,
+                                                       UCS_MEMORY_TYPE_CUDA));
+            });
+            fill(0, REMOTE_SIZE, GUARD);
+
+            m_mem.address  = m_vmm->ptr();
+            m_mem.length   = REMOTE_SIZE;
+            m_mem.mem_type = UCS_MEMORY_TYPE_CUDA;
+            m_receiver.mem_type_reg(&m_mem, UCT_MD_MEM_ACCESS_ALL);
+            m_receiver.rkey_unpack(&m_mem, &m_rkey);
+        }
+
+        const entity                            &m_receiver;
+        int                                     m_device;
+        std::unique_ptr<cuda_fabric_mem_buffer> m_vmm;
+        uct_allocated_memory_t                  m_mem;
+        uct_rkey_bundle_t                       m_rkey;
+    };
+
+    void init() override
+    {
+        if (mem_buffer::get_device_count() <= RECV_DEVICE) {
+            UCS_TEST_SKIP_R("CUDA fabric transport tests require two devices");
+        }
+
+        if (!is_cft_supported()) {
+            UCS_TEST_SKIP_R("CUDA logical endpoints are not supported");
+        }
+
+        modify_config("CUDA_IPC_ENABLE_CFT", "y");
+        mem_buffer::set_device(SEND_DEVICE);
+        ASSERT_EQ(cudaSuccess, cudaFree(0));
+        test_cuda_ipc_rma_device::init();
+    }
+
+    static bool is_cft_supported()
+    {
+        int supported = 0;
+        CUdevice device;
+
+        return (cuDeviceGet(&device, RECV_DEVICE) == CUDA_SUCCESS) &&
+               (cuDeviceGetAttribute(
+                        &supported,
+                        CU_DEVICE_ATTRIBUTE_LOGICAL_ENDPOINT_UNICAST_SUPPORTED,
+                        device) == CUDA_SUCCESS) &&
+               supported;
+    }
+
+    /* Put @a length bytes to @a offset of remote memory and check the data
+     * and the surrounding bytes */
+    void test_put(size_t offset, size_t length)
+    {
+        remote_buffer remote(*this, RECV_DEVICE);
+        device_elem elem(m_sender->md(), remote.rkey());
+        mapped_buffer sendbuf(length, SEED1, *m_sender, 0,
+                              UCS_MEMORY_TYPE_CUDA);
+        uct_device_ep_h device_ep;
+
+        ASSERT_NE(UCT_CUDA_IPC_LE_ID_INVALID, elem.le_id());
+        ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
+        ASSERT_UCS_OK(cuda_uct::launch_uct_put(device_ep, elem.ptr(),
+                                               elem.ptr(), sendbuf.ptr(),
+                                               (uintptr_t)remote.ptr() + offset,
+                                               length, get_device_level(),
+                                               get_num_threads(),
+                                               get_num_blocks()));
+
+        on_device(RECV_DEVICE, [&]() {
+            mem_buffer::pattern_check(remote.ptr() + offset, length, SEED1,
+                                      UCS_MEMORY_TYPE_CUDA);
+        });
+
+        std::vector<uint8_t> guard(GUARD_SIZE, GUARD);
+        EXPECT_EQ(guard, remote.read(offset + length, GUARD_SIZE));
+        if (offset >= GUARD_SIZE) {
+            EXPECT_EQ(guard, remote.read(offset - GUARD_SIZE, GUARD_SIZE));
+        }
+    }
+};
+
+UCS_TEST_P(test_cuda_ipc_cft, put_device)
+{
+    skip_unsupported_level();
+    test_put(get_offset(), base_length + get_offset());
+}
+
+UCS_TEST_P(test_cuda_ipc_cft, put_device_large)
+{
+    skip_unsupported_level();
+    /* Larger than all staging buffers, not a multiple of 16 bytes */
+    test_put(get_offset() + 3, 100000 + get_offset());
+}
+
+UCS_TEST_P(test_cuda_ipc_cft, atomic_add_device)
+{
+    skip_unsupported_level();
+
+    /* Cover both halves of the 16-byte block written by the fabric reduction */
+    const size_t offset    = (get_offset() & 1) ? sizeof(uint64_t) : 0;
+    const uint64_t initial = 0x1000;
+    const uint64_t inc     = get_offset() + 1;
+    remote_buffer remote(*this, RECV_DEVICE);
+    device_elem elem(m_sender->md(), remote.rkey());
+    uct_device_ep_h device_ep;
+    uint64_t values[2] = {initial, initial};
+
+    ASSERT_NE(UCT_CUDA_IPC_LE_ID_INVALID, elem.le_id());
+    on_device(RECV_DEVICE, [&]() {
+        mem_buffer::copy_to(remote.ptr(), values, sizeof(values),
+                            UCS_MEMORY_TYPE_CUDA);
+    });
+
+    ASSERT_UCS_OK(uct_ep_get_device_ep(m_sender->ep(0), &device_ep));
+    ASSERT_UCS_OK(cuda_uct::launch_uct_atomic(device_ep, elem.ptr(),
+                                              (uintptr_t)remote.ptr() + offset,
+                                              inc, get_device_level(),
+                                              get_num_threads(),
+                                              get_num_blocks()));
+
+    std::vector<uint8_t> result = remote.read(0, sizeof(values));
+    memcpy(values, result.data(), sizeof(values));
+    EXPECT_EQ(initial + inc, values[offset / sizeof(uint64_t)]);
+    EXPECT_EQ(initial, values[1 - (offset / sizeof(uint64_t))]);
+}
+
+UCS_TEST_P(test_cuda_ipc_cft, put_zcopy_unsupported)
+{
+    if ((get_device_level() != UCS_DEVICE_LEVEL_THREAD) ||
+        (get_num_threads() != 1) || (get_num_blocks() != 1) ||
+        (get_offset() != 0)) {
+        UCS_TEST_SKIP_R("host operation does not depend on the variant");
+    }
+
+    /* Memory bound to a logical endpoint cannot be mapped for host operations */
+    remote_buffer remote(*this, RECV_DEVICE);
+    mapped_buffer sendbuf(base_length, SEED1, *m_sender, 0,
+                          UCS_MEMORY_TYPE_CUDA);
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_ep_put_zcopy(m_sender->ep(0), sendbuf.iov(), 1,
+                               (uint64_t)remote.ptr(), remote.rkey(), NULL));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_cuda_ipc_cft, cuda_ipc)
+
+#endif /* HAVE_CUDA_LOGICAL_ENDPOINT */
 
 class test_cuda_ipc_sgl : public test_cuda_ipc_rma {
 protected:
