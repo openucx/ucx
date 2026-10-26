@@ -2061,7 +2061,7 @@ static void ucp_ep_recovery_reset_probe(ucp_ep_recovery_probe_t *probe)
 
 static uintptr_t ucp_ep_ext_slot(ucp_ep_h ep)
 {
-    return (uintptr_t)ep->ext->recovery_arg;
+    return (uintptr_t)(ucp_ep_has_cm_lane(ep) ? NULL : ep->ext->recovery_arg);
 }
 
 static int ucp_ep_ext_slot_is_peer_id(uintptr_t slot)
