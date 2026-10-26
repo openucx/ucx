@@ -30,7 +30,8 @@ typedef struct uct_rocm_ipc_md_config {
 
 typedef struct uct_rocm_ipc_key {
     hsa_amd_ipc_memory_t ipc;
-    /* Owner sets this signal to 0 when the allocation is released */
+    /* Owner sets this signal to 0 when the allocation is released.
+     * Unused when UCX_ROCM_IPC_SIGNAL_INVALIDATE is n. */
     hsa_amd_ipc_signal_t ipc_signal;
     uintptr_t            address;
     size_t               length;

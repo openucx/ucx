@@ -13,6 +13,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/config/parser.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
@@ -63,6 +64,49 @@ static uct_rocm_ipc_remote_cache_t uct_rocm_ipc_remote_cache;
 
 /* Runs before the registration cache (priority 1000). */
 #define UCT_ROCM_IPC_MEM_EVENT_PRIO 100
+
+typedef struct {
+    int signal_invalidate;
+} uct_rocm_ipc_cache_config_t;
+
+static ucs_config_field_t uct_rocm_ipc_cache_config_table[] = {
+    {"SIGNAL_INVALIDATE", "y",
+     "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
+     "The IPC signal remains part of the packed rkey when this is n.",
+     ucs_offsetof(uct_rocm_ipc_cache_config_t, signal_invalidate),
+     UCS_CONFIG_TYPE_BOOL},
+
+    {NULL}
+};
+
+UCS_CONFIG_REGISTER_TABLE(uct_rocm_ipc_cache_config_table, "ROCm IPC",
+                          "ROCM_IPC_", uct_rocm_ipc_cache_config_t,
+                          &ucs_config_global_list);
+
+static int uct_rocm_ipc_signal_invalidate_enabled(void)
+{
+    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
+    static int enabled         = 1;
+
+    UCS_INIT_ONCE(&once) {
+        uct_rocm_ipc_cache_config_t config;
+        ucs_status_t status;
+
+        status = ucs_config_parser_fill_opts(
+                &config, UCS_CONFIG_GET_TABLE(uct_rocm_ipc_cache_config_table),
+                UCS_DEFAULT_ENV_PREFIX, 0);
+        if (status == UCS_OK) {
+            enabled = config.signal_invalidate;
+            ucs_config_parser_release_opts(&config,
+                                           uct_rocm_ipc_cache_config_table);
+        }
+        if (!enabled) {
+            ucs_diag("rocm ipc signal invalidation is disabled");
+        }
+    }
+
+    return enabled;
+}
 
 
 typedef struct uct_rocm_ipc_export {
@@ -138,8 +182,7 @@ static void uct_rocm_ipc_export_mem_free_cb(ucm_event_type_t event_type,
     uintptr_t start, end;
 
     if ((event_type != UCM_EVENT_MEM_TYPE_FREE) ||
-        ((event->mem_type.mem_type != UCS_MEMORY_TYPE_ROCM) &&
-         (event->mem_type.mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED))) {
+        (event->mem_type.mem_type != UCS_MEMORY_TYPE_ROCM)) {
         return;
     }
 
@@ -186,11 +229,13 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     hsa_signal_t signal;
     hsa_status_t hsa_status;
 
-    UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
-        uct_rocm_ipc_export_install_handler();
-    }
+    if (uct_rocm_ipc_signal_invalidate_enabled()) {
+        UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
+            uct_rocm_ipc_export_install_handler();
+        }
 
-    uct_rocm_ipc_export_reap();
+        uct_rocm_ipc_export_reap();
+    }
 
     hsa_status = hsa_amd_signal_create(1, 0, NULL, HSA_AMD_SIGNAL_IPC, &signal);
     if (hsa_status != HSA_STATUS_SUCCESS) {
@@ -246,7 +291,9 @@ static void uct_rocm_ipc_export_cleanup(void)
     ucs_list_head_init(&destroy_list);
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
     ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_active, list) {
-        hsa_signal_store_screlease(exp->signal, 0);
+        if (uct_rocm_ipc_signal_invalidate_enabled()) {
+            hsa_signal_store_screlease(exp->signal, 0);
+        }
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
     }
@@ -499,6 +546,16 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_rocm_ipc_cache_region_t);
         if (memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0) {
+            if (region->signal.handle == 0) {
+                ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
+                          UCS_PGT_REGION_FMT,
+                          cache->name, (void*)key->address, key->length,
+                          UCS_PGT_REGION_ARG(&region->super));
+
+                *mapped_addr = region->mapped_addr;
+                return UCS_OK;
+            }
+
             signal_value = hsa_signal_load_scacquire(region->signal);
             if (signal_value > 0) {
                 ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
@@ -526,27 +583,30 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         }
     }
 
-    if (uct_rocm_ipc_signal_is_empty(&key->ipc_signal)) {
-        ucs_error("%s: rocm ipc key %p has no ipc signal", cache->name,
-                  (void*)key->address);
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
+    if (uct_rocm_ipc_signal_invalidate_enabled()) {
+        if (uct_rocm_ipc_signal_is_empty(&key->ipc_signal)) {
+            ucs_error("%s: rocm ipc key %p has no ipc signal", cache->name,
+                      (void*)key->address);
+            status = UCS_ERR_INVALID_PARAM;
+            goto err;
+        }
 
-    /* Acquire the signal reference before mapping memory. Once the mapping
-     * exists, the exporter may be blocked in hipFree and may destroy its
-     * signal reference immediately after dispatching the free event. */
-    hsa_status = hsa_amd_ipc_signal_attach(&key->ipc_signal, &local_signal);
-    if (hsa_status != HSA_STATUS_SUCCESS) {
-        ucs_error("%s: failed to attach rocm ipc signal for %p: %d",
-                  cache->name, (void*)key->address, hsa_status);
-        status = UCS_ERR_IO_ERROR;
-        goto err;
-    }
+        /* Acquire the signal reference before mapping memory. Once the
+         * mapping exists, the exporter may be blocked in hipFree and may
+         * destroy its signal reference after dispatching the free event. */
+        hsa_status = hsa_amd_ipc_signal_attach(&key->ipc_signal,
+                                               &local_signal);
+        if (hsa_status != HSA_STATUS_SUCCESS) {
+            ucs_error("%s: failed to attach rocm ipc signal for %p: %d",
+                      cache->name, (void*)key->address, hsa_status);
+            status = UCS_ERR_IO_ERROR;
+            goto err;
+        }
 
-    if (hsa_signal_load_scacquire(local_signal) <= 0) {
-        status = UCS_ERR_INVALID_ADDR;
-        goto err_destroy_signal;
+        if (hsa_signal_load_scacquire(local_signal) <= 0) {
+            status = UCS_ERR_INVALID_ADDR;
+            goto err_destroy_signal;
+        }
     }
 
     hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
@@ -609,13 +669,16 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     }
 
     region->in_pgtable = 1;
-    *watch_region_p    = region;
+    if (uct_rocm_ipc_signal_invalidate_enabled()) {
+        *watch_region_p = region;
+    }
     ucs_trace("%s: rocm_ipc cache new region:" UCS_PGT_REGION_FMT " size:%lu",
               cache->name, UCS_PGT_REGION_ARG(&region->super), key->length);
     return UCS_OK;
 
 err_destroy_signal:
-    if (hsa_signal_destroy(local_signal) != HSA_STATUS_SUCCESS) {
+    if ((local_signal.handle != 0) &&
+        (hsa_signal_destroy(local_signal) != HSA_STATUS_SUCCESS)) {
         ucs_warn("%s: failed to destroy rocm ipc signal for %p", cache->name,
                  (void*)key->address);
     }
