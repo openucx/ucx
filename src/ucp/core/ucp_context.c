@@ -478,6 +478,12 @@ static ucs_config_field_t ucp_context_config_table[] = {
    ucs_offsetof(ucp_context_config_t, recovery_retries),
    UCS_CONFIG_TYPE_UINT},
 
+  {"RECOVERY_ENABLE", "y",
+   "Enable recovery of failed lanes on endpoints created with\n"
+   "UCP_ERR_HANDLING_MODE_FAILOVER. When disabled, failed lanes are removed\n"
+   "without attempting to restore them.",
+   ucs_offsetof(ucp_context_config_t, recovery_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"FAILOVER_MODE", "auto",
    "Failover method for endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER.\n"

@@ -2342,6 +2342,10 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
 
+    if (!context->config.ext.recovery_enable) {
+        return UCS_OK;
+    }
+
     if (ucp_ep_config(ep)->key.dst_version < 22) {
         ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
                  "remote peer version %d is not supported",

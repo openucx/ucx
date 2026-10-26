@@ -189,6 +189,8 @@ typedef struct ucp_context_config {
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
+    /** Enable recovery of failed lanes */
+    int                                    recovery_enable;
     /** Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints */
     ucp_failover_mode_t                    failover_mode;
     /** Time period between dynamic transport switching rounds */
