@@ -16,7 +16,9 @@ protected:
         ucs_status_t result;
 
         if (RUNNING_ON_VALGRIND) {
-            UCS_TEST_SKIP_R("CUDA memory hooks may miss events under Valgrind");
+            /* Remove once Bistro invalidates Valgrind's cached translations. */
+            UCS_TEST_SKIP_R("Valgrind may execute stale translations of "
+                            "Bistro-patched CUDA driver functions");
         }
 
         ucs::test::init();
