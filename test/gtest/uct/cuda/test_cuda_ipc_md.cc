@@ -771,6 +771,12 @@ UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
     }
 
     if (!check_domain(1, sys_dev1)) {
+        /* An MPS MLOPart device is itself a single locality domain, soit has
+         * no domain 1 to allocate from */
+        if (!mem_buffer::cuda_mem_is_gdr_capable()) {
+            UCS_TEST_SKIP_R("single locality-domain device");
+        }
+
         ADD_FAILURE() << "locality domain 1 allocation failed even though "
                          "domain 0 succeeded";
         return;
