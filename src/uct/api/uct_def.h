@@ -901,5 +901,4 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
  */
 typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
 
-
 #endif

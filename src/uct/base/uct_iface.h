@@ -364,6 +364,8 @@ typedef struct uct_base_iface {
     uct_error_handler_t      err_handler;      /* Error handler */
     void                     *err_handler_arg; /* Error handler argument */
     uint32_t                 err_handler_flags; /* Error handler callback flags */
+    uct_async_ep_event_cb_t  async_ep_event_cb; /* Endpoint event callback */
+    void                     *async_ep_event_arg; /* Endpoint event callback arg */
     uct_worker_progress_t    prog;             /* Will be removed once all transports
                                                   support progress control */
     unsigned                 progress_flags;   /* Which progress is currently enabled */
@@ -879,6 +881,18 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
 
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);
+
+/**
+ * Notify the UCT user about an endpoint-specific asynchronous event.
+ *
+ * The caller must keep @a ep valid until the callback returns.
+ *
+ * @param [in] iface   Interface which owns @a ep.
+ * @param [in] ep      Endpoint associated with the event.
+ * @param [in] events  Event flags from @ref uct_iface_event_types.
+ */
+void uct_iface_handle_ep_event(uct_iface_h iface, uct_ep_h ep,
+                               unsigned events);
 
 /**
  * Initialize AM data alignment and its offset based on the user configuration
