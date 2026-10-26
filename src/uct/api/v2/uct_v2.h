@@ -25,7 +25,7 @@ BEGIN_C_DECLS
  */
 enum uct_tl_resource_desc_field {
     UCT_TL_RESOURCE_DESC_FIELD_RESOURCE   = UCS_BIT(0), /**< Resource */
-    UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE = UCS_BIT(1)  /**< Controller */
+    UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE = UCS_BIT(1) /**< Controller */
 };
 
 
@@ -38,14 +38,14 @@ typedef struct {
     uint64_t               field_mask;
 
     /** Transport resource information. */
-    uct_tl_resource_desc_t  resource;
+    uct_tl_resource_desc_t resource;
 
     /**
      * System device controlling this transport, matching
      * @ref uct_iface_attr_t::ctl_device. UCS_SYS_DEVICE_ID_UNKNOWN if the
      * transport does not report a controller.
      */
-    ucs_sys_device_t        ctl_device;
+    ucs_sys_device_t       ctl_device;
 } uct_tl_resource_desc_v2_t;
 
 
@@ -69,9 +69,11 @@ typedef struct {
  *         small, or another error code on failure. Outputs are unchanged on
  *         failure.
  */
-ucs_status_t uct_md_query_tl_resources_v2(
-        uct_md_h md, uint64_t field_mask, size_t resource_size,
-        uct_tl_resource_desc_v2_t **resources_p, unsigned *num_resources_p);
+ucs_status_t
+uct_md_query_tl_resources_v2(uct_md_h md, uint64_t field_mask,
+                             size_t resource_size,
+                             uct_tl_resource_desc_v2_t **resources_p,
+                             unsigned *num_resources_p);
 
 
 /**

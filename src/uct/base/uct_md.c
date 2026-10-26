@@ -78,12 +78,16 @@ void uct_md_close(uct_md_h md)
     md->ops->close(md);
 }
 
-ucs_status_t uct_md_query_tl_resources_v2(
-        uct_md_h md, uint64_t field_mask, size_t resource_size,
-        uct_tl_resource_desc_v2_t **resources_p, unsigned *num_resources_p)
+ucs_status_t
+uct_md_query_tl_resources_v2(uct_md_h md, uint64_t field_mask,
+                             size_t resource_size,
+                             uct_tl_resource_desc_v2_t **resources_p,
+                             unsigned *num_resources_p)
 {
     uct_component_t *component = md->component;
-    uct_tl_resource_desc_v2_t resource = {0};
+    uct_tl_resource_desc_v2_t resource = {
+        .ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN
+    };
     void *resources = NULL, *tmp;
     uct_tl_device_resource_t *tl_devices;
     unsigned i, num_resources, num_tl_devices;
@@ -93,10 +97,10 @@ ucs_status_t uct_md_query_tl_resources_v2(
     if ((resource_size < sizeof(resource.field_mask)) ||
         ((field_mask & UCT_TL_RESOURCE_DESC_FIELD_RESOURCE) &&
          (resource_size < ucs_offsetof(uct_tl_resource_desc_v2_t, resource) +
-                          sizeof(resource.resource))) ||
+                                  sizeof(resource.resource))) ||
         ((field_mask & UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE) &&
          (resource_size < ucs_offsetof(uct_tl_resource_desc_v2_t, ctl_device) +
-                          sizeof(resource.ctl_device)))) {
+                                  sizeof(resource.ctl_device)))) {
         ucs_error("resource descriptor size %zu omits requested fields",
                   resource_size);
         return UCS_ERR_INVALID_PARAM;
@@ -152,7 +156,7 @@ ucs_status_t uct_md_query_tl_resources_v2(
             }
 
             memcpy(UCS_PTR_BYTE_OFFSET(tmp,
-                                      (num_resources + i) * resource_size),
+                                       (num_resources + i) * resource_size),
                    &resource, ucs_min(resource_size, sizeof(resource)));
         }
 
@@ -179,9 +183,10 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
     unsigned i, num_resources;
     ucs_status_t status;
 
-    status = uct_md_query_tl_resources_v2(
-            md, UCT_TL_RESOURCE_DESC_FIELD_RESOURCE, sizeof(*resources),
-            &resources, &num_resources);
+    status = uct_md_query_tl_resources_v2(md,
+                                          UCT_TL_RESOURCE_DESC_FIELD_RESOURCE,
+                                          sizeof(*resources), &resources,
+                                          &num_resources);
     if (status != UCS_OK) {
         return status;
     }
