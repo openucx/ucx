@@ -35,11 +35,13 @@ noinst_HEADERS = \
 if HAVE_TL_RC
 noinst_HEADERS += \
 	rc/rc_mlx5.h \
+	rc/rc_mlx5_ext.h \
 	rc/rc_mlx5.inl \
 	rc/rc_mlx5_common.h
 
 libuct_ib_mlx5_la_SOURCES += \
 	rc/rc_mlx5_ep.c \
+	rc/rc_mlx5_ext.c \
 	rc/rc_mlx5_iface.c \
 	rc/rc_mlx5_common.c
 

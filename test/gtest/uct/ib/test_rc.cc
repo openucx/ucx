@@ -24,6 +24,40 @@ extern "C" {
 }
 #endif
 
+#ifdef HAVE_MLX5_DV
+class test_rc_extension : public ucs::test {
+};
+
+UCS_TEST_F(test_rc_extension, registration)
+{
+    uct_rc_mlx5_ext_ops_t ops = {};
+    const uct_rc_mlx5_ext_ops_t *acquired;
+
+    ops.struct_size  = sizeof(ops);
+    ops.api_version  = UCT_RC_MLX5_EXT_API_VERSION;
+    ops.name         = "test";
+    ops.requirements = UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP;
+    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
+    EXPECT_EQ(UCS_ERR_BUSY, uct_rc_mlx5_ext_register(&ops));
+    EXPECT_EQ(ops.requirements, uct_rc_mlx5_ext_get_requirements());
+    acquired = uct_rc_mlx5_ext_acquire();
+    EXPECT_NE(nullptr, acquired);
+    EXPECT_EQ(ops.requirements, acquired->requirements);
+    uct_rc_mlx5_ext_release(acquired);
+    uct_rc_mlx5_ext_unregister(&ops);
+    EXPECT_EQ(nullptr, uct_rc_mlx5_ext_acquire());
+    EXPECT_EQ(0ul, uct_rc_mlx5_ext_get_requirements());
+}
+
+UCS_TEST_F(test_rc_extension, invalid_registration)
+{
+    uct_rc_mlx5_ext_ops_t ops = {};
+
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(nullptr));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
+}
+#endif
+
 class test_rc_completion_info : public ucs::test {
 protected:
     struct test_op {

@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_H
 
 #include "rc_mlx5_common.h"
+#include "rc_mlx5_ext.h"
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -57,6 +58,7 @@ enum {
  */
 typedef struct uct_rc_mlx5_base_ep {
     uct_rc_ep_t              super;
+    void                    *ext_ctx;
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;

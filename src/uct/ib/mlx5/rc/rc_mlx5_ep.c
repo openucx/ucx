@@ -2440,6 +2440,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
     self->err_handler_inprogress = 0;
+    self->ext_ctx                = NULL;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,
@@ -2517,10 +2518,27 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     }
 
     self->mp.free = 1;
+    if ((iface->ext_ops != NULL) && (iface->ext_ops->ep_init != NULL)) {
+        status = iface->ext_ops->ep_init(
+                &self->super.super.super.super, iface->ext_ctx,
+                &self->super.ext_ctx);
+        if (status != UCS_OK) {
+            goto err_remove_tm_qp;
+        }
+    }
+
     return UCS_OK;
 
+err_remove_tm_qp:
+#if IBV_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
+    }
+#endif
 err_destroy_tm_qp:
-    uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
+    }
 err:
     return status;
 }
@@ -2540,6 +2558,11 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
+    if ((iface->ext_ops != NULL) && (iface->ext_ops->ep_cleanup != NULL)) {
+        iface->ext_ops->ep_cleanup(&self->super.super.super.super,
+                                   self->super.ext_ctx);
+        self->super.ext_ctx = NULL;
+    }
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);

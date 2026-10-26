@@ -110,11 +110,24 @@ uct_rc_mlx5_iface_progress(void *arg, int flags)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(iface, flags);
-    if (!uct_rc_iface_poll_tx(&iface->super, count)) {
-        return count;
+    if (ucs_likely(iface->ext_ops == NULL)) {
+        if (!uct_rc_iface_poll_tx(&iface->super, count)) {
+            return count;
+        }
+
+        return count + uct_rc_mlx5_iface_poll_tx(iface, flags);
     }
 
-    return count + uct_rc_mlx5_iface_poll_tx(iface, flags);
+    if (uct_rc_iface_poll_tx(&iface->super, count)) {
+        count += uct_rc_mlx5_iface_poll_tx_with_info(iface, flags);
+    }
+
+    if (iface->ext_ops->progress != NULL) {
+        count += iface->ext_ops->progress(&iface->super.super.super.super,
+                                          iface->ext_ctx);
+    }
+
+    return count;
 }
 
 static unsigned uct_rc_mlx5_iface_progress_cyclic(void *arg)
@@ -850,6 +863,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     init_attr->flags |= UCT_IB_CQ_IGNORE_OVERRUN;
     uct_ib_mlx5_parse_cqe_zipping(md, &mlx5_config->super, init_attr);
+    if (init_attr->flags & UCT_IB_CQ_COMPLETION_TIMESTAMP) {
+        /* Compressed CQEs do not retain each checkpoint timestamp. */
+        init_attr->cqe_zip_sizes[UCT_IB_DIR_TX] = 0;
+    }
 
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,
                                        params, init_attr);
@@ -867,6 +884,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
 
+    self->ext_ops              = NULL;
+    self->ext_ctx              = NULL;
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
     self->tx.bf_copy_mode     = mlx5_config->super.bf_copy_mode;
@@ -1014,6 +1033,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.tx_moderation         = config->super.tx_cq_moderation;
     init_attr.dev_name              = params->mode.device.dev_name;
 
+    if (uct_rc_mlx5_ext_get_requirements() &
+        UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP) {
+        init_attr.flags |= UCT_IB_CQ_COMPLETION_TIMESTAMP;
+    }
+
     if ((md->dp_ordering_cap_devx.rc == UCT_IB_MLX5_DP_ORDERING_OOO_ALL) ||
         md->ddp_support_dv.rc) {
         init_attr.flags |= UCT_IB_DDP_SUPPORTED;
@@ -1033,9 +1057,25 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
+    self->super.ext_ops = uct_rc_mlx5_ext_acquire();
+
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {
+        uct_rc_mlx5_ext_release(self->super.ext_ops);
+        self->super.ext_ops = NULL;
         return status;
+    }
+
+    if ((self->super.ext_ops != NULL) &&
+        (self->super.ext_ops->iface_init != NULL)) {
+        status = self->super.ext_ops->iface_init(
+                &self->super.super.super.super.super, params,
+                &self->super.ext_ctx);
+        if (status != UCS_OK) {
+            uct_rc_mlx5_ext_release(self->super.ext_ops);
+            self->super.ext_ops = NULL;
+            return status;
+        }
     }
 
     return UCS_OK;
@@ -1045,6 +1085,17 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    if (self->super.ext_ops != NULL) {
+        if (self->super.ext_ops->iface_cleanup != NULL) {
+            self->super.ext_ops->iface_cleanup(
+                    &self->super.super.super.super.super,
+                    self->super.ext_ctx);
+        }
+
+        uct_rc_mlx5_ext_release(self->super.ext_ops);
+        self->super.ext_ops = NULL;
+        self->super.ext_ctx = NULL;
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_iface_t, uct_rc_mlx5_iface_common_t);
