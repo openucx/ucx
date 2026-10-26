@@ -9,8 +9,12 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
+#include <memory>
+#include <vector>
+
 extern "C" {
 #include <ucs/arch/cpu.h>
+#include <uct/api/v2/uct_v2.h>
 }
 
 #ifdef HAVE_MLX5_DV
@@ -909,6 +913,71 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
     m_e1->destroy_eps();
     flush();
     EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_sgl_no_comp,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    static const size_t num_iters = 64;
+    uct_iface_attr_v2_t attr_v2   = {};
+    std::vector<std::unique_ptr<mapped_buffer> > local, remote;
+    std::vector<void*> buffers;
+    std::vector<size_t> lengths;
+    std::vector<uct_mem_h> memhs;
+    std::vector<uint64_t> remote_addrs;
+    std::vector<uct_rkey_t> rkeys;
+    ucs_status_t status;
+    size_t count, length, i;
+
+    attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                         UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+    if ((uct_iface_query_v2(m_e1->iface(), &attr_v2) != UCS_OK) ||
+        !(attr_v2.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY) ||
+        (attr_v2.max_get_sgl_zcopy_count == 0)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    const uct_iface_attr &attr = m_e1->iface_attr();
+    count  = ucs_min(size_t(2), attr_v2.max_get_sgl_zcopy_count);
+    length = ucs_min(ucs_max(size_t(1024), attr.cap.get.min_zcopy),
+                     attr.cap.get.max_zcopy);
+
+    ASSERT_LE(count * length, m_num_get_bytes);
+
+    for (i = 0; i < count; ++i) {
+        local.emplace_back(new mapped_buffer(length, 0ul, *m_e1));
+        remote.emplace_back(new mapped_buffer(length, 0xABCul + i, *m_e2));
+        buffers.push_back(local[i]->ptr());
+        lengths.push_back(length);
+        memhs.push_back(local[i]->memh());
+        remote_addrs.push_back(remote[i]->addr());
+        rkeys.push_back(remote[i]->rkey());
+    }
+
+    ASSERT_GT(num_iters * count * length, 2 * m_num_get_bytes);
+
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(30 * ucs::test_time_multiplier());
+    for (size_t iter = 0; iter < num_iters; ++iter) {
+        do {
+            status = uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(),
+                                          lengths.data(), memhs.data(),
+                                          remote_addrs.data(), rkeys.data(),
+                                          NULL, NULL, count, NULL);
+            if (status == UCS_ERR_NO_RESOURCE) {
+                progress();
+            }
+        } while ((status == UCS_ERR_NO_RESOURCE) &&
+                 (ucs_get_time() < deadline));
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+    }
+
+    flush();
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+
+    for (i = 0; i < count; ++i) {
+        local[i]->pattern_check(0xABCul + i);
+    }
 }
 
 // Check that it is not possible to send while not all pendings are dispatched
