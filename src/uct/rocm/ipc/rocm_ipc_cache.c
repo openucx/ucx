@@ -246,6 +246,7 @@ static void uct_rocm_ipc_export_cleanup(void)
     ucs_list_head_init(&destroy_list);
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
     ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_active, list) {
+        hsa_signal_store_screlease(exp->signal, 0);
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
     }
@@ -340,6 +341,20 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
               (void*)region->key.address, mapped_addr);
     ucs_list_add_tail(deferred, &region->list);
     return 1;
+}
+
+/* Caller holds the remote-cache write lock. A different or overlapping IPC
+ * handle proves that this mapping is stale, so wake its handler to release
+ * the reference it holds on the region and its signal. */
+static int
+uct_rocm_ipc_cache_region_stale_drop_locked(uct_rocm_ipc_cache_region_t *region,
+                                            ucs_list_link_t *deferred)
+{
+    if (ucs_atomic_cswap32(&region->signal_owner, 2, 2) == 2) {
+        hsa_signal_store_screlease(region->signal, 0);
+    }
+
+    return uct_rocm_ipc_cache_region_drop_locked(region, deferred);
 }
 
 static void uct_rocm_ipc_cache_region_finalize(ucs_list_link_t *deferred)
@@ -451,7 +466,7 @@ uct_rocm_ipc_cache_invalidate_regions(uct_rocm_ipc_cache_t *cache, void *from,
                              &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         ucs_list_del(&region->list);
-        uct_rocm_ipc_cache_region_drop_locked(region, deferred);
+        uct_rocm_ipc_cache_region_stale_drop_locked(region, deferred);
     }
     ucs_trace("%s: closed memhandles in the range [%p..%p]", cache->name, from,
               to);
@@ -505,7 +520,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                       (void*)key->address, key->length);
         }
 
-        if (!uct_rocm_ipc_cache_region_drop_locked(region, deferred)) {
+        if (!uct_rocm_ipc_cache_region_stale_drop_locked(region, deferred)) {
             status = UCS_ERR_IO_ERROR;
             goto err;
         }
