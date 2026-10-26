@@ -6,6 +6,9 @@
 
 UCX_CHECK_ROCM
 
+AC_CHECK_DECLS([SYS_pidfd_getfd], [], [],
+               [[#include <sys/syscall.h>]])
+
 AS_IF([test "x$rocm_happy" = "xyes"], [uct_modules="${uct_modules}:rocm"])
 uct_rocm_modules=""
 AC_DEFINE_UNQUOTED([uct_rocm_MODULES], ["${uct_rocm_modules}"], [ROCM loadable modules])

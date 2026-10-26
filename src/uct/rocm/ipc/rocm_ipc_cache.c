@@ -101,20 +101,38 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
     hsa_agent_t *gpu_agents;
     hsa_status_t status;
     void *va     = NULL;
+    int local_fd = -1;
     int num_gpu, i;
-    int pidfd       = syscall(__NR_pidfd_open, key->pid, 0);
-    int local_fd    = (pidfd >= 0) ?
-                      syscall(__NR_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
-    int saved_errno = errno; /* capture before close(pidfd) clobbers errno */
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    int pidfd;
+    int saved_errno;
+
+    /* key->pid is meaningful only in the sender's PID namespace; a peer in a
+     * different namespace would resolve to an unrelated local process. */
+    if (key->pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
+        ucs_debug("cannot import vmm fd: sender pid %d is in a different pid "
+                  "namespace (remote=%u local=%u)", key->pid, key->pid_ns,
+                  ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
+        return NULL;
+    }
+
+    pidfd    = syscall(SYS_pidfd_open, key->pid, 0);
+    local_fd = (pidfd >= 0) ?
+               syscall(SYS_pidfd_getfd, pidfd, key->vmm.fd, 0) : -1;
+    saved_errno = errno; /* capture before close(pidfd) clobbers errno */
     if (pidfd >= 0) {
         close(pidfd);
     }
     if (local_fd < 0) {
         errno = saved_errno;
-        ucs_error("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
+        ucs_debug("failed to dup vmm dmabuf fd from pid %d fd %d: %m",
                   key->pid, key->vmm.fd);
         return NULL;
     }
+#else
+    ucs_debug("cannot import vmm dmabuf fd: SYS_pidfd_getfd is not available");
+    return NULL;
+#endif
 
     status = hsa_amd_vmem_import_shareable_handle(local_fd, &vmem_handle);
     close(local_fd);
