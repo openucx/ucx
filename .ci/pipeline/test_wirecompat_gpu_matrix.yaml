@@ -1,0 +1,177 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-wirecompat-gpu
+
+failFast: false
+timeout_minutes: 150
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 2Gi, cpu: 1000m}"
+  requests: "{memory: 2Gi, cpu: 1000m}"
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+
+env:
+  UCX_REPO: "https://github.com/openucx/ucx.git"
+  # Same image as the Azure centos7_cuda11 container.
+  DOCKER_IMAGE: "harbor.mellanox.com#ucx/centos7-mofed5.4-cuda11:1"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_GRES: "gpu:1"
+  SLURM_HEAD_NODE: scctl
+  SLURM_JOB_TIMEOUT: '02:15:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  CI_IMAGE_TAG: "20260223-1"
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+
+matrix:
+  axes:
+    arch:
+      - x86_64
+
+taskName: '${arch}/gpu'
+
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
+      # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      # Without a GPU gres the node's GPU is hidden from the job.
+      extraArgs: ["--gres=${SLURM_GRES}"]
+
+  # All steps share one named container, so the checkout persists.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 15
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: "mkdir -p /ws && cd /ws && git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
+
+  - name: Build ucx artifact
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; cd /ws; nvidia-smi -L | grep GPU;
+        ./autogen.sh;
+        ./contrib/configure-release --enable-assertions --without-java --without-go --prefix=/ws/ucx-install-current;
+        make -s -j 32; make install
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+  # Tags run in turn in one allocation to keep funk usage at one node.
+  - name: Test wire compatibility
+    containerSelector: "{name: 'build_helper_ucx'}"
+    timeout: 90
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      testScript: >-
+        cd /ws; source .ci/scripts/cap_output.sh; source buildlib/az-helpers.sh; failed="";
+        for ucx_tag in v1.15.x v1.16.x v1.17.x v1.18.x; do
+        (
+        set -eEx;
+        ucx_dir=/ws/ucx_$ucx_tag;
+        export UCX_LEGACY_LIB_PATH=$ucx_dir/lib;
+        git_clone_with_retry $ucx_tag $ucx_dir 1;
+        cd $ucx_dir; ./autogen.sh;
+        ./contrib/configure-release --enable-assertions --prefix=$ucx_dir --without-java --without-go;
+        make -s -j 32; make install;
+        cd examples;
+        gcc -I$ucx_dir/include -L$ucx_dir/lib -o client_server ucp_client_server.c -lm -lucs -lucp;
+        gcc -I$ucx_dir/include -L$ucx_dir/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp;
+        cd /ws;
+        UCX_PR_PATH=/ws/ucx-install-current UCX_LEGACY_PATH=$ucx_dir buildlib/tools/check_tls_perf_caps.sh;
+        WIRE_COMPAT_STAGE_ID=1 timeout 2m buildlib/tools/test_wire_compat.sh $ucx_dir/examples/client_server -a "-c tag";
+        WIRE_COMPAT_STAGE_ID=2 timeout 2m buildlib/tools/test_wire_compat.sh $ucx_dir/examples/ucp_hworld -n;
+        UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=3 timeout 2m buildlib/tools/test_wire_compat.sh $ucx_dir/examples/client_server -a "-c tag";
+        UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=4 timeout 2m buildlib/tools/test_wire_compat.sh $ucx_dir/examples/ucp_hworld -n
+        );
+        [ $? -eq 0 ] || failed="$failed $ucx_tag";
+        done;
+        if [ -n "$failed" ]; then echo "Wire compatibility failed with UCX:$failed"; exit 1; fi
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
+      slurmEnv: [
+        "NVIDIA_VISIBLE_DEVICES=all",
+        "AZP_AGENT_ID=0",
+        "UCX_PR_LIB_PATH=/ws/ucx-install-current/lib",
+        "BUILD_REPOSITORY_URI=${UCX_REPO}"
+      ]
+
+  # Frees the node once the row passes; pipeline_stop covers failed rows.
+  - name: Release Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: stop
+    args:
+      headNode: "${SLURM_HEAD_NODE}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"
