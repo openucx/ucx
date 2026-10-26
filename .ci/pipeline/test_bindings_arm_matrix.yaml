@@ -9,7 +9,7 @@ job: ucx-test-bindings-arm
 
 failFast: false
 # Covers the allocation wait plus the step timeouts.
-timeout_minutes: 240
+timeout_minutes: 270
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -36,8 +36,8 @@ env:
   SLURM_MINCPUS: 24
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
-  # Checkout and the five JUCX step timeouts plus slack.
-  SLURM_JOB_TIMEOUT: '03:00:00'
+  # Image sync, checkout and the five JUCX step timeouts plus slack.
+  SLURM_JOB_TIMEOUT: '03:30:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
@@ -94,6 +94,23 @@ steps:
         "--mem=${SLURM_MEM}",
         "--mincpus=${SLURM_MINCPUS}"
       ]
+
+  # Pulls the image outside the timed checkout and test steps.
+  - name: Sync Container Image
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      testScript: "hostname; nvidia-smi -L || echo no-gpu-visible; df -h /"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
 
   # All steps share the container, so later steps find the checkout and JDK 11.
   - name: Checkout

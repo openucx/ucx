@@ -8,8 +8,8 @@
 job: ucx-test-dl-gpu
 
 failFast: false
-# Covers the allocation wait plus the checkout and test step timeouts.
-timeout_minutes: 270
+# Covers the allocation wait plus the image sync, checkout and test step timeouts.
+timeout_minutes: 300
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -47,8 +47,8 @@ env:
   SLURM_MINCPUS: 24
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
-  # Checkout and test step timeouts plus slack.
-  SLURM_JOB_TIMEOUT: '03:20:00'
+  # Image sync, checkout and test step timeouts plus slack.
+  SLURM_JOB_TIMEOUT: '03:50:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
@@ -108,6 +108,23 @@ steps:
         "--mem=${SLURM_MEM}",
         "--mincpus=${SLURM_MINCPUS}"
       ]
+
+  # Pulls the image outside the timed checkout and test steps.
+  - name: Sync Container Image
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: 30
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      testScript: "hostname; nvidia-smi -L || echo no-gpu-visible; df -h /"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w${worker}"
 
   # Checkout and Test share a container name, so pyxis reuses the container
   # and the test step finds the checkout in place.
