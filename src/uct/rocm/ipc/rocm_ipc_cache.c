@@ -174,7 +174,7 @@ err_release_handle:
     hsa_amd_vmem_handle_release(vmem_handle);
     ucs_error("failed to map vmm handle. addr:%p len:%lu",
               (void *)key->address, key->length);
-    return NULL; /* unreachable */
+    return NULL;
 }
 #endif
 
@@ -184,8 +184,19 @@ static void uct_rocm_ipc_cache_region_detach(uct_rocm_ipc_cache_region_t *region
 
 #ifdef HAVE_ROCM_VMM_TYPE
     if (region->key.is_vmm) {
-        hsa_amd_vmem_unmap(region->mapped_addr, region->key.length);
-        hsa_amd_vmem_address_free(region->mapped_addr, region->key.length);
+        hsa_status = hsa_amd_vmem_unmap(region->mapped_addr,
+                                        region->key.length);
+        if (hsa_status != HSA_STATUS_SUCCESS) {
+            ucs_warn("failed to unmap vmm addr:%p hsa_status:%d",
+                     region->mapped_addr, hsa_status);
+        }
+
+        hsa_status = hsa_amd_vmem_address_free(region->mapped_addr,
+                                               region->key.length);
+        if (hsa_status != HSA_STATUS_SUCCESS) {
+            ucs_warn("failed to free vmm addr:%p hsa_status:%d",
+                     region->mapped_addr, hsa_status);
+        }
         return;
     }
 #endif
