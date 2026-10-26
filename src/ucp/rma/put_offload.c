@@ -454,6 +454,84 @@ ucp_proto_put_sgl_offload_send_frag(ucp_request_t *req,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_sgl_offload_send_affine(ucp_request_t *req,
+                                      const ucp_proto_multi_lane_priv_t *lpriv,
+                                      size_t max_frag_length,
+                                      ucp_datatype_iter_t *next_iter)
+{
+    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    size_t max_count = ucs_min(
+            lpriv->max_sgl_zcopy_count,
+            ucp_proto_multi_scaled_length(
+                    lpriv->weight,
+                    dt_iter->type.sgl.flat_count));
+    size_t ptr_bytes = max_count * sizeof(void*);
+    size_t size_bytes = max_count * sizeof(size_t);
+    size_t addr_bytes = max_count * sizeof(uint64_t);
+    size_t memh_bytes = max_count * sizeof(uct_mem_h);
+    size_t rkey_bytes = max_count * sizeof(uct_rkey_t);
+    ucp_rsc_index_t md_index   = lpriv->super.md_index;
+    ucp_rsc_index_t rkey_index = lpriv->super.rkey_index;
+    ucp_mem_h *sgl_memhs       = dt_iter->type.sgl.memhs;
+    ucp_rkey_h const *sgl_rkeys = req->send.rma.sgl.rkeys;
+    void **buffers             = ucs_alloc_on_stack(ptr_bytes, "sgl_buffers");
+    size_t *lengths            = ucs_alloc_on_stack(size_bytes, "sgl_lengths");
+    uint64_t *remote_addrs     = ucs_alloc_on_stack(addr_bytes, "sgl_addrs");
+    size_t *elem_indices       = ucs_alloc_on_stack(size_bytes, "sgl_indices");
+    uct_mem_h *uct_memhs       = ucs_alloc_on_stack(memh_bytes, "sgl_memhs");
+    uct_rkey_t *uct_rkeys      = ucs_alloc_on_stack(rkey_bytes, "sgl_rkeys");
+    ucs_status_t status;
+    size_t count, i, index;
+
+    if ((buffers == NULL) || (lengths == NULL) || (remote_addrs == NULL) ||
+        (elem_indices == NULL) || (uct_memhs == NULL) || (uct_rkeys == NULL)) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    count = ucp_datatype_iter_next_sgl_frags(
+            dt_iter, req->send.rma.sgl.remote_addrs, max_count,
+            max_frag_length, next_iter, buffers, lengths, remote_addrs,
+            elem_indices);
+    if (count == 0) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    for (i = 0; i < count; ++i) {
+        index        = elem_indices[i];
+        uct_memhs[i] = (sgl_memhs != NULL) ?
+                       ucp_datatype_iter_uct_memh(sgl_memhs[index], md_index) :
+                       UCT_MEM_HANDLE_NULL;
+        uct_rkeys[i] = ucp_rkey_get_tl_rkey(sgl_rkeys[index], rkey_index);
+    }
+
+    status = ucp_proto_put_sgl_offload_post(req, lpriv, buffers, lengths,
+                                            uct_memhs, remote_addrs, uct_rkeys,
+                                            count);
+out:
+    if (uct_rkeys != NULL) {
+        ucs_free_on_stack(uct_rkeys, rkey_bytes);
+    }
+    if (uct_memhs != NULL) {
+        ucs_free_on_stack(uct_memhs, memh_bytes);
+    }
+    if (elem_indices != NULL) {
+        ucs_free_on_stack(elem_indices, size_bytes);
+    }
+    if (remote_addrs != NULL) {
+        ucs_free_on_stack(remote_addrs, addr_bytes);
+    }
+    if (lengths != NULL) {
+        ucs_free_on_stack(lengths, size_bytes);
+    }
+    if (buffers != NULL) {
+        ucs_free_on_stack(buffers, ptr_bytes);
+    }
+    return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                     const ucp_proto_multi_lane_priv_t *lpriv,
                                     ucp_datatype_iter_t *next_iter,
@@ -485,6 +563,11 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     /* Silence compiler warning, in case of an early return below */
     next_iter->offset               = start_index;
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
+
+    if (ucs_unlikely(dt_iter->type.sgl.counts != NULL)) {
+        return ucp_proto_put_sgl_offload_send_affine(
+                req, lpriv, max_frag_length, next_iter);
+    }
 
     if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||
                      !ucp_proto_put_sgl_elem_fits(lengths[start_index],

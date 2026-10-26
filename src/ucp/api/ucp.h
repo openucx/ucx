@@ -933,7 +933,8 @@ enum ucp_dt_local_sgl_field {
 enum ucp_dt_remote_sgl_field {
     UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS = UCS_BIT(0), /**< remote_addrs array is valid */
     UCP_DT_REMOTE_SGL_FIELD_LENGTHS      = UCS_BIT(1), /**< lengths array is valid */
-    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2)  /**< rkeys array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2), /**< rkeys valid */
+    UCP_DT_REMOTE_SGL_FIELD_STRIDES      = UCS_BIT(3)  /**< strides valid */
 };
 
 
@@ -950,6 +951,10 @@ enum ucp_dt_remote_sgl_field {
  * of @a lengths[i] bytes, each separated by @a strides[i] bytes, starting
  * at @a buffers[i]. When @a counts and @a strides are not set, each
  * element is transferred once (equivalent to count=1, stride=0).
+ * For a repeated PUT element, the local counts and strides and the matching
+ * remote strides must all be set. Counts must be positive; for a count greater
+ * than one, both strides must be at least the element length. The local memory
+ * handle must cover the full strided span.
  *
  * The descriptor @ref ucp_dt_local_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
@@ -984,11 +989,15 @@ typedef struct {
  * This structure describes per-element remote addresses, lengths, and keys.
  * Element @a i targets remote address @a remote_addrs[i] using key
  * @a rkeys[i].
+ * When the matching local element has a repetition count, @a strides[i]
+ * gives the byte distance between successive remote blocks. Local and remote
+ * strides may differ; both sides use the local element's repetition count.
+ * The remote key must cover the full strided span.
  *
  * The descriptor @ref ucp_dt_remote_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
- * @a remote_addrs, @a lengths, and @a rkeys are not copied and must remain
- * valid until the data transfer request is completed.
+ * @a remote_addrs, @a lengths, @a rkeys, and @a strides are not copied and
+ * must remain valid until the data transfer request is completed.
  *
  * Pass via @ref ucp_request_param_t::remote with
  * @ref ucp_request_param_t::remote_datatype set to @ref ucp_dt_make_sgl().
@@ -999,6 +1008,7 @@ typedef struct {
     const uint64_t   *remote_addrs; /**< Array of remote memory addresses */
     const size_t     *lengths;      /**< Array of transfer lengths in bytes */
     ucp_rkey_h const *rkeys;        /**< Array of remote memory keys */
+    const size_t     *strides;      /**< Remote stride per repeated block */
 } ucp_dt_remote_sgl_t;
 
 
