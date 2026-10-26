@@ -39,8 +39,13 @@ def pipelineOverviewUrl = "${env.BUILD_URL}pipeline-overview/"
 githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHubCommitState.PENDING)
 currentBuild.description = githubHelper.getBuildDescription()
 
-def jobs = [
+// Basic compile gates every job but codestyle, as on Azure: a PR that does
+// not build must not take GPU, BlueField or Slurm slots.
+def gateJob = 'ucx-basic-compile-oss'
+def gateFreeJobs = [
   'ucx-codestyle-oss',
+]
+def jobs = [
   'ucx-static-checks-oss',
   'ucx-coverity-oss',
   'ucx-build-oss',
@@ -50,16 +55,29 @@ def jobs = [
   'ucx-test-dl-gpu-oss',
 ]
 
+def runJob = { jobName ->
+  build job: jobName, parameters: [
+    string(name: 'sha1', value: sha),
+    string(name: 'githubData', value: VARIABLE_FROM_POST),
+  ], propagate: false, wait: true
+}
+
 try {
+  def gate = null
+  def gateStage = [("UCX-OSS/${gateJob}".toString()): { gate = runJob("UCX-OSS/${gateJob}") }]
+  for (def j in gateFreeJobs) {
+    def jobName = "UCX-OSS/${j}"
+    gateStage[jobName] = { runJob(jobName) }
+  }
+  parallel gateStage
+  if (gate.result != 'SUCCESS') {
+    error("Basic compile ${gate.result}, skipping the other jobs: ${gate.absoluteUrl}")
+  }
+
   def fanout = [:]
   for (def j in jobs) {
     def jobName = "UCX-OSS/${j}"
-    fanout[jobName] = {
-      build job: jobName, parameters: [
-        string(name: 'sha1', value: sha),
-        string(name: 'githubData', value: VARIABLE_FROM_POST),
-      ], propagate: false, wait: true
-    }
+    fanout[jobName] = { runJob(jobName) }
   }
   parallel fanout
   githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI passed", GitHubCommitState.SUCCESS)
