@@ -913,7 +913,6 @@ protected:
     static ucs::mock        *m_probe_mock;
     static unsigned          m_probe_count;
 
-    void run_recovery_probe_failure_live_lanes();
     void run_initiator_failure();
     void run_target_failure();
     void run_probe_gated_recovery();
@@ -942,31 +941,6 @@ public:
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
     }
 };
-
-void test_ucp_fault_tolerance::run_recovery_probe_failure_live_lanes()
-{
-    skip_unless_rc_probe_gate();
-
-    ucs::mock mock;
-    mock_recovery_probe(sender().worker(), mock, recovery_probe_fail);
-
-    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_AM);
-
-    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    if ((ucp_ep_get_failed_lanes(ep) & ucp_ep_config(ep)->p2p_lanes) == 0) {
-        UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
-    }
-
-    wait_for_flag(&m_probe_count);
-
-    EXPECT_NE(0u, m_probe_count);
-    ASSERT_NE(nullptr, ep->ext->recovery_arg);
-    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep) & ucp_ep_config(ep)->p2p_lanes);
-
-    EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true))
-            << "data did not flow on live lanes during recovery";
-    EXPECT_EQ(0, total_err_count());
-}
 
 class test_ucp_flush_lane_recovery : public test_ucp_fault_tolerance {
 public:
@@ -1296,7 +1270,14 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
         UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
     }
 
+    wait_for_flag(&m_probe_count);
     ASSERT_NE(nullptr, ep->ext->recovery_arg);
+    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep) & ucp_ep_config(ep)->p2p_lanes);
+    EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true));
+    ASSERT_NE(nullptr, ep->ext->recovery_arg);
+
+    /* Expedite give-up after checking data flow during recovery. */
+    ep->ext->recovery_arg->retries_left = 1;
     wait_for_cond([ep]() {
         return ep->ext->recovery_arg == NULL;
     }, [this]() {
@@ -1320,9 +1301,6 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
     }
 
 #define UCP_FT_TESTS(_fixture) \
-    UCP_FT_TEST(_fixture, recovery_probe_failure_live_lanes, \
-                "MAX_EAGER_LANES=8", \
-                "RECOVERY_RETRIES=100") \
     UCP_FT_TEST(_fixture, initiator_failure, "MAX_EAGER_LANES=8", \
                 "RECOVERY_RETRIES=100") \
     UCP_FT_TEST(_fixture, target_failure, "MAX_EAGER_LANES=8", \
@@ -1335,7 +1313,7 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
                 "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000", \
                 "KEEPALIVE_INTERVAL=0.1s") \
     UCP_FT_TEST(_fixture, recovery_retries_exhausted_live_lanes, \
-                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000", \
                 "KEEPALIVE_INTERVAL=0.1s")
 
 UCP_FT_TESTS(test_ucp_fault_tolerance)
