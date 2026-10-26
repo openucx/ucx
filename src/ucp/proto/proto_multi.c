@@ -720,7 +720,8 @@ static void ucp_proto_multi_limit_iface_bandwidth(
         iface_weight    = 0;
 
         ucs_for_each_bit(iface_lane, lane_map) {
-            if (ucp_proto_common_get_rsc_index(params, iface_lane) != rsc_index) {
+            if (ucp_proto_common_get_rsc_index(params, iface_lane) !=
+                rsc_index) {
                 continue;
             }
 
@@ -756,6 +757,7 @@ ucp_proto_multi_aggregate_perf(const ucp_proto_multi_init_params_t *params,
     perf->send_pre_overhead  = 0;
     perf->send_post_overhead = 0;
     perf->recv_overhead      = 0;
+    perf->flags              = 0;
     perf->latency            = 0;
     perf->sys_latency        = 0;
     perf->min_length         = 0;

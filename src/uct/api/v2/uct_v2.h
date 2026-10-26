@@ -115,7 +115,7 @@ typedef enum {
     /** Paths share the interface bandwidth reported in
      * @ref uct_perf_attr_t::bandwidth. Limit their aggregate bandwidth to this
      * value while preserving the selected traffic distribution. */
-    UCT_PERF_ATTR_FLAGS_SHARED_PATH_BANDWIDTH = UCS_BIT(2)
+    UCT_PERF_ATTR_FLAGS_SHARED_PATH_BANDWIDTH = UCS_BIT(1)
 } uct_perf_attr_flags_t;
 
 /**
