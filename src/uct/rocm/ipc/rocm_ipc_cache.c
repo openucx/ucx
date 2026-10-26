@@ -121,7 +121,8 @@ static void uct_rocm_ipc_export_reap(void)
     ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_retired, list) {
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
-        uct_rocm_ipc_export_retired_count--;
+        __atomic_fetch_sub(&uct_rocm_ipc_export_retired_count, 1,
+                           __ATOMIC_RELAXED);
     }
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
 
@@ -157,7 +158,8 @@ static void uct_rocm_ipc_export_mem_free_cb(ucm_event_type_t event_type,
         hsa_signal_store_screlease(exp->signal, 0);
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&uct_rocm_ipc_export_retired, &exp->list);
-        uct_rocm_ipc_export_retired_count++;
+        __atomic_fetch_add(&uct_rocm_ipc_export_retired_count, 1,
+                           __ATOMIC_RELAXED);
         ucs_debug("rocm ipc signal export %p length %zu", (void*)exp->address,
                   exp->length);
     }
@@ -223,8 +225,8 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
 
 void uct_rocm_ipc_export_progress(void)
 {
-    /* Writers hold the export lock. A stale zero only delays reaping. */
-    if (ucs_likely(uct_rocm_ipc_export_retired_count == 0)) {
+    if (ucs_likely(__atomic_load_n(&uct_rocm_ipc_export_retired_count,
+                                   __ATOMIC_RELAXED) == 0)) {
         return;
     }
 
@@ -251,7 +253,8 @@ static void uct_rocm_ipc_export_cleanup(void)
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
     }
-    uct_rocm_ipc_export_retired_count = 0;
+    __atomic_store_n(&uct_rocm_ipc_export_retired_count, 0,
+                     __ATOMIC_RELAXED);
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
 
     ucs_list_for_each_safe(exp, tmp, &destroy_list, list) {
@@ -291,7 +294,7 @@ uct_rocm_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
 static void
 uct_rocm_ipc_cache_region_unref(uct_rocm_ipc_cache_region_t *region)
 {
-    if (ucs_atomic_fadd32(&region->refcount, (uint32_t)-1) == 1) {
+    if (ucs_atomic_fsub32(&region->refcount, 1) == 1) {
         ucs_free(region);
     }
 }
@@ -467,6 +470,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     ucs_pgt_region_t *pgt_region;
     uct_rocm_ipc_cache_region_t *region;
     hsa_signal_t local_signal = {.handle = 0};
+    hsa_signal_value_t signal_value;
     hsa_status_t hsa_status;
     int ret;
 
@@ -480,19 +484,27 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_rocm_ipc_cache_region_t);
         if (memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0) {
-            ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
-                      UCS_PGT_REGION_FMT,
-                      cache->name, (void*)key->address, key->length,
-                      UCS_PGT_REGION_ARG(&region->super));
+            signal_value = hsa_signal_load_scacquire(region->signal);
+            if (signal_value > 0) {
+                ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
+                          UCS_PGT_REGION_FMT,
+                          cache->name, (void*)key->address, key->length,
+                          UCS_PGT_REGION_ARG(&region->super));
 
-            *mapped_addr = region->mapped_addr;
-            return UCS_OK;
+                *mapped_addr = region->mapped_addr;
+                return UCS_OK;
+            }
+
+            ucs_trace("%s: rocm_ipc cache remove invalidated region:"
+                      UCS_PGT_REGION_FMT,
+                      cache->name, UCS_PGT_REGION_ARG(&region->super));
+        } else {
+            ucs_trace("%s: rocm_ipc cache remove stale region:"
+                      UCS_PGT_REGION_FMT " new_addr:%p new_size:%lu",
+                      cache->name, UCS_PGT_REGION_ARG(&region->super),
+                      (void*)key->address, key->length);
         }
 
-        ucs_trace("%s: rocm_ipc cache remove stale region:" UCS_PGT_REGION_FMT
-                  " new_addr:%p new_size:%lu",
-                  cache->name, UCS_PGT_REGION_ARG(&region->super),
-                  (void*)key->address, key->length);
         if (!uct_rocm_ipc_cache_region_drop_locked(region, deferred)) {
             status = UCS_ERR_IO_ERROR;
             goto err;
@@ -525,8 +537,8 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
                                            mapped_addr);
     if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
-        ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu",
-                  cache->name, (void*)key->address, key->length);
+        ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu hsa_status:%d",
+                  cache->name, (void*)key->address, key->length, hsa_status);
         status = UCS_ERR_INVALID_ADDR;
         goto err_destroy_signal;
     }
