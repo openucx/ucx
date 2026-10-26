@@ -100,6 +100,116 @@ UCS_TEST_F(test_rc_extension, bandwidth_query)
     ASSERT_UCS_OK(uct_rc_mlx5_base_ep_query(tl_ep, &attr));
     EXPECT_EQ(bandwidth, attr.bandwidth);
 }
+
+class test_rc_extension_transport : public uct_test {
+protected:
+    struct provider_guard {
+        uct_rc_mlx5_ext_ops_t ops = {};
+
+        provider_guard()
+        {
+            ops.struct_size = sizeof(ops);
+            ops.api_version = UCT_RC_MLX5_EXT_API_VERSION;
+            ops.name        = "test";
+        }
+
+        ~provider_guard()
+        {
+            uct_rc_mlx5_ext_unregister(&ops);
+        }
+    };
+
+    struct completion {
+        uct_rc_iface_send_op_with_info_t op;
+        uint64_t                         field_mask;
+        bool                             completed;
+    };
+
+    static void completion_cb(
+            uct_rc_iface_send_op_t *send_op,
+            const uct_rc_send_op_completion_info_t *info)
+    {
+        completion *comp = reinterpret_cast<completion*>(send_op);
+
+        comp->field_mask = (info == NULL) ? 0 : info->field_mask;
+        comp->completed  = true;
+    }
+
+    static unsigned progress_cb(uct_iface_h, void *ctx)
+    {
+        if (ctx != NULL) {
+            ++*static_cast<unsigned*>(ctx);
+        }
+
+        return 0;
+    }
+
+    static ucs_status_t reject_connect(uct_ep_h, void*, const void*, size_t)
+    {
+        return UCS_ERR_UNREACHABLE;
+    }
+};
+
+UCS_TEST_P(test_rc_extension_transport, progress_without_timestamps)
+{
+    completion comp         = {};
+    unsigned progress_calls = 0;
+    provider_guard provider;
+
+    provider.ops.progress = progress_cb;
+    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&provider.ops));
+    std::unique_ptr<entity> e(create_entity(0));
+    auto iface = ucs_derived_of(e->iface(), uct_rc_mlx5_iface_common_t);
+    iface->ext_ctx = &progress_calls;
+    e->connect(0, *e, 0);
+
+    mapped_buffer source(8, 0ul, *e);
+    mapped_buffer target(8, 0ul, *e);
+    auto ep = ucs_derived_of(e->ep(0), uct_rc_mlx5_ep_t);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, source.ptr(), source.length(),
+                            source.memh(), 1);
+
+    /* Observe the same WQE's completion without requesting a timestamp CQ. */
+    uct_rc_ep_init_send_op_with_info(&comp.op, 0, completion_cb, 0);
+    uct_rc_txqp_add_send_op_sn(&ep->super.super.txqp, &comp.op.super,
+                               ep->super.tx.wq.sw_pi);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(
+            e->ep(0), iov, iovcnt, target.addr(), target.rkey(), NULL));
+    e->flush();
+    EXPECT_TRUE(comp.completed);
+    EXPECT_EQ(0ul, comp.field_mask);
+    EXPECT_GT(progress_calls, 0u);
+}
+
+UCS_TEST_P(test_rc_extension_transport, failed_provider_not_connected)
+{
+    provider_guard provider;
+
+    provider.ops.ep_connect = reject_connect;
+    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&provider.ops));
+    std::unique_ptr<entity> e(create_entity(0));
+    e->create_ep(0);
+    std::vector<char> device_addr(e->iface_attr().device_addr_len);
+    std::vector<char> ep_addr(e->iface_attr().ep_addr_len);
+    auto device_addr_p = reinterpret_cast<uct_device_addr_t*>(
+            device_addr.data());
+    auto ep_addr_p = reinterpret_cast<uct_ep_addr_t*>(ep_addr.data());
+    uct_ep_connect_to_ep_params_t params = {};
+
+    ASSERT_UCS_OK(uct_iface_get_device_address(e->iface(), device_addr_p));
+    ASSERT_UCS_OK(uct_ep_get_address(e->ep(0), ep_addr_p));
+    params.field_mask = UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH |
+                        UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH;
+    params.device_addr_length = device_addr.size();
+    params.ep_addr_length     = ep_addr.size();
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              uct_ep_connect_to_ep_v2(e->ep(0), device_addr_p, ep_addr_p,
+                                      &params));
+    auto ep = ucs_derived_of(e->ep(0), uct_rc_mlx5_ep_t);
+    EXPECT_FALSE(ep->super.super.flags & UCT_RC_EP_FLAG_CONNECTED);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_extension_transport, rc_mlx5)
 #endif
 
 class test_rc_sgl_api : public ucs::test {

@@ -119,7 +119,12 @@ uct_rc_mlx5_iface_progress(void *arg, int flags)
     }
 
     if (uct_rc_iface_poll_tx(&iface->super, count)) {
-        count += uct_rc_mlx5_iface_poll_tx_with_info(iface, flags);
+        if (iface->ext_ops->requirements &
+            UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP) {
+            count += uct_rc_mlx5_iface_poll_tx_with_info(iface, flags);
+        } else {
+            count += uct_rc_mlx5_iface_poll_tx(iface, flags);
+        }
     }
 
     if (iface->ext_ops->progress != NULL) {

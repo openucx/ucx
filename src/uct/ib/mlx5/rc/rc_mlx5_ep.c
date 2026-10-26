@@ -359,7 +359,8 @@ ucs_status_t uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
     uct_rc_mlx5_sgl_checkpoint_t *checkpoint;
     size_t max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
     unsigned num_checkpoints = 0, checkpoint_index = 0;
-    size_t i, total;
+    size_t i;
+    size_t UCS_V_UNUSED total;
     ucs_status_t status;
     uint8_t fence_flag;
     int fence;
@@ -2426,7 +2427,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(
             rc_addr->atomic_mr_id);
-    ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
     /* Legacy connect has no remote length and requires symmetric providers. */
     addr_length = UCS_PARAM_VALUE(
@@ -2434,7 +2434,11 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
             EP_ADDR_LENGTH, uct_rc_mlx5_iface_get_ep_address_len(iface));
     if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
         ep->super.super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
-        return (iface->ext_ops == NULL) ? UCS_OK : UCS_ERR_UNREACHABLE;
+        if (iface->ext_ops != NULL) {
+            return UCS_ERR_UNREACHABLE;
+        }
+
+        goto out_connected;
     }
 
     ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
@@ -2492,6 +2496,8 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         return UCS_ERR_UNREACHABLE;
     }
 
+out_connected:
+    ep->super.super.flags |= UCT_RC_EP_FLAG_CONNECTED;
     return UCS_OK;
 }
 
