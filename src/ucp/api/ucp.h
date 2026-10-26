@@ -951,6 +951,10 @@ enum ucp_dt_remote_sgl_field {
  * of @a lengths[i] bytes, each separated by @a strides[i] bytes, starting
  * at @a buffers[i]. When @a counts and @a strides are not set, each
  * element is transferred once (equivalent to count=1, stride=0).
+ * For a repeated PUT element, the local counts and strides and the matching
+ * remote strides must all be set. Counts must be positive; for a count greater
+ * than one, both strides must be at least the element length. The local memory
+ * handle must cover the full strided span.
  *
  * The descriptor @ref ucp_dt_local_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays
@@ -988,6 +992,7 @@ typedef struct {
  * When the matching local element has a repetition count, @a strides[i]
  * gives the byte distance between successive remote blocks. Local and remote
  * strides may differ; both sides use the local element's repetition count.
+ * The remote key must cover the full strided span.
  *
  * The descriptor @ref ucp_dt_remote_sgl_t itself is copied by the library,
  * so the caller may release it after the call returns. However, the arrays

@@ -418,31 +418,43 @@ ucs_status_t ucp_datatype_iter_sgl_mem_reg(ucp_context_h context,
         }
     }
 
-    for (i = 0; i < count; ++i) {
-        size_t length = dt_iter->type.sgl.lengths[i];
-        if (dt_iter->type.sgl.counts != NULL) {
-            length += (dt_iter->type.sgl.counts[i] - 1) *
-                      dt_iter->type.sgl.strides[i];
-        }
-        status = ucp_datatype_iter_mem_reg_single(
-                context, dt_iter->type.sgl.buffers[i],
-                length, dt_iter->mem_info.type,
-                md_map, uct_flags, &memhs[i]);
-        if (status != UCS_OK) {
-            if (dt_iter->type.sgl.memhs == NULL) {
-                /* Roll back only handles we own */
-                while (i-- > 0) {
-                    ucp_datatype_iter_mem_dereg_single(&memhs[i]);
-                }
-                ucs_free(memhs);
+    if (dt_iter->type.sgl.counts == NULL) {
+        for (i = 0; i < count; ++i) {
+            status = ucp_datatype_iter_mem_reg_single(
+                    context, dt_iter->type.sgl.buffers[i],
+                    dt_iter->type.sgl.lengths[i], dt_iter->mem_info.type,
+                    md_map, uct_flags, &memhs[i]);
+            if (status != UCS_OK) {
+                goto err;
             }
-
-            return status;
+        }
+    } else {
+        for (i = 0; i < count; ++i) {
+            size_t length = dt_iter->type.sgl.lengths[i] +
+                            (dt_iter->type.sgl.counts[i] - 1) *
+                            dt_iter->type.sgl.strides[i];
+            status = ucp_datatype_iter_mem_reg_single(
+                    context, dt_iter->type.sgl.buffers[i], length,
+                    dt_iter->mem_info.type, md_map, uct_flags, &memhs[i]);
+            if (status != UCS_OK) {
+                goto err;
+            }
         }
     }
 
     dt_iter->type.sgl.memhs = memhs;
     return UCS_OK;
+
+err:
+    if (dt_iter->type.sgl.memhs == NULL) {
+        /* Roll back only handles we own */
+        while (i-- > 0) {
+            ucp_datatype_iter_mem_dereg_single(&memhs[i]);
+        }
+        ucs_free(memhs);
+    }
+
+    return status;
 }
 
 void ucp_datatype_iter_sgl_mem_dereg(ucp_datatype_iter_t *dt_iter)
