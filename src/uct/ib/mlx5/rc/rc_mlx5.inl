@@ -97,6 +97,18 @@ uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_txqp_process_tx_cqe_with_info(
+        uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe, uint16_t hw_ci)
+{
+    uct_rc_send_op_completion_info_t comp_info = {
+        UCT_RC_SEND_OP_COMPLETION_INFO_FIELD_TIMESTAMP,
+        be64toh(cqe->timestamp)
+    };
+
+    uct_rc_txqp_set_completion_info(txqp, hw_ci, &comp_info);
+    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_rx_inline(uct_rc_mlx5_iface_common_t *iface,
                                    uct_ib_iface_recv_desc_t *desc,
@@ -2080,13 +2092,14 @@ uct_rc_mlx5_ep_update_tx_qp_res(uct_rc_mlx5_base_ep_t *ep, uint16_t sw_ci)
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
+static UCS_F_ALWAYS_INLINE int uct_rc_mlx5_iface_poll_tx_start(
+        uct_rc_mlx5_iface_common_t *iface, int poll_flags,
+        struct mlx5_cqe64 **cqe_p, uct_rc_mlx5_base_ep_t **ep_p,
+        uint16_t *hw_ci_p)
 {
     struct mlx5_cqe64 *cqe;
     uct_rc_mlx5_base_ep_t *ep;
     unsigned qp_num;
-    uint16_t hw_ci;
 
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
                               poll_flags, uct_ib_mlx5_check_completion);
@@ -2104,17 +2117,56 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
                             uct_rc_mlx5_base_ep_t);
     ucs_assert(ep != NULL);
 
-    hw_ci = ntohs(cqe->wqe_counter);
+    *hw_ci_p = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface,
-                   ep, qp_num, hw_ci);
+                   ep, qp_num, *hw_ci_p);
+    *cqe_p = cqe;
+    *ep_p  = ep;
+    return 1;
+}
 
-    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
+static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_iface_poll_tx_done(
+        uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_base_ep_t *ep,
+        uint16_t hw_ci)
+{
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     uct_rc_mlx5_ep_update_tx_qp_res(ep, hw_ci);
     uct_rc_mlx5_iface_update_tx_cq_res(&iface->super, ep, hw_ci);
     uct_rc_iface_arbiter_dispatch(&iface->super);
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
+}
 
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
+{
+    uct_rc_mlx5_base_ep_t *ep;
+    struct mlx5_cqe64 *cqe;
+    uint16_t hw_ci;
+
+    if (!uct_rc_mlx5_iface_poll_tx_start(iface, poll_flags, &cqe, &ep,
+                                         &hw_ci)) {
+        return 0;
+    }
+
+    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
+    uct_rc_mlx5_iface_poll_tx_done(iface, ep, hw_ci);
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned uct_rc_mlx5_iface_poll_tx_with_info(
+        uct_rc_mlx5_iface_common_t *iface, int poll_flags)
+{
+    uct_rc_mlx5_base_ep_t *ep;
+    struct mlx5_cqe64 *cqe;
+    uint16_t hw_ci;
+
+    if (!uct_rc_mlx5_iface_poll_tx_start(iface, poll_flags, &cqe, &ep,
+                                         &hw_ci)) {
+        return 0;
+    }
+
+    uct_rc_mlx5_txqp_process_tx_cqe_with_info(&ep->super.txqp, cqe, hw_ci);
+    uct_rc_mlx5_iface_poll_tx_done(iface, ep, hw_ci);
     return 1;
 }
 

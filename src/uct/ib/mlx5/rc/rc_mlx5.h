@@ -87,6 +87,9 @@ typedef struct {
     uct_ib_mlx5_mmio_reg_t        *reg; /* Doorbell register */
 } uct_rc_mlx5_iface_qp_cleanup_ctx_t;
 
+void uct_rc_mlx5_iface_qp_cleanup(
+        uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx);
+
 typedef struct uct_rc_mlx5_base_ep_address {
     uct_ib_uint24_t qp_num;
 } UCS_S_PACKED uct_rc_mlx5_base_ep_address_t;
@@ -120,6 +123,8 @@ struct mlx5_cqe64 *
 uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
                                       uct_ib_mlx5_cq_t *cq,
                                       struct mlx5_cqe64 *cqe, int poll_flags);
+
+unsigned uct_rc_mlx5_iface_progress_tx_with_info(void *arg);
 
 ucs_status_t uct_rc_mlx5_base_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                            unsigned length,

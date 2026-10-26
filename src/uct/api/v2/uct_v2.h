@@ -276,7 +276,10 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::remote_address */
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2)
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_attr::bandwidth */
+    UCT_EP_ATTR_FIELD_BANDWIDTH       = UCS_BIT(3)
 };
 
 
@@ -425,6 +428,15 @@ struct uct_ep_attr {
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
+
+    /**
+     * Latest completed endpoint bandwidth sample, in bytes per second.
+     * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask
+     * and the interface advertises @ref UCT_IFACE_FLAG_EP_QUERY_BW.
+     * A transport may return @ref UCS_ERR_NO_ELEM before the first sample or
+     * @ref UCS_ERR_TIMED_OUT when its latest sample is stale.
+     */
+    double                  bandwidth;
 };
 
 
@@ -1342,9 +1354,9 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  * This routine fetches information about the endpoint.
  *
  * @param [in]  ep         Endpoint to query.
- * @param [out] ep_attr    Filled with endpoint attributes.
+ * @param [in,out] ep_attr Requested fields and returned endpoint attributes.
  *
- * @return Error code.
+ * @return                 Error code returned by the transport.
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 

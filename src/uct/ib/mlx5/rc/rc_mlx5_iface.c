@@ -122,6 +122,15 @@ static unsigned uct_rc_mlx5_iface_progress_cyclic(void *arg)
     return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP);
 }
 
+unsigned uct_rc_mlx5_iface_progress_tx_with_info(void *arg)
+{
+    uct_rc_mlx5_iface_common_t *iface = arg;
+
+    return uct_rc_iface_poll_tx(&iface->super, 0) ?
+           uct_rc_mlx5_iface_poll_tx_with_info(
+                   iface, UCT_IB_MLX5_POLL_FLAG_HAS_EP) : 0;
+}
+
 static unsigned uct_rc_mlx5_iface_progress_cyclic_zip(void *arg)
 {
     return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
@@ -625,7 +634,7 @@ static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
     uct_rc_mlx5_destroy_srq(md, &iface->rx.srq);
 }
 
-static void
+void
 uct_rc_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
 {
     uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx =

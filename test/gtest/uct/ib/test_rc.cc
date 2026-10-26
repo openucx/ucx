@@ -24,6 +24,68 @@ extern "C" {
 }
 #endif
 
+class test_rc_completion_info : public ucs::test {
+protected:
+    struct test_op {
+        uct_rc_iface_send_op_with_info_t op;
+        uint64_t                         field_mask;
+        uint64_t                         timestamp;
+    };
+
+    static void completion_cb(
+            uct_rc_iface_send_op_t *send_op,
+            const uct_rc_send_op_completion_info_t *comp_info)
+    {
+        test_op *op = reinterpret_cast<test_op*>(send_op);
+        op->field_mask = (comp_info == NULL) ? 0 : comp_info->field_mask;
+        op->timestamp  = (comp_info == NULL) ? 0 : comp_info->timestamp;
+    }
+};
+
+UCS_TEST_F(test_rc_completion_info, dispatch)
+{
+    uct_rc_send_op_completion_info_t comp_info = {
+        UCT_RC_SEND_OP_COMPLETION_INFO_FIELD_TIMESTAMP, 0x12345678
+    };
+    uct_rc_txqp_t txqp = {};
+    test_op op = {};
+    ucs_queue_head_init(&txqp.outstanding);
+    uct_rc_ep_init_send_op_with_info(&op.op, 0, completion_cb, 0);
+    uct_rc_txqp_add_send_op_sn(&txqp, &op.op.super, 7);
+    uct_rc_txqp_set_completion_info(&txqp, 7, &comp_info);
+    uct_rc_txqp_completion_desc(&txqp, 7);
+    EXPECT_EQ(comp_info.field_mask, op.field_mask);
+    EXPECT_EQ(comp_info.timestamp, op.timestamp);
+    EXPECT_EQ(NULL, op.op.comp_info);
+}
+
+UCS_TEST_F(test_rc_completion_info, completed_prefix_wraparound)
+{
+    uct_rc_send_op_completion_info_t comp_info = {
+        UCT_RC_SEND_OP_COMPLETION_INFO_FIELD_TIMESTAMP, 0x12345678
+    };
+    const uint16_t sns[] = {UINT16_MAX, 0, 0, 1};
+    uct_rc_txqp_t txqp   = {};
+    test_op ops[4]      = {};
+
+    ucs_queue_head_init(&txqp.outstanding);
+    for (unsigned i = 0; i < ucs_static_array_size(ops); ++i) {
+        uct_rc_ep_init_send_op_with_info(&ops[i].op, 0, completion_cb, 0);
+        uct_rc_txqp_add_send_op_sn(&txqp, &ops[i].op.super, sns[i]);
+    }
+
+    uct_rc_txqp_set_completion_info(&txqp, 0, &comp_info);
+    uct_rc_txqp_completion_desc(&txqp, 0);
+    EXPECT_EQ(0ul, ops[0].field_mask);
+    EXPECT_EQ(comp_info.timestamp, ops[1].timestamp);
+    EXPECT_EQ(comp_info.timestamp, ops[2].timestamp);
+    EXPECT_EQ(NULL, ops[3].op.comp_info);
+    EXPECT_FALSE(ucs_queue_is_empty(&txqp.outstanding));
+
+    uct_rc_txqp_completion_desc(&txqp, 1);
+    EXPECT_EQ(0ul, ops[3].field_mask);
+    EXPECT_TRUE(ucs_queue_is_empty(&txqp.outstanding));
+}
 
 void test_rc::init()
 {

@@ -127,6 +127,24 @@ enum {
 
 typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *resp);
 
+enum {
+    UCT_RC_SEND_OP_COMPLETION_INFO_FIELD_TIMESTAMP = UCS_BIT(0)
+};
+
+/**
+ * Completion metadata for an internal RC send operation.
+ *
+ * The object is valid only for the duration of the completion callback.
+ */
+typedef struct uct_rc_send_op_completion_info {
+    uint64_t field_mask;
+    uint64_t timestamp; /* Raw NIC clock ticks, in host byte order. */
+} uct_rc_send_op_completion_info_t;
+
+typedef void (*uct_rc_send_handler_with_info_t)(
+        uct_rc_iface_send_op_t *op,
+        const uct_rc_send_op_completion_info_t *comp_info);
+
 
 /**
  * RC network header.
@@ -357,6 +375,13 @@ struct uct_rc_iface_send_op {
 #if ENABLE_DEBUG_DATA
     const char                    *name;       /* object ID, debug only */
 #endif
+};
+
+
+struct uct_rc_iface_send_op_with_info {
+    uct_rc_iface_send_op_t            super;
+    uct_rc_send_handler_with_info_t   handler;
+    const uct_rc_send_op_completion_info_t *comp_info;
 };
 
 

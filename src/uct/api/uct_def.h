@@ -901,5 +901,23 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
  */
 typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process endpoint-aware asynchronous events.
+ *
+ * The transport invokes this callback synchronously from the interface worker
+ * asynchronous context. It must not hold locks needed by endpoint query or
+ * destruction while invoking the callback. The callback must not retain the
+ * endpoint after it returns.
+ *
+ * @param [in]  arg      User argument to be passed to the callback.
+ * @param [in]  ep       Endpoint associated with the event. For
+ *                       @ref UCT_EVENT_PATH_SPEED_CHANGE, it must be non-NULL
+ *                       and is valid only for the duration of the callback.
+ * @param [in]  flags    Event flags from @ref uct_iface_event_types.
+ */
+typedef void (*uct_async_ep_event_cb_t)(void *arg, uct_ep_h ep,
+                                        unsigned flags);
+
 
 #endif

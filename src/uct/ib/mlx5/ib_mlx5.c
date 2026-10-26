@@ -137,6 +137,12 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                       uct_ib_mlx5_cq_t *mlx5_cq, int preferred_cpu, size_t inl)
 {
     ucs_status_t status                = UCS_OK;
+#if !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE || \
+    !HAVE_DECL_IBV_WC_EX_WITH_COMPLETION_TIMESTAMP
+    if (init_attr->flags & UCT_IB_CQ_COMPLETION_TIMESTAMP) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
     uct_ib_device_t *dev               = uct_ib_iface_device(iface);
     struct ibv_cq_init_attr_ex cq_attr = {};
@@ -145,6 +151,13 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu,
                         uct_ib_cq_size(iface, init_attr, dir));
+
+    if ((dir == UCT_IB_DIR_TX) &&
+        (init_attr->flags & UCT_IB_CQ_COMPLETION_TIMESTAMP)) {
+#if HAVE_DECL_IBV_WC_EX_WITH_COMPLETION_TIMESTAMP
+        cq_attr.wc_flags |= IBV_WC_EX_WITH_COMPLETION_TIMESTAMP;
+#endif
+    }
 
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);

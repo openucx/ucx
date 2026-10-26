@@ -1213,7 +1213,9 @@ uct_rc_mlx5_iface_common_create_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
 #if HAVE_DEVX
     uct_ib_mlx5_md_t *md              = uct_ib_mlx5_iface_md(ib_iface);
 
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) {
+    if ((md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_CQ) &&
+        !((dir == UCT_IB_DIR_TX) &&
+          (init_attr->flags & UCT_IB_CQ_COMPLETION_TIMESTAMP))) {
         return uct_ib_mlx5_devx_create_cq(ib_iface, dir, init_attr, uct_cq,
                                           preferred_cpu, inl);
     }
