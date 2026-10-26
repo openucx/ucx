@@ -385,6 +385,10 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
     uint8_t fence_flag;
     int fence;
 
+    if (completion->super.count != 0) {
+        return UCS_ERR_BUSY;
+    }
+
     if ((buffers == NULL) || (lengths == NULL) || (memhs == NULL) ||
         (remote_addrs == NULL) || (rkeys == NULL) || (count == 0) ||
         (count > max_count) || (count != completion->count) ||
@@ -392,10 +396,6 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
         (completion->callback == NULL) ||
         !completion->checkpoints[count - 1]) {
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (completion->super.count != 0) {
-        return UCS_ERR_BUSY;
     }
 
     if (!(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED)) {

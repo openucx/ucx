@@ -355,6 +355,7 @@ UCS_TEST_P(test_rc_sgl_completion, checkpoints_consumed_on_post)
     ASSERT_EQ(UCS_INPROGRESS, post(&m_completion.super));
     EXPECT_EQ(2, m_completion.super.count);
     memset(m_checkpoints, 0, sizeof(m_checkpoints));
+    EXPECT_EQ(UCS_ERR_BUSY, post(&m_completion.super));
     m_entity->flush();
     ASSERT_EQ(2u, m_results.size());
     EXPECT_EQ(0u, m_results[0].index);
