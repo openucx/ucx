@@ -216,6 +216,23 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     }
 }
 
+#ifndef NVALGRIND
+/* Allocate op->iov, which keeps the buffer ranges of both IOV and SGL ops so
+ * they can be marked as defined on completion. Returns NULL if not running
+ * under Valgrind (nothing to save), or if the allocation failed. */
+static struct iovec *uct_rc_ep_send_op_alloc_iovec(uct_rc_iface_send_op_t *op,
+                                                   size_t count,
+                                                   const char *name)
+{
+    if (!RUNNING_ON_VALGRIND) {
+        return NULL;
+    }
+
+    op->iov = ucs_malloc(sizeof(*op->iov) * count, name);
+    return op->iov;
+}
+#endif
+
 void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
                                size_t iovcnt)
 {
@@ -223,17 +240,33 @@ void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
     size_t op_iovcnt = iovcnt;
     ucs_iov_iter_t iov_iter;
 
-    if (!RUNNING_ON_VALGRIND) {
-        return;
-    }
-
-    op->iov = ucs_malloc(sizeof(*op->iov) * iovcnt, "rc_get_zcopy_iov");
-    if (op->iov == NULL) {
+    if (uct_rc_ep_send_op_alloc_iovec(op, iovcnt, "rc_get_zcopy_iov") == NULL) {
         return;
     }
 
     ucs_iov_iter_init(&iov_iter);
     uct_iov_to_iovec(op->iov, &op_iovcnt, iov, iovcnt, SIZE_MAX, &iov_iter);
+#endif
+}
+
+void uct_rc_ep_send_op_set_sgl(uct_rc_iface_send_op_t *op,
+                               void *const *buffers, const size_t *lengths,
+                               size_t count)
+{
+#ifndef NVALGRIND
+    size_t i;
+
+    ucs_assert(count > 0);
+
+    if (uct_rc_ep_send_op_alloc_iovec(op, count, "rc_get_sgl_zcopy_iov") ==
+        NULL) {
+        return;
+    }
+
+    for (i = 0; i < count; ++i) {
+        op->iov[i].iov_base = buffers[i];
+        op->iov[i].iov_len  = lengths[i];
+    }
 #endif
 }
 
@@ -320,6 +353,15 @@ void uct_rc_ep_am_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                                 const void *resp)
 {
+    uct_rc_ep_send_op_complete_optional_comp(op);
+}
+
+/* Outstanding purge can tell get sgl zcopy from get zcopy by handler.
+ * The operation may not have a user completion (comp == NULL). */
+void uct_rc_ep_get_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp)
+{
+    uct_rc_op_release_reads_get_zcopy(op);
     uct_rc_ep_send_op_complete_optional_comp(op);
 }
 
@@ -514,6 +556,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                  * uct_rc_ep_get_zcopy_completion_handler,
                  * uct_rc_ep_put_zcopy_completion_handler,
                  * uct_rc_ep_put_sgl_zcopy_completion_handler,
+                 * uct_rc_ep_get_sgl_zcopy_completion_handler,
                  * uct_rc_ep_flush_op_completion_handler,
                  * uct_rc_ep_check_completion_handler or
                  * one of the atomic handlers,
@@ -526,7 +569,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                 (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
                 uct_rc_op_release_get_bcopy(op);
                 uct_rc_iface_update_reads(iface);
-            } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
+            } else if ((op->handler ==
+                        uct_rc_ep_get_zcopy_completion_handler) ||
+                       (op->handler ==
+                        uct_rc_ep_get_sgl_zcopy_completion_handler)) {
                 uct_rc_op_release_reads_get_zcopy(op);
                 uct_rc_iface_update_reads(iface);
             }
@@ -540,6 +586,7 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
             (op->handler == uct_rc_ep_put_zcopy_completion_handler) ||
             (op->handler == uct_rc_ep_put_sgl_zcopy_completion_handler) ||
             (op->handler == uct_rc_ep_get_zcopy_completion_handler) ||
+            (op->handler == uct_rc_ep_get_sgl_zcopy_completion_handler) ||
             (op->handler == uct_rc_ep_check_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
