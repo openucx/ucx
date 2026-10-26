@@ -1602,7 +1602,10 @@ run_tests() {
 	do_distributed_task 1 4 run_ucx_perftest_fault_tolerance
 
 	# mpi tests, last: they rebuild the tree
-	do_distributed_task 1 4 run_mpi_tests
+	if [ "${RUN_MPI_TESTS:-yes}" == "yes" ]
+	then
+		do_distributed_task 1 4 run_mpi_tests
+	fi
 }
 
 run_asan_check() {
