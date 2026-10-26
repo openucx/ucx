@@ -588,6 +588,9 @@ public:
                            MULTI_CHANNEL, "multi_channel");
         add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
                            FLUSH_WITHOUT_REQ, "flush_without_req");
+        add_variant_values(variants, test_ucp_device_kernel::get_test_variants,
+                           NODELAY_FLUSH_WITHOUT_REQ,
+                           "nodelay_flush_without_req");
     }
 
     virtual void init() override
@@ -606,6 +609,7 @@ protected:
         LAZY_WITHOUT_REQ,
         MULTI_CHANNEL,
         FLUSH_WITHOUT_REQ,
+        NODELAY_FLUSH_WITHOUT_REQ,
     } send_mode_t;
 
     test_ucp_device_kernel_params_t init_params()
@@ -636,6 +640,11 @@ protected:
             break;
         case FLUSH_WITHOUT_REQ:
             params.with_no_delay = false;
+            params.with_request  = false;
+            params.use_flush     = true;
+            break;
+        case NODELAY_FLUSH_WITHOUT_REQ:
+            params.with_no_delay = true;
             params.with_request  = false;
             params.use_flush     = true;
             break;

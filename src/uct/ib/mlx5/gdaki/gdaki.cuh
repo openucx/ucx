@@ -375,11 +375,10 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_check_completion(
     return uct_rc_mlx5_gda_check_cqe(ep, comp->channel_id, comp->wqe_idx);
 }
 
-UCS_F_DEVICE void
-uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid)
+UCS_F_DEVICE void uct_rc_mlx5_gda_push_db(uct_rc_gdaki_dev_ep_t *ep,
+                                          unsigned cid, uint64_t wqe_next)
 {
     auto qp           = uct_rc_mlx5_gda_get_qp(ep, cid);
-    uint64_t wqe_next = READ_ONCE(qp->sq_ready_index);
     uint32_t qpn_ds   = uct_rc_mlx5_load_const(&qp->qpn_ds);
     auto *db_ptr   = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
     auto dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
@@ -397,20 +396,21 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_flush(uct_device_ep_h tl_ep,
     auto cid = channel_id & ep->channel_mask;
     auto qp  = uct_rc_mlx5_gda_get_qp(ep, cid);
     ucs_status_t status = UCS_INPROGRESS;
-    uint64_t rsvd_idx;
+    uint64_t wqe_next;
     unsigned lane_id;
     unsigned num_lanes;
 
     uct_dev_exec_init<level>(lane_id, num_lanes);
 
     if (lane_id == 0) {
+        wqe_next = READ_ONCE(qp->sq_ready_index);
+
         if (flags & UCT_DEVICE_FLAG_PUSH) {
-            uct_rc_mlx5_gda_push_db(ep, cid);
+            uct_rc_mlx5_gda_push_db(ep, cid, wqe_next);
         }
 
-        rsvd_idx = READ_ONCE(qp->sq_rsvd_index);
         do {
-            status = uct_rc_mlx5_gda_check_cqe(ep, cid, rsvd_idx - 1);
+            status = uct_rc_mlx5_gda_check_cqe(ep, cid, wqe_next - 1);
         } while (status == UCS_INPROGRESS);
     }
 
