@@ -18,7 +18,6 @@
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack_int.h>
-#include <ucs/memory/memtype_cache.h>
 #include <ucs/type/class.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/profile/profile.h>
@@ -28,20 +27,42 @@
 #define uct_rocm_memcpy_h2d(_d,_s,_l)  memcpy((_d),(_s),(_l))
 #define uct_rocm_memcpy_d2h(_d,_s,_l)  ucs_memcpy_nontemporal((_d),(_s),(_l))
 
-/* Use the rkey's VMM flag when present, else derive the type from the address
- * (memtype-ep path passes UCT_INVALID_RKEY) to keep VMM memory off memcpy. */
+#ifdef HAVE_ROCM_VMM_TYPE
+/* VMM device memory (HSA_EXT_POINTER_TYPE_HSA_VMEM) is GPU-only and cannot
+ * be accessed via CPU memcpy. Returns 1 if addr must use async HSA copy.
+ * Calls hsa_amd_pointer_info directly to avoid logging errors for non-ROCM
+ * addresses (e.g. plain host buffers), which is a normal and expected case. */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_is_vmm_addr(const void *addr, size_t length)
+{
+    hsa_amd_pointer_info_t info = {.size = sizeof(info)};
+
+    return (hsa_amd_pointer_info((void*)addr, &info, NULL, NULL, NULL) ==
+            HSA_STATUS_SUCCESS) &&
+           (info.type == HSA_EXT_POINTER_TYPE_HSA_VMEM);
+}
+#else
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_is_vmm_addr(const void *addr, size_t length)
+{
+    return 0;
+}
+#endif
+
+/* A valid rkey flagged as VMM is authoritative. A zero/absent flag is not: the
+ * rkey may describe a different buffer than remote_addr (a host staging frag in
+ * the rndv pipeline, or UCT_INVALID_RKEY on the memtype-ep path), so probe the
+ * accessed address directly to keep device-only VMM memory off the memcpy
+ * path. */
 static UCS_F_ALWAYS_INLINE int
 uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr, size_t length)
 {
-    ucs_memory_info_t mem_info;
-
-    if (rkey != UCT_INVALID_RKEY) {
-        return ((const uct_rocm_copy_key_t*)rkey)->is_vmm;
+    if ((rkey != UCT_INVALID_RKEY) &&
+        ((const uct_rocm_copy_key_t*)rkey)->is_vmm) {
+        return 1;
     }
 
-    return (ucs_memtype_cache_lookup((void*)remote_addr, length, &mem_info) ==
-            UCS_OK) &&
-           (mem_info.type == UCS_MEMORY_TYPE_ROCM_VMM);
+    return uct_rocm_is_vmm_addr((void*)remote_addr, length);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
