@@ -402,7 +402,7 @@ ucx_env_cleanup::ucx_env_cleanup() {
 
         if ((env_var.find("=") != std::string::npos) &&
             (env_var.find(UCS_DEFAULT_ENV_PREFIX, 0, prefix_len) != std::string::npos)) {
-            ucx_env_storage.push_back(env_var);
+            ucx_env_storage.push_back(std::move(env_var));
         }
     }
 
@@ -799,7 +799,7 @@ sock_addr_storage::sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr,
         m_netdev_name      = "";
     } else {
         set_sock_addr(*ucs_sock_addr.addr, ucs_sock_addr.addrlen,
-                      is_rdmacm_netdev, netdev_name);
+                      is_rdmacm_netdev, std::move(netdev_name));
     }
 }
 
@@ -813,7 +813,7 @@ void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
     m_size               = size;
     m_is_valid           = true;
     m_is_rdmacm_netdev   = is_rdmacm_netdev;
-    m_netdev_name        = netdev_name;
+    m_netdev_name        = std::move(netdev_name);
 }
 
 void sock_addr_storage::reset_to_any() {

@@ -36,8 +36,9 @@ public:
              }
         }
 
-        run_workers(static_cast<send_func_t>(&uct_amo_test::atomic_op<T, opcode>),
-                    recvbuf, add_vec, true);
+        run_workers(static_cast<send_func_t>(
+                            &uct_amo_test::atomic_op<T, opcode>),
+                    recvbuf, std::move(add_vec), true);
 
         wait_for_remote();
         EXPECT_EQ(exp_result, *(T*)recvbuf.ptr());

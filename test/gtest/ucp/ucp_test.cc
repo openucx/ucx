@@ -475,7 +475,7 @@ void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
                                  int value, const std::string& name)
 {
     ucp_test_variant_value entry = {value, name};
-    values.push_back(entry);
+    values.push_back(std::move(entry));
 }
 
 void ucp_test::add_variant_with_value(std::vector<ucp_test_variant>& variants,
@@ -549,7 +549,7 @@ ucp_test::enum_test_params(const std::vector<ucp_test_variant>& variants,
         while (ss.good()) {
             std::string tl_name;
             std::getline(ss, tl_name, ',');
-            result.back().transports.push_back(tl_name);
+            result.back().transports.push_back(std::move(tl_name));
         }
     }
 

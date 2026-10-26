@@ -915,7 +915,7 @@ UCS_TEST_F(test_topo, sibling) {
     auto gpu = m_gpus[0];
     if (!sibling_dma.empty()) {
         dma = sibling_dma;
-        gpu = sibling_gpu;
+        gpu = std::move(sibling_gpu);
         UCS_TEST_MESSAGE << "Found sibling "
                          << "dma=" << dma << " gpu=" << gpu;
     }

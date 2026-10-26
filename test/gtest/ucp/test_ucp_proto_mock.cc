@@ -427,8 +427,8 @@ public:
                           std::string desc, std::string config) :
             range_start(range_start),
             range_end(range_end),
-            desc(desc),
-            config(config){};
+            desc(std::move(desc)),
+            config(std::move(config)){};
 
         bool operator==(const proto_select_data &other) const
         {
