@@ -571,7 +571,34 @@ protected:
         UCS_TEST_MESSAGE << "Success";
     }
 
-    void test_ops(unsigned op_mask) {
+    void test_recovery(unsigned op_mask) {
+        if (op_mask & TEST_OP_ALL_LANES_FAILED) {
+            // Recovery is not expected, it depends on timings
+            return;
+        }
+
+        UCS_TEST_MESSAGE << "Checking recovery status...";
+
+        wait_for_cond([this]() {
+            return ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX)) == 0;
+        }, [this]() {
+            short_progress_loop();
+        });
+
+        const ucp_lane_map_t failed_lanes =
+                ucp_ep_get_failed_lanes(sender().ep(0, INJECTED_EP_INDEX));
+        ASSERT_EQ(0, failed_lanes)
+            << "Failed lanes are not recovered" << std::hex << failed_lanes;
+        for (ucp_lane_index_t lane_idx = 0;
+             lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
+            if (ucp_wireup_ep_test(ucp_ep_get_lane(sender().ep(0, INJECTED_EP_INDEX), lane_idx))) {
+                short_progress_loop();
+                continue;
+            }
+
+            ++lane_idx;
+        }
+
         if (op_mask & TEST_OP_AM) {
             ucs_status_t status = do_am_send_and_wait(sender().ep(0, INJECTED_EP_INDEX),
                                                       am_msg_size(), true);
@@ -600,47 +627,13 @@ protected:
             EXPECT_EQ(UCS_OK, status) << "GET operation returned status: "
                                       << ucs_status_string(status);
         }
-    }
-
-    void test_recovery(unsigned op_mask) {
-        if (op_mask & TEST_OP_ALL_LANES_FAILED) {
-            // Recovery is not expected, it depends on timings
-            return;
-        }
-
-        UCS_TEST_MESSAGE << "Checking recovery status...";
-
-        wait_for_cond(
-                [this]() {
-                    return ucp_ep_get_failed_lanes(
-                                   sender().ep(0, INJECTED_EP_INDEX)) == 0;
-                },
-                [this]() { short_progress_loop(); });
-
-        const ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(
-                sender().ep(0, INJECTED_EP_INDEX));
-        ASSERT_EQ(0, failed_lanes)
-                << "Failed lanes are not recovered" << std::hex << failed_lanes;
-        for (ucp_lane_index_t lane_idx = 0;
-             lane_idx < ucp_ep_num_lanes(sender().ep(0, INJECTED_EP_INDEX));) {
-            if (ucp_wireup_ep_test(
-                        ucp_ep_get_lane(sender().ep(0, INJECTED_EP_INDEX),
-                                        lane_idx))) {
-                short_progress_loop();
-                continue;
-            }
-
-            ++lane_idx;
-        }
-
-        test_ops(op_mask);
 
         ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
                                         << " times";
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
-    void test_ops_with_injected_failure(failure_side_t failure_side) {
+    void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
@@ -652,13 +645,9 @@ protected:
             ASSERT_TRUE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_rma_with_injected_failure(failure_side, op_mask);
         }
-    }
 
-    void do_test(failure_side_t failure_side) {
-        test_ops_with_injected_failure(failure_side);
-        test_recovery(get_variant_value());
+        test_recovery(op_mask);
     }
-
 protected:
     size_t rma_msg_size() const {
         const unsigned op_mask = get_variant_value();
@@ -809,25 +798,19 @@ protected:
 protected:
     static constexpr uint64_t m_seed = 0x12345678;
 
-    void skip_unless_rc_recovery() {
-        if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5", "rc_verbs",
-                                "ib"})) {
-            UCS_TEST_SKIP_R("probe gate applies to RC p2p lanes only");
-        }
-    }
-
     void skip_unless_rc_probe_gate() {
         if (get_variant_value() != TEST_OP_AM) {
             UCS_TEST_SKIP_R("pure AM variant only");
         }
-
-        skip_unless_rc_recovery();
+        if (!has_any_transport({"rc_x", "rc_v", "rc_mlx5", "rc_verbs", "ib"})) {
+            UCS_TEST_SKIP_R("probe gate applies to RC p2p lanes only");
+        }
     }
 
     static ucs_status_t recovery_probe_fail(uct_ep_h ep, unsigned flags,
                                             uct_completion_t *comp)
     {
-        /* Recovery probes pass a completion, whereas keepalive does not */
+        /* Keepalive passes no completion, recovery probes always do */
         if (comp != NULL) {
             ++m_probe_count;
         }
@@ -962,27 +945,26 @@ public:
 
 void test_ucp_fault_tolerance::run_recovery_probe_failure_live_lanes()
 {
-    skip_unless_rc_recovery();
-    if (get_variant_value() & TEST_OP_ALL_LANES_FAILED) {
-        UCS_TEST_SKIP_R("requires a live transport lane");
-    }
+    skip_unless_rc_probe_gate();
 
     ucs::mock mock;
     mock_recovery_probe(sender().worker(), mock, recovery_probe_fail);
 
-    test_ops_with_injected_failure(FAILURE_SIDE_INITIATOR);
+    test_am_with_injected_failure(FAILURE_SIDE_INITIATOR, TEST_OP_AM);
 
     ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    if (ucp_ep_get_failed_lanes(ep) == 0) {
+    if ((ucp_ep_get_failed_lanes(ep) & ucp_ep_config(ep)->p2p_lanes) == 0) {
         UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
     }
 
     wait_for_flag(&m_probe_count);
 
     EXPECT_NE(0u, m_probe_count);
-    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep));
+    ASSERT_NE(nullptr, ep->ext->recovery_arg);
+    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep) & ucp_ep_config(ep)->p2p_lanes);
 
-    test_ops(get_variant_value());
+    EXPECT_EQ(UCS_OK, do_am_send_and_wait(ep, am_msg_size(), true))
+            << "data did not flow on live lanes during recovery";
     EXPECT_EQ(0, total_err_count());
 }
 
@@ -1338,12 +1320,12 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
     }
 
 #define UCP_FT_TESTS(_fixture) \
+    UCP_FT_TEST(_fixture, recovery_probe_failure_live_lanes, \
+                "MAX_EAGER_LANES=8", \
+                "RECOVERY_RETRIES=100") \
     UCP_FT_TEST(_fixture, initiator_failure, "MAX_EAGER_LANES=8", \
                 "RECOVERY_RETRIES=100") \
     UCP_FT_TEST(_fixture, target_failure, "MAX_EAGER_LANES=8", \
-                "RECOVERY_RETRIES=100") \
-    UCP_FT_TEST(_fixture, recovery_probe_failure_live_lanes, \
-                "MAX_EAGER_LANES=8", \
                 "RECOVERY_RETRIES=100") \
     UCP_FT_TEST(_fixture, probe_gated_recovery, "MAX_EAGER_LANES=8", \
                 "RECOVERY_RETRIES=100") \
