@@ -538,6 +538,19 @@ ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective);
 
 
 /**
+ * Allow peer processes of the same user, which are not ancestors of the
+ * current process, to pass the ptrace access check against it, as required
+ * by process_vm_readv() and pidfd_getfd(). With Yama ptrace_scope 1, this
+ * calls prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY), which affects the whole
+ * process. Peers are assumed to have the same capabilities as the current
+ * process. The check is done only once per process.
+ *
+ * @return Nonzero if peer processes are allowed to access the current process.
+ */
+int ucs_sys_ptrace_enable_peers();
+
+
+/**
  * Allocate or re-allocate memory from the operating system.
  *
  * @param [in]  old_ptr     Pointer to existing block, may be NULL. If non-NULL,

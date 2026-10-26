@@ -242,6 +242,10 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
         return status;
     }
 
+    /* Peers import the file descriptor with pidfd_getfd(), which requires them
+     * to pass the ptrace access check against this process */
+    ucs_sys_ptrace_enable_peers();
+
     key->ph.handle_type               = UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD;
     key->ph.handle.posix_fd.system_id = ucs_get_system_id();
     ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64,

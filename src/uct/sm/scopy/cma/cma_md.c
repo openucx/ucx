@@ -18,13 +18,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
-#include <sys/prctl.h>
 #include <sys/uio.h>
 #include <string.h>
-
-#if HAVE_SYS_CAPABILITY_H
-#  include <sys/capability.h>
-#endif
 
 
 typedef struct uct_cma_md {
@@ -49,72 +44,6 @@ static ucs_config_field_t uct_cma_md_config_table[] = {
 
     {NULL}
 };
-
-static int uct_cma_test_ptrace_scope()
-{
-    static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
-    const char *extra_info_str;
-    int cma_supported;
-    char buffer[32];
-    ssize_t nread;
-    char *value;
-
-    /* Check if ptrace_scope allows using CMA.
-     * See https://www.kernel.org/doc/Documentation/security/Yama.txt
-     */
-    nread = ucs_read_file(buffer, sizeof(buffer) - 1, 1, "%s", ptrace_scope_file);
-    if (nread < 0) {
-        /* Cannot read file - assume that Yama security module is not enabled */
-        ucs_debug("could not read '%s' - assuming Yama security is not enforced",
-                  ptrace_scope_file);
-        return 1;
-    }
-
-    ucs_assert(nread < sizeof(buffer));
-    extra_info_str = "";
-    cma_supported  = 0;
-    buffer[nread]  = '\0';
-    value          = ucs_strtrim(buffer);
-    if(!strcmp(value, "0")) {
-        /* ptrace scope 0 allow attaching within same UID */
-        cma_supported = 1;
-    } else if (!strcmp(value, "1")) {
-        /* ptrace scope 1 allows attaching with explicit permission by prctl() */
-#if HAVE_DECL_PR_SET_PTRACER
-        int ret = prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
-        if (!ret) {
-            extra_info_str = ", enabled PR_SET_PTRACER_ANY";
-            cma_supported  = 1;
-        } else {
-            extra_info_str = " and prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY) failed";
-        }
-#else
-        extra_info_str = " but no PR_SET_PTRACER";
-#endif
-    } else if (!strcmp(value, "2")) {
-        /* ptrace scope 2 means only a process with CAP_SYS_PTRACE can attach */
-#if HAVE_SYS_CAPABILITY_H
-        ucs_status_t status;
-        uint32_t ecap;
-
-        status = ucs_sys_get_proc_cap(&ecap);
-        UCS_STATIC_ASSERT(CAP_SYS_PTRACE < 32);
-        if ((status == UCS_OK) && (ecap & CAP_SYS_PTRACE)) {
-            extra_info_str = ", process has CAP_SYS_PTRACE";
-            cma_supported = 1;
-        } else
-#endif
-            extra_info_str = " but no CAP_SYS_PTRACE";
-    } else {
-        /* ptrace scope 3 means attach is completely disabled on the system */
-    }
-
-    /* coverity[result_independent_of_operands] */
-    ucs_log(cma_supported ? UCS_LOG_LEVEL_TRACE : UCS_LOG_LEVEL_DEBUG,
-            "ptrace_scope is %s%s, CMA is %ssupported",
-            value, extra_info_str, cma_supported ? "" : "un");
-    return cma_supported;
-}
 
 static int uct_cma_test_writev()
 {
@@ -142,7 +71,7 @@ uct_cma_query_md_resources(uct_component_t *component,
                            uct_md_resource_desc_t **resources_p,
                            unsigned *num_resources_p)
 {
-    if (uct_cma_test_writev() && uct_cma_test_ptrace_scope()) {
+    if (uct_cma_test_writev() && ucs_sys_ptrace_enable_peers()) {
         return uct_md_query_single_md_resource(component, resources_p,
                                                num_resources_p);
     } else {
