@@ -130,6 +130,68 @@ protected:
         test_sgl(std::vector<size_t>(count, elem_size(UCS_KBYTE)), &comp);
     }
 
+    void test_put_contiguous_remote()
+    {
+        if ((op() != SGL_OP_PUT) || (GetParam()->tl_name != "rc_mlx5")) {
+            UCS_TEST_SKIP_R("rc_mlx5 PUT only");
+        }
+        connect_or_skip();
+        if (max_count() < 17) {
+            UCS_TEST_SKIP_R("at least 17 SGL entries required");
+        }
+
+        static constexpr size_t ROW_SIZE = 8;
+        static constexpr size_t ENTRIES  = 17;
+        mapped_buffer dst(256, *m_receiver);
+        mapped_buffer dst2(ROW_SIZE, *m_receiver);
+        std::vector<std::unique_ptr<mapped_buffer>> src;
+        std::vector<void*> buffers(ENTRIES);
+        std::vector<size_t> lengths(ENTRIES, ROW_SIZE);
+        std::vector<uct_mem_h> memhs(ENTRIES);
+        std::vector<uint64_t> remote_addrs(ENTRIES);
+        std::vector<uct_rkey_t> rkeys(ENTRIES);
+        uint8_t result[256];
+        uint8_t result2[ROW_SIZE];
+
+        dst.memset(0xa5);
+        dst2.memset(0xa5);
+        for (size_t i = 0; i < ENTRIES; ++i) {
+            src.emplace_back(new mapped_buffer(ROW_SIZE, *m_sender));
+            src.back()->memset(i + 1);
+            buffers[i]      = src.back()->ptr();
+            memhs[i]        = src.back()->memh();
+            remote_addrs[i] = (i < 16) ?
+                              dst.addr() + i * ROW_SIZE + ((i == 15) ?
+                              ROW_SIZE : 0) : dst2.addr();
+            rkeys[i]        = (i < 16) ? dst.rkey() : dst2.rkey();
+        }
+
+        /* More than one send-QP ring, including variable-size WQE wrap. */
+        for (size_t iteration = 0; iteration < 40; ++iteration) {
+            ucs_status_t status = uct_ep_put_sgl_zcopy(
+                    m_sender->ep(0), buffers.data(), lengths.data(),
+                    memhs.data(), remote_addrs.data(), rkeys.data(), NULL,
+                    NULL, ENTRIES, NULL);
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+            m_sender->flush();
+        }
+
+        mem_buffer::copy_from(result, dst.ptr(), sizeof(result),
+                              UCS_MEMORY_TYPE_HOST);
+        mem_buffer::copy_from(result2, dst2.ptr(), sizeof(result2),
+                              UCS_MEMORY_TYPE_HOST);
+        for (size_t i = 0; i < sizeof(result); ++i) {
+            uint8_t expected = (i < 15 * ROW_SIZE) ?
+                               static_cast<uint8_t>(i / ROW_SIZE + 1) :
+                               ((i >= 16 * ROW_SIZE) &&
+                                (i < 17 * ROW_SIZE) ? 16 : 0xa5);
+            EXPECT_EQ(expected, result[i]) << "byte " << i;
+        }
+        for (uint8_t value : result2) {
+            EXPECT_EQ(17, value);
+        }
+    }
+
 private:
     enum sgl_op_t {
         SGL_OP_PUT,
@@ -325,6 +387,10 @@ UCS_TEST_P(test_uct_sgl, zero_count) {
 
 UCS_TEST_P(test_uct_sgl, with_callback) {
     test_sgl_with_callback();
+}
+
+UCS_TEST_P(test_uct_sgl, put_contiguous_remote) {
+    test_put_contiguous_remote();
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_sgl)
