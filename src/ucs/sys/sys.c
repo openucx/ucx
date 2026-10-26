@@ -27,6 +27,7 @@
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/resource.h>
 #include <net/if.h>
@@ -857,6 +858,69 @@ ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 #else
     return UCS_ERR_UNSUPPORTED;
 #endif
+}
+
+int ucs_sys_ptrace_enable_peers()
+{
+    static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
+    const char *extra_info_str;
+    int allowed;
+    char buffer[32];
+    ssize_t nread;
+    char *value;
+
+    /* See https://www.kernel.org/doc/Documentation/security/Yama.txt */
+    nread = ucs_read_file(buffer, sizeof(buffer) - 1, 1, "%s", ptrace_scope_file);
+    if (nread < 0) {
+        /* Cannot read file - assume that Yama security module is not enabled */
+        ucs_debug("could not read '%s' - assuming Yama security is not enforced",
+                  ptrace_scope_file);
+        return 1;
+    }
+
+    ucs_assert(nread < sizeof(buffer));
+    extra_info_str = "";
+    allowed        = 0;
+    buffer[nread]  = '\0';
+    value          = ucs_strtrim(buffer);
+    if (!strcmp(value, "0")) {
+        /* ptrace scope 0 allows attaching within same UID */
+        allowed = 1;
+    } else if (!strcmp(value, "1")) {
+        /* ptrace scope 1 allows attaching with explicit permission by prctl() */
+#if HAVE_DECL_PR_SET_PTRACER
+        if (prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0) == 0) {
+            extra_info_str = ", enabled PR_SET_PTRACER_ANY";
+            allowed        = 1;
+        } else {
+            extra_info_str = " and prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY) failed";
+        }
+#else
+        extra_info_str = " but no PR_SET_PTRACER";
+#endif
+    } else if (!strcmp(value, "2")) {
+        /* ptrace scope 2 means only a process with CAP_SYS_PTRACE can attach */
+#if HAVE_SYS_CAPABILITY_H
+        ucs_status_t status;
+        uint32_t ecap;
+
+        status = ucs_sys_get_proc_cap(&ecap);
+        UCS_STATIC_ASSERT(CAP_SYS_PTRACE < 32);
+        if ((status == UCS_OK) && (ecap & UCS_BIT(CAP_SYS_PTRACE))) {
+            extra_info_str = ", process has CAP_SYS_PTRACE";
+            allowed        = 1;
+        } else
+#endif
+            extra_info_str = " but no CAP_SYS_PTRACE";
+    } else {
+        /* ptrace scope 3 means attach is completely disabled on the system */
+    }
+
+    /* coverity[result_independent_of_operands] */
+    ucs_log(allowed ? UCS_LOG_LEVEL_TRACE : UCS_LOG_LEVEL_DEBUG,
+            "ptrace_scope is %s%s, ptrace access from peers is %sallowed",
+            value, extra_info_str, allowed ? "" : "not ");
+    return allowed;
 }
 
 /**
