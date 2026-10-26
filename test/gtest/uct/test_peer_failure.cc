@@ -838,17 +838,16 @@ protected:
         ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
 
         /*
-         * Invalidate before the sentinel is observed. The sender is not
-         * progressed while it arrives, so the flush stays outstanding.
-         * Wait for the error callback, then purge. The sentinel proves
-         * all prior requests were executed at the receiver.
+         * Observe the sentinel before moving the QP to ERR, which can drop
+         * the write. The sender is not progressed, so the flush stays
+         * outstanding.
          */
         const uint8_t *tail = (uint8_t*)recvbuf.ptr() + sentinel_offset;
         uct_ep_invalidate_params_t invalidate_params = {};
 
-        ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
         wait_for_value(tail, *(uint8_t*)sentinel_buf.ptr(), false);
         ASSERT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
+        ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
 
         wait_for_flag(&m_err_count);
         ASSERT_EQ(1u, m_err_count);
