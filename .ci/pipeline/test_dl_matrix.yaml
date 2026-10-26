@@ -35,13 +35,16 @@ env:
   RUNNING_IN_AZURE: "no"
   # Must match the number of values in the worker axis below.
   NWORKERS: "4"
-  # common.sh sets make -j to 4 unless parallel_jobs is passed; use 32 of
-  # the node's 144 cores.
-  BUILD_JOBS: "32"
+  # common.sh sets make -j to 4 unless parallel_jobs is passed; match SLURM_MINCPUS.
+  BUILD_JOBS: "24"
   SLURM_NODES: 1
   # The account is tied to the partition by the cluster's cli_filter.
   SLURM_PARTITION: gb200nvl72_ci
   SLURM_ACCOUNT: oberon-gb-ci
+  # Without a GPU count the site plugin forces exclusive mode (whole idle node).
+  SLURM_GRES: gpu:2
+  SLURM_MEM: 128G
+  SLURM_MINCPUS: 24
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
   # Checkout and test step timeouts plus slack.
@@ -99,7 +102,12 @@ steps:
       # Build number last: pipeline_stop finds files by job_id_*_${BUILD_NUMBER}.txt.
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
       credentialsId: "${SSH_CREDENTIALS_ID}"
-      extraArgs: ["--account=${SLURM_ACCOUNT}"]
+      extraArgs: [
+        "--account=${SLURM_ACCOUNT}",
+        "--gres=${SLURM_GRES}",
+        "--mem=${SLURM_MEM}",
+        "--mincpus=${SLURM_MINCPUS}"
+      ]
 
   # Checkout and Test share a container name, so pyxis reuses the container
   # and the test step finds the checkout in place.
