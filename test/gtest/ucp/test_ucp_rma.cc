@@ -1227,9 +1227,10 @@ public:
 
     virtual void init() override {
         /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
+        const char *name = ::testing::UnitTest::GetInstance()->
+                           current_test_info()->name();
         if ((mem_type() == UCS_MEMORY_TYPE_CUDA) &&
-            (std::strstr(::testing::UnitTest::GetInstance()->current_test_info()->name(),
-                         "put_asymmetric_strides") == NULL)) {
+            (std::strstr(name, "put_asymmetric_strides") == NULL)) {
             UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
         }
 

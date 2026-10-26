@@ -565,8 +565,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
 
     if (ucs_unlikely(dt_iter->type.sgl.counts != NULL)) {
-        return ucp_proto_put_sgl_offload_send_affine(req, lpriv,
-                                                     max_frag_length, next_iter);
+        return ucp_proto_put_sgl_offload_send_affine(
+                req, lpriv, max_frag_length, next_iter);
     }
 
     if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||

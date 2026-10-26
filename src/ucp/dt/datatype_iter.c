@@ -290,8 +290,10 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                                         size_t count,
                                         const ucp_request_param_t *param)
 {
-    int has_counts         = !!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_COUNTS);
-    int has_strides        = !!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_STRIDES);
+    int has_counts         = !!(local->field_mask &
+                                UCP_DT_LOCAL_SGL_FIELD_COUNTS);
+    int has_strides        = !!(local->field_mask &
+                                UCP_DT_LOCAL_SGL_FIELD_STRIDES);
     int has_remote_strides = !!(remote->field_mask &
                                 UCP_DT_REMOTE_SGL_FIELD_STRIDES);
     size_t flat_count      = 0;

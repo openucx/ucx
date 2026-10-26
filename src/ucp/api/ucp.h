@@ -933,8 +933,8 @@ enum ucp_dt_local_sgl_field {
 enum ucp_dt_remote_sgl_field {
     UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS = UCS_BIT(0), /**< remote_addrs array is valid */
     UCP_DT_REMOTE_SGL_FIELD_LENGTHS      = UCS_BIT(1), /**< lengths array is valid */
-    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2), /**< rkeys array is valid */
-    UCP_DT_REMOTE_SGL_FIELD_STRIDES      = UCS_BIT(3)  /**< strides array is valid */
+    UCP_DT_REMOTE_SGL_FIELD_RKEYS        = UCS_BIT(2), /**< rkeys valid */
+    UCP_DT_REMOTE_SGL_FIELD_STRIDES      = UCS_BIT(3)  /**< strides valid */
 };
 
 
@@ -1008,7 +1008,7 @@ typedef struct {
     const uint64_t   *remote_addrs; /**< Array of remote memory addresses */
     const size_t     *lengths;      /**< Array of transfer lengths in bytes */
     ucp_rkey_h const *rkeys;        /**< Array of remote memory keys */
-    const size_t     *strides;      /**< Remote byte strides for repeated blocks */
+    const size_t     *strides;      /**< Remote stride per repeated block */
 } ucp_dt_remote_sgl_t;
 
 
