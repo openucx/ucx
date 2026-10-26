@@ -1465,45 +1465,6 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
 
 /**
  * @ingroup UCT_RMA
- * @brief Completion of one timestamp checkpoint in an SGL operation.
- *
- * @param [in] arg        User argument supplied in the SGL parameters.
- * @param [in] index      Original element index in the SGL arrays.
- * @param [in] status     Completion status of the checkpoint.
- * @param [in] timestamp  Raw local NIC clock ticks, in host byte order, or
- *                        zero if no timestamp is available. Conversion and
- *                        wraparound follow the transport's clock domain.
- *
- * The callback runs in the endpoint's normal completion context. Each
- * requested checkpoint receives one callback after a successful post,
- * including when an outstanding operation is canceled or fails.
- */
-typedef void (*uct_sgl_zcopy_completion_cb_t)(
-        void *arg, unsigned index, ucs_status_t status, uint64_t timestamp);
-
-
-/** @ingroup UCT_RMA @brief Valid fields of @ref uct_sgl_zcopy_params_t. */
-enum uct_sgl_zcopy_param_field {
-    UCT_SGL_ZCOPY_PARAM_FIELD_CHECKPOINTS = UCS_BIT(0), /**< checkpoints */
-    UCT_SGL_ZCOPY_PARAM_FIELD_CALLBACK    = UCS_BIT(1), /**< callback */
-    UCT_SGL_ZCOPY_PARAM_FIELD_ARG         = UCS_BIT(2)  /**< arg */
-};
-
-
-/**
- * @ingroup UCT_RMA
- * @brief Optional checkpoint completion parameters for an SGL operation.
- */
-typedef struct uct_sgl_zcopy_params {
-    uint64_t                       field_mask; /**< Valid fields. */
-    const uint8_t                  *checkpoints; /**< One flag per element. */
-    uct_sgl_zcopy_completion_cb_t   callback; /**< Checkpoint callback. */
-    void                           *arg; /**< Optional callback argument. */
-} uct_sgl_zcopy_params_t;
-
-
-/**
- * @ingroup UCT_RMA
  * @brief Scatter-gather list (SGL) zero-copy put: write multiple buffers to
  *        multiple remote addresses while avoiding local memory copy.
  *
@@ -1542,47 +1503,6 @@ uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                      const uint64_t *remote_addrs, uct_rkey_t const *rkeys,
                      const size_t *counts, const size_t *strides,
                      size_t count, uct_completion_t *comp);
-
-
-/**
- * @ingroup UCT_RMA
- * @brief SGL zero-copy put with optional timestamped checkpoints.
- *
- * Data arguments have the same meaning as @ref uct_ep_put_sgl_zcopy. NULL
- * @a params or a zero field mask preserves that function's behavior. In
- * checkpoint mode, @a comp must be NULL, @a count must be nonzero, and both
- * the checkpoints and callback fields must be provided. A nonzero flag in
- * checkpoints[i] requests a timestamped completion for element i. The final
- * element must be a checkpoint so that the operation can release resources
- * without a subsequent send. The arg field is optional and defaults to NULL.
- *
- * SGL arrays and @a params are consumed before return. Registered buffers,
- * their remote targets, and callback state must remain valid until all
- * requested checkpoint callbacks have run. An error return posts nothing
- * and generates no callbacks. Transports without checkpoint support return
- * UCS_ERR_UNSUPPORTED rather than silently dropping checkpoint requests.
- *
- * @param [in] ep           Destination endpoint handle.
- * @param [in] buffers      Local buffers.
- * @param [in] lengths      Transfer lengths.
- * @param [in] memhs        Local memory handles.
- * @param [in] remote_addrs Remote addresses.
- * @param [in] rkeys        Remote keys.
- * @param [in] counts       Optional repetition counts.
- * @param [in] strides      Optional strides.
- * @param [in] count        Number of SGL elements.
- * @param [in] comp         Ordinary completion, or NULL in checkpoint mode.
- * @param [in] params       Optional checkpoint completion parameters.
- *
- * @return UCS_INPROGRESS after a successful checkpoint-mode post, or an
- *         error code. Ordinary mode follows @ref uct_ep_put_sgl_zcopy.
- */
-ucs_status_t uct_ep_put_sgl_zcopy_v2(
-        uct_ep_h ep, void * const *buffers, const size_t *lengths,
-        uct_mem_h const *memhs, const uint64_t *remote_addrs,
-        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
-        size_t count, uct_completion_t *comp,
-        const uct_sgl_zcopy_params_t *params);
 
 
 /**

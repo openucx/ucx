@@ -78,12 +78,12 @@ typedef struct uct_rc_mlx5_sgl_checkpoint {
 } uct_rc_mlx5_sgl_checkpoint_t;
 
 struct uct_rc_mlx5_sgl_context {
-    uct_sgl_zcopy_completion_cb_t callback;
-    void                         *arg;
-    unsigned                      remaining;
-    uint16_t                      first_sn;
-    uint16_t                      count;
-    uct_rc_mlx5_sgl_checkpoint_t  checkpoints[];
+    uct_rc_mlx5_sgl_completion_t   *completion;
+    uct_rc_mlx5_sgl_checkpoint_cb_t callback;
+    void                          *arg;
+    uint16_t                       first_sn;
+    uint16_t                       count;
+    uct_rc_mlx5_sgl_checkpoint_t   checkpoints[];
 };
 
 
@@ -193,14 +193,6 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   uct_rkey_t const *rkeys, const size_t *counts,
                                   const size_t *strides, size_t count,
                                   uct_completion_t *comp);
-
-ucs_status_t
-uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
-        uct_ep_h tl_ep, void * const *buffers, const size_t *lengths,
-        uct_mem_h const *memhs, const uint64_t *remote_addrs,
-        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
-        size_t count, uct_completion_t *comp,
-        const uct_sgl_zcopy_params_t *params);
 
 ucs_status_t
 uct_rc_mlx5_base_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,

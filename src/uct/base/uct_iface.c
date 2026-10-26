@@ -1166,38 +1166,6 @@ uct_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                                                  strides, count, comp);
 }
 
-ucs_status_t uct_ep_put_sgl_zcopy_v2(
-        uct_ep_h ep, void * const *buffers, const size_t *lengths,
-        uct_mem_h const *memhs, const uint64_t *remote_addrs,
-        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
-        size_t count, uct_completion_t *comp,
-        const uct_sgl_zcopy_params_t *params)
-{
-    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
-    const uint64_t required       = UCT_SGL_ZCOPY_PARAM_FIELD_CHECKPOINTS |
-                                    UCT_SGL_ZCOPY_PARAM_FIELD_CALLBACK;
-
-    if ((params == NULL) || (params->field_mask == 0)) {
-        return uct_ep_put_sgl_zcopy(ep, buffers, lengths, memhs, remote_addrs,
-                                     rkeys, counts, strides, count, comp);
-    }
-
-    if ((params->field_mask & ~(required | UCT_SGL_ZCOPY_PARAM_FIELD_ARG)) ||
-        ((params->field_mask & required) != required) || (comp != NULL) ||
-        (count == 0) || (params->checkpoints == NULL) ||
-        (params->callback == NULL) || !params->checkpoints[count - 1]) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (iface->internal_ops->ep_put_sgl_zcopy_v2 == NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    return iface->internal_ops->ep_put_sgl_zcopy_v2(
-            ep, buffers, lengths, memhs, remote_addrs, rkeys, counts, strides,
-            count, comp, params);
-}
-
 typedef struct uct_stub_iface {
     uct_iface_t              super;
     uct_iface_internal_ops_t *internal_ops;

@@ -326,15 +326,6 @@ typedef ucs_status_t (*uct_ep_get_sgl_zcopy_func_t)(
         uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
         size_t count, uct_completion_t *comp);
 
-
-typedef ucs_status_t (*uct_ep_put_sgl_zcopy_v2_func_t)(
-        uct_ep_h ep, void * const *buffers, const size_t *lengths,
-        uct_mem_h const *memhs, const uint64_t *remote_addrs,
-        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
-        size_t count, uct_completion_t *comp,
-        const uct_sgl_zcopy_params_t *params);
-
-
 /* Purge outstanding operations from an endpoint */
 typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
@@ -354,7 +345,6 @@ typedef struct uct_iface_internal_ops {
     uct_ep_put_sgl_zcopy_func_t      ep_put_sgl_zcopy;
     uct_ep_get_sgl_zcopy_func_t      ep_get_sgl_zcopy;
     uct_ep_outstanding_purge_func_t  ep_outstanding_purge;
-    uct_ep_put_sgl_zcopy_v2_func_t   ep_put_sgl_zcopy_v2;
 } uct_iface_internal_ops_t;
 
 

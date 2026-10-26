@@ -271,6 +271,12 @@ ucs_status_t uct_rc_mlx5_base_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     return status;
 }
 
+static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
+        uct_ep_h tl_ep, void * const *buffers, const size_t *lengths,
+        uct_mem_h const *memhs, const uint64_t *remote_addrs,
+        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
+        size_t count, uct_rc_mlx5_sgl_completion_t *completion);
+
 ucs_status_t
 uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   const size_t *lengths, uct_mem_h const *memhs,
@@ -285,6 +291,13 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     ucs_status_t status;
     size_t UCS_V_UNUSED total;
     int fence;
+
+    if (uct_rc_mlx5_sgl_completion_is_adapter(comp)) {
+        return uct_rc_mlx5_ep_put_sgl_with_completion(
+                tl_ep, buffers, lengths, memhs, remote_addrs, rkeys, counts,
+                strides, count,
+                ucs_derived_of(comp, uct_rc_mlx5_sgl_completion_t));
+    }
 
     UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "put_sgl_zcopy");
 
@@ -314,6 +327,12 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
     return UCS_INPROGRESS;
 }
 
+void uct_rc_mlx5_sgl_completion_marker(uct_completion_t *completion)
+{
+    ucs_fatal("rc sgl completion adapter %p used as ordinary completion",
+              completion);
+}
+
 static void uct_rc_mlx5_sgl_completion(
         uct_rc_iface_send_op_t *send_op,
         const uct_rc_send_op_completion_info_t *comp_info)
@@ -323,7 +342,8 @@ static void uct_rc_mlx5_sgl_completion(
     uct_rc_mlx5_sgl_checkpoint_t *checkpoint =
             ucs_container_of(op_with_info, uct_rc_mlx5_sgl_checkpoint_t, op);
     uct_rc_mlx5_sgl_context_t *context = checkpoint->context;
-    uct_sgl_zcopy_completion_cb_t callback = context->callback;
+    uct_rc_mlx5_sgl_completion_t *completion = context->completion;
+    uct_rc_mlx5_sgl_checkpoint_cb_t callback = context->callback;
     void *arg                        = context->arg;
     ucs_status_t status               = UCS_OK;
     uint64_t timestamp               = 0;
@@ -339,20 +359,20 @@ static void uct_rc_mlx5_sgl_completion(
         timestamp = comp_info->timestamp;
     }
 
-    ucs_assert(context->remaining > 0);
-    last = (--context->remaining == 0);
+    ucs_assert(completion->super.count > 0);
+    uct_completion_update_status(&completion->super, status);
+    last = (--completion->super.count == 0);
     callback(arg, checkpoint->index, status, timestamp);
     if (last) {
         ucs_free(context);
     }
 }
 
-ucs_status_t uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
+static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
         uct_ep_h tl_ep, void * const *buffers, const size_t *lengths,
         uct_mem_h const *memhs, const uint64_t *remote_addrs,
         uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
-        size_t count, uct_completion_t *comp,
-        const uct_sgl_zcopy_params_t *params)
+        size_t count, uct_rc_mlx5_sgl_completion_t *completion)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_rc_mlx5_sgl_context_t *context;
@@ -367,10 +387,15 @@ ucs_status_t uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
 
     if ((buffers == NULL) || (lengths == NULL) || (memhs == NULL) ||
         (remote_addrs == NULL) || (rkeys == NULL) || (count == 0) ||
-        (count > max_count) || (count > UINT16_MAX) || (comp != NULL) ||
-        (params->checkpoints == NULL) || (params->callback == NULL) ||
-        !params->checkpoints[count - 1]) {
+        (count > max_count) || (count != completion->count) ||
+        (completion->ep != tl_ep) || (completion->checkpoints == NULL) ||
+        (completion->callback == NULL) ||
+        !completion->checkpoints[count - 1]) {
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (completion->super.count != 0) {
+        return UCS_ERR_BUSY;
     }
 
     if (!(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED)) {
@@ -383,18 +408,18 @@ ucs_status_t uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
         return UCS_ERR_UNSUPPORTED;
     }
 
-    UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "put_sgl_zcopy_v2");
+    UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "put_sgl_zcopy");
     for (i = 0; i < count; ++i) {
         if ((lengths[i] == 0) || (lengths[i] > UCT_IB_MAX_MESSAGE_SIZE)) {
             return UCS_ERR_INVALID_PARAM;
         }
 
-        num_checkpoints += !!params->checkpoints[i];
+        num_checkpoints += !!completion->checkpoints[i];
     }
 
     status = uct_rc_mlx5_base_ep_sgl_zcopy_check(
             iface, ep, lengths, count, 1, UCT_IB_MAX_MESSAGE_SIZE,
-            "put_sgl_zcopy_v2");
+            "put_sgl_zcopy");
     if (status != UCS_OK) {
         return status;
     }
@@ -406,14 +431,13 @@ ucs_status_t uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
         return UCS_ERR_NO_MEMORY;
     }
 
-    context->callback  = params->callback;
-    context->arg       = UCS_PARAM_VALUE(UCT_SGL_ZCOPY_PARAM_FIELD, params,
-                                         arg, ARG, NULL);
-    context->remaining = num_checkpoints;
-    context->first_sn  = ep->tx.wq.sw_pi;
-    context->count     = count;
+    context->completion = completion;
+    context->callback   = completion->callback;
+    context->arg        = completion->arg;
+    context->first_sn   = ep->tx.wq.sw_pi;
+    context->count      = count;
     for (i = 0; i < count; ++i) {
-        if (!params->checkpoints[i]) {
+        if (!completion->checkpoints[i]) {
             continue;
         }
 
@@ -425,6 +449,8 @@ ucs_status_t uct_rc_mlx5_base_ep_put_sgl_zcopy_v2(
                 uct_rc_mlx5_sgl_completion, lengths[i]);
     }
 
+    completion->super.count  = num_checkpoints;
+    completion->super.status = UCS_OK;
     fence      = uct_rc_ep_fm(&iface->super, &ep->tx.wq.fi, 1);
     fence_flag = fence ? iface->config.put_fence_flag : 0;
     total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(

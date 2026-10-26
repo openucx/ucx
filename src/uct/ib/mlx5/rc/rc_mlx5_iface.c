@@ -1133,6 +1133,12 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
 {
     ucs_status_t status;
 
+    if (uct_rc_mlx5_sgl_completion_is_adapter(comp)) {
+        return uct_rc_mlx5_base_ep_put_sgl_zcopy(
+                ep, buffers, lengths, memhs, remote_addrs, rkeys, counts,
+                strides, count, comp);
+    }
+
     status = uct_ib_mlx5_ext_ep_put_sgl_zcopy(ep, buffers, lengths, memhs,
                                               remote_addrs, rkeys, counts,
                                               strides, count, comp);
@@ -1143,6 +1149,47 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     }
 
     return status;
+}
+
+ucs_status_t uct_rc_mlx5_sgl_completion_init(
+        uct_ep_h ep, size_t count, const uint8_t *checkpoints,
+        uct_rc_mlx5_sgl_checkpoint_cb_t callback, void *arg,
+        uct_rc_mlx5_sgl_completion_t *completion)
+{
+    const uct_base_iface_t *base;
+    uct_rc_mlx5_iface_common_t *iface;
+
+    if ((ep == NULL) || (completion == NULL) || (count == 0) ||
+        (count > UINT16_MAX) || (checkpoints == NULL) || (callback == NULL)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    base = ucs_derived_of(ep->iface, uct_base_iface_t);
+    if (base->internal_ops->ep_put_sgl_zcopy != uct_rc_mlx5_ep_put_sgl_zcopy) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    iface = ucs_derived_of(ep->iface, uct_rc_mlx5_iface_common_t);
+    if ((iface->ext_ops == NULL) ||
+        !(iface->ext_ops->requirements &
+          UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((count > uct_rc_mlx5_base_sgl_zcopy_max_count(iface)) ||
+        !checkpoints[count - 1]) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    completion->super.func   = uct_rc_mlx5_sgl_completion_marker;
+    completion->super.count  = 0;
+    completion->super.status = UCS_OK;
+    completion->ep           = ep;
+    completion->count        = count;
+    completion->checkpoints  = checkpoints;
+    completion->callback     = callback;
+    completion->arg          = arg;
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -1213,6 +1260,10 @@ uct_rc_mlx5_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
                              uct_completion_t *comp)
 {
     ucs_status_t status;
+
+    if (uct_rc_mlx5_sgl_completion_is_adapter(comp)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = uct_ib_mlx5_ext_ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
                                               remote_addrs, rkeys, counts,
@@ -1331,8 +1382,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
             .ep_get_sgl_zcopy       = uct_rc_mlx5_ep_get_sgl_zcopy,
-            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge,
-            .ep_put_sgl_zcopy_v2     = uct_rc_mlx5_base_ep_put_sgl_zcopy_v2
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

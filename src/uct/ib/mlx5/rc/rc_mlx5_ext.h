@@ -26,6 +26,62 @@ typedef struct uct_rc_mlx5_path_identity {
     const void  *tx_cq;
 } uct_rc_mlx5_path_identity_t;
 
+/** Internal callback for one SGL checkpoint, in normal RC completion context.
+ * The timestamp is raw local NIC ticks, or zero when unavailable (e.g. purge).
+ * Each requested checkpoint is reported exactly once after a successful post.
+ */
+typedef void (*uct_rc_mlx5_sgl_checkpoint_cb_t)(
+        void *arg, unsigned index, ucs_status_t status, uint64_t timestamp);
+
+
+/**
+ * Internal RC completion adapter for the ordinary uct_ep_put_sgl_zcopy API.
+ *
+ * Initialize with uct_rc_mlx5_sgl_completion_init and pass &adapter.super only
+ * to put_sgl_zcopy on the bound endpoint, not to other UCT operations. The
+ * unique super.func marker identifies this object before extended fields are
+ * accessed. NULL and ordinary completions retain their existing semantics.
+ *
+ * The SGL arrays and checkpoint flags are consumed before post returns. The
+ * adapter, callback state, registered buffers and remote targets must remain
+ * valid until all checkpoint callbacks finish. super.count tracks remaining
+ * callbacks; it is zero when idle, and super.status aggregates their status.
+ * The count/status are committed before invoking a callback, so the final
+ * callback may release or reinitialize the adapter. Do not reinitialize or
+ * modify an in-flight adapter. A failed post neither changes its state nor
+ * generates callbacks. Access is serialized by the endpoint's worker.
+ */
+typedef struct uct_rc_mlx5_sgl_completion {
+    uct_completion_t                  super;
+    uct_ep_h                          ep;
+    size_t                            count;
+    const uint8_t                    *checkpoints;
+    uct_rc_mlx5_sgl_checkpoint_cb_t    callback;
+    void                             *arg;
+} uct_rc_mlx5_sgl_completion_t;
+
+
+/**
+ * Prepare an idle adapter for a timestamp-capable stock RC endpoint.
+ * A nonzero checkpoint flag selects an element; the final element must be
+ * selected. Returns unsupported without changing the output for other
+ * backends or an interface without timestamp support.
+ */
+ucs_status_t uct_rc_mlx5_sgl_completion_init(
+        uct_ep_h ep, size_t count, const uint8_t *checkpoints,
+        uct_rc_mlx5_sgl_checkpoint_cb_t callback, void *arg,
+        uct_rc_mlx5_sgl_completion_t *completion);
+
+/* Export one marker across DSOs; it is not an ordinary completion callback. */
+void uct_rc_mlx5_sgl_completion_marker(uct_completion_t *completion);
+
+static inline int
+uct_rc_mlx5_sgl_completion_is_adapter(const uct_completion_t *completion)
+{
+    return (completion != NULL) &&
+           (completion->func == uct_rc_mlx5_sgl_completion_marker);
+}
+
 /**
  * Optional hooks implemented by one external RC mlx5 extension provider.
  *
