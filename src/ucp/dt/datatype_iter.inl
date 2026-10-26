@@ -652,8 +652,10 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
     size_t elem_index  = dt_iter->offset;
     size_t frag_offset = dt_iter->type.sgl.frag_offset;
     size_t desc_count  = 0;
-    size_t elem_length, row_length, row_index, row_offset, frag_length;
+    size_t elem_length, row_length, frag_length;
+    size_t row_index = 0, row_offset = 0;
     size_t local_offset, remote_offset;
+    size_t last_elem_index = SIZE_MAX;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_SGL);
     ucs_assert(max_frag_count >= 1);
@@ -668,8 +670,13 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
         }
         if (elem_length > 0) {
             ucs_assert(elem_length > frag_offset);
-            row_index   = frag_offset / row_length;
-            row_offset  = frag_offset % row_length;
+            if (last_elem_index != elem_index) {
+                row_index       = (dt_iter->type.sgl.counts != NULL) ?
+                                  frag_offset / row_length : 0;
+                row_offset      = (dt_iter->type.sgl.counts != NULL) ?
+                                  frag_offset % row_length : frag_offset;
+                last_elem_index = elem_index;
+            }
             frag_length = ucs_min(row_length - row_offset, max_frag_length);
             local_offset  = row_offset;
             remote_offset = row_offset;
@@ -690,6 +697,11 @@ ucp_datatype_iter_next_sgl_frags(const ucp_datatype_iter_t *dt_iter,
 
             frag_offset += frag_length;
             if (frag_offset < elem_length) {
+                row_offset += frag_length;
+                if (row_offset == row_length) {
+                    row_offset = 0;
+                    ++row_index;
+                }
                 continue;
             }
         }

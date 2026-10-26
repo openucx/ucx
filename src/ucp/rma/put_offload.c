@@ -464,7 +464,7 @@ ucp_proto_put_sgl_offload_send_affine(ucp_request_t *req,
             lpriv->max_sgl_zcopy_count,
             ucp_proto_multi_scaled_length(
                     lpriv->weight,
-                    dt_iter->type.sgl.counts[dt_iter->offset]));
+                    dt_iter->type.sgl.flat_count));
     size_t ptr_bytes = max_count * sizeof(void*);
     size_t size_bytes = max_count * sizeof(size_t);
     size_t addr_bytes = max_count * sizeof(uint64_t);

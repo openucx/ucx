@@ -80,6 +80,7 @@ typedef struct {
             const size_t     *counts;
             const size_t     *strides;
             const size_t     *remote_strides;
+            size_t           flat_count;  /* Expanded entry count */
             size_t           frag_offset; /* Logical byte offset in the current element */
             /* length = element count, offset = current element index */
         } sgl;

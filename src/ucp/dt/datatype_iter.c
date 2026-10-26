@@ -294,6 +294,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     int has_strides        = !!(local->field_mask & UCP_DT_LOCAL_SGL_FIELD_STRIDES);
     int has_remote_strides = !!(remote->field_mask &
                                 UCP_DT_REMOTE_SGL_FIELD_STRIDES);
+    size_t flat_count      = 0;
     size_t i;
     ucs_status_t status;
 
@@ -315,12 +316,15 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
             size_t len  = local->lengths[i];
             size_t local_span, remote_span;
 
-            if ((rows == 0) || ((rows > 1) &&
-                ((len == 0) || (local->strides[i] < len) ||
-                 (remote->strides[i] < len) ||
-                 (rows > SIZE_MAX / len) ||
-                 ((rows - 1) > (SIZE_MAX - len) / local->strides[i]) ||
-                 ((rows - 1) > (SIZE_MAX - len) / remote->strides[i])))) {
+            if ((rows == 0) || (flat_count > SIZE_MAX - rows) ||
+                ((rows > 1) && ((len == 0) ||
+                                (local->strides[i] < len) ||
+                                (remote->strides[i] < len) ||
+                                (rows > SIZE_MAX / len) ||
+                                ((rows - 1) > (SIZE_MAX - len) /
+                                              local->strides[i]) ||
+                                ((rows - 1) > (SIZE_MAX - len) /
+                                              remote->strides[i])))) {
                 ucs_error("sgl[%zu]: invalid repetition count or stride", i);
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -332,6 +336,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
                 ucs_error("sgl[%zu]: repeated address overflows", i);
                 return UCS_ERR_INVALID_PARAM;
             }
+            flat_count += rows;
         }
     }
 
@@ -343,6 +348,7 @@ ucs_status_t ucp_datatype_iter_sgl_init(ucp_context_h context,
     dt_iter->type.sgl.counts      = has_counts ? local->counts : NULL;
     dt_iter->type.sgl.strides     = has_counts ? local->strides : NULL;
     dt_iter->type.sgl.remote_strides = has_counts ? remote->strides : NULL;
+    dt_iter->type.sgl.flat_count = has_counts ? flat_count : count;
     dt_iter->type.sgl.frag_offset = 0;
 
     if (ucs_unlikely(count == 0)) {
