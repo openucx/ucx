@@ -192,6 +192,14 @@ private:
         status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, 0, &fd);
         ASSERT_UCS_OK(status);
 
+        // Addresses in a VRF are reachable only from sockets bound to the VRF
+        const char *vrf_name = uct_tcp_iface_vrf_name(
+                (uct_tcp_iface_t*)to.iface());
+        if (vrf_name != NULL) {
+            status = ucs_socket_bind_to_device(fd, vrf_name);
+            ASSERT_UCS_OK(status);
+        }
+
         status = ucs_socket_connect(fd, (struct sockaddr*)&dest_addr);
         ASSERT_UCS_OK(status);
 
@@ -367,6 +375,25 @@ UCS_TEST_P(test_uct_tcp, vrf_enable)
             UCS_TEST_MESSAGE << dev_name << " is reported only with VRF_ENABLE";
         }
     }
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_bind_to_device)
+{
+    const char *iface_vrf_name   = uct_tcp_iface_vrf_name(m_tcp_iface);
+    int vrf_index                = vrf_master_index(m_tcp_iface->if_name);
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    char vrf_name[IFNAMSIZ]      = {};
+
+    if (vrf_index != -1) {
+        ASSERT_NE(nullptr, if_indextoname(vrf_index, vrf_name));
+    }
+    EXPECT_STREQ(vrf_name, (iface_vrf_name != NULL) ? iface_vrf_name : "");
+
+    // The listener must be bound to the VRF device, if any
+    ASSERT_EQ(0, getsockopt(m_tcp_iface->listen_fd, SOL_SOCKET,
+                            SO_BINDTODEVICE, bound_if_name, &len));
+    EXPECT_STREQ(vrf_name, bound_if_name);
 }
 
 

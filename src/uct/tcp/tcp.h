@@ -401,6 +401,7 @@ typedef struct uct_tcp_iface {
         struct sockaddr_storage   netmask;           /* Network address mask */
         size_t                    sockaddr_len;      /* Network address length */
         ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
+        char                      vrf_name[IFNAMSIZ]; /* VRF device name, or empty */
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
@@ -683,6 +684,13 @@ static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
 {
     ucs_assert(iface->outstanding > 0);
     iface->outstanding--;
+}
+
+/* VRF device which sockets of the interface must be bound to, or NULL */
+static inline const char *uct_tcp_iface_vrf_name(uct_tcp_iface_t *iface)
+{
+    return ucs_string_is_empty(iface->config.vrf_name) ? NULL :
+                                                         iface->config.vrf_name;
 }
 
 /**
