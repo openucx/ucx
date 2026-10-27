@@ -564,6 +564,9 @@ typedef struct ucp_ep_recovery_arg {
      * outstanding operations are resolved,
      * outstanding re-posts also go here */
     ucs_queue_head_t        tf_pending_q;
+    /* LANES_ADDR reply waiting for error completions. Owned by wireup.
+     * NULL when no reply is waiting. */
+    void                    *tf_reply;
 } ucp_ep_recovery_arg_t;
 
 

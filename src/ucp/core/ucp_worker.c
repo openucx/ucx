@@ -18,6 +18,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
+#include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup_lane_info.h>
@@ -482,18 +483,22 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         if (wireup_ep == NULL) {
             /* This endpoint is already held. Keep it until its completion. */
             if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
+                ucp_wireup_tf_lane_errored(ucp_ep, lane);
                 return UCS_INPROGRESS;
             }
 
             if (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK) {
                 /* Purge after return, once the outstanding range is
-                 * recorded. */
+                 * recorded. The hold is the error this request was waiting
+                 * for. A deferred reply rebuilds the lane only after it. */
                 ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
+                ucp_wireup_tf_lane_errored(ucp_ep, lane);
                 return UCS_INPROGRESS;
             }
         }
 
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
+        ucp_wireup_tf_lane_errored(ucp_ep, lane);
         return UCS_OK;
     }
 
@@ -565,8 +570,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_debug("worker %p: error handler called for UCT EP %p: %s",
-              worker, uct_ep, ucs_status_string(status));
+    ucs_debug("worker %p: error handler called for UCT EP %p: %s", worker,
+              uct_ep, ucs_status_string(status));
 
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
@@ -587,6 +592,9 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
             goto out;
         }
     }
+
+    ucs_debug("worker %p: uct_ep %p is ep %p lane %d slot %p", worker, uct_ep,
+              ucp_ep, lane, ucp_ep_get_lane(ucp_ep, lane));
 
     status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep,
                                                     status);
