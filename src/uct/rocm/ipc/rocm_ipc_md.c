@@ -93,7 +93,7 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     status = uct_rocm_ipc_export_add(key->address, key->length,
                                      &key->ipc_signal);
     if (status != UCS_OK) {
-        ucs_warn("failed to export rocm ipc invalidation signal for %p: %s",
+        ucs_diag("failed to export rocm ipc invalidation signal for %p: %s",
                  address, ucs_status_string(status));
     }
 
@@ -153,7 +153,7 @@ uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
     ucs_status_t status;
 
     /* GPU kernels use the mapping directly, so it must outlive the element */
-    status = uct_rocm_ipc_cache_pin_memhandle(&unpacked->super, &mapped_addr,
+    status = uct_rocm_ipc_cache_map_memhandle(&unpacked->super, &mapped_addr,
                                               &region);
     if (status != UCS_OK) {
         ucs_error("Failed to map IPC handle: %s", ucs_status_string(status));
@@ -261,7 +261,7 @@ ucs_status_t uct_rocm_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
 
     /* The returned address is valid until the rkey is released */
     if (unpacked->region == NULL) {
-        status = uct_rocm_ipc_cache_pin_memhandle(&unpacked->super,
+        status = uct_rocm_ipc_cache_map_memhandle(&unpacked->super,
                                                   &unpacked->mapped_addr,
                                                   &unpacked->region);
         if (status != UCS_OK) {

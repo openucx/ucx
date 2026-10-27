@@ -73,7 +73,6 @@ typedef struct {
 static ucs_config_field_t uct_rocm_ipc_cache_config_table[] = {
     {"SIGNAL_INVALIDATE", "y",
      "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
-     "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
      "When set to n, a mapping is replaced only when the peer's IPC handle\n"
      "changes. The packed rkey layout is the same in both cases.",
      ucs_offsetof(uct_rocm_ipc_cache_config_t, signal_invalidate),
@@ -184,6 +183,7 @@ static void uct_rocm_ipc_export_mem_free_cb(ucm_event_type_t event_type,
     uct_rocm_ipc_export_t *exp;
     khiter_t iter;
     uintptr_t address;
+    int reaped = 0;
 
     if ((event_type != UCM_EVENT_MEM_TYPE_FREE) ||
         (event->mem_type.mem_type != UCS_MEMORY_TYPE_ROCM)) {
@@ -201,10 +201,15 @@ static void uct_rocm_ipc_export_mem_free_cb(ucm_event_type_t event_type,
         kh_del(rocm_ipc_exports, &uct_rocm_ipc_exports, iter);
         hsa_signal_store_screlease(exp->signal, 0);
         ucs_list_add_tail(&uct_rocm_ipc_export_retired, &exp->list);
+        reaped = 1;
         ucs_debug("rocm ipc signal export %p length %zu", (void*)exp->address,
                   exp->length);
     }
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
+
+    if (reaped) {
+        uct_rocm_ipc_export_reap();
+    }
 }
 
 static void uct_rocm_ipc_export_install_handler(void)
@@ -856,10 +861,9 @@ out_unref:
     return status;
 }
 
-/* Pins the mapping when @a pinned_p is not NULL. */
-static ucs_status_t
-uct_rocm_ipc_cache_map(uct_rocm_ipc_key_t *key, void **mapped_addr,
-                       uct_rocm_ipc_cache_region_t **pinned_p)
+ucs_status_t
+uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
+                                 uct_rocm_ipc_cache_region_t **region_p)
 {
     uct_rocm_ipc_cache_hash_key_t hash_key = {key->pid, key->pid_ns,
                                               key->dev_num};
@@ -884,7 +888,7 @@ uct_rocm_ipc_cache_map(uct_rocm_ipc_key_t *key, void **mapped_addr,
             /* Keep the region alive until its IPC signal is armed. */
             ucs_atomic_add32(&watch_region->refcount, 1);
         }
-        if (pinned_p != NULL) {
+        if (region_p != NULL) {
             ++region->pin_count;
             ucs_atomic_add32(&region->refcount, 1);
             pinned = region;
@@ -904,23 +908,10 @@ uct_rocm_ipc_cache_map(uct_rocm_ipc_key_t *key, void **mapped_addr,
     }
 
     *mapped_addr = mapped;
-    if (pinned_p != NULL) {
-        *pinned_p = pinned;
+    if (region_p != NULL) {
+        *region_p = pinned;
     }
     return UCS_OK;
-}
-
-ucs_status_t
-uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr)
-{
-    return uct_rocm_ipc_cache_map(key, mapped_addr, NULL);
-}
-
-ucs_status_t
-uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
-                                 uct_rocm_ipc_cache_region_t **region_p)
-{
-    return uct_rocm_ipc_cache_map(key, mapped_addr, region_p);
 }
 
 void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region)

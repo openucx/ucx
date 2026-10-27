@@ -45,16 +45,13 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
 
 void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache);
 
-ucs_status_t
-uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
-
 /**
- * Map @a key and keep @a mapped_addr attached until
+ * Map @a key. A non-NULL @a region_p pins the mapping until
  * @ref uct_rocm_ipc_cache_unpin, even if the cache invalidates the region.
  * Known limitation: a pin does not keep the owner allocation alive remotely.
  */
 ucs_status_t
-uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
+uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
                                  uct_rocm_ipc_cache_region_t **region_p);
 
 void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region);

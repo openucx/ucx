@@ -86,7 +86,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (iface->config.enable_ipc_handle_cache) {
-        ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr);
+        ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr, NULL);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
                       ret);
