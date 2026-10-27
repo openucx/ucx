@@ -72,30 +72,8 @@ ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
 
 void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
                                   uintptr_t d_bptr, const void *mapped_addr,
-                                  CUdevice cu_dev, int cache_enabled);
-
-
-/**
- * @brief Close the region of a buffer in the given cache if it is not in use
- *
- * @param cache   Cache to look for the region in
- * @param d_bptr  Remote base address of the buffer
- */
-void uct_cuda_ipc_cache_release_unused(uct_cuda_ipc_cache_t *cache,
-                                       uintptr_t d_bptr);
-
-
-/**
- * @brief Close the cached region of a buffer if it is not in use
- *
- * @param pid     Remote process ID
- * @param pid_ns  Remote process ID namespace
- * @param d_bptr  Remote base address of the buffer
- * @param cu_dev  CUDA device handle the region was mapped on
- */
-void uct_cuda_ipc_cache_release_unused_region(pid_t pid, ucs_sys_ns_t pid_ns,
-                                              uintptr_t d_bptr,
-                                              CUdevice cu_dev);
+                                  CUdevice cu_dev, int enable_cache,
+                                  int enabel_assert);
 
 
 /**

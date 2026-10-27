@@ -639,7 +639,8 @@ out:
 
 static void
 uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
-                                  const void *mapped_addr, int cache_enabled)
+                                  const void *mapped_addr, int enable_cache,
+                                  int enable_assert)
 {
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
@@ -647,56 +648,31 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     /* use write lock because cache maybe modified */
     pthread_rwlock_wrlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, d_bptr);
-    ucs_assert(pgt_region != NULL);
+    if (enable_assert) {
+        ucs_assert(pgt_region != NULL);
+    }
+
     region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+    if (enable_assert) {
+        ucs_assert(region->refcount >= 1);
+    }
 
-    ucs_assert(region->refcount >= 1);
     region->refcount--;
+    if (!region->refcount && !enable_cache) {
+        if (enable_assert) {
+            ucs_assert(region->mapped_addr == mapped_addr);
+        }
 
-    if (!region->refcount && !cache_enabled) {
-        ucs_assert(region->mapped_addr == mapped_addr);
         uct_cuda_ipc_cache_region_destroy(cache, region);
     }
 
     pthread_rwlock_unlock(&cache->lock);
 }
 
-void uct_cuda_ipc_cache_release_unused(uct_cuda_ipc_cache_t *cache,
-                                       uintptr_t d_bptr)
-{
-    ucs_pgt_region_t *pgt_region;
-    uct_cuda_ipc_cache_region_t *region;
-
-    pthread_rwlock_wrlock(&cache->lock);
-    pgt_region = ucs_pgtable_lookup(&cache->pgtable, d_bptr);
-    if (pgt_region != NULL) {
-        region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
-        if (region->refcount == 0) {
-            uct_cuda_ipc_cache_region_destroy(cache, region);
-        }
-    }
-
-    pthread_rwlock_unlock(&cache->lock);
-}
-
-void uct_cuda_ipc_cache_release_unused_region(pid_t pid, ucs_sys_ns_t pid_ns,
-                                              uintptr_t d_bptr, CUdevice cu_dev)
-{
-    const uct_cuda_ipc_cache_hash_key_t key = {pid, pid_ns, cu_dev};
-    uct_cuda_ipc_cache_t *cache;
-
-    ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
-    cache = uct_cuda_ipc_remote_cache_get(key);
-    if (cache != NULL) {
-        uct_cuda_ipc_cache_release_unused(cache, d_bptr);
-    }
-
-    ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
-}
-
 void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
                                   uintptr_t d_bptr, const void *mapped_addr,
-                                  CUdevice cu_dev, int cache_enabled)
+                                  CUdevice cu_dev, int enable_cache,
+                                  int enable_assert)
 {
     const uct_cuda_ipc_cache_hash_key_t key = {pid, pid_ns, cu_dev};
     uct_cuda_ipc_cache_t *cache;
@@ -713,7 +689,7 @@ void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     cache = uct_cuda_ipc_remote_cache_get(key);
     if (cache != NULL) {
         uct_cuda_ipc_cache_destroy_region(cache, d_bptr, mapped_addr,
-                                          cache_enabled);
+                                          enable_cache, enable_assert);
     } else {
         ucs_debug("no remote cache found for key: %d:%u:%d", pid, pid_ns,
                   cu_dev);

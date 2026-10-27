@@ -372,7 +372,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 
             uct_cuda_ipc_unmap_memhandle(
                     unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+                    unpacked->super.super.d_bptr, mapped_addr, dev, 0, 1);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
@@ -714,62 +714,6 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->num_regions);
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
-}
-
-UCS_TEST_F(test_cuda_ipc_cache_lru, release_unused_keeps_in_use) {
-    create_cache(ULONG_MAX, SIZE_MAX);
-
-    insert_region(0);
-    uct_cuda_ipc_cache_release_unused(m_cache, BASE_ADDR);
-
-    /* The region is in use, so it must stay in the cache */
-    EXPECT_EQ(1UL, m_cache->num_regions);
-    EXPECT_EQ(REGION_SIZE, m_cache->total_size);
-    EXPECT_TRUE(pgtable_has(0));
-}
-
-UCS_TEST_F(test_cuda_ipc_cache_lru, release_unused_keeps_reacquired) {
-    create_cache(ULONG_MAX, SIZE_MAX);
-
-    uct_cuda_ipc_cache_region_t *region = insert_region(0);
-    release_region(region);
-    reacquire_region(region);
-    uct_cuda_ipc_cache_release_unused(m_cache, BASE_ADDR);
-
-    EXPECT_EQ(1UL, m_cache->num_regions);
-    EXPECT_TRUE(pgtable_has(0));
-}
-
-UCS_TEST_F(test_cuda_ipc_cache_lru, release_unused_no_region) {
-    create_cache(ULONG_MAX, SIZE_MAX);
-
-    insert_region(0);
-    /* No region at this address, the cache must not change */
-    uct_cuda_ipc_cache_release_unused(m_cache, BASE_ADDR + 4 * REGION_SIZE);
-
-    EXPECT_EQ(1UL, m_cache->num_regions);
-    EXPECT_TRUE(pgtable_has(0));
-}
-
-UCS_TEST_F(test_cuda_ipc_cache_lru, release_unused_closes_idle) {
-    create_cache(ULONG_MAX, SIZE_MAX);
-
-    uct_cuda_ipc_cache_region_t *region0 = insert_region(0);
-    insert_region(1);
-    release_region(region0);
-
-    {
-        /* The test regions have no real memory handle behind them, so closing
-         * them makes the CUDA driver fail and print a warning */
-        scoped_log_handler slh(hide_warns_logger);
-        uct_cuda_ipc_cache_release_unused(m_cache, BASE_ADDR);
-    }
-
-    /* Only the idle region is closed, the in-use one stays */
-    EXPECT_EQ(1UL, m_cache->num_regions);
-    EXPECT_EQ(REGION_SIZE, m_cache->total_size);
-    EXPECT_FALSE(pgtable_has(0));
-    EXPECT_TRUE(pgtable_has(1));
 }
 
 
