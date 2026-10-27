@@ -162,15 +162,18 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
         }
     }
 
-    uar = uct_worker_tl_data_get(iface->super.worker,
-                                 UCT_IB_MLX5_DEVX_UAR_KEY,
-                                 uct_ib_mlx5_devx_uar_t,
-                                 uct_ib_mlx5_devx_uar_cmp,
-                                 uct_ib_mlx5_devx_uar_init,
-                                 md, mmio_mode);
-    if (UCS_PTR_IS_ERR(uar)) {
-        status = UCS_PTR_STATUS(uar);
-        goto err;
+    if (attr->uar == NULL) {
+        uar = uct_worker_tl_data_get(iface->super.worker,
+                                     UCT_IB_MLX5_DEVX_UAR_KEY,
+                                     uct_ib_mlx5_devx_uar_t,
+                                     uct_ib_mlx5_devx_uar_cmp,
+                                     uct_ib_mlx5_devx_uar_init, md, mmio_mode);
+        if (UCS_PTR_IS_ERR(uar)) {
+            status = UCS_PTR_STATUS(uar);
+            goto err;
+        }
+    } else {
+        uar = attr->uar;
     }
 
     UCT_IB_MLX5DV_SET(create_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_QP);
@@ -278,7 +281,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
         uct_ib_mlx5_txwq_reset(tx);
     } else {
         ucs_assert(qp->devx.wq_buf == NULL);
-        uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+        if (attr->uar == NULL) {
+            uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+        }
     }
 
     return UCS_OK;
@@ -286,7 +291,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
 err_free:
     uct_ib_mlx5_devx_obj_destroy(qp->devx.obj, "QP");
 err_uar:
-    uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+    if (attr->uar == NULL) {
+        uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+    }
 err:
     return status;
 }

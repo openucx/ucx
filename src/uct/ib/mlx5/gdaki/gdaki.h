@@ -20,8 +20,26 @@
 #define UCT_DEVICE_CUDA_NAME_LEN 4
 
 typedef struct {
-    uct_ib_mlx5_cq_t   cq;
-    uct_ib_mlx5_txwq_t qp;
+    void   *addr;
+    size_t length;
+    int    registered;
+} uct_rc_gdaki_uar_reg_t;
+
+typedef struct uct_rc_gdaki_shared_uar uct_rc_gdaki_shared_uar_t;
+
+typedef struct {
+    uct_ib_mlx5_devx_uar_t qp_uar;
+    uct_rc_gdaki_uar_reg_t reg;
+} uct_rc_gdaki_dedicated_uar_t;
+
+typedef struct {
+    uct_ib_mlx5_cq_t        cq;
+    uct_ib_mlx5_txwq_t      qp;
+    /* UAR state owned by the worker (shared) or channel (dedicated) */
+    union {
+        uct_rc_gdaki_shared_uar_t    *shared;
+        uct_rc_gdaki_dedicated_uar_t dedicated;
+    } uar;
 } uct_rc_gdaki_channel_t;
 
 typedef struct {
@@ -41,6 +59,7 @@ typedef struct uct_rc_gdaki_iface {
     uint64_t                   *atomic_buff;
     unsigned                   num_channels;
     unsigned                   ep_alloc_mode;
+    unsigned                   uar_alloc_mode;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
     struct {
