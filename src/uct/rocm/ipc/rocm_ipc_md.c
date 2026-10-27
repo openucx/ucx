@@ -63,6 +63,7 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     void *base_ptr = NULL;
     size_t size    = 0;
     hsa_status_t hsa_status;
+    ucs_status_t status;
     hsa_agent_t agent;
     hsa_amd_pointer_type_t mem_type;
 
@@ -88,8 +89,15 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 
     /* One IPC signal per allocation. Every importer of this key watches it. */
-    return uct_rocm_ipc_export_add(key->address, key->length,
-                                   &key->ipc_signal);
+    memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+    status = uct_rocm_ipc_export_add(key->address, key->length,
+                                     &key->ipc_signal);
+    if (status != UCS_OK) {
+        ucs_warn("failed to export rocm ipc invalidation signal for %p: %s",
+                 address, ucs_status_string(status));
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t

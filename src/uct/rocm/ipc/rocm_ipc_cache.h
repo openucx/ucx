@@ -51,7 +51,7 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
 /**
  * Map @a key and keep @a mapped_addr attached until
  * @ref uct_rocm_ipc_cache_unpin, even if the cache invalidates the region.
- * The caller must keep the owner allocation alive until it unpins the mapping.
+ * Known limitation: a pin does not keep the owner allocation alive remotely.
  */
 ucs_status_t
 uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,

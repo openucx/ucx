@@ -251,7 +251,7 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     hsa_status = hsa_amd_signal_create(1, 0, NULL, HSA_AMD_SIGNAL_IPC,
                                        &exp->signal);
     if (hsa_status != HSA_STATUS_SUCCESS) {
-        ucs_error("failed to create rocm ipc signal for %p length %zu: %d",
+        ucs_debug("failed to create rocm ipc signal for %p length %zu: %d",
                   (void*)address, length, hsa_status);
         ucs_free(exp);
         return UCS_ERR_IO_ERROR;
@@ -259,7 +259,7 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
 
     hsa_status = hsa_amd_ipc_signal_create(exp->signal, &exp->ipc_signal);
     if (hsa_status != HSA_STATUS_SUCCESS) {
-        ucs_error("failed to export rocm ipc signal for %p length %zu: %d",
+        ucs_debug("failed to export rocm ipc signal for %p length %zu: %d",
                   (void*)address, length, hsa_status);
         hsa_signal_destroy(exp->signal);
         ucs_free(exp);
@@ -604,23 +604,23 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         uct_rocm_ipc_cache_region_stale_drop_locked(region, deferred);
     }
 
-    if (uct_rocm_ipc_signal_invalidate_enabled()) {
-        if (uct_rocm_ipc_signal_is_empty(&key->ipc_signal)) {
-            ucs_error("%s: rocm ipc key %p has no ipc signal", cache->name,
-                      (void*)key->address);
-            status = UCS_ERR_INVALID_PARAM;
-            goto err;
-        }
-
+    if (uct_rocm_ipc_signal_invalidate_enabled() &&
+        !uct_rocm_ipc_signal_is_empty(&key->ipc_signal)) {
         /* Acquire the signal reference before mapping memory. Once the
          * mapping exists, the exporter may be blocked in hipFree and may
          * destroy its signal reference after dispatching the free event. */
         hsa_status = hsa_amd_ipc_signal_attach(&key->ipc_signal,
                                                &local_signal);
         if (hsa_status != HSA_STATUS_SUCCESS) {
-            ucs_error("%s: failed to attach rocm ipc signal for %p: %d",
-                      cache->name, (void*)key->address, hsa_status);
-            status = UCS_ERR_IO_ERROR;
+            if (hsa_status == HSA_STATUS_ERROR_INVALID_ARGUMENT) {
+                ucs_debug("%s: rocm ipc buffer %p already released by the owner",
+                          cache->name, (void*)key->address);
+                status = UCS_ERR_INVALID_ADDR;
+            } else {
+                ucs_error("%s: failed to attach rocm ipc signal for %p: %d",
+                          cache->name, (void*)key->address, hsa_status);
+                status = UCS_ERR_IO_ERROR;
+            }
             goto err;
         }
 
@@ -694,7 +694,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
 
     region->in_pgtable = 1;
     *region_p          = region;
-    if (uct_rocm_ipc_signal_invalidate_enabled()) {
+    if (local_signal.handle != 0) {
         *watch_region_p = region;
     }
     ucs_trace("%s: rocm_ipc cache new region:" UCS_PGT_REGION_FMT " size:%lu",
