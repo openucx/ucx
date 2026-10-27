@@ -119,7 +119,9 @@ typedef struct uct_rocm_ipc_export {
 } uct_rocm_ipc_export_t;
 
 
-static ucs_list_link_t   uct_rocm_ipc_export_active;
+KHASH_MAP_INIT_INT64(rocm_ipc_exports, uct_rocm_ipc_export_t*);
+
+static khash_t(rocm_ipc_exports) uct_rocm_ipc_exports;
 static ucs_list_link_t   uct_rocm_ipc_export_retired;
 static ucs_spinlock_t    uct_rocm_ipc_export_lock;
 static ucs_init_once_t   uct_rocm_ipc_export_handler_once =
@@ -152,21 +154,6 @@ static void uct_rocm_ipc_export_destroy(uct_rocm_ipc_export_t *exp)
     ucs_free(exp);
 }
 
-/* Caller holds the export lock. */
-static uct_rocm_ipc_export_t *
-uct_rocm_ipc_export_find_active(uintptr_t address, size_t length)
-{
-    uct_rocm_ipc_export_t *exp;
-
-    ucs_list_for_each(exp, &uct_rocm_ipc_export_active, list) {
-        if ((exp->address == address) && (exp->length == length)) {
-            return exp;
-        }
-    }
-
-    return NULL;
-}
-
 /* An importer attaches the IPC signal before it maps memory. Therefore, after
  * the free event has been dispatched, every mapping that can delay hipFree
  * already holds its own signal reference and any thread may reap the export. */
@@ -192,28 +179,25 @@ static void uct_rocm_ipc_export_reap(void)
 static void uct_rocm_ipc_export_mem_free_cb(ucm_event_type_t event_type,
                                             ucm_event_t *event, void *arg)
 {
-    uct_rocm_ipc_export_t *exp, *tmp;
-    uintptr_t start, end;
+    uct_rocm_ipc_export_t *exp;
+    khiter_t iter;
+    uintptr_t address;
 
     if ((event_type != UCM_EVENT_MEM_TYPE_FREE) ||
         (event->mem_type.mem_type != UCS_MEMORY_TYPE_ROCM)) {
         return;
     }
 
-    start = (uintptr_t)event->mem_type.address;
-    end   = start + event->mem_type.size;
+    address = (uintptr_t)event->mem_type.address;
 
     /* Importers acquire a signal reference before mapping memory, so the
      * exported signal can be destroyed after this callback on any thread. */
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
-    ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_active, list) {
-        if ((exp->address >= end) ||
-            ((exp->address + exp->length) <= start)) {
-            continue;
-        }
-
+    iter = kh_get(rocm_ipc_exports, &uct_rocm_ipc_exports, address);
+    if (iter != kh_end(&uct_rocm_ipc_exports)) {
+        exp = kh_val(&uct_rocm_ipc_exports, iter);
+        kh_del(rocm_ipc_exports, &uct_rocm_ipc_exports, iter);
         hsa_signal_store_screlease(exp->signal, 0);
-        ucs_list_del(&exp->list);
         ucs_list_add_tail(&uct_rocm_ipc_export_retired, &exp->list);
         ucs_debug("rocm ipc signal export %p length %zu", (void*)exp->address,
                   exp->length);
@@ -239,6 +223,8 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
 {
     uct_rocm_ipc_export_t *exp, *existing;
     hsa_status_t hsa_status;
+    khiter_t iter;
+    int ret;
 
     if (uct_rocm_ipc_signal_invalidate_enabled()) {
         UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
@@ -249,9 +235,9 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     }
 
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
-    existing = uct_rocm_ipc_export_find_active(address, length);
-    if (existing != NULL) {
-        *ipc_signal_p = existing->ipc_signal;
+    iter = kh_get(rocm_ipc_exports, &uct_rocm_ipc_exports, address);
+    if (iter != kh_end(&uct_rocm_ipc_exports)) {
+        *ipc_signal_p = kh_val(&uct_rocm_ipc_exports, iter)->ipc_signal;
         ucs_spin_unlock(&uct_rocm_ipc_export_lock);
         return UCS_OK;
     }
@@ -284,16 +270,23 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     exp->length      = length;
 
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
-    existing = uct_rocm_ipc_export_find_active(address, length);
-    if (existing == NULL) {
-        ucs_list_add_tail(&uct_rocm_ipc_export_active, &exp->list);
+    iter = kh_put(rocm_ipc_exports, &uct_rocm_ipc_exports, address, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_spin_unlock(&uct_rocm_ipc_export_lock);
+        uct_rocm_ipc_export_destroy(exp);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (ret != UCS_KH_PUT_KEY_PRESENT) {
+        kh_val(&uct_rocm_ipc_exports, iter) = exp;
         *ipc_signal_p = exp->ipc_signal;
     } else {
+        existing = kh_val(&uct_rocm_ipc_exports, iter);
         *ipc_signal_p = existing->ipc_signal;
     }
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
 
-    if (existing != NULL) {
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
         uct_rocm_ipc_export_destroy(exp);
     }
 
@@ -312,13 +305,13 @@ static void uct_rocm_ipc_export_cleanup(void)
 
     ucs_list_head_init(&destroy_list);
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
-    ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_active, list) {
+    kh_foreach_value(&uct_rocm_ipc_exports, exp, {
         if (uct_rocm_ipc_signal_invalidate_enabled()) {
             hsa_signal_store_screlease(exp->signal, 0);
         }
-        ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
-    }
+    })
+    kh_clear(rocm_ipc_exports, &uct_rocm_ipc_exports);
     ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_retired, list) {
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
@@ -389,7 +382,7 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
     }
 
     /* A registered handler owns the signal and destroys it when it runs. */
-    if (ucs_atomic_cswap32(&region->signal_owner, 0, 1) == 0) {
+    if (!region->handler_armed) {
         region->retired_signal = region->signal;
         region->signal.handle = 0;
     }
@@ -422,13 +415,13 @@ static void
 uct_rocm_ipc_cache_region_stale_drop_locked(uct_rocm_ipc_cache_region_t *region,
                                             ucs_list_link_t *deferred)
 {
-    int handler_owned;
-
-    handler_owned = (ucs_atomic_cswap32(&region->signal_owner, 2, 2) == 2);
-    uct_rocm_ipc_cache_region_drop_locked(region, deferred);
-    if (handler_owned) {
+    if (region->handler_armed) {
+        /* Wake the handler before the region is deactivated, so that it takes
+         * the locked path and does not race with this store. */
         hsa_signal_store_screlease(region->signal, 0);
     }
+
+    uct_rocm_ipc_cache_region_drop_locked(region, deferred);
 }
 
 static void
@@ -673,7 +666,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     region->refcount              = 1;
     region->deactivate            = 0;
     region->handler_done          = 0;
-    region->signal_owner          = 0;
+    region->handler_armed         = 0;
     region->pin_count             = 0;
     region->in_pgtable            = 0;
 
@@ -806,12 +799,13 @@ uct_rocm_ipc_cache_region_watch(uct_rocm_ipc_cache_region_t *region)
     ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
     if ((ucs_atomic_cswap32(&region->deactivate, 0, 0) != 0) ||
         (region->signal.handle == 0) ||
-        (ucs_atomic_cswap32(&region->signal_owner, 0, 2) != 0)) {
+        region->handler_armed) {
         /* The mapping was claimed before the handler existed. */
         ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
         status = UCS_ERR_INVALID_ADDR;
         goto out_unref;
     }
+    region->handler_armed = 1;
     ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
     ucs_atomic_add32(&region->refcount, 1);
@@ -964,7 +958,7 @@ UCS_STATIC_INIT
     if (status != UCS_OK) {
         ucs_fatal("failed to initialize rocm ipc export lock");
     }
-    ucs_list_head_init(&uct_rocm_ipc_export_active);
+    kh_init_inplace(rocm_ipc_exports, &uct_rocm_ipc_exports);
     ucs_list_head_init(&uct_rocm_ipc_export_retired);
 }
 
@@ -976,6 +970,7 @@ UCS_STATIC_CLEANUP
     kh_foreach_value(&uct_rocm_ipc_remote_cache.hash, cache,
                      { uct_rocm_ipc_destroy_cache(cache); })
     kh_destroy_inplace(rocm_ipc_rem_cache, &uct_rocm_ipc_remote_cache.hash);
+    kh_destroy_inplace(rocm_ipc_exports, &uct_rocm_ipc_exports);
     ucs_rw_spinlock_cleanup(&uct_rocm_ipc_remote_cache.lock);
     ucs_spinlock_destroy(&uct_rocm_ipc_export_lock);
 }
