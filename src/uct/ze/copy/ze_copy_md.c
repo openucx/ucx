@@ -105,10 +105,19 @@ uct_ze_copy_import_get_func(ze_driver_handle_t driver, const char *name,
 {
     ze_result_t ret;
 
-    ret = zeDriverGetExtensionFunctionAddress(driver, name, func_p);
+    /* Some drivers report success for an unknown name without setting the
+       address */
+    *func_p = NULL;
+    ret     = zeDriverGetExtensionFunctionAddress(driver, name, func_p);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_debug("zeDriverGetExtensionFunctionAddress(%s) failed: 0x%x", name,
                   ret);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (*func_p == NULL) {
+        ucs_debug("zeDriverGetExtensionFunctionAddress(%s) returned no address",
+                  name);
         return UCS_ERR_UNSUPPORTED;
     }
 
