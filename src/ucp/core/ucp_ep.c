@@ -2968,7 +2968,8 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
     uint32_t expect;
     void *buf;
 
-    if (!ucp_ep_tf_exchange_open(ep, lane) || (token == NULL) || (len == 0)) {
+    if ((tf == NULL) || !ucp_ep_tf_exchange_open(ep, lane) ||
+        (token == NULL) || (len == 0)) {
         return;
     }
 
