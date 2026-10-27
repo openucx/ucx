@@ -510,17 +510,17 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         *sys_dev_p = ucs_topo_global_ctx.num_devices++;
         device     = &ucs_topo_global_ctx.devices[*sys_dev_p];
 
-        device->bus_id          = *bus_id;
-        device->name            = name;
-        device->name_priority   = 0;
-        device->numa_node       = numa_node;
-        device->pci_id          = pci_id;
-        device->user_value      = user_value;
-        device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
-        device->flags           = 0;
-        device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
-        device->sibling_role    = UCS_TOPO_SIBLING_ROLE_NONE;
-        device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
+        device->bus_id        = *bus_id;
+        device->name          = name;
+        device->name_priority = 0;
+        device->numa_node     = numa_node;
+        device->pci_id        = pci_id;
+        device->user_value    = user_value;
+        device->device_class  = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
+        device->flags         = 0;
+        device->class_ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        device->sibling_role  = UCS_TOPO_SIBLING_ROLE_NONE;
+        device->sys_dev_aux   = UCS_SYS_DEVICE_ID_UNKNOWN;
         UCS_STATIC_BITMAP_RESET_ALL(&device->siblings);
 
         if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
@@ -803,12 +803,6 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     result =
             (sys_dev >= ucs_topo_global_ctx.num_devices) ||
             (sys_dev_mem >= ucs_topo_global_ctx.num_devices) ||
-            /*
-             * Memory device was never matched with a sibling, it does not
-             * mandate an auxiliary path.
-             */
-            UCS_STATIC_BITMAP_IS_ZERO(
-                    ucs_topo_global_ctx.devices[sys_dev_mem].siblings) ||
             /* The device itself never uses auxiliary path */
             (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
              UCS_TOPO_SIBLING_ROLE_DEV) ||
@@ -819,7 +813,13 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
              */
             UCS_STATIC_BITMAP_GET(
                     ucs_topo_global_ctx.devices[sys_dev_mem].siblings,
-                    sys_dev);
+                    sys_dev) ||
+            /*
+             * Memory device was never matched with a sibling, it does not
+             * mandate an auxiliary path.
+             */
+            UCS_STATIC_BITMAP_IS_ZERO(
+                    ucs_topo_global_ctx.devices[sys_dev_mem].siblings);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -1397,6 +1397,19 @@ static void ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
     }
 }
 
+static void ucs_topo_sys_device_clear_siblings(ucs_sys_device_t sys_dev)
+{
+    ucs_topo_sys_device_info_t *device = &ucs_topo_global_ctx.devices[sys_dev];
+    unsigned peer;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(peer, &device->siblings) {
+        UCS_STATIC_BITMAP_RESET(&ucs_topo_global_ctx.devices[peer].siblings,
+                                sys_dev);
+    }
+
+    UCS_STATIC_BITMAP_RESET_ALL(&device->siblings);
+}
+
 /* Memory device supports auxiliary path if a sibling is found */
 ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 {
@@ -1411,6 +1424,13 @@ ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
         goto out;
     }
 
+    if (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+        UCS_TOPO_SIBLING_ROLE_MEM) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    ucs_topo_sys_device_clear_siblings(sys_dev);
     ucs_topo_global_ctx.devices[sys_dev].sibling_role =
             UCS_TOPO_SIBLING_ROLE_MEM;
 
@@ -1440,6 +1460,14 @@ ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
         goto out;
     }
 
+    if ((ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+         UCS_TOPO_SIBLING_ROLE_DEV) &&
+        (ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux == sys_dev_aux)) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    ucs_topo_sys_device_clear_siblings(sys_dev);
     ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux = sys_dev_aux;
     ucs_topo_global_ctx.devices[sys_dev].sibling_role =
             UCS_TOPO_SIBLING_ROLE_DEV;

@@ -1002,14 +1002,14 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
     expect_sibling(gpu_dev2);
 }
 
-// Several network devices (e.g. planes of a multiplane NIC) can share a single
-// auxiliary (Direct NIC) device. All of them must be able to access the memory
-// device which sits behind the same bridge as the auxiliary device.
+// Multiple network devices sharing a single auxiliary device, with multiple
+// memory devices behind it.
 class test_topo_multi_dev_sibling : public test_topo {
 protected:
     static constexpr int num_planes = 3;
+    static constexpr int num_mems   = 2;
 
-    // Test both registration orders: memory device first (matched by
+    // Test both registration orders: memory devices first (matched by
     // set_sys_dev_aux), or network devices first (matched by enable_aux_path)
     void run_test(bool mem_first)
     {
@@ -1025,13 +1025,29 @@ protected:
             UCS_TEST_SKIP_R("No sibling DMA device found");
         }
 
+        // Memory devices: the same GPU BDF with distinct user values
+        std::vector<ucs_sys_device_t> mems;
         auto gpu_dev = register_device("gpu0", sibling_gpu);
         ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+        mems.push_back(gpu_dev);
+
+        ucs_sys_bus_id_t gpu_bus_id;
+        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev, &gpu_bus_id));
+        for (int i = 1; i < num_mems; ++i) {
+            ucs_sys_device_t mem_alias;
+            ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                    &gpu_bus_id, i, &mem_alias));
+            ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_alias);
+            mems.push_back(mem_alias);
+        }
+
         auto dma_dev = register_device("dma", sibling_dma);
         ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
 
         if (mem_first) {
-            ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+            for (auto mem : mems) {
+                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(mem));
+            }
         }
 
         // All planes report the same auxiliary device
@@ -1050,17 +1066,34 @@ protected:
         ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
 
         if (!mem_first) {
-            ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+            for (auto mem : mems) {
+                ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(mem));
+            }
         }
 
-        EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+        // Every memory device is matched with every plane, and vice versa
+        for (auto mem : mems) {
+            EXPECT_TRUE(ucs_topo_device_has_sibling(mem));
+            for (auto plane : planes) {
+                EXPECT_TRUE(ucs_topo_is_sibling(plane, mem));
+                EXPECT_TRUE(ucs_topo_is_reachable(plane, mem));
+            }
+        }
+
         for (auto plane : planes) {
-            EXPECT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
-            EXPECT_TRUE(ucs_topo_is_reachable(plane, gpu_dev));
+            EXPECT_TRUE(ucs_topo_device_has_sibling(plane));
         }
 
-        EXPECT_FALSE(ucs_topo_is_sibling(other, gpu_dev));
-        EXPECT_FALSE(ucs_topo_is_reachable(other, gpu_dev));
+        // Skip if the other HCA happens to be behind the GPU's bridge as well
+        if (ucs_topo_is_sibling(other, mems[0])) {
+            UCS_TEST_SKIP_R("Other HCA is behind the GPU bridge");
+        }
+
+        EXPECT_FALSE(ucs_topo_device_has_sibling(other));
+        for (auto mem : mems) {
+            EXPECT_FALSE(ucs_topo_is_sibling(other, mem));
+            EXPECT_FALSE(ucs_topo_is_reachable(other, mem));
+        }
     }
 };
 
@@ -1072,4 +1105,59 @@ UCS_TEST_F(test_topo_multi_dev_sibling, mem_first)
 UCS_TEST_F(test_topo_multi_dev_sibling, devs_first)
 {
     run_test(false);
+}
+
+// A pairing must not outlive the role or the auxiliary device it was made for
+UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
+{
+    read_pcie_devices();
+    if ((m_hcas.size() < 2) || m_gpus.empty() || m_dmas.empty()) {
+        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+    }
+
+    std::string sibling_gpu, sibling_dma;
+    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
+    if (sibling_dma.empty()) {
+        UCS_TEST_SKIP_R("No sibling DMA device found");
+    }
+
+    auto gpu_dev = register_device("gpu0", sibling_gpu);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+    auto dma_dev = register_device("dma", sibling_dma);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+    auto plane = register_device("plane", m_hcas[0]);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, plane);
+
+    // An auxiliary device which is not behind the GPU's bridge. This depends
+    // on the PCIe topology of the machine.
+    auto other = register_device("other", m_hcas[1]);
+    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, other);
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
+    if (ucs_topo_is_sibling(other, gpu_dev)) {
+        UCS_TEST_SKIP_R("Other HCA is behind the GPU bridge");
+    }
+
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+    ASSERT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+
+    // Setting the same auxiliary device again keeps the pairing
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+    EXPECT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+
+    // Role flip DEV -> MEM: the memory device forgets the former DEV
+    ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(plane));
+    EXPECT_FALSE(ucs_topo_is_sibling(plane, gpu_dev));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+
+    // Role flip MEM -> DEV pairs it again
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
+    EXPECT_TRUE(ucs_topo_is_sibling(plane, gpu_dev));
+    EXPECT_TRUE(ucs_topo_device_has_sibling(gpu_dev));
+
+    // Moving the device to another auxiliary device drops the old pairing
+    ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, other));
+    EXPECT_FALSE(ucs_topo_is_sibling(plane, gpu_dev));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(plane));
+    EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
 }
