@@ -92,6 +92,17 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
 
+/**
+ * Get the VRF (L3 master) device which a network interface is enslaved to.
+ * Addresses of such interface can be used only by sockets bound to the VRF.
+ *
+ * @param [in]  if_index         Network interface index.
+ *
+ * @return Network interface index of the VRF device, or -1 if the interface
+ *         is not enslaved to a VRF device.
+ */
+int ucs_netlink_get_vrf_master_index(int if_index);
+
 END_C_DECLS
 
 #endif /* UCS_NETLINK_H */

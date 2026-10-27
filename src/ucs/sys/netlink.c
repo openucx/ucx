@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <linux/rtnetlink.h>
 #include <pthread.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -395,4 +396,56 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
      * reached only for a default route, so the default is accepted only when
      * no interface has a more specific route. */
     return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
+}
+
+static ucs_status_t
+ucs_netlink_parse_vrf_master_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    const struct ifinfomsg *ifi_msg = NLMSG_DATA(nlh);
+    int *vrf_master_index_p         = arg;
+    int master_index                = -1;
+    int is_vrf_slave                = 0;
+    const struct rtattr *rta, *info_rta;
+    int len, info_len;
+
+    if (nlh->nlmsg_type != RTM_NEWLINK) {
+        return UCS_INPROGRESS;
+    }
+
+    len = IFLA_PAYLOAD(nlh);
+    for (rta = IFLA_RTA(ifi_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if (rta->rta_type == IFLA_MASTER) {
+            master_index = *(const int*)RTA_DATA(rta);
+        } else if (rta->rta_type == IFLA_LINKINFO) {
+            info_len = RTA_PAYLOAD(rta);
+            for (info_rta = RTA_DATA(rta); RTA_OK(info_rta, info_len);
+                 info_rta = RTA_NEXT(info_rta, info_len)) {
+                if ((info_rta->rta_type == IFLA_INFO_SLAVE_KIND) &&
+                    (RTA_PAYLOAD(info_rta) == sizeof("vrf")) &&
+                    !memcmp(RTA_DATA(info_rta), "vrf", sizeof("vrf"))) {
+                    is_vrf_slave = 1;
+                }
+            }
+        }
+    }
+
+    if (is_vrf_slave) {
+        *vrf_master_index_p = master_index;
+    }
+
+    return UCS_OK;
+}
+
+int ucs_netlink_get_vrf_master_index(int if_index)
+{
+    struct ifinfomsg ifi_msg = {
+        .ifi_family = AF_UNSPEC,
+        .ifi_index  = if_index
+    };
+    int vrf_master_index     = -1;
+
+    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, 0, &ifi_msg,
+                             sizeof(ifi_msg), ucs_netlink_parse_vrf_master_cb,
+                             &vrf_master_index);
+    return vrf_master_index;
 }
