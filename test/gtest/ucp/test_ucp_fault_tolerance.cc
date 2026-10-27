@@ -375,8 +375,13 @@ protected:
     /**
      * Common helper function to test PUT, AM and FLUSH operations with injected failure
      */
-    void test_put_am_flush_with_injected_failure(failure_side_t failure_side, unsigned op_mask) {
+    void
+    test_put_am_flush_with_injected_failure(failure_side_t failure_side,
+                                            unsigned op_mask,
+                                            ucp_lane_map_t *injected_lanes_p) {
         const std::string op_str = op_name(op_mask);
+
+        *injected_lanes_p = 0;
 
         /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
         flush_workers();
@@ -400,6 +405,7 @@ protected:
 
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                       << ucs_status_string(status);
+            *injected_lanes_p |= UCS_BIT(lane);
 
             UCS_TEST_MESSAGE << "Attempting " << op_str
                              << " operation after failure injection on lane "
@@ -580,34 +586,36 @@ protected:
         UCS_TEST_MESSAGE << "Success";
     }
 
-    void test_recovery(unsigned op_mask, failure_side_t failure_side) {
+    void test_recovery(unsigned op_mask, ucp_lane_map_t injected_lanes) {
         if (op_mask & TEST_OP_ALL_LANES_FAILED) {
             // Recovery is not expected, it depends on timings
             return;
         }
 
         ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-
-        if (op_mask & TEST_NO_RECOVERY) {
-            if ((failure_side != FAILURE_SIDE_TARGET) ||
-                !has_transport("dc_x")) {
-                wait_for_cond(
-                        [ep]() { return ucp_ep_get_failed_lanes(ep) != 0; },
-                        [this]() { short_progress_loop(); });
-                EXPECT_NE(0, ucp_ep_get_failed_lanes(ep));
-            }
-
-            EXPECT_EQ(nullptr, ep->ext->recovery_arg);
-            EXPECT_EQ(0, total_err_count());
+        const bool no_recovery = op_mask & TEST_NO_RECOVERY;
+        const ucp_lane_map_t expected_failed_lanes = no_recovery ?
+                                                             injected_lanes :
+                                                             0;
+        if (no_recovery) {
+            ASSERT_NE(0, injected_lanes);
         } else {
             UCS_TEST_MESSAGE << "Checking recovery status...";
+        }
 
-            wait_for_cond([ep]() { return ucp_ep_get_failed_lanes(ep) == 0; },
-                          [this]() { short_progress_loop(); });
+        auto wait_for_failed_lanes =
+                [this, ep](ucp_lane_map_t expected) -> ucp_lane_map_t {
+            wait_for_cond(
+                    [ep, expected]() {
+                        return ucp_ep_get_failed_lanes(ep) == expected;
+                    },
+                    [this]() { short_progress_loop(); });
+            return ucp_ep_get_failed_lanes(ep);
+        };
+        ASSERT_EQ(expected_failed_lanes,
+                  wait_for_failed_lanes(expected_failed_lanes));
 
-            const ucp_lane_map_t failed_lanes = ucp_ep_get_failed_lanes(ep);
-            ASSERT_EQ(0, failed_lanes) << "Failed lanes are not recovered"
-                                       << std::hex << failed_lanes;
+        if (!no_recovery) {
             for (ucp_lane_index_t lane_idx = 0;
                  lane_idx < ucp_ep_num_lanes(ep);) {
                 if (ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane_idx))) {
@@ -617,6 +625,8 @@ protected:
 
                 ++lane_idx;
             }
+        } else {
+            EXPECT_EQ(nullptr, ep->ext->recovery_arg);
         }
 
         if (op_mask & TEST_OP_AM) {
@@ -649,14 +659,22 @@ protected:
 
         ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count
                                         << " times";
+        ASSERT_EQ(expected_failed_lanes,
+                  wait_for_failed_lanes(expected_failed_lanes));
+        if (no_recovery) {
+            EXPECT_EQ(nullptr, ep->ext->recovery_arg);
+        }
+
         UCS_TEST_MESSAGE << "Endpoint is operational";
     }
 
     void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
+        ucp_lane_map_t injected_lanes = 0;
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
-            test_put_am_flush_with_injected_failure(failure_side, op_mask);
+            test_put_am_flush_with_injected_failure(failure_side, op_mask,
+                                                    &injected_lanes);
         } else if (op_mask & TEST_OP_AM) {
             ASSERT_FALSE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_am_with_injected_failure(failure_side, op_mask);
@@ -665,7 +683,7 @@ protected:
             test_rma_with_injected_failure(failure_side, op_mask);
         }
 
-        test_recovery(op_mask, failure_side);
+        test_recovery(op_mask, injected_lanes);
     }
 protected:
     size_t rma_msg_size() const {
@@ -1149,7 +1167,7 @@ UCS_TEST_P(test_ucp_flush_lane_recovery, lane_replaced_during_inprogress_flush,
         UCS_TEST_SKIP_R("uct_ep_invalidate is not supported");
     }
 
-    test_recovery(TEST_OP_AM, FAILURE_SIDE_INITIATOR);
+    test_recovery(TEST_OP_AM, 0);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush_lane_recovery, shm_ib, "shm,ib")
@@ -1167,6 +1185,10 @@ void test_ucp_fault_tolerance::run_initiator_failure()
 
 void test_ucp_fault_tolerance::run_target_failure()
 {
+    if ((get_variant_value() & TEST_NO_RECOVERY) && has_transport("dc_x")) {
+        UCS_TEST_SKIP_R("DC cannot detect remote DCI failure");
+    }
+
     do_test(FAILURE_SIDE_TARGET);
 }
 
