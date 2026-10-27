@@ -154,7 +154,8 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
 
     if ((mem_type == HSA_EXT_POINTER_TYPE_HSA) || is_vmm) {
         /* This covers device memory, hipHostMalloc, and VMM-mapped memory.
-         * VMM memory is already device-accessible; hsa_amd_memory_lock hangs on it. */
+         * VMM memory is already device-accessible; hsa_amd_memory_lock hangs
+         * on it. */
         dev_addr = address;
     } else {
         if (pg_align_addr) {
