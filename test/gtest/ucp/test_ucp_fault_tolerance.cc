@@ -57,12 +57,20 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
                                TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH,
                                op_name(TEST_OP_PUT |TEST_OP_AM | TEST_OP_FLUSH));
+        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_RMA,
+                               TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH |
+                                       TEST_NO_RECOVERY,
+                               op_name(TEST_OP_PUT | TEST_OP_AM |
+                                       TEST_OP_FLUSH | TEST_NO_RECOVERY));
     }
 
     test_ucp_fault_tolerance() {
         configure_peer_failure_settings();
         // reduce UD testing time 
         modify_config("KEEPALIVE_INTERVAL", "0.3s");
+        if (get_variant_value() & TEST_NO_RECOVERY) {
+            modify_config("RECOVERY_ENABLE", "n");
+        }
     }
 
 protected:
@@ -86,7 +94,8 @@ protected:
         TEST_OP_ALL_LANES_FAILED = UCS_BIT(4),
         TEST_MSG_SIZE_SMALL      = UCS_BIT(5),
         TEST_MSG_SIZE_MEDIUM     = UCS_BIT(6),
-        TEST_MSG_SIZE_LARGE      = UCS_BIT(7)
+        TEST_MSG_SIZE_LARGE      = UCS_BIT(7),
+        TEST_NO_RECOVERY         = UCS_BIT(8)
     };
 
     /* Must stay below cap.get.min_zcopy, so GET cannot use zcopy */
@@ -577,6 +586,15 @@ protected:
             return;
         }
 
+        if (op_mask & TEST_NO_RECOVERY) {
+            ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+
+            EXPECT_EQ(nullptr, ep->ext->recovery_arg);
+            EXPECT_NE(0, ucp_ep_get_failed_lanes(ep));
+            EXPECT_EQ(0, total_err_count());
+            return;
+        }
+
         UCS_TEST_MESSAGE << "Checking recovery status...";
 
         wait_for_cond([this]() {
@@ -633,7 +651,7 @@ protected:
         UCS_TEST_MESSAGE << "All lanes are operational";
     }
 
-    void test_ops_with_injected_failure(failure_side_t failure_side) {
+    void do_test(failure_side_t failure_side) {
         const unsigned op_mask = get_variant_value();
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
@@ -645,11 +663,8 @@ protected:
             ASSERT_TRUE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_rma_with_injected_failure(failure_side, op_mask);
         }
-    }
 
-    void do_test(failure_side_t failure_side) {
-        test_ops_with_injected_failure(failure_side);
-        test_recovery(get_variant_value());
+        test_recovery(op_mask);
     }
 protected:
     size_t rma_msg_size() const {
@@ -705,6 +720,10 @@ protected:
 
         if (op_mask & TEST_MSG_SIZE_LARGE) {
             name += "MSG_LARGE|";
+        }
+
+        if (op_mask & TEST_NO_RECOVERY) {
+            name += "NO_RECOVERY|";
         }
 
         if (!name.empty()) {
@@ -911,7 +930,6 @@ protected:
     static ucs::mock        *m_probe_mock;
     static unsigned          m_probe_count;
 
-    void run_lanes_degradation();
     void run_initiator_failure();
     void run_target_failure();
     void run_probe_gated_recovery();
@@ -937,31 +955,6 @@ public:
     DISABLED_test_ucp_fault_tolerance_tf() {
         modify_config("FAILOVER_MODE", "token");
         /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected. */
-        modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
-    }
-};
-
-class test_ucp_fault_tolerance_no_recovery :
-    public test_ucp_fault_tolerance {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_with_value(variants, UCP_FEATURE_AM, TEST_OP_AM, "am");
-    }
-
-    test_ucp_fault_tolerance_no_recovery()
-    {
-        modify_config("FAILOVER_MODE", "sw");
-        modify_config("RECOVERY_ENABLE", "n");
-    }
-};
-
-class test_ucp_fault_tolerance_no_recovery_tf :
-    public test_ucp_fault_tolerance_no_recovery {
-public:
-    test_ucp_fault_tolerance_no_recovery_tf()
-    {
-        modify_config("FAILOVER_MODE", "token");
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
     }
 };
@@ -1160,18 +1153,6 @@ UCS_TEST_P(test_ucp_flush_lane_recovery, lane_replaced_during_inprogress_flush,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_flush_lane_recovery, shm_ib, "shm,ib")
 
-void test_ucp_fault_tolerance::run_lanes_degradation()
-{
-    skip_unless_rc_probe_gate();
-
-    test_ops_with_injected_failure(FAILURE_SIDE_INITIATOR);
-
-    ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
-    EXPECT_EQ(nullptr, ep->ext->recovery_arg);
-    EXPECT_NE(0, ucp_ep_get_failed_lanes(ep));
-    EXPECT_EQ(0, total_err_count());
-}
-
 void test_ucp_fault_tolerance::run_initiator_failure()
 {
     if ((get_variant_value() & TEST_OP_ALL_LANES_FAILED) &&
@@ -1347,15 +1328,9 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
 
 UCP_FT_TESTS(test_ucp_fault_tolerance)
 UCP_FT_TESTS(DISABLED_test_ucp_fault_tolerance_tf)
-UCP_FT_TEST(test_ucp_fault_tolerance_no_recovery, lanes_degradation,
-            "MAX_EAGER_LANES=2")
-UCP_FT_TEST(test_ucp_fault_tolerance_no_recovery_tf, lanes_degradation,
-            "MAX_EAGER_LANES=2")
 
 #undef UCP_FT_TEST
 #undef UCP_FT_TESTS
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
 UCP_INSTANTIATE_TEST_CASE(DISABLED_test_ucp_fault_tolerance_tf)
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance_no_recovery)
-UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance_no_recovery_tf)
