@@ -639,8 +639,7 @@ out:
 
 static void
 uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
-                                  const void *mapped_addr, int enable_cache,
-                                  int enable_assert)
+                                  const void *mapped_addr, int cache_enabled)
 {
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
@@ -648,18 +647,18 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     /* use write lock because cache maybe modified */
     pthread_rwlock_wrlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, d_bptr);
-    if (enable_assert) {
+    if (mapped_addr != NULL) {
         ucs_assert(pgt_region != NULL);
     }
 
     region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
-    if (enable_assert) {
+    if (mapped_addr != NULL) {
         ucs_assert(region->refcount >= 1);
+        region->refcount--;
     }
 
-    region->refcount--;
-    if (!region->refcount && !enable_cache) {
-        if (enable_assert) {
+    if (!region->refcount && !cache_enabled) {
+        if (mapped_addr != NULL) {
             ucs_assert(region->mapped_addr == mapped_addr);
         }
 
@@ -671,8 +670,7 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
 
 void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
                                   uintptr_t d_bptr, const void *mapped_addr,
-                                  CUdevice cu_dev, int enable_cache,
-                                  int enable_assert)
+                                  CUdevice cu_dev, int cache_enabled)
 {
     const uct_cuda_ipc_cache_hash_key_t key = {pid, pid_ns, cu_dev};
     uct_cuda_ipc_cache_t *cache;
@@ -689,7 +687,7 @@ void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
     cache = uct_cuda_ipc_remote_cache_get(key);
     if (cache != NULL) {
         uct_cuda_ipc_cache_destroy_region(cache, d_bptr, mapped_addr,
-                                          enable_cache, enable_assert);
+                                          cache_enabled);
     } else {
         ucs_debug("no remote cache found for key: %d:%u:%d", pid, pid_ns,
                   cu_dev);

@@ -372,7 +372,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 
             uct_cuda_ipc_unmap_memhandle(
                     unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0, 1);
+                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {

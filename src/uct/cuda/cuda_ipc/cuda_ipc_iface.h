@@ -68,7 +68,7 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
                                      mapping->entries[i].pid_ns,
                                      mapping->entries[i].d_bptr,
                                      mapping->entries[i].mapped_addr,
-                                     cuda_device, enable_cache, 1);
+                                     cuda_device, enable_cache);
     }
 
     ucs_free(mapping);
