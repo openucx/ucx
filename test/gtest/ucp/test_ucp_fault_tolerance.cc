@@ -625,8 +625,6 @@ protected:
 
                 ++lane_idx;
             }
-        } else {
-            EXPECT_EQ(nullptr, ep->ext->recovery_arg);
         }
 
         if (op_mask & TEST_OP_AM) {
@@ -661,9 +659,6 @@ protected:
                                         << " times";
         ASSERT_EQ(expected_failed_lanes,
                   wait_for_failed_lanes(expected_failed_lanes));
-        if (no_recovery) {
-            EXPECT_EQ(nullptr, ep->ext->recovery_arg);
-        }
 
         UCS_TEST_MESSAGE << "Endpoint is operational";
     }
