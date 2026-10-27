@@ -819,9 +819,10 @@ UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_unaligned_range,
     size_t alloc_length;
     uct_md_mem_attr_t mem_attr;
 
-    ASSERT_EQ(CUDA_SUCCESS, cuMemGetAddressRange(&alloc_base, &alloc_length,
-                                                 (CUdeviceptr)address));
-    if ((alloc_base + alloc_length) >= ((CUdeviceptr)address + length)) {
+    /* If the query fails, the MD keeps the requested extent as well */
+    if ((cuMemGetAddressRange(&alloc_base, &alloc_length,
+                              (CUdeviceptr)address) == CUDA_SUCCESS) &&
+        ((alloc_base + alloc_length) >= ((CUdeviceptr)address + length))) {
         UCS_TEST_SKIP_R("allocation range covers the requested range");
     }
 
