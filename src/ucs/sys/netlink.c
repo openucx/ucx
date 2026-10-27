@@ -46,6 +46,11 @@ KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
            kh_int_hash_func, kh_int_hash_equal);
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
 
+/* Network interface index -> index of the VRF device it is enslaved to */
+KHASH_INIT(ucs_netlink_vrf_cache, khint32_t, int, 1, kh_int_hash_func,
+           kh_int_hash_equal);
+static khash_t(ucs_netlink_vrf_cache) ucs_netlink_vrf_master_cache;
+
 static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
 {
     return (nlh->nlmsg_type == NLMSG_DONE);
@@ -408,11 +413,11 @@ static ucs_status_t
 ucs_netlink_parse_vrf_master_cb(const struct nlmsghdr *nlh, void *arg)
 {
     const struct ifinfomsg *ifi_msg = NLMSG_DATA(nlh);
-    int *vrf_master_index_p         = arg;
     int master_index                = -1;
     int is_vrf_slave                = 0;
     const struct rtattr *rta, *info_rta;
-    int len, info_len;
+    int len, info_len, khret;
+    khiter_t iter;
 
     if (nlh->nlmsg_type != RTM_NEWLINK) {
         return UCS_INPROGRESS;
@@ -435,23 +440,45 @@ ucs_netlink_parse_vrf_master_cb(const struct nlmsghdr *nlh, void *arg)
         }
     }
 
-    if (is_vrf_slave) {
-        *vrf_master_index_p = master_index;
+    if (!is_vrf_slave || (master_index == -1)) {
+        return UCS_INPROGRESS;
     }
 
-    return UCS_OK;
+    iter = kh_put(ucs_netlink_vrf_cache, &ucs_netlink_vrf_master_cache,
+                  ifi_msg->ifi_index, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to put net iface index (%d) in the VRF cache",
+                  ifi_msg->ifi_index);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    kh_val(&ucs_netlink_vrf_master_cache, iter) = master_index;
+    return UCS_INPROGRESS;
+}
+
+static void ucs_netlink_init_vrf_master_cache(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    struct ifinfomsg ifi_msg         = {.ifi_family = AF_UNSPEC};
+
+    UCS_INIT_ONCE(&init_once) {
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, NLM_F_DUMP,
+                                 &ifi_msg, sizeof(ifi_msg),
+                                 ucs_netlink_parse_vrf_master_cb, NULL);
+    }
 }
 
 int ucs_netlink_get_vrf_master_index(int if_index)
 {
-    struct ifinfomsg ifi_msg = {
-        .ifi_family = AF_UNSPEC,
-        .ifi_index  = if_index
-    };
-    int vrf_master_index     = -1;
+    khiter_t iter;
 
-    ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, 0, &ifi_msg,
-                             sizeof(ifi_msg), ucs_netlink_parse_vrf_master_cb,
-                             &vrf_master_index);
-    return vrf_master_index;
+    ucs_netlink_init_vrf_master_cache();
+
+    iter = kh_get(ucs_netlink_vrf_cache, &ucs_netlink_vrf_master_cache,
+                  if_index);
+    if (iter == kh_end(&ucs_netlink_vrf_master_cache)) {
+        return -1;
+    }
+
+    return kh_val(&ucs_netlink_vrf_master_cache, iter);
 }

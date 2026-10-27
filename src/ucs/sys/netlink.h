@@ -95,6 +95,7 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
 /**
  * Get the VRF (L3 master) device which a network interface is enslaved to.
  * Addresses of such interface can be used only by sockets bound to the VRF.
+ * VRF membership of all interfaces is read once and cached at the first call.
  *
  * @param [in]  if_index         Network interface index.
  *
