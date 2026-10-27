@@ -11,7 +11,6 @@
 #include "rocm_ipc_iface.h"
 #include "rocm_ipc_md.h"
 #include "rocm_ipc_ep.h"
-#include "rocm_ipc_cache.h"
 
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/rocm/base/rocm_signal.h>
@@ -172,8 +171,6 @@ static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
 
-    /* Destroy export signals whose hipFree has already returned. */
-    uct_rocm_ipc_export_progress();
     return uct_rocm_base_progress(&iface->signal_queue);
 }
 

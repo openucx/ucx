@@ -13,6 +13,11 @@
 #include "rocm_ipc_md.h"
 
 
+typedef struct uct_rocm_ipc_cache {
+    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
+    char                  *name;      /**< Name */
+} uct_rocm_ipc_cache_t;
+
 typedef struct {
     ucs_pgt_region_t        super;        /**< Base class - page table region */
     ucs_list_link_t         list;         /**< List element */
@@ -27,11 +32,6 @@ typedef struct {
     uint32_t                signal_owner; /**< 0 open, 1 claim, 2 handler */
     int                     in_pgtable;   /**< Region is linked in @a cache */
 } uct_rocm_ipc_cache_region_t;
-
-typedef struct uct_rocm_ipc_cache {
-    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
-    char                  *name;      /**< Name */
-} uct_rocm_ipc_cache_t;
 
 ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
                                        const char *name);
@@ -48,11 +48,5 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
  */
 ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
                                      hsa_amd_ipc_signal_t *ipc_signal_p);
-
-/**
- * Destroy retired export signals. Importers attach the signal before mapping
- * memory, so any thread may safely reap them.
- */
-void uct_rocm_ipc_export_progress(void);
 
 #endif

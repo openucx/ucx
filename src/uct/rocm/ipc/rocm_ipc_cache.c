@@ -121,7 +121,6 @@ typedef struct uct_rocm_ipc_export {
 static ucs_list_link_t   uct_rocm_ipc_export_active;
 static ucs_list_link_t   uct_rocm_ipc_export_retired;
 static ucs_spinlock_t    uct_rocm_ipc_export_lock;
-static uint32_t          uct_rocm_ipc_export_retired_count;
 static ucs_init_once_t   uct_rocm_ipc_export_handler_once =
         UCS_INIT_ONCE_INITIALIZER;
 
@@ -181,8 +180,6 @@ static void uct_rocm_ipc_export_reap(void)
     ucs_list_for_each_safe(exp, tmp, &uct_rocm_ipc_export_retired, list) {
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
-        __atomic_fetch_sub(&uct_rocm_ipc_export_retired_count, 1,
-                           __ATOMIC_RELAXED);
     }
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
 
@@ -217,8 +214,6 @@ static void uct_rocm_ipc_export_mem_free_cb(ucm_event_type_t event_type,
         hsa_signal_store_screlease(exp->signal, 0);
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&uct_rocm_ipc_export_retired, &exp->list);
-        __atomic_fetch_add(&uct_rocm_ipc_export_retired_count, 1,
-                           __ATOMIC_RELAXED);
         ucs_debug("rocm ipc signal export %p length %zu", (void*)exp->address,
                   exp->length);
     }
@@ -304,16 +299,6 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     return UCS_OK;
 }
 
-void uct_rocm_ipc_export_progress(void)
-{
-    if (ucs_likely(__atomic_load_n(&uct_rocm_ipc_export_retired_count,
-                                   __ATOMIC_RELAXED) == 0)) {
-        return;
-    }
-
-    uct_rocm_ipc_export_reap();
-}
-
 static void uct_rocm_ipc_export_cleanup(void)
 {
     uct_rocm_ipc_export_t *exp, *tmp;
@@ -337,8 +322,6 @@ static void uct_rocm_ipc_export_cleanup(void)
         ucs_list_del(&exp->list);
         ucs_list_add_tail(&destroy_list, &exp->list);
     }
-    __atomic_store_n(&uct_rocm_ipc_export_retired_count, 0,
-                     __ATOMIC_RELAXED);
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
 
     ucs_list_for_each_safe(exp, tmp, &destroy_list, list) {
@@ -429,7 +412,7 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
 /* Caller holds the remote-cache write lock. A different or overlapping IPC
  * handle proves that this mapping is stale, so wake its handler to release
  * the reference it holds on the region and its signal. */
-static int
+static void
 uct_rocm_ipc_cache_region_stale_drop_locked(uct_rocm_ipc_cache_region_t *region,
                                             ucs_list_link_t *deferred)
 {
@@ -437,7 +420,7 @@ uct_rocm_ipc_cache_region_stale_drop_locked(uct_rocm_ipc_cache_region_t *region,
         hsa_signal_store_screlease(region->signal, 0);
     }
 
-    return uct_rocm_ipc_cache_region_drop_locked(region, deferred);
+    uct_rocm_ipc_cache_region_drop_locked(region, deferred);
 }
 
 static void uct_rocm_ipc_cache_region_finalize(ucs_list_link_t *deferred)
@@ -564,10 +547,10 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                               uct_rocm_ipc_cache_region_t **watch_region_p,
                               ucs_list_link_t *deferred)
 {
+    hsa_signal_t local_signal = {.handle = 0};
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_rocm_ipc_cache_region_t *region;
-    hsa_signal_t local_signal = {.handle = 0};
     hsa_signal_value_t signal_value;
     hsa_status_t hsa_status;
     int ret;
@@ -613,10 +596,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                       (void*)key->address, key->length);
         }
 
-        if (!uct_rocm_ipc_cache_region_stale_drop_locked(region, deferred)) {
-            status = UCS_ERR_IO_ERROR;
-            goto err;
-        }
+        uct_rocm_ipc_cache_region_stale_drop_locked(region, deferred);
     }
 
     if (uct_rocm_ipc_signal_invalidate_enabled()) {
@@ -640,6 +620,8 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         }
 
         if (hsa_signal_load_scacquire(local_signal) <= 0) {
+            ucs_debug("%s: rocm ipc buffer %p was already released by the owner",
+                      cache->name, (void*)key->address);
             status = UCS_ERR_INVALID_ADDR;
             goto err_destroy_signal;
         }
