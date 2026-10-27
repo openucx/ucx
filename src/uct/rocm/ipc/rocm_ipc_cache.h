@@ -59,6 +59,8 @@ uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
 
 void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region);
 
+void uct_rocm_ipc_export_init(void);
+
 /**
  * Create or reuse an IPC signal for an exported buffer and remember it until
  * free. Returns an empty signal when invalidation is disabled.

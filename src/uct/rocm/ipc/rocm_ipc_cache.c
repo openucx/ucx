@@ -73,7 +73,9 @@ typedef struct {
 static ucs_config_field_t uct_rocm_ipc_cache_config_table[] = {
     {"SIGNAL_INVALIDATE", "y",
      "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
-     "The IPC signal remains part of the packed rkey when this is n.",
+     "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
+     "When set to n, a mapping is replaced only when the peer's IPC handle\n"
+     "changes. The packed rkey layout is the same in both cases.",
      ucs_offsetof(uct_rocm_ipc_cache_config_t, signal_invalidate),
      UCS_CONFIG_TYPE_BOOL},
 
@@ -218,6 +220,17 @@ static void uct_rocm_ipc_export_install_handler(void)
     }
 }
 
+void uct_rocm_ipc_export_init(void)
+{
+    if (!uct_rocm_ipc_signal_invalidate_enabled()) {
+        return;
+    }
+
+    UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
+        uct_rocm_ipc_export_install_handler();
+    }
+}
+
 ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
                                      hsa_amd_ipc_signal_t *ipc_signal_p)
 {
@@ -229,10 +242,6 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     if (!uct_rocm_ipc_signal_invalidate_enabled()) {
         memset(ipc_signal_p, 0, sizeof(*ipc_signal_p));
         return UCS_OK;
-    }
-
-    UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
-        uct_rocm_ipc_export_install_handler();
     }
 
     uct_rocm_ipc_export_reap();

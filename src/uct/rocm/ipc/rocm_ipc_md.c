@@ -207,6 +207,7 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
         .component = &uct_rocm_ipc_component.super,
     };
 
+    uct_rocm_ipc_export_init();
     *md_p = &md;
     return UCS_OK;
 }

@@ -180,13 +180,11 @@ ucs_status_t uct_rocm_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_rocm_ipc_unpacked_rkey_t *unpacked =
-            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
-                           uct_rocm_ipc_unpacked_rkey_t);
     ucs_status_t ret;
+    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
 
     ret = UCS_PROFILE_CALL_ALWAYS(uct_rocm_ipc_ep_zcopy, tl_ep, remote_addr,
-                                  iov, &unpacked->super, comp, 1);
+                                  iov, key, comp, 1);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
@@ -200,13 +198,11 @@ ucs_status_t uct_rocm_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uint64_t remote_addr, uct_rkey_t rkey,
                                        uct_completion_t *comp)
 {
-    uct_rocm_ipc_unpacked_rkey_t *unpacked =
-            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
-                           uct_rocm_ipc_unpacked_rkey_t);
     ucs_status_t ret;
+    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
 
     ret = UCS_PROFILE_CALL_ALWAYS(uct_rocm_ipc_ep_zcopy, tl_ep, remote_addr,
-                                  iov, &unpacked->super, comp, 0);
+                                  iov, key, comp, 0);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
