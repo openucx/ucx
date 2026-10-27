@@ -3841,7 +3841,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
         }
 
         if ((ucp_ep_config(ucp_ep)->key.lanes[lane].lane_types &
-             UCP_LANE_TYPE_FAILED) &&
+             UCS_BIT(UCP_LANE_TYPE_FAILED)) &&
             (ucp_ep_recovery_arg(ucp_ep) != NULL) &&
             (ucp_ep_recovery_arg(ucp_ep)->tf[lane].uct_ep == uct_ep)) {
             ucs_debug("ep %p: lookup held lane %d for uct_ep %p", ucp_ep, lane,
