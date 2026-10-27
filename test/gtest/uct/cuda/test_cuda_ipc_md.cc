@@ -20,6 +20,7 @@ extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <ucs/datastruct/pgtable.h>
@@ -313,11 +314,35 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 #endif
 }
 
-UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
+UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
 {
-    /* Currently MNNVL is always disabled in CI */
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
-    EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+    bool expected                  = false;
+#if HAVE_NVML_FABRIC_INFO
+    nvmlGpuFabricInfoV_t fabric_info;
+    nvmlDevice_t device;
+    uint64_t cluster_uuid[2] = {};
+
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    if ((UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device) ==
+         UCS_OK) &&
+        (UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV, device,
+                                 &fabric_info) == UCS_OK)) {
+        /* MNNVL is enabled only if GPU 0 completed joining an NVLink fabric */
+        memcpy(cluster_uuid, fabric_info.clusterUuid, sizeof(cluster_uuid));
+        expected = (fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
+                   (fabric_info.status == NVML_SUCCESS) &&
+                   ((cluster_uuid[0] | cluster_uuid[1]) != 0);
+    }
+#endif
+
+    ASSERT_EQ(expected, !!cuda_ipc_md->enable_mnnvl);
+#if HAVE_NVML_FABRIC_INFO
+    if (expected) {
+        EXPECT_EQ(cluster_uuid[0] ^ cluster_uuid[1] ^ fabric_info.cliqueId,
+                  cuda_ipc_md->nvlink_domain);
+    }
+#endif
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
