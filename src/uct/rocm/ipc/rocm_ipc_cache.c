@@ -15,6 +15,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
@@ -366,9 +367,9 @@ uct_rocm_ipc_cache_region_unref(uct_rocm_ipc_cache_region_t *region)
     }
 }
 
-/* Caller holds the remote-cache write lock. The claim winner detaches the
- * mapping immediately so the exporter's hipFree can finish. It destroys the
- * IPC signal only when no handler has taken ownership of it. */
+/* Caller holds the remote-cache write lock. The claim winner detaches an
+ * unpinned mapping immediately so the exporter's hipFree can finish. It
+ * destroys the IPC signal only when no handler has taken ownership of it. */
 static int
 uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
                                       ucs_list_link_t *deferred)
@@ -380,8 +381,13 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
         return 0;
     }
 
-    mapped_addr         = region->mapped_addr;
-    region->mapped_addr = NULL;
+    /* A pinned mapping is detached by the last unpin. */
+    mapped_addr = NULL;
+    if (region->pin_count == 0) {
+        mapped_addr         = region->mapped_addr;
+        region->mapped_addr = NULL;
+    }
+
     /* A registered handler owns the signal and destroys it when it runs. */
     if (ucs_atomic_cswap32(&region->signal_owner, 0, 1) == 0) {
         region->retired_signal = region->signal;
@@ -416,28 +422,12 @@ static void
 uct_rocm_ipc_cache_region_stale_drop_locked(uct_rocm_ipc_cache_region_t *region,
                                             ucs_list_link_t *deferred)
 {
-    if (ucs_atomic_cswap32(&region->signal_owner, 2, 2) == 2) {
-        hsa_signal_store_screlease(region->signal, 0);
-    }
+    int handler_owned;
 
+    handler_owned = (ucs_atomic_cswap32(&region->signal_owner, 2, 2) == 2);
     uct_rocm_ipc_cache_region_drop_locked(region, deferred);
-}
-
-static void uct_rocm_ipc_cache_region_finalize(ucs_list_link_t *deferred)
-{
-    uct_rocm_ipc_cache_region_t *region, *tmp;
-
-    ucs_list_for_each_safe(region, tmp, deferred, list) {
-        ucs_list_del(&region->list);
-        if (region->retired_signal.handle != 0) {
-            if (hsa_signal_destroy(region->retired_signal) !=
-                HSA_STATUS_SUCCESS) {
-                ucs_warn("failed to destroy rocm ipc cache signal for %p",
-                         (void*)region->key.address);
-            }
-            region->retired_signal.handle = 0;
-        }
-        uct_rocm_ipc_cache_region_unref(region);
+    if (handler_owned) {
+        hsa_signal_store_screlease(region->signal, 0);
     }
 }
 
@@ -455,6 +445,19 @@ uct_rocm_ipc_cache_region_signal_destroy(uct_rocm_ipc_cache_region_t *region,
     }
 }
 
+static void uct_rocm_ipc_cache_region_finalize(ucs_list_link_t *deferred)
+{
+    uct_rocm_ipc_cache_region_t *region, *tmp;
+
+    ucs_list_for_each_safe(region, tmp, deferred, list) {
+        ucs_list_del(&region->list);
+        uct_rocm_ipc_cache_region_signal_destroy(region,
+                                                 region->retired_signal);
+        region->retired_signal.handle = 0;
+        uct_rocm_ipc_cache_region_unref(region);
+    }
+}
+
 static bool uct_rocm_ipc_cache_signal_cb(hsa_signal_value_t value, void *arg)
 {
     uct_rocm_ipc_cache_region_t *region = arg;
@@ -462,19 +465,25 @@ static bool uct_rocm_ipc_cache_signal_cb(hsa_signal_value_t value, void *arg)
     hsa_signal_t signal = {.handle = 0};
     int claimed;
 
-    (void)value;
     if (ucs_atomic_cswap32(&region->handler_done, 0, 1) != 0) {
         return false;
     }
 
     ucs_list_head_init(&deferred);
-    ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
-    claimed = uct_rocm_ipc_cache_region_drop_locked(region, &deferred);
-    if (region->signal.handle != 0) {
+    if (ucs_atomic_cswap32(&region->deactivate, 0, 0) != 0) {
+        /* A stale or teardown drop already unlinked the region. */
         signal                = region->signal;
         region->signal.handle = 0;
+        claimed               = 0;
+    } else {
+        ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
+        claimed = uct_rocm_ipc_cache_region_drop_locked(region, &deferred);
+        if (region->signal.handle != 0) {
+            signal                = region->signal;
+            region->signal.handle = 0;
+        }
+        ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
     }
-    ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
     uct_rocm_ipc_cache_region_signal_destroy(region, signal);
     if (claimed) {
@@ -510,7 +519,7 @@ static void uct_rocm_ipc_cache_purge(uct_rocm_ipc_cache_t *cache)
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         ucs_list_del(&region->list);
-        uct_rocm_ipc_cache_region_drop_locked(region, &deferred);
+        uct_rocm_ipc_cache_region_stale_drop_locked(region, &deferred);
     }
     ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
@@ -538,12 +547,14 @@ uct_rocm_ipc_cache_invalidate_regions(uct_rocm_ipc_cache_t *cache, void *from,
               to);
 }
 
-/* Caller holds the remote-cache write lock. A new region is returned through
+/* Caller holds the remote-cache write lock. The mapped region is returned
+ * through @a region_p. A new region is also returned through
  * @a watch_region_p so the caller can arm its IPC signal after releasing the
  * lock. @a deferred receives regions whose signals must be destroyed. */
 static ucs_status_t
 uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
-                              uct_rocm_ipc_key_t *key, void **mapped_addr,
+                              uct_rocm_ipc_key_t *key,
+                              uct_rocm_ipc_cache_region_t **region_p,
                               uct_rocm_ipc_cache_region_t **watch_region_p,
                               ucs_list_link_t *deferred)
 {
@@ -553,6 +564,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     uct_rocm_ipc_cache_region_t *region;
     hsa_signal_value_t signal_value;
     hsa_status_t hsa_status;
+    void *mapped_addr;
     int ret;
 
     *watch_region_p = NULL;
@@ -571,7 +583,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                           cache->name, (void*)key->address, key->length,
                           UCS_PGT_REGION_ARG(&region->super));
 
-                *mapped_addr = region->mapped_addr;
+                *region_p = region;
                 return UCS_OK;
             }
 
@@ -582,7 +594,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                           cache->name, (void*)key->address, key->length,
                           UCS_PGT_REGION_ARG(&region->super));
 
-                *mapped_addr = region->mapped_addr;
+                *region_p = region;
                 return UCS_OK;
             }
 
@@ -620,7 +632,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
         }
 
         if (hsa_signal_load_scacquire(local_signal) <= 0) {
-            ucs_debug("%s: rocm ipc buffer %p was already released by the owner",
+            ucs_debug("%s: rocm ipc buffer %p already released by the owner",
                       cache->name, (void*)key->address);
             status = UCS_ERR_INVALID_ADDR;
             goto err_destroy_signal;
@@ -628,7 +640,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     }
 
     hsa_status = hsa_amd_ipc_memory_attach(&key->ipc, key->length, 0, NULL,
-                                           mapped_addr);
+                                           &mapped_addr);
     if (ucs_unlikely(hsa_status != HSA_STATUS_SUCCESS)) {
         ucs_error("%s: failed to open ipc mem handle. addr:%p len:%lu hsa_status:%d",
                   cache->name, (void*)key->address, key->length, hsa_status);
@@ -642,8 +654,8 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                              "uct_rocm_ipc_cache_region");
     if (ret != 0) {
         ucs_warn("failed to allocate uct_rocm_ipc_cache region");
-        if (hsa_amd_ipc_memory_detach(*mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_fatal("failed to unmap addr:%p", *mapped_addr);
+        if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
+            ucs_fatal("failed to unmap addr:%p", mapped_addr);
         }
         status = UCS_ERR_NO_MEMORY;
         goto err_destroy_signal;
@@ -654,7 +666,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     region->super.end             =
             ucs_align_up_pow2(key->address + key->length, UCS_PGT_ADDR_ALIGN);
     region->key                   = *key;
-    region->mapped_addr           = *mapped_addr;
+    region->mapped_addr           = mapped_addr;
     region->cache                 = cache;
     region->signal                = local_signal;
     region->retired_signal.handle = 0;
@@ -662,6 +674,7 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     region->deactivate            = 0;
     region->handler_done          = 0;
     region->signal_owner          = 0;
+    region->pin_count             = 0;
     region->in_pgtable            = 0;
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert, &cache->pgtable,
@@ -679,14 +692,15 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
                   " size:%lu :%s",
                   cache->name, UCS_PGT_REGION_ARG(&region->super), key->length,
                   ucs_status_string(status));
-        if (hsa_amd_ipc_memory_detach(*mapped_addr) != HSA_STATUS_SUCCESS) {
-            ucs_fatal("failed to unmap addr:%p", *mapped_addr);
+        if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
+            ucs_fatal("failed to unmap addr:%p", mapped_addr);
         }
         ucs_free(region);
         goto err_destroy_signal;
     }
 
     region->in_pgtable = 1;
+    *region_p          = region;
     if (uct_rocm_ipc_signal_invalidate_enabled()) {
         *watch_region_p = region;
     }
@@ -847,12 +861,16 @@ out_unref:
     return status;
 }
 
-ucs_status_t
-uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr)
+/* Pins the mapping when @a pinned_p is not NULL. */
+static ucs_status_t
+uct_rocm_ipc_cache_map(uct_rocm_ipc_key_t *key, void **mapped_addr,
+                       uct_rocm_ipc_cache_region_t **pinned_p)
 {
     uct_rocm_ipc_cache_hash_key_t hash_key = {key->pid, key->pid_ns,
                                               key->dev_num};
     uct_rocm_ipc_cache_region_t *watch_region = NULL;
+    uct_rocm_ipc_cache_region_t *pinned       = NULL;
+    uct_rocm_ipc_cache_region_t *region;
     uct_rocm_ipc_cache_t *cache;
     ucs_list_link_t deferred;
     ucs_status_t status;
@@ -862,12 +880,20 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr)
     ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
     status = uct_rocm_ipc_remote_cache_get(hash_key, &cache);
     if (status == UCS_OK) {
-        status = uct_rocm_ipc_cache_map_region(cache, key, &mapped,
+        status = uct_rocm_ipc_cache_map_region(cache, key, &region,
                                                &watch_region, &deferred);
     }
-    if ((status == UCS_OK) && (watch_region != NULL)) {
-        /* Keep the region alive until its IPC signal is armed. */
-        ucs_atomic_add32(&watch_region->refcount, 1);
+    if (status == UCS_OK) {
+        mapped = region->mapped_addr;
+        if (watch_region != NULL) {
+            /* Keep the region alive until its IPC signal is armed. */
+            ucs_atomic_add32(&watch_region->refcount, 1);
+        }
+        if (pinned_p != NULL) {
+            ++region->pin_count;
+            ucs_atomic_add32(&region->refcount, 1);
+            pinned = region;
+        }
     }
     ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
@@ -875,10 +901,48 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr)
     if ((status == UCS_OK) && (watch_region != NULL)) {
         status = uct_rocm_ipc_cache_region_watch(watch_region);
     }
-    if (status == UCS_OK) {
-        *mapped_addr = mapped;
+    if (status != UCS_OK) {
+        if (pinned != NULL) {
+            uct_rocm_ipc_cache_unpin(pinned);
+        }
+        return status;
     }
-    return status;
+
+    *mapped_addr = mapped;
+    if (pinned_p != NULL) {
+        *pinned_p = pinned;
+    }
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr)
+{
+    return uct_rocm_ipc_cache_map(key, mapped_addr, NULL);
+}
+
+ucs_status_t
+uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
+                                 uct_rocm_ipc_cache_region_t **region_p)
+{
+    return uct_rocm_ipc_cache_map(key, mapped_addr, region_p);
+}
+
+void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region)
+{
+    ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
+    ucs_assert(region->pin_count > 0);
+    if ((--region->pin_count == 0) &&
+        (ucs_atomic_cswap32(&region->deactivate, 0, 0) != 0)) {
+        if (hsa_amd_ipc_memory_detach(region->mapped_addr) !=
+            HSA_STATUS_SUCCESS) {
+            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
+        }
+        region->mapped_addr = NULL;
+    }
+    ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
+
+    uct_rocm_ipc_cache_region_unref(region);
 }
 
 void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache)

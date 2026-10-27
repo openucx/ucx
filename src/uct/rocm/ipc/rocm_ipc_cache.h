@@ -26,10 +26,11 @@ typedef struct {
     uct_rocm_ipc_cache_t    *cache;       /**< Cache that owns the region */
     hsa_signal_t            signal;       /**< Attached IPC signal */
     hsa_signal_t            retired_signal; /**< Signal owned by claim winner */
-    uint32_t                refcount;     /**< Pgtable, handler, and watcher */
+    uint32_t                refcount;     /**< Pgtable, handler, watcher, pin */
     uint32_t                deactivate;   /**< 1 after unmap is claimed */
     uint32_t                handler_done; /**< Async handler entered once */
     uint32_t                signal_owner; /**< 0 open, 1 claim, 2 handler */
+    unsigned                pin_count;    /**< Consumers holding mapped_addr */
     int                     in_pgtable;   /**< Region is linked in @a cache */
 } uct_rocm_ipc_cache_region_t;
 
@@ -40,6 +41,17 @@ void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache);
 
 ucs_status_t
 uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
+
+/**
+ * Map @a key and keep @a mapped_addr attached until
+ * @ref uct_rocm_ipc_cache_unpin, even if the cache invalidates the region.
+ * The owner's free of the buffer waits for that release.
+ */
+ucs_status_t
+uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
+                                 uct_rocm_ipc_cache_region_t **region_p);
+
+void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region);
 
 /**
  * Create or reuse an IPC signal for an exported buffer and remember it until
