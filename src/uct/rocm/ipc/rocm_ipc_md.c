@@ -18,12 +18,6 @@
 #include <unistd.h>
 
 
-typedef struct {
-    uct_rocm_ipc_key_t          super;
-    uct_rocm_ipc_cache_region_t *region;      /**< Pinned by rkey_ptr */
-    void                        *mapped_addr; /**< Mapping of @a region */
-} uct_rocm_ipc_unpacked_rkey_t;
-
 static ucs_config_field_t uct_rocm_ipc_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_rocm_ipc_md_config_t, super),
@@ -141,7 +135,9 @@ uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
                               uct_device_mem_elem_t *mem_elem_p,
                               void **release_handle_p)
 {
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
+    uct_rocm_ipc_unpacked_rkey_t *unpacked =
+            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
+                           uct_rocm_ipc_unpacked_rkey_t);
     uct_rocm_ipc_device_mem_element_t *rocm_ipc_mem_element =
             (uct_rocm_ipc_device_mem_element_t*)mem_elem_p;
     uct_rocm_ipc_cache_region_t *region;
@@ -149,18 +145,19 @@ uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
     ucs_status_t status;
 
     /* GPU kernels use the mapping directly, so it must outlive the element */
-    status = uct_rocm_ipc_cache_pin_memhandle(key, &mapped_addr, &region);
+    status = uct_rocm_ipc_cache_pin_memhandle(&unpacked->super, &mapped_addr,
+                                              &region);
     if (status != UCS_OK) {
         ucs_error("Failed to map IPC handle: %s", ucs_status_string(status));
         return status;
     }
 
     /* Calculate offset: base_address - mapped_address */
-    rocm_ipc_mem_element->mapped_offset = UCS_PTR_BYTE_DIFF(key->address,
-                                                            mapped_addr);
+    rocm_ipc_mem_element->mapped_offset =
+            UCS_PTR_BYTE_DIFF(unpacked->super.address, mapped_addr);
 
     ucs_trace("rocm_ipc mem_elem_pack: key_addr=%p mapped=%p offset=%ld",
-              (void*)key->address, mapped_addr,
+              (void*)unpacked->super.address, mapped_addr,
               rocm_ipc_mem_element->mapped_offset);
 
     *release_handle_p = region;
@@ -233,7 +230,8 @@ static ucs_status_t uct_rocm_ipc_rkey_release(uct_component_t *component,
                                               uct_rkey_t rkey, void *handle)
 {
     uct_rocm_ipc_unpacked_rkey_t *unpacked =
-            (uct_rocm_ipc_unpacked_rkey_t*)rkey;
+            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
+                           uct_rocm_ipc_unpacked_rkey_t);
 
     ucs_assert(NULL == handle);
     if (unpacked->region != NULL) {
@@ -247,7 +245,8 @@ ucs_status_t uct_rocm_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                                    void *handle, uint64_t raddr, void **laddr_p)
 {
     uct_rocm_ipc_unpacked_rkey_t *unpacked =
-            (uct_rocm_ipc_unpacked_rkey_t*)rkey;
+            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
+                           uct_rocm_ipc_unpacked_rkey_t);
     ptrdiff_t offset;
     ucs_status_t status;
 

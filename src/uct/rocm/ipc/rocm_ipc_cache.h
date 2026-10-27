@@ -34,6 +34,12 @@ typedef struct {
     int                     in_pgtable;   /**< Region is linked in @a cache */
 } uct_rocm_ipc_cache_region_t;
 
+typedef struct {
+    uct_rocm_ipc_key_t          super;
+    uct_rocm_ipc_cache_region_t *region;      /**< Pinned by rkey_ptr */
+    void                        *mapped_addr; /**< Mapping of @a region */
+} uct_rocm_ipc_unpacked_rkey_t;
+
 ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
                                        const char *name);
 
@@ -45,7 +51,7 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
 /**
  * Map @a key and keep @a mapped_addr attached until
  * @ref uct_rocm_ipc_cache_unpin, even if the cache invalidates the region.
- * The owner's free of the buffer waits for that release.
+ * The caller must keep the owner allocation alive until it unpins the mapping.
  */
 ucs_status_t
 uct_rocm_ipc_cache_pin_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
