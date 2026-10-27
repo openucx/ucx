@@ -1277,7 +1277,8 @@ ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         }
 
         status = ucp_ep_tf_derive_rx(ep, lane, tx_tokens[lane].token,
-                                     tx_tokens[lane].len, &rx_token, &rx_len);
+                                     tx_tokens[lane].len, 1, &rx_token,
+                                     &rx_len);
         if (status != UCS_OK) {
             ucs_debug("ep %p: lane %d: rx token was not derived: %s", ep, lane,
                       ucs_status_string(status));
@@ -1503,7 +1504,8 @@ ucp_wireup_process_lanes_addr_reply(
                                    rx_tokens);
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
     ucp_ep_tf_lanes_purge_outstanding(ep, lanes_info->requested_lane_map,
-                                      request_id, 0);
+                                      request_id, 0,
+                                      lanes_info->requested_lane_map);
 }
 
 /* Locate the lanes info and the optional token trailer of a LANES_ADDR
@@ -1679,9 +1681,9 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 1, rx_tokens);
         ucs_debug("ep %p: LANES_ADDR_ACK request_id=0x%" PRIx32, ep,
                   request_id);
-        ucp_ep_tf_lanes_purge_outstanding(ep,
-                                          lanes_info->requested_lane_map,
-                                          request_id, 1);
+        ucp_ep_tf_lanes_purge_outstanding(ep, lanes_info->requested_lane_map,
+                                          request_id, 1,
+                                          lanes_info->requested_lane_map);
     } else {
         ucs_bug("invalid wireup message");
     }
