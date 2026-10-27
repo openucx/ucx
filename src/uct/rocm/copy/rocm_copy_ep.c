@@ -33,7 +33,7 @@
  * Calls hsa_amd_pointer_info directly to avoid logging errors for non-ROCM
  * addresses (e.g. plain host buffers), which is a normal and expected case. */
 static UCS_F_ALWAYS_INLINE int
-uct_rocm_is_vmm_addr(const void *addr, size_t length)
+uct_rocm_is_vmm_addr(const void *addr)
 {
     hsa_amd_pointer_info_t info = {.size = sizeof(info)};
 
@@ -43,26 +43,21 @@ uct_rocm_is_vmm_addr(const void *addr, size_t length)
 }
 #else
 static UCS_F_ALWAYS_INLINE int
-uct_rocm_is_vmm_addr(const void *addr, size_t length)
+uct_rocm_is_vmm_addr(const void *addr)
 {
     return 0;
 }
 #endif
 
-/* A valid rkey flagged as VMM is authoritative. A zero/absent flag is not: the
- * rkey may describe a different buffer than remote_addr (a host staging frag in
- * the rndv pipeline, or UCT_INVALID_RKEY on the memtype-ep path), so probe the
- * accessed address directly to keep device-only VMM memory off the memcpy
- * path. */
+/* Trust a valid rkey's is_vmm flag; only UCT_INVALID_RKEY probes the addr. */
 static UCS_F_ALWAYS_INLINE int
-uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr, size_t length)
+uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr)
 {
-    if ((rkey != UCT_INVALID_RKEY) &&
-        ((const uct_rocm_copy_key_t*)rkey)->is_vmm) {
-        return 1;
+    if (rkey != UCT_INVALID_RKEY) {
+        return ((const uct_rocm_copy_key_t*)rkey)->is_vmm;
     }
 
-    return uct_rocm_is_vmm_addr((void*)remote_addr, length);
+    return uct_rocm_is_vmm_addr((void*)remote_addr);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
@@ -285,7 +280,7 @@ ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     ucs_status_t status;
 
     if ((size < iface->config.d2h_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr, size)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
         uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
         status = UCS_OK;
     } else {
@@ -309,7 +304,7 @@ ucs_status_t uct_rocm_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     ucs_status_t status;
 
     if ((size < iface->config.h2d_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr, size)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
         uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
         status = UCS_OK;
     } else {
@@ -334,7 +329,7 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_iov_t *iov;
 
     if ((length <= iface->config.h2d_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr, length)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
         uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
@@ -371,7 +366,7 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     uct_iov_t *iov;
 
     if ((length <= iface->config.d2h_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr, length)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
         uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
