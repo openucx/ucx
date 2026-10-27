@@ -61,7 +61,7 @@ void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region);
 
 /**
  * Create or reuse an IPC signal for an exported buffer and remember it until
- * free.
+ * free. Returns an empty signal when invalidation is disabled.
  * The packed @a ipc_signal is the same for every peer that imports this key.
  */
 ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,

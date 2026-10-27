@@ -226,13 +226,16 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
     khiter_t iter;
     int ret;
 
-    if (uct_rocm_ipc_signal_invalidate_enabled()) {
-        UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
-            uct_rocm_ipc_export_install_handler();
-        }
-
-        uct_rocm_ipc_export_reap();
+    if (!uct_rocm_ipc_signal_invalidate_enabled()) {
+        memset(ipc_signal_p, 0, sizeof(*ipc_signal_p));
+        return UCS_OK;
     }
+
+    UCS_INIT_ONCE(&uct_rocm_ipc_export_handler_once) {
+        uct_rocm_ipc_export_install_handler();
+    }
+
+    uct_rocm_ipc_export_reap();
 
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
     iter = kh_get(rocm_ipc_exports, &uct_rocm_ipc_exports, address);
