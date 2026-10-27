@@ -286,12 +286,13 @@ bool test_md::check_dmabuf_export(ucs_memory_type_t mem_type)
     return true;
 }
 
-/* Memory which the device refuses to export as a dmabuf is not registrable
- * either, which is the case under an MPS MLOPart device */
+/* Under an MPS MLOPart device the driver allocates no GDR capable memory and
+ * refuses to export it as a dmabuf, which is what leaves it unregistrable.
+ * Gate on that driver property rather than on the flag the guarded tests
+ * assert, so a regression in the registrability detection fails them instead
+ * of skipping them. */
 bool test_md::check_registrable(ucs_memory_type_t mem_type)
 {
-    uct_md_mem_attr_v2_t mem_attr = {};
-
     /* Skip conditions are evaluated before the memory domain is opened, and
      * again from init() once it is */
     if (md() == nullptr) {
@@ -303,16 +304,8 @@ bool test_md::check_registrable(ucs_memory_type_t mem_type)
         return false;
     }
 
-    mem_buffer buffer(ucs_get_page_size(), mem_type);
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
-    if (uct_md_mem_query_v2(md(), buffer.ptr(), buffer.size(), &mem_attr) !=
-        UCS_OK) {
-        return false;
-    }
-
-    return !!(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+    return (mem_type != UCS_MEMORY_TYPE_CUDA) ||
+           mem_buffer::cuda_mem_is_gdr_capable();
 }
 
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
