@@ -2059,51 +2059,39 @@ static void ucp_ep_recovery_reset_probe(ucp_ep_recovery_probe_t *probe)
 #define UCP_EP_SLOT_PEER_ID_BIT ((uintptr_t)1)
 
 
-static uintptr_t ucp_ep_ext_slot(ucp_ep_h ep)
+static int ucp_ep_ext_recovery_is_peer_id(ucp_ep_recovery_arg_t *recovery_arg)
 {
-    return (uintptr_t)(ucp_ep_has_cm_lane(ep) ? NULL : ep->ext->recovery_arg);
-}
-
-static int ucp_ep_ext_slot_is_peer_id(uintptr_t slot)
-{
-    return (slot & UCP_EP_SLOT_PEER_ID_BIT) != 0;
+    return !!(((uintptr_t)recovery_arg) & UCP_EP_SLOT_PEER_ID_BIT);
 }
 
 ucp_ep_recovery_arg_t *ucp_ep_recovery_arg(ucp_ep_h ep)
 {
-    uintptr_t slot = ucp_ep_ext_slot(ep);
-
-    if ((slot == 0) || ucp_ep_ext_slot_is_peer_id(slot)) {
+    if (ucp_ep_has_cm_lane(ep) ||
+        ucp_ep_ext_recovery_is_peer_id(ep->ext->recovery_arg)) {
         return NULL;
     }
 
-    return (ucp_ep_recovery_arg_t*)slot;
+    return ep->ext->recovery_arg;
 }
 
 ucp_request_t *ucp_ep_close_req(ucp_ep_h ep)
 {
-    uintptr_t slot = ucp_ep_ext_slot(ep);
-
-    if ((slot == 0) || ucp_ep_ext_slot_is_peer_id(slot)) {
-        return NULL;
-    }
-
-    return (ucp_request_t*)slot;
+    return ucp_ep_has_cm_lane(ep) ? ep->ext->close_req : NULL;
 }
 
 static uint32_t ucp_ep_tf_seen_peer_id(ucp_ep_h ep)
 {
-    uintptr_t slot = ucp_ep_ext_slot(ep);
+    ucs_assert(!ucp_ep_has_cm_lane(ep));
 
-    if (ucp_ep_ext_slot_is_peer_id(slot)) {
-        return (uint32_t)(slot >> 1);
-    }
-
-    if (slot == 0) {
+    if (ep->ext->recovery_arg == NULL) {
         return 0;
     }
 
-    return ((ucp_ep_recovery_arg_t*)slot)->seen_peer_id;
+    if (ucp_ep_ext_recovery_is_peer_id(ep->ext->recovery_arg)) {
+        return (uint32_t)(((uintptr_t)ep->ext->recovery_arg) >> 1);
+    }
+
+    return ep->ext->recovery_arg->seen_peer_id;
 }
 
 static void ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint32_t peer_id)
@@ -2744,7 +2732,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
          UCP_FAILOVER_MODE_SW) ||
         (ep->flags & UCP_EP_FLAG_FAILED) ||
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
-        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
+        ucp_ep_has_cm_lane(ep) ||
         (ucp_ep_config(ep)->key.dst_version <
          UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION) ||
         (ucp_ep_get_lane(ep, lane) != uct_ep)) {
