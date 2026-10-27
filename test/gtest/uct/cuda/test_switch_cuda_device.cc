@@ -647,13 +647,8 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
 }
 
 #if CUDA_VERSION >= 12020
-/* Host-located VMM is not dmabuf-exportable but is registrable by IB.
- *
- * TODO: REG_WHOLE_ALLOC=off is needed because of an existing issue with
- * base_address being set to 0, causing cache pollution with this type of memory
- */
-UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
-           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+/* Host-located VMM is not dmabuf-exportable but is registrable by IB */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
@@ -663,13 +658,29 @@ UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
 
 /* Host-located VMM is typed as CUDA memory, but cannot be allocated as
  * GPUDirect RDMA capable */
-UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_not_gdr_capable,
-           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_not_gdr_capable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
     query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
+}
+
+/* cuMemGetAddressRange() reports a zero base address for host-located VMM, so
+ * the registration range must not be extended to it */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+    uct_md_mem_attr_t mem_attr;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                   &mem_attr));
+    EXPECT_EQ(buffer.ptr(), mem_attr.base_address);
+    EXPECT_EQ(buffer.size(), mem_attr.alloc_length);
 }
 #endif
 
