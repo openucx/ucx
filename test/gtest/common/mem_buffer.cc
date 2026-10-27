@@ -386,6 +386,7 @@ bool mem_buffer::cuda_mem_is_gdr_capable()
     void *ptr;
 
     if (cudaMalloc(&ptr, 4096) != cudaSuccess) {
+        (void)cudaGetLastError(); /* do not leak the error to other tests */
         return false;
     }
 

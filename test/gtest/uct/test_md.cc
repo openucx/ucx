@@ -265,10 +265,6 @@ bool test_md::check_dmabuf_export(ucs_memory_type_t mem_type)
 {
     uct_md_mem_attr_t mem_attr = {};
 
-    if (md() == nullptr) {
-        return true;
-    }
-
     if (!(m_md_attr.dmabuf_mem_types & UCS_BIT(mem_type)) ||
         !mem_buffer::is_mem_type_supported(mem_type)) {
         return false;
@@ -1293,7 +1289,11 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
             continue;
         }
 
-        if (dmabuf_expected && !check_dmabuf_export(mem_type)) {
+        /* Only an MPS MLOPart device may refuse an export the MD advertises;
+         * anywhere else a refusal is a genuine failure of the dmabuf path */
+        if (dmabuf_expected && (mem_type == UCS_MEMORY_TYPE_CUDA) &&
+            !mem_buffer::cuda_mem_is_gdr_capable() &&
+            !check_dmabuf_export(mem_type)) {
             UCS_TEST_MESSAGE << "skipping " << ucs_memory_type_names[mem_type]
                              << " (device refuses dmabuf export)";
             continue;
@@ -1484,7 +1484,8 @@ protected:
 #if HAVE_DECL_GDR_PIN_BUFFER_V2
 
 /* The driver refuses to pin memory it did not allocate as GPUDirect RDMA
- * capable, which is the case for every allocation under an MPS MLOPartdevice */
+ * capable, which is the case for every allocation under an MPS MLOPart
+ * device */
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
                      !check_caps(UCT_MD_FLAG_REG) ||
                              !mem_buffer::cuda_mem_is_gdr_capable(),

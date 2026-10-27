@@ -766,19 +766,16 @@ UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
     };
 
     ucs_sys_device_t sys_dev0, sys_dev1;
-    if (!check_domain(0, sys_dev0)) {
-        UCS_TEST_SKIP_R("failed to allocate locality-domain 0 VMM memory");
+
+    /* Domain 1 is present only on a device with several locality domains, so
+     * its absence is what tells a single-domain device apart */
+    if (!check_domain(1, sys_dev1)) {
+        UCS_TEST_SKIP_R("single locality-domain device");
     }
 
-    if (!check_domain(1, sys_dev1)) {
-        /* An MPS MLOPart device is itself a single locality domain, soit has
-         * no domain 1 to allocate from */
-        if (!mem_buffer::cuda_mem_is_gdr_capable()) {
-            UCS_TEST_SKIP_R("single locality-domain device");
-        }
-
-        ADD_FAILURE() << "locality domain 1 allocation failed even though "
-                         "domain 0 succeeded";
+    if (!check_domain(0, sys_dev0)) {
+        ADD_FAILURE() << "locality domain 0 allocation failed even though "
+                         "domain 1 succeeded";
         return;
     }
 
