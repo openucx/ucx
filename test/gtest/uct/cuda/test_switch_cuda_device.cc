@@ -562,8 +562,13 @@ UCS_TEST_P(test_mem_alloc_device, legacy_mem_gdr_capable)
     constexpr size_t size = 4 * UCS_MBYTE;
     mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_gdr_capable(buffer.ptr(), size,
-                      mem_buffer::cuda_mem_is_gdr_capable());
+    if (mem_buffer::cuda_mem_is_gdr_capable()) {
+        query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
+    } else {
+        /* Registrability is not asserted under MLOPart, as it dependson
+         * whether the platform can export a dma_buf fd for such memory */
+        query_gdr_capable(buffer.ptr(), size, 0);
+    }
 }
 
 /* VMM device memory is GDR capable only when requested at allocation */

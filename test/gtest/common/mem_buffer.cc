@@ -400,7 +400,8 @@ bool mem_buffer::cuda_mem_is_gdr_capable()
     if (cuPointerGetAttribute(&is_gdr_capable,
                               CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE,
                               (CUdeviceptr)ptr) != CUDA_SUCCESS) {
-        is_gdr_capable = 0;
+        cudaFree(ptr);
+        return false;
     }
 
     cudaFree(ptr);
