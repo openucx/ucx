@@ -807,7 +807,8 @@ UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
 #endif
 }
 
-UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_unaligned_range) {
+UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_unaligned_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on") {
     cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 2);
     /* Starts in the middle of the first handle and ends in the second one,
      * while being shorter than a single handle */
