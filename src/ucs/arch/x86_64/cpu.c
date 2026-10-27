@@ -411,7 +411,7 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
         family += version.ext_family;
     }
     if ((family == 0x6) || (family == 0x7) || (family == 0xf) ||
-        (family == 0x17) || (family == 0x19)) {
+        (family == 0x17) || (family == 0x19) || (family == 0x1a)) {
         model = (version.ext_model << 4) | model;
     }
 
