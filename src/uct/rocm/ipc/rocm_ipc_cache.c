@@ -114,6 +114,7 @@ typedef struct uct_rocm_ipc_export {
     uintptr_t       address;
     size_t          length;
     hsa_signal_t    signal;
+    hsa_amd_ipc_signal_t ipc_signal;
 } uct_rocm_ipc_export_t;
 
 
@@ -149,6 +150,21 @@ static void uct_rocm_ipc_export_destroy(uct_rocm_ipc_export_t *exp)
     }
 
     ucs_free(exp);
+}
+
+/* Caller holds the export lock. */
+static uct_rocm_ipc_export_t *
+uct_rocm_ipc_export_find_active(uintptr_t address, size_t length)
+{
+    uct_rocm_ipc_export_t *exp;
+
+    ucs_list_for_each(exp, &uct_rocm_ipc_export_active, list) {
+        if ((exp->address == address) && (exp->length == length)) {
+            return exp;
+        }
+    }
+
+    return NULL;
 }
 
 /* An importer attaches the IPC signal before it maps memory. Therefore, after
@@ -225,8 +241,7 @@ static void uct_rocm_ipc_export_install_handler(void)
 ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
                                      hsa_amd_ipc_signal_t *ipc_signal_p)
 {
-    uct_rocm_ipc_export_t *exp;
-    hsa_signal_t signal;
+    uct_rocm_ipc_export_t *exp, *existing;
     hsa_status_t hsa_status;
 
     if (uct_rocm_ipc_signal_invalidate_enabled()) {
@@ -237,34 +252,55 @@ ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,
         uct_rocm_ipc_export_reap();
     }
 
-    hsa_status = hsa_amd_signal_create(1, 0, NULL, HSA_AMD_SIGNAL_IPC, &signal);
-    if (hsa_status != HSA_STATUS_SUCCESS) {
-        ucs_error("failed to create rocm ipc signal for %p length %zu: %d",
-                  (void*)address, length, hsa_status);
-        return UCS_ERR_IO_ERROR;
+    ucs_spin_lock(&uct_rocm_ipc_export_lock);
+    existing = uct_rocm_ipc_export_find_active(address, length);
+    if (existing != NULL) {
+        *ipc_signal_p = existing->ipc_signal;
+        ucs_spin_unlock(&uct_rocm_ipc_export_lock);
+        return UCS_OK;
     }
-
-    hsa_status = hsa_amd_ipc_signal_create(signal, ipc_signal_p);
-    if (hsa_status != HSA_STATUS_SUCCESS) {
-        ucs_error("failed to export rocm ipc signal for %p length %zu: %d",
-                  (void*)address, length, hsa_status);
-        hsa_signal_destroy(signal);
-        return UCS_ERR_IO_ERROR;
-    }
+    ucs_spin_unlock(&uct_rocm_ipc_export_lock);
 
     exp = ucs_malloc(sizeof(*exp), "uct_rocm_ipc_export_t");
     if (exp == NULL) {
-        hsa_signal_destroy(signal);
         return UCS_ERR_NO_MEMORY;
+    }
+
+    hsa_status = hsa_amd_signal_create(1, 0, NULL, HSA_AMD_SIGNAL_IPC,
+                                       &exp->signal);
+    if (hsa_status != HSA_STATUS_SUCCESS) {
+        ucs_error("failed to create rocm ipc signal for %p length %zu: %d",
+                  (void*)address, length, hsa_status);
+        ucs_free(exp);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    hsa_status = hsa_amd_ipc_signal_create(exp->signal, &exp->ipc_signal);
+    if (hsa_status != HSA_STATUS_SUCCESS) {
+        ucs_error("failed to export rocm ipc signal for %p length %zu: %d",
+                  (void*)address, length, hsa_status);
+        hsa_signal_destroy(exp->signal);
+        ucs_free(exp);
+        return UCS_ERR_IO_ERROR;
     }
 
     exp->address     = address;
     exp->length      = length;
-    exp->signal      = signal;
 
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
-    ucs_list_add_tail(&uct_rocm_ipc_export_active, &exp->list);
+    existing = uct_rocm_ipc_export_find_active(address, length);
+    if (existing == NULL) {
+        ucs_list_add_tail(&uct_rocm_ipc_export_active, &exp->list);
+        *ipc_signal_p = exp->ipc_signal;
+    } else {
+        *ipc_signal_p = existing->ipc_signal;
+    }
     ucs_spin_unlock(&uct_rocm_ipc_export_lock);
+
+    if (existing != NULL) {
+        uct_rocm_ipc_export_destroy(exp);
+    }
+
     return UCS_OK;
 }
 

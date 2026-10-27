@@ -42,7 +42,8 @@ ucs_status_t
 uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
 
 /**
- * Create an IPC signal for an exported buffer and remember it until free.
+ * Create or reuse an IPC signal for an exported buffer and remember it until
+ * free.
  * The packed @a ipc_signal is the same for every peer that imports this key.
  */
 ucs_status_t uct_rocm_ipc_export_add(uintptr_t address, size_t length,

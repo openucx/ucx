@@ -87,7 +87,7 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->pid     = getpid();
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 
-    /* One IPC signal per export. Every importer of this key watches it. */
+    /* One IPC signal per allocation. Every importer of this key watches it. */
     if (uct_rocm_ipc_export_add(key->address, key->length, &key->ipc_signal) !=
         UCS_OK) {
         return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
