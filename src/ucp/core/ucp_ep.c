@@ -1658,7 +1658,7 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
             if (ucp_ep_close_req(ucp_ep) != NULL) {
                 /* Promote close operation to CANCEL in case of transport error,
                  * since the disconnect event may never arrive. */
-                close_req = ucp_ep_close_req(ucp_ep);
+                close_req                        = ucp_ep_close_req(ucp_ep);
                 close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
                 ucp_ep_local_disconnect_progress(close_req);
             }
@@ -1795,8 +1795,8 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
     ucs_status_t status;
     ucs_string_buffer_t strb;
 
-    ucs_debug("ep %p: recovery clearing FAILED states for lanes 0x%" PRIx64,
-             ep, lanes);
+    ucs_debug("ep %p: recovery clearing FAILED states for lanes 0x%" PRIx64, ep,
+              lanes);
 
     if (lanes == 0) {
         return UCS_OK;
@@ -1826,8 +1826,8 @@ ucs_status_t ucp_ep_reconfig_clear_failed_lanes(ucp_ep_h ep,
 
     ucp_ep_set_cfg_index(ep, new_cfg_index, 1);
     ucs_debug("ep %p: cleared FAILED states for lanes 0x%" PRIx64
-             " (cfg_index %u -> %u, am_lane=%d)",
-             ep, (uint64_t)lanes, old_cfg_index, ep->cfg_index, ep->am_lane);
+              " (cfg_index %u -> %u, am_lane=%d)",
+              ep, (uint64_t)lanes, old_cfg_index, ep->cfg_index, ep->am_lane);
     if (ucs_log_is_enabled(log_level)) {
         ucs_string_buffer_init(&strb);
         ucp_proto_select_info(ep->worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
@@ -2109,9 +2109,8 @@ static void ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint32_t peer_id)
     }
 
     /* A bare id can share a pointer's alignment, so the low bit marks it. */
-    ep->ext->recovery_arg =
-            (ucp_ep_recovery_arg_t*)(((uintptr_t)peer_id << 1) |
-                                     UCP_EP_SLOT_PEER_ID_BIT);
+    ep->ext->recovery_arg = (ucp_ep_recovery_arg_t*)(((uintptr_t)peer_id << 1) |
+                                                     UCP_EP_SLOT_PEER_ID_BIT);
 }
 
 static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
@@ -2353,7 +2352,8 @@ static int ucp_ep_recovery_send_request(ucp_ep_h ep, ucp_lane_map_t lanes)
 
     ucp_ep_recovery_arg(ep)->sent_lanes |= recovery_lanes;
     ucs_debug("ep %p: sending recovery request, lanes=0x%" PRIx64
-              " recovery=0x%" PRIx64, ep, (uint64_t)lanes, recovery_lanes);
+              " recovery=0x%" PRIx64,
+              ep, (uint64_t)lanes, recovery_lanes);
 
     /* A request answers no other message, so requested_lane_map is empty.
      * 0 is the no-trailer sentinel on the wire. */
@@ -2425,7 +2425,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
             return UCS_ERR_NO_MEMORY;
         }
 
-        arg->seen_peer_id    = seen_peer_id;
+        arg->seen_peer_id     = seen_peer_id;
         ep->ext->recovery_arg = arg;
         ucp_ep_tf_arg_init(arg);
     }
@@ -2515,8 +2515,8 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     held      = ucp_ep_tf_held_lanes(ep);
     recovered = ready & ~held;
     ucs_debug("ep %p: recovery failed=0x%" PRIx64 " ready=0x%" PRIx64
-             " held=0x%" PRIx64, ep, (uint64_t)failed, (uint64_t)ready,
-             (uint64_t)held);
+              " held=0x%" PRIx64,
+              ep, (uint64_t)failed, (uint64_t)ready, (uint64_t)held);
     status    = ucp_ep_reconfig_clear_failed_lanes(ep, recovered);
     if (status != UCS_OK) {
         ucs_error("ep %p: failed to clear FAILED states for lanes 0x%" PRIx64,
@@ -2577,7 +2577,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
              * IDLE round re-enters address exchange so rebuild can connect. */
             ucp_ep_recovery_arg(ep)->state  = UCP_EP_RECOVERY_STATE_IDLE;
             ucp_ep_recovery_arg(ep)->resend = 1;
-            ret                           = 1;
+            ret                             = 1;
             goto done;
         }
 
@@ -2603,7 +2603,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     }
 
     ucs_assert(ucp_ep_recovery_arg(ep)->state == UCP_EP_RECOVERY_STATE_IDLE);
-    resend = ucp_ep_recovery_arg(ep)->resend;
+    resend                          = ucp_ep_recovery_arg(ep)->resend;
     ucp_ep_recovery_arg(ep)->resend = 0;
     if (resend) {
         lanes = failed & ucp_ep_recovery_arg(ep)->sent_lanes;
@@ -2618,7 +2618,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     if (lanes == 0) {
         /* Nothing new. The next round retries the lanes already sent. */
         ucp_ep_recovery_arg(ep)->resend = 1;
-        ret                           = 1;
+        ret                             = 1;
         goto done;
     }
 
@@ -2633,7 +2633,7 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     } else {
         ucp_ep_recovery_arg(ep)->state  = UCP_EP_RECOVERY_STATE_IDLE;
         ucp_ep_recovery_arg(ep)->resend = resend;
-        ret                           = 1;
+        ret                             = 1;
     }
 
     goto done;
@@ -2816,8 +2816,8 @@ ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
         tf->state = UCP_EP_TF_LANE_INVALIDATED;
         ucp_ep_tf_note_ids(tf, request_id, peer_id);
         invalidated |= UCS_BIT(lane);
-        ucs_debug("ep %p: invalidated lane %d uct_ep %p req 0x%x peer 0x%x",
-                 ep, lane, uct_ep, tf->request_id, tf->peer_id);
+        ucs_debug("ep %p: invalidated lane %d uct_ep %p req 0x%x peer 0x%x", ep,
+                  lane, uct_ep, tf->request_id, tf->peer_id);
     }
 
     return invalidated;
@@ -2871,7 +2871,7 @@ ucp_lane_map_t ucp_ep_tf_invalidate_transport(ucp_ep_h ep, ucp_lane_map_t lanes)
         uct_ep = ucp_ep_get_lane(ep, lane);
         status = uct_ep_invalidate(uct_ep, &params);
         ucs_debug("ep %p: lane %d invalidate uct_ep %p: %s", ep, lane, uct_ep,
-                 ucs_status_string(status));
+                  ucs_status_string(status));
         if (status == UCS_OK) {
             armed |= UCS_BIT(lane);
         }
@@ -2896,10 +2896,10 @@ uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
     return tf->tx_len;
 }
 
-ucs_status_t
-ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane, const void *tx_token,
-                    uint8_t tx_len, int require_open, void **rx_token_p,
-                    uint8_t *rx_len_p)
+ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
+                                 const void *tx_token, uint8_t tx_len,
+                                 int require_open, void **rx_token_p,
+                                 uint8_t *rx_len_p)
 {
     ucp_worker_iface_t *wiface;
     uct_iface_attr_v2_t attr;
@@ -2957,15 +2957,15 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
     uint32_t expect;
     void *buf;
 
-    if ((tf == NULL) || !ucp_ep_tf_exchange_open(ep, lane) ||
-        (token == NULL) || (len == 0)) {
+    if ((tf == NULL) || !ucp_ep_tf_exchange_open(ep, lane) || (token == NULL) ||
+        (len == 0)) {
         return;
     }
 
     expect = from_ack ? tf->peer_id : tf->request_id;
     if ((request_id == 0) || (request_id != expect)) {
         ucs_debug("ep %p: lane %d: rx token id 0x%x does not match 0x%x", ep,
-                 lane, request_id, expect);
+                  lane, request_id, expect);
         return;
     }
 
@@ -2988,7 +2988,7 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
     tf->rx_token = buf;
     tf->rx_len   = len;
     ucs_debug("ep %p: lane %d: stored rx token length %u request_id 0x%x", ep,
-             lane, len, request_id);
+              lane, len, request_id);
 }
 
 static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg)
@@ -3016,7 +3016,7 @@ static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
 {
     if ((tf->uct_ep != NULL) || (tf->state != UCP_EP_TF_LANE_EMPTY)) {
         ucs_debug("ep %p: release uct_ep %p state %u req 0x%x peer 0x%x", ep,
-                 tf->uct_ep, (unsigned)tf->state, tf->request_id, tf->peer_id);
+                  tf->uct_ep, (unsigned)tf->state, tf->request_id, tf->peer_id);
     }
 
     tf->uct_ep     = NULL;
@@ -3101,7 +3101,7 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
     }
 
     ucs_debug("ep %p: lane %d: purging cancel on uct_ep %p", ep, lane,
-             tf->uct_ep);
+              tf->uct_ep);
     uct_ep_pending_purge(tf->uct_ep, ucp_request_purge_enqueue_cb,
                          &ucp_ep_recovery_arg(ep)->tf_pending_q);
     /* The token purge already walked this queue. Another walk is empty and
@@ -3163,22 +3163,22 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
         }
 
         if ((tf->state != UCP_EP_TF_LANE_HELD) || (tf->uct_ep == NULL)) {
-            ucs_debug("ep %p: lane %d skip purge state %u uct_ep %p rx %p",
-                     ep, lane, (unsigned)tf->state, tf->uct_ep, tf->rx_token);
+            ucs_debug("ep %p: lane %d skip purge state %u uct_ep %p rx %p", ep,
+                      lane, (unsigned)tf->state, tf->uct_ep, tf->rx_token);
             continue;
         }
 
         expect = from_ack ? tf->peer_id : tf->request_id;
         if ((request_id == 0) || (request_id != expect)) {
             ucs_debug("ep %p: lane %d skip purge id 0x%x expect 0x%x"
-                     " from_ack %d",
-                     ep, lane, request_id, expect, from_ack);
+                      " from_ack %d",
+                      ep, lane, request_id, expect, from_ack);
             continue;
         }
 
         if (tf->purged) {
             ucs_debug("ep %p: lane %d already purged uct_ep %p", ep, lane,
-                     tf->uct_ep);
+                      tf->uct_ep);
         } else {
             /* A reply still owes the peer its receive position. An ACK that
              * names this held lane and carries no token means that queue pair
@@ -3190,11 +3190,11 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
 
             if (tf->rx_token == NULL) {
                 ucs_debug("ep %p: lane %d: purge without rx token on uct_ep %p",
-                         ep, lane, tf->uct_ep);
+                          ep, lane, tf->uct_ep);
             } else {
                 ucs_debug("ep %p: lane %d: purging outstanding on uct_ep %p"
-                         " rx token %p",
-                         ep, lane, tf->uct_ep, tf->rx_token);
+                          " rx token %p",
+                          ep, lane, tf->uct_ep, tf->rx_token);
             }
 
             status = ucp_ep_tf_purge_lane(ep, lane, tf);
@@ -3208,8 +3208,8 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
         /* The ACK token is this queue pair's receive position. Destroying
          * it before that token is sent leaves the peer held forever. */
         if (!(release_lanes & UCS_BIT(lane))) {
-            ucs_debug("ep %p: lane %d keep uct_ep %p until the ACK token",
-                     ep, lane, tf->uct_ep);
+            ucs_debug("ep %p: lane %d keep uct_ep %p until the ACK token", ep,
+                      lane, tf->uct_ep);
             continue;
         }
 
@@ -3295,7 +3295,7 @@ ucp_ep_tf_claim(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
     tf->state    = UCP_EP_TF_LANE_HELD;
     tf->purged   = 0;
     ucs_debug("ep %p: hold lane %d uct_ep %p tx_token_len %zu", ep, lane,
-             uct_ep, tx_len);
+              uct_ep, tx_len);
     return UCS_OK;
 }
 
@@ -3845,7 +3845,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
             (ucp_ep_recovery_arg(ucp_ep) != NULL) &&
             (ucp_ep_recovery_arg(ucp_ep)->tf[lane].uct_ep == uct_ep)) {
             ucs_debug("ep %p: lookup held lane %d for uct_ep %p", ucp_ep, lane,
-                     uct_ep);
+                      uct_ep);
             return lane;
         }
     }
