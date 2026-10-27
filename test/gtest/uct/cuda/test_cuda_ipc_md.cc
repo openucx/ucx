@@ -807,4 +807,22 @@ UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
 #endif
 }
 
+UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_unaligned_range) {
+    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 2);
+    /* Starts in the middle of the first handle and ends in the second one,
+     * while being shorter than a single handle */
+    size_t chunk_size = buffer.size() / 2;
+    void *address     = UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2);
+    size_t length     = (chunk_size / 2) + 1;
+    uct_md_mem_attr_t mem_attr;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), address, length, &mem_attr));
+
+    EXPECT_LE(mem_attr.base_address, address);
+    EXPECT_GE(UCS_PTR_BYTE_OFFSET(mem_attr.base_address, mem_attr.alloc_length),
+              UCS_PTR_BYTE_OFFSET(address, length));
+}
+
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);
