@@ -1390,9 +1390,16 @@ void test_ucp_mmap_max_hca::test_limits_memh_md_map(ucs_memory_type_t mem_type)
 
     ucp_mem_h memh;
     ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh));
+    ucs_sys_device_t sys_dev = memh->sys_dev;
     ucp_md_map_t net_all     = memh->md_map & net_md_map;
     ucp_md_map_t non_net_all = memh->md_map & ~net_md_map;
     ASSERT_UCS_OK(ucp_mem_unmap(ctx_all, memh));
+
+    /* The policy applies only to memory with a known system device */
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        mem_buffer::release(ptr, mem_type);
+        UCS_TEST_SKIP_R("memory has no system device");
+    }
 
     /* LIMIT=1: at most 1 network MD */
     modify_config("MAX_HCA_PER_GPU", "1");
@@ -1422,7 +1429,7 @@ void test_ucp_mmap_max_hca::test_limits_memh_md_map(ucs_memory_type_t mem_type)
     EXPECT_EQ(non_net_all, non_net_lim);
 }
 
-UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map_cuda)
 {
     test_limits_memh_md_map(UCS_MEMORY_TYPE_CUDA);
 }
