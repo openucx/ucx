@@ -555,7 +555,6 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     ucs_status_t status;
     ucs_pgt_region_t *pgt_region;
     uct_rocm_ipc_cache_region_t *region;
-    hsa_signal_value_t signal_value;
     hsa_status_t hsa_status;
     void *mapped_addr;
     int ret;
@@ -570,18 +569,8 @@ uct_rocm_ipc_cache_map_region(uct_rocm_ipc_cache_t *cache,
     if (ucs_likely(pgt_region != NULL)) {
         region = ucs_derived_of(pgt_region, uct_rocm_ipc_cache_region_t);
         if (memcmp(&key->ipc, &region->key.ipc, sizeof(key->ipc)) == 0) {
-            if (region->signal.handle == 0) {
-                ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
-                          UCS_PGT_REGION_FMT,
-                          cache->name, (void*)key->address, key->length,
-                          UCS_PGT_REGION_ARG(&region->super));
-
-                *region_p = region;
-                return UCS_OK;
-            }
-
-            signal_value = hsa_signal_load_scacquire(region->signal);
-            if (signal_value > 0) {
+            if ((region->signal.handle == 0) ||
+                (hsa_signal_load_scacquire(region->signal) > 0)) {
                 ucs_trace("%s: rocm_ipc cache hit addr:%p size:%lu region:"
                           UCS_PGT_REGION_FMT,
                           cache->name, (void*)key->address, key->length,
