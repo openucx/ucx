@@ -6,9 +6,12 @@
 #include <common/test.h>
 #include <uct/uct_test.h>
 
+#include <set>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/tcp/tcp.h>
+#include <ucs/sys/netlink.h>
 }
 
 class test_uct_tcp : public uct_test {
@@ -231,6 +234,41 @@ private:
     }
 
 protected:
+    void query_devices(const char *vrf_enable, std::set<std::string> &devices)
+    {
+        uct_md_config_t *md_config;
+        uct_tl_resource_desc_t *resources;
+        unsigned num_resources;
+        uct_md_h md;
+
+        ASSERT_UCS_OK(uct_md_config_read(GetParam()->component, NULL, NULL,
+                                         &md_config));
+        ucs_status_t status = uct_config_modify(md_config, "TCP_VRF_ENABLE",
+                                                vrf_enable);
+        if (status == UCS_OK) {
+            status = uct_md_open(GetParam()->component,
+                                 GetParam()->md_name.c_str(), md_config, &md);
+        }
+        uct_config_release(md_config);
+        ASSERT_UCS_OK(status);
+
+        status = uct_md_query_tl_resources(md, &resources, &num_resources);
+        if (status == UCS_OK) {
+            for (unsigned i = 0; i < num_resources; ++i) {
+                devices.insert(resources[i].dev_name);
+            }
+            uct_release_tl_resource_list(resources);
+        }
+        uct_md_close(md);
+        ASSERT_UCS_OK(status);
+    }
+
+    static int vrf_master_index(const std::string &dev_name)
+    {
+        return ucs_netlink_get_vrf_master_index(
+                if_nametoindex(dev_name.c_str()));
+    }
+
     uct_tcp_iface *m_tcp_iface;
     entity        *m_ent;
 };
@@ -308,6 +346,27 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
     EXPECT_EQ(sizeof(uct_tcp_iface_addr_t), iface_attr.iface_addr_len);
     EXPECT_EQ(sizeof(uct_tcp_ep_addr_t), iface_attr.ep_addr_len);
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_enable)
+{
+    std::set<std::string> devices, vrf_devices;
+
+    query_devices("n", devices);
+    query_devices("y", vrf_devices);
+
+    // VRF slaves are reported only when VRF_ENABLE is set
+    for (const auto &dev_name : devices) {
+        EXPECT_EQ(-1, vrf_master_index(dev_name)) << dev_name;
+        EXPECT_EQ(1u, vrf_devices.count(dev_name)) << dev_name;
+    }
+
+    for (const auto &dev_name : vrf_devices) {
+        if (devices.count(dev_name) == 0) {
+            EXPECT_NE(-1, vrf_master_index(dev_name)) << dev_name;
+            UCS_TEST_MESSAGE << dev_name << " is reported only with VRF_ENABLE";
+        }
+    }
 }
 
 

@@ -473,6 +473,7 @@ typedef struct uct_tcp_md {
         int         af_prio_count;
         sa_family_t af_prio_list[2];
         uint8_t     bridge_enable;
+        uint8_t     vrf_enable;
     } config;
 } uct_tcp_md_t;
 
@@ -484,6 +485,7 @@ typedef struct uct_tcp_md_config {
     uct_md_config_t                   super;
     UCS_CONFIG_STRING_ARRAY_FIELD(af) af_prio;
     int                               bridge_enable;
+    int                               vrf_enable;
 } uct_tcp_md_config_t;
 
 
@@ -519,6 +521,9 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
 
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
+
+/* Index of the VRF device which the interface is enslaved to, or -1 */
+int uct_tcp_netif_vrf_index(const char *if_name);
 
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);

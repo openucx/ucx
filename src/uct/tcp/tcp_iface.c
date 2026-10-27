@@ -1037,6 +1037,12 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             continue;
         }
 
+        if (!tcp_md->config.vrf_enable &&
+            (uct_tcp_netif_vrf_index((*entry)->d_name) != -1)) {
+            ucs_debug("filtered out VRF slave device %s", (*entry)->d_name);
+            continue;
+        }
+
         tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),
                           "tcp devices");
         if (tmp == NULL) {
