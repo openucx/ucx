@@ -555,14 +555,15 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_gpu_pref_loc,
 }
 
 /* Plain device memory is allocated as GPUDirect RDMA capable, except under an
- * MPS MLOPart device, where the driver allocates none */
-UCS_TEST_SKIP_COND_P(test_mem_alloc_device, legacy_mem_gdr_capable,
-                     !mem_buffer::cuda_mem_is_gdr_capable())
+ * MPS MLOPart device, where the driver allocates none. Assert what the driver
+ * itself reports, so that both cases are covered. */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_gdr_capable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
+    query_gdr_capable(buffer.ptr(), size,
+                      mem_buffer::cuda_mem_is_gdr_capable());
 }
 
 /* VMM device memory is GDR capable only when requested at allocation */

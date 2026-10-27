@@ -382,8 +382,15 @@ bool mem_buffer::cuda_mem_is_gdr_capable()
 {
 #if HAVE_CUDA
 #if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
-    int is_gdr_capable = 0;
+    /* Cache the device property, but only once it was probed successfully, so
+     * that a transient allocation failure does not skip every guarded test */
+    static int cached_capable = -1;
+    int is_gdr_capable        = 0;
     void *ptr;
+
+    if (cached_capable != -1) {
+        return cached_capable == 1;
+    }
 
     if (cudaMalloc(&ptr, 4096) != cudaSuccess) {
         (void)cudaGetLastError(); /* do not leak the error to other tests */
@@ -397,7 +404,8 @@ bool mem_buffer::cuda_mem_is_gdr_capable()
     }
 
     cudaFree(ptr);
-    return is_gdr_capable;
+    cached_capable = !!is_gdr_capable;
+    return cached_capable == 1;
 #else
     /* Without the attribute the memory domain assumes capability as well */
     return true;
