@@ -611,9 +611,10 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     }
 
     /* For multi-handle VMM, the physical allocation containing the address
-     * may not cover the whole requested range; keep the caller's extent. This
-     * also rejects the zero base address reported for host-located VMM. */
-    if (is_vmm && ((base_address + alloc_length) < (address + length))) {
+     * may not cover the whole requested range, and host-located VMM reports a
+     * zero base address; keep the caller's extent in both cases. */
+    if (is_vmm && ((base_address == 0) ||
+                   ((base_address + alloc_length) < (address + length)))) {
         goto out_ctx_pop;
     }
 
