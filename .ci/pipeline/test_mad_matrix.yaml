@@ -1,0 +1,70 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-mad
+
+failFast: false
+timeout_minutes: 60
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
+
+runs_on_dockers:
+  # Two CX8 VFs: a port takes one MAD RTE registration, so server and client need their own.
+  # Server and client share the pod, so the data path may go over shm.
+  - {
+      name: "hca-ib-2vf",
+      url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network,cx8-ib-network" }],
+      limits: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 2}",
+      requests: "{memory: 16Gi, cpu: 8000m, nvidia.com/cx8_vfs: 2}",
+      caps_add: "[ IPC_LOCK, NET_RAW ]"
+    }
+
+matrix:
+  axes:
+    arch: [x86_64]
+
+taskName: '${name}/${arch}'
+
+steps:
+  - name: Build
+    parallel: false
+    timeout: 30
+    run: |
+      export BUILD_SOURCESDIRECTORY=${WORKSPACE}
+      source ./buildlib/tools/test_mad.sh
+      build_ucx
+
+  - name: Test
+    parallel: false
+    timeout: 15
+    run: |
+      source .ci/scripts/cap_output.sh
+      set -eEx -o pipefail
+      hcas=($(ibv_devinfo | awk '/hca_id:/ {h=$2} /port:/ {p=$2} /state:/ {s=$2}
+                                 /link_layer:/ {if (s == "PORT_ACTIVE" && $2 == "InfiniBand") print h ":" p}'))
+      [ ${#hcas[@]} -ge 2 ] || { echo "ERROR: need 2 active IB ports, got: ${hcas[*]}"; exit 1; }
+      srv=${hcas[0]}
+      cli=${hcas[1]}
+      lid=$(ibstat ${srv/:/ } | awk '/Base lid/ {print $NF}')
+      guid=$(ibstat ${srv/:/ } | awk '/Port GUID/ {print $NF}')
+      echo "server=${srv} client=${cli} lid=${lid} guid=${guid}"
+
+      for addr in "lid:${lid}" "guid:${guid}"; do
+        timeout 300 ./install/bin/ucx_perftest -K ${srv} > srv.log 2>&1 &
+        spid=$!
+        sleep 5
+        rc=0
+        timeout 120 ./install/bin/ucx_perftest -t tag_bw -e -K ${cli} ${addr} || rc=$?
+        wait ${spid} || rc=$((rc ? rc : $?))
+        echo "==== server log (${addr})"
+        cat srv.log
+        [ ${rc} -eq 0 ] || { echo "ERROR: MAD RTE test ${addr} failed rc=${rc}"; exit ${rc}; }
+      done

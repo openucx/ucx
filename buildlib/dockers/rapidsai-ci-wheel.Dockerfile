@@ -1,0 +1,13 @@
+# Azure wrapper around rapidsai/ci-wheel: chmod /pyenv so the non-root UID Azure runs
+# steps as can write there (rapidsai owns it as root); + adds gdb for stack capture.
+# Default base = cuda13; cuda12 image built by overriding BASE_IMAGE to the cuda12.9.2 tag.
+
+ARG BASE_IMAGE=rapidsai/ci-wheel:26.12-cuda13.3.0-rockylinux8-py3.12
+FROM ${BASE_IMAGE}
+
+# enroot copies labels into /etc/rc as comments; the base's multi-line description breaks it on Slurm.
+LABEL org.opencontainers.image.description="UCX CI wrapper of a RAPIDS CI image"
+
+RUN chmod -R o+rwX /pyenv \
+ && dnf --refresh --disablerepo=powertools install -y gdb \
+ && dnf clean all

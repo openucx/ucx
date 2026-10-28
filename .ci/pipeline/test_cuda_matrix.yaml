@@ -1,0 +1,232 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-cuda
+
+failFast: false
+timeout_minutes: 300
+# Each row holds one funk node.
+batchSize: 6
+
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 2Gi, cpu: 1000m}"
+  requests: "{memory: 2Gi, cpu: 1000m}"
+
+credentials:
+  - {credentialsId: 'svcnbu-swx-hpcx-scctl', usernameVariable: 'SERVICE_USER_USERNAME', passwordVariable: 'SERVICE_USER_PASSWORD'}
+
+env:
+  UCX_REPO: "https://github.com/openucx/ucx.git"
+  # Has git and autotools, which the nvidia/cuda images lack.
+  BUILDER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio"
+  CUDA_REGISTRY: "dockerhub.nvidia.com#nvidia/cuda"
+  SLURM_NODES: 1
+  SLURM_PARTITION: funk
+  SLURM_GRES: "gpu:1"
+  SLURM_HEAD_NODE: scctl
+  SLURM_JOB_TIMEOUT: '01:30:00'
+  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  CI_IMAGE_TAG: "20260223-1"
+
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+
+runs_on_dockers:
+  - {
+     file: '.ci/dockerfiles/Dockerfile.build_helper',
+     name: 'build_helper_ucx',
+     tag: "${CI_IMAGE_TAG}",
+     build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+    }
+
+# Same images as the Azure Cuda stage; a tag runs in nvidia/cuda:<tag>.
+matrix:
+  axes:
+    arch:
+      - x86_64
+    test:
+      - soname_suffix_cuda_ib
+      - 11.0.3-devel-centos7
+      - 11.1.1-devel-centos7
+      - 11.2.2-devel-centos7
+      - 11.3.1-devel-centos7
+      - 11.4.3-devel-centos7
+      - 11.5.2-devel-ubi8
+      - 11.6.2-devel-ubi8
+      - 11.0.3-devel-ubuntu18.04
+      - 11.1.1-devel-ubuntu18.04
+      - 11.2.2-devel-ubuntu18.04
+      - 11.3.1-devel-ubuntu18.04
+      - 11.4.3-devel-ubuntu18.04
+      - 11.5.2-devel-ubuntu18.04
+      - 11.6.2-devel-ubuntu18.04
+      - 11.0.3-devel-ubuntu20.04
+      - 11.1.1-devel-ubuntu20.04
+      - 11.2.2-devel-ubuntu20.04
+      - 11.3.1-devel-ubuntu20.04
+      - 11.4.3-devel-ubuntu20.04
+      - 11.5.2-devel-ubuntu20.04
+      - 11.6.2-devel-ubuntu20.04
+      - 12.0.0-devel-centos7
+      - 12.1.0-devel-centos7
+      - 12.0.0-devel-ubuntu18.04
+      - 12.1.0-devel-ubuntu18.04
+      - 12.0.0-devel-ubuntu20.04
+      - 12.1.0-devel-ubuntu20.04
+      - 12.0.0-devel-ubuntu22.04
+      - 12.1.0-devel-ubuntu22.04
+      - 13.0.0-devel-ubuntu22.04
+      - 13.0.0-devel-ubuntu24.04
+      - 13.0.0-devel-rockylinux8
+      - 13.0.0-devel-rockylinux9
+
+taskName: '${arch}/${test}'
+
+# testScript runs via bash -c on the funk node. Jenkins substitutes $VAR and
+# ${VAR} for its own env names, so scripts use lowercase names.
+steps:
+  - name: Allocate Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: "${SLURM_PARTITION}"
+      headNode: "${SLURM_HEAD_NODE}"
+      nodes: "${SLURM_NODES}"
+      jobTimeout: "${SLURM_JOB_TIMEOUT}"
+      immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
+      jobName: "ucx-ci-cuda-${BUILD_NUMBER}-${test}"
+      # pipeline_stop matches job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      # Without a GPU gres the node's GPU is hidden from the job.
+      extraArgs: ["--gres=${SLURM_GRES}"]
+
+  # The source tree goes to node /tmp, which the CUDA container mounts too.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_ucx', test: '[0-9].*'}"
+    timeout: 20
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        set -eEx; ws=/host_tmp/ucx-ci-cuda-${BUILD_NUMBER}-${test};
+        rm -rf $ws; git clone ${UCX_REPO} $ws; cd $ws;
+        git fetch --no-tags origin ${sha1}; git checkout ${sha1}; ./autogen.sh
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${BUILDER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-cuda-src-${BUILD_NUMBER}-${test}"
+      extraArgs: ["--container-mounts=/tmp:/host_tmp"]
+
+  # Like Azure Docker, /.dockerenv skips check_nv_peer_mem; some images lack lsmod.
+  - name: Memory hooks test
+    containerSelector: "{name: 'build_helper_ucx', test: '[0-9].*'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      testScript: >-
+        ws=/host_tmp/ucx-ci-cuda-${BUILD_NUMBER}-${test}; rc=0;
+        source $ws/.ci/scripts/cap_output.sh; chmod u+rwx -R $ws; touch /.dockerenv;
+        WORKSPACE=$ws $ws/buildlib/pr/cuda/test_malloc_hook.sh || rc=$?;
+        rm -rf $ws; exit $rc
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${CUDA_REGISTRY}:${test}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-cuda-${BUILD_NUMBER}-${test}"
+      extraArgs: ["--container-mounts=/tmp:/host_tmp"]
+      slurmEnv: ["NVIDIA_VISIBLE_DEVICES=all"]
+
+  - name: Checkout source
+    containerSelector: "{name: 'build_helper_ucx', test: 'soname.*'}"
+    timeout: 20
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      testScript: "mkdir -p /ws && cd /ws && git clone ${UCX_REPO} . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${BUILDER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-cuda-${BUILD_NUMBER}-${test}"
+
+  - name: Build SONAME suffix with CUDA/IB
+    containerSelector: "{name: 'build_helper_ucx', test: 'soname.*'}"
+    timeout: 60
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      # builds.sh builds in $HOME; keep it in the container, not the NFS home.
+      testScript: "cd /ws && ./buildlib/tools/builds.sh"
+      headNode: "${SLURM_HEAD_NODE}"
+      dockerImage: "${BUILDER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "ucx-ci-cuda-${BUILD_NUMBER}-${test}"
+      extraArgs: ["--container-mounts=/hpc/local:/hpc/local"]
+      slurmEnv: [
+        "NVIDIA_VISIBLE_DEVICES=all",
+        "HOME=/ws/home",
+        "BUILD_ID=${BUILD_NUMBER}",
+        "EXECUTOR_NUMBER=0",
+        "build_mode=soname_suffix",
+        "soname_suffix_check_hw=yes",
+        "ucx_gpu=yes"
+      ]
+
+  # Frees the node once the row passes; pipeline_stop covers failed rows.
+  - name: Release Environment
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: stop
+    args:
+      headNode: "${SLURM_HEAD_NODE}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${test}_${BUILD_NUMBER}.txt"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+
+# Loads swx-jenkins-lib once before the parallel rows; /tmp has no job id files.
+pipeline_start:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "/tmp"
+
+pipeline_stop:
+  containerSelector: "{name: 'build_helper_ucx'}"
+  parallel: false
+  shell: action
+  module: slurmCI
+  run: stopAllForBuild
+  args:
+    credentialsId: "${SCCTL_CREDENTIALS_ID}"
+    headNode: "${SLURM_HEAD_NODE}"
+    jobIdDir: "${JOB_ID_FILE_ROOT}"

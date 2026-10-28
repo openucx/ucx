@@ -1,0 +1,70 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-test-efa
+
+failFast: false
+timeout_minutes: 250
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 16Gi, cpu: 8000m}"
+  requests: "{memory: 16Gi, cpu: 8000m}"
+
+# RAM-backed /dev/shm for shm transports; counts toward pod memory.
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+
+# EFA is mocked by ibmock; the VF node provides /dev/infiniband and rdma_cm like Azure.
+# The node has hugepages, so sysv shm needs a hugetlb allowance or it dies with SIGBUS.
+runs_on_dockers:
+  - {
+      name: "rhel90",
+      url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0",
+      arch: x86_64,
+      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
+      annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
+      limits: "{memory: 16Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 4Gi}",
+      requests: "{memory: 16Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 4Gi}",
+      caps_add: "[ IPC_LOCK, NET_RAW, SYS_PTRACE ]"
+    }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+
+steps:
+  - name: Build rdma-core and ibmock
+    parallel: false
+    timeout: 60
+    run: ./contrib/test_efa.sh build_efa
+
+  # ibmock devices need uverbs0/1, which a VF pod does not have.
+  - name: Setup mock devices
+    parallel: false
+    timeout: 5
+    run: |
+      for i in 0 1; do
+        [ -e /dev/infiniband/uverbs$i ] || mknod -m 666 /dev/infiniband/uverbs$i c 1 3
+      done
+      ls -l /dev/infiniband
+
+  - name: Run gtests
+    parallel: false
+    timeout: 140
+    run: |
+      source .ci/scripts/cap_output.sh
+      ./contrib/test_efa.sh gtest_efa
+
+  - name: Setup rdma-core
+    parallel: false
+    timeout: 10
+    run: ./contrib/test_efa.sh install_rdma_core_efa
+
+  - name: RPM test
+    parallel: false
+    timeout: 30
+    run: ./contrib/test_efa.sh test_rpm_efa

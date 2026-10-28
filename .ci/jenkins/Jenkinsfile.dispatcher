@@ -13,58 +13,148 @@ withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariabl
   githubHelper = GithubHelper.getInstance("${GIT_PASSWORD}", VARIABLE_FROM_POST)
 }
 
-// Abort previous dispatcher runs for the same PR
+// Abort previous dispatcher runs for the same PR and their leaf jobs
 def currentPrNumber = githubHelper.getPRNumber()?.toString()
 if (currentPrNumber) {
-  def slurper = new groovy.json.JsonSlurper()
   try {
-    Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
+    def staleBuilds = Jenkins.instance.getItemByFullName(env.JOB_NAME).builds.findAll {
       it.isBuilding() && it.number < currentBuild.number
-    }.each { b ->
+    }.findAll { b ->
       def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'VARIABLE_FROM_POST' }?.value
-      def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
-      if (otherPr == currentPrNumber) {
-        echo "Aborting dispatcher #${b.number} for same PR #${currentPrNumber}"
-        b.doStop()
+      // JsonSlurper is created per call: it is not Serializable, and holding it in
+      // a local across the sleep below fails the pipeline state checkpoint.
+      def otherPr = gd ? new groovy.json.JsonSlurper().parseText(gd)?.issue?.number?.toString() : null
+      otherPr == currentPrNumber
+    }
+
+    if (staleBuilds) {
+      echo "PR #${currentPrNumber}: found ${staleBuilds.size()} stale dispatcher(s) to abort"
+    }
+
+    // Targets to kill as [jobFullName, buildNumber] pairs - holding Run objects
+    // across the sleep below breaks the pipeline state checkpoint (WorkflowRun is
+    // not serializable). Leaf builds are collected from each stale dispatcher's
+    // console log and listed first, so they are killed before their dispatcher.
+    // Leaf jobs are logged as "UCX-OSS » <job>".
+    def targets = []
+    staleBuilds.each { b ->
+      b.getLog(1000).each { line ->
+        def m = (line =~ /Starting building: (.+) #(\d+)/)
+        if (m) {
+          targets.add([m[0][1].replace(' » ', '/'), m[0][2] as int])
+        }
       }
     }
+    targets.addAll(staleBuilds.collect { [env.JOB_NAME, it.number] })
+    staleBuilds = null
+
+    // Stop gracefully first so pipeline_stop can release Slurm allocations.
+    targets.each { t ->
+      if (Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.isBuilding()) {
+        echo "Stopping ${t[0]} #${t[1]}"
+        Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.doStop()
+      }
+    }
+    for (int i = 0; i < 30; i++) {
+      def stopping = targets.findAll { t ->
+        Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.isBuilding()
+      }
+      if (!stopping) break
+      sleep 10
+    }
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      def alive = targets.findAll { t ->
+        Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.isBuilding()
+      }
+      if (!alive) break
+      alive.each { t ->
+        echo "${attempt > 1 ? 'Retry ' + attempt + ': ' : ''}Killing ${t[0]} #${t[1]}"
+        Jenkins.instance.getItemByFullName(t[0])?.getBuildByNumber(t[1])?.doKill()
+      }
+      if (attempt < 3) sleep 5
+    }
   } catch(Exception e) {
-    echo "Could not abort previous dispatchers: ${e.message}"
+    echo "Could not abort previous builds: ${e.message}"
   }
 }
 
-def sha = githubHelper.getMergedSHA()
 def pipelineOverviewUrl = "${env.BUILD_URL}pipeline-overview/"
 
-githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI started", GitHubCommitState.PENDING)
+githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI started", GitHubCommitState.PENDING)
 currentBuild.description = githubHelper.getBuildDescription()
 
-def jobs = [
-  'ucx-codestyle-oss',
-  'ucx-static-checks-oss',
-  'ucx-coverity-oss',
-  'ucx-build-oss',
-  'ucx-build-static-oss',
-  'ucx-test-oss',
-  'ucx-test-gpu-oss',
-  'ucx-test-dl-gpu-oss',
+// Basic compile gates every leaf but codestyle, as on Azure: a PR that does
+// not build must not take GPU, BlueField or Slurm slots.
+def gateJob = 'UCX-OSS/ucx-basic-compile-oss'
+
+// Leaf jobs to dispatch, keyed by parallel-branch name
+def gateStageJobs = [
+  'codestyle':      'UCX-OSS/ucx-codestyle-oss',
+]
+def leafJobs = [
+  'static-checks':  'UCX-OSS/ucx-static-checks-oss',
+  'coverity':       'UCX-OSS/ucx-coverity-oss',
+  'build':          'UCX-OSS/ucx-build-oss',
+  'build-static':   'UCX-OSS/ucx-build-static-oss',
+  'test':           'UCX-OSS/ucx-test-oss',
+  'gpu':            'UCX-OSS/ucx-test-gpu-oss',
+  'cuda':           'UCX-OSS/ucx-test-cuda-oss',
+  'dl-gpu':         'UCX-OSS/ucx-test-dl-gpu-oss',
+  'bindings':       'UCX-OSS/ucx-test-bindings-oss',
+  'bindings-gpu':   'UCX-OSS/ucx-test-bindings-gpu-oss',
+  'bindings-arm':   'UCX-OSS/ucx-test-bindings-arm-oss',
+  'ucxx':           'UCX-OSS/ucx-test-ucxx-oss',
+  'ucxx-gpu':       'UCX-OSS/ucx-test-ucxx-gpu-oss',
+  'namespace':      'UCX-OSS/ucx-test-namespace-oss',
+  'wirecompat':     'UCX-OSS/ucx-test-wirecompat-oss',
+  'wirecompat-gpu': 'UCX-OSS/ucx-test-wirecompat-gpu-oss',
+  'efa':            'UCX-OSS/ucx-test-efa-oss',
+  'mad':            'UCX-OSS/ucx-test-mad-oss',
+  'bf':             'UCX-OSS/ucx-test-bf-oss',
 ]
 
 try {
-  def fanout = [:]
-  for (def j in jobs) {
-    def jobName = "UCX-OSS/${j}"
-    fanout[jobName] = {
-      build job: jobName, parameters: [
-        string(name: 'sha1', value: sha),
-        string(name: 'githubData', value: VARIABLE_FROM_POST),
-      ], propagate: false, wait: true
+  // Compute the merged SHA once so all leaf jobs test the same commit
+  def mergedSHA = githubHelper.getMergedSHA()
+  def leafParams = [
+    string(name: 'sha1', value: mergedSHA),
+    string(name: 'githubData', value: VARIABLE_FROM_POST)
+  ]
+
+  // Leaf jobs report their own GitHub statuses; the dispatcher build stays
+  // SUCCESS unless dispatching itself fails. catchError paints a failed
+  // leaf's branch red without failing the build, and all branches run to
+  // completion regardless of sibling failures.
+  def leafBranches = { jobs ->
+    jobs.collectEntries { branchName, jobName ->
+      [(branchName): {
+        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE', catchInterruptions: false) {
+          build job: jobName, parameters: leafParams, wait: true
+        }
+      }]
     }
   }
-  parallel fanout
-  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI passed", GitHubCommitState.SUCCESS)
+
+  // Any non-SUCCESS gate result, an abort included, skips the leaf jobs.
+  def gate = null
+  parallel(leafBranches(gateStageJobs) + ['basic-compile': {
+    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE', catchInterruptions: false) {
+      gate = build job: gateJob, parameters: leafParams, wait: true, propagate: false
+      if (gate.result != 'SUCCESS') {
+        error("Basic compile ${gate.result}: ${gate.absoluteUrl}")
+      }
+    }
+  }])
+  if (gate?.result != 'SUCCESS') {
+    error("Basic compile did not pass, skipping the other jobs: ${gate?.absoluteUrl}")
+  }
+
+  parallel(leafBranches(leafJobs))
+
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI ended", GitHubCommitState.SUCCESS)
 } catch(Exception ex) {
   println ex
-  githubHelper.updateCommitStatus(pipelineOverviewUrl, "Blossom CI failed", GitHubCommitState.FAILURE)
+  githubHelper.updateCommitStatus(pipelineOverviewUrl, "UCX CI ended", GitHubCommitState.FAILURE)
   throw ex
 }
