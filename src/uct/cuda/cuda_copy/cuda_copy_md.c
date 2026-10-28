@@ -601,6 +601,11 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     ucs_trace("query address 0x%llx: 0x%llx..0x%llx length %zu", address,
               base_address, base_address + alloc_length, alloc_length);
 
+    /* Host-located VMM reports a zero base address */
+    if (base_address == 0) {
+        goto out_ctx_pop;
+    }
+
     if (md->config.alloc_whole_reg == UCS_CONFIG_AUTO) {
         total_bytes = uct_cuda_copy_md_get_total_device_mem(cuda_device);
         if (alloc_length > (total_bytes * md->config.max_reg_ratio)) {
@@ -611,10 +616,8 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
     }
 
     /* For multi-handle VMM, the physical allocation containing the address
-     * may not cover the whole requested range, and host-located VMM reports a
-     * zero base address; keep the caller's extent in both cases. */
-    if (is_vmm && ((base_address == 0) ||
-                   ((base_address + alloc_length) < (address + length)))) {
+     * may not cover the whole requested range */
+    if (is_vmm && ((base_address + alloc_length) < (address + length))) {
         goto out_ctx_pop;
     }
 
