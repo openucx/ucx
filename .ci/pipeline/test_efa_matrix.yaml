@@ -32,9 +32,6 @@ runs_on_dockers:
 
 taskName: '${arch}/${name}'
 
-env:
-  BUILD_ID: "${BUILD_NUMBER}"
-
 steps:
   - name: Build rdma-core and ibmock
     parallel: false
