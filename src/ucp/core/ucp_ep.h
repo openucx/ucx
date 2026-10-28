@@ -1134,7 +1134,7 @@ ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id);
 
 
-/** Nonzero when @a request_id is accepted for every lane in @a lanes. */
+/** Nonzero when @a lanes is not empty and @a request_id is accepted. */
 int ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
                               uint32_t request_id);
 
