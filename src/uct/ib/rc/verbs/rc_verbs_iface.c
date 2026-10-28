@@ -51,9 +51,9 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {"RX_MAX_WR", "128",
-   "Number of receive WRs posted to each QP created without an SRQ, in the\n"
-   "range 1 to 65535, and limited by the device's max_qp_wr. Receive-buffer\n"
-   "and RX CQ requirements grow with the number of endpoints.",
+   "Number of receive WRs posted to each QP when SRQ_ENABLE=n or the device\n"
+   "does not support SRQ. The RX CQ is then sized for MAX_NUM_EPS endpoints,\n"
+   "and MAX_NUM_EPS=inf uses the largest RX CQ the device supports.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, rx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {"SRQ_ENABLE", "try",
@@ -335,8 +335,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         num_eps   = ucs_min(ib_config->super.max_num_eps,
                             IBV_DEV_ATTR(&ib_md->dev, max_cqe) / rx_max_wr);
         rx_cq_len = ucs_max(num_eps * rx_max_wr, ib_config->rx.queue_len);
-        ucs_debug("%s: RX CQ length %u for %u receive WRs per endpoint",
-                  uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr);
+        ucs_debug("%s: RX CQ length %u for %u receive WRs per endpoint "
+                  "without an SRQ, batch size %u, endpoint limit %u",
+                  uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr,
+                  rx_batch_limit, rx_cq_len / rx_max_wr);
 
         /* Leave a batch of receive WRs unreposted, to avoid RNR. */
         init_attr.fc_max_wnd_size = ucs_max(rx_max_wr - rx_batch_limit, 1);
