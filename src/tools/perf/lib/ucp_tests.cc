@@ -38,6 +38,8 @@ public:
         m_recvs_outstanding(0),
         m_sends_outstanding(0),
         m_max_outstanding(m_perf.params.max_outstanding),
+        m_sgl_put((UCX_PERF_CMD_PUT == CMD) &&
+                  (UCP_PERF_DATATYPE_SGL == m_perf.params.ucp.send_datatype)),
         m_length(0ul),
         m_send_sn_buffer(NULL),
         m_send_sn_length(0ul),
@@ -156,12 +158,6 @@ public:
         }
     }
 
-    inline bool is_sgl_put() const
-    {
-        return (UCX_PERF_CMD_PUT == CMD) &&
-               (UCP_PERF_DATATYPE_SGL == m_perf.params.ucp.send_datatype);
-    }
-
     void prepare_sgl()
     {
         ucp_sgl_state_t &sgl = m_perf.ucp.sgl;
@@ -225,7 +221,7 @@ public:
 
         ucp_perf_test_prepare_iov_buffers();
 
-        if (is_sgl_put()) {
+        if (m_sgl_put) {
             prepare_sgl();
         }
 
@@ -265,7 +261,7 @@ public:
         m_recv_params.user_data    = this;
         fill_common_params(m_recv_params, m_perf.ucp.recv_memh);
 
-        if (is_sgl_put()) {
+        if (m_sgl_put) {
             m_sgl_send_params          = m_send_params;
             m_sgl_send_get_info_params = m_send_get_info_params;
             add_sgl_params(m_sgl_send_params);
@@ -509,7 +505,7 @@ public:
          psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false,
          bool force_contig = false)
     {
-        const bool use_sgl         = is_sgl_put() && !force_contig;
+        const bool use_sgl         = m_sgl_put && !force_contig;
         uint64_t value             = 0;
         ucp_request_param_t *param;
         void *request;
@@ -721,7 +717,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_PUT:
-            if (is_sgl_put()) {
+            if (m_sgl_put) {
                 status_p = ucp_put_nbx(ep, &m_local_sgl,
                                        m_perf.params.msg_size_cnt,
                                        UCP_REMOTE_ADDR_INVALID,
@@ -849,7 +845,7 @@ public:
 
             m_send_sn_buffer = iov[last].buffer;
             m_send_sn_length = iov[last].length;
-        } else if (is_sgl_put()) {
+        } else if (m_sgl_put) {
             const ucp_sgl_state_t &sgl = m_perf.ucp.sgl;
             size_t last                = m_perf.params.msg_size_cnt - 1;
 
@@ -1166,7 +1162,7 @@ private:
             fence();
         }
 
-        if (is_sgl_put()) {
+        if (m_sgl_put) {
             return validate_sgl_sn(recv_buffer, m_perf.params.recv_mem_type,
                                    m_perf.recv_allocator, sn, host_buffer);
         }
@@ -1208,6 +1204,7 @@ private:
     int                m_recvs_outstanding;
     int                m_sends_outstanding;
     const int          m_max_outstanding;
+    const bool         m_sgl_put;
     size_t             m_length;
     void               *m_send_sn_buffer;
     size_t             m_send_sn_length;
