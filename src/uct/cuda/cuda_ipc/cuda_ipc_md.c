@@ -652,11 +652,10 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     extended_rkey = &unpacked_rkey->super;
     rkey          = &extended_rkey->super;
 
-    uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns,
-                                 rkey->d_bptr, rkey_handle->mapped_addr,
-                                 rkey_handle->cu_dev,
+    uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
+                                 rkey_handle->mapped_addr, rkey_handle->cu_dev,
                                  uct_cuda_ipc_component.enable_remote_cache &&
-                                 !rkey_handle->free_unused_mapping);
+                                         !rkey_handle->free_unused_mapping);
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
