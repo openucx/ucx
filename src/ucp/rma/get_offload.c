@@ -117,7 +117,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .sgl_min_frag_offs   = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
@@ -200,6 +201,8 @@ ucp_proto_get_offload_zcopy_probe_param(
         uint64_t extra_flags, uint64_t tl_v2_cap_flags, int is_sgl)
 {
     ucp_context_t *context               = init_params->worker->context;
+    ptrdiff_t min_zcopy_offs             = ucs_offsetof(uct_iface_attr_t,
+                                                        cap.get.min_zcopy);
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
@@ -210,8 +213,7 @@ ucp_proto_get_offload_zcopy_probe_param(
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
         .super.min_frag_offs = is_sgl ? UCP_PROTO_COMMON_OFFSET_INVALID :
-                               ucs_offsetof(uct_iface_attr_t,
-                                            cap.get.min_zcopy),
+                               min_zcopy_offs,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.get.max_iov),
@@ -230,7 +232,6 @@ ucp_proto_get_offload_zcopy_probe_param(
         .max_lanes                  = context->config.ext.max_rma_lanes,
         .min_chunk                  = context->config.ext.min_rma_chunk_size,
         .use_single_lane_min_length = 1,
-        .sgl_min_get_zcopy          = is_sgl,
         .initial_reg_md_map         = 0,
         .first.tl_cap_flags         = UCT_IFACE_FLAG_GET_ZCOPY,
         .first.tl_v2_cap_flags      = tl_v2_cap_flags,
@@ -238,7 +239,9 @@ ucp_proto_get_offload_zcopy_probe_param(
         .middle.tl_cap_flags        = UCT_IFACE_FLAG_GET_ZCOPY,
         .middle.tl_v2_cap_flags     = tl_v2_cap_flags,
         .middle.lane_type           = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs             = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs             = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .sgl_min_frag_offs          = is_sgl ? min_zcopy_offs :
+                                      UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {

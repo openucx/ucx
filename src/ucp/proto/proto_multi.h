@@ -92,8 +92,8 @@ typedef struct {
      size_t                      max_sgl_zcopy_count;
 
     /* Minimal length of a single SGL element fragment posted on this lane,
-     * cached from uct_iface_attr_t at protocol init when requested by
-     * ucp_proto_multi_init_params_t::sgl_min_get_zcopy, otherwise zero */
+     * cached from uct_iface_attr_t at protocol init according to
+     * ucp_proto_multi_init_params_t::sgl_min_frag_offs */
     size_t                      min_sgl_frag;
 } ucp_proto_multi_lane_priv_t;
 
@@ -133,9 +133,11 @@ typedef struct {
      * messages that do not use all selected lanes */
     int                            use_single_lane_min_length;
 
-    /* Cache the minimal get zcopy size of each lane in
-     * ucp_proto_multi_lane_priv_t::min_sgl_frag */
-    int                            sgl_min_get_zcopy;
+    /* Offset of the iface attribute (uct_iface_attr_t) holding the minimal
+     * length of a single SGL element fragment, cached in
+     * ucp_proto_multi_lane_priv_t::min_sgl_frag. Can be
+     * UCP_PROTO_COMMON_OFFSET_INVALID if there is no minimal length */
+    ptrdiff_t                      sgl_min_frag_offs;
 
     /* MDs on which the buffer is expected to be already registered, so no need
        to account for the overhead of registering on them */
