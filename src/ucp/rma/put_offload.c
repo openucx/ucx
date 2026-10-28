@@ -552,7 +552,9 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                             &remote_addrs[start_index],
                                             uct_rkeys, elem_count);
 
+    /* coverity[incorrect_free] */
     ucs_free_on_stack(uct_memhs, uct_memhs_size);
+    /* coverity[incorrect_free] */
     ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
 
     return status;
