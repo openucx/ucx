@@ -692,19 +692,16 @@ static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    unsigned prev_available     = ep->rx_available;
 
     /* Post as many receive WRs as the shared buffer pool can supply. Progress
      * retries the remaining WRs after descriptors are returned to the pool. */
-    while (ep->rx_available > 0) {
-        if (uct_rc_verbs_iface_post_recv_common(iface, ep, 1) == 0) {
-            if (ep->rx_available == prev_available) {
-                ucs_error("failed to post receives on QP 0x%x", ep->qp->qp_num);
-                return UCS_ERR_NO_MEMORY;
-            }
+    while ((ep->rx_available > 0) &&
+           (uct_rc_verbs_iface_post_recv_common(iface, ep, 1) > 0)) {
+    }
 
-            break;
-        }
+    if (ep->rx_available == iface->config.rx_max_wr) {
+        ucs_error("failed to post receives on QP 0x%x", ep->qp->qp_num);
+        return UCS_ERR_NO_MEMORY;
     }
 
     return UCS_OK;
@@ -754,12 +751,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
+    self->rx_available = iface->config.rx_max_wr;
     if (iface->super.config.srq_disable) {
-        self->rx_available = iface->config.rx_max_wr;
-        status             = uct_rc_verbs_ep_prepost_recvs(self);
+        status = uct_rc_verbs_ep_prepost_recvs(self);
     } else {
-        self->rx_available = 0;
-        status             = uct_rc_verbs_iface_common_prepost_recvs(iface);
+        status = uct_rc_verbs_iface_common_prepost_recvs(iface);
     }
     if (status != UCS_OK) {
         goto err_remove_qp;

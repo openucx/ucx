@@ -268,12 +268,10 @@ void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
 
-    if (rc_iface->config.srq_disable) {
-        return;
+    if (iface->srq != NULL) {
+        /* TODO flush RX buffers */
+        uct_ib_destroy_srq(iface->srq);
     }
-
-    /* TODO flush RX buffers */
-    uct_ib_destroy_srq(iface->srq);
 }
 
 static void
@@ -344,7 +342,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         init_attr.fc_max_wnd_size = ucs_max(rx_max_wr - rx_batch_limit, 1);
     } else {
         rx_max_wr                 = 0;
-        rx_batch_limit            = 0;
+        rx_batch_limit            = ib_config->rx.max_batch;
         rx_cq_len                 = ib_config->rx.queue_len;
     }
 
@@ -378,10 +376,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
 
     /* A QP must be able to reach the repost threshold. */
-    if (self->super.config.srq_disable) {
-        self->super.super.config.rx_max_batch =
-                ucs_min(self->super.super.config.rx_max_batch, rx_batch_limit);
-    }
+    self->super.super.config.rx_max_batch =
+            ucs_min(self->super.super.config.rx_max_batch, rx_batch_limit);
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {
