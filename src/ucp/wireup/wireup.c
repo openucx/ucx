@@ -1314,16 +1314,17 @@ ucp_wireup_process_lanes_addr_request(
         const ucp_wireup_lane_token_t *tx_tokens,
         const ucp_unpacked_address_t *remote_address)
 {
-    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided, invalidated;
     ucp_lane_map_t discard = 0;
+    ucp_lane_map_t peer_unaware, to_rebuild, peer_provided, invalidated;
+    ucp_lane_map_t pending, armed;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
 
-    /* A peer token means that lane already failed remotely. Take it off the
-     * endpoint so the reply can carry a rebuilt address. The old transport
-     * endpoint stays held until the ACK brings the receive token. */
+    /* A peer token means that lane already failed remotely. Derive the RX
+     * token while the queue pair is still installed, then move it to error.
+     * The completion holds it. The reply is sent now; the ACK purges it. */
     memset(rx_tokens, 0, sizeof(rx_tokens));
     invalidated = 0;
     if (request_id != 0) {
@@ -1332,7 +1333,9 @@ ucp_wireup_process_lanes_addr_request(
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens);
-        discard = ucp_ep_tf_hold_invalidated_lanes(ep, invalidated);
+        pending = ucp_ep_tf_lanes_to_invalidate(ep, invalidated);
+        armed   = ucp_ep_tf_invalidate_transport(ep, pending);
+        discard = pending & ~armed;
     }
 
     /* Lanes still up take the software path. A held lane is already failed
@@ -1411,9 +1414,8 @@ ucp_wireup_store_rx_tokens(ucp_ep_h ep,
 }
 
 /* A token in the reply means the remote side already failed that lane.
- * Invalidate it, purge it, and take it off the lane. The queue pair stays
- * alive in @a retired until the caller derives tokens. Lanes that cannot
- * carry a token are discarded on the software path. */
+ * Record it and move the queue pair to error. The completion holds the lane
+ * and purges it. Lanes that cannot carry a token take the software path. */
 static void
 ucp_wireup_invalidate_unaware_failed_lanes(
         ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *lanes_info,
@@ -1437,11 +1439,11 @@ ucp_wireup_invalidate_unaware_failed_lanes(
         invalidated = ucp_ep_tf_invalidate_lanes(ep, lanes, request_id, 0);
     }
 
-    /* Reply RX token is the peer receive position. Store it before the live
-     * purge, and for already-held lanes that this reply does not retire. */
+    /* Reply RX token is the peer receive position. Store it before the queue
+     * pair moves to error, including lanes this reply does not move. */
     ucp_wireup_store_rx_tokens(ep, lanes_info, request_id, 0, rx_tokens);
     if (invalidated != 0) {
-        /* Keep the queue pairs until the reply handler derives RX tokens. */
+        /* The queue pair stays on the lane until the error completion. */
         ucp_ep_tf_retire_unaware_lanes(ep, invalidated, retired);
     }
 

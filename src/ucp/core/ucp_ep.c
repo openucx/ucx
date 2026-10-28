@@ -523,13 +523,17 @@ static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
     return (elem->cb == ucp_wireup_eps_progress) && (elem->arg == arg);
 }
 
+static int
+ucp_ep_tf_purge_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
+
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (ucp_wireup_msg_ack_cb_pred(elem, arg) ||
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_ep_tf_purge_remove_filter(elem, arg)) {
         return 1;
     }
 
@@ -2614,14 +2618,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
     ucs_assert(arg->state == UCP_EP_RECOVERY_STATE_IDLE);
     resend      = arg->resend;
     arg->resend = 0;
+    /* A lane that never went out stays eligible. A resend also republishes
+     * lanes whose previous request is still outstanding. */
+    lanes       = failed & ~arg->sent_lanes;
     if (resend) {
-        lanes = failed & arg->sent_lanes;
-        if (lanes == 0) {
-            lanes = failed & ~arg->sent_lanes;
-        }
-    } else {
-        /* A new failure publishes only lanes that no request has sent. */
-        lanes = failed & ~arg->sent_lanes;
+        lanes |= failed & arg->sent_lanes;
     }
 
     if (lanes == 0) {
@@ -3190,23 +3191,17 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
             ucs_trace("ep %p: lane %d already purged uct_ep %p", ep, lane,
                       tf->uct_ep);
         } else {
-            /* A reply still owes the peer its receive position. An ACK that
-             * names this held lane and carries no token means that queue pair
-             * is gone, so every outstanding send is undelivered. */
-            if ((tf->rx_token == NULL) && !from_ack) {
-                ucs_debug("ep %p: lane %d: reply has no rx token", ep, lane);
+            /* A missing token can mean the query failed, not that the queue
+             * pair is gone. Replaying every send would duplicate operations
+             * the peer already completed. */
+            if (tf->rx_token == NULL) {
+                ucs_debug("ep %p: lane %d: no rx token, skip purge", ep, lane);
                 continue;
             }
 
-            if (tf->rx_token == NULL) {
-                ucs_debug("ep %p: lane %d: purge without rx token on uct_ep %p",
-                          ep, lane, tf->uct_ep);
-            } else {
-                ucs_debug("ep %p: lane %d: purging outstanding on uct_ep %p"
-                          " rx token %p",
-                          ep, lane, tf->uct_ep, tf->rx_token);
-            }
-
+            ucs_debug("ep %p: lane %d: purging outstanding on uct_ep %p"
+                      " rx token %p",
+                      ep, lane, tf->uct_ep, tf->rx_token);
             status = ucp_ep_tf_purge_lane(ep, lane, tf);
             if (status != UCS_OK) {
                 continue;
@@ -3501,86 +3496,86 @@ void ucp_ep_set_lanes_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
     ucp_worker_signal_internal(worker);
 }
 
-static void
-ucp_ep_tf_purge_live_ep(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
+typedef struct {
+    ucp_ep_h         ep;
+    ucp_lane_index_t lane;
+} ucp_ep_tf_purge_arg_t;
+
+static unsigned ucp_ep_tf_purge_held_progress(void *arg)
 {
-    uct_ep_outstanding_purge_params_t params;
+    ucp_ep_tf_purge_arg_t *purge_arg = arg;
+    ucp_ep_h ep                      = purge_arg->ep;
+    ucp_lane_index_t lane            = purge_arg->lane;
+    ucp_worker_h worker              = ep->worker;
     ucp_ep_lane_tf_t *tf;
     ucs_status_t status;
 
-    ucs_assert(ucp_ep_recovery_arg(ep) != NULL);
+    ucs_free(purge_arg);
+
+    UCS_ASYNC_BLOCK(&worker->async);
 
     tf = ucp_ep_tf_get(ep, lane);
-
-    /* A stored reply RX token is the peer receive position. Without one,
-     * every outstanding send is undelivered. */
-    uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb,
-                         &ucp_ep_recovery_arg(ep)->tf_pending_q);
-    memset(&params, 0, sizeof(params));
-    params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
-                        UCT_EP_OUTSTANDING_FIELD_ARG;
-    params.cb         = ucp_ep_tf_outstanding_purge_cb;
-    params.arg        = ep;
-    if ((tf != NULL) && (tf->rx_token != NULL)) {
-        params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
-        params.rx_token = tf->rx_token;
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+        (tf->uct_ep == NULL) || (tf->rx_token == NULL) || tf->purged) {
+        goto out;
     }
 
-    status = uct_ep_outstanding_purge(uct_ep, &params);
+    status = ucp_ep_tf_purge_lane(ep, lane, tf);
     if (status != UCS_OK) {
-        ucs_error("ep %p: outstanding purge on lane %d failed: %s", ep, lane,
-                  ucs_status_string(status));
+        goto out;
     }
+
+    tf->purged = 1;
+    uct_ep_destroy(tf->uct_ep);
+    ucp_ep_tf_lane_release(ep, tf);
+
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+static int
+ucp_ep_tf_purge_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
+{
+    ucp_ep_tf_purge_arg_t *purge_arg = elem->arg;
+
+    if ((elem->cb == ucp_ep_tf_purge_held_progress) && (purge_arg->ep == arg)) {
+        ucs_free(purge_arg);
+        return 1;
+    }
+
+    return 0;
+}
+
+void ucp_ep_tf_schedule_token_purge(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_ep_lane_tf_t *tf = ucp_ep_tf_get(ep, lane);
+    ucp_ep_tf_purge_arg_t *purge_arg;
+
+    if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_HELD) ||
+        (tf->uct_ep == NULL) || (tf->rx_token == NULL) || tf->purged) {
+        return;
+    }
+
+    purge_arg = ucs_malloc(sizeof(*purge_arg), "ucp_tf_purge_arg");
+    if (purge_arg == NULL) {
+        ucs_error("ep %p: failed to allocate token purge argument", ep);
+        return;
+    }
+
+    purge_arg->ep   = ep;
+    purge_arg->lane = lane;
+    ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                              ucp_ep_tf_purge_held_progress, purge_arg);
 }
 
 void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                     uct_ep_h retired[])
 {
-    ucp_worker_cfg_index_t old_cfg_index;
-    ucp_lane_index_t lane;
-    ucp_ep_lane_tf_t *tf;
-    uct_ep_h uct_ep;
-    ucs_status_t status;
-
-    ucs_for_each_bit(lane, lanes) {
-        tf = ucp_ep_tf_get(ep, lane);
-        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
-            (tf->uct_ep != NULL)) {
-            continue;
-        }
-
-        uct_ep = ucp_ep_get_lane(ep, lane);
-        if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep) ||
-            ucp_wireup_ep_test(uct_ep)) {
-            continue;
-        }
-
-        /* Mark the lane failed before the walk, so the repost instance probed
-         * for the new configuration does not select it. Keep the transport
-         * endpoint until the walk finishes. */
-        old_cfg_index = ep->cfg_index;
-        status        = ucp_ep_reconfig_internal(ep, UCS_BIT(lane));
-        if (status != UCS_OK) {
-            /* Reconfiguration failed, so the endpoint is unrecoverable. Do not
-             * purge this lane: the current configuration still selects it. */
-            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
-            break;
-        }
-
-        if (old_cfg_index != ep->cfg_index) {
-            ucp_ep_config_activate_worker_ifaces(ep->worker, ep->cfg_index);
-            tf->deactivate_cfg_index = old_cfg_index;
-        } else {
-            tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-        }
-
-        ucp_failed_tl_iface_get();
-        ucp_ep_set_lane(ep, lane, &ucp_failed_tl_ep_discard_arg.failed_ep);
-        ucp_ep_unprogress_uct_ep(ep, uct_ep, ucp_ep_get_rsc_index(ep, lane));
-        ucp_ep_tf_purge_live_ep(ep, lane, uct_ep);
-        retired[lane] = uct_ep;
-        ucs_debug("ep %p: retired unaware lane %d uct_ep %p", ep, lane, uct_ep);
-    }
+    /* The completion holds the queue pair and records the outstanding range.
+     * Purging here would walk WQEs from the unset sentinel. */
+    (void)retired;
+    ucp_ep_tf_invalidate_transport(ep, lanes);
 }
 
 void ucp_ep_tf_destroy_retired_lanes(ucp_ep_h ep, uct_ep_h retired[])

@@ -1130,6 +1130,13 @@ ucs_status_t
 ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
+/**
+ * Purge a held lane whose RX token is already stored, after this callback
+ * returns. The transport records the outstanding range only then.
+ */
+void ucp_ep_tf_schedule_token_purge(ucp_ep_h ep, ucp_lane_index_t lane);
+
+
 /** Nonzero when @a request_id is newer than @a seen. 0 is unseen. */
 int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id);
 
@@ -1147,10 +1154,10 @@ ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes);
  * Mark lanes a remote token reported as failed.
  *
  * The transport endpoint stays on the lane in
- * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_retire_unaware_lanes
- * purges it, or until @ref ucp_ep_tf_invalidate_transport moves it to error
- * and the error completion holds it. Non-zero @a request_id and @a peer_id
- * are recorded. Already held lanes only record @a peer_id.
+ * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_invalidate_transport
+ * or @ref ucp_ep_tf_retire_unaware_lanes moves it to error and the error
+ * completion holds it. Non-zero @a request_id and @a peer_id are recorded.
+ * Already held lanes only record @a peer_id.
  *
  * @return Lanes left invalidated. Any other lane is not on the token path.
  */
@@ -1173,12 +1180,10 @@ int ucp_ep_tf_is_held(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
- * Purge invalidated lanes and take their UCT endpoints off the lanes.
+ * Move invalidated lanes to error. The completion holds each queue pair.
  *
- * Each retired endpoint is returned in @a retired and is not stored on the
- * lane. The lane is marked failed and points at the failed stub. The caller
- * destroys the returned endpoints with @ref ucp_ep_tf_destroy_retired_lanes
- * after any token derive that still needs the queue pair.
+ * @a retired is unused. The queue pair stays on the lane until that
+ * completion, so a token derive in this handler can still see it.
  */
 void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                                     uct_ep_h retired[]);
