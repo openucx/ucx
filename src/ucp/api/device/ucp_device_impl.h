@@ -38,8 +38,7 @@ typedef enum {
     UCP_DEVICE_FLAG_NODELAY =
             UCT_DEVICE_FLAG_NODELAY, /**< Complete before return. */
     UCP_DEVICE_FLAG_PUSH =
-            UCT_DEVICE_FLAG_PUSH /**< Push any previously posted operations that
-                                      have not been pushed out yet. */
+            UCT_DEVICE_FLAG_PUSH /**< Push opertaions posted without NODELAY */
 } ucp_device_flags_t;
 
 
