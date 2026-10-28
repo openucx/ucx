@@ -434,7 +434,7 @@ uct_mm_iface_event_fd_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     char dummy[UCT_MM_IFACE_MAX_SIG_EVENTS]; /* pop multiple signals at once */
-    uint64_t head, prev_head;
+    uint64_t head;
     int ret;
 
     if ((events & UCT_EVENT_SEND_COMP) &&
@@ -461,15 +461,10 @@ uct_mm_iface_event_fd_arm(uct_iface_h tl_iface, unsigned events)
     if (!(head & UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED)) {
         /* Try to mark the head index as armed in an atomic way; fail if any
            sender managed to update the head at the same time */
-        prev_head = ucs_atomic_cswap64(
-                ucs_unaligned_ptr(&iface->recv_fifo_ctl->head), head,
-                head | UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
-        if (prev_head != head) {
+        ucs_atomic_or64(&iface->recv_fifo_ctl->head, UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
+        if ((head ^ iface->recv_fifo_ctl->head) & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED) {
             /* race with sender; need to retry */
-            ucs_assert(!(prev_head & UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED));
-            ucs_trace("iface %p: cannot arm, head %" PRIu64
-                      " prev_head %" PRIu64,
-                      iface, head, prev_head);
+            ucs_trace("iface %p: cannot arm, head %" PRIu64, iface, head);
             return UCS_ERR_BUSY;
         }
     }
