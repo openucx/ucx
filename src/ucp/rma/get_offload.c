@@ -297,10 +297,6 @@ ucp_proto_get_sgl_short_elem_completion(void *request, ucs_status_t status,
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
 
-/* Get an element shorter than the minimal zero-copy get size by a regular get
- * sub-request. The parent reference is taken before the sub-request is created,
- * so the parent can't complete before it. Returns UCS_INPROGRESS if the element
- * was handled */
 static ucs_status_t
 ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
                              void *buffer, size_t length, uint64_t remote_addr)
