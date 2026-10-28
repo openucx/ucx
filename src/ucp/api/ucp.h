@@ -3955,9 +3955,6 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  *
  * @note Supported datatypes for @a param->datatype are
  * @ref ucp_dt_make_contig, @ref ucp_dt_make_iov, and @ref ucp_dt_make_sgl.
- * @note With @ref ucp_dt_make_sgl, each element must be at least as long as the
- * minimal zero-copy get size of the transport, otherwise the operation fails
- * with @ref UCS_ERR_INVALID_PARAM.
  */
 ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,

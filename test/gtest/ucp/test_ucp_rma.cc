@@ -1213,6 +1213,7 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
 #define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
+#define UCP_SGL_GET_SW_PROTOS    "PROTOS=^get/sgl/offload"
 
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
@@ -1259,10 +1260,10 @@ protected:
         }
     }
 
-    /* Each SGL element is transferred by a single UCT operation, so a get
-       element must not be shorter than the transport minimal get zcopy length */
-    size_t min_elem_size() const {
-        return (op() == SGL_OP_GET) ? 128 : 64;
+    void require_get() const {
+        if (op() != SGL_OP_GET) {
+            UCS_TEST_SKIP_R("get only");
+        }
     }
 
     struct sgl_ctx {
@@ -1417,6 +1418,22 @@ protected:
                            param);
     }
 
+    void verify_sgl(const sgl_ctx &ctx) {
+        ucs_memory_type_t mtype = mem_type();
+        for (size_t i = 0; i < ctx.lengths.size(); i++) {
+            uint8_t expected = static_cast<uint8_t>(i + 1);
+            void *result     = (op() == SGL_OP_PUT) ? ctx.dst[i].ptr() :
+                                                    ctx.src[i].ptr();
+            std::vector<uint8_t> host_buf(ctx.lengths[i]);
+            mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
+                                  mtype);
+            for (size_t j = 0; j < ctx.lengths[i]; j++) {
+                ASSERT_EQ(expected, host_buf[j])
+                    << "Mismatch at element " << i << " byte " << j;
+            }
+        }
+    }
+
     void test_sgl(const std::vector<size_t> &elem_sizes,
                   bool use_memhs = true, bool use_callback = false,
                   bool set_remote_count = true,
@@ -1474,22 +1491,6 @@ protected:
             return;
         }
 
-        auto verify_sgl_buffers = [&]() {
-            ucs_memory_type_t mtype = mem_type();
-            for (size_t i = 0; i < num; i++) {
-                uint8_t expected = static_cast<uint8_t>(i + 1);
-                void *result     = (op() == SGL_OP_PUT) ? ctx.dst[i].ptr() :
-                                                        ctx.src[i].ptr();
-                std::vector<uint8_t> host_buf(ctx.lengths[i]);
-                mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
-                                      mtype);
-                for (size_t j = 0; j < ctx.lengths[i]; j++) {
-                    ASSERT_EQ(expected, host_buf[j])
-                        << "Mismatch at element " << i << " byte " << j;
-                }
-            }
-        };
-
         if (!UCS_PTR_IS_PTR(sptr)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
         } else {
@@ -1510,7 +1511,7 @@ protected:
         }
 
         flush_ep(sender());
-        verify_sgl_buffers();
+        verify_sgl(ctx);
     }
 
     bool offload_proto_selected(ucs_status_ptr_t sptr) const {
@@ -1613,8 +1614,7 @@ UCS_TEST_P(test_ucp_rma_sgl, various_counts) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, various_sizes) {
-    const size_t buf_sizes[] = {(op() == SGL_OP_GET) ? min_elem_size() : 1,
-                                256, UCS_KBYTE, 4 * UCS_KBYTE};
+    const size_t buf_sizes[] = {1, 256, UCS_KBYTE, 4 * UCS_KBYTE};
     for (size_t buf_size : buf_sizes) {
         test_sgl(4, buf_size);
         if (HasFailure() || (num_errors() > 0)) {
@@ -1624,7 +1624,7 @@ UCS_TEST_P(test_ucp_rma_sgl, various_sizes) {
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, various_lengths) {
-    test_sgl({min_elem_size(), 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+    test_sgl({1, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, with_callback) {
@@ -1719,7 +1719,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, fragmented_elements,
     cleanup();
     modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
     test_ucp_rma::init();
-    test_sgl({255, 256, 257, 1024, min_elem_size()});
+    test_sgl({255, 256, 257, 1024, 1});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {
@@ -1733,41 +1733,137 @@ UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {
             UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, get_element_below_min_zcopy) {
-    if (op() != SGL_OP_GET) {
-        UCS_TEST_SKIP_R("get only");
-    }
+UCS_TEST_P(test_ucp_rma_sgl, short_elements) {
+    test_sgl({1, 2, 8, 63, 64, 65, 100, 127, 128, 129, 255, 256, 477, 478});
+}
 
-    /* Complete the wireup and make sure a get zcopy lane exists */
+UCS_TEST_P(test_ucp_rma_sgl, short_and_long_elements) {
+    test_sgl({1, 4 * UCS_KBYTE, 7, 64, 2 * UCS_KBYTE, 3, 512, 100, UCS_KBYTE,
+              65 * UCS_KBYTE, 1});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_with_callback) {
+    test_sgl(10, 8, true, true);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, many_short_elements) {
+    test_sgl(UCS_KBYTE, 8);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_get_sw, UCP_SGL_GET_SW_PROTOS) {
+    require_get();
+    test_sgl({1, 64, 65, 127, 128, UCS_KBYTE, 3, 4 * UCS_KBYTE});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_completion_order) {
+    static constexpr size_t NUM_ELEMS = 64;
+
+    require_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
     test_sgl(1, UCS_KBYTE);
 
-    ucp_ep_h ep = sender().ep();
-    size_t min_zcopy = SIZE_MAX;
-    for (ucp_lane_index_t lane = 0; lane < ucp_ep_config(ep)->key.num_lanes;
-         lane++) {
-        const uct_iface_attr_t *attr = ucp_worker_iface_get_attr(
-                sender().worker(), ucp_ep_get_rsc_index(ep, lane));
-        if (attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
-            min_zcopy = ucs_min(min_zcopy, attr->cap.get.min_zcopy);
-        }
-    }
-
-    if (min_zcopy <= 1) {
-        UCS_TEST_SKIP_R("get zcopy accepts elements of any length");
-    }
-
     sgl_ctx ctx;
-    init_sgl_ctx(ctx, 1, 1);
+    init_sgl_ctx(ctx, NUM_ELEMS, 8);
 
     ucp_dt_local_sgl_t local   = make_local_sgl(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
     ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, 1);
+    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
 
-    scoped_log_handler wrap_err(wrap_errors_logger);
-    ucs_status_ptr_t sptr = sgl_op_nbx(&local, 1, UCP_REMOTE_ADDR_INVALID,
+    struct cb_state {
+        unsigned    count;
+        ucs_status_t status;
+    } cb = {0, UCS_INPROGRESS};
+
+    param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                          UCP_OP_ATTR_FIELD_USER_DATA |
+                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.send       = [](void *request, ucs_status_t status,
+                             void *user_data) {
+        cb_state *s = static_cast<cb_state*>(user_data);
+        s->status   = status;
+        s->count++;
+    };
+    param.user_data     = &cb;
+
+    ucs_status_ptr_t sptr = sgl_op_nbx(&local, NUM_ELEMS,
+                                       UCP_REMOTE_ADDR_INVALID,
                                        UCP_RKEY_INVALID, &param);
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, request_wait(sptr));
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* The parent request must not complete before all the elements arrived, so
+       the data is verified right after the completion, without a flush */
+    while (cb.count == 0) {
+        ucp_worker_progress(sender().worker());
+        ucp_worker_progress(receiver().worker());
+        if (cb.count == 0) {
+            EXPECT_FALSE(ucp_request_is_completed(sptr));
+        }
+    }
+
+    EXPECT_EQ(1u, cb.count);
+    EXPECT_UCS_OK(cb.status);
+    verify_sgl(ctx);
+    ucp_request_release(sptr);
+
+    /* No additional completions are expected */
+    for (int i = 0; i < 100; i++) {
+        ucp_worker_progress(sender().worker());
+        ucp_worker_progress(receiver().worker());
+    }
+    EXPECT_EQ(1u, cb.count);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_ep_close_force) {
+    static constexpr size_t NUM_ELEMS = 64;
+
+    require_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 8);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
+
+    struct cb_state {
+        unsigned count;
+    } cb = {0};
+
+    param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                          UCP_OP_ATTR_FIELD_USER_DATA |
+                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.send       = [](void *request, ucs_status_t status,
+                             void *user_data) {
+        static_cast<cb_state*>(user_data)->count++;
+    };
+    param.user_data     = &cb;
+
+    ucs_status_ptr_t sptr = sgl_op_nbx(&local, NUM_ELEMS,
+                                       UCP_REMOTE_ADDR_INVALID,
+                                       UCP_RKEY_INVALID, &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* Close the endpoint while the short elements are outstanding. The parent
+       request must be completed exactly once, with any status, only after all
+       the sub-requests were completed */
+    scoped_log_handler slh(hide_errors_logger);
+    sender().close_all_eps(*this, 0, UCP_EP_CLOSE_FLAG_FORCE);
+
+    ucs_time_t deadline = ucs::get_deadline();
+    while ((cb.count == 0) && (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    EXPECT_EQ(1u, cb.count);
+    ucp_request_release(sptr);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_addr,

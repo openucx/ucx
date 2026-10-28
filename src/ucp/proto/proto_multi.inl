@@ -383,10 +383,12 @@ typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
         void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
         const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
 
-/* Adjust a single SGL element fragment before it is posted. May be NULL */
+/* Adjust a single SGL element fragment before it is posted. May be NULL.
+ * Returns UCS_INPROGRESS if the fragment was already submitted by the function,
+ * so there is nothing left to post */
 typedef ucs_status_t (*ucp_proto_rma_sgl_adjust_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        void **buffer_p, size_t *length_p, uint64_t *remote_addr_p);
+        size_t elem_index, void **buffer_p, size_t *length_p, uint64_t *remote_addr_p);
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rma_sgl_elem_fits(size_t length, size_t min_frag_length,
@@ -431,9 +433,10 @@ ucp_proto_rma_sgl_offload_send_frag(
     }
 
     if (adjust_func != NULL) {
-        status = adjust_func(req, lpriv, &buffer, &length, &remote_addr);
+        status = adjust_func(req, lpriv, elem_index, &buffer, &length,
+                             &remote_addr);
         if (ucs_unlikely(status != UCS_OK)) {
-            return status;
+            return (status == UCS_INPROGRESS) ? UCS_OK : status;
         }
     }
 

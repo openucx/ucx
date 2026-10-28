@@ -284,11 +284,55 @@ ucp_proto_get_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
                                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY, 1);
 }
 
+static void
+ucp_proto_get_sgl_short_elem_completion(void *request, ucs_status_t status,
+                                        void *user_data)
+{
+    ucp_request_t *req = user_data;
+
+    ucp_request_free(request);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+}
+
+/* Get an element which is shorter than the minimal zero-copy get size, using
+ * a regular get sub-request. The sub-request holds a reference on the parent
+ * request completion, which is taken before the sub-request is created, so the
+ * parent can't be completed before the sub-request. Returns UCS_INPROGRESS if
+ * the element was handled (the reference is not counted by the caller) */
+static ucs_status_t
+ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
+                             void *buffer, size_t length, uint64_t remote_addr)
+{
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_USER_DATA |
+                        UCP_OP_ATTR_FIELD_MEMORY_TYPE,
+        .cb.send      = ucp_proto_get_sgl_short_elem_completion,
+        .user_data    = req,
+        .memory_type  = req->send.state.dt_iter.mem_info.type
+    };
+    ucs_status_ptr_t status_ptr;
+    ucs_status_t status;
+
+    ++req->send.state.uct_comp.count;
+    status_ptr = ucp_get_nbx(req->send.ep, buffer, length, remote_addr,
+                             req->send.rma.sgl.rkeys[elem_index], &param);
+    if (UCS_PTR_IS_PTR(status_ptr)) {
+        return UCS_INPROGRESS;
+    }
+
+    /* Completed immediately, the callback will not be called. The parent holds
+       an extra reference until all elements are posted, so it can't drop to 0 */
+    --req->send.state.uct_comp.count;
+    status = UCS_PTR_STATUS(status_ptr);
+    return (status == UCS_OK) ? UCS_INPROGRESS : status;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_get_sgl_adjust_min_frag(ucp_request_t *req,
                                   const ucp_proto_multi_lane_priv_t *lpriv,
-                                  void **buffer_p, size_t *length_p,
-                                  uint64_t *remote_addr_p)
+                                  size_t elem_index, void **buffer_p,
+                                  size_t *length_p, uint64_t *remote_addr_p)
 {
     size_t min_frag    = lpriv->min_sgl_frag;
     size_t frag_offset = req->send.state.dt_iter.type.sgl.frag_offset;
@@ -298,19 +342,17 @@ ucp_proto_get_sgl_adjust_min_frag(ucp_request_t *req,
         return UCS_OK;
     }
 
-    diff            = ucs_min(min_frag - *length_p, frag_offset);
+    if (frag_offset == 0) {
+        return ucp_proto_get_sgl_short_elem(req, elem_index, *buffer_p,
+                                            *length_p, *remote_addr_p);
+    }
+
+    diff = min_frag - *length_p;
+    ucs_assertv(diff <= frag_offset, "diff=%zu frag_offset=%zu", diff,
+                frag_offset);
     *buffer_p       = UCS_PTR_BYTE_OFFSET(*buffer_p, -diff);
     *remote_addr_p -= diff;
     *length_p      += diff;
-
-    if (ucs_unlikely(*length_p < min_frag)) {
-        /* The whole element is shorter than the minimal get size, so there is
-           nothing to overlap with */
-        ucs_error("req %p: sgl get element length %zu is shorter than the "
-                  "minimal get zero-copy size %zu", req, *length_p, min_frag);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     return UCS_OK;
 }
 
@@ -411,10 +453,10 @@ ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
                 dt_iter, dt_iter->offset, dt_iter->length,
                 dt_iter->type.sgl.frag_offset, max_frag_length);
 
-    status = ucp_proto_get_sgl_adjust_min_frag(req, lpriv, &buffer, &length,
-                                               &remote_addr);
+    status = ucp_proto_get_sgl_adjust_min_frag(req, lpriv, elem_index, &buffer,
+                                               &length, &remote_addr);
     if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        return (status == UCS_INPROGRESS) ? UCS_OK : status;
     }
 
     tl_rkey    = ucp_rkey_get_tl_rkey(sgl_rkeys[elem_index], rkey_index);
