@@ -2405,6 +2405,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
     ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
     ucp_worker_h worker        = ep->worker;
     ucp_context_h context      = worker->context;
+    uint16_t seen_peer_id;
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
 
@@ -2417,7 +2418,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     if (arg == NULL) {
         /* Read the stashed peer id before this pointer replaces it. */
-        uint16_t seen_peer_id = ucp_ep_tf_seen_peer_id(ep);
+        seen_peer_id = ucp_ep_tf_seen_peer_id(ep);
 
         arg = ucs_calloc(1, sizeof(*arg), "ucp_ep_recovery_arg");
         if (arg == NULL) {
