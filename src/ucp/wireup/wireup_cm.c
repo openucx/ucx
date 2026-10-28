@@ -1037,6 +1037,11 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
 
     ucs_assert(ucp_ep->ext->cm_idx == UCP_NULL_RESOURCE);
 
+    status = ucp_worker_add_resource_cms(worker);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     ucp_ep->ext->cm_idx      = 0;
     wireup_ep->ep_init_flags = ucp_ep_init_flags(worker, params);
 
