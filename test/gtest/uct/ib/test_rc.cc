@@ -1064,19 +1064,43 @@ _UCT_INSTANTIATE_TEST_CASE(test_rc_no_srq, rc_verbs)
 
 class test_rc_srq_select : public test_rc {
 protected:
+    ucs_status_t open_iface(uct_iface_h *iface_p)
+    {
+        return uct_iface_open(m_e1->md(), m_e1->worker(),
+                              &m_e1->iface_params(), m_iface_config, iface_p);
+    }
+
     /* Open an interface as if the device did not support an SRQ */
-    void check_no_srq_fallback()
+    ucs_status_t open_without_srq(uct_iface_h *iface_p)
     {
         uct_ib_device_t *dev = &uct_ib_iface_md(&rc_iface(m_e1)->super)->dev;
         int max_srq          = IBV_DEV_ATTR(dev, max_srq);
-        uct_iface_h iface;
         ucs_status_t status;
 
         IBV_DEV_ATTR(dev, max_srq) = 0;
-        status = uct_iface_open(m_e1->md(), m_e1->worker(),
-                                &m_e1->iface_params(), m_iface_config, &iface);
+        status                     = open_iface(iface_p);
         IBV_DEV_ATTR(dev, max_srq) = max_srq;
-        ASSERT_UCS_OK(status);
+
+        return status;
+    }
+
+    bool device_has_srq()
+    {
+        return uct_ib_device_has_srq(
+                &uct_ib_iface_md(&rc_iface(m_e1)->super)->dev);
+    }
+
+    void check_srq_used(uct_iface_h iface)
+    {
+        EXPECT_FALSE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_disable);
+        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq != NULL);
+    }
+
+    void check_no_srq_fallback()
+    {
+        uct_iface_h iface;
+
+        ASSERT_UCS_OK(open_without_srq(&iface));
 
         EXPECT_TRUE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_disable);
         EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq == NULL);
@@ -1086,13 +1110,11 @@ protected:
 
 UCS_TEST_P(test_rc_srq_select, try_uses_srq, "RC_VERBS_SRQ_ENABLE=try")
 {
-    if (!uct_ib_device_has_srq(&uct_ib_iface_md(&rc_iface(m_e1)->super)->dev)) {
+    if (!device_has_srq()) {
         UCS_TEST_SKIP_R("device does not support SRQ");
     }
 
-    EXPECT_FALSE(rc_iface(m_e1)->config.srq_disable);
-    EXPECT_TRUE(ucs_derived_of(m_e1->iface(), uct_rc_verbs_iface_t)->srq !=
-                NULL);
+    check_srq_used(m_e1->iface());
 }
 
 UCS_TEST_P(test_rc_srq_select, try_falls_back, "RC_VERBS_SRQ_ENABLE=try")
@@ -1100,18 +1122,40 @@ UCS_TEST_P(test_rc_srq_select, try_falls_back, "RC_VERBS_SRQ_ENABLE=try")
     check_no_srq_fallback();
 }
 
-UCS_TEST_P(test_rc_srq_select, yes_warns_and_falls_back,
-           "RC_VERBS_SRQ_ENABLE=try")
+UCS_TEST_P(test_rc_srq_select, yes_uses_srq, "RC_VERBS_SRQ_ENABLE=try")
 {
+    uct_iface_h iface;
+
+    if (!device_has_srq()) {
+        UCS_TEST_SKIP_R("device does not support SRQ");
+    }
+
     ASSERT_UCS_OK(
             uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
 
-    scoped_log_handler wrap_warn(wrap_warns_logger);
+    ASSERT_UCS_OK(open_iface(&iface));
 
-    check_no_srq_fallback();
+    check_srq_used(iface);
+    uct_iface_close(iface);
+}
 
-    ASSERT_EQ(1u, m_warnings.size());
-    EXPECT_NE(std::string::npos, m_warnings[0].find("SRQ is not supported"));
+UCS_TEST_P(test_rc_srq_select, yes_requires_srq, "RC_VERBS_SRQ_ENABLE=try")
+{
+    uct_iface_h iface = NULL;
+
+    ASSERT_UCS_OK(
+            uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, open_without_srq(&iface));
+    if (iface != NULL) {
+        uct_iface_close(iface);
+    }
+
+    ASSERT_EQ(1u, m_errors.size());
+    EXPECT_NE(std::string::npos,
+              m_errors[0].find("SRQ is requested but not supported"));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_srq_select, rc_verbs)
