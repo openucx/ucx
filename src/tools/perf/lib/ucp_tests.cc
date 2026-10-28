@@ -1226,7 +1226,7 @@ private:
     ucp_atomic_op_t     m_atomic_op;
 };
 
-/* Noinline keeps the dispatchers under -Wframe-larger-than (runner is large) */
+/* Noinline keeps the dispatchers under -Wframe-larger-than limit */
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 static UCS_F_NOINLINE ucs_status_t ucp_perf_run_test(ucx_perf_context_t *perf)
 {
