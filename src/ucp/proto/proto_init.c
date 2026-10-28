@@ -298,14 +298,18 @@ ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
 
 ucs_status_t
 ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
-                                    ucs_memory_type_t local_mem_type,
-                                    ucs_memory_type_t remote_mem_type,
+                                    const ucp_memory_info_t *local_mem_info,
+                                    const ucp_memory_info_t *remote_mem_info,
                                     uct_ep_operation_t memtype_op,
                                     size_t range_start, size_t range_end,
                                     int local, ucp_proto_perf_t *perf)
 {
     ucp_proto_perf_factors_t perf_factors = UCP_PROTO_PERF_FACTORS_INITIALIZER;
     ucp_context_h context                 = worker->context;
+    ucs_memory_type_t local_mem_type      = local_mem_info->type;
+    ucs_memory_type_t remote_mem_type     = remote_mem_info->type;
+    const ucp_memory_info_t *copy_mem_info;
+    ucp_ep_h async_ep;
     ucp_proto_perf_factor_id_t buffer_copy_factor_id;
     ucs_memory_type_t src_mem_type, dst_mem_type;
     ucp_proto_perf_node_t *tl_perf_node;
@@ -332,8 +336,10 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
 
     if (worker->mem_type_ep[local_mem_type] != NULL) {
         ep_config = ucp_ep_config(worker->mem_type_ep[local_mem_type]);
+        copy_mem_info = local_mem_info;
     } else if (worker->mem_type_ep[remote_mem_type] != NULL) {
         ep_config = ucp_ep_config(worker->mem_type_ep[remote_mem_type]);
+        copy_mem_info = remote_mem_info;
     } else {
         ucs_debug("cannot copy memory between %s and %s",
                   ucs_memory_type_names[local_mem_type],
@@ -349,7 +355,16 @@ ucp_proto_init_add_buffer_copy_time(ucp_worker_h worker, const char *title,
     switch (memtype_op) {
     case UCT_EP_OP_PUT_SHORT:
     case UCT_EP_OP_GET_SHORT:
-        lane = ep_config->key.rma_lanes[0];
+        async_ep = (copy_mem_info->flags & UCS_MEM_FLAG_CUDA_ASYNC) ?
+                           ucp_worker_cuda_async_ep_for_short(
+                                   worker, copy_mem_info, memtype_op, &lane) :
+                           NULL;
+        if (async_ep != NULL) {
+            ep_config = ucp_ep_config(async_ep);
+        } else {
+            /* Retain the existing estimate for every non-async-GDR case. */
+            lane = ep_config->key.rma_lanes[0];
+        }
         break;
     case UCT_EP_OP_PUT_ZCOPY:
     case UCT_EP_OP_GET_ZCOPY:
@@ -423,8 +438,13 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
                                ucp_md_map_t reg_md_map, ucp_proto_perf_t *perf)
 {
     const ucp_proto_select_param_t *select_param = params->super.select_param;
-    ucs_memory_type_t buffer_mem_type;
-    ucs_memory_type_t recv_mem_type;
+    ucp_memory_info_t buffer_mem_info;
+    ucp_memory_info_t select_mem_info;
+    ucp_memory_info_t recv_mem_info;
+    ucp_memory_info_t host_mem_info = {
+        .type = UCS_MEMORY_TYPE_HOST, .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
+        .flags = 0
+    };
     uint32_t op_attr_mask;
     ucs_status_t status;
 
@@ -443,14 +463,15 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
          * protocols. Consider moving it to the corresponding probe functions.
          */
         if (params->reg_mem_info.type != UCS_MEMORY_TYPE_UNKNOWN) {
-            buffer_mem_type = params->reg_mem_info.type;
+            buffer_mem_info = params->reg_mem_info;
         } else {
-            buffer_mem_type = UCS_MEMORY_TYPE_HOST;
+            buffer_mem_info = host_mem_info;
         }
+        select_mem_info = ucp_proto_common_select_param_mem_info(select_param);
         status = ucp_proto_init_add_buffer_copy_time(
-                params->super.worker, "local copy", buffer_mem_type,
-                select_param->mem_type, params->memtype_op, range_start,
-                range_end, 1, perf);
+                params->super.worker, "local copy", &buffer_mem_info,
+                &select_mem_info, params->memtype_op, range_start, range_end, 1,
+                perf);
         if (status != UCS_OK) {
             return status;
         }
@@ -473,12 +494,15 @@ ucp_proto_init_add_buffer_perf(const ucp_proto_common_init_params_t *params,
 
     /* Receiver has to copy data.
      * Assume same memory type as sender if no rkey */
-    recv_mem_type = (params->super.rkey_config_key == NULL) ?
+    recv_mem_info.type = (params->super.rkey_config_key == NULL) ?
                             select_param->mem_type :
                             params->super.rkey_config_key->mem_type;
-    status        = ucp_proto_init_add_buffer_copy_time(
-            params->super.worker, "remote copy", UCS_MEMORY_TYPE_HOST,
-            recv_mem_type, UCT_EP_OP_PUT_SHORT, range_start, range_end, 0,
+    /* Do not infer receiver allocation flags from the local sender buffer. */
+    recv_mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    recv_mem_info.flags   = 0;
+    status = ucp_proto_init_add_buffer_copy_time(
+            params->super.worker, "remote copy", &host_mem_info,
+            &recv_mem_info, UCT_EP_OP_PUT_SHORT, range_start, range_end, 0,
             perf);
 
     return status;

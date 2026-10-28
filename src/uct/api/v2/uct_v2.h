@@ -1118,7 +1118,7 @@ typedef struct {
  * @brief  Memory domain capability flags.
  */
 typedef enum {
-    UCT_MD_FLAG_V2_FIRST         = UCT_MD_FLAG_LAST,
+    UCT_MD_FLAG_V2_FIRST                = UCT_MD_FLAG_LAST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1126,7 +1126,7 @@ typedef enum {
      * key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_RMA flag.
      */
-    UCT_MD_FLAG_INVALIDATE_RMA   = UCT_MD_FLAG_V2_FIRST,
+    UCT_MD_FLAG_INVALIDATE_RMA          = UCT_MD_FLAG_V2_FIRST,
 
     /**
      * Memory domain supports invalidation of memory handle registered by
@@ -1134,13 +1134,16 @@ typedef enum {
      * packed key by @ref uct_md_mkey_pack_v2 with
      * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE_AMO flag.
      */
-    UCT_MD_FLAG_INVALIDATE_AMO   = UCS_BIT(12),
+    UCT_MD_FLAG_INVALIDATE_AMO          = UCS_BIT(12),
 
     /**
      * Memory domain supports interfaces that perform inter-process memory type
      * copy operations.
      */
-    UCT_MD_FLAG_IPC_MEMTYPE_COPY = UCS_BIT(13)
+    UCT_MD_FLAG_IPC_MEMTYPE_COPY        = UCS_BIT(13),
+
+    /** MD supports short copies for CUDA stream-ordered allocations. */
+    UCT_MD_FLAG_CUDA_ASYNC_MEMTYPE_COPY = UCS_BIT(14)
 } uct_md_flags_v2_t;
 
 

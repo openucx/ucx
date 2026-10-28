@@ -12,6 +12,7 @@
 
 #include <ucp/proto/lane_type.h>
 #include <ucp/proto/proto_select.h>
+#include <ucp/dt/dt.h>
 #include <ucp/wireup/ep_match.h>
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
@@ -906,6 +907,11 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            double bandwidth);
 
 ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker);
+
+/** Select a qualified async short-copy candidate, or NULL if unavailable. */
+ucp_ep_h ucp_worker_cuda_async_ep_for_short(
+        ucp_worker_h worker, const ucp_memory_info_t *mem_info,
+        uct_ep_operation_t operation, ucp_lane_index_t *lane_p);
 
 void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker);
 
