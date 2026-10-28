@@ -26,7 +26,6 @@
 #include <ucs/time/time.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/vfs/base/vfs_obj.h>
-#include <limits.h>
 
 
 #define UCT_MD_ATTR_V2_FIELD_COPY(_md_attr_dst, _md_attr_src, _field_name, \
@@ -88,19 +87,24 @@ uct_md_query_tl_resources_v2(uct_md_h md, uint64_t field_mask,
     uct_tl_resource_desc_v2_t resource = {
         .ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN
     };
-    void *resources = NULL, *tmp;
+    size_t expected_resource_size = sizeof(resource.field_mask);
+    void *resources               = NULL, *tmp;
     uct_tl_device_resource_t *tl_devices;
     unsigned i, num_resources, num_tl_devices;
     ucs_status_t status;
     uct_tl_t *tl;
 
-    if ((resource_size < sizeof(resource.field_mask)) ||
-        ((field_mask & UCT_TL_RESOURCE_DESC_FIELD_RESOURCE) &&
-         (resource_size < ucs_offsetof(uct_tl_resource_desc_v2_t, resource) +
-                                  sizeof(resource.resource))) ||
-        ((field_mask & UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE) &&
-         (resource_size < ucs_offsetof(uct_tl_resource_desc_v2_t, ctl_device) +
-                                  sizeof(resource.ctl_device)))) {
+    if (field_mask & UCT_TL_RESOURCE_DESC_FIELD_CTL_DEVICE) {
+        expected_resource_size =
+                ucs_offsetof(uct_tl_resource_desc_v2_t, ctl_device) +
+                sizeof(resource.ctl_device);
+    } else if (field_mask & UCT_TL_RESOURCE_DESC_FIELD_RESOURCE) {
+        expected_resource_size =
+                ucs_offsetof(uct_tl_resource_desc_v2_t, resource) +
+                sizeof(resource.resource);
+    }
+
+    if (resource_size < expected_resource_size) {
         ucs_error("resource descriptor size %zu omits requested fields",
                   resource_size);
         return UCS_ERR_INVALID_PARAM;
@@ -121,14 +125,6 @@ uct_md_query_tl_resources_v2(uct_md_h md, uint64_t field_mask,
         if (num_tl_devices == 0) {
             ucs_free(tl_devices);
             continue;
-        }
-
-        if ((num_tl_devices > UINT_MAX - num_resources) ||
-            (num_tl_devices > (SIZE_MAX / resource_size) - num_resources)) {
-            ucs_error("transport resource array size overflow");
-            ucs_free(tl_devices);
-            status = UCS_ERR_NO_MEMORY;
-            goto err;
         }
 
         tmp = ucs_realloc(resources,
@@ -210,7 +206,7 @@ void uct_release_tl_resource_list(uct_tl_resource_desc_t *resources)
 
 void uct_release_tl_resource_list_v2(uct_tl_resource_desc_v2_t *resources)
 {
-    ucs_free(resources);
+    uct_release_tl_resource_list((uct_tl_resource_desc_t*)resources);
 }
 
 ucs_status_t

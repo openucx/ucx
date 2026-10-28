@@ -86,6 +86,7 @@ UCS_TEST_P(test_ucp_context, controller_device_metadata) {
     ucp_context_h context;
     uct_tl_resource_desc_t *legacy;
     uct_tl_resource_desc_v2_t *resources;
+    uint64_t field_masks[2];
     unsigned num_resources;
 
     param.transports = {"self"};
@@ -145,6 +146,13 @@ UCS_TEST_P(test_ucp_context, controller_device_metadata) {
         }
         uct_release_tl_resource_list_v2(resources);
     }
+    ASSERT_UCS_OK(uct_md_query_tl_resources_v2(
+            md, UCS_BIT(63), sizeof(uint64_t), &resources, &num_resources));
+    ASSERT_EQ(2u, num_resources);
+    memcpy(field_masks, resources, sizeof(field_masks));
+    EXPECT_EQ(0u, field_masks[0]);
+    EXPECT_EQ(0u, field_masks[1]);
+    uct_release_tl_resource_list_v2(resources);
     ASSERT_UCS_OK(uct_md_query_tl_resources(md, &legacy, &num_resources));
     EXPECT_EQ(2u, num_resources);
     EXPECT_STREQ("memory0", legacy[0].dev_name);
@@ -152,9 +160,11 @@ UCS_TEST_P(test_ucp_context, controller_device_metadata) {
     uct_release_tl_resource_list(legacy);
     {
         scoped_log_handler slh(hide_errors_logger);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  uct_md_query_tl_resources_v2(md, resource, sizeof(uint64_t),
-                                               &resources, &num_resources));
+        for (uint64_t mask : {resource, control, resource | control}) {
+            EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                      uct_md_query_tl_resources_v2(md, mask, sizeof(uint64_t),
+                                                 &resources, &num_resources));
+        }
     }
     context = create_entity(false, param)->ucph();
     ASSERT_EQ(2, context->num_tls);
