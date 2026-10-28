@@ -888,8 +888,7 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
     ucp_md_index_t md_index;
 
     if ((memh->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (!UCP_MEM_IS_CUDA(memh->mem_type) &&
-         !UCP_MEM_IS_ROCM(memh->mem_type))) {
+        !UCP_MEM_IS_GPU(memh->mem_type)) {
         return reg_md_map;
     }
 

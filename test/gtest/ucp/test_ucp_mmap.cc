@@ -1373,10 +1373,12 @@ void test_ucp_mmap_max_hca::test_limits_memh_md_map(ucs_memory_type_t mem_type)
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
-    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all);
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all) &
+                              ctx_all->reg_md_map[mem_type];
 
     if (ucs_popcount(net_md_map) < 2) {
-        UCS_TEST_SKIP_R("need at least 2 network MDs");
+        UCS_TEST_SKIP_R("need at least 2 network MDs which can register " +
+                        mem_buffer::mem_type_name(mem_type));
     }
 
     const size_t size = 4096;
