@@ -1,6 +1,6 @@
 # UCX's aarch64 CUDA 13 + MOFED 24.10 release image plus what the DL cluster job
 # needs on top: gdrcopy, which the cluster has no environment module for, the
-# Python packaging module test_ucx_tls.py imports, and ip for the io_demo test.
+# Python packaging module test_ucx_tls.py imports, and ip for the IP-based tests.
 
 FROM harbor.mellanox.com/ucx/aarch64/ubuntu24.04-mofed24.10-cuda13:1
 
