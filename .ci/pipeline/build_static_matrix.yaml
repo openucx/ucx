@@ -42,8 +42,4 @@ steps:
   - name: Build Static
     parallel: false
     timeout: 30
-    run: |
-      set -euo pipefail
-      # Only the IB row sets these.
-      export EXTRA_MODULES="${EXTRA_MODULES:-}" EXTRA_TLS="${EXTRA_TLS:-}" RUN_TLS="${RUN_TLS:-}"
-      ./buildlib/tools/build_static.sh
+    run: ./buildlib/tools/build_static.sh
