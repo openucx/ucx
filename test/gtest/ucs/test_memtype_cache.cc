@@ -582,7 +582,7 @@ protected:
     virtual void init() {
         ucs::test::init();
         m_enable_events = ucm_global_opts.enable_events;
-        modify_config("MEMTYPE_CACHE", "explicit");
+        modify_config("MEMTYPE_CACHE", "y");
         ucm_global_opts.enable_events = 0;
         ucs_memtype_cache_cleanup();
         ucs_memtype_cache_global_init();
@@ -712,7 +712,7 @@ UCS_TEST_F(test_memtype_explicit, disabled_cache) {
                                &disabled_token);
     ucs_memtype_cache_unregister(&token);
 
-    modify_config("MEMTYPE_CACHE", "explicit");
+    modify_config("MEMTYPE_CACHE", "y");
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,

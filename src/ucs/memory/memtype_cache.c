@@ -83,7 +83,7 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
     ucs_memtype_cache_t *memtype_cache = NULL;
     ucs_status_t status;
 
-    if (ucs_global_opts.enable_memtype_cache == UCS_MEMTYPE_CACHE_NO) {
+    if (ucs_global_opts.enable_memtype_cache == UCS_NO) {
         return NULL;
     }
 
@@ -96,8 +96,7 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
         if (status != UCS_OK) {
             /* If we failed to create the memtype cache once, do not try again */
             ucs_memtype_cache_failed = 1;
-            if (ucs_global_opts.enable_memtype_cache ==
-                UCS_MEMTYPE_CACHE_YES) {
+            if (ucs_global_opts.enable_memtype_cache == UCS_YES) {
                 ucs_warn("failed to create memtype cache: %s",
                          ucs_status_string(status));
             }
@@ -428,7 +427,7 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     khiter_t hash_it;
     int ret;
 
-    if ((ucs_global_opts.enable_memtype_cache != UCS_MEMTYPE_CACHE_EXPLICIT) ||
+    if ((ucs_global_opts.enable_memtype_cache != UCS_YES) ||
         (size == 0) ||
         (size > UINTPTR_MAX - start - (UCS_PGT_ADDR_ALIGN - 1)) ||
         (token == NULL) || (mem_type == UCS_MEMORY_TYPE_HOST) ||
@@ -798,11 +797,15 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
                                    1000, ucs_memtype_cache_event_callback,
                                    self);
     if (status != UCS_OK) {
-        ucs_diag("failed to set UCM memtype event handler: %s",
-                 ucs_status_string(status));
-        if (ucs_global_opts.enable_memtype_cache !=
-            UCS_MEMTYPE_CACHE_EXPLICIT) {
+        if (ucs_global_opts.enable_memtype_cache != UCS_YES) {
+            ucs_diag("failed to set UCM memtype event handler: %s",
+                     ucs_status_string(status));
             goto err_cleanup_pgtable;
+        }
+
+        if (ucm_global_opts.enable_events) {
+            ucs_warn("failed to set UCM memtype event handler: %s; "
+                     "using explicit registration", ucs_status_string(status));
         }
     } else {
         self->has_events = 1;

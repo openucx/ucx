@@ -363,10 +363,6 @@ In some cases, the internal memory type cache can misdetect GPU memory as host
 memory, also leading to invalid memory access. This cache can be disabled by
 setting `UCX_MEMTYPE_CACHE=n`.
 
-`UCX_MEMTYPE_CACHE=explicit` keeps the event-based cache when UCM memory events
-are available. Otherwise, it caches only memory explicitly registered by UCX
-for a known lifetime. Unlike `n`, this setting does not disable the cache.
-
 #### Why am I getting the error "provided PTX was compiled with an unsupported toolchain"?
 
 The application is loading a cuda binary that was compiled for newer version of
