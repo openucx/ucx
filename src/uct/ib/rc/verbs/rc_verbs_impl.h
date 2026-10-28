@@ -102,7 +102,7 @@ uct_rc_verbs_iface_qp_cleanup_notify(uct_rc_verbs_iface_t *iface,
 {
     uct_ib_async_event_t event;
 
-    ucs_assertv(iface->super.config.srq_disable,
+    ucs_assertv(!iface->super.config.srq_enabled,
                 "software LAST_WQE is not allowed for SRQ QP 0x%x", qp_num);
 
     event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
@@ -162,7 +162,7 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 {
     unsigned i, num_wcs = iface->super.super.config.rx_max_poll;
-    uint8_t srq_enable  = !iface->super.config.srq_disable;
+    uint8_t srq_enabled = iface->super.config.srq_enabled;
     uct_ib_iface_recv_desc_t *desc;
     struct ibv_wc wc[num_wcs];
     ucs_status_t status;
@@ -190,7 +190,7 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
                                          wc[i].imm_data, wc[i].slid);
         }
 
-        if (!srq_enable) {
+        if (!srq_enabled) {
             /* Do not repost flushed WRs */
             uct_rc_verbs_iface_rx_complete_no_srq(iface, wc[i].qp_num,
                                                   wc[i].status !=
@@ -201,7 +201,7 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
                              UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
-    if (srq_enable) {
+    if (srq_enabled) {
         iface->super.rx.srq.available += num_wcs;
         uct_rc_verbs_iface_post_recv_common(iface, NULL, 0);
     } else {
