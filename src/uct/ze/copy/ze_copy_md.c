@@ -86,8 +86,6 @@ typedef struct {
     uct_ze_copy_host_import_t funcs;
     int                       available; /* Entry points were resolved */
     int                       enabled;   /* Driver did not reject imports */
-    unsigned long             num_fallbacks; /* Ranges left unimported because
-                                                they overlap an import */
 } uct_ze_copy_import_registry_t;
 
 
@@ -102,24 +100,25 @@ static ucs_status_t
 uct_ze_copy_import_get_func(ze_driver_handle_t driver, const char *name,
                             void **func_p)
 {
+    void *func = NULL;
     ze_result_t ret;
 
     /* Some drivers report success for an unknown name without setting the
        address */
-    *func_p = NULL;
-    ret     = zeDriverGetExtensionFunctionAddress(driver, name, func_p);
+    ret = zeDriverGetExtensionFunctionAddress(driver, name, &func);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_debug("zeDriverGetExtensionFunctionAddress(%s) failed: 0x%x", name,
                   ret);
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (*func_p == NULL) {
+    if (func == NULL) {
         ucs_debug("zeDriverGetExtensionFunctionAddress(%s) returned no address",
                   name);
         return UCS_ERR_UNSUPPORTED;
     }
 
+    *func_p = func;
     return UCS_OK;
 }
 
@@ -250,8 +249,14 @@ uct_ze_copy_import_create(void *address, size_t length,
         goto err_free;
     }
 
-    /* Neither end of the range is imported, so its base cannot be a key */
-    ucs_assert(khret != UCS_KH_PUT_KEY_PRESENT);
+    if (khret == UCS_KH_PUT_KEY_PRESENT) {
+        /* Another user of the extension released our import of this base,
+           which stays recorded until its registrations are released */
+        ucs_debug("import of host memory %p was released outside ze_copy",
+                  address);
+        status = UCS_ERR_ALREADY_EXISTS;
+        goto err_free;
+    }
 
     ret = funcs->import(funcs->driver, address, length);
     if (ret == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
@@ -329,11 +334,9 @@ static void uct_ze_copy_import_register(void *address, size_t length,
                       "at %p", address, length, base_start);
         }
     } else {
-        ++registry->num_fallbacks;
         ucs_debug("host memory %p length %zu partially overlaps the imports "
-                  "at %p and %p, left unimported (%lu such ranges so far)",
-                  address, length, base_start, base_end,
-                  registry->num_fallbacks);
+                  "at %p and %p, left unimported",
+                  address, length, base_start, base_end);
     }
 
 out:
@@ -344,11 +347,10 @@ out_unlock:
     pthread_mutex_unlock(&registry->lock);
 }
 
-static ucs_status_t uct_ze_copy_import_release(uct_ze_copy_import_t *import)
+static void uct_ze_copy_import_release(uct_ze_copy_import_t *import)
 {
     uct_ze_copy_import_registry_t *registry = &uct_ze_copy_imports;
     const uct_ze_copy_host_import_t *funcs  = &registry->funcs;
-    ucs_status_t status                     = UCS_OK;
     khiter_t iter;
     ze_result_t ret;
 
@@ -356,7 +358,7 @@ static ucs_status_t uct_ze_copy_import_release(uct_ze_copy_import_t *import)
     ucs_assert(import->refcount > 0);
     if (--import->refcount > 0) {
         pthread_mutex_unlock(&registry->lock);
-        return UCS_OK;
+        return;
     }
 
     iter = kh_get(ze_copy_import, &registry->hash, (uintptr_t)import->address);
@@ -370,12 +372,10 @@ static ucs_status_t uct_ze_copy_import_release(uct_ze_copy_import_t *import)
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_diag("zexDriverReleaseImportedPointer(%p) failed: 0x%x",
                  import->address, ret);
-        status = UCS_ERR_IO_ERROR;
     }
     pthread_mutex_unlock(&registry->lock);
 
     ucs_free(import);
-    return status;
 }
 
 static int
@@ -505,11 +505,11 @@ uct_ze_copy_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
-    if (params->memh == UCT_ZE_COPY_DUMMY_MEMH) {
-        return UCS_OK;
+    if (params->memh != UCT_ZE_COPY_DUMMY_MEMH) {
+        uct_ze_copy_import_release(params->memh);
     }
 
-    return uct_ze_copy_import_release(params->memh);
+    return UCS_OK;
 }
 
 static void uct_ze_copy_md_close(uct_md_h uct_md)

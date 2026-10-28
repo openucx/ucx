@@ -13,9 +13,9 @@ extern "C" {
 
 
 /*
- * Smoke tests for the ze_copy MD: lifecycle, capability query, allocation
- * and memory-type detection. The ze_copy MD is the path used by UCP for
- * VRAM<->host staging on Intel XPU.
+ * Tests for the ze_copy MD: lifecycle, capability query, allocation,
+ * memory-type detection and host memory import. The ze_copy MD is the path
+ * used by UCP for VRAM<->host staging on Intel XPU.
  */
 class test_ze_copy_md : public ucs::test {
 protected:
@@ -343,6 +343,8 @@ UCS_TEST_F(test_ze_copy_md, host_import_partial_overlap) {
     uct_mem_h head = mem_reg(md, ptr, 2 * CHUNK);
     /* Starts inside the import */
     uct_mem_h tail = mem_reg(md, ptr + (2 * CHUNK), 2 * CHUNK);
+    EXPECT_NE(middle_memh, head);
+    EXPECT_NE(middle_memh, tail);
     EXPECT_TRUE(import_base(hi, ptr) == NULL);
     EXPECT_TRUE(import_base(hi, ptr + buf.size() - 1) == NULL);
     EXPECT_EQ(middle, import_base(hi, middle));
@@ -431,6 +433,36 @@ UCS_TEST_F(test_ze_copy_md, host_import_foreign) {
 
     EXPECT_EQ(ZE_RESULT_SUCCESS, hi->release(hi->driver, foreign));
     EXPECT_TRUE(import_base(hi, foreign) == NULL);
+
+    uct_md_close(md);
+}
+
+/*
+ * Another user of the extension can drop one of our imports by releasing a
+ * pointer inside it. Registering the range again leaves it unimported, and
+ * deregistering both registrations must not release anything twice.
+ */
+UCS_TEST_F(test_ze_copy_md, host_import_released_by_foreign) {
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
+    uct_md_h md                         = open_md_or_skip();
+    std::vector<char> buf(2 * CHUNK);
+    char *ptr                           = buf.data();
+    char *inner                         = ptr + CHUNK;
+
+    uct_mem_h first = mem_reg(md, ptr, buf.size());
+    EXPECT_EQ(ptr, import_base(hi, ptr));
+
+    /* An import inside ours is not recorded, but its release drops ours */
+    EXPECT_EQ(ZE_RESULT_SUCCESS, hi->import(hi->driver, inner, CHUNK));
+    EXPECT_EQ(ZE_RESULT_SUCCESS, hi->release(hi->driver, inner));
+    EXPECT_TRUE(import_base(hi, ptr) == NULL);
+
+    uct_mem_h second = mem_reg(md, ptr, buf.size());
+    EXPECT_NE(first, second);
+    EXPECT_TRUE(import_base(hi, ptr) == NULL);
+    mem_dereg(md, first);
+    mem_dereg(md, second);
+    EXPECT_TRUE(import_base(hi, ptr) == NULL);
 
     uct_md_close(md);
 }

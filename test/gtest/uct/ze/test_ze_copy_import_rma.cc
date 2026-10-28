@@ -31,6 +31,11 @@ protected:
 
     void init() override
     {
+        /* ze_copy reaches only its own interface */
+        if (!dynamic_cast<const p2p_resource*>(GetParam())->loopback) {
+            UCS_TEST_SKIP_R("ze_copy supports only loopback");
+        }
+
         uct_p2p_test::init();
         ze_copy_host_import_or_skip();
 
