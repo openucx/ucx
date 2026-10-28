@@ -470,6 +470,11 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
                                    uint32_t resource_id);
 
+/* Mark a registered event as fired and schedule the callbacks of its waiters.
+ * An event which is not registered is ignored. */
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event);
+
 /* Invoke the callback defined by 'wait_ctx' from callback queue when the event
  * fires. If it has already been fired, the callback is scheduled immediately to
  * the callback queue.

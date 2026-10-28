@@ -758,11 +758,9 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
     uct_rc_iface_t *iface                      = cleanup_ctx->iface;
     uct_rc_iface_ops_t *ops;
 
-    if (!iface->config.srq_disable) {
-        uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
-                                             IBV_EVENT_QP_LAST_WQE_REACHED,
-                                             cleanup_ctx->qp_num);
-    }
+    uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         cleanup_ctx->qp_num);
 
     ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
     ops->cleanup_qp(cleanup_ctx);

@@ -742,13 +742,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_destroy_qp;
     }
 
-    /* LAST_WQE is generated only for QPs with SRQ. */
-    if (!iface->super.config.srq_disable) {
-        status = uct_ib_device_async_event_register(
-                &md->dev, IBV_EVENT_QP_LAST_WQE_REACHED, self->qp->qp_num);
-        if (status != UCS_OK) {
-            goto err_destroy_qp;
-        }
+    status = uct_ib_device_async_event_register(&md->dev,
+                                                IBV_EVENT_QP_LAST_WQE_REACHED,
+                                                self->qp->qp_num);
+    if (status != UCS_OK) {
+        goto err_destroy_qp;
     }
 
     status = uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
@@ -779,11 +777,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 err_remove_qp:
     uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
 err_event_unreg:
-    if (!iface->super.config.srq_disable) {
-        uct_ib_device_async_event_unregister(&md->dev,
-                                             IBV_EVENT_QP_LAST_WQE_REACHED,
-                                             self->qp->qp_num);
-    }
+    uct_ib_device_async_event_unregister(&md->dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->qp->qp_num);
 err_destroy_qp:
     uct_ib_destroy_qp(self->qp);
 err:
@@ -814,6 +810,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert(UCS_CIRCULAR_COMPARE16(self->txcnt.pi, >=, self->txcnt.ci));
     uct_rc_ep_cleanup_qp(&self->super, &cleanup_ctx->super, self->qp->qp_num,
                          self->txcnt.pi - self->txcnt.ci);
+
+    if (iface->super.config.srq_disable && (cleanup_ctx->rx_remaining == 0)) {
+        uct_rc_verbs_iface_qp_cleanup_notify(iface, self->qp->qp_num);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);
