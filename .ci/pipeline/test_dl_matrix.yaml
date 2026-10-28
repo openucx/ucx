@@ -35,8 +35,8 @@ env:
   RUNNING_IN_AZURE: "no"
   # Must match the number of values in the worker axis below.
   NWORKERS: "4"
-  # common.sh sets make -j to 4 unless parallel_jobs is passed; match SLURM_MINCPUS.
-  BUILD_JOBS: "24"
+  # common.sh sets make -j to 4 unless parallel_jobs is passed.
+  BUILD_JOBS: "${SLURM_MINCPUS}"
   SLURM_NODES: 1
   # The account is tied to the partition by the cluster's cli_filter.
   SLURM_PARTITION: gb200nvl72_ci
@@ -119,7 +119,7 @@ steps:
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
       # Fails the row when the allocation has no visible GPU.
-      testScript: "hostname && nvidia-smi -L && df -h /"
+      testScript: "hostname && nvidia-smi -L | grep GPU && df -h /"
       headNode: "${SLURM_HEAD_NODE}"
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
