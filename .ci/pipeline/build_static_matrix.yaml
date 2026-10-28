@@ -24,7 +24,6 @@ runs_on_dockers:
       name: "centos7-ib",
       url: "harbor.mellanox.com/ucx/centos7:5",
       arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
       limits: "{memory: 8Gi, cpu: 6000m, nvidia.com/sriov_cx7_p2: 1}",
       requests: "{memory: 8Gi, cpu: 6000m, nvidia.com/sriov_cx7_p2: 1}",
