@@ -294,11 +294,10 @@ ucp_proto_get_sgl_short_elem_completion(void *request, ucs_status_t status,
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
 
-/* Get an element which is shorter than the minimal zero-copy get size, using
- * a regular get sub-request. The sub-request holds a reference on the parent
- * request completion, which is taken before the sub-request is created, so the
- * parent can't be completed before the sub-request. Returns UCS_INPROGRESS if
- * the element was handled (the reference is not counted by the caller) */
+/* Get an element shorter than the minimal zero-copy get size by a regular get
+ * sub-request. The parent reference is taken before the sub-request is created,
+ * so the parent can't complete before it. Returns UCS_INPROGRESS if the element
+ * was handled */
 static ucs_status_t
 ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
                              void *buffer, size_t length, uint64_t remote_addr)
@@ -321,9 +320,8 @@ ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
         return UCS_INPROGRESS;
     }
 
-    /* Completed immediately, the callback will not be called. The parent holds
-       an extra reference until all elements are posted, so it can't drop to
-       0 */
+    /* Completed immediately, so there is no callback. The count can't drop to
+       0, since the parent holds the initial reference until all are posted */
     --req->send.state.uct_comp.count;
     status = UCS_PTR_STATUS(status_ptr);
     return (status == UCS_OK) ? UCS_INPROGRESS : status;

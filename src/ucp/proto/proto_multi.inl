@@ -384,8 +384,7 @@ typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
         const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
 
 /* Adjust a single SGL element fragment before it is posted. May be NULL.
- * Returns UCS_INPROGRESS if the fragment was already submitted by the function,
- * so there is nothing left to post */
+ * Returns UCS_INPROGRESS if the fragment was already submitted */
 typedef ucs_status_t (*ucp_proto_rma_sgl_adjust_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         size_t elem_index, void **buffer_p, size_t *length_p,
