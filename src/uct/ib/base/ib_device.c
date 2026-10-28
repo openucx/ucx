@@ -258,9 +258,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
     }
 }
 
-static void
-uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
-                                   const uct_ib_async_event_t *event)
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event)
 {
     ucs_spin_lock(&dev->async_event_lock);
     uct_ib_device_async_event_dispatch_nolock(dev, event);

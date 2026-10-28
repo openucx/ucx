@@ -276,22 +276,6 @@ void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
     uct_ib_destroy_srq(iface->srq);
 }
 
-/* Finalize cleanup after all receive WR flush completions have been polled.
- * QPs attached to an SRQ are cleaned up by the LAST_WQE event instead. */
-void uct_rc_verbs_iface_gc_drain_check(uct_rc_verbs_iface_t *iface)
-{
-    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx, *tmp;
-
-    ucs_assert(iface->super.config.srq_disable);
-
-    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->super.qp_gc_list,
-                           super.list) {
-        if (cleanup_ctx->rx_remaining == 0) {
-            uct_rc_iface_qp_cleanup_progress(&cleanup_ctx->super);
-        }
-    }
-}
-
 static void
 uct_rc_verbs_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
 {

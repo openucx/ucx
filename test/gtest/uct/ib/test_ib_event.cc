@@ -333,6 +333,57 @@ public:
         return (m_e == NULL) || iface_has_srq(*m_e);
     }
 
+    ucs_status_t register_software_event() {
+        m_event.got       = false;
+        m_event.super.cb  = last_wqe_check_cb;
+        m_event.super.cbq = &m_e->worker()->progress_q;
+        m_event.dev       = dev(*m_e);
+        /* Use a separate event key to avoid notifying a real QP. */
+        m_event.qp_num    = UINT32_MAX;
+
+        return uct_ib_device_async_event_register(m_event.dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, m_event.qp_num);
+    }
+
+    static void unregister_software_event(event_ctx *event) {
+        uct_ib_device_async_event_unregister(event->dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, event->qp_num);
+    }
+
+    void fire_software_event() {
+        uct_ib_async_event_t event = {};
+
+        event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
+        event.qp_num     = m_event.qp_num;
+        uct_ib_device_async_event_dispatch(m_event.dev, &event);
+    }
+
+    void test_software_last_wqe(bool before) {
+        ASSERT_UCS_OK(register_software_event());
+        ucs::handle<event_ctx*> event(&m_event, unregister_software_event);
+
+        if (before) {
+            fire_software_event();
+        }
+
+        ASSERT_UCS_OK(uct_ib_device_async_event_wait(m_event.dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, m_event.qp_num, &m_event.super));
+        if (!before) {
+            /* Firing the event twice must invoke the callback only once. */
+            fire_software_event();
+            fire_software_event();
+        }
+
+        EXPECT_FALSE(m_event.got);
+
+        ucs_time_t deadline = ucs::get_deadline(5.0);
+        while (!m_event.got && (ucs_get_time() < deadline)) {
+            m_e->progress();
+        }
+
+        EXPECT_TRUE(m_event.got);
+    }
+
     bool wait_for_last_wqe_event(bool before) {
         ucs_status_t status;
         bool ret;
@@ -455,6 +506,32 @@ UCS_TEST_SKIP_COND_P(uct_qp_test_event, last_wqe_cb_before_subscribe,
                      !has_srq())
 {
     ASSERT_TRUE(wait_for_last_wqe_event(true));
+}
+
+UCS_TEST_P(uct_qp_test_event, software_last_wqe_before_subscribe)
+{
+    test_software_last_wqe(true);
+}
+
+UCS_TEST_P(uct_qp_test_event, software_last_wqe_after_subscribe)
+{
+    test_software_last_wqe(false);
+}
+
+UCS_TEST_P(uct_qp_test_event, software_last_wqe_unregister_pending)
+{
+    {
+        ASSERT_UCS_OK(register_software_event());
+        ucs::handle<event_ctx*> event(&m_event, unregister_software_event);
+
+        ASSERT_UCS_OK(uct_ib_device_async_event_wait(m_event.dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, m_event.qp_num, &m_event.super));
+        fire_software_event();
+        EXPECT_FALSE(m_event.got);
+    }
+
+    m_e->progress();
+    EXPECT_FALSE(m_event.got);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(uct_qp_test_event);

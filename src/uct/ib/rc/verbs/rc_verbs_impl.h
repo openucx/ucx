@@ -26,8 +26,6 @@ uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-void uct_rc_verbs_iface_gc_drain_check(uct_rc_verbs_iface_t *iface);
-
 void uct_rc_verbs_iface_eps_post_recv(uct_rc_verbs_iface_t *iface);
 
 unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
@@ -93,6 +91,22 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
     }
 }
 
+/* Fire LAST_WQE in software for a QP without an SRQ. */
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_iface_qp_cleanup_notify(uct_rc_verbs_iface_t *iface,
+                                     uint32_t qp_num)
+{
+    uct_ib_async_event_t event;
+
+    ucs_assertv(iface->super.config.srq_disable,
+                "software LAST_WQE is not allowed for SRQ QP 0x%x", qp_num);
+
+    event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
+    event.qp_num     = qp_num;
+    uct_ib_device_async_event_dispatch(uct_ib_iface_device(&iface->super.super),
+                                       &event);
+}
+
 /* Account for a receive WR flush completion after its QP was removed from the
  * lookup table. A QP created without an SRQ is kept until every posted receive
  * WR has generated a completion. */
@@ -104,7 +118,10 @@ uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface, uint32_t qp_num)
     ucs_list_for_each(cleanup_ctx, &iface->super.qp_gc_list, super.list) {
         if (cleanup_ctx->super.qp_num == qp_num) {
             ucs_assertv(cleanup_ctx->rx_remaining > 0, "qp_num=0x%x", qp_num);
-            cleanup_ctx->rx_remaining--;
+            if (--cleanup_ctx->rx_remaining == 0) {
+                uct_rc_verbs_iface_qp_cleanup_notify(iface, qp_num);
+            }
+
             return;
         }
     }
@@ -196,10 +213,6 @@ out:
     if (nosrq) {
         if (ucs_unlikely(iface->rx_post_recv_pending)) {
             uct_rc_verbs_iface_eps_post_recv(iface);
-        }
-
-        if (ucs_unlikely(!ucs_list_is_empty(&iface->super.qp_gc_list))) {
-            uct_rc_verbs_iface_gc_drain_check(iface);
         }
     } else {
         uct_rc_verbs_iface_post_recv_common(iface, NULL, 0);

@@ -814,6 +814,72 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, am_and_qp_drain,
     wait_qp_gc_list_empty();
 }
 
+UCS_TEST_P(test_rc_no_srq, last_wqe_after_rx_drain)
+{
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e1);
+    unsigned quota              = iface->rx_cq_available;
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+    ucs_time_t deadline;
+
+    m_e1->destroy_ep(0);
+    ASSERT_EQ(1ul, ucs_list_length(&iface->super.qp_gc_list));
+    cleanup_ctx = ucs_list_head(&iface->super.qp_gc_list,
+                                uct_rc_verbs_iface_qp_cleanup_ctx_t,
+                                super.list);
+    ASSERT_GT(cleanup_ctx->rx_remaining, 0u);
+
+    /* Progress only the iface to verify that draining schedules cleanup. */
+    deadline = ucs::get_deadline(5.0);
+    while ((ucs_get_time() < deadline) &&
+           !ucs_list_is_empty(&iface->super.qp_gc_list) &&
+           (cleanup_ctx->rx_remaining > 0)) {
+        uct_iface_progress(m_e1->iface());
+    }
+
+    ASSERT_FALSE(ucs_list_is_empty(&iface->super.qp_gc_list));
+    EXPECT_EQ(0u, cleanup_ctx->rx_remaining);
+    EXPECT_NE(UCS_CALLBACKQ_ID_NULL, cleanup_ctx->super.super.cb_id);
+    EXPECT_EQ(quota, iface->rx_cq_available);
+
+    wait_qp_gc_list_empty();
+    EXPECT_EQ(quota + rx_max_wr(m_e1), iface->rx_cq_available);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_already_drained,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    scoped_log_handler slh(hide_warns_logger);
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e1);
+    unsigned quota              = iface->rx_cq_available;
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+    ucs_time_t deadline;
+
+    send_am_messages(m_e1, 8, UCS_OK);
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL));
+    ASSERT_TRUE(rc_ep(m_e1)->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL);
+
+    deadline = ucs::get_deadline(5.0);
+    while ((rx_available(m_e1, 0) < rx_max_wr(m_e1)) &&
+           (ucs_get_time() < deadline)) {
+        uct_iface_progress(m_e1->iface());
+    }
+
+    ASSERT_EQ(rx_max_wr(m_e1), rx_available(m_e1, 0));
+
+    /* No receive WR remains, so no later RX CQE can trigger cleanup. */
+    m_e1->destroy_ep(0);
+    ASSERT_EQ(1ul, ucs_list_length(&iface->super.qp_gc_list));
+    cleanup_ctx = ucs_list_head(&iface->super.qp_gc_list,
+                                uct_rc_verbs_iface_qp_cleanup_ctx_t,
+                                super.list);
+    EXPECT_EQ(0u, cleanup_ctx->rx_remaining);
+    EXPECT_NE(UCS_CALLBACKQ_ID_NULL, cleanup_ctx->super.super.cb_id);
+
+    wait_qp_gc_list_empty();
+    EXPECT_EQ(quota + rx_max_wr(m_e1), iface->rx_cq_available);
+}
+
 /* The flow control window must not exceed the number of receive WRs posted to
  * one QP, and must leave one receive batch of them unused. Otherwise, the peer
  * can send more messages than that QP can receive. */
