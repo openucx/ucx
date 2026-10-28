@@ -160,9 +160,9 @@ public:
 
     void prepare_sgl()
     {
-        ucp_sgl_state_t &sgl = m_perf.ucp.sgl;
-        const size_t count   = m_perf.params.msg_size_cnt;
-        size_t offset        = 0;
+        ucp_perf_sgl_state_t &sgl = m_perf.ucp.sgl;
+        const size_t count        = m_perf.params.msg_size_cnt;
+        size_t offset             = 0;
         size_t i;
 
         ucs_assert(NULL != m_perf.params.msg_size_list);
@@ -846,8 +846,8 @@ public:
             m_send_sn_buffer = iov[last].buffer;
             m_send_sn_length = iov[last].length;
         } else if (m_sgl_put) {
-            const ucp_sgl_state_t &sgl = m_perf.ucp.sgl;
-            size_t last                = m_perf.params.msg_size_cnt - 1;
+            const ucp_perf_sgl_state_t &sgl = m_perf.ucp.sgl;
+            size_t last                     = m_perf.params.msg_size_cnt - 1;
 
             while ((last > 0) && (sgl.lengths[last] == 0)) {
                 --last;
