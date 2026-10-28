@@ -10,7 +10,6 @@
 #endif
 
 #include "rma.inl"
-#include "rma_sgl.inl"
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
