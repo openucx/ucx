@@ -639,7 +639,7 @@ ucp_proto_put_sgl_offload_sw_progress(uct_pending_req_t *self)
 
 ucp_proto_t ucp_put_sgl_offload_sw_proto = {
     .name     = "put/sgl/offload_sw",
-    .desc     = "sgl " UCP_PROTO_RMA_EMULATION_DESC,
+    .desc     = "sgl per-element " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
     .probe    = ucp_proto_put_sgl_offload_sw_probe,
