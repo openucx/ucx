@@ -259,6 +259,55 @@ bool test_md::check_alloc_mem_type(ucs_memory_type_t mem_type)
                 (m_md_attr.alloc_mem_types & UCS_BIT(mem_type))));
 }
 
+/* The MD advertises dmabuf export per memory type, but the device can still
+ * refuse it, as it does under an MPS MLOPart device */
+bool test_md::check_dmabuf_export(ucs_memory_type_t mem_type)
+{
+    uct_md_mem_attr_t mem_attr = {};
+
+    if (!(m_md_attr.dmabuf_mem_types & UCS_BIT(mem_type)) ||
+        !mem_buffer::is_mem_type_supported(mem_type)) {
+        return false;
+    }
+
+    mem_buffer buffer(ucs_get_page_size(), mem_type);
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
+    if (uct_md_mem_query(md(), buffer.ptr(), buffer.size(), &mem_attr) !=
+        UCS_OK) {
+        return false;
+    }
+
+    if (mem_attr.dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+        return false;
+    }
+
+    close(mem_attr.dmabuf_fd);
+    return true;
+}
+
+/* Under an MPS MLOPart device the driver allocates no GDR capable memory and
+ * refuses to export it as a dmabuf, which is what leaves it unregistrable.
+ * Gate on that driver property rather than on the flag the guarded tests
+ * assert, so a regression in the registrability detection fails them instead
+ * of skipping them. */
+bool test_md::check_registrable(ucs_memory_type_t mem_type)
+{
+    /* Skip conditions are evaluated before the memory domain is opened, and
+     * again from init() once it is */
+    if (md() == nullptr) {
+        return true;
+    }
+
+    if (!(m_md_attr.access_mem_types & UCS_BIT(mem_type)) ||
+        !mem_buffer::is_mem_type_supported(mem_type)) {
+        return false;
+    }
+
+    return (mem_type != UCS_MEMORY_TYPE_CUDA) ||
+           mem_buffer::cuda_mem_is_gdr_capable();
+}
+
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
                            ucs_memory_type_t mem_type)
 {
@@ -1233,6 +1282,16 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
             continue;
         }
 
+        /* Only an MPS MLOPart device may refuse an export the MD advertises;
+         * anywhere else a refusal is a genuine failure of the dmabuf path */
+        if (dmabuf_expected && (mem_type == UCS_MEMORY_TYPE_CUDA) &&
+            !mem_buffer::cuda_mem_is_gdr_capable() &&
+            !check_dmabuf_export(mem_type)) {
+            UCS_TEST_MESSAGE << "skipping " << ucs_memory_type_names[mem_type]
+                             << " (device refuses dmabuf export)";
+            continue;
+        }
+
         mem_buffer mem_buf(size, mem_type);
 
         if (!dmabuf_expected) {
@@ -1417,15 +1476,21 @@ protected:
 
 #if HAVE_DECL_GDR_PIN_BUFFER_V2
 
+/* The driver refuses to pin memory it did not allocate as GPUDirect RDMA
+ * capable, which is the case for every allocation under an MPS MLOPart
+ * device */
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_default_pin,
-                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE?=auto")
+                     !check_caps(UCT_MD_FLAG_REG) ||
+                             !mem_buffer::cuda_mem_is_gdr_capable(),
+                     "GDR_COPY_USE_PCIE?=auto")
 {
     ASSERT_UCS_OK(register_mem());
 }
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin,
                      !mem_buffer::cuda_gpu_has_c2c() ||
-                             !check_caps(UCT_MD_FLAG_REG),
+                             !check_caps(UCT_MD_FLAG_REG) ||
+                             !mem_buffer::cuda_mem_is_gdr_capable(),
                      "GDR_COPY_USE_PCIE?=yes")
 {
     ASSERT_UCS_OK(register_mem());
@@ -1441,7 +1506,9 @@ UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_pcie_pin_fail,
 }
 
 UCS_TEST_SKIP_COND_P(test_gdr_copy, gdr_copy_reg_cuda_try_pcie_pin,
-                     !check_caps(UCT_MD_FLAG_REG), "GDR_COPY_USE_PCIE=try")
+                     !check_caps(UCT_MD_FLAG_REG) ||
+                             !mem_buffer::cuda_mem_is_gdr_capable(),
+                     "GDR_COPY_USE_PCIE=try")
 {
     ASSERT_UCS_OK(register_mem());
 }
