@@ -1048,6 +1048,66 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, flush_cancel,
     wait_qp_gc_list_empty();
 }
 
+/* Report a real receive completion as failed, to exercise the error path of a
+ * QP which has its own receive queue: the completion carries a valid QP
+ * number, which the accounting of such a QP looks up. */
+static struct {
+    struct ibv_cq *cq;
+    int           (*poll_cq)(struct ibv_cq*, int, struct ibv_wc*);
+    void          *desc;
+    uint32_t      qp_num;
+    int           reported;
+} flushed_rx;
+
+static int flushed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
+                              struct ibv_wc *wc)
+{
+    int count = flushed_rx.poll_cq(cq, num_entries, wc);
+
+    if ((cq == flushed_rx.cq) && (count > 0) && !flushed_rx.reported &&
+        (wc[0].status == IBV_WC_SUCCESS)) {
+        flushed_rx.desc     = (void*)(uintptr_t)wc[0].wr_id;
+        flushed_rx.qp_num   = wc[0].qp_num;
+        flushed_rx.reported = 1;
+        wc[0].status        = IBV_WC_WR_FLUSH_ERR;
+    }
+
+    return count;
+}
+
+/* A flushed receive WR delivers no active message, so its descriptor must be
+ * released and its slot must not be posted again. The repost batch is one, so
+ * that reposting the slot would be visible. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, failed_rx_release_desc,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "IB_RX_MAX_BATCH=1")
+{
+    uct_rc_iface_t *rc = rc_iface(m_e2);
+
+    ASSERT_EQ(1u, rc->super.config.rx_max_batch);
+    ASSERT_EQ(0, rx_available(m_e2, 0));
+
+    flushed_rx.cq       = rc->super.cq[UCT_IB_DIR_RX];
+    flushed_rx.poll_cq  = flushed_rx.cq->context->ops.poll_cq;
+    flushed_rx.desc     = NULL;
+    flushed_rx.reported = 0;
+
+    ucs::mock mock;
+    mock.setup(&flushed_rx.cq->context->ops.poll_cq, flushed_rx_poll_cq);
+
+    send_am_messages(m_e1, 1, UCS_OK, 0, 0);
+    wait_for_value(&flushed_rx.reported, 1, true);
+    ASSERT_TRUE(flushed_rx.reported);
+
+    /* The completion of this test is reported for the first QP only. */
+    ASSERT_EQ(ucs_derived_of(rc_ep(m_e2, 0), uct_rc_verbs_ep_t)->qp->qp_num,
+              flushed_rx.qp_num);
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, flushed_rx.desc))
+            << "receive descriptor leaked";
+    EXPECT_EQ(1, rx_available(m_e2, 0));
+}
+
 /* Two 384-entry receive queues consume 768 descriptors. Limit the pool to
  * 1024 descriptors, so holding the remainder exhausts it and prevents receive
  * reposting from the completion path. */
@@ -1062,6 +1122,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs,
                      UCT_TEST_NO_RX_BUFS_CONFIG)
 {
     scoped_log_handler slh(no_rx_bufs_log_handler);
+    unsigned am_count   = 0;
     std::vector<void*> descs;
     unsigned prev_total = 0;
     unsigned total      = 0;
@@ -1092,8 +1153,14 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs,
 
     EXPECT_LT(total, prev_total);
 
-    send_am_messages(m_e1, 1, UCS_OK, 0, 0);
-    flush();
+    /* Count only recovery messages, not delayed preparation messages. */
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                             am_count_handler, &am_count, 0);
+    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+    send_am_message_wait(m_e1, 0, RECOVERY_AM_ID);
+    wait_for_value(&am_count, 1u, true);
+    EXPECT_EQ(1u, am_count);
+    flush(ucs::get_deadline(5.0));
 }
 
 /* Verify that the QP which the shared receive buffer pool left short gets the
@@ -1267,6 +1334,89 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_ep_create,
     release_rx_bufs(descs, num_spare, descs.size());
 
     wait_qp_gc_list_empty();
+}
+
+/* The RX CQ is sized for MAX_NUM_EPS endpoints with RX_MAX_WR receive WRs
+ * each, so that every endpoint can post its own receive queue. */
+UCS_TEST_P(test_rc_no_srq, rx_cq_num_eps, "MAX_NUM_EPS=4",
+           "RC_VERBS_RX_MAX_WR=32", "IB_RX_QUEUE_LEN=128")
+{
+    const int num_eps           = 4;
+    const int wr                = 32;
+    scoped_log_handler slh(wrap_errors_logger);
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e2);
+    uct_ep_params_t ep_params;
+    uct_ep_h refused_ep;
+    ucs_status_t status;
+    int ep_idx;
+
+    ASSERT_EQ(wr, rx_max_wr(m_e2));
+
+    /* The connected endpoints of the fixture already took their quota. */
+    EXPECT_EQ((num_eps - NUM_EPS) * wr, iface->rx_cq_available);
+
+    for (ep_idx = NUM_EPS; ep_idx < num_eps; ep_idx++) {
+        m_e2->create_ep(ep_idx);
+    }
+
+    EXPECT_EQ(0, iface->rx_cq_available);
+
+    /* The RX CQ has no room for the receive WRs of one more endpoint. */
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e2->iface();
+    status               = uct_ep_create(&ep_params, &refused_ep);
+    if (status == UCS_OK) {
+        uct_ep_destroy(refused_ep);
+    }
+    EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
+
+    /* Destroying an endpoint returns its quota after its receive WRs are
+     * drained, so that another endpoint can be created. */
+    m_e2->destroy_ep(num_eps - 1);
+    wait_for_value(&iface->rx_cq_available, wr, true);
+    ASSERT_EQ(wr, iface->rx_cq_available);
+    m_e2->create_ep(num_eps - 1);
+}
+
+/* Without flow control, the peer can send more messages than one receive
+ * queue holds. Verify that all of them are delivered after RNR retries. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     "RC_FC_ENABLE=n", "RC_VERBS_RX_MAX_WR=32")
+{
+    unsigned am_count = 0;
+    unsigned target   = rx_max_wr(m_e2) * 2;
+    ucs_status_t status;
+    ucs_time_t deadline;
+    unsigned sent;
+
+    if (rc_iface(m_e2)->config.fc_enabled) {
+        UCS_TEST_SKIP_R("flow control is enabled");
+    }
+
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_count_handler, &am_count, 0);
+
+    /* Progress the sender only, so that the receive queue of the peer runs out
+     * of receive WRs and the fabric reports RNR. */
+    sent     = 0;
+    deadline = ucs::get_deadline(10.0);
+    while ((sent < target) && (ucs_get_time() < deadline)) {
+        status = send_am_message(m_e1, 0, 0);
+        if (status == UCS_OK) {
+            sent++;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            uct_iface_progress(m_e1->iface());
+        } else {
+            UCS_TEST_ABORT("failed to send: " << ucs_status_string(status));
+        }
+    }
+
+    ASSERT_GT(sent, (unsigned)rx_max_wr(m_e2));
+
+    wait_for_value(&am_count, sent, true);
+    EXPECT_EQ(sent, am_count);
+    flush();
 }
 
 /* Verify that an endpoint is not created when the RX CQ quota has no room left
