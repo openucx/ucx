@@ -157,6 +157,12 @@ uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     if (level == UCS_DEVICE_LEVEL_WARP) {
         wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
     } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
+        __shared__ uint64_t shared_wqe_base;
+        if (lane_id == 0) {
+            shared_wqe_base = wqe_base;
+        }
+        __syncthreads();
+        wqe_base = shared_wqe_base;
         __syncthreads();
     }
 }

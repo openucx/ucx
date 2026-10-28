@@ -224,3 +224,20 @@ UCS_TEST_P(test_device, atomic)
 
 _UCT_INSTANTIATE_TEST_CASE(test_device, rc_gda)
 _UCT_INSTANTIATE_TEST_CASE(test_device, cuda_ipc)
+
+#if HAVE_GDA
+class test_gda_device : public ucs::test {
+};
+
+UCS_TEST_F(test_gda_device, reserve_wqe_block)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA memory not supported");
+    }
+
+    scoped_cuda_device device_guard;
+    for (unsigned num_threads : {32u, 128u}) {
+        ASSERT_UCS_OK(ucx_cuda::launch_gda_reserve_wqe_block(num_threads));
+    }
+}
+#endif

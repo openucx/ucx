@@ -88,4 +88,50 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
     return *status;
 }
 
+#if HAVE_GDA
+static __global__ void gda_reserve_wqe_block_kernel(unsigned *errors_p)
+{
+    __shared__ uint64_t storage[(sizeof(uct_rc_gdaki_dev_ep_t) +
+                                sizeof(uct_rc_gdaki_dev_qp_t)) / sizeof(uint64_t)];
+    auto *ep            = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(storage);
+    const uint64_t base = UCS_BIT(32);
+
+    if (threadIdx.x == 0) {
+        ep->qps[0]               = {};
+        ep->qps[0].sq_rsvd_index = base;
+        ep->sq_wqe_num           = 1;
+    }
+
+    __syncthreads();
+
+    /* Two available indices above 32 bits, then the no-resource sentinel. */
+    for (unsigned i = 0; i < 3; ++i) {
+        uint64_t expected = (i < 2) ? base + i : UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
+        uint64_t wqe_base = ~expected;
+        unsigned errors;
+
+        uct_rc_mlx5_gda_reserv_wqe<UCS_DEVICE_LEVEL_BLOCK>(
+                ep, 0, 1, threadIdx.x, wqe_base);
+        errors = __syncthreads_count(wqe_base != expected);
+        if (threadIdx.x == 0) {
+            *errors_p += errors;
+        }
+    }
+}
+
+ucs_status_t launch_gda_reserve_wqe_block(unsigned num_threads)
+{
+    device_result_ptr<unsigned> errors = 0;
+    ucs_status_t status;
+
+    gda_reserve_wqe_block_kernel<<<1, num_threads>>>(errors.device_ptr());
+    status = synchronize();
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return (*errors == 0) ? UCS_OK : UCS_ERR_IO_ERROR;
+}
+#endif
+
 } // namespace ucx_cuda
