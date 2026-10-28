@@ -818,6 +818,14 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
+    /* A NULL memh is dereferenced by uct_mm_iface_get_address() */
+    if (self->recv_fifo_mem.memh == UCT_MEM_HANDLE_NULL) {
+        ucs_error("md %s did not provide a memory handle for the receive FIFO",
+                  self->super.super.md->component->name);
+        status = UCS_ERR_NO_DEVICE;
+        goto err_free_fifo;
+    }
+
     uct_mm_iface_set_fifo_ptrs(self->recv_fifo_mem.address,
                                &self->recv_fifo_ctl, &self->recv_fifo_elems);
     self->recv_fifo_ctl->head = 0;
@@ -888,6 +896,7 @@ destroy_recv_mpool:
 err_close_signal_fd:
     close(self->signal_fd);
 err_free_fifo:
+    /* coverity[var_deref_model] */
     uct_iface_mem_free(&self->recv_fifo_mem);
 err:
     return status;
