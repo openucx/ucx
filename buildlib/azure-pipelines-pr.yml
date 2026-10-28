@@ -13,6 +13,7 @@ pr:
     - .agents
     - .ci
     - .claude/skills
+    - .github
     - .gitignore
     - .readthedocs.yaml
     - AGENTS.md
