@@ -592,7 +592,7 @@ protected:
             return;
         }
 
-        ucp_ep_h ep = sender().ep(0, INJECTED_EP_INDEX);
+        ucp_ep_h ep            = sender().ep(0, INJECTED_EP_INDEX);
         const bool no_recovery = op_mask & TEST_NO_RECOVERY;
         const ucp_lane_map_t expected_failed_lanes = no_recovery ?
                                                              injected_lanes :
@@ -970,6 +970,16 @@ public:
         modify_config("FAILOVER_MODE", "token");
         /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected. */
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
+    }
+
+protected:
+    void init() override
+    {
+        if (get_variant_value() & TEST_NO_RECOVERY) {
+            UCS_TEST_SKIP_R("recovery disabled test uses software PSN only");
+        }
+
+        test_ucp_fault_tolerance::init();
     }
 };
 

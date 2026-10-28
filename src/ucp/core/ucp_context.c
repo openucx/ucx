@@ -482,6 +482,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Enable recovery of failed lanes on endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER. When disabled, failed lanes are removed\n"
    "without attempting to restore them.\n"
+   "When disabled, only software PSN failover is supported.\n"
    "The value of this option must be the same on both peers.",
    ucs_offsetof(ucp_context_config_t, recovery_enable), UCS_CONFIG_TYPE_BOOL},
 
@@ -494,8 +495,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " sw    - force software PSN based recovery protocol. Transport\n"
    "         selection is unchanged.\n"
    " token - force token based retransmits. Transports that do not support\n"
-   "         the required capabilities are disabled. Rejected when\n"
-   "         UCX_IB_INDIRECT_ATOMIC is enabled.",
+   "         the required capabilities are disabled. Rejected when either\n"
+   "         UCX_IB_INDIRECT_ATOMIC is enabled or UCX_RECOVERY_ENABLE is\n"
+   "         disabled.",
    ucs_offsetof(ucp_context_config_t, failover_mode),
    UCS_CONFIG_TYPE_ENUM(ucp_failover_modes)},
 
@@ -2261,10 +2263,28 @@ static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
     return 0;
 }
 
-/* Indirect atomics have no token replay. */
+/* Select a failover mode compatible with recovery and indirect atomics. */
 static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
 {
-    int enabled = ucp_context_query_ib_indirect_atomic(context);
+    int enabled;
+
+    if (!context->config.ext.recovery_enable) {
+        if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
+            ucs_error("UCX_FAILOVER_MODE=token requires "
+                      "UCX_RECOVERY_ENABLE=y");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+            ucs_debug("recovery is disabled, failover mode auto selects "
+                      "software psn failover");
+            context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
+        }
+
+        return UCS_OK;
+    }
+
+    enabled = ucp_context_query_ib_indirect_atomic(context);
 
     if (!enabled) {
         return UCS_OK;
