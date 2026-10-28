@@ -1217,23 +1217,15 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
     static void get_base_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA);
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    static void get_src_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_HOST,
-                                                      UCS_MEMORY_TYPE_CUDA};
-
-        for (ucs_memory_type_t src : mem_types) {
-            for (ucs_memory_type_t dst : mem_types) {
-                if (mem_buffer::is_mem_type_supported(src) &&
-                    mem_buffer::is_mem_type_supported(dst)) {
-                    add_variant_values(variants, get_base_variants,
-                                       mem_types_variant(src, dst),
-                                       mem_types_variant_name(src, dst));
-                }
-            }
-        }
+        add_variant_memtypes(variants, get_src_variants, SGL_MEM_TYPES_MASK);
     }
 
     virtual void init() override {
@@ -1242,32 +1234,16 @@ public:
     }
 
     ucs_memory_type_t src_mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value() >>
-                                              MEM_TYPE_SHIFT);
+        return static_cast<ucs_memory_type_t>(get_variant_value(1));
     }
 
     ucs_memory_type_t dst_mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value() &
-                                              MEM_TYPE_MASK);
+        return static_cast<ucs_memory_type_t>(get_variant_value(2));
     }
 
 protected:
-    static constexpr int MEM_TYPE_SHIFT = 8;
-    static constexpr int MEM_TYPE_MASK  = UCS_MASK(MEM_TYPE_SHIFT);
-
-    static int mem_types_variant(ucs_memory_type_t src_mem_type,
-                                 ucs_memory_type_t dst_mem_type) {
-        return (src_mem_type << MEM_TYPE_SHIFT) | dst_mem_type;
-    }
-
-    static std::string mem_types_variant_name(ucs_memory_type_t src_mem_type,
-                                              ucs_memory_type_t dst_mem_type) {
-        auto name = [](ucs_memory_type_t mem_type) {
-            return (mem_type == UCS_MEMORY_TYPE_HOST) ? "dram" : "vram";
-        };
-
-        return std::string(name(src_mem_type)) + "_to_" + name(dst_mem_type);
-    }
+    static constexpr uint64_t SGL_MEM_TYPES_MASK =
+            UCS_BIT(UCS_MEMORY_TYPE_HOST) | UCS_BIT(UCS_MEMORY_TYPE_CUDA);
 
     enum sgl_op_t {
         SGL_OP_PUT,
