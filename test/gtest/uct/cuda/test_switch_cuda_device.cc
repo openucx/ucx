@@ -646,6 +646,72 @@ UCS_TEST_P(test_mem_alloc_device, no_current_context_vmm_mem_registrable,
     query_registrable_no_current_context(buffer.ptr(), size);
 }
 
+UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on")
+{
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 3);
+
+    /* The handle containing the address covers only the first chunk, so the
+     * requested extent must be kept */
+    check_mem_query_range(buffer.ptr(), buffer.size());
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_locality_domain_mem_type)
+{
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+    ASSERT_EQ(cudaSuccess, cudaSetDevice(0));
+
+    auto check_domain = [this](unsigned char domain_id,
+                               ucs_sys_device_t &sys_dev) {
+        cuda_vmm_mem_buffer buffer;
+        CUresult ret = buffer.alloc(64, 0,
+                                    CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN,
+                                    1, domain_id);
+        if (ret != CUDA_SUCCESS) {
+            return false;
+        }
+
+        uct_md_mem_attr_t mem_attr;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+
+        ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                       &mem_attr));
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+        sys_dev = mem_attr.sys_dev;
+        return true;
+    };
+
+    ucs_sys_device_t sys_dev0, sys_dev1;
+    if (!check_domain(0, sys_dev0)) {
+        UCS_TEST_SKIP_R("failed to allocate locality-domain 0 VMM memory");
+    }
+
+    if (!check_domain(1, sys_dev1)) {
+        ADD_FAILURE() << "locality domain 1 allocation failed even though "
+                         "domain 0 succeeded";
+        return;
+    }
+
+    EXPECT_EQ(sys_dev0, sys_dev1);
+#else
+    UCS_TEST_SKIP_R("built without locality-domain support");
+#endif
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_unaligned_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on")
+{
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 2);
+    size_t chunk_size = buffer.size() / 2;
+
+    /* Starts in the middle of the first handle and ends in the second one,
+     * while being shorter than a single handle */
+    check_mem_query_range(UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2),
+                          (chunk_size / 2) + 1);
+}
+
 #if CUDA_VERSION >= 12020
 /* Host-located VMM is not dmabuf-exportable but is registrable by IB */
 UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable)
