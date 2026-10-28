@@ -1029,6 +1029,76 @@ ucs_status_t ucp_ep_fence_strong(ucp_ep_h ep)
     return UCS_OK;
 }
 
+static void ucp_ep_fence_strong_nb_flushed_cb(ucp_request_t *req)
+{
+    ucp_ep_h ep         = req->send.ep;
+    ucs_status_t status = req->status;
+    int ep_destroyed;
+
+    ucs_assert(ep->ext->fence_inflight_req == req);
+
+    ep->ext->fence_inflight_req = NULL;
+    ep->ext->fence_status       = status;
+
+    if (ucs_likely(status == UCS_OK)) {
+        ep->ext->unflushed_lanes = 0;
+        ep->ext->fence_seq       = req->send.flush.fence_seq;
+    } else {
+        ucp_ep_fence_pending_purge(ep, status);
+    }
+
+    ep_destroyed = ucp_ep_refcount_remove(ep, flush);
+    ucp_request_put(req);
+    if (!ep_destroyed) {
+        ucp_ep_fence_pending_resume(ep);
+    }
+}
+
+ucs_status_t ucp_ep_fence_strong_nb(ucp_ep_h ep, uint64_t fence_seq)
+{
+    ucs_status_ptr_t request;
+    ucp_request_t *flush_req;
+    ucs_status_t status;
+
+    if (ucs_unlikely(ep->ext->fence_inflight_req != NULL)) {
+        return UCS_OK;
+    }
+
+    ep->ext->fence_status = UCS_INPROGRESS;
+    ucp_ep_refcount_add(ep, flush);
+
+    request = ucp_ep_flush_lanes_internal(ep, UCP_REQUEST_FLAG_RELEASED,
+                                          &ucp_request_null_param, NULL,
+                                          ucp_ep_fence_strong_nb_flushed_cb,
+                                          "ep_fence_strong_nb",
+                                          UCT_FLUSH_FLAG_REMOTE,
+                                          ep->ext->unflushed_lanes);
+    if (ucs_unlikely(UCS_PTR_IS_ERR(request))) {
+        status                = UCS_PTR_STATUS(request);
+        ep->ext->fence_status = status;
+        ucp_ep_refcount_remove(ep, flush);
+        return status;
+    }
+
+    if (ucs_unlikely(request == NULL)) {
+        int ep_destroyed;
+
+        ep->ext->unflushed_lanes = 0;
+        ep->ext->fence_seq       = fence_seq;
+        ep->ext->fence_status    = UCS_OK;
+        ep_destroyed             = ucp_ep_refcount_remove(ep, flush);
+        if (!ep_destroyed) {
+            ucp_ep_fence_pending_resume(ep);
+        }
+        return UCS_OK;
+    }
+
+    flush_req                       = (ucp_request_t*)request - 1;
+    flush_req->send.flush.fence_seq = fence_seq;
+    ep->ext->fence_inflight_req     = flush_req;
+    return UCS_OK;
+}
+
 static unsigned ucp_ep_flush_mem_resume_callback(void *arg)
 {
     ucp_request_t *req = arg;

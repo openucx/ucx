@@ -615,6 +615,11 @@ typedef struct ucp_ep_ext {
     uint64_t                      fence_seq;       /* Sequence number for fence
                                                       detection */
 
+    ucs_queue_head_t              fence_pending_q; /* Fence-blocked requests */
+    ucp_request_t                 *fence_inflight_req; /* Active fence flush */
+    ucs_status_t                  fence_status; /* Current/last flush status */
+    uint8_t                       fence_pending_scheduled; /* Progress armed */
+
     /**
      * UCT endpoints for every slow-path lane that has no room in the base endpoint
      * structure. TODO allocate this array dynamically.
@@ -1012,6 +1017,9 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
  */
 void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
+void ucp_ep_fence_pending_add(ucp_ep_h ep, uct_pending_req_t *req);
+void ucp_ep_fence_pending_purge(ucp_ep_h ep, ucs_status_t status);
+void ucp_ep_fence_pending_resume(ucp_ep_h ep);
 
 /**
  * @brief Query local and/or remote socket address of endpoint @a ucp_ep.
