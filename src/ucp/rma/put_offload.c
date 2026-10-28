@@ -410,12 +410,8 @@ ucp_proto_put_sgl_max_payload(const ucp_request_t *req,
 {
     size_t length = req->send.rma.sgl.length;
 
-    if (length < lpriv->min_end_offset) {
-        return lpriv->max_frag;
-    }
-
-    return ucs_min(ucp_proto_multi_scaled_length(lpriv->weight, length),
-                   lpriv->max_frag);
+    return ucp_proto_multi_lane_payload(lpriv, length, length,
+                                        lpriv->max_frag);
 }
 
 static UCS_F_INLINE_OPTIMIZED ucs_status_t
@@ -504,8 +500,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                                     max_payload, next_iter);
     }
 
-    /* Stop at the lane payload, so that all lanes send the same number of
-     * bytes */
+    /* Stop at the lane payload, so that each lane sends its share of the
+     * message */
     for (elem_count = 0, total_length = 0; elem_count < max_elem_count;
          elem_count++) {
         length = lengths[start_index + elem_count];
