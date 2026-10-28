@@ -491,6 +491,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_t *ep_ext,
                 }
                 return UCS_OK;
             }
+            /* coverity[uninit_use_in_call] */
             ucp_stream_rdesc_advance(&rdesc_tmp, unpacked, ep_ext);
             /* This request is full, try next one */
             ucs_assert(ucp_request_can_complete_stream_recv(req));

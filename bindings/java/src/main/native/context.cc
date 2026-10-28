@@ -212,5 +212,6 @@ Java_org_openucx_jucx_ucp_UcpContext_queryMemTypesNative(JNIEnv *env, jclass cls
         JNU_ThrowExceptionByStatus(env, status);
     }
 
+    /* coverity[uninit_use] */
     return params.memory_types;
 }
