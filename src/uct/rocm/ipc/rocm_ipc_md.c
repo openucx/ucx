@@ -15,6 +15,8 @@
 #include <uct/api/v2/uct_v2.h>
 #include <uct/api/device/uct_device_types.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/ptr_arith.h>
 
 #include <unistd.h>
 
@@ -82,23 +84,52 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
 #ifdef HAVE_ROCM_VMM_TYPE
     if (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) {
         hsa_amd_vmem_alloc_handle_t vmem_handle;
+        void *vmm_base;
+        size_t vmm_size;
 
-        status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, base_ptr);
+        /* hsa_amd_pointer_info() reports agentBaseAddress as the queried pointer
+         * for VMEM, not the hsa_amd_vmem_map() base that
+         * hsa_amd_vmem_retain_alloc_handle() requires. Resolve the true base
+         * from the vmm registry; fall back to page-alignment (correct when the
+         * buffer is in the mapping's first page) on a miss. */
+        if (uct_rocm_base_vmm_lookup_base(address, &vmm_base, &vmm_size) ==
+            UCS_OK) {
+            /* A buffer that straddles a vmem_map boundary (e.g. a pool
+             * allocator that maps a large reservation in adjacent chunks)
+             * cannot be described by a single exported handle. Reject so UCP
+             * falls back to the staging pipeline instead of transferring past
+             * the mapping. */
+            if (((uintptr_t)address + length) >
+                ((uintptr_t)vmm_base + vmm_size)) {
+                ucs_debug("VMM buffer [%p, +0x%zx) straddles mapping "
+                          "[%p, +0x%zx); falling back from rocm_ipc", address,
+                          length, vmm_base, vmm_size);
+                return HSA_STATUS_ERROR;
+            }
+        } else {
+            /* Registry miss: page-align (correct when the buffer is in the
+             * mapping's first page). */
+            vmm_base = ucs_align_down_pow2_ptr(base_ptr, ucs_get_page_size());
+            vmm_size = size;
+        }
+
+        status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, vmm_base);
         if (status != HSA_STATUS_SUCCESS) {
-            ucs_error("hsa_amd_vmem_retain_alloc_handle failed for %p", base_ptr);
+            ucs_error("hsa_amd_vmem_retain_alloc_handle failed for base %p "
+                      "(reg addr %p) status %d", vmm_base, address, status);
             return status;
         }
 
         status = hsa_amd_vmem_export_shareable_handle(&key->vmm.fd, vmem_handle, 0);
         hsa_amd_vmem_handle_release(vmem_handle);
         if (status != HSA_STATUS_SUCCESS) {
-            ucs_error("hsa_amd_vmem_export_shareable_handle failed for %p", base_ptr);
+            ucs_error("hsa_amd_vmem_export_shareable_handle failed for %p", vmm_base);
             return status;
         }
 
         key->vmm.reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
-        key->address    = (uintptr_t)base_ptr;
-        key->length  = size;
+        key->address    = (uintptr_t)vmm_base;
+        key->length  = vmm_size;
         key->dev_num = uct_rocm_base_get_dev_num(agent);
         key->is_vmm  = 1;
         key->pid     = getpid();
