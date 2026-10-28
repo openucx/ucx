@@ -5,7 +5,8 @@
 job: ucx-test-wirecompat-gpu
 
 failFast: false
-timeout_minutes: 150
+# Covers the allocation wait plus the step timeouts.
+timeout_minutes: 210
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -28,11 +29,13 @@ env:
   SLURM_PARTITION: funk
   SLURM_GRES: "gpu:1"
   SLURM_HEAD_NODE: scctl
-  SLURM_JOB_TIMEOUT: '02:15:00'
+  # Step timeouts plus slack.
+  SLURM_JOB_TIMEOUT: '02:30:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   CI_IMAGE_TAG: "20260223-1"
+  BUILD_JOBS: "32"
 
 pvc_volumes:
   - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
@@ -101,7 +104,7 @@ steps:
         set -eEx; cd /ws; nvidia-smi -L | grep GPU;
         ./autogen.sh;
         ./contrib/configure-release --enable-assertions --without-java --without-go --prefix=/ws/ucx-install-current;
-        make -s -j 32; make install
+        make -s -j ${BUILD_JOBS}; make install
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SCCTL_CREDENTIALS_ID}"
@@ -120,6 +123,7 @@ steps:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_gpuwc_${BUILD_NUMBER}.txt"
       testScript: >-
         cd /ws; source .ci/scripts/cap_output.sh; source buildlib/az-helpers.sh; failed="";
+        export AZP_AGENT_ID=$((${BUILD_NUMBER} % 50));
         for ucx_tag in v1.15.x v1.16.x v1.17.x v1.18.x; do
         (
         set -eEx;
@@ -128,7 +132,7 @@ steps:
         git_clone_with_retry $ucx_tag $ucx_dir 1;
         cd $ucx_dir; ./autogen.sh;
         ./contrib/configure-release --enable-assertions --prefix=$ucx_dir --without-java --without-go;
-        make -s -j 32; make install;
+        make -s -j ${BUILD_JOBS}; make install;
         cd examples;
         gcc -I$ucx_dir/include -L$ucx_dir/lib -o client_server ucp_client_server.c -lm -lucs -lucp;
         gcc -I$ucx_dir/include -L$ucx_dir/lib -o ucp_hworld ucp_hello_world.c -lm -lucs -lucp;
@@ -140,6 +144,7 @@ steps:
         UCX_TLS=^sm WIRE_COMPAT_STAGE_ID=4 timeout 2m buildlib/tools/test_wire_compat.sh $ucx_dir/examples/ucp_hworld -n
         );
         [ $? -eq 0 ] || failed="$failed $ucx_tag";
+        pkill -9 -f "/ws/ucx_$ucx_tag/examples/";
         done;
         if [ -n "$failed" ]; then echo "Wire compatibility failed with UCX:$failed"; exit 1; fi
       headNode: "${SLURM_HEAD_NODE}"
@@ -148,7 +153,6 @@ steps:
       containerName: "ucx-ci-gpuwc-${BUILD_NUMBER}"
       slurmEnv: [
         "NVIDIA_VISIBLE_DEVICES=all",
-        "AZP_AGENT_ID=0",
         "UCX_PR_LIB_PATH=/ws/ucx-install-current/lib",
         "BUILD_REPOSITORY_URI=${UCX_REPO}"
       ]
