@@ -88,6 +88,21 @@ UCS_TEST_F(test_static_bitmap, test_set_all) {
     EXPECT_EQ(UINT64_MAX, m_bitmap.bits[1]);
 }
 
+UCS_TEST_F(test_static_bitmap, test_fls) {
+    const size_t set_bits[] = {0, 31, 32, 90, 100, 127};
+    size_t bit_index;
+
+    bit_index = UCS_STATIC_BITMAP_FLS(m_bitmap);
+    EXPECT_EQ(128, bit_index);
+
+    /* Each bit is higher than the ones set before it */
+    for (const size_t bit : set_bits) {
+        UCS_STATIC_BITMAP_SET(&m_bitmap, bit);
+        bit_index = UCS_STATIC_BITMAP_FLS(m_bitmap);
+        EXPECT_EQ(bit, bit_index);
+    }
+}
+
 UCS_TEST_F(test_static_bitmap, test_ffs) {
     size_t bit_index;
 

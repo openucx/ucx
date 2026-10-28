@@ -8,6 +8,7 @@
 #include <ucp/core/ucp_context.h>
 
 extern "C" {
+#include <ucp/core/ucp_worker.inl>
 #include <ucp/wireup/address.h>
 }
 
@@ -159,3 +160,67 @@ UCS_TEST_F(test_ucp_tl_bitmap, rounding_bit) {
     UCS_STATIC_BITMAP_SET(&m_tl_bitmap, UCP_MAX_RESOURCES);
     EXPECT_TRUE(visited_bits().empty());
 }
+
+class test_ucp_tl_unified : public test_ucp_context {
+public:
+    test_ucp_tl_unified()
+    {
+        modify_config("UNIFIED_MODE", "y");
+    }
+
+protected:
+    virtual void init()
+    {
+        test_base::init(); /* Skip entities creation, tests create their own */
+    }
+};
+
+UCS_TEST_P(test_ucp_tl_unified, max_resources, "SELF_NUM_DEVICES?=64") {
+    ucp_unpacked_address_t unpacked_address;
+    ucp_address_t *address;
+    size_t address_length;
+    ucs_status_t status;
+
+    create_entity();
+
+    ucp_worker_h worker = sender().worker();
+    EXPECT_EQ(UCP_ADDRESS_UNIFIED_MAX_RESOURCES, worker->context->num_tls);
+
+    /* The highest resource index must not collide with the address flags */
+    ASSERT_UCS_OK(ucp_worker_get_address(worker, &address, &address_length));
+    status = ucp_address_unpack(worker, address,
+                                ucp_worker_default_address_pack_flags(worker),
+                                &unpacked_address);
+    ucp_worker_release_address(worker, address);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(worker->num_ifaces, unpacked_address.address_count);
+    ucs_free(unpacked_address.address_list);
+}
+
+UCS_TEST_P(test_ucp_tl_unified, exceeds_max_resources, "SELF_NUM_DEVICES?=65") {
+    const ucp_worker_params_t worker_params = {};
+    ucp_context_h ucph;
+    ucp_worker_h worker;
+    ucs_status_t status;
+
+    /* Each self device is selected, including the one with index 64 */
+    ASSERT_UCS_OK(ucp_init(&get_variant_ctx_params(), m_ucp_config, &ucph));
+
+    /* A failed worker does not cache the selection, so the next one fails too */
+    for (unsigned i = 0; i < 2; ++i) {
+        {
+            const scoped_log_handler slh(hide_errors_logger);
+            status = ucp_worker_create(ucph, &worker_params, &worker);
+        }
+
+        EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
+        if (status == UCS_OK) {
+            ucp_worker_destroy(worker);
+        }
+    }
+
+    ucp_cleanup(ucph);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tl_unified, self, "self");
