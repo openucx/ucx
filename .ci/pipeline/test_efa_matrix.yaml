@@ -24,7 +24,6 @@ runs_on_dockers:
       name: "rhel90",
       url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0",
       arch: x86_64,
-      tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]",
       annotations: [{ key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2" }],
       limits: "{memory: 16Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 4Gi}",
       requests: "{memory: 16Gi, cpu: 8000m, nvidia.com/sriov_cx7_p2: 1, hugepages-2Mi: 4Gi}",
