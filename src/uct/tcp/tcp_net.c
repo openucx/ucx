@@ -125,7 +125,8 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
     Iface  Destination  Gateway  Flags  RefCnt  Use  Metric  Mask  MTU  Window  IRTT
     */
     while (fgets(str, sizeof(str), f) != NULL) {
-        ret = sscanf(str, "%s %*x %*x %*d %*d %*d %*d %x", name, &netmask);
+        ret = sscanf(str, "%127s %*x %*x %*d %*d %*d %*d %x", name,
+                     &netmask);
         if ((ret == 2) && !strcmp(name, if_name) && (netmask == 0)) {
             *result_p = 1;
             goto out;
