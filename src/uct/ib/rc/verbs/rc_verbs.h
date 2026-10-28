@@ -107,7 +107,8 @@ typedef struct uct_rc_verbs_iface {
         size_t                  max_inline;
         size_t                  max_send_sge;
         unsigned                tx_max_wr;
-        uint16_t                rx_max_wr; /* receive WRs per QP without SRQ */
+        uint16_t                rx_max_wr; /* receive WRs per QP without SRQ,
+                                              0 with SRQ */
         uint8_t                 flush_by_fc;
     } config;
 } uct_rc_verbs_iface_t;
