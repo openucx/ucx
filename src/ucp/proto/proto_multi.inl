@@ -388,7 +388,8 @@ typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
  * so there is nothing left to post */
 typedef ucs_status_t (*ucp_proto_rma_sgl_adjust_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        size_t elem_index, void **buffer_p, size_t *length_p, uint64_t *remote_addr_p);
+        size_t elem_index, void **buffer_p, size_t *length_p,
+        uint64_t *remote_addr_p);
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_rma_sgl_elem_fits(size_t length, size_t min_frag_length,

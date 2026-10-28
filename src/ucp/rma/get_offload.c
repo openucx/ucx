@@ -322,7 +322,8 @@ ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
     }
 
     /* Completed immediately, the callback will not be called. The parent holds
-       an extra reference until all elements are posted, so it can't drop to 0 */
+       an extra reference until all elements are posted, so it can't drop to
+       0 */
     --req->send.state.uct_comp.count;
     status = UCS_PTR_STATUS(status_ptr);
     return (status == UCS_OK) ? UCS_INPROGRESS : status;
