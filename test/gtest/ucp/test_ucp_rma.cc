@@ -1733,6 +1733,43 @@ UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {
             UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL);
 }
 
+UCS_TEST_P(test_ucp_rma_sgl, get_element_below_min_zcopy) {
+    if (op() != SGL_OP_GET) {
+        UCS_TEST_SKIP_R("get only");
+    }
+
+    /* Complete the wireup and make sure a get zcopy lane exists */
+    test_sgl(1, UCS_KBYTE);
+
+    ucp_ep_h ep = sender().ep();
+    size_t min_zcopy = SIZE_MAX;
+    for (ucp_lane_index_t lane = 0; lane < ucp_ep_config(ep)->key.num_lanes;
+         lane++) {
+        const uct_iface_attr_t *attr = ucp_worker_iface_get_attr(
+                sender().worker(), ucp_ep_get_rsc_index(ep, lane));
+        if (attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+            min_zcopy = ucs_min(min_zcopy, attr->cap.get.min_zcopy);
+        }
+    }
+
+    if (min_zcopy <= 1) {
+        UCS_TEST_SKIP_R("get zcopy accepts elements of any length");
+    }
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, 1, 1);
+
+    ucp_dt_local_sgl_t local   = make_local_sgl(
+            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+    ucp_request_param_t param  = make_sgl_param(&remote, 1);
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs_status_ptr_t sptr = sgl_op_nbx(&local, 1, UCP_REMOTE_ADDR_INVALID,
+                                       UCP_RKEY_INVALID, &param);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, request_wait(sptr));
+}
+
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_addr,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,

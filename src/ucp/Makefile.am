@@ -72,6 +72,7 @@ noinst_HEADERS = \
 	proto/proto_repost.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rma/rma_sgl.inl \
 	rma/rma_rndv.h \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \

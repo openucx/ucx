@@ -876,6 +876,14 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
         lpriv->flush_sys_dev_mask =
                 ucp_proto_multi_init_flush_sys_dev_mask(params, lane);
 
+        lpriv->min_sgl_frag = 0;
+        if (params->sgl_min_get_zcopy) {
+            rsc_index = ucp_proto_common_get_rsc_index(&params->super.super,
+                                                       lane);
+            lpriv->min_sgl_frag = ucp_worker_iface_get_attr(
+                    params->super.super.worker, rsc_index)->cap.get.min_zcopy;
+        }
+
         if (v2_cap_flags & (UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
             rsc_index = ucp_proto_common_get_rsc_index(&params->super.super,
