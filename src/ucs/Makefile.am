@@ -25,6 +25,8 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/bitops.h \
 	arch/ppc64/bitops.h \
 	arch/rv64/bitops.h \
+	arch/loongarch64/bitops.h \
+	arch/generic/bitops.h \
 	arch/x86_64/bitops.h \
 	arch/bitops.h \
 	algorithm/crc.h \
@@ -87,8 +89,10 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/x86_64/atomic.h \
 	arch/aarch64/global_opts.h \
 	arch/generic/atomic.h \
+	arch/generic/global_opts.h \
 	arch/ppc64/global_opts.h \
 	arch/rv64/global_opts.h \
+	arch/loongarch64/global_opts.h \
 	arch/global_opts.h
 
 noinst_HEADERS = \
@@ -96,6 +100,7 @@ noinst_HEADERS = \
 	arch/generic/cpu.h \
 	arch/ppc64/cpu.h \
 	arch/rv64/cpu.h \
+	arch/loongarch64/cpu.h \
 	arch/x86_64/cpu.h \
 	arch/x86_64/cpu_nt_avx2.inl \
 	arch/cpu.h \
@@ -164,8 +169,9 @@ libucs_la_SOURCES = \
 	arch/aarch64/global_opts.c \
 	arch/ppc64/timebase.c \
 	arch/ppc64/global_opts.c \
+	arch/generic/global_opts.c \
 	arch/rv64/cpu.c \
-	arch/rv64/global_opts.c \
+	arch/loongarch64/cpu.c \
 	arch/x86_64/cpu.c \
 	arch/x86_64/global_opts.c \
 	arch/cpu.c \

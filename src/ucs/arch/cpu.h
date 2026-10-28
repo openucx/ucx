@@ -48,6 +48,7 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_NVIDIA_VERA,
     UCS_CPU_MODEL_FUJITSU_A64FX,
     UCS_CPU_MODEL_FUJITSU_MONAKA,
+    UCS_CPU_MODEL_LOONGARCH64,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 
@@ -81,6 +82,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_ZHAOXIN,
     UCS_CPU_VENDOR_GENERIC_RV64G,
     UCS_CPU_VENDOR_NVIDIA,
+    UCS_CPU_VENDOR_GENERIC_LOONGARCH64,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
@@ -116,6 +118,8 @@ typedef struct ucs_cpu_builtin_memcpy {
 #  include "aarch64/cpu.h"
 #elif defined(__riscv)
 #  include "rv64/cpu.h"
+#elif defined(__loongarch_lp64)
+#  include "loongarch64/cpu.h"
 #else
 #  error "Unsupported architecture"
 #endif

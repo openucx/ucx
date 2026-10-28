@@ -34,7 +34,8 @@ noinst_HEADERS = \
 	bistro/bistro_x86_64.h \
 	bistro/bistro_aarch64.h \
 	bistro/bistro_ppc64.h \
-	bistro/bistro_rv64.h
+	bistro/bistro_rv64.h \
+	bistro/bistro_loongarch64.h
 
 libucm_la_SOURCES = \
 	event/event.c \
@@ -48,7 +49,8 @@ libucm_la_SOURCES = \
 	bistro/bistro_x86_64.c \
 	bistro/bistro_aarch64.c \
 	bistro/bistro_ppc64.c \
-	bistro/bistro_rv64.c
+	bistro/bistro_rv64.c \
+	bistro/bistro_loongarch64.c
 
 if HAVE_UCM_PTMALLOC286
 libucm_la_CPPFLAGS += \
