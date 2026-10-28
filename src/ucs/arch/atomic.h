@@ -18,6 +18,8 @@
 #  include "generic/atomic.h"
 #elif defined(__riscv)
 #  include "generic/atomic.h"
+#elif defined(__loongarch_lp64)
+#  include "generic/atomic.h"
 #else
 #  error "Unsupported architecture"
 #endif
