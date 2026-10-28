@@ -79,13 +79,18 @@ err:
 
 static ucs_status_t
 ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *done_p)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           !ucs_netlink_is_msg_done(nlh)) {
+    /* NLMSG_DONE may follow other messages of a dump in the same datagram */
+    for (; NLMSG_OK(nlh, msg_len); nlh = NLMSG_NEXT(nlh, msg_len)) {
+        if (ucs_netlink_is_msg_done(nlh)) {
+            *done_p = 1;
+            break;
+        }
+
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -93,8 +98,9 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, arg);
-        nlh    = NLMSG_NEXT(nlh, msg_len);
+        if (status == UCS_INPROGRESS) {
+            status = parse_cb(nlh, arg);
+        }
     }
 
     return UCS_OK;
@@ -110,7 +116,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     int netlink_fd      = -1;
     size_t recv_msg_len;
     char *recv_msg;
-    int msg_done;
+    int msg_done        = 0;
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
@@ -164,8 +170,8 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
             goto out;
         }
 
-        status   = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
-        msg_done = ucs_netlink_is_msg_done((const struct nlmsghdr *)recv_msg);
+        status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg,
+                                       &msg_done);
         ucs_free(recv_msg);
     } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
 
