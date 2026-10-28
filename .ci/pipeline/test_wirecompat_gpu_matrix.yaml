@@ -103,7 +103,7 @@ steps:
       testScript: >-
         set -eEx; cd /ws; nvidia-smi -L | grep GPU;
         ./autogen.sh;
-        ./contrib/configure-release --enable-assertions --without-java --without-go --prefix=/ws/ucx-install-current;
+        ./contrib/configure-release --enable-assertions --with-cuda --without-java --without-go --prefix=/ws/ucx-install-current;
         make -s -j ${BUILD_JOBS}; make install
       headNode: "${SLURM_HEAD_NODE}"
       dockerImage: "${DOCKER_IMAGE}"
@@ -131,7 +131,7 @@ steps:
         export UCX_LEGACY_LIB_PATH=$ucx_dir/lib;
         git_clone_with_retry $ucx_tag $ucx_dir 1;
         cd $ucx_dir; ./autogen.sh;
-        ./contrib/configure-release --enable-assertions --prefix=$ucx_dir --without-java --without-go;
+        ./contrib/configure-release --enable-assertions --with-cuda --prefix=$ucx_dir --without-java --without-go;
         make -s -j ${BUILD_JOBS}; make install;
         cd examples;
         gcc -I$ucx_dir/include -L$ucx_dir/lib -o client_server ucp_client_server.c -lm -lucs -lucp;
