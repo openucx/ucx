@@ -426,7 +426,7 @@ protected:
             for (ucp_lane_index_t valid_lane = lane_idx + 1; valid_lane < lanes.size();
                  ++valid_lane) {
                 const ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep(0, INJECTED_EP_INDEX));
-                ASSERT_FALSE(UCS_BIT(UCP_LANE_TYPE_FAILED) &
+                EXPECT_FALSE(UCS_BIT(UCP_LANE_TYPE_FAILED) &
                              ep_config->key.lanes[lanes[valid_lane]].lane_types)
                     << "Lane " << size_t(valid_lane) << " has being marked as failed after "
                     << "failure injection on lane " << size_t(lane);
@@ -434,7 +434,7 @@ protected:
         }
 
         short_progress_loop();
-        ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
+        EXPECT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
         UCS_TEST_MESSAGE << "Success";
         return injected_lanes;
     }
