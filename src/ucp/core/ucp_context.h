@@ -759,6 +759,10 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
                     ucs_topo_sys_device_get_name(mem_info->sys_dev));
         }
     } else {
+        if ((status == UCS_ERR_UNSUPPORTED) &&
+            (ucs_memtype_explicit_lookup(address, length, mem_info) == UCS_OK)) {
+            return;
+        }
         ucp_memory_detect_slowpath(context, address, length, mem_info);
     }
 
