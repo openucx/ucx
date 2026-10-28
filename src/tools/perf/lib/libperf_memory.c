@@ -78,7 +78,7 @@ static ucs_status_t ucp_perf_test_alloc_sgl_mem(ucx_perf_context_t *perf)
     if ((perf->ucp.sgl.buffers == NULL) || (perf->ucp.sgl.lengths == NULL) ||
         (perf->ucp.sgl.memhs == NULL) || (perf->ucp.sgl.remote_addrs == NULL) ||
         (perf->ucp.sgl.rkeys == NULL)) {
-        ucs_error("Failed allocate SGL buffers with count=%zu", count);
+        ucs_error("failed to allocate SGL arrays of %zu elements", total);
         ucp_perf_test_free_sgl_mem(perf);
         return UCS_ERR_NO_MEMORY;
     }
