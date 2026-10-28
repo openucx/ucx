@@ -22,24 +22,23 @@
 #include <ucp/wireup/wireup_ep.h>
 
 
-#define UCP_RMA_SGL_CHECK(_op, _condition, _fmt, ...) \
+#define UCP_RMA_SGL_CHECK(_condition, _fmt, ...) \
     do { \
         if (ucs_unlikely(_condition)) { \
-            ucs_error("sgl " _op ": " _fmt, ##__VA_ARGS__); \
+            ucs_error("%s: sgl " _fmt, __func__, ##__VA_ARGS__); \
             ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
             goto out_unlock; \
         } \
     } while (0)
 
 
-#define UCP_RMA_SGL_CHECK_ARRAY(_op, _desc, _field, _array, _name) \
-    UCP_RMA_SGL_CHECK(_op, \
-                      !((_desc)->field_mask & (_field)) || \
+#define UCP_RMA_SGL_CHECK_ARRAY(_desc, _field, _array, _name) \
+    UCP_RMA_SGL_CHECK(!((_desc)->field_mask & (_field)) || \
                       ((_desc)->_array == NULL), \
                       _name " field must be set to a valid array")
 
 
-#define UCP_RMA_SGL_CHECK_PARAMS(_op, _buffer, _count, _remote_addr, _rkey, \
+#define UCP_RMA_SGL_CHECK_PARAMS(_buffer, _count, _remote_addr, _rkey, \
                                  _param) \
     do { \
         if (!ENABLE_PARAMS_CHECK) { \
@@ -48,55 +47,47 @@
             const ucp_dt_local_sgl_t *_local; \
             const ucp_dt_remote_sgl_t *_remote; \
             \
-            UCP_RMA_SGL_CHECK(_op, (_remote_addr) != UCP_REMOTE_ADDR_INVALID, \
+            UCP_RMA_SGL_CHECK((_remote_addr) != UCP_REMOTE_ADDR_INVALID, \
                               "remote_addr must be UCP_REMOTE_ADDR_INVALID, " \
                               "got 0x%" PRIx64, (_remote_addr)); \
-            UCP_RMA_SGL_CHECK(_op, (_rkey) != UCP_RKEY_INVALID, \
+            UCP_RMA_SGL_CHECK((_rkey) != UCP_RKEY_INVALID, \
                               "rkey must be UCP_RKEY_INVALID, got %p", \
                               (_rkey)); \
-            UCP_RMA_SGL_CHECK(_op, \
-                              ((_param)->op_attr_mask & \
+            UCP_RMA_SGL_CHECK(((_param)->op_attr_mask & \
                                UCP_OP_ATTR_FIELD_REMOTE) == 0, \
                               "UCP_OP_ATTR_FIELD_REMOTE must be set"); \
-            UCP_RMA_SGL_CHECK(_op, \
-                              !((_param)->op_attr_mask & \
+            UCP_RMA_SGL_CHECK(!((_param)->op_attr_mask & \
                                 UCP_OP_ATTR_FIELD_REMOTE_DATATYPE) || \
                               !UCP_DT_IS_SGL((_param)->remote_datatype), \
                               "remote_datatype must be set to " \
                               "ucp_dt_make_sgl()"); \
-            UCP_RMA_SGL_CHECK(_op, (_param)->remote == NULL, \
+            UCP_RMA_SGL_CHECK((_param)->remote == NULL, \
                               "remote descriptor must not be NULL"); \
             \
             _local = (const ucp_dt_local_sgl_t*)(_buffer); \
             \
-            UCP_RMA_SGL_CHECK_ARRAY(_op, _local, \
-                                    UCP_DT_LOCAL_SGL_FIELD_BUFFERS, \
+            UCP_RMA_SGL_CHECK_ARRAY(_local, UCP_DT_LOCAL_SGL_FIELD_BUFFERS, \
                                     buffers, "local buffers"); \
-            UCP_RMA_SGL_CHECK_ARRAY(_op, _local, \
-                                    UCP_DT_LOCAL_SGL_FIELD_LENGTHS, \
+            UCP_RMA_SGL_CHECK_ARRAY(_local, UCP_DT_LOCAL_SGL_FIELD_LENGTHS, \
                                     lengths, "local lengths"); \
-            UCP_RMA_SGL_CHECK(_op, \
-                              (_local->field_mask & \
+            UCP_RMA_SGL_CHECK((_local->field_mask & \
                                UCP_DT_LOCAL_SGL_FIELD_MEMHS) && \
                               (_local->memhs == NULL), \
                               "local memhs array must not be NULL"); \
             \
             _remote = (_param)->remote; \
             \
-            UCP_RMA_SGL_CHECK_ARRAY(_op, _remote, \
+            UCP_RMA_SGL_CHECK_ARRAY(_remote, \
                                     UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS, \
                                     remote_addrs, "remote addrs"); \
-            UCP_RMA_SGL_CHECK_ARRAY(_op, _remote, \
-                                    UCP_DT_REMOTE_SGL_FIELD_LENGTHS, \
+            UCP_RMA_SGL_CHECK_ARRAY(_remote, UCP_DT_REMOTE_SGL_FIELD_LENGTHS, \
                                     lengths, "remote lengths"); \
-            UCP_RMA_SGL_CHECK_ARRAY(_op, _remote, \
-                                    UCP_DT_REMOTE_SGL_FIELD_RKEYS, \
+            UCP_RMA_SGL_CHECK_ARRAY(_remote, UCP_DT_REMOTE_SGL_FIELD_RKEYS, \
                                     rkeys, "remote rkeys"); \
             \
-            UCP_RMA_SGL_CHECK(_op, _remote->rkeys[0] == NULL, \
+            UCP_RMA_SGL_CHECK(_remote->rkeys[0] == NULL, \
                               "sgl[0] rkey must not be NULL"); \
-            UCP_RMA_SGL_CHECK(_op, \
-                              ((_param)->op_attr_mask & \
+            UCP_RMA_SGL_CHECK(((_param)->op_attr_mask & \
                                UCP_OP_ATTR_FIELD_REMOTE_COUNT) && \
                               ((_param)->remote_count != (_count)), \
                               "local count %zu != remote count %zu (only " \
@@ -235,8 +226,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
         datatype = param->datatype;
         if (UCP_DT_IS_SGL(datatype)) {
-            UCP_RMA_SGL_CHECK_PARAMS("put", buffer, count, remote_addr, rkey,
-                                     param);
+            UCP_RMA_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
             remote = param->remote;
             rkey   = remote->rkeys[0];
         } else if (UCP_DT_IS_CONTIG(datatype)) {
@@ -326,8 +316,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE)) {
         datatype = param->datatype;
         if (UCP_DT_IS_SGL(datatype)) {
-            UCP_RMA_SGL_CHECK_PARAMS("get", buffer, count, remote_addr, rkey,
-                                     param);
+            UCP_RMA_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
             remote = param->remote;
             rkey   = remote->rkeys[0];
         } else if (UCP_DT_IS_CONTIG(datatype)) {
