@@ -491,12 +491,12 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     size_t max_elem_count        = ucs_min(
             ucp_proto_put_sgl_max_elem_count(lpriv, dt_iter->length),
             dt_iter->length - start_index);
-    size_t uct_rkeys_size        = max_elem_count * sizeof(uct_rkey_t);
-    size_t uct_memhs_size        = max_elem_count * sizeof(uct_mem_h);
+    size_t uct_rkeys_size;
+    size_t uct_memhs_size;
     uct_rkey_t *uct_rkeys;
     uct_mem_h *uct_memhs;
     ucs_status_t status;
-    size_t elem_count, idx, total_length;
+    size_t elem_count, idx, length, total_length;
 
     ucs_assert(max_payload > 0);
     ucs_assert(max_elem_count > 0);
@@ -513,6 +513,30 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                                     max_payload, next_iter);
     }
 
+    /* Stop at the lane payload, so that all lanes send the same number of
+     * bytes */
+    for (elem_count = 0, total_length = 0; elem_count < max_elem_count;
+         elem_count++) {
+        length = lengths[start_index + elem_count];
+        if ((length == 0) || ((total_length + length) > max_payload)) {
+            break;
+        }
+
+        total_length += length;
+    }
+
+    /* A long batch is not redirected, to keep posting the user arrays without
+     * copying them */
+    if (ucs_unlikely((total_length < max_payload) &&
+                     (elem_count < max_frag_count) &&
+                     ((start_index + elem_count) < dt_iter->length))) {
+        return ucp_proto_put_sgl_offload_send_frags(req, lpriv, max_frag_count,
+                                                    max_payload, next_iter);
+    }
+
+    uct_rkeys_size = elem_count * sizeof(uct_rkey_t);
+    uct_memhs_size = elem_count * sizeof(uct_mem_h);
+
     uct_rkeys = ucs_alloc_on_stack(uct_rkeys_size, "uct_sgl_rkeys");
     if (uct_rkeys == NULL) {
         return UCS_ERR_NO_MEMORY;
@@ -524,34 +548,13 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
         return UCS_ERR_NO_MEMORY;
     }
 
-    /* Stop at the lane payload, so that all lanes send the same number of
-     * bytes */
-    for (elem_count = 0, total_length = 0; elem_count < max_elem_count;
-         elem_count++) {
-        idx = start_index + elem_count;
-        if ((lengths[idx] == 0) ||
-            ((total_length + lengths[idx]) > max_payload)) {
-            break;
-        }
-
-        total_length         += lengths[idx];
-        uct_memhs[elem_count] = (sgl_memhs != NULL) ?
-                                ucp_datatype_iter_uct_memh(sgl_memhs[idx],
-                                                           md_index) :
-                                UCT_MEM_HANDLE_NULL;
-        uct_rkeys[elem_count] = ucp_rkey_get_tl_rkey(sgl_rkeys[idx],
-                                                     rkey_index);
-    }
-
-    /* A long batch is not redirected, to keep posting the user arrays without
-     * copying them */
-    if (ucs_unlikely((total_length < max_payload) &&
-                     (elem_count < max_frag_count) &&
-                     ((start_index + elem_count) < dt_iter->length))) {
-        ucs_free_on_stack(uct_memhs, uct_memhs_size);
-        ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
-        return ucp_proto_put_sgl_offload_send_frags(req, lpriv, max_frag_count,
-                                                    max_payload, next_iter);
+    for (idx = 0; idx < elem_count; idx++) {
+        uct_memhs[idx] = (sgl_memhs != NULL) ?
+                         ucp_datatype_iter_uct_memh(sgl_memhs[start_index + idx],
+                                                    md_index) :
+                         UCT_MEM_HANDLE_NULL;
+        uct_rkeys[idx] = ucp_rkey_get_tl_rkey(sgl_rkeys[start_index + idx],
+                                              rkey_index);
     }
 
     next_iter->offset               = start_index + elem_count;
