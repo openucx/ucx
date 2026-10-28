@@ -73,14 +73,14 @@ typedef void (*uct_async_ep_event_cb_t)(void *arg, uct_ep_h ep,
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Field mask for @ref uct_iface_async_ep_event_params_t.
+ * @brief Field mask for @ref uct_iface_set_async_ep_event_params_t.
  */
-enum uct_iface_async_ep_event_params_field {
-    /** Enables @ref uct_iface_async_ep_event_params_t::cb */
-    UCT_IFACE_ASYNC_EP_EVENT_PARAM_FIELD_CB  = UCS_BIT(0),
+enum uct_iface_set_async_ep_event_params_field {
+    /** Enables @ref uct_iface_set_async_ep_event_params_t::cb */
+    UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB  = UCS_BIT(0),
 
-    /** Enables @ref uct_iface_async_ep_event_params_t::arg */
-    UCT_IFACE_ASYNC_EP_EVENT_PARAM_FIELD_ARG = UCS_BIT(1)
+    /** Enables @ref uct_iface_set_async_ep_event_params_t::arg */
+    UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG = UCS_BIT(1)
 };
 
 
@@ -90,16 +90,17 @@ enum uct_iface_async_ep_event_params_field {
  */
 typedef struct {
     /** Mask of valid fields, using bits from
-     *  @ref uct_iface_async_ep_event_params_field. */
+     *  @ref uct_iface_set_async_ep_event_params_field. */
     uint64_t                field_mask;
 
     /** Callback invoked for endpoint-specific events. A NULL callback removes
      *  the currently registered handler. */
     uct_async_ep_event_cb_t cb;
 
-    /** User argument passed to @ref uct_iface_async_ep_event_params_t::cb. */
+    /** User argument passed to
+     *  @ref uct_iface_set_async_ep_event_params_t::cb. */
     void                    *arg;
-} uct_iface_async_ep_event_params_t;
+} uct_iface_set_async_ep_event_params_t;
 
 
 /**
@@ -478,11 +479,9 @@ struct uct_ep_attr {
     void                    *tx_token;
 
     /**
-     * Latest completed endpoint bandwidth sample, in bytes per second.
+     * Latest endpoint bandwidth, in bytes per second.
      * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask
      * and the interface advertises @ref UCT_IFACE_FLAG_V2_EP_QUERY_BW.
-     * A transport may return @ref UCS_ERR_NO_ELEM before the first sample or
-     * @ref UCS_ERR_TIMED_OUT when its latest sample is stale.
      */
     double                  bandwidth;
 };
@@ -1403,7 +1402,7 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  *
  * This routine fetches information about the endpoint.
  *
- * @param [in]  ep         Endpoint to query.
+ * @param [in]    ep      Endpoint to query.
  * @param [inout] ep_attr Requested fields and returned endpoint attributes.
  *
  * @return                 Error code returned by the transport.
@@ -1427,7 +1426,7 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  */
 ucs_status_t uct_iface_set_async_ep_event_handler(
         uct_iface_h iface,
-        const uct_iface_async_ep_event_params_t *params);
+        const uct_iface_set_async_ep_event_params_t *params);
 
 
 /**
