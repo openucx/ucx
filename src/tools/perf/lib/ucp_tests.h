@@ -174,7 +174,6 @@ protected:
     }
 
 private:
-
     void fill_sn_region(void *buffer, size_t length, const ucx_perf_allocator_t *allocator,
                         PSN sn)
     {
