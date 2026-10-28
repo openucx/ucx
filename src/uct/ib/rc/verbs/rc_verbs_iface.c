@@ -57,9 +57,10 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_config_t, rx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {"SRQ_ENABLE", "try",
-   "Whether QPs use an SRQ:\n"
-   " - y|try : Use an SRQ if the device supports it, y warns if not\n"
-   " - n     : Create QPs without an SRQ",
+   "Use a shared receive queue (SRQ) for rc_verbs QPs:\n"
+   " - y   : Use an SRQ, fail if the device does not support it\n"
+   " - try : Use an SRQ if the device supports it\n"
+   " - n   : Create each QP with its own receive queue, sized by RX_MAX_WR",
    ucs_offsetof(uct_rc_verbs_iface_config_t, srq_enable),
    UCS_CONFIG_TYPE_TERNARY},
 
@@ -328,8 +329,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.srq_disable = (config->srq_enable == UCS_NO) ||
                             !uct_ib_device_has_srq(&ib_md->dev);
     if ((config->srq_enable == UCS_YES) && init_attr.srq_disable) {
-        ucs_warn("%s: SRQ is not supported, using QPs without an SRQ instead.",
-                 uct_ib_device_name(&ib_md->dev));
+        ucs_error("%s: SRQ is requested but not supported",
+                  uct_ib_device_name(&ib_md->dev));
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (init_attr.srq_disable) {
