@@ -14,7 +14,7 @@ kubernetes:
   requests: "{memory: 8Gi, cpu: 8000m}"
 
 runs_on_dockers:
-  - { name: "ubuntu2404", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
+  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
 
 taskName: '${arch}/${name}'
 
