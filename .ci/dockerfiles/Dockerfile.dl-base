@@ -1,13 +1,13 @@
 # UCX's aarch64 CUDA 13 + MOFED 24.10 release image plus what the DL cluster job
-# needs on top: gdrcopy, which the cluster has no environment module for, and
-# the Python packaging module test_ucx_tls.py imports.
+# needs on top: gdrcopy, which the cluster has no environment module for, the
+# Python packaging module test_ucx_tls.py imports, and ip for the IP-based tests.
 
 FROM harbor.mellanox.com/ucx/aarch64/ubuntu24.04-mofed24.10-cuda13:1
 
 ARG GDRCOPY_VERSION=2.5.1
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3-setuptools && \
+    apt-get install -y --no-install-recommends python3-setuptools iproute2 && \
     rm -rf /var/lib/apt/lists/*
 
 # configure finds gdrcopy under /usr/local on its own.
