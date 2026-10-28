@@ -60,9 +60,8 @@ typedef ze_result_t (*uct_ze_copy_translate_handle_func_t)(int handle_type,
 
 /* Host memory range imported into the driver through this registry */
 typedef struct {
-    void   *address;
-    size_t length;
-    int    refcount; /* Registrations that resolved to this import */
+    void *address;
+    int  refcount; /* Registrations that resolved to this import */
 } uct_ze_copy_import_t;
 
 
@@ -266,7 +265,6 @@ uct_ze_copy_import_create(void *address, size_t length,
     }
 
     import->address    = address;
-    import->length     = length;
     import->refcount   = 1;
     kh_val(hash, iter) = import;
     *import_p          = import;
@@ -297,7 +295,7 @@ static void uct_ze_copy_import_register(void *address, size_t length,
 
     *memh_p   = UCT_ZE_COPY_DUMMY_MEMH;
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                                                        UCS_LOG_LEVEL_WARN;
+                                                        UCS_LOG_LEVEL_DIAG;
 
     pthread_mutex_lock(&registry->lock);
     if (!registry->enabled) {
@@ -743,3 +741,14 @@ uct_component_t uct_ze_copy_component = {
     .md_vfs_init    = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ze_copy_component);
+
+/* Imports still held at exit end with the process. The driver is not called
+   here, since its own state may already be destroyed. */
+UCS_STATIC_CLEANUP
+{
+    uct_ze_copy_import_t *import;
+
+    kh_foreach_value(&uct_ze_copy_imports.hash, import, ucs_free(import));
+    kh_destroy_inplace(ze_copy_import, &uct_ze_copy_imports.hash);
+    pthread_mutex_destroy(&uct_ze_copy_imports.lock);
+}

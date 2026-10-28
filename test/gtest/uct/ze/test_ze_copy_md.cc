@@ -3,12 +3,12 @@
  * See file LICENSE for terms.
  */
 
+#include "test_ze_copy_import.h"
 #include <common/test.h>
 
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ze/base/ze_base.h>
-#include <uct/ze/copy/ze_copy_md.h>
 }
 
 
@@ -69,24 +69,6 @@ protected:
             UCS_TEST_SKIP_R("Could not open ze_cpy MD on this system");
         }
         return md;
-    }
-
-    /* Host pointer import entry points; skips the test when unavailable */
-    static const uct_ze_copy_host_import_t *host_import()
-    {
-        const uct_ze_copy_host_import_t *hi = uct_ze_copy_md_get_host_import();
-        void *base;
-
-        if (hi == NULL) {
-            UCS_TEST_SKIP_R("Level Zero host pointer import is not available");
-        }
-
-        if (hi->get_base(hi->driver, &base, &base) ==
-            ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
-            UCS_TEST_SKIP_R("Level Zero host pointer import is disabled");
-        }
-
-        return hi;
     }
 
     /* Base of the import that contains ptr, or NULL when it is not imported */
@@ -273,7 +255,7 @@ UCS_TEST_F(test_ze_copy_md, mem_query_base_and_length) {
  * the import.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_reg_dereg) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr                           = buf.data();
@@ -294,7 +276,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_reg_dereg) {
  * import that stays until the last of them is deregistered, in any order.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_shared) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip();
     std::vector<char> buf(2 * CHUNK);
     char *ptr                           = buf.data();
@@ -323,7 +305,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_shared) {
  * import.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_shared_by_mds) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md1                        = open_md_or_skip();
     uct_md_h md2                        = open_md_or_skip();
     std::vector<char> buf(2 * CHUNK);
@@ -348,7 +330,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_shared_by_mds) {
  * unimported, and deregistering it must not release that import.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_partial_overlap) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip();
     std::vector<char> buf(4 * CHUNK);
     char *ptr                           = buf.data();
@@ -381,7 +363,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_partial_overlap) {
  * and released independently, in either order.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_nested) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip();
     std::vector<char> buf(3 * CHUNK);
     char *ptr                           = buf.data();
@@ -427,7 +409,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_nested) {
  * inside one borrows it, a range around one gets an import of its own.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_foreign) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip();
     std::vector<char> buf(3 * CHUNK);
     char *ptr                           = buf.data();
@@ -458,7 +440,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_foreign) {
  * Level Zero allocations are not imported.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_skips_ze_memory) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip();
     size_t length                       = CHUNK;
     void *addr                          = NULL;
@@ -486,7 +468,7 @@ UCS_TEST_F(test_ze_copy_md, host_import_skips_ze_memory) {
  * HOST_IMPORT=n keeps registrations working without importing.
  */
 UCS_TEST_F(test_ze_copy_md, host_import_disabled) {
-    const uct_ze_copy_host_import_t *hi = host_import();
+    const uct_ze_copy_host_import_t *hi = ze_copy_host_import_or_skip();
     uct_md_h md                         = open_md_or_skip("n");
     std::vector<char> buf(2 * CHUNK);
     char *ptr                           = buf.data();
