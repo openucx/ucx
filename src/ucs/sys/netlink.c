@@ -89,6 +89,8 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
+    *done_p = 0;
+
     /* NLMSG_DONE may follow other messages of a dump in the same datagram */
     for (; NLMSG_OK(nlh, msg_len); nlh = NLMSG_NEXT(nlh, msg_len)) {
         if (ucs_netlink_is_msg_done(nlh)) {
@@ -121,7 +123,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
     int netlink_fd      = -1;
     size_t recv_msg_len;
     char *recv_msg;
-    int msg_done        = 0;
+    int msg_done;
     ucs_status_t status;
     struct iovec iov[2];
     size_t bytes_sent;
