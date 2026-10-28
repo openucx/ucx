@@ -42,7 +42,9 @@ test_netlink_route_parse(const struct rtmsg *rt_msg, int if_index,
     route.family   = rt_msg->rtm_family;
     route.dst_len  = rt_msg->rtm_dst_len;
     route.type     = rt_msg->rtm_type;
-    memcpy(&route.dst, dst_in_addr, sizeof(route.dst));
+    if (dst_in_addr != NULL) {
+        memcpy(&route.dst, dst_in_addr, sizeof(route.dst));
+    }
     routes->push_back(route);
     return UCS_OK;
 }
@@ -294,7 +296,11 @@ UCS_TEST_F(test_sys, netlink_multipath_route) {
                 struct rtattr gateway_rta;
                 struct in_addr gateway;
             } first;
-            struct rtnexthop second;
+            struct {
+                struct rtnexthop rtnh;
+                struct rtattr preference_rta;
+                uint8_t preference;
+            } second;
         } multipath;
         struct {
             struct rtattr rta;
@@ -313,8 +319,6 @@ UCS_TEST_F(test_sys, netlink_multipath_route) {
     msg.dst.rta.rta_len        = RTA_LENGTH(sizeof(msg.dst.addr));
     msg.dst.rta.rta_type       = RTA_DST;
     msg.dst.addr               = dst_addr;
-    msg.multipath.rta.rta_len  = RTA_LENGTH(sizeof(msg.multipath) -
-                                            sizeof(msg.multipath.rta));
     msg.multipath.rta.rta_type = RTA_MULTIPATH;
     msg.multipath.first.rtnh.rtnh_len =
             RTNH_LENGTH(RTA_LENGTH(sizeof(msg.multipath.first.gateway)));
@@ -323,8 +327,16 @@ UCS_TEST_F(test_sys, netlink_multipath_route) {
             RTA_LENGTH(sizeof(msg.multipath.first.gateway));
     msg.multipath.first.gateway_rta.rta_type = RTA_GATEWAY;
     msg.multipath.first.gateway.s_addr        = htonl(0xc0a86401);
-    msg.multipath.second.rtnh_len             = RTNH_LENGTH(0);
-    msg.multipath.second.rtnh_ifindex         = if_indices[1];
+    /* The final nexthop is valid even though its length is not aligned. */
+    msg.multipath.second.rtnh.rtnh_len = RTNH_LENGTH(
+            RTA_LENGTH(sizeof(msg.multipath.second.preference)));
+    msg.multipath.second.rtnh.rtnh_ifindex = if_indices[1];
+    msg.multipath.second.preference_rta.rta_len =
+            RTA_LENGTH(sizeof(msg.multipath.second.preference));
+    msg.multipath.second.preference_rta.rta_type = RTA_PREF;
+    msg.multipath.rta.rta_len =
+            RTA_LENGTH(sizeof(msg.multipath.first) +
+                       msg.multipath.second.rtnh.rtnh_len);
 
     ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
                                           test_netlink_route_parse, &routes));
@@ -338,6 +350,20 @@ UCS_TEST_F(test_sys, netlink_multipath_route) {
     }
 
     routes.clear();
+    msg.rtm.rtm_dst_len  = 0;
+    msg.dst.rta.rta_type = RTA_UNSPEC;
+    ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
+                                          test_netlink_route_parse, &routes));
+    ASSERT_EQ(num_paths, routes.size());
+    for (unsigned i = 0; i < routes.size(); ++i) {
+        EXPECT_EQ(if_indices[i], routes[i].if_index);
+        EXPECT_EQ(0, routes[i].dst_len);
+        EXPECT_EQ(INADDR_ANY, routes[i].dst.s_addr);
+    }
+    msg.rtm.rtm_dst_len  = 24;
+    msg.dst.rta.rta_type = RTA_DST;
+
+    routes.clear();
     msg.multipath.first.rtnh.rtnh_flags = RTNH_F_DEAD;
     ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
                                           test_netlink_route_parse, &routes));
@@ -346,7 +372,7 @@ UCS_TEST_F(test_sys, netlink_multipath_route) {
     msg.multipath.first.rtnh.rtnh_flags = 0;
 
     routes.clear();
-    msg.multipath.second.rtnh_len = RTNH_LENGTH(1);
+    ++msg.multipath.second.rtnh.rtnh_len;
     ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
                                           test_netlink_route_parse, &routes));
     EXPECT_TRUE(routes.empty());
@@ -357,9 +383,11 @@ UCS_TEST_F(test_sys, netlink_multipath_route) {
                                           test_netlink_route_parse, &routes));
     EXPECT_TRUE(routes.empty());
 
+    msg.multipath.second.rtnh.rtnh_len = RTNH_LENGTH(
+            RTA_LENGTH(sizeof(msg.multipath.second.preference)));
     msg.multipath.rta.rta_len =
-            RTA_LENGTH(sizeof(msg.multipath) - sizeof(msg.multipath.rta));
-    msg.multipath.second.rtnh_len = RTNH_LENGTH(0);
+            RTA_LENGTH(sizeof(msg.multipath.first) +
+                       msg.multipath.second.rtnh.rtnh_len);
     msg.oif.rta.rta_len = RTA_LENGTH(sizeof(msg.oif.if_index));
     msg.oif.rta.rta_type = RTA_OIF;
     msg.oif.if_index      = 51;

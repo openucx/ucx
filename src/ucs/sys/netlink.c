@@ -178,26 +178,22 @@ ucs_netlink_multipath_is_valid(const struct rtattr *multipath_rta)
 {
     const struct rtnexthop *rtnh = RTA_DATA(multipath_rta);
     int remaining               = RTA_PAYLOAD(multipath_rta);
-    unsigned count              = 0;
-    int rtnh_len;
 
-    while (remaining > 0) {
-        if (remaining < (int)sizeof(*rtnh)) {
-            return 0;
-        }
-
-        rtnh_len = rtnh->rtnh_len;
-        if ((rtnh_len < (int)sizeof(*rtnh)) ||
-            (RTNH_ALIGN(rtnh_len) > remaining)) {
-            return 0;
-        }
-
-        remaining -= RTNH_ALIGN(rtnh_len);
-        rtnh = RTNH_NEXT(rtnh);
-        ++count;
+    if (remaining <= 0) {
+        return 0;
     }
 
-    return count > 0;
+    while (remaining > 0) {
+        if ((remaining < (int)sizeof(*rtnh)) ||
+            !RTNH_OK(rtnh, remaining)) {
+            return 0;
+        }
+
+        remaining -= RTNH_ALIGN(rtnh->rtnh_len);
+        rtnh = RTNH_NEXT(rtnh);
+    }
+
+    return 1;
 }
 
 static ucs_status_t
@@ -247,11 +243,11 @@ ucs_status_t
 ucs_netlink_parse_route(const struct nlmsghdr *nlh,
                         ucs_netlink_route_parse_func_t parse_func, void *arg)
 {
-    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    const struct rtmsg *rt_msg         = NLMSG_DATA(nlh);
     const struct rtattr *multipath_rta = NULL;
+    const void *dst_in_addr            = NULL;
+    const int *if_index_p              = NULL;
     const struct rtattr *rta;
-    const void *dst_in_addr = NULL;
-    const int *if_index_p    = NULL;
     const struct rtnexthop *rtnh;
     ucs_status_t status;
     int remaining;

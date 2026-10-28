@@ -33,6 +33,18 @@ typedef enum {
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                void *arg);
 
+/**
+ * Callback function for parsing a route from a netlink message.
+ *
+ * @param [in] rt_msg       Pointer to the route message header.
+ * @param [in] if_index     Network interface index for the route.
+ * @param [in] dst_in_addr  Pointer to the destination address, or NULL when
+ *                          the message has no RTA_DST attribute.
+ * @param [in] arg          User-provided argument passed through from the
+ *                          caller.
+ *
+ * @return UCS_OK on success, or an error code otherwise.
+ */
 typedef ucs_status_t (*ucs_netlink_route_parse_func_t)(
         const struct rtmsg *rt_msg, int if_index, const void *dst_in_addr,
         void *arg);
@@ -54,6 +66,19 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                          const void *protocol_header, size_t header_length,
                          ucs_netlink_parse_cb_t parse_cb, void *arg);
 
+/**
+ * Parse a route netlink message.
+ *
+ * The callback is invoked once for a top-level RTA_OIF, or once for every live
+ * nexthop in an RTA_MULTIPATH attribute when RTA_OIF is absent.
+ *
+ * @param [in] nlh         Pointer to the netlink message header.
+ * @param [in] parse_func  Callback function to process the route.
+ * @param [in] arg         User-provided argument for the callback.
+ *
+ * @return UCS_OK if the route is skipped or all callback invocations succeed,
+ *         or the error code returned by the callback otherwise.
+ */
 ucs_status_t
 ucs_netlink_parse_route(const struct nlmsghdr *nlh,
                         ucs_netlink_route_parse_func_t parse_func, void *arg);
