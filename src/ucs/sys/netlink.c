@@ -333,14 +333,24 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
                                                           iface_rules);
 }
 
-static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
+static int
+ucs_netlink_max_netmask_len(int if_index, const struct sockaddr *sa_remote)
 {
+    int vrf_index       = ucs_netlink_get_vrf_master_index(if_index);
     int max_netmask_len = -1;
     ucs_netlink_rt_rules_t iface_rules;
+    khint32_t curr_if_index;
 
-    kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
-        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
-                                                                 &iface_rules);
+    kh_foreach(&ucs_netlink_routing_table_cache, curr_if_index, iface_rules, {
+        int curr_netmask_len;
+
+        /* Longest prefix match is done only within one routing domain */
+        if (ucs_netlink_get_vrf_master_index(curr_if_index) != vrf_index) {
+            continue;
+        }
+
+        curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
+                                                             &iface_rules);
         if (curr_netmask_len > max_netmask_len) {
             max_netmask_len = curr_netmask_len;
         }
@@ -408,7 +418,7 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
     /* Accept the route if it is the best match. In relaxed mode, this check is
      * reached only for a default route, so the default is accepted only when
      * no interface has a more specific route. */
-    return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
+    return (ucs_netlink_max_netmask_len(if_index, sa_remote) == netmask_len);
 }
 
 static ucs_status_t
