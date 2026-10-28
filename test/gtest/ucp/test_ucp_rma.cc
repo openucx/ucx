@@ -1418,9 +1418,11 @@ protected:
                            param);
     }
 
-    void verify_sgl(const sgl_ctx &ctx) {
+    void verify_sgl(const sgl_ctx &ctx, size_t begin = 0,
+                    size_t end = SIZE_MAX) {
         ucs_memory_type_t mtype = mem_type();
-        for (size_t i = 0; i < ctx.lengths.size(); i++) {
+        end                     = std::min(end, ctx.lengths.size());
+        for (size_t i = begin; i < end; i++) {
             uint8_t expected = static_cast<uint8_t>(i + 1);
             void *result     = (op() == SGL_OP_PUT) ? ctx.dst[i].ptr() :
                                                     ctx.src[i].ptr();
@@ -1432,6 +1434,33 @@ protected:
                     << "Mismatch at element " << i << " byte " << j;
             }
         }
+    }
+
+    struct cb_state {
+        unsigned     count  = 0;
+        ucs_status_t status = UCS_INPROGRESS;
+    };
+
+    ucs_status_ptr_t post_sgl_with_cb(sgl_ctx &ctx, cb_state &cb) {
+        size_t num                 = ctx.lengths.size();
+        ucp_dt_local_sgl_t local   = make_local_sgl(
+                ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        ucp_request_param_t param  = make_sgl_param(&remote, num);
+
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA |
+                              UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        param.cb.send       = [](void *request, ucs_status_t status,
+                                 void *user_data) {
+            cb_state *s = static_cast<cb_state*>(user_data);
+            s->status   = status;
+            s->count++;
+        };
+        param.user_data     = &cb;
+
+        return sgl_op_nbx(&local, num, UCP_REMOTE_ADDR_INVALID,
+                          UCP_RKEY_INVALID, &param);
     }
 
     void test_sgl(const std::vector<size_t> &elem_sizes,
@@ -1767,30 +1796,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_completion_order) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, NUM_ELEMS, 8);
 
-    ucp_dt_local_sgl_t local   = make_local_sgl(
-            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
-
-    struct cb_state {
-        unsigned    count;
-        ucs_status_t status;
-    } cb = {0, UCS_INPROGRESS};
-
-    param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
-                          UCP_OP_ATTR_FIELD_USER_DATA |
-                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-    param.cb.send       = [](void *request, ucs_status_t status,
-                             void *user_data) {
-        cb_state *s = static_cast<cb_state*>(user_data);
-        s->status   = status;
-        s->count++;
-    };
-    param.user_data     = &cb;
-
-    ucs_status_ptr_t sptr = sgl_op_nbx(&local, NUM_ELEMS,
-                                       UCP_REMOTE_ADDR_INVALID,
-                                       UCP_RKEY_INVALID, &param);
+    cb_state cb;
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
     ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
     /* The parent request must not complete before all the elements arrived, so
@@ -1816,10 +1823,152 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_completion_order) {
     EXPECT_EQ(1u, cb.count);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, short_elements_ep_close_force) {
-    static constexpr size_t NUM_ELEMS = 64;
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
+    static const std::vector<size_t> lengths = {1,   2,   8,   63,  64,  65,
+                                                100, 127, 128, 129, 255, 256,
+                                                3,   5,   13,  477};
+    static constexpr size_t LOCAL_GAP        = 5;
+    static constexpr size_t REMOTE_GAP       = 11;
+    static constexpr uint8_t LOCAL_FILL      = 0xee;
 
     require_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    size_t num = lengths.size();
+    size_t local_size  = 0;
+    size_t remote_size = 0;
+    for (size_t length : lengths) {
+        local_size  += length + LOCAL_GAP;
+        remote_size += length + REMOTE_GAP;
+    }
+
+    sgl_ctx ctx;
+    ctx.src.emplace_back(local_size, sender(), 0, mem_type());
+    ctx.dst.emplace_back(remote_size, receiver(), 0, mem_type());
+    ctx.rkey_handles.resize(1);
+    ctx.dst[0].rkey(sender(), ctx.rkey_handles[0]);
+
+    std::vector<uint8_t> local_data(local_size, LOCAL_FILL);
+    std::vector<uint8_t> remote_data(remote_size);
+    for (size_t i = 0; i < remote_size; i++) {
+        remote_data[i] = static_cast<uint8_t>(i * 7 + 1);
+    }
+    mem_buffer::copy_to(ctx.src[0].ptr(), local_data.data(), local_size,
+                        mem_type());
+    mem_buffer::copy_to(ctx.dst[0].ptr(), remote_data.data(), remote_size,
+                        mem_type());
+
+    /* The elements are laid out in the opposite order locally and remotely,
+       with different gaps between them, which must remain untouched */
+    std::vector<size_t> local_offsets(num), remote_offsets(num);
+    size_t local_offset = local_size, remote_offset = 0;
+    for (size_t i = 0; i < num; i++) {
+        local_offset     -= lengths[i] + LOCAL_GAP;
+        local_offsets[i]  = local_offset;
+        remote_offsets[i] = remote_offset;
+        remote_offset    += lengths[i] + REMOTE_GAP;
+
+        ctx.buffers.push_back(UCS_PTR_BYTE_OFFSET(ctx.src[0].ptr(),
+                                                  local_offsets[i]));
+        ctx.remote_addrs.push_back(
+                reinterpret_cast<uint64_t>(ctx.dst[0].ptr()) +
+                remote_offsets[i]);
+        ctx.memhs.push_back(ctx.src[0].memh());
+        ctx.rkeys.push_back(ctx.rkey_handles[0]);
+    }
+    ctx.lengths        = lengths;
+    ctx.remote_lengths = lengths;
+
+    cb_state cb;
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    while (cb.count == 0) {
+        progress();
+    }
+    EXPECT_UCS_OK(cb.status);
+    ucp_request_release(sptr);
+
+    for (size_t i = 0; i < num; i++) {
+        memcpy(&local_data[local_offsets[i]], &remote_data[remote_offsets[i]],
+               lengths[i]);
+    }
+
+    std::vector<uint8_t> result(local_size);
+    mem_buffer::copy_from(result.data(), ctx.src[0].ptr(), local_size,
+                          mem_type());
+    EXPECT_EQ(local_data, result);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
+           "PROTOS=get/sgl/offload,reconfig") {
+    require_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, {4 * UCS_KBYTE, 8, 4 * UCS_KBYTE, 4 * UCS_KBYTE});
+
+    /* Only the sgl protocol is allowed, so the sub-request of the short element
+       fails synchronously, while the previous element is still outstanding */
+    cb_state cb;
+    ucs_status_ptr_t sptr;
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        sptr = post_sgl_with_cb(ctx, cb);
+    }
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    EXPECT_EQ(0u, cb.count);
+
+    while (cb.count == 0) {
+        progress();
+    }
+
+    /* The parent fails only after the previous element was fetched, and the
+       next elements are not posted */
+    EXPECT_EQ(1u, cb.count);
+    EXPECT_NE(UCS_OK, cb.status);
+    verify_sgl(ctx, 0, 1);
+    for (size_t i = 1; i < ctx.lengths.size(); i++) {
+        uint8_t first_byte;
+        mem_buffer::copy_from(&first_byte, ctx.src[i].ptr(), 1, mem_type());
+        EXPECT_EQ(0, first_byte) << "element " << i;
+    }
+    ucp_request_release(sptr);
+
+    for (int i = 0; i < 100; i++) {
+        progress();
+    }
+    EXPECT_EQ(1u, cb.count);
+}
+
+class test_ucp_rma_sgl_err : public test_ucp_rma_sgl {
+public:
+    /* Regular short get from GPU memory (rendezvous) fails with an assertion
+       on a remote access error or an endpoint force close */
+    void require_host_get() const {
+        require_get();
+        if (mem_type() != UCS_MEMORY_TYPE_HOST) {
+            UCS_TEST_SKIP_R("host memory only");
+        }
+    }
+
+    virtual ucp_ep_params_t get_ep_params() override {
+        ucp_ep_params_t params = test_ucp_rma_sgl::get_ep_params();
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_ep_close_force) {
+    static constexpr size_t NUM_ELEMS = 1024;
+
+    require_host_get();
 
     /* Complete the wireup, so that the operation below is posted rather than
        added to a pending queue */
@@ -1828,34 +1977,59 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_ep_close_force) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, NUM_ELEMS, 8);
 
-    ucp_dt_local_sgl_t local   = make_local_sgl(
-            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
-
-    struct cb_state {
-        unsigned count;
-    } cb = {0};
-
-    param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
-                          UCP_OP_ATTR_FIELD_USER_DATA |
-                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-    param.cb.send       = [](void *request, ucs_status_t status,
-                             void *user_data) {
-        static_cast<cb_state*>(user_data)->count++;
-    };
-    param.user_data     = &cb;
-
-    ucs_status_ptr_t sptr = sgl_op_nbx(&local, NUM_ELEMS,
-                                       UCP_REMOTE_ADDR_INVALID,
-                                       UCP_RKEY_INVALID, &param);
+    cb_state cb;
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
     ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
-    /* Close the endpoint while the short elements are outstanding. The parent
-       request must be completed exactly once, with any status, only after all
-       the sub-requests were completed */
+    /* No progress was made since the operation was posted, so the sub-requests
+       are still outstanding when the endpoint is closed */
+    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+    EXPECT_EQ(0u, cb.count);
+    EXPECT_FALSE(ucp_request_is_completed(sptr));
+    EXPECT_GT(req->send.state.uct_comp.count, 0);
+    UCS_TEST_MESSAGE << "outstanding sub-requests at close: "
+                     << req->send.state.uct_comp.count;
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        sender().close_all_eps(*this, 0, UCP_EP_CLOSE_FLAG_FORCE);
+    }
+
+    /* The parent is completed exactly once, either with the data fetched or
+       canceled */
+    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(20);
+    while ((cb.count == 0) && (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    EXPECT_EQ(1u, cb.count);
+    UCS_TEST_MESSAGE << "parent status: " << ucs_status_string(cb.status);
+    if (cb.status == UCS_OK) {
+        verify_sgl(ctx);
+    } else {
+        EXPECT_EQ(UCS_ERR_CANCELED, cb.status);
+    }
+    ucp_request_release(sptr);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_remote_error) {
+    static constexpr size_t NUM_ELEMS = 64;
+    static constexpr size_t BAD_INDEX = NUM_ELEMS / 2;
+
+    require_host_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 8);
+    ctx.remote_addrs[BAD_INDEX] = 0x1000;
+
+    cb_state cb;
     scoped_log_handler slh(hide_errors_logger);
-    sender().close_all_eps(*this, 0, UCP_EP_CLOSE_FLAG_FORCE);
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
 
     ucs_time_t deadline = ucs::get_deadline();
     while ((cb.count == 0) && (ucs_get_time() < deadline)) {
@@ -1863,7 +2037,14 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_ep_close_force) {
     }
 
     EXPECT_EQ(1u, cb.count);
+    EXPECT_NE(UCS_OK, cb.status);
+    UCS_TEST_MESSAGE << "parent status: " << ucs_status_string(cb.status);
     ucp_request_release(sptr);
+
+    for (int i = 0; i < 100; i++) {
+        progress();
+    }
+    EXPECT_EQ(1u, cb.count);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_addr,
@@ -2087,3 +2268,4 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_err, all, "all")
