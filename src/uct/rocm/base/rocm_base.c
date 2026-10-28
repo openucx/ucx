@@ -154,11 +154,19 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
  * them) but are never looked up on the VMM path, so they are harmless.
  */
 typedef struct uct_rocm_base_vmm_region {
-    ucs_pgt_region_t super; /**< page-aligned [start, end) for the page table */
-    ucs_list_link_t  list;  /**< used to collect regions for removal */
-    void             *base; /**< exact allocation base */
-    size_t           size;  /**< exact allocation size */
+    ucs_pgt_region_t super;  /**< page-aligned [start, end) for the page table */
+    ucs_list_link_t  list;   /**< used to collect regions for removal */
+    void             *base;  /**< exact allocation base */
+    size_t           size;   /**< exact allocation size */
+    uint64_t         reg_id; /**< stable id for this live mapping */
 } uct_rocm_base_vmm_region_t;
+
+/* Monotonic id assigned once per live mapping (under the registry lock). Gives
+ * the rocm_ipc rkey a stable identity for the same live chunk, so concurrent
+ * re-registrations hit the IPC cache instead of unmapping each other. Started
+ * at a high offset so it never collides with the per-registration fallback id
+ * used on a registry miss. */
+static uint64_t uct_rocm_base_vmm_reg_id = (1ull << 48);
 
 static struct {
     ucs_spinlock_t lock;
@@ -237,6 +245,7 @@ static void uct_rocm_base_vmm_registry_insert(void *address, size_t size)
     region->super.end   = end;
     region->base        = address;
     region->size        = size;
+    region->reg_id      = ++uct_rocm_base_vmm_reg_id;
 
     status = ucs_pgtable_insert(&uct_rocm_base_vmm_registry.pgtable,
                                 &region->super);
@@ -306,7 +315,7 @@ static void uct_rocm_base_vmm_registry_init(void)
 }
 
 ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
-                                           size_t *size)
+                                           size_t *size, uint64_t *reg_id)
 {
     ucs_pgt_region_t *pgt_region;
     uct_rocm_base_vmm_region_t *region;
@@ -323,6 +332,9 @@ ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
         region = ucs_derived_of(pgt_region, uct_rocm_base_vmm_region_t);
         *base  = region->base;
         *size  = region->size;
+        if (reg_id != NULL) {
+            *reg_id = region->reg_id;
+        }
         status = UCS_OK;
     }
     ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
@@ -684,8 +696,8 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
              * base; use the true base/size from the vmm registry so the
              * reported base_address and the memtype cache update below are not
              * poisoned. */
-            if (uct_rocm_base_vmm_lookup_base(addr, &vmm_base, &vmm_size) ==
-                UCS_OK) {
+            if (uct_rocm_base_vmm_lookup_base(addr, &vmm_base, &vmm_size,
+                                              NULL) == UCS_OK) {
                 base_addr = vmm_base;
                 base_size = vmm_size;
             }

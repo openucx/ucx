@@ -256,6 +256,10 @@ static int uct_rocm_ipc_key_equal(const uct_rocm_ipc_key_t *key1,
 {
 #ifdef HAVE_ROCM_VMM_TYPE
     if (key1->is_vmm || key2->is_vmm) {
+        /* reg_id is stable per live mapping (assigned by the vmm registry), so
+         * concurrent re-registrations of the same chunk compare equal and hit
+         * the cache instead of unmapping a mapping an in-flight copy may still
+         * be reading. */
         return (key1->is_vmm == key2->is_vmm) &&
                (key1->pid == key2->pid) &&
                (key1->vmm.reg_id == key2->vmm.reg_id);

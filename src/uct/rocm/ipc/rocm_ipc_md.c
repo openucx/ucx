@@ -86,14 +86,16 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         hsa_amd_vmem_alloc_handle_t vmem_handle;
         void *vmm_base;
         size_t vmm_size;
+        uint64_t vmm_reg_id;
 
         /* hsa_amd_pointer_info() reports agentBaseAddress as the queried pointer
          * for VMEM, not the hsa_amd_vmem_map() base that
          * hsa_amd_vmem_retain_alloc_handle() requires. Resolve the true base
-         * from the vmm registry; fall back to page-alignment (correct when the
-         * buffer is in the mapping's first page) on a miss. */
-        if (uct_rocm_base_vmm_lookup_base(address, &vmm_base, &vmm_size) ==
-            UCS_OK) {
+         * (and a stable per-live-mapping reg_id) from the vmm registry; fall
+         * back to page-alignment (correct when the buffer is in the mapping's
+         * first page) on a miss. */
+        if (uct_rocm_base_vmm_lookup_base(address, &vmm_base, &vmm_size,
+                                          &vmm_reg_id) == UCS_OK) {
             /* A buffer that straddles a vmem_map boundary (e.g. a pool
              * allocator that maps a large reservation in adjacent chunks)
              * cannot be described by a single exported handle. Reject so UCP
@@ -108,9 +110,11 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
             }
         } else {
             /* Registry miss: page-align (correct when the buffer is in the
-             * mapping's first page). */
-            vmm_base = ucs_align_down_pow2_ptr(base_ptr, ucs_get_page_size());
-            vmm_size = size;
+             * mapping's first page) and fall back to a unique per-registration
+             * id. */
+            vmm_base   = ucs_align_down_pow2_ptr(base_ptr, ucs_get_page_size());
+            vmm_size   = size;
+            vmm_reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
         }
 
         status = hsa_amd_vmem_retain_alloc_handle(&vmem_handle, vmm_base);
@@ -127,7 +131,7 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
             return status;
         }
 
-        key->vmm.reg_id = ucs_atomic_fadd64(&uct_rocm_ipc_vmm_reg_id_gen, 1);
+        key->vmm.reg_id = vmm_reg_id;
         key->address    = (uintptr_t)vmm_base;
         key->length  = vmm_size;
         key->dev_num = uct_rocm_base_get_dev_num(agent);

@@ -38,9 +38,10 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
                                         hsa_device_type_t *dev_type);
 #ifdef HAVE_ROCM_VMM_TYPE
 /* Resolve a (possibly interior) VMM pointer to its exact hsa_amd_vmem_map()
- * base and size. Returns UCS_ERR_NO_ELEM if the mapping was not observed. */
+ * base and size, plus a stable per-live-mapping id (reg_id may be NULL).
+ * Returns UCS_ERR_NO_ELEM if the mapping was not observed. */
 ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
-                                           size_t *size);
+                                           size_t *size, uint64_t *reg_id);
 #endif
 ucs_status_t uct_rocm_base_get_last_device_pool(hsa_amd_memory_pool_t *pool);
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
