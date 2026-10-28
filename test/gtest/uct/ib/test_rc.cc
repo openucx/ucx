@@ -1734,6 +1734,11 @@ public:
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
     }
+
+    virtual void inject_error(unsigned idx = 0) override
+    {
+        kill_receiver(idx);
+    }
 };
 
 /* this test is quite tricky: it emulates missing iface resources
