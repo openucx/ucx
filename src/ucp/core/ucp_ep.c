@@ -2079,7 +2079,7 @@ ucp_request_t *ucp_ep_close_req(ucp_ep_h ep)
     return ucp_ep_has_cm_lane(ep) ? ep->ext->close_req : NULL;
 }
 
-static uint32_t ucp_ep_tf_seen_peer_id(ucp_ep_h ep)
+static uint16_t ucp_ep_tf_seen_peer_id(ucp_ep_h ep)
 {
     ucs_assert(!ucp_ep_has_cm_lane(ep));
 
@@ -2088,13 +2088,13 @@ static uint32_t ucp_ep_tf_seen_peer_id(ucp_ep_h ep)
     }
 
     if (ucp_ep_ext_recovery_is_peer_id(ep->ext->recovery_arg)) {
-        return (uint32_t)(((uintptr_t)ep->ext->recovery_arg) >> 1);
+        return (uint16_t)(((uintptr_t)ep->ext->recovery_arg) >> 1);
     }
 
     return ep->ext->recovery_arg->seen_peer_id;
 }
 
-static void ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint32_t peer_id)
+static void ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint16_t peer_id)
 {
     ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
 
@@ -2116,7 +2116,7 @@ static void ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint32_t peer_id)
 static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
 {
     ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
-    uint32_t seen_peer_id;
+    uint16_t seen_peer_id;
 
     ucs_assert(arg != NULL);
 
@@ -2417,7 +2417,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     if (arg == NULL) {
         /* Read the stashed peer id before this pointer replaces it. */
-        uint32_t seen_peer_id = ucp_ep_tf_seen_peer_id(ep);
+        uint16_t seen_peer_id = ucp_ep_tf_seen_peer_id(ep);
 
         arg = ucs_calloc(1, sizeof(*arg), "ucp_ep_recovery_arg");
         if (arg == NULL) {
@@ -2762,7 +2762,7 @@ int ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
         return 0;
     }
 
-    ucp_ep_tf_seen_peer_id_set(ep, request_id);
+    ucp_ep_tf_seen_peer_id_set(ep, (uint16_t)request_id);
     return 1;
 }
 

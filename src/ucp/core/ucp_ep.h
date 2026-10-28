@@ -554,7 +554,7 @@ typedef struct ucp_ep_recovery_arg {
     uint8_t                 resend;
     /* Highest peer LANES_ADDR request id accepted while this object is
      * alive. 0 means none. Moved into the ext slot when the object is freed. */
-    uint32_t                seen_peer_id;
+    uint16_t                seen_peer_id;
     /* Lanes a request already published. A later failure leaves them out
      * until recovery retries. */
     ucp_lane_map_t          sent_lanes;
@@ -591,7 +591,7 @@ typedef struct ucp_ep_ext {
                                                     1) recovery is not supported for connected to sockaddr EPs
                                                     2) it does not make sense to recover lanes during close protocol
                                                     The low bit set means there is no pointer: the remaining bits
-                                                    are the last accepted peer request id. */
+                                                    are the last accepted 16-bit peer request id. */
     };
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
