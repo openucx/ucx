@@ -2266,8 +2266,6 @@ static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
 /* Select a failover mode compatible with recovery and indirect atomics. */
 static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
 {
-    int enabled;
-
     if (!context->config.ext.recovery_enable) {
         if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
             ucs_error("UCX_FAILOVER_MODE=token requires "
@@ -2284,9 +2282,7 @@ static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
         return UCS_OK;
     }
 
-    enabled = ucp_context_query_ib_indirect_atomic(context);
-
-    if (!enabled) {
+    if (!ucp_context_query_ib_indirect_atomic(context)) {
         return UCS_OK;
     }
 
