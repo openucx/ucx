@@ -245,6 +245,11 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_device_completion_t *tl_comp, uint32_t opcode, bool is_atomic,
         uint64_t add)
 {
+    /* A grid-wide reservation broadcast is not implemented. */
+    if (level == UCS_DEVICE_LEVEL_GRID) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
     unsigned cflag                = 0;
     uint64_t wqe_base;

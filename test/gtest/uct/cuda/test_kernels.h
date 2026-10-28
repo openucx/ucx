@@ -24,7 +24,8 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
 
 #if HAVE_GDA
 ucs_status_t launch_gda_reserve_wqe(ucs_device_level_t level,
-                                   unsigned num_threads, unsigned &num_errors);
+                                    unsigned num_threads, unsigned &num_errors);
+ucs_status_t launch_gda_grid_unsupported(unsigned &num_errors);
 #endif
 
 }; // namespace ucx_cuda

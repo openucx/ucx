@@ -92,12 +92,16 @@ ucs_status_t launch_uct_atomic(uct_device_ep_h ep,
 template<ucs_device_level_t level>
 static __global__ void gda_reserve_wqe_kernel(unsigned *errors_p)
 {
+    /* One queue per cooperative group; WARP uses exactly one full warp. */
     constexpr size_t storage_size = sizeof(uct_rc_gdaki_dev_ep_t) +
                                     sizeof(uct_rc_gdaki_dev_qp_t);
     __shared__ uint64_t storage[(storage_size + sizeof(uint64_t) - 1) /
-                               sizeof(uint64_t)];
+                                 sizeof(uint64_t)];
     auto *ep            = reinterpret_cast<uct_rc_gdaki_dev_ep_t*>(storage);
     const uint64_t base = UCS_BIT(32);
+    unsigned lane_id, num_lanes;
+
+    uct_dev_exec_init<level>(lane_id, num_lanes);
 
     if (threadIdx.x == 0) {
         ep->qps[0]               = {};
@@ -114,8 +118,7 @@ static __global__ void gda_reserve_wqe_kernel(unsigned *errors_p)
         uint64_t wqe_base = ~expected;
         unsigned errors;
 
-        uct_rc_mlx5_gda_reserv_wqe<level>(
-                ep, 0, 1, threadIdx.x, wqe_base);
+        uct_rc_mlx5_gda_reserv_wqe<level>(ep, 0, 1, lane_id, wqe_base);
         errors = __syncthreads_count(wqe_base != expected);
         if (threadIdx.x == 0) {
             *errors_p += errors;
@@ -128,7 +131,7 @@ static __global__ void gda_reserve_wqe_kernel(unsigned *errors_p)
 }
 
 ucs_status_t launch_gda_reserve_wqe(ucs_device_level_t level,
-                                   unsigned num_threads, unsigned &num_errors)
+                                    unsigned num_threads, unsigned &num_errors)
 {
     device_result_ptr<unsigned> errors = 0;
     ucs_status_t status;
@@ -148,6 +151,39 @@ ucs_status_t launch_gda_reserve_wqe(ucs_device_level_t level,
     num_errors = *errors;
     return UCS_OK;
 }
+
+static __global__ void gda_grid_unsupported_kernel(ucs_status_t *statuses)
+{
+    statuses[blockIdx.x * blockDim.x + threadIdx.x] =
+            uct_rc_mlx5_gda_ep_single<UCS_DEVICE_LEVEL_GRID>(
+                    nullptr, nullptr, nullptr, 0, 0, 0, 0, 0, 0, nullptr,
+                    MLX5_OPCODE_RDMA_WRITE, false, 0);
+}
+
+ucs_status_t launch_gda_grid_unsupported(unsigned &num_errors)
+{
+    std::vector<ucs_status_t> statuses(66, UCS_INPROGRESS);
+    auto device_statuses = make_device_vector(statuses);
+
+    gda_grid_unsupported_kernel<<<2, 33>>>(device_statuses.ptr());
+    ucs_status_t status = synchronize();
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (cudaMemcpy(statuses.data(), device_statuses.ptr(),
+                   statuses.size() * sizeof(statuses[0]),
+                   cudaMemcpyDeviceToHost) != cudaSuccess) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    num_errors = 0;
+    for (auto result : statuses) {
+        num_errors += result != UCS_ERR_UNSUPPORTED;
+    }
+    return UCS_OK;
+}
+
 #endif
 
 } // namespace ucx_cuda
