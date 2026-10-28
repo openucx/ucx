@@ -276,7 +276,11 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_loopback_cuda, envelope)
+/* gdr_copy cannot pin memory the driver did not allocate as GPUDirect RDMA
+ * capable, which is every allocation under an MPS MLOPart device */
+UCS_TEST_SKIP_COND_P(test_uct_loopback_cuda, envelope,
+                     has_transport("gdr_copy") &&
+                             !mem_buffer::cuda_mem_is_gdr_capable())
 {
     std::vector<std::vector<ucs_memory_type_t>> pairs = mem_type_pairs();
 
