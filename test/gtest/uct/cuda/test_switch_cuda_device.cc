@@ -673,14 +673,8 @@ UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_range,
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
-    uct_md_mem_attr_t mem_attr;
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
-    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                   &mem_attr));
-    EXPECT_EQ(buffer.ptr(), mem_attr.base_address);
-    EXPECT_EQ(buffer.size(), mem_attr.alloc_length);
+    check_mem_query_range(buffer.ptr(), buffer.size());
 }
 #endif
 

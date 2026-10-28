@@ -745,23 +745,13 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
 class test_cuda_copy_md : public test_md {
 };
 
-UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
-    /* A single byte per chunk is rounded up to the allocation granularity, so
-     * the buffer is backed by 3 distinct physical handles */
-    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 3);
-    uct_md_mem_attr_t mem_attr;
+UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on") {
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 3);
 
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
-
-    /* Query the full multi-handle range; the guard preserves the caller's
-     * requested extent instead of shrinking to the single chunk that
-     * contains the base pointer. */
-    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                   &mem_attr));
-
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-    EXPECT_GE(mem_attr.alloc_length, buffer.size());
+    /* The handle containing the address covers only the first chunk, so the
+     * requested extent must be kept */
+    check_mem_query_range(buffer.ptr(), buffer.size());
 }
 
 UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
@@ -809,31 +799,13 @@ UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
 
 UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_unaligned_range,
            "CUDA_COPY_REG_WHOLE_ALLOC=on") {
-    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 2);
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 2);
+    size_t chunk_size = buffer.size() / 2;
+
     /* Starts in the middle of the first handle and ends in the second one,
      * while being shorter than a single handle */
-    size_t chunk_size = buffer.size() / 2;
-    void *address     = UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2);
-    size_t length     = (chunk_size / 2) + 1;
-    CUdeviceptr alloc_base;
-    size_t alloc_length;
-    uct_md_mem_attr_t mem_attr;
-
-    /* If the query fails, the MD keeps the requested extent as well */
-    if ((cuMemGetAddressRange(&alloc_base, &alloc_length,
-                              (CUdeviceptr)address) == CUDA_SUCCESS) &&
-        ((alloc_base + alloc_length) >= ((CUdeviceptr)address + length))) {
-        UCS_TEST_SKIP_R("allocation range covers the requested range");
-    }
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
-    ASSERT_UCS_OK(uct_md_mem_query(md(), address, length, &mem_attr));
-
-    /* The containing allocation is too short, so the requested extent must be
-     * kept */
-    EXPECT_EQ(address, mem_attr.base_address);
-    EXPECT_EQ(length, mem_attr.alloc_length);
+    check_mem_query_range(UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2),
+                          (chunk_size / 2) + 1);
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);
