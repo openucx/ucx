@@ -1861,8 +1861,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
     mem_buffer::copy_to(ctx.dst[0].ptr(), remote_data.data(), remote_size,
                         mem_type());
 
-    /* The elements are laid out in the opposite order locally and remotely,
-       with different gaps between them, which must remain untouched */
+    /* Opposite element order and different gaps locally and remotely, the gaps
+       must remain untouched */
     std::vector<size_t> local_offsets(num), remote_offsets(num);
     size_t local_offset = local_size, remote_offset = 0;
     for (size_t i = 0; i < num; i++) {
@@ -1948,8 +1948,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
 
 class test_ucp_rma_sgl_err : public test_ucp_rma_sgl {
 public:
-    /* Regular short get from GPU memory (rendezvous) fails with an assertion
-       on a remote access error or an endpoint force close */
+    /* Short get from GPU memory (rendezvous) asserts on a remote error and on
+       a force close, also for a regular get */
     void require_host_get() const {
         require_get();
         if (mem_type() != UCS_MEMORY_TYPE_HOST) {
