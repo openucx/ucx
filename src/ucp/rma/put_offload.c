@@ -403,14 +403,6 @@ ucp_proto_put_sgl_offload_post(ucp_request_t *req,
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_put_sgl_max_elem_count(const ucp_proto_multi_lane_priv_t *lpriv,
-                                 size_t count)
-{
-    return ucs_min(lpriv->max_sgl_zcopy_count,
-                   ucp_proto_multi_scaled_length(lpriv->weight, count));
-}
-
 /* Split the SGL by its total length, like a multi-lane contiguous message */
 static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_put_sgl_max_payload(const ucp_request_t *req,
@@ -488,9 +480,8 @@ ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
     const size_t *lengths        = dt_iter->type.sgl.lengths;
     const uint64_t *remote_addrs = req->send.rma.sgl.remote_addrs;
     size_t start_index           = dt_iter->offset;
-    size_t max_elem_count        = ucs_min(
-            ucp_proto_put_sgl_max_elem_count(lpriv, dt_iter->length),
-            dt_iter->length - start_index);
+    size_t max_elem_count        = ucs_min(lpriv->max_sgl_zcopy_count,
+                                           dt_iter->length - start_index);
     size_t uct_rkeys_size;
     size_t uct_memhs_size;
     uct_rkey_t *uct_rkeys;
