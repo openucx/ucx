@@ -46,7 +46,7 @@ protected:
                       ucs_memory_type_t mem_type);
     void check_memory(void *address, void *expect, size_t size,
                       ucs_memory_type_t mem_type);
-    void check_mem_query_range(void *address, size_t length);
+    void check_mem_query_exact_range(void *address, size_t length);
     void free_memory(void *address, ucs_memory_type_t mem_type);
     static bool is_device_detected(ucs_memory_type_t mem_type);
     static void* alloc_thread(void *arg);

@@ -274,7 +274,7 @@ void test_md::check_memory(void *address, void *expect, size_t size,
     EXPECT_TRUE(mem_buffer::compare(expect, address, size, mem_type));
 }
 
-void test_md::check_mem_query_range(void *address, size_t length)
+void test_md::check_mem_query_exact_range(void *address, size_t length)
 {
     uct_md_mem_attr_t mem_attr;
 

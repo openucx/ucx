@@ -653,7 +653,7 @@ UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_range,
 
     /* The handle containing the address covers only the first chunk, so the
      * requested extent must be kept */
-    check_mem_query_range(buffer.ptr(), buffer.size());
+    check_mem_query_exact_range(buffer.ptr(), buffer.size());
 }
 
 UCS_TEST_P(test_mem_alloc_device, vmm_locality_domain_mem_type)
@@ -705,11 +705,19 @@ UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_unaligned_range,
 {
     cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 2);
     size_t chunk_size = buffer.size() / 2;
+    void *address     = UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2);
+    uct_md_mem_attr_t mem_attr;
 
-    /* Starts in the middle of the first handle and ends in the second one,
-     * while being shorter than a single handle */
-    check_mem_query_range(UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2),
-                          (chunk_size / 2) + 1);
+    /* Contained in the first handle: extended to the whole handle */
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), address, chunk_size / 2, &mem_attr));
+    EXPECT_EQ(buffer.ptr(), mem_attr.base_address);
+    EXPECT_EQ(chunk_size, mem_attr.alloc_length);
+
+    /* Ends in the second handle, while being shorter than a single handle:
+     * the requested extent must be kept */
+    check_mem_query_exact_range(address, (chunk_size / 2) + 1);
 }
 
 #if CUDA_VERSION >= 12020
@@ -740,7 +748,7 @@ UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_range,
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
-    check_mem_query_range(buffer.ptr(), buffer.size());
+    check_mem_query_exact_range(buffer.ptr(), buffer.size());
 }
 #endif
 
