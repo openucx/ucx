@@ -145,6 +145,7 @@ gtest_SOURCES = \
 	\
 	ucp/test_ucp_am.cc \
 	ucp/test_ucp_ep.cc \
+	ucp/test_ucp_flush.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_fault_tolerance.cc \
@@ -279,6 +280,7 @@ gtest_SOURCES += \
 	ucm/cuda_hooks.cc \
 	uct/cuda/test_cuda_ctx_cleanup.cc \
 	uct/cuda/test_switch_cuda_device.cc \
+	uct/cuda/test_cuda_ipc_iface.cc \
 	uct/cuda/test_cuda_ipc_md.cc \
 	uct/cuda/test_cuda_nvml.cc
 
@@ -301,6 +303,11 @@ endif
 
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
+
+if HAVE_GDR_COPY
+gtest_CPPFLAGS += $(GDR_COPY_CPPFLAGS)
+endif
+
 gtest_LDFLAGS += \
 	$(CUDA_LDFLAGS)
 gtest_LDADD += \

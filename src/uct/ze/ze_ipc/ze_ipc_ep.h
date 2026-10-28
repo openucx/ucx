@@ -12,9 +12,6 @@
 
 #include <sys/types.h>
 
-/* Forward declaration */
-typedef struct uct_ze_ipc_iface uct_ze_ipc_iface_t;
-
 
 typedef struct uct_ze_ipc_ep {
     uct_base_ep_t super;

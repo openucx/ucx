@@ -12,8 +12,6 @@
 #include <pthread.h>
 
 
-typedef struct uct_rocm_ipc_cache uct_rocm_ipc_cache_t;
-
 typedef struct uct_rocm_ipc_component {
     uct_component_t super;
 } uct_rocm_ipc_component_t;
