@@ -26,7 +26,7 @@ uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-void uct_rc_verbs_iface_eps_post_recv(uct_rc_verbs_iface_t *iface);
+void uct_rc_verbs_iface_repost_pending(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_rx_error(uct_rc_verbs_iface_t *iface,
                                  const struct ibv_wc *wc,
@@ -60,8 +60,10 @@ uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
     /* A QP with no posted receive WRs cannot generate a receive completion.
      * Retry from progress when the shared receive buffer pool cannot supply a
      * full batch. */
-    if ((ep != NULL) && (posted < count) && (ep->rx_available >= batch)) {
-        iface->rx_post_recv_pending = 1;
+    if ((ep != NULL) && (posted < count) && (ep->rx_available >= batch) &&
+        ucs_list_is_empty(&ep->rx_repost_pending_list)) {
+        ucs_list_add_tail(&iface->rx_repost_pending_eps,
+                          &ep->rx_repost_pending_list);
     }
 
     return posted;
@@ -205,8 +207,8 @@ out:
         iface->super.rx.srq.available += num_wcs;
         uct_rc_verbs_iface_post_recv_common(iface, NULL, 0);
     } else {
-        if (ucs_unlikely(iface->rx_post_recv_pending)) {
-            uct_rc_verbs_iface_eps_post_recv(iface);
+        if (ucs_unlikely(!ucs_list_is_empty(&iface->rx_repost_pending_eps))) {
+            uct_rc_verbs_iface_repost_pending(iface);
         }
     }
 
