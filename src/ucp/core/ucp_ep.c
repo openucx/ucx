@@ -2129,6 +2129,7 @@ static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
 
     seen_peer_id = arg->seen_peer_id;
     ucp_ep_refcount_assert(ep, probe, ==, 0);
+    ucp_wireup_tf_reply_discard(ep);
     ucp_ep_tf_cleanup(ep);
     ucs_free(arg);
     ep->ext->recovery_arg = NULL;
@@ -2507,8 +2508,14 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* Recovery completed between rounds, the ep operates normally. */
-        ucs_assert(ucp_ep_recovery_arg(ep) == NULL);
+        /* A peer request moves the queue pair to error and waits for that
+         * completion before this lane is failed. Recovery stays idle until
+         * the completion holds it. */
+        if ((ucp_ep_recovery_arg(ep) == NULL) ||
+            (ucp_ep_recovery_arg(ep)->tf_reply == NULL)) {
+            ucs_assert(ucp_ep_recovery_arg(ep) == NULL);
+        }
+
         goto done;
     }
 
