@@ -414,7 +414,7 @@ static ucs_status_t ucm_cudamem_install(int events)
         goto out;
     }
 
-    if (ucm_global_opts.cuda_hook_modes == 0) {
+    if (!(ucm_global_opts.cuda_hook_modes & UCM_GPU_HOOK_MODES_MASK)) {
         ucm_info("cuda memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;
@@ -441,6 +441,9 @@ static ucs_status_t ucm_cudamem_install(int events)
     }
 
 out_unlock:
+    if (status != UCS_OK) {
+        ucm_diag("failed to install cuda hooks: %s", ucs_status_string(status));
+    }
     pthread_mutex_unlock(&install_mutex);
 out:
     return status;

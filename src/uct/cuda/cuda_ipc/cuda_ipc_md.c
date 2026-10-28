@@ -697,19 +697,20 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     return UCS_OK;
 }
 
-static int
-uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
-                                  ucs_ternary_auto_value_t mnnvl_enable)
+/* Set MNNVL support and the NVLink domain of the MD from the GPU fabric info */
+static void uct_cuda_ipc_md_init_mnnvl(uct_cuda_ipc_md_t *md,
+                                       ucs_ternary_auto_value_t mnnvl_enable)
 {
 #if !HAVE_NVML_FABRIC_INFO
     static int mnnvl_supported = 0;
 #else
     static int mnnvl_supported = -1;
+    static uint64_t nvlink_domain;
     nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
-    int64_t *cluster_uuid;
+    uint64_t cluster_uuid[2];
 
     if (mnnvl_supported != -1) {
         goto out;
@@ -732,16 +733,24 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         goto out_not_supported;
     }
 
-    ucs_debug("fabric_info: state=%u status=%u uuid=%s", fabric_info.state,
-              fabric_info.status,
+    ucs_debug("fabric_info: state=%u status=%u uuid=%s clique=%u",
+              fabric_info.state, fabric_info.status,
               ucs_str_dump_hex(fabric_info.clusterUuid,
                                NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
-                               SIZE_MAX));
+                               SIZE_MAX),
+              fabric_info.cliqueId);
 
-    cluster_uuid = (int64_t*)fabric_info.clusterUuid;
+    /* Copy to avoid an unaligned access */
+    UCS_STATIC_ASSERT(NVML_GPU_FABRIC_UUID_LEN == sizeof(cluster_uuid));
+    memcpy(cluster_uuid, fabric_info.clusterUuid, sizeof(cluster_uuid));
     if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
         (fabric_info.status == NVML_SUCCESS) &&
         (cluster_uuid[0] | cluster_uuid[1]) != 0) {
+        /* Fold the cluster UUID and clique ID into 64 bits, to keep the device
+         * address short. Peers compare the folded values, so the formula is
+         * part of the wire protocol and must not change between versions. */
+        nvlink_domain = cluster_uuid[0] ^ cluster_uuid[1] ^
+                        fabric_info.cliqueId;
         mnnvl_supported = 1;
         goto out;
     }
@@ -749,15 +758,15 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
 out_not_supported:
     mnnvl_supported = 0;
 out:
+    md->nvlink_domain = nvlink_domain;
 #endif
+    md->enable_mnnvl = mnnvl_supported;
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
         ucs_error("multi-node NVLINK support is requested but not supported");
     } else {
         ucs_debug("multi-node NVLINK support is %s", mnnvl_supported ?
                   "enabled" : "disabled");
     }
-
-    return mnnvl_supported;
 }
 
 static void uct_cuda_ipc_md_close(uct_md_h md)
@@ -861,9 +870,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops        = &md_ops;
     md->super.component  = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
-                                                  md, ipc_config->enable_mnnvl);
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
+    uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
