@@ -415,8 +415,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
 
     ucs_memtype_cache_register((void*)alloc_handle->ptr,
                                alloc_handle->length, mem_attr.mem_type,
-                               mem_attr.sys_dev, mem_attr.mem_flags,
-                               alloc_handle);
+                               mem_attr.sys_dev, mem_attr.mem_flags);
     *memh_p    = alloc_handle;
     *address_p = (void*)alloc_handle->ptr;
     *length_p  = alloc_handle->length;
@@ -515,7 +514,8 @@ static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
     uct_cuda_copy_alloc_handle_t *alloc_handle = (uct_cuda_copy_alloc_handle_t*)
             memh;
 
-    ucs_memtype_cache_unregister(alloc_handle);
+    ucs_memtype_cache_unregister((void*)alloc_handle->ptr,
+                                 alloc_handle->length);
     uct_cuda_mem_free(alloc_handle);
     ucs_free(alloc_handle);
     return UCS_OK;

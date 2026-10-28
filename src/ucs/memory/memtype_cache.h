@@ -9,8 +9,6 @@
 
 #include "memory_type.h"
 
-#include <ucs/datastruct/khash.h>
-#include <ucs/datastruct/interval_map.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/stats/stats_fwd.h>
@@ -25,10 +23,6 @@ BEGIN_C_DECLS
 
 typedef struct ucs_memtype_cache         ucs_memtype_cache_t;
 typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
-typedef struct ucs_memtype_cache_registration ucs_memtype_cache_registration_t;
-
-KHASH_TYPE(ucs_memtype_cache_tokens, const void*,
-           ucs_memtype_cache_registration_t*);
 
 
 /* The single global instance of memory type cache */
@@ -48,8 +42,6 @@ typedef struct ucs_memory_info {
 struct ucs_memtype_cache {
     ucs_spinlock_t                    lock; /**< Protects cache state */
     ucs_pgtable_t                     pgtable; /**< Cached regions */
-    ucs_interval_map_t                registrations; /**< Explicit mappings */
-    khash_t(ucs_memtype_cache_tokens) token_hash; /**< Token index */
     int                               has_events; /**< UCM events active */
 };
 
@@ -124,8 +116,10 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
  * cache is not tracking allocations by UCM events; otherwise the call has no
  * effect.
  *
- * The range is extended to UCS_PGT_ADDR_ALIGN. The caller must unregister it
- * with @ref ucs_memtype_cache_unregister before the memory is released, since
+ * The range is extended to UCS_PGT_ADDR_ALIGN. Every address in it holds a
+ * reference count, so ranges may be registered more than once and may overlap.
+ * The caller must unregister the same range with
+ * @ref ucs_memtype_cache_unregister before the memory is released, since
  * without free events the cache cannot detect that it became invalid.
  *
  * @param [in]  address         Start address of the memory.
@@ -134,23 +128,21 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
  *                              registered.
  * @param [in]  sys_dev         System device of the range.
  * @param [in]  mem_flags       UCS memory flags of the range.
- * @param [in]  token           Unique token identifying the registration, used
- *                              to unregister it. Must not be NULL. A second
- *                              registration with the same token is ignored.
  */
 void ucs_memtype_cache_register(const void *address, size_t size,
                                 ucs_memory_type_t mem_type,
-                                ucs_sys_device_t sys_dev, uint8_t mem_flags,
-                                const void *token);
+                                ucs_sys_device_t sys_dev, uint8_t mem_flags);
 
 
 /**
- * Remove a registration made by @ref ucs_memtype_cache_register. Does nothing
- * if the token is not registered.
+ * Drop one reference from an address range added by
+ * @ref ucs_memtype_cache_register. Addresses whose reference count reaches
+ * zero are removed from the cache. Ranges that are not registered are ignored.
  *
- * @param [in]  token           Token passed to @ref ucs_memtype_cache_register.
+ * @param [in]  address         Start address passed to register.
+ * @param [in]  size            Size passed to register.
  */
-void ucs_memtype_cache_unregister(const void *token);
+void ucs_memtype_cache_unregister(const void *address, size_t size);
 
 
 /**

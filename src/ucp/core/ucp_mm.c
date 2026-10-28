@@ -1277,7 +1277,7 @@ out:
 
             ucs_memtype_cache_register(ucp_memh_address(memh),
                                        ucp_memh_length(memh), mem_info.type,
-                                       mem_info.sys_dev, mem_info.flags, memh);
+                                       mem_info.sys_dev, mem_info.flags);
         }
         *memh_p = memh;
     }
@@ -1306,7 +1306,11 @@ ucs_status_t ucp_mem_unmap(ucp_context_h context, ucp_mem_h memh)
         return UCS_OK;
     }
 
-    ucs_memtype_cache_unregister(memh);
+    if (!(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+        ucs_memtype_cache_unregister(ucp_memh_address(memh),
+                                     ucp_memh_length(memh));
+    }
+
     ucp_memh_cleanup(context, memh);
     return UCS_OK;
 }
