@@ -375,13 +375,11 @@ protected:
     /**
      * Common helper function to test PUT, AM and FLUSH operations with injected failure
      */
-    void
+    ucp_lane_map_t
     test_put_am_flush_with_injected_failure(failure_side_t failure_side,
-                                            unsigned op_mask,
-                                            ucp_lane_map_t *injected_lanes_p) {
+                                            unsigned op_mask) {
         const std::string op_str = op_name(op_mask);
-
-        *injected_lanes_p = 0;
+        ucp_lane_map_t injected_lanes = 0;
 
         /* TODO: cover case when wireup is in progress, flush here is to complete wireup */
         flush_workers();
@@ -405,7 +403,7 @@ protected:
 
             EXPECT_EQ(UCS_OK, status) << "uct_ep_invalidate returned status: "
                                       << ucs_status_string(status);
-            *injected_lanes_p |= UCS_BIT(lane);
+            injected_lanes |= UCS_BIT(lane);
 
             UCS_TEST_MESSAGE << "Attempting " << op_str
                              << " operation after failure injection on lane "
@@ -438,6 +436,7 @@ protected:
         short_progress_loop();
         ASSERT_EQ(0, m_total_err_count) << "Error callback invoked " << m_total_err_count << " times";
         UCS_TEST_MESSAGE << "Success";
+        return injected_lanes;
     }
 
     /**
@@ -668,8 +667,8 @@ protected:
         ucp_lane_map_t injected_lanes = 0;
 
         if (ucs_test_all_flags(op_mask, TEST_OP_PUT | TEST_OP_AM | TEST_OP_FLUSH)) {
-            test_put_am_flush_with_injected_failure(failure_side, op_mask,
-                                                    &injected_lanes);
+            injected_lanes = test_put_am_flush_with_injected_failure(
+                    failure_side, op_mask);
         } else if (op_mask & TEST_OP_AM) {
             ASSERT_FALSE(op_mask & (TEST_OP_PUT|TEST_OP_GET));
             test_am_with_injected_failure(failure_side, op_mask);

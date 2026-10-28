@@ -481,8 +481,8 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"RECOVERY_ENABLE", "y",
    "Enable recovery of failed lanes on endpoints created with\n"
    "UCP_ERR_HANDLING_MODE_FAILOVER. When disabled, failed lanes are removed\n"
-   "without attempting to restore them.\n"
-   "When disabled, only software PSN failover is supported.\n"
+   "without attempting to restore them, and only software PSN failover is\n"
+   "supported.\n"
    "The value of this option must be the same on both peers.",
    ucs_offsetof(ucp_context_config_t, recovery_enable), UCS_CONFIG_TYPE_BOOL},
 
@@ -2266,36 +2266,29 @@ static int ucp_context_query_ib_indirect_atomic(ucp_context_h context)
 /* Select a failover mode compatible with recovery and indirect atomics. */
 static ucs_status_t ucp_context_adjust_failover_mode(ucp_context_h context)
 {
+    const char *reason;
+
     if (!context->config.ext.recovery_enable) {
-        if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
-            ucs_error("UCX_FAILOVER_MODE=token requires "
-                      "UCX_RECOVERY_ENABLE=y");
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
-            ucs_debug("recovery is disabled, failover mode auto selects "
-                      "software psn failover");
-            context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
-        }
-
-        return UCS_OK;
-    }
-
-    if (!ucp_context_query_ib_indirect_atomic(context)) {
-        return UCS_OK;
+        reason = "UCX_RECOVERY_ENABLE=y";
+    } else if (ucp_context_query_ib_indirect_atomic(context)) {
+        reason = "UCX_IB_INDIRECT_ATOMIC=n";
+    } else {
+        goto out;
     }
 
     if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_TOKEN) {
-        ucs_error("UCX_FAILOVER_MODE=token requires "
-                  "UCX_IB_INDIRECT_ATOMIC=n");
+        ucs_error("UCX_FAILOVER_MODE=token requires %s", reason);
         return UCS_ERR_INVALID_PARAM;
-    } else if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
-        ucs_debug("ib indirect atomic is enabled, failover mode auto "
-                  "selects software psn recovery");
+    }
+
+    if (context->config.ext.failover_mode == UCP_FAILOVER_MODE_AUTO) {
+        ucs_debug("failover auto selects software psn mode: token mode "
+                  "requires %s",
+                  reason);
         context->config.ext.failover_mode = UCP_FAILOVER_MODE_SW;
     }
 
+out:
     return UCS_OK;
 }
 
