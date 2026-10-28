@@ -180,28 +180,31 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     return num_wcs;
 }
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_verbs_iface_progress(void *arg, int nosrq)
+void uct_rc_verbs_iface_rx_error(uct_rc_verbs_iface_t *iface,
+                                 const struct ibv_wc *wc,
+                                 uct_ib_iface_recv_desc_t *desc)
+{
+    if ((wc->status == IBV_WC_REM_ABORT_ERR) ||
+        (wc->status == IBV_WC_WR_FLUSH_ERR)) {
+        /* A failed receive never delivers an active message. */
+        ucs_mpool_put_inline(desc);
+    } else {
+        UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive", &iface->super.super,
+                                            0, wc);
+    }
+}
+
+static unsigned uct_rc_verbs_iface_progress(void *arg)
 {
     uct_rc_verbs_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_verbs_iface_poll_rx(iface, nosrq);
+    count = uct_rc_verbs_iface_poll_rx(iface);
     if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
 
     return count + uct_rc_verbs_iface_poll_tx(iface);
-}
-
-static unsigned uct_rc_verbs_iface_progress_srq(void *arg)
-{
-    return uct_rc_verbs_iface_progress(arg, 0);
-}
-
-static unsigned uct_rc_verbs_iface_progress_nosrq(void *arg)
-{
-    return uct_rc_verbs_iface_progress(arg, 1);
 }
 
 static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
@@ -369,9 +372,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->super.config.tx_moderation     = ucs_min(self->super.config.tx_moderation,
                                                    self->config.tx_max_wr / 4);
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
-    self->super.progress                 = self->super.config.srq_disable ?
-                                           uct_rc_verbs_iface_progress_nosrq :
-                                           uct_rc_verbs_iface_progress_srq;
+    self->super.progress                 = uct_rc_verbs_iface_progress;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
 
