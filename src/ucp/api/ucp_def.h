@@ -780,6 +780,13 @@ typedef struct ucp_ep_params {
     const char              *name;
 
     /**
+     * Traffic class for this endpoint.
+     * This setting is optional. To enable it, the corresponding - @ref
+     * UCP_EP_PARAM_FIELD_EP_TRAFFIC_CLASS bit in the field mask must be set.
+     */
+    uint8_t                 ep_traffic_class;
+
+    /**
      * The sockaddr to bind locally. Specifies the associated network device
      * to bind locally to establish new connections.
      * To retrieve the endpoint's local_sockaddr, use @ref ucp_ep_query.
@@ -787,7 +794,6 @@ typedef struct ucp_ep_params {
      * UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR bit in the field mask must be set.
      */
     ucs_sock_addr_t         local_sockaddr;
-
 } ucp_ep_params_t;
 
 
