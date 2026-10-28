@@ -150,21 +150,13 @@ UCS_F_DEVICE void
 uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                            unsigned count, unsigned lane_id, uint64_t &wqe_base)
 {
+    uint64_t value = 0;
+
     if (lane_id == 0) {
-        wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, cid, count);
+        value = uct_rc_mlx5_gda_reserv_wqe_thread(ep, cid, count);
     }
 
-    if (level == UCS_DEVICE_LEVEL_WARP) {
-        wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
-    } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
-        __shared__ uint64_t shared_wqe_base;
-        if (lane_id == 0) {
-            shared_wqe_base = wqe_base;
-        }
-        __syncthreads();
-        wqe_base = shared_wqe_base;
-        __syncthreads();
-    }
+    wqe_base = uct_dev_bcast<level>(value, lane_id);
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(

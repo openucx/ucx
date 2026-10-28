@@ -236,8 +236,24 @@ UCS_TEST_F(test_gda_device, reserve_wqe_block)
     }
 
     scoped_cuda_device device_guard;
-    for (unsigned num_threads : {32u, 128u}) {
-        ASSERT_UCS_OK(ucx_cuda::launch_gda_reserve_wqe_block(num_threads));
+    for (unsigned num_threads : {32u, 33u, 128u}) {
+        unsigned errors = 0;
+        ASSERT_UCS_OK(ucx_cuda::launch_gda_reserve_wqe(
+                UCS_DEVICE_LEVEL_BLOCK, num_threads, errors));
+        EXPECT_EQ(0u, errors) << "BLOCK threads=" << num_threads;
     }
+}
+
+UCS_TEST_F(test_gda_device, reserve_wqe_warp)
+{
+    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("CUDA memory not supported");
+    }
+
+    scoped_cuda_device device_guard;
+    unsigned errors = 0;
+    ASSERT_UCS_OK(ucx_cuda::launch_gda_reserve_wqe(
+            UCS_DEVICE_LEVEL_WARP, UCS_DEVICE_NUM_THREADS_IN_WARP, errors));
+    EXPECT_EQ(0u, errors);
 }
 #endif
