@@ -341,7 +341,7 @@ stages:
     - template: wire_compat.yml
       parameters:
         name: gpu
-        demands: ucx_gpu -equals yes
+        demands: ucx_new01_test -equals yes
         container: centos7_cuda11
         ucx_targets:
           ucx_1_15:
@@ -355,7 +355,7 @@ stages:
     - template: wire_compat.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_new01_test -equals yes
     # Temporarily disable wire-compat tests on rain machines
     #- template: wire_compat.yml
     #  parameters:
@@ -381,14 +381,14 @@ stages:
     - template: tests.yml
       parameters:
         name: gpu
-        demands: ucx_gpu -equals yes
+        demands: ucx_new01_test -equals yes
         test_perf: 1
         container: ubuntu2404_doca31_gpunetio
         prebuild: yes
     - template: tests.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_new01_test -equals yes
         test_perf: 1
     - template: tests.yml
       parameters:
@@ -408,7 +408,7 @@ stages:
     - template: efa.yml
       parameters:
         name: EFA
-        demands: ucx_new -equals yes
+        demands: ucx_new01_test -equals yes
 
   - stage: Namespace_Tests
     dependsOn: [Basic_compile]
@@ -416,11 +416,11 @@ stages:
     - template: namespace_tests.yml
       parameters:
         name: new_namespace
-        demands: ucx_new -equals yes
+        demands: ucx_new01_test -equals yes
     - template: namespace_tests.yml
       parameters:
         name: gpu_namespace
-        demands: ucx_gpu -equals yes
+        demands: ucx_new01_test -equals yes
 
   - stage: io_demo
     dependsOn: [Basic_compile]
@@ -435,7 +435,7 @@ stages:
         parameters:
           arch: amd64
           name: gpu
-          demands: ucx_gpu
+          demands: ucx_new01_test
 
       - template: ../jucx/jucx-test.yml
         parameters:
@@ -448,11 +448,11 @@ stages:
       - template: go/go-test.yml
         parameters:
           name: new
-          demands: ucx_new -equals yes
+          demands: ucx_new01_test -equals yes
       - template: go/go-test.yml
         parameters:
             name: gpu
-            demands: ucx_gpu -equals yes
+            demands: ucx_new01_test -equals yes
 
   - stage: Build_Static
     dependsOn: [Basic_compile]
@@ -509,7 +509,7 @@ stages:
         pool:
           name: MLNX
           demands:
-            - ucx_gpu_test -equals yes
+            - ucx_new01_test -equals yes
         container: ubuntu2404_doca31_gpunetio
         workspace:
           clean: all
@@ -538,7 +538,7 @@ stages:
     - template: tests.yml
       parameters:
         name: gpu
-        demands: ucx_gpu -equals yes
+        demands: ucx_new01_test -equals yes
         test_perf: 0
         container: centos8_cuda11_asan
         asan_check: yes
@@ -546,7 +546,7 @@ stages:
     - template: tests.yml
       parameters:
         name: new
-        demands: ucx_new -equals yes
+        demands: ucx_new01_test -equals yes
         test_perf: 0
         container: ubuntu2204_ib
         asan_check: yes
