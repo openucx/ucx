@@ -4,6 +4,9 @@ parameters:
 
 jobs:
   - job: ${{ parameters.name }}
+    ${{ if eq(parameters.name, 'gpu') }}:
+      variables:
+        UCX_CI_GPU_JOB: yes
     workspace:
       clean: all
 
