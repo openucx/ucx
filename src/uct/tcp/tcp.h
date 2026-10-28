@@ -526,6 +526,9 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 /* Index of the VRF device which the interface is enslaved to, or -1 */
 int uct_tcp_netif_vrf_index(const char *if_name);
 
+/* Whether sockets can be bound to the VRF device with the given index */
+int uct_tcp_netif_vrf_bind_allowed(int vrf_index);
+
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);
 

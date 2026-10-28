@@ -1013,7 +1013,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     uct_tl_device_resource_t *devices, *tmp;
     struct dirent **entries, **entry;
     unsigned num_devices;
-    int is_active, i, n;
+    int is_active, vrf_index, i, n;
     ucs_status_t status;
     const char *sysfs_path;
     char *path_buffer;
@@ -1064,10 +1064,19 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             continue;
         }
 
-        if (!tcp_md->config.vrf_enable &&
-            (uct_tcp_netif_vrf_index((*entry)->d_name) != -1)) {
-            ucs_debug("filtered out VRF slave device %s", (*entry)->d_name);
-            continue;
+        vrf_index = uct_tcp_netif_vrf_index((*entry)->d_name);
+        if (vrf_index != -1) {
+            if (!tcp_md->config.vrf_enable) {
+                ucs_debug("filtered out VRF slave device %s",
+                          (*entry)->d_name);
+                continue;
+            }
+
+            if (!uct_tcp_netif_vrf_bind_allowed(vrf_index)) {
+                ucs_diag("filtered out VRF slave device %s: not permitted to "
+                         "bind sockets to its VRF", (*entry)->d_name);
+                continue;
+            }
         }
 
         tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),
