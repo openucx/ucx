@@ -1226,6 +1226,11 @@ private:
     ucp_atomic_op_t     m_atomic_op;
 };
 
+/*
+ * Keep every runner instantiation in its own non-inlined function. Otherwise
+ * each dispatcher below holds all of its runner objects in one stack frame,
+ * which exceeds -Wframe-larger-than=8192 (built with -Werror).
+ */
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 static UCS_F_NOINLINE ucs_status_t ucp_perf_run_test(ucx_perf_context_t *perf)
 {
