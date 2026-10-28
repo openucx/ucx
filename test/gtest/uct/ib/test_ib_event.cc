@@ -29,7 +29,7 @@ public:
     static bool iface_has_srq(entity &e) {
         uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
 
-        return !iface->config.srq_disable;
+        return iface->config.srq_enabled;
     }
 
     /* Before init(), no entity exists and the test cannot determine whether

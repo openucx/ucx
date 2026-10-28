@@ -228,7 +228,7 @@ UCS_TEST_SKIP_COND_P(test_rc, failed_rx_release_desc,
 {
     uct_rc_iface_t *rc = rc_iface(m_e2);
 
-    if (rc->config.srq_disable) {
+    if (!rc->config.srq_enabled) {
         UCS_TEST_SKIP_R("SRQ is disabled");
     }
 
@@ -593,7 +593,7 @@ protected:
         test_rc::init();
 
         /* Fail instead of silently exercising the SRQ path. */
-        if (!rc_iface(m_e1)->config.srq_disable ||
+        if (rc_iface(m_e1)->config.srq_enabled ||
             (verbs_iface(m_e1)->srq != NULL)) {
             UCS_TEST_ABORT("SRQ is not disabled as requested");
         }
@@ -1158,7 +1158,7 @@ protected:
 
     void check_srq_used(uct_iface_h iface)
     {
-        EXPECT_FALSE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_disable);
+        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_enabled);
         EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq != NULL);
     }
 
@@ -1168,7 +1168,7 @@ protected:
 
         ASSERT_UCS_OK(open_without_srq(&iface));
 
-        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_disable);
+        EXPECT_FALSE(ucs_derived_of(iface, uct_rc_iface_t)->config.srq_enabled);
         EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq == NULL);
         uct_iface_close(iface);
     }

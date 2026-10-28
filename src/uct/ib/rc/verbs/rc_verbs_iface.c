@@ -259,12 +259,12 @@ uct_rc_iface_verbs_init_rx(uct_rc_iface_t *rc_iface,
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
 
-    if (rc_iface->config.srq_disable) {
-        iface->srq = NULL;
-        return UCS_OK;
+    if (rc_iface->config.srq_enabled) {
+        return uct_rc_iface_init_rx(rc_iface, config, &iface->srq);
     }
 
-    return uct_rc_iface_init_rx(rc_iface, config, &iface->srq);
+    iface->srq = NULL;
+    return UCS_OK;
 }
 
 void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
@@ -311,15 +311,19 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     }
 
     /* Use an SRQ unless disabled or unsupported by the device. */
-    init_attr.srq_disable = (config->srq_enable == UCS_NO) ||
-                            !uct_ib_device_has_srq(&ib_md->dev);
-    if ((config->srq_enable == UCS_YES) && init_attr.srq_disable) {
+    init_attr.srq_enabled = (config->srq_enable != UCS_NO) &&
+                            uct_ib_device_has_srq(&ib_md->dev);
+    if ((config->srq_enable == UCS_YES) && !init_attr.srq_enabled) {
         ucs_error("%s: SRQ is requested but not supported",
                   uct_ib_device_name(&ib_md->dev));
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (init_attr.srq_disable) {
+    if (init_attr.srq_enabled) {
+        rx_max_wr                 = 0;
+        rx_batch_limit            = ib_config->rx.max_batch;
+        rx_cq_len                 = ib_config->rx.queue_len;
+    } else {
         rx_wr_limit = ucs_min(IBV_DEV_ATTR(&ib_md->dev, max_qp_wr), UINT16_MAX);
         if ((config->rx_max_wr == 0) || (config->rx_max_wr > rx_wr_limit)) {
             ucs_error(UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_MAX_WR must be "
@@ -343,10 +347,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
         /* Leave a batch of receive WRs unreposted, to avoid RNR. */
         init_attr.fc_max_wnd_size = ucs_max(rx_max_wr - rx_batch_limit, 1);
-    } else {
-        rx_max_wr                 = 0;
-        rx_batch_limit            = ib_config->rx.max_batch;
-        rx_cq_len                 = ib_config->rx.queue_len;
     }
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);

@@ -591,7 +591,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->tx.cq_available       = uct_rc_iface_tx_cq_capacity(tx_cq_size);
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
-    self->config.srq_disable    = init_attr->srq_disable;
+    self->config.srq_enabled    = init_attr->srq_enabled;
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
