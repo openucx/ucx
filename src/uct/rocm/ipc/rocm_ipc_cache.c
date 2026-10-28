@@ -278,9 +278,7 @@ static void uct_rocm_ipc_export_cleanup(void)
     ucs_list_head_init(&destroy_list);
     ucs_spin_lock(&uct_rocm_ipc_export_lock);
     kh_foreach_value(&uct_rocm_ipc_exports, exp, {
-        if (uct_rocm_ipc_signal_invalidate_enabled()) {
-            hsa_signal_store_screlease(exp->signal, 0);
-        }
+        hsa_signal_store_screlease(exp->signal, 0);
         ucs_list_add_tail(&destroy_list, &exp->list);
     })
     kh_clear(rocm_ipc_exports, &uct_rocm_ipc_exports);
