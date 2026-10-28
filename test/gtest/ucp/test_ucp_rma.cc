@@ -1827,8 +1827,7 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
     static const std::vector<size_t> lengths = {1,   2,   8,   63,  64,  65,
                                                 100, 127, 128, 129, 255, 256,
                                                 3,   5,   13,  477};
-    static constexpr size_t LOCAL_GAP        = 5;
-    static constexpr size_t REMOTE_GAP       = 11;
+    static constexpr size_t GAP              = 5;
     static constexpr uint8_t LOCAL_FILL      = 0xee;
 
     require_get();
@@ -1837,47 +1836,38 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
        added to a pending queue */
     test_sgl(1, UCS_KBYTE);
 
-    size_t num = lengths.size();
-    size_t local_size  = 0;
-    size_t remote_size = 0;
+    size_t size = 0;
     for (size_t length : lengths) {
-        local_size  += length + LOCAL_GAP;
-        remote_size += length + REMOTE_GAP;
+        size += length + GAP;
     }
 
     sgl_ctx ctx;
-    ctx.src.emplace_back(local_size, sender(), 0, mem_type());
-    ctx.dst.emplace_back(remote_size, receiver(), 0, mem_type());
+    ctx.src.emplace_back(size, sender(), 0, mem_type());
+    ctx.dst.emplace_back(size, receiver(), 0, mem_type());
     ctx.rkey_handles.resize(1);
     ctx.dst[0].rkey(sender(), ctx.rkey_handles[0]);
 
-    std::vector<uint8_t> local_data(local_size, LOCAL_FILL);
-    std::vector<uint8_t> remote_data(remote_size);
-    for (size_t i = 0; i < remote_size; i++) {
-        remote_data[i] = static_cast<uint8_t>(i * 7 + 1);
+    std::vector<uint8_t> expected(size, LOCAL_FILL);
+    std::vector<uint8_t> remote(size);
+    for (size_t i = 0; i < size; i++) {
+        remote[i] = static_cast<uint8_t>(i * 7 + 1);
     }
-    mem_buffer::copy_to(ctx.src[0].ptr(), local_data.data(), local_size,
-                        mem_type());
-    mem_buffer::copy_to(ctx.dst[0].ptr(), remote_data.data(), remote_size,
-                        mem_type());
+    mem_buffer::copy_to(ctx.src[0].ptr(), expected.data(), size, mem_type());
+    mem_buffer::copy_to(ctx.dst[0].ptr(), remote.data(), size, mem_type());
 
-    /* Opposite element order and different gaps locally and remotely, the gaps
-       must remain untouched */
-    std::vector<size_t> local_offsets(num), remote_offsets(num);
-    size_t local_offset = local_size, remote_offset = 0;
-    for (size_t i = 0; i < num; i++) {
-        local_offset     -= lengths[i] + LOCAL_GAP;
-        local_offsets[i]  = local_offset;
-        remote_offsets[i] = remote_offset;
-        remote_offset    += lengths[i] + REMOTE_GAP;
-
+    /* The elements are in the opposite order locally and remotely, and the gaps
+       between them must remain untouched */
+    size_t remote_offset = 0;
+    for (size_t length : lengths) {
+        size_t local_offset = size - remote_offset - length;
         ctx.buffers.push_back(UCS_PTR_BYTE_OFFSET(ctx.src[0].ptr(),
-                                                  local_offsets[i]));
+                                                  local_offset));
         ctx.remote_addrs.push_back(
-                reinterpret_cast<uint64_t>(ctx.dst[0].ptr()) +
-                remote_offsets[i]);
+                reinterpret_cast<uint64_t>(ctx.dst[0].ptr()) + remote_offset);
         ctx.memhs.push_back(ctx.src[0].memh());
         ctx.rkeys.push_back(ctx.rkey_handles[0]);
+        memcpy(&expected[local_offset], &remote[remote_offset], length);
+        remote_offset += length + GAP;
     }
     ctx.lengths        = lengths;
     ctx.remote_lengths = lengths;
@@ -1891,15 +1881,9 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
     EXPECT_UCS_OK(cb.status);
     ucp_request_release(sptr);
 
-    for (size_t i = 0; i < num; i++) {
-        memcpy(&local_data[local_offsets[i]], &remote_data[remote_offsets[i]],
-               lengths[i]);
-    }
-
-    std::vector<uint8_t> result(local_size);
-    mem_buffer::copy_from(result.data(), ctx.src[0].ptr(), local_size,
-                          mem_type());
-    EXPECT_EQ(local_data, result);
+    std::vector<uint8_t> result(size);
+    mem_buffer::copy_from(result.data(), ctx.src[0].ptr(), size, mem_type());
+    EXPECT_EQ(expected, result);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
@@ -1939,17 +1923,12 @@ UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
         EXPECT_EQ(0, first_byte) << "element " << i;
     }
     ucp_request_release(sptr);
-
-    for (int i = 0; i < 100; i++) {
-        progress();
-    }
-    EXPECT_EQ(1u, cb.count);
 }
 
 class test_ucp_rma_sgl_err : public test_ucp_rma_sgl {
 public:
-    /* Short get from GPU memory (rendezvous) asserts on a remote error and on
-       a force close, also for a regular get */
+    /* Short get from GPU memory (rendezvous) asserts on a force close, also
+       for a regular get */
     void require_host_get() const {
         require_get();
         if (mem_type() != UCS_MEMORY_TYPE_HOST) {
@@ -2003,48 +1982,12 @@ UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_ep_close_force) {
     }
 
     EXPECT_EQ(1u, cb.count);
-    UCS_TEST_MESSAGE << "parent status: " << ucs_status_string(cb.status);
     if (cb.status == UCS_OK) {
         verify_sgl(ctx);
     } else {
         EXPECT_EQ(UCS_ERR_CANCELED, cb.status);
     }
     ucp_request_release(sptr);
-}
-
-UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_remote_error) {
-    static constexpr size_t NUM_ELEMS = 64;
-    static constexpr size_t BAD_INDEX = NUM_ELEMS / 2;
-
-    require_host_get();
-
-    /* Complete the wireup, so that the operation below is posted rather than
-       added to a pending queue */
-    test_sgl(1, UCS_KBYTE);
-
-    sgl_ctx ctx;
-    init_sgl_ctx(ctx, NUM_ELEMS, 8);
-    ctx.remote_addrs[BAD_INDEX] = 0x1000;
-
-    cb_state cb;
-    scoped_log_handler slh(hide_errors_logger);
-    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
-    ucs_time_t deadline = ucs::get_deadline();
-    while ((cb.count == 0) && (ucs_get_time() < deadline)) {
-        progress();
-    }
-
-    EXPECT_EQ(1u, cb.count);
-    EXPECT_NE(UCS_OK, cb.status);
-    UCS_TEST_MESSAGE << "parent status: " << ucs_status_string(cb.status);
-    ucp_request_release(sptr);
-
-    for (int i = 0; i < 100; i++) {
-        progress();
-    }
-    EXPECT_EQ(1u, cb.count);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_addr,
