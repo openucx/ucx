@@ -173,47 +173,41 @@ out:
     return status;
 }
 
-static ucs_status_t
-ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr, size_t rtm_dst_len)
+static int
+ucs_netlink_multipath_is_valid(const struct rtattr *multipath_rta)
 {
-    *if_index_p  = -1;
-    *dst_in_addr = NULL;
+    const struct rtnexthop *rtnh = RTA_DATA(multipath_rta);
+    int remaining               = RTA_PAYLOAD(multipath_rta);
+    unsigned count              = 0;
+    int rtnh_len;
 
-    for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-        if (rta->rta_type == RTA_OIF) {
-            *if_index_p = *((const int *)RTA_DATA(rta));
-        } else if (rta->rta_type == RTA_DST) {
-            *dst_in_addr = RTA_DATA(rta);
+    while (remaining > 0) {
+        if (remaining < (int)sizeof(*rtnh)) {
+            return 0;
         }
+
+        rtnh_len = rtnh->rtnh_len;
+        if ((rtnh_len < (int)sizeof(*rtnh)) ||
+            (RTNH_ALIGN(rtnh_len) > remaining)) {
+            return 0;
+        }
+
+        remaining -= RTNH_ALIGN(rtnh_len);
+        rtnh = RTNH_NEXT(rtnh);
+        ++count;
     }
 
-    if (/* Network interface index is not valid */
-        (*if_index_p == -1) ||
-        /* dst_in_addr required but not present */
-        ((rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
+    return count > 0;
 }
 
 static ucs_status_t
-ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
+ucs_netlink_cache_route(const struct rtmsg *rt_msg, int iface_index,
+                        const void *dst_in_addr, void *UCS_V_UNUSED arg)
 {
-    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
-    const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
     ucs_netlink_rt_rules_t *iface_rules;
-    int iface_index;
     khiter_t iter;
     int khret;
-
-    if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr,
-                                   rt_msg->rtm_dst_len) != UCS_OK) {
-        return UCS_INPROGRESS;
-    }
 
     iter = kh_put(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
                   iface_index, &khret);
@@ -245,6 +239,77 @@ ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 
     new_rule->subnet_prefix_len = rt_msg->rtm_dst_len;
     new_rule->route_type        = rt_msg->rtm_type;
+
+    return UCS_OK;
+}
+
+ucs_status_t
+ucs_netlink_parse_route(const struct nlmsghdr *nlh,
+                        ucs_netlink_route_parse_func_t parse_func, void *arg)
+{
+    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    const struct rtattr *multipath_rta = NULL;
+    const struct rtattr *rta;
+    const void *dst_in_addr = NULL;
+    const int *if_index_p    = NULL;
+    const struct rtnexthop *rtnh;
+    ucs_status_t status;
+    int remaining;
+
+    remaining = RTM_PAYLOAD(nlh);
+    for (rta = RTM_RTA(rt_msg); RTA_OK(rta, remaining);
+         rta = RTA_NEXT(rta, remaining)) {
+        if (rta->rta_type == RTA_OIF) {
+            if_index_p = RTA_DATA(rta);
+        } else if (rta->rta_type == RTA_DST) {
+            dst_in_addr = RTA_DATA(rta);
+        } else if (rta->rta_type == RTA_MULTIPATH) {
+            multipath_rta = rta;
+        }
+    }
+
+    if ((rt_msg->rtm_dst_len != 0) && (dst_in_addr == NULL)) {
+        return UCS_OK;
+    }
+
+    if (if_index_p != NULL) {
+        if (*if_index_p == -1) {
+            return UCS_OK;
+        }
+
+        return parse_func(rt_msg, *if_index_p, dst_in_addr, arg);
+    }
+
+    if ((multipath_rta == NULL) ||
+        !ucs_netlink_multipath_is_valid(multipath_rta)) {
+        return UCS_OK;
+    }
+
+    remaining = RTA_PAYLOAD(multipath_rta);
+    for (rtnh = RTA_DATA(multipath_rta); remaining > 0;
+         remaining -= RTNH_ALIGN(rtnh->rtnh_len), rtnh = RTNH_NEXT(rtnh)) {
+        if (rtnh->rtnh_flags & RTNH_F_DEAD) {
+            continue;
+        }
+
+        status = parse_func(rt_msg, rtnh->rtnh_ifindex, dst_in_addr, arg);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    ucs_status_t status = ucs_netlink_parse_route(
+            nlh, ucs_netlink_cache_route, arg);
+
+    if (status != UCS_OK) {
+        return status;
+    }
 
     return UCS_INPROGRESS;
 }

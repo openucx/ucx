@@ -12,6 +12,8 @@
 #include <linux/netlink.h>
 #include <netinet/in.h>
 
+struct rtmsg;
+
 BEGIN_C_DECLS
 
 typedef enum {
@@ -31,6 +33,10 @@ typedef enum {
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                void *arg);
 
+typedef ucs_status_t (*ucs_netlink_route_parse_func_t)(
+        const struct rtmsg *rt_msg, int if_index, const void *dst_in_addr,
+        void *arg);
+
 /*
  * Send a netlink request and parse the response.
  *
@@ -47,6 +53,10 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                          unsigned short nlmsg_flags,
                          const void *protocol_header, size_t header_length,
                          ucs_netlink_parse_cb_t parse_cb, void *arg);
+
+ucs_status_t
+ucs_netlink_parse_route(const struct nlmsghdr *nlh,
+                        ucs_netlink_route_parse_func_t parse_func, void *arg);
 
 
 /**

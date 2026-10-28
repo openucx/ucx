@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/sys/module.h>
 #include <ucs/sys/module_int.h>
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/sock.h>
 #include <ucs/type/spinlock.h>
@@ -15,9 +16,36 @@ extern "C" {
 #include <ucs/arch/cpu.h>
 }
 
+#include <linux/rtnetlink.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <set>
+#include <vector>
+
+struct test_netlink_route {
+    int            if_index;
+    uint8_t        family;
+    uint8_t        dst_len;
+    uint8_t        type;
+    struct in_addr dst;
+};
+
+static ucs_status_t
+test_netlink_route_parse(const struct rtmsg *rt_msg, int if_index,
+                         const void *dst_in_addr, void *arg)
+{
+    std::vector<test_netlink_route> *routes =
+            static_cast<std::vector<test_netlink_route>*>(arg);
+    test_netlink_route route = {};
+
+    route.if_index = if_index;
+    route.family   = rt_msg->rtm_family;
+    route.dst_len  = rt_msg->rtm_dst_len;
+    route.type     = rt_msg->rtm_type;
+    memcpy(&route.dst, dst_in_addr, sizeof(route.dst));
+    routes->push_back(route);
+    return UCS_OK;
+}
 
 class test_sys : public ucs::test {
 protected:
@@ -247,4 +275,97 @@ UCS_TEST_F(test_sys, cpu_cache) {
     check_cache_type(UCS_CPU_CACHE_L1i, "L1i");
     check_cache_type(UCS_CPU_CACHE_L2, "L2");
     check_cache_type(UCS_CPU_CACHE_L3, "L3");
+}
+
+UCS_TEST_F(test_sys, netlink_multipath_route) {
+    static const unsigned num_paths = 2;
+    static const int if_indices[num_paths] = {17, 42};
+    struct netlink_route_msg {
+        struct nlmsghdr nlh;
+        struct rtmsg rtm;
+        struct {
+            struct rtattr rta;
+            struct in_addr addr;
+        } dst;
+        struct {
+            struct rtattr rta;
+            struct {
+                struct rtnexthop rtnh;
+                struct rtattr gateway_rta;
+                struct in_addr gateway;
+            } first;
+            struct rtnexthop second;
+        } multipath;
+        struct {
+            struct rtattr rta;
+            int if_index;
+        } oif;
+    } msg = {};
+    std::vector<test_netlink_route> routes;
+    struct in_addr dst_addr;
+
+    dst_addr.s_addr            = htonl(0xc0a86400);
+    msg.nlh.nlmsg_len          = sizeof(msg) - sizeof(msg.oif);
+    msg.nlh.nlmsg_type         = RTM_NEWROUTE;
+    msg.rtm.rtm_family         = AF_INET;
+    msg.rtm.rtm_dst_len        = 24;
+    msg.rtm.rtm_type           = RTN_UNICAST;
+    msg.dst.rta.rta_len        = RTA_LENGTH(sizeof(msg.dst.addr));
+    msg.dst.rta.rta_type       = RTA_DST;
+    msg.dst.addr               = dst_addr;
+    msg.multipath.rta.rta_len  = RTA_LENGTH(sizeof(msg.multipath) -
+                                            sizeof(msg.multipath.rta));
+    msg.multipath.rta.rta_type = RTA_MULTIPATH;
+    msg.multipath.first.rtnh.rtnh_len =
+            RTNH_LENGTH(RTA_LENGTH(sizeof(msg.multipath.first.gateway)));
+    msg.multipath.first.rtnh.rtnh_ifindex = if_indices[0];
+    msg.multipath.first.gateway_rta.rta_len =
+            RTA_LENGTH(sizeof(msg.multipath.first.gateway));
+    msg.multipath.first.gateway_rta.rta_type = RTA_GATEWAY;
+    msg.multipath.first.gateway.s_addr        = htonl(0xc0a86401);
+    msg.multipath.second.rtnh_len             = RTNH_LENGTH(0);
+    msg.multipath.second.rtnh_ifindex         = if_indices[1];
+
+    ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
+                                          test_netlink_route_parse, &routes));
+    ASSERT_EQ(num_paths, routes.size());
+    for (unsigned i = 0; i < routes.size(); ++i) {
+        EXPECT_EQ(if_indices[i], routes[i].if_index);
+        EXPECT_EQ(AF_INET, routes[i].family);
+        EXPECT_EQ(24, routes[i].dst_len);
+        EXPECT_EQ(RTN_UNICAST, routes[i].type);
+        EXPECT_EQ(dst_addr.s_addr, routes[i].dst.s_addr);
+    }
+
+    routes.clear();
+    msg.multipath.first.rtnh.rtnh_flags = RTNH_F_DEAD;
+    ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
+                                          test_netlink_route_parse, &routes));
+    ASSERT_EQ(1, routes.size());
+    EXPECT_EQ(if_indices[1], routes[0].if_index);
+    msg.multipath.first.rtnh.rtnh_flags = 0;
+
+    routes.clear();
+    msg.multipath.second.rtnh_len = RTNH_LENGTH(1);
+    ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
+                                          test_netlink_route_parse, &routes));
+    EXPECT_TRUE(routes.empty());
+
+    msg.multipath.rta.rta_len = RTA_LENGTH(0);
+    msg.nlh.nlmsg_len -= sizeof(msg.multipath) - sizeof(msg.multipath.rta);
+    ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
+                                          test_netlink_route_parse, &routes));
+    EXPECT_TRUE(routes.empty());
+
+    msg.multipath.rta.rta_len =
+            RTA_LENGTH(sizeof(msg.multipath) - sizeof(msg.multipath.rta));
+    msg.multipath.second.rtnh_len = RTNH_LENGTH(0);
+    msg.oif.rta.rta_len = RTA_LENGTH(sizeof(msg.oif.if_index));
+    msg.oif.rta.rta_type = RTA_OIF;
+    msg.oif.if_index      = 51;
+    msg.nlh.nlmsg_len     = sizeof(msg);
+    ASSERT_UCS_OK(ucs_netlink_parse_route(&msg.nlh,
+                                          test_netlink_route_parse, &routes));
+    ASSERT_EQ(1, routes.size());
+    EXPECT_EQ(msg.oif.if_index, routes[0].if_index);
 }
