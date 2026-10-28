@@ -687,7 +687,7 @@ static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
 }
 
 /* VRF device which sockets of the interface must be bound to, or NULL */
-static inline const char *uct_tcp_iface_vrf_name(uct_tcp_iface_t *iface)
+static inline const char *uct_tcp_iface_vrf_name(const uct_tcp_iface_t *iface)
 {
     return ucs_string_is_empty(iface->config.vrf_name) ? NULL :
                                                          iface->config.vrf_name;
