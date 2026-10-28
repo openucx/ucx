@@ -124,12 +124,7 @@ public:
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
             iov[iov_it].buffer = (char *)buffer + iov_length_it;
             iov[iov_it].length = m_perf.params.msg_size_list[iov_it];
-
-            if (m_perf.params.iov_stride) {
-                iov_length_it += m_perf.params.iov_stride;
-            } else {
-                iov_length_it += iov[iov_it].length;
-            }
+            iov_length_it     += element_step(iov_it);
         }
     }
 
@@ -184,7 +179,7 @@ public:
             sgl.remote_addrs[i] = m_perf.ucp.remote_addr + offset;
             sgl.rkeys[i]        = m_perf.ucp.rkey;
 
-            offset += sgl_element_step(i);
+            offset += element_step(i);
         }
 
         m_local_sgl.field_mask = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |

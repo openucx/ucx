@@ -112,7 +112,7 @@ public:
             for (size_t i = 0; i < m_perf.params.msg_size_cnt; ++i) {
                 fill_sn_region(UCS_PTR_BYTE_OFFSET(buffer, offset),
                                m_perf.params.msg_size_list[i], allocator, sn);
-                offset += sgl_element_step(i);
+                offset += element_step(i);
             }
         } else {
             fill_sn_region(buffer, length, allocator, sn);
@@ -158,7 +158,7 @@ public:
                 return status;
             }
 
-            offset += sgl_element_step(i);
+            offset += element_step(i);
         }
 
         return UCS_OK;
@@ -167,7 +167,7 @@ public:
 protected:
     ucx_perf_context_t &m_perf;
 
-    size_t sgl_element_step(size_t i) const
+    size_t element_step(size_t i) const
     {
         return m_perf.params.iov_stride ? m_perf.params.iov_stride :
                                           m_perf.params.msg_size_list[i];
