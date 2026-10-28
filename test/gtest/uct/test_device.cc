@@ -145,7 +145,8 @@ protected:
                                uct_rkey_t rkey) :
             m_entity(e),
             m_dev_buf(sizeof(uct_device_mem_elem_t), 0, e, 0,
-                      UCS_MEMORY_TYPE_CUDA)
+                      UCS_MEMORY_TYPE_CUDA),
+            m_release_handle(nullptr)
         {
             EXPECT_UCS_OK(uct_md_mem_elem_pack(m_entity.md(), memh, rkey,
                                                &m_host_buf, &m_release_handle));
@@ -161,7 +162,9 @@ protected:
 
         ~device_mem_elem_handle()
         {
-            uct_md_mem_elem_release(m_entity.md(), m_release_handle);
+            if (m_release_handle != nullptr) {
+                uct_md_mem_elem_release(m_entity.md(), m_release_handle);
+            }
         }
     };
 

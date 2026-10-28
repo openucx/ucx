@@ -67,7 +67,7 @@ ucp_test_kernel_do_operation(const test_ucp_device_kernel_params_t &params,
         return status;
     }
 
-    if (!(flags & UCT_DEVICE_FLAG_NODELAY) || (req_ptr == nullptr)) {
+    if (!(flags & UCP_DEVICE_FLAG_NODELAY) || (req_ptr == nullptr)) {
         return UCS_OK;
     }
 
@@ -130,7 +130,7 @@ ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
     device_request<level> req(shared_reqs);
 
     ucp_device_request_t *req_ptr = params.with_request ? req.ptr() : nullptr;
-    uint64_t flags    = params.with_no_delay ? UCT_DEVICE_FLAG_NODELAY : 0;
+    uint64_t flags    = params.with_no_delay ? UCP_DEVICE_FLAG_NODELAY : 0;
     size_t loop_iters = params.use_flush ? params.num_iters :
                                            params.num_iters - 1;
 
@@ -142,13 +142,13 @@ ucp_test_kernel_job(const test_ucp_device_kernel_params_t &params,
     }
 
     if (params.use_flush) {
-        uint64_t flush_flags = params.with_no_delay ? 0 : UCT_DEVICE_FLAG_PUSH;
+        uint64_t flush_flags = params.with_no_delay ? 0 : UCP_DEVICE_FLAG_PUSH;
         status = ucp_device_flush<level>(params.remote_mem_list, 0,
                                          flush_flags);
     } else {
         // Last iteration must use no-delay flag, to force execution
         status = ucp_test_kernel_do_operation<level>(params,
-                                                     UCT_DEVICE_FLAG_NODELAY,
+                                                     UCP_DEVICE_FLAG_NODELAY,
                                                      req.ptr());
     }
 }
