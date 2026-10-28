@@ -751,6 +751,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
+    ucs_list_head_init(&self->rx_repost_pending_list);
     self->rx_available = iface->config.rx_max_wr;
     if (iface->super.config.srq_enabled) {
         status = uct_rc_verbs_iface_common_prepost_recvs(iface);
@@ -771,6 +772,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
 
 err_remove_qp:
+    ucs_list_del(&self->rx_repost_pending_list);
     uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
 err_event_unreg:
     uct_ib_device_async_event_unregister(&md->dev,
@@ -787,6 +789,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+
+    /* The endpoint no longer posts receive WRs */
+    ucs_list_del(&self->rx_repost_pending_list);
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
                                   UCS_ERR_CANCELED, self->txcnt.pi, 1);

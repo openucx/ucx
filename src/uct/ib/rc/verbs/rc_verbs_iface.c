@@ -366,7 +366,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
     self->config.rx_max_wr               = rx_max_wr;
     self->rx_cq_available                = rx_cq_len;
-    self->rx_post_recv_pending           = 0;
     self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
                                                    self->super.config.tx_qp_len);
     self->super.config.tx_moderation     = ucs_min(self->super.config.tx_moderation,
@@ -375,6 +374,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->super.progress                 = uct_rc_verbs_iface_progress;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
+    ucs_list_head_init(&self->rx_repost_pending_eps);
 
     /* A QP must be able to reach the repost threshold. */
     self->super.super.config.rx_max_batch =
@@ -536,21 +536,26 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
     return count;
 }
 
-void uct_rc_verbs_iface_eps_post_recv(uct_rc_verbs_iface_t *iface)
+void uct_rc_verbs_iface_repost_pending(uct_rc_verbs_iface_t *iface)
 {
-    unsigned batch = iface->super.super.config.rx_max_batch;
+    unsigned batch         = iface->super.super.config.rx_max_batch;
+    ucs_list_link_t *queue = &iface->rx_repost_pending_eps;
     uct_rc_verbs_ep_t *ep;
-    uct_rc_ep_t *rc_ep;
 
-    iface->rx_post_recv_pending = 0;
-    ucs_list_for_each(rc_ep, &iface->super.ep_list, list) {
-        ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
-        if (!uct_rc_verbs_ep_can_post_recv(ep) || (ep->rx_available < batch)) {
-            continue;
+    /* A full batch restores receive progress; later completions drive further
+     * reposting. Keep only endpoints which still need a retry in the queue. */
+    while (!ucs_list_is_empty(queue)) {
+        ep = ucs_list_head(queue, uct_rc_verbs_ep_t, rx_repost_pending_list);
+        if (uct_rc_verbs_ep_can_post_recv(ep) &&
+            (ep->rx_available >= batch)) {
+            if (uct_rc_verbs_iface_post_recv_common(iface, ep, 0) < batch) {
+                /* Keep the endpoint first while the pool is short */
+                return;
+            }
         }
 
-        /* Requeue the scan if the pool cannot supply a full batch. */
-        uct_rc_verbs_iface_post_recv_common(iface, ep, 0);
+        ucs_list_del(&ep->rx_repost_pending_list);
+        ucs_list_head_init(&ep->rx_repost_pending_list);
     }
 }
 
