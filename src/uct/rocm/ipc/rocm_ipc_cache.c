@@ -10,10 +10,10 @@
 #endif
 
 #include "rocm_ipc_cache.h"
+#include "rocm_ipc_iface.h"
 
 #include <ucm/api/ucm.h>
 #include <ucs/arch/atomic.h>
-#include <ucs/config/parser.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -65,51 +65,6 @@ static uct_rocm_ipc_remote_cache_t uct_rocm_ipc_remote_cache;
 
 /* Runs before the registration cache (priority 1000). */
 #define UCT_ROCM_IPC_MEM_EVENT_PRIO 100
-
-typedef struct {
-    int signal_invalidate;
-} uct_rocm_ipc_cache_config_t;
-
-static ucs_config_field_t uct_rocm_ipc_cache_config_table[] = {
-    {"SIGNAL_INVALIDATE", "y",
-     "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
-     "When set to n, a mapping is replaced only when the peer's IPC handle\n"
-     "changes. The packed rkey layout is the same in both cases.",
-     ucs_offsetof(uct_rocm_ipc_cache_config_t, signal_invalidate),
-     UCS_CONFIG_TYPE_BOOL},
-
-    {NULL}
-};
-
-UCS_CONFIG_REGISTER_TABLE(uct_rocm_ipc_cache_config_table, "ROCm IPC",
-                          "ROCM_IPC_", uct_rocm_ipc_cache_config_t,
-                          &ucs_config_global_list);
-
-static int uct_rocm_ipc_signal_invalidate_enabled(void)
-{
-    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
-    static int enabled         = 1;
-
-    UCS_INIT_ONCE(&once) {
-        uct_rocm_ipc_cache_config_t config;
-        ucs_status_t status;
-
-        status = ucs_config_parser_fill_opts(
-                &config, UCS_CONFIG_GET_TABLE(uct_rocm_ipc_cache_config_table),
-                UCS_DEFAULT_ENV_PREFIX, 0);
-        if (status == UCS_OK) {
-            enabled = config.signal_invalidate;
-            ucs_config_parser_release_opts(&config,
-                                           uct_rocm_ipc_cache_config_table);
-        }
-        if (!enabled) {
-            ucs_diag("rocm ipc signal invalidation is disabled");
-        }
-    }
-
-    return enabled;
-}
-
 
 typedef struct uct_rocm_ipc_export {
     ucs_list_link_t list;
