@@ -2286,20 +2286,6 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_mlx5_ep_get_path_identity(
-        uct_ep_h tl_ep, uct_rc_mlx5_path_identity_t *identity)
-{
-    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-
-    if (identity == NULL) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    identity->qpn   = ep->tx.wq.super.qp_num;
-    identity->tx_cq = &iface->cq[UCT_IB_DIR_TX];
-    return UCS_OK;
-}
-
 void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                                     void *data, size_t length, char *buffer,
                                     size_t max)

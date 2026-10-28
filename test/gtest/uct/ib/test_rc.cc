@@ -82,6 +82,11 @@ UCS_TEST_F(test_rc_extension, invalid_registration)
 
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(nullptr));
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
+
+    ops.struct_size = sizeof(ops);
+    ops.api_version = UCT_RC_MLX5_EXT_API_VERSION - 1;
+    ops.name        = "test";
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
 }
 
 UCS_TEST_F(test_rc_extension, completion_adapter_validation)
@@ -166,32 +171,19 @@ protected:
         comp->completed  = true;
     }
 
-    static unsigned progress_cb(uct_iface_h, void *ctx)
-    {
-        if (ctx != NULL) {
-            ++*static_cast<unsigned*>(ctx);
-        }
-
-        return 0;
-    }
-
     static ucs_status_t reject_connect(uct_ep_h, void*, const void*, size_t)
     {
         return UCS_ERR_UNREACHABLE;
     }
 };
 
-UCS_TEST_P(test_rc_extension_transport, progress_without_timestamps)
+UCS_TEST_P(test_rc_extension_transport, completion_without_timestamps)
 {
-    completion comp         = {};
-    unsigned progress_calls = 0;
+    completion comp = {};
     provider_guard provider;
 
-    provider.ops.progress = progress_cb;
     ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&provider.ops));
     std::unique_ptr<entity> e(create_entity(0));
-    auto iface = ucs_derived_of(e->iface(), uct_rc_mlx5_iface_common_t);
-    iface->ext_ctx = &progress_calls;
     e->connect(0, *e, 0);
 
     mapped_buffer source(8, 0ul, *e);
@@ -209,7 +201,6 @@ UCS_TEST_P(test_rc_extension_transport, progress_without_timestamps)
     e->flush();
     EXPECT_TRUE(comp.completed);
     EXPECT_EQ(0ul, comp.field_mask);
-    EXPECT_GT(progress_calls, 0u);
 }
 
 UCS_TEST_P(test_rc_extension_transport, failed_provider_not_connected)

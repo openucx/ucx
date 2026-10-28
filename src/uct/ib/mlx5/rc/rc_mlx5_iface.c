@@ -127,11 +127,6 @@ uct_rc_mlx5_iface_progress(void *arg, int flags)
         }
     }
 
-    if (iface->ext_ops->progress != NULL) {
-        count += iface->ext_ops->progress(&iface->super.super.super.super,
-                                          iface->ext_ctx);
-    }
-
     return count;
 }
 

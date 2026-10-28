@@ -25,8 +25,8 @@ static unsigned uct_rc_mlx5_ext_refcount;
 
 ucs_status_t uct_rc_mlx5_ext_register(const uct_rc_mlx5_ext_ops_t *ops)
 {
-    size_t min_size = ucs_offsetof(uct_rc_mlx5_ext_ops_t, progress) +
-                      sizeof(ops->progress);
+    size_t min_size = ucs_offsetof(uct_rc_mlx5_ext_ops_t, ep_query) +
+                      sizeof(ops->ep_query);
     ucs_status_t status = UCS_OK;
     uint64_t event_flags;
 

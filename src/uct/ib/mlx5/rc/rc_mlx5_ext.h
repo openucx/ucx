@@ -14,17 +14,12 @@
 
 BEGIN_C_DECLS
 
-#define UCT_RC_MLX5_EXT_API_VERSION 1
+#define UCT_RC_MLX5_EXT_API_VERSION 2
 
 enum {
     /** Request completion timestamps on the stock RC TX CQ. */
     UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP = UCS_BIT(0)
 };
-
-typedef struct uct_rc_mlx5_path_identity {
-    uint32_t    qpn;
-    const void  *tx_cq;
-} uct_rc_mlx5_path_identity_t;
 
 /** Internal callback for one SGL checkpoint, in normal RC completion context.
  * The timestamp is raw local NIC ticks, or zero when unavailable (e.g. purge).
@@ -116,9 +111,6 @@ typedef struct uct_rc_mlx5_ext_ops {
     ucs_status_t (*ep_query)(uct_ep_h ep, void *ep_ctx,
                              uct_ep_attr_t *ep_attr);
 
-    /** Optional hook after stock RC progress; NULL adds no provider call. */
-    unsigned (*progress)(uct_iface_h iface, void *iface_ctx);
-
     /** Optional event capabilities; absent in shorter structures means none.
      * Only UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE is supported, and requires
      * an ep_query hook. */
@@ -127,9 +119,6 @@ typedef struct uct_rc_mlx5_ext_ops {
 
 ucs_status_t uct_rc_mlx5_ext_register(const uct_rc_mlx5_ext_ops_t *ops);
 void uct_rc_mlx5_ext_unregister(const uct_rc_mlx5_ext_ops_t *ops);
-
-ucs_status_t uct_rc_mlx5_ep_get_path_identity(
-        uct_ep_h ep, uct_rc_mlx5_path_identity_t *identity);
 
 /* Internal transport helpers. */
 const uct_rc_mlx5_ext_ops_t *uct_rc_mlx5_ext_acquire(void);
