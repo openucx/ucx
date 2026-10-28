@@ -52,6 +52,7 @@ env:
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  SYNC_TIMEOUT: 30
   CHECKOUT_TIMEOUT: 10
   TEST_TIMEOUT: 180
   CI_IMAGE_TAG: "20261018-1"
@@ -110,14 +111,15 @@ steps:
   # Pulls the image outside the timed checkout and test steps.
   - name: Sync Container Image
     containerSelector: "{name: 'build_helper_dl'}"
-    timeout: 30
+    timeout: "${SYNC_TIMEOUT}"
     parallel: false
     shell: action
     module: slurmCI
     run: run
     args:
       jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
-      testScript: "hostname; nvidia-smi -L || echo no-gpu-visible; df -h /"
+      # Fails the row when the allocation has no visible GPU.
+      testScript: "hostname && nvidia-smi -L && df -h /"
       headNode: "${SLURM_HEAD_NODE}"
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
@@ -162,6 +164,7 @@ steps:
       slurmEnv: [
         "RUN_TESTS=${RUN_TESTS}",
         "RUN_MPI_TESTS=${RUN_MPI_TESTS}",
+        "NPROC=${SLURM_MINCPUS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}",
