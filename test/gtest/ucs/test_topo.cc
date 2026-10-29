@@ -137,8 +137,8 @@ protected:
     }
 
     // MLOPart aliases: the same BDF with distinct user values. Appends mem_dev
-    // and its (num_aliases - 1) aliases to mems
-    void register_mem_aliases(ucs_sys_device_t mem_dev, int num_aliases,
+    // and its (num_mems - 1) aliases to mems
+    void register_mem_aliases(ucs_sys_device_t mem_dev, int num_mems,
                               std::vector<ucs_sys_device_t> &mems)
     {
         ucs_sys_bus_id_t bus_id;
@@ -146,7 +146,7 @@ protected:
         ASSERT_UCS_OK(ucs_topo_get_device_bus_id(mem_dev, &bus_id));
         mems.push_back(mem_dev);
 
-        for (int i = 1; i < num_aliases; ++i) {
+        for (int i = 1; i < num_mems; ++i) {
             ucs_sys_device_t alias;
             ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
                     &bus_id, i, &alias));
