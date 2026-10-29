@@ -55,14 +55,14 @@ template<ucs_device_level_t level> UCS_F_DEVICE void uct_dev_sync(void)
     }
 }
 
-template<ucs_device_level_t level>
-UCS_F_DEVICE int uct_dev_bcast(int value, unsigned lane_id)
+template<ucs_device_level_t level, typename T>
+UCS_F_DEVICE T uct_dev_bcast(T value, unsigned lane_id)
 {
     switch (level) {
     case UCS_DEVICE_LEVEL_WARP:
         return __shfl_sync(0xffffffff, value, 0);
     case UCS_DEVICE_LEVEL_BLOCK: {
-        __shared__ int shared_value;
+        __shared__ T shared_value;
         if (lane_id == 0) {
             shared_value = value;
         }
@@ -72,7 +72,7 @@ UCS_F_DEVICE int uct_dev_bcast(int value, unsigned lane_id)
         return value;
     }
     case UCS_DEVICE_LEVEL_THREAD:
-    case UCS_DEVICE_LEVEL_GRID:
+    case UCS_DEVICE_LEVEL_GRID: /* No grid broadcast; callers must reject GRID. */
     default:
         return value;
     }

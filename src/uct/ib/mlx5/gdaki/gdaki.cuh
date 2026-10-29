@@ -150,15 +150,13 @@ UCS_F_DEVICE void
 uct_rc_mlx5_gda_reserv_wqe(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                            unsigned count, unsigned lane_id, uint64_t &wqe_base)
 {
+    uint64_t value = 0;
+
     if (lane_id == 0) {
-        wqe_base = uct_rc_mlx5_gda_reserv_wqe_thread(ep, cid, count);
+        value = uct_rc_mlx5_gda_reserv_wqe_thread(ep, cid, count);
     }
 
-    if (level == UCS_DEVICE_LEVEL_WARP) {
-        wqe_base = __shfl_sync(0xffffffff, wqe_base, 0);
-    } else if (level == UCS_DEVICE_LEVEL_BLOCK) {
-        __syncthreads();
-    }
+    wqe_base = uct_dev_bcast<level>(value, lane_id);
 }
 
 UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
@@ -247,12 +245,18 @@ UCS_F_DEVICE ucs_status_t uct_rc_mlx5_gda_ep_single(
         uct_device_completion_t *tl_comp, uint32_t opcode, bool is_atomic,
         uint64_t add)
 {
-    uct_rc_gda_completion_t *comp = &tl_comp->rc_gda;
-    unsigned cflag                = 0;
+    uct_rc_gda_completion_t *comp;
+    unsigned cflag = 0;
     uint64_t wqe_base;
     unsigned lane_id;
     unsigned num_lanes;
 
+    /* A grid-wide reservation broadcast is not implemented. */
+    if (level == UCS_DEVICE_LEVEL_GRID) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    comp = &tl_comp->rc_gda;
     uct_dev_exec_init<level>(lane_id, num_lanes);
     uct_rc_mlx5_gda_reserv_wqe<level>(ep, cid, 1, lane_id, wqe_base);
     if (wqe_base == UCT_RC_GDA_RESV_WQE_NO_RESOURCE) {
