@@ -218,7 +218,7 @@ UCS_PTR_MAP_IMPL(request, 0);
               (((_param)->datatype & UCP_DATATYPE_CLASS_MASK) == \
                UCP_DATATYPE_SGL)))) { \
             ucs_error("SGL datatype and remote descriptor parameters are " \
-                      "only supported for ucp_put_nbx"); \
+                      "only supported for ucp_put_nbx and ucp_get_nbx"); \
             return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
         } \
     } while (0)

@@ -1213,6 +1213,7 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
 #define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
+#define UCP_SGL_GET_SW_PROTOS    "PROTOS=^get/sgl/offload"
 
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
@@ -1220,10 +1221,16 @@ public:
         add_variant(variants, UCP_FEATURE_RMA);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+    static void get_memtype_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_memtypes(variants, get_base_variants,
                              UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                              UCS_BIT(UCS_MEMORY_TYPE_HOST));
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        static const char *op_names[] = {"put", "get"};
+        add_variant_values(variants, get_memtype_variants, UCS_MASK(2),
+                           op_names);
     }
 
     virtual void init() override {
@@ -1243,6 +1250,22 @@ protected:
 
     bool m_require_zcopy_lane = true;
 
+    sgl_op_t op() const {
+        return static_cast<sgl_op_t>(get_variant_value(1));
+    }
+
+    void require_put() const {
+        if (op() != SGL_OP_PUT) {
+            UCS_TEST_SKIP_R("put only");
+        }
+    }
+
+    void require_get() const {
+        if (op() != SGL_OP_GET) {
+            UCS_TEST_SKIP_R("get only");
+        }
+    }
+
     struct sgl_ctx {
         std::vector<mapped_buffer>           src;
         std::vector<mapped_buffer>           dst;
@@ -1257,8 +1280,7 @@ protected:
         uint64_t                             null_remote_arrays = 0;
     };
 
-    void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
-                      sgl_op_t op = SGL_OP_PUT) {
+    void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes) {
         ucs_memory_type_t mtype = mem_type();
         size_t num              = elem_sizes.size();
 
@@ -1279,8 +1301,8 @@ protected:
         for (size_t i = 0; i < num; i++) {
             uint8_t pattern = static_cast<uint8_t>(i + 1);
 
-            ctx.src[i].memset((op == SGL_OP_PUT) ? pattern : 0);
-            ctx.dst[i].memset((op == SGL_OP_PUT) ? 0 : pattern);
+            ctx.src[i].memset((op() == SGL_OP_PUT) ? pattern : 0);
+            ctx.dst[i].memset((op() == SGL_OP_PUT) ? 0 : pattern);
             ctx.dst[i].rkey(sender(), ctx.rkey_handles[i]);
 
             ctx.buffers[i]      = ctx.src[i].ptr();
@@ -1293,9 +1315,8 @@ protected:
         ctx.remote_lengths = ctx.lengths;
     }
 
-    void init_sgl_ctx(sgl_ctx &ctx, size_t num_elems, size_t buf_size,
-                      sgl_op_t op = SGL_OP_PUT) {
-        init_sgl_ctx(ctx, std::vector<size_t>(num_elems, buf_size), op);
+    void init_sgl_ctx(sgl_ctx &ctx, size_t num_elems, size_t buf_size) {
+        init_sgl_ctx(ctx, std::vector<size_t>(num_elems, buf_size));
     }
 
     void init_sgl_ctx_mixed_mem_types(sgl_ctx &ctx) {
@@ -1385,10 +1406,10 @@ protected:
         return param;
     }
 
-    ucs_status_ptr_t sgl_op_nbx(sgl_op_t op, void *local_sgl, size_t count,
+    ucs_status_ptr_t sgl_op_nbx(void *local_sgl, size_t count,
                                 uint64_t remote_addr, ucp_rkey_h rkey,
                                 const ucp_request_param_t *param) {
-        if (op == SGL_OP_PUT) {
+        if (op() == SGL_OP_PUT) {
             return ucp_put_nbx(sender().ep(), local_sgl, count, remote_addr,
                                rkey, param);
         }
@@ -1397,19 +1418,65 @@ protected:
                            param);
     }
 
-    void test_sgl(sgl_op_t op, const std::vector<size_t> &elem_sizes,
-                  bool use_memhs, bool use_callback, bool set_remote_count,
-                  bool expect_immediate_completion) {
+    void verify_sgl(const sgl_ctx &ctx, size_t begin = 0,
+                    size_t end = SIZE_MAX) {
+        ucs_memory_type_t mtype = mem_type();
+        end                     = std::min(end, ctx.lengths.size());
+        for (size_t i = begin; i < end; i++) {
+            uint8_t expected = static_cast<uint8_t>(i + 1);
+            void *result     = (op() == SGL_OP_PUT) ? ctx.dst[i].ptr() :
+                                                      ctx.src[i].ptr();
+            std::vector<uint8_t> host_buf(ctx.lengths[i]);
+            mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
+                                  mtype);
+            for (size_t j = 0; j < ctx.lengths[i]; j++) {
+                ASSERT_EQ(expected, host_buf[j])
+                    << "Mismatch at element " << i << " byte " << j;
+            }
+        }
+    }
+
+    struct cb_state {
+        unsigned     count  = 0;
+        ucs_status_t status = UCS_INPROGRESS;
+    };
+
+    ucs_status_ptr_t post_sgl_with_cb(sgl_ctx &ctx, cb_state &cb) {
+        size_t num                 = ctx.lengths.size();
+        ucp_dt_local_sgl_t local   = make_local_sgl(
+                ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        ucp_request_param_t param  = make_sgl_param(&remote, num);
+
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA |
+                              UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        param.cb.send       = [](void *request, ucs_status_t status,
+                                 void *user_data) {
+            cb_state *s = static_cast<cb_state*>(user_data);
+            s->status   = status;
+            s->count++;
+        };
+        param.user_data     = &cb;
+
+        return sgl_op_nbx(&local, num, UCP_REMOTE_ADDR_INVALID,
+                          UCP_RKEY_INVALID, &param);
+    }
+
+    void test_sgl(const std::vector<size_t> &elem_sizes,
+                  bool use_memhs = true, bool use_callback = false,
+                  bool set_remote_count = true,
+                  bool expect_immediate_completion = false) {
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
-        uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
-                                                  UCT_IFACE_FLAG_GET_ZCOPY;
+        uint64_t zcopy_cap = (op() == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
+                                                    UCT_IFACE_FLAG_GET_ZCOPY;
         if (m_require_zcopy_lane && !sender().has_lane_with_caps(zcopy_cap)) {
             UCS_TEST_SKIP_R("zcopy is not supported");
         }
 
         sgl_ctx ctx;
-        init_sgl_ctx(ctx, elem_sizes, op);
+        init_sgl_ctx(ctx, elem_sizes);
 
         uint64_t local_mask = LOCAL_MASK_DEFAULT;
         if (use_memhs) {
@@ -1443,8 +1510,7 @@ protected:
             param.user_data = &cb;
         }
 
-        ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, num,
-                                           UCP_REMOTE_ADDR_INVALID,
+        ucs_status_ptr_t sptr = sgl_op_nbx(&local, num, UCP_REMOTE_ADDR_INVALID,
                                            UCP_RKEY_INVALID, &param);
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
@@ -1452,22 +1518,6 @@ protected:
             EXPECT_EQ(UCS_OK, UCS_PTR_STATUS(sptr));
             return;
         }
-
-        auto verify_sgl_buffers = [&]() {
-            ucs_memory_type_t mtype = mem_type();
-            for (size_t i = 0; i < num; i++) {
-                uint8_t expected = static_cast<uint8_t>(i + 1);
-                void *result     = (op == SGL_OP_PUT) ? ctx.dst[i].ptr() :
-                                                        ctx.src[i].ptr();
-                std::vector<uint8_t> host_buf(ctx.lengths[i]);
-                mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
-                                      mtype);
-                for (size_t j = 0; j < ctx.lengths[i]; j++) {
-                    ASSERT_EQ(expected, host_buf[j])
-                        << "Mismatch at element " << i << " byte " << j;
-                }
-            }
-        };
 
         if (!UCS_PTR_IS_PTR(sptr)) {
             ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
@@ -1489,10 +1539,10 @@ protected:
         }
 
         flush_ep(sender());
-        verify_sgl_buffers();
+        verify_sgl(ctx);
     }
 
-    static bool offload_proto_selected(ucs_status_ptr_t sptr) {
+    bool offload_proto_selected(ucs_status_ptr_t sptr) const {
         if (!UCS_PTR_IS_PTR(sptr)) {
             /* Only the emulation protocol can complete the put in-place, by
                copying the data to a bounce buffer */
@@ -1501,24 +1551,15 @@ protected:
 
         const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
         return strstr(req->send.proto_config->proto->name,
-                      "put/sgl/offload") != nullptr;
+                      (op() == SGL_OP_PUT) ? "put/sgl/offload" :
+                                             "get/sgl/offload") != nullptr;
     }
 
-    void test_put_sgl(const std::vector<size_t> &elem_sizes,
-                      bool use_memhs = true, bool use_callback = false,
-                      bool set_remote_count = true,
-                      bool expect_immediate_completion = false) {
-        test_sgl(SGL_OP_PUT, elem_sizes, use_memhs, use_callback,
-                 set_remote_count, expect_immediate_completion);
-    }
-
-    void test_put_sgl(size_t num_elems, size_t buf_size,
-                      bool use_memhs = true, bool use_callback = false,
-                      bool set_remote_count = true,
-                      bool expect_immediate_completion = false) {
-        test_put_sgl(std::vector<size_t>(num_elems, buf_size),
-                     use_memhs, use_callback, set_remote_count,
-                     expect_immediate_completion);
+    void test_sgl(size_t num_elems, size_t buf_size, bool use_memhs = true,
+                  bool use_callback = false, bool set_remote_count = true,
+                  bool expect_immediate_completion = false) {
+        test_sgl(std::vector<size_t>(num_elems, buf_size), use_memhs,
+                 use_callback, set_remote_count, expect_immediate_completion);
     }
 
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
@@ -1529,12 +1570,14 @@ protected:
             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
             UCP_DT_REMOTE_SGL_FIELD_RKEYS;
 
-    void expect_sgl_status_ctx(sgl_op_t op, sgl_ctx &ctx, uint64_t local_mask,
-                               uint64_t remote_mask, size_t count,
-                               ucs_status_t expected_status,
-                               uint32_t extra_param_mask, uint64_t remote_addr,
-                               ucp_rkey_h rkey, uint32_t clear_param_mask,
-                               bool null_remote, size_t remote_count)
+    void expect_sgl_status_ctx(
+            sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
+            size_t count, ucs_status_t expected_status,
+            uint32_t extra_param_mask = 0,
+            uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+            ucp_rkey_h rkey = UCP_RKEY_INVALID,
+            uint32_t clear_param_mask = 0, bool null_remote = false,
+            size_t remote_count = 0)
     {
         size_t effective_remote_count = remote_count ? remote_count : count;
         ucp_dt_local_sgl_t local      = make_local_sgl(ctx, local_mask);
@@ -1549,127 +1592,114 @@ protected:
         }
 
         scoped_log_handler wrap_err(wrap_errors_logger);
-        ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, count, remote_addr,
-                                           rkey, &param);
+        ucs_status_ptr_t sptr = sgl_op_nbx(&local, count, remote_addr, rkey,
+                                           &param);
         EXPECT_EQ(expected_status, UCS_PTR_STATUS(sptr));
     }
 
-    void expect_sgl_put_status_ctx(
-            sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
-            size_t count, ucs_status_t expected_status,
-            uint32_t extra_param_mask = 0,
-            uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
-            ucp_rkey_h rkey = UCP_RKEY_INVALID,
-            uint32_t clear_param_mask = 0, bool null_remote = false,
-            size_t remote_count = 0)
-    {
-        expect_sgl_status_ctx(SGL_OP_PUT, ctx, local_mask, remote_mask, count,
-                              expected_status, extra_param_mask, remote_addr,
-                              rkey, clear_param_mask, null_remote,
-                              remote_count);
-    }
-
-    void expect_sgl_put_invalid_param_ctx(
+    void expect_sgl_invalid_param_ctx(
             sgl_ctx &ctx, uint64_t local_mask, uint64_t remote_mask,
             size_t count, uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
             ucp_rkey_h rkey = UCP_RKEY_INVALID,
             uint32_t clear_param_mask = 0, bool null_remote = false,
             size_t remote_count = 0)
     {
-        expect_sgl_put_status_ctx(ctx, local_mask, remote_mask, count,
-                                  UCS_ERR_INVALID_PARAM, 0, remote_addr, rkey,
-                                  clear_param_mask, null_remote, remote_count);
+        expect_sgl_status_ctx(ctx, local_mask, remote_mask, count,
+                              UCS_ERR_INVALID_PARAM, 0, remote_addr, rkey,
+                              clear_param_mask, null_remote, remote_count);
     }
 
-    void expect_sgl_put_invalid_param(uint64_t local_mask,
-                                      uint64_t remote_mask,
-                                      uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
-                                      ucp_rkey_h rkey = UCP_RKEY_INVALID,
-                                      uint32_t clear_param_mask = 0,
-                                      bool null_remote = false,
-                                      size_t count = 2,
-                                      size_t remote_count = 0)
+    void expect_sgl_invalid_param(uint64_t local_mask, uint64_t remote_mask,
+                                  uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+                                  ucp_rkey_h rkey = UCP_RKEY_INVALID,
+                                  uint32_t clear_param_mask = 0,
+                                  bool null_remote = false, size_t count = 2,
+                                  size_t remote_count = 0)
     {
         sgl_ctx ctx;
         init_sgl_ctx(ctx, count, 64);
-        expect_sgl_put_invalid_param_ctx(ctx, local_mask, remote_mask, count,
-                                         remote_addr, rkey, clear_param_mask,
-                                         null_remote, remote_count);
+        expect_sgl_invalid_param_ctx(ctx, local_mask, remote_mask, count,
+                                     remote_addr, rkey, clear_param_mask,
+                                     null_remote, remote_count);
     }
 };
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_counts) {
+UCS_TEST_P(test_ucp_rma_sgl, various_counts) {
     static const size_t counts[] = {1, 2, 4, 10, 1024};
     for (size_t count : counts) {
-        test_put_sgl(count, 2 * UCS_KBYTE);
+        test_sgl(count, 2 * UCS_KBYTE);
         if (HasFailure() || (num_errors() > 0)) {
             break;
         }
     }
 
     if (!RUNNING_ON_VALGRIND && !HasFailure() && (num_errors() == 0)) {
-        test_put_sgl(1000, 2 * UCS_KBYTE);
+        test_sgl(1000, 2 * UCS_KBYTE);
         if (!HasFailure() && (num_errors() == 0)) {
-            test_put_sgl(4096, 2 * UCS_KBYTE);
+            test_sgl(4096, 2 * UCS_KBYTE);
         }
     }
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
-    static const size_t buf_sizes[] = {1, 256, UCS_KBYTE, 4 * UCS_KBYTE};
+UCS_TEST_P(test_ucp_rma_sgl, various_sizes) {
+    const size_t buf_sizes[] = {1, 256, UCS_KBYTE, 4 * UCS_KBYTE};
     for (size_t buf_size : buf_sizes) {
-        test_put_sgl(4, buf_size);
+        test_sgl(4, buf_size);
         if (HasFailure() || (num_errors() > 0)) {
             break;
         }
     }
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_lengths) {
-    test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+UCS_TEST_P(test_ucp_rma_sgl, various_lengths) {
+    test_sgl({1, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_with_callback) {
-    test_put_sgl(10, UCS_KBYTE, true, true);
+UCS_TEST_P(test_ucp_rma_sgl, with_callback) {
+    test_sgl(10, UCS_KBYTE, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_no_memhs) {
-    test_put_sgl(4, 2 * UCS_KBYTE, false);
+UCS_TEST_P(test_ucp_rma_sgl, no_memhs) {
+    test_sgl(4, 2 * UCS_KBYTE, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
-    test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
+UCS_TEST_P(test_ucp_rma_sgl, no_remote_count) {
+    test_sgl(4, 2 * UCS_KBYTE, true, false, false);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+    require_put();
     m_require_zcopy_lane = false;
-    test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+    test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
+    require_put();
     m_require_zcopy_lane = false;
-    test_put_sgl(10, UCS_KBYTE, true, true);
+    test_sgl(10, UCS_KBYTE, true, true);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, put_emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
+    require_put();
     m_require_zcopy_lane = false;
-    test_put_sgl(4, 2 * UCS_KBYTE, false);
+    test_sgl(4, 2 * UCS_KBYTE, false);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
+    require_put();
     m_require_zcopy_lane = false;
-    test_put_sgl(4, 256 * UCS_KBYTE);
+    test_sgl(4, 256 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
+UCS_TEST_P(test_ucp_rma_sgl, split_between_lanes) {
     static constexpr size_t NUM_ELEMS = 16;
 
     /* Complete the wireup, so that the operation below is posted rather than
        added to a pending queue */
-    test_put_sgl(1, UCS_KBYTE);
+    test_sgl(1, UCS_KBYTE);
 
     sgl_ctx ctx;
     init_sgl_ctx(ctx, NUM_ELEMS, 64 * UCS_KBYTE);
@@ -1678,7 +1708,7 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
     ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
     ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
-    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
+    ucs_status_ptr_t sptr      = sgl_op_nbx(&local, NUM_ELEMS,
                                             UCP_REMOTE_ADDR_INVALID,
                                             UCP_RKEY_INVALID, &param);
     if (!offload_proto_selected(sptr)) {
@@ -1698,69 +1728,299 @@ UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
     request_wait(sptr);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, multi_rail,
                      RUNNING_ON_VALGRIND) {
     static const char *rail_counts[] = {"1", "4", "6", "8"};
     for (const char *rails : rail_counts) {
         cleanup();
         modify_config("MAX_RMA_RAILS", rails);
         test_ucp_rma::init();
-        test_put_sgl(100, 2 * UCS_KBYTE);
+        test_sgl(100, 2 * UCS_KBYTE);
         if (HasFailure() || (num_errors() > 0)) {
             break;
         }
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_fragmented_elements,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, fragmented_elements,
                      RUNNING_ON_VALGRIND) {
     cleanup();
     modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
     test_ucp_rma::init();
-    test_put_sgl({255, 256, 257, 1024, 64});
+    test_sgl({255, 256, 257, 1024, 1});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_force_imm_cmpl) {
+UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {
     static constexpr size_t NUM_ELEMS = 4;
 
     sgl_ctx ctx;
     init_sgl_ctx(ctx, NUM_ELEMS, UCS_KBYTE);
-    expect_sgl_put_status_ctx(
+    expect_sgl_status_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, NUM_ELEMS, UCS_ERR_NO_RESOURCE,
             UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_addr,
-                     !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 0x1234, UCP_RKEY_INVALID);
+UCS_TEST_P(test_ucp_rma_sgl, short_elements) {
+    test_sgl({1, 2, 8, 63, 64, 65, 100, 127, 128, 129, 255, 256, 477, 478});
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_rkey,
+UCS_TEST_P(test_ucp_rma_sgl, short_and_long_elements) {
+    test_sgl({1, 4 * UCS_KBYTE, 7, 64, 2 * UCS_KBYTE, 3, 512, 100, UCS_KBYTE,
+              65 * UCS_KBYTE, 1});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_with_callback) {
+    test_sgl(10, 8, true, true);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, many_short_elements) {
+    test_sgl(UCS_KBYTE, 8);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_get_sw, UCP_SGL_GET_SW_PROTOS) {
+    require_get();
+    test_sgl({1, 64, 65, 127, 128, UCS_KBYTE, 3, 4 * UCS_KBYTE});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_completion_order) {
+    static constexpr size_t NUM_ELEMS = 64;
+
+    require_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 8);
+
+    cb_state cb;
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* The parent request must not complete before all the elements arrived, so
+       the data is verified right after the completion, without a flush */
+    ucs_time_t deadline = ucs::get_deadline();
+    while ((cb.count == 0) && (ucs_get_time() < deadline)) {
+        ucp_worker_progress(sender().worker());
+        ucp_worker_progress(receiver().worker());
+        if (cb.count == 0) {
+            EXPECT_FALSE(ucp_request_is_completed(sptr));
+        }
+    }
+
+    EXPECT_EQ(1u, cb.count);
+    EXPECT_UCS_OK(cb.status);
+    verify_sgl(ctx);
+    ucp_request_release(sptr);
+
+    /* No additional completions are expected */
+    for (int i = 0; i < 100; i++) {
+        ucp_worker_progress(sender().worker());
+        ucp_worker_progress(receiver().worker());
+    }
+    EXPECT_EQ(1u, cb.count);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
+    static const std::vector<size_t> lengths = {1,   2,   8,   63,  64,  65,
+                                                100, 127, 128, 129, 255, 256,
+                                                3,   5,   13,  477};
+    static constexpr size_t GAP              = 5;
+    static constexpr uint8_t LOCAL_FILL      = 0xee;
+
+    require_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    size_t size = 0;
+    for (size_t length : lengths) {
+        size += length + GAP;
+    }
+
+    sgl_ctx ctx;
+    ctx.src.emplace_back(size, sender(), 0, mem_type());
+    ctx.dst.emplace_back(size, receiver(), 0, mem_type());
+    ctx.rkey_handles.resize(1);
+    ctx.dst[0].rkey(sender(), ctx.rkey_handles[0]);
+
+    std::vector<uint8_t> expected(size, LOCAL_FILL);
+    std::vector<uint8_t> remote(size);
+    for (size_t i = 0; i < size; i++) {
+        remote[i] = static_cast<uint8_t>(i * 7 + 1);
+    }
+    mem_buffer::copy_to(ctx.src[0].ptr(), expected.data(), size, mem_type());
+    mem_buffer::copy_to(ctx.dst[0].ptr(), remote.data(), size, mem_type());
+
+    /* The elements are in the opposite order locally and remotely, and the gaps
+       between them must remain untouched */
+    size_t remote_offset = 0;
+    for (size_t length : lengths) {
+        size_t local_offset = size - remote_offset - length;
+        ctx.buffers.push_back(UCS_PTR_BYTE_OFFSET(ctx.src[0].ptr(),
+                                                  local_offset));
+        ctx.remote_addrs.push_back(
+                reinterpret_cast<uint64_t>(ctx.dst[0].ptr()) + remote_offset);
+        ctx.memhs.push_back(ctx.src[0].memh());
+        ctx.rkeys.push_back(ctx.rkey_handles[0]);
+        memcpy(&expected[local_offset], &remote[remote_offset], length);
+        remote_offset += length + GAP;
+    }
+    ctx.lengths        = lengths;
+    ctx.remote_lengths = lengths;
+
+    cb_state cb;
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    wait_for_flag(&cb.count);
+    ASSERT_EQ(1u, cb.count);
+    EXPECT_UCS_OK(cb.status);
+    ucp_request_release(sptr);
+
+    std::vector<uint8_t> result(size);
+    mem_buffer::copy_from(result.data(), ctx.src[0].ptr(), size, mem_type());
+    EXPECT_EQ(expected, result);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
+           "PROTOS=get/sgl/offload,reconfig") {
+    require_get();
+    if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_ZCOPY,
+                                     UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, {4 * UCS_KBYTE, 8, 4 * UCS_KBYTE, 4 * UCS_KBYTE});
+
+    /* Only the sgl protocol is allowed, so the sub-request of the short element
+       fails synchronously, while the previous element is still outstanding */
+    cb_state cb;
+    ucs_status_ptr_t sptr;
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        sptr = post_sgl_with_cb(ctx, cb);
+    }
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+    EXPECT_EQ(0u, cb.count);
+
+    wait_for_flag(&cb.count);
+
+    /* The parent fails only after the previous element was fetched, and the
+       next elements are not posted */
+    EXPECT_EQ(1u, cb.count);
+    EXPECT_NE(UCS_OK, cb.status);
+    verify_sgl(ctx, 0, 1);
+    for (size_t i = 1; i < ctx.lengths.size(); i++) {
+        uint8_t first_byte;
+        mem_buffer::copy_from(&first_byte, ctx.src[i].ptr(), 1, mem_type());
+        EXPECT_EQ(0, first_byte) << "element " << i;
+    }
+    ucp_request_release(sptr);
+}
+
+class test_ucp_rma_sgl_err : public test_ucp_rma_sgl {
+public:
+    /* TODO: Short get from GPU memory (rendezvous) asserts on a force close,
+       also for a regular get. Run on all memory types once it is fixed */
+    void require_host_get() const {
+        require_get();
+        if (mem_type() != UCS_MEMORY_TYPE_HOST) {
+            UCS_TEST_SKIP_R("host memory only");
+        }
+    }
+
+    virtual ucp_ep_params_t get_ep_params() override {
+        ucp_ep_params_t params = test_ucp_rma_sgl::get_ep_params();
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_ep_close_force) {
+    static constexpr size_t NUM_ELEMS = 1024;
+
+    require_host_get();
+
+    /* Complete the wireup, so that the operation below is posted rather than
+       added to a pending queue */
+    test_sgl(1, UCS_KBYTE);
+
+    sgl_ctx ctx;
+    init_sgl_ctx(ctx, NUM_ELEMS, 8);
+
+    cb_state cb;
+    ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+
+    /* No progress was made since the operation was posted, so the sub-requests
+       are still outstanding when the endpoint is closed */
+    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+    EXPECT_EQ(0u, cb.count);
+    EXPECT_FALSE(ucp_request_is_completed(sptr));
+    EXPECT_GT(req->send.state.uct_comp.count, 0);
+    UCS_TEST_MESSAGE << "outstanding sub-requests at close: "
+                     << req->send.state.uct_comp.count;
+
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        sender().close_all_eps(*this, 0, UCP_EP_CLOSE_FLAG_FORCE);
+    }
+
+    /* The parent is completed exactly once, either with the data fetched or
+       canceled */
+    ucs_time_t deadline = ucs::get_deadline();
+    while ((cb.count == 0) && (ucs_get_time() < deadline)) {
+        progress();
+    }
+
+    EXPECT_EQ(1u, cb.count);
+    if (cb.status == UCS_OK) {
+        verify_sgl(ctx);
+    } else {
+        EXPECT_EQ(UCS_ERR_CANCELED, cb.status);
+    }
+    ucp_request_release(sptr);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_addr,
+                     !ENABLE_PARAMS_CHECK) {
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                             0x1234, UCP_RKEY_INVALID);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_rkey,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
-    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2,
-                                     UCP_REMOTE_ADDR_INVALID, ctx.rkeys[0]);
+    expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                 REMOTE_MASK_DEFAULT, 2,
+                                 UCP_REMOTE_ADDR_INVALID, ctx.rkeys[0]);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_field,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_field,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 UCP_OP_ATTR_FIELD_REMOTE);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             UCP_OP_ATTR_FIELD_REMOTE);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_datatype_field,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_datatype_field,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 UCP_OP_ATTR_FIELD_REMOTE_DATATYPE);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             UCP_OP_ATTR_FIELD_REMOTE_DATATYPE);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_datatype,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_datatype,
                      !ENABLE_PARAMS_CHECK) {
     static constexpr size_t NUM_ELEMS = 2;
 
@@ -1773,131 +2033,131 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_invalid_remote_datatype,
     param.remote_datatype      = ucp_dt_make_contig(1);
 
     scoped_log_handler wrap_err(wrap_errors_logger);
-    ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, NUM_ELEMS,
-                                        UCP_REMOTE_ADDR_INVALID,
-                                        UCP_RKEY_INVALID, &param);
+    ucs_status_ptr_t sptr = sgl_op_nbx(&local, NUM_ELEMS,
+                                       UCP_REMOTE_ADDR_INVALID,
+                                       UCP_RKEY_INVALID, &param);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_remote,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_remote,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 0, true);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             0, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_local_buffers,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_local_buffers,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(UCP_DT_LOCAL_SGL_FIELD_LENGTHS,
-                                 REMOTE_MASK_DEFAULT);
+    expect_sgl_invalid_param(UCP_DT_LOCAL_SGL_FIELD_LENGTHS,
+                             REMOTE_MASK_DEFAULT);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_local_lengths,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_local_lengths,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(UCP_DT_LOCAL_SGL_FIELD_BUFFERS,
-                                 REMOTE_MASK_DEFAULT);
+    expect_sgl_invalid_param(UCP_DT_LOCAL_SGL_FIELD_BUFFERS,
+                             REMOTE_MASK_DEFAULT);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_addrs,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_addrs,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT,
-                                 UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
-                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT,
+                             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                             UCP_DT_REMOTE_SGL_FIELD_RKEYS);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_rkeys,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_rkeys,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT,
-                                 UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
-                                 UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT,
+                             UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                             UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_missing_remote_lengths,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_lengths,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT,
-                                 UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
-                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT,
+                             UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                             UCP_DT_REMOTE_SGL_FIELD_RKEYS);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_count_mismatch,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, count_mismatch,
                      !ENABLE_PARAMS_CHECK) {
-    expect_sgl_put_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 0, false, 4, 3);
+    expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             0, false, 4, 3);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_mixed_mem_types,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, mixed_mem_types,
                      !ENABLE_PARAMS_CHECK ||
                              !mem_buffer::is_mem_type_supported(
                                      UCS_MEMORY_TYPE_CUDA)) {
     sgl_ctx ctx;
     init_sgl_ctx_mixed_mem_types(ctx);
-    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+    expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                 REMOTE_MASK_DEFAULT, 2);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_null_memh,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, memhs_null_memh,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
     ctx.memhs[1] = NULL;
-    expect_sgl_put_invalid_param_ctx(
+    expect_sgl_invalid_param_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, 2);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_buffer_out_of_range,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, memhs_buffer_out_of_range,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
     ctx.buffers[1] = reinterpret_cast<void*>(0xdeadbeefUL);
-    expect_sgl_put_invalid_param_ctx(
+    expect_sgl_invalid_param_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, 2);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_memhs_inconsistent_mem_info,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, memhs_inconsistent_mem_info,
                      !ENABLE_PARAMS_CHECK ||
                              !mem_buffer::is_mem_type_supported(
                                      UCS_MEMORY_TYPE_CUDA)) {
     sgl_ctx ctx;
     init_sgl_ctx_mixed_mem_types(ctx);
-    expect_sgl_put_invalid_param_ctx(
+    expect_sgl_invalid_param_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, 2);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_null,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, rkeys_null,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
     ctx.rkeys[1] = NULL;
-    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+    expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                 REMOTE_MASK_DEFAULT, 2);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_mismatched_cfg,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, rkeys_mismatched_cfg,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
 
     ucp_worker_cfg_index_t saved_cfg_index = ctx.rkeys[1]->cfg_index;
     ctx.rkeys[1]->cfg_index = saved_cfg_index + 1;
-    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+    expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                 REMOTE_MASK_DEFAULT, 2);
     ctx.rkeys[1]->cfg_index = saved_cfg_index;
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_single_elem_rkey_null,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, single_elem_rkey_null,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 1, 64);
     ctx.rkeys[0] = NULL;
-    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 1);
+    expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                 REMOTE_MASK_DEFAULT, 1);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_local_arrays,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_local_arrays,
                      !ENABLE_PARAMS_CHECK) {
     static const uint64_t fields[] = {UCP_DT_LOCAL_SGL_FIELD_BUFFERS,
                                       UCP_DT_LOCAL_SGL_FIELD_LENGTHS,
@@ -1907,12 +2167,12 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_local_arrays,
     init_sgl_ctx(ctx, 2, 64);
     for (uint64_t field : fields) {
         ctx.null_local_arrays = field;
-        expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT | field,
-                                         REMOTE_MASK_DEFAULT, 2);
+        expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT | field,
+                                     REMOTE_MASK_DEFAULT, 2);
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_remote_arrays,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_remote_arrays,
                      !ENABLE_PARAMS_CHECK) {
     static const uint64_t fields[] = {UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS,
                                       UCP_DT_REMOTE_SGL_FIELD_LENGTHS,
@@ -1922,33 +2182,34 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_null_remote_arrays,
     init_sgl_ctx(ctx, 2, 64);
     for (uint64_t field : fields) {
         ctx.null_remote_arrays = field;
-        expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                         REMOTE_MASK_DEFAULT, 2);
+        expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                     REMOTE_MASK_DEFAULT, 2);
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_remote_lengths_mismatch,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, remote_lengths_mismatch,
                      !ENABLE_PARAMS_CHECK) {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
     ctx.remote_lengths[1] = 32;
-    expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+    expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
+                                 REMOTE_MASK_DEFAULT, 2);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_zero_count) {
-    test_put_sgl(0, 64, true, false, true, true);
+UCS_TEST_P(test_ucp_rma_sgl, zero_count) {
+    test_sgl(0, 64, true, false, true, true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, without_proto,
                      !ENABLE_PARAMS_CHECK, "PROTO_ENABLE=n")
 {
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
-    expect_sgl_put_status_ctx(
+    expect_sgl_status_ctx(
             ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS,
             REMOTE_MASK_DEFAULT, 2, UCS_ERR_UNSUPPORTED);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_err, all, "all")

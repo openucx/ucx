@@ -117,7 +117,8 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .min_sgl_frag_offs   = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
@@ -195,20 +196,24 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 }
 
 static void
-ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
+ucp_proto_get_offload_zcopy_probe_param(
+        const ucp_proto_init_params_t *init_params, unsigned cfg_priority,
+        uint64_t extra_flags, uint64_t tl_v2_cap_flags, int is_sgl)
 {
     ucp_context_t *context               = init_params->worker->context;
+    ptrdiff_t min_zcopy_offs             = ucs_offsetof(uct_iface_attr_t,
+                                                        cap.get.min_zcopy);
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.overhead      = 0,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
-        .super.cfg_priority  = 30,
+        .super.cfg_priority  = cfg_priority,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_iov       = 1,
-        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
-                                            cap.get.min_zcopy),
+        .super.min_frag_offs = is_sgl ? UCP_PROTO_COMMON_OFFSET_INVALID :
+                               min_zcopy_offs,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.get.max_iov),
@@ -219,9 +224,8 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_ERR_HANDLING |
-                               UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+                               extra_flags,
         .super.exclude_map   = 0,
         .super.reg_mem_info  = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
@@ -230,10 +234,14 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
         .use_single_lane_min_length = 1,
         .initial_reg_md_map         = 0,
         .first.tl_cap_flags         = UCT_IFACE_FLAG_GET_ZCOPY,
+        .first.tl_v2_cap_flags      = tl_v2_cap_flags,
         .first.lane_type            = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags        = UCT_IFACE_FLAG_GET_ZCOPY,
+        .middle.tl_v2_cap_flags     = tl_v2_cap_flags,
         .middle.lane_type           = UCP_LANE_TYPE_RMA_BW,
-        .opt_align_offs             = UCP_PROTO_COMMON_OFFSET_INVALID
+        .opt_align_offs             = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .min_sgl_frag_offs          = is_sgl ? min_zcopy_offs :
+                                      UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
@@ -241,6 +249,16 @@ ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
     }
 
     ucp_proto_multi_probe(&params);
+}
+
+static void
+ucp_proto_get_offload_zcopy_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_get_offload_zcopy_probe_param(
+            init_params, 30,
+            UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG |
+                    UCP_PROTO_COMMON_INIT_FLAG_FAILOVER,
+            0, 0);
 }
 
 static ucs_status_t ucp_proto_get_offload_zcopy_reset(ucp_request_t *req)
@@ -260,4 +278,197 @@ ucp_proto_t ucp_get_offload_zcopy_proto = {
     .progress       = {ucp_proto_get_offload_zcopy_progress},
     .abort          = ucp_proto_request_zcopy_abort,
     .reset          = ucp_proto_get_offload_zcopy_reset
+};
+
+static void
+ucp_proto_get_sgl_offload_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_get_offload_zcopy_probe_param(init_params, 30, 0,
+                                            UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY, 1);
+}
+
+static void
+ucp_proto_get_sgl_short_elem_completion(void *request, ucs_status_t status,
+                                        void *user_data)
+{
+    ucp_request_t *req = user_data;
+
+    ucs_assert(req != NULL);
+    ucp_request_free(request);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+}
+
+static ucs_status_t
+ucp_proto_get_sgl_short_elem(ucp_request_t *req, size_t elem_index,
+                             void *buffer, size_t length, uint64_t remote_addr)
+{
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_USER_DATA |
+                        UCP_OP_ATTR_FIELD_MEMORY_TYPE,
+        .cb.send      = ucp_proto_get_sgl_short_elem_completion,
+        .user_data    = req,
+        .memory_type  = req->send.state.dt_iter.mem_info.type
+    };
+    ucs_status_ptr_t status_ptr;
+    ucs_status_t status;
+
+    ++req->send.state.uct_comp.count;
+    status_ptr = ucp_get_nbx(req->send.ep, buffer, length, remote_addr,
+                             req->send.rma.sgl.rkeys[elem_index], &param);
+    if (UCS_PTR_IS_PTR(status_ptr)) {
+        return UCS_INPROGRESS;
+    }
+
+    /* Completed immediately, so there is no callback. The count can't drop to
+       0, since the parent holds the initial reference until all are posted */
+    --req->send.state.uct_comp.count;
+    status = UCS_PTR_STATUS(status_ptr);
+    return (status == UCS_OK) ? UCS_INPROGRESS : status;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_sgl_adjust_min_frag(ucp_request_t *req,
+                                  const ucp_proto_multi_lane_priv_t *lpriv,
+                                  size_t elem_index, void **buffer_p,
+                                  size_t *length_p, uint64_t *remote_addr_p)
+{
+    size_t min_frag    = lpriv->min_sgl_frag;
+    size_t frag_offset = req->send.state.dt_iter.type.sgl.frag_offset;
+    size_t diff;
+
+    if (*length_p >= min_frag) {
+        return UCS_OK;
+    }
+
+    if (frag_offset == 0) {
+        return ucp_proto_get_sgl_short_elem(req, elem_index, *buffer_p,
+                                            *length_p, *remote_addr_p);
+    }
+
+    diff = min_frag - *length_p;
+    ucs_assertv(diff <= frag_offset, "diff=%zu frag_offset=%zu", diff,
+                frag_offset);
+    *buffer_p       = UCS_PTR_BYTE_OFFSET(*buffer_p, -diff);
+    *remote_addr_p -= diff;
+    *length_p      += diff;
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_sgl_offload_post(ucp_request_t *req,
+                               const ucp_proto_multi_lane_priv_t *lpriv,
+                               void *const *buffers, const size_t *lengths,
+                               uct_mem_h const *memhs,
+                               const uint64_t *remote_addrs,
+                               uct_rkey_t const *rkeys, size_t count)
+{
+    uct_ep_h uct_ep = ucp_ep_get_lane(req->send.ep, lpriv->super.lane);
+
+    return uct_ep_get_sgl_zcopy(uct_ep, buffers, lengths, memhs, remote_addrs,
+                                rkeys, NULL, NULL, count,
+                                &req->send.state.uct_comp);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_sgl_offload_send_func(ucp_request_t *req,
+                                    const ucp_proto_multi_lane_priv_t *lpriv,
+                                    ucp_datatype_iter_t *next_iter,
+                                    ucp_lane_index_t *lane_shift)
+{
+    return ucp_proto_rma_sgl_offload_send_func(
+            req, lpriv, next_iter, ucp_proto_get_sgl_offload_post,
+            ucp_proto_get_sgl_adjust_min_frag);
+}
+
+static ucs_status_t
+ucp_proto_get_sgl_offload_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    /* coverity[tainted_data_downcast] */
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCS_BIT(UCP_DATATYPE_SGL),
+            ucp_proto_get_sgl_offload_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
+}
+
+ucp_proto_t ucp_get_sgl_offload_proto = {
+    .name     = "get/sgl/offload",
+    .desc     = "sgl",
+    .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
+    .probe    = ucp_proto_get_sgl_offload_probe,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_get_sgl_offload_progress},
+    .abort    = ucp_proto_request_zcopy_abort,
+    .reset    = ucp_proto_get_offload_zcopy_reset
+};
+
+static void
+ucp_proto_get_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_get_offload_zcopy_probe_param(init_params, 20, 0, 0, 1);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_sgl_offload_sw_post(ucp_request_t *req,
+                                  const ucp_proto_multi_lane_priv_t *lpriv,
+                                  void *const *buffers, const size_t *lengths,
+                                  uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, size_t count)
+{
+    uct_iov_t iov = {
+        .buffer = buffers[0],
+        .length = lengths[0],
+        .memh   = memhs[0],
+        .stride = 0,
+        .count  = 1
+    };
+
+    ucs_assertv(count == 1, "count=%zu", count);
+
+    return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
+                            &iov, 1, remote_addrs[0], rkeys[0],
+                            &req->send.state.uct_comp);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
+                                       const ucp_proto_multi_lane_priv_t *lpriv,
+                                       ucp_datatype_iter_t *next_iter,
+                                       ucp_lane_index_t *lane_shift)
+{
+    return ucp_proto_rma_sgl_offload_send_frag(
+            req, lpriv, next_iter, ucp_proto_get_sgl_offload_sw_post,
+            ucp_proto_get_sgl_adjust_min_frag);
+}
+
+static ucs_status_t
+ucp_proto_get_sgl_offload_sw_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    /* coverity[tainted_data_downcast] */
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv, ucp_proto_multi_rma_init_func,
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCS_BIT(UCP_DATATYPE_SGL),
+            ucp_proto_get_sgl_offload_sw_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
+}
+
+ucp_proto_t ucp_get_sgl_offload_sw_proto = {
+    .name     = "get/sgl/offload_sw",
+    .desc     = "sgl per-element " UCP_PROTO_ZCOPY_DESC,
+    .flags    = 0,
+    .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
+    .probe    = ucp_proto_get_sgl_offload_sw_probe,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_get_sgl_offload_sw_progress},
+    .abort    = ucp_proto_request_zcopy_abort,
+    .reset    = ucp_proto_get_offload_zcopy_reset
 };
