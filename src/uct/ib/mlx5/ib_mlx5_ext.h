@@ -20,6 +20,9 @@
 
 BEGIN_C_DECLS
 
+struct uct_rc_mlx5_ext_ops;
+
+
 /**
  * @brief External plugin maximum PUT SGL zero-copy entry count callback.
  *
@@ -47,15 +50,32 @@ typedef struct uct_ib_mlx5_ext_ops {
     uct_ep_put_sgl_zcopy_func_t                    ep_put_sgl_zcopy;             /**< PUT SGL zero-copy callback */
     uct_ib_mlx5_ext_max_get_sgl_zcopy_count_func_t max_get_sgl_zcopy_count;      /**< Maximum GET SGL zero-copy entry count callback */
     uct_ep_get_sgl_zcopy_func_t                    ep_get_sgl_zcopy;             /**< GET SGL zero-copy callback */
+
+    /**
+     * Optional RC lifecycle, wireup and query hooks. Set to NULL when absent.
+     * RC binds the first registered non-NULL table at interface creation and
+     * uses that provider for the interface's lifetime. This does not change
+     * the independent PUT/GET SGL dispatch above.
+     */
+    const struct uct_rc_mlx5_ext_ops *rc_ops;
 } uct_ib_mlx5_ext_ops_t;
 
 /**
  * @brief Release mlx5 external extension.
+ *
+ * The caller must first destroy all attached interfaces, drain callbacks and
+ * stop provider timers and queued work. Serialize cleanup with registration,
+ * unregistration, interface creation and plugin dispatch.
  */
 void uct_ib_mlx5_ext_cleanup(void);
 
 /**
  * @brief Unregister the first external plugin matching a name.
+ *
+ * Before unregistering an RC provider, destroy its attached interfaces, drain
+ * callbacks and stop its timers and queued work. Serialize unregistration with
+ * interface creation and plugin dispatch. Keep the provider's code, RC table
+ * and referenced data alive until unregistration returns.
  *
  * @param [in] name Plugin name.
  */
@@ -63,6 +83,17 @@ void uct_ib_mlx5_ext_unregister(const char *name);
 
 /**
  * @brief Register an external plugin.
+ *
+ * The registry copies this structure, including the inline name, but borrows
+ * rc_ops and its referenced data. Keep the RC table immutable and valid until
+ * unregistration or registry cleanup. An RC provider must use a unique name
+ * that fits in name, including the terminating NUL, and register before RC
+ * interfaces are opened. Serialize registration with interface creation and
+ * plugin dispatch.
+ *
+ * Initialize unused hooks, including rc_ops, to NULL. This transport-private
+ * structure requires matching rebuilt UCX and plugin consumers; RC table size
+ * and version fields do not provide binary compatibility for this structure.
  *
  * @param [in] ops Plugin operations.
  *
