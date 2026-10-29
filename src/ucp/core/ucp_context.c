@@ -836,7 +836,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "musa",  { "musa_copy", NULL } },
-  { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "rocm",  { "rocm_copy", "rocm_ipc", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
@@ -2566,6 +2566,20 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
     return 1;
 }
 
+static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
+                                      unsigned max_rails)
+{
+    const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+
+    if (max_rails > max_lanes) {
+        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
+                  name, max_rails, max_lanes);
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2648,6 +2662,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
+    }
+
+    if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
+                                    context->config.ext.max_eager_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
+                                    context->config.ext.max_rndv_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
+                                    context->config.ext.max_rma_lanes)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }
@@ -2957,6 +2981,25 @@ ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
     return UCS_ERR_INVALID_PARAM;
 }
 
+/* Handle an error during gpu-nic assignment initialization, when the
+ * assignment mode is AUTO then we log and continue without assignment. */
+static ucs_status_t
+ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
+                                           ucp_gpu_nic_assignment_mode_t mode,
+                                           const char *reason)
+{
+    if (context->config.ext.gpu_nic_assignment_mode ==
+        UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
+        ucs_diag("gpu-nic assignment is disabled: %s", reason);
+        return UCS_OK;
+    }
+
+    ucs_error("%s for gpu-nic assignment mode %s, set "
+              "UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
+              reason, ucp_gpu_nic_assignment_modes[mode]);
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -2984,20 +3027,18 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 
     ucs_debug("gpu-nic assignment mode %s", ucp_gpu_nic_assignment_modes[mode]);
 
+    /* GPUs hidden from this process are missing from the topology groups, so
+     * processes with different visible GPUs would not build the same groups */
+    if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
+        return ucp_context_gpu_nic_assignment_unavailable(
+                context, mode, "incomplete gpu discovery");
+    }
+
     ucp_context_gpu_nic_assignment_net_device_filter_init(context,
                                                           &net_device_filter);
     if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
-        if (context->config.ext.gpu_nic_assignment_mode ==
-            UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-            ucs_diag("gpu-nic assignment is disabled: no assignable network "
-                     "devices");
-            return UCS_OK;
-        }
-
-        ucs_error("no assignable network devices for gpu-nic assignment mode "
-                  "%s, set UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
-                  ucp_gpu_nic_assignment_modes[mode]);
-        return UCS_ERR_INVALID_PARAM;
+        return ucp_context_gpu_nic_assignment_unavailable(
+                context, mode, "no assignable network devices");
     }
 
     status = ucs_topo_build_groups(&net_device_filter, &groups);

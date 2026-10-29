@@ -568,6 +568,8 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    uint32_t                      lane_generation; /* Incremented whenever a lane
+                                                       is updated */
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -804,6 +806,29 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags);
 
+/**
+ * @brief Flush a subset of endpoint lanes specified by @a lane_mask.
+ *
+ * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
+ * @a lane_mask are initially flushed. If the endpoint topology changes while
+ * the flush is active, current live lanes are added conservatively.
+ *
+ * Device visibility state is shared by all lanes of the endpoint. A partial
+ * flush can clear this state while an excluded lane still has writes in
+ * flight, causing a later flush to skip the visibility work for those writes.
+ *
+ * Callers must include every lane with outstanding writes that require a
+ * device flush, and defer new such writes on excluded lanes until this
+ * flush completes.
+ */
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask);
+
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
@@ -917,6 +942,8 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self);
 
 void ucp_ep_flush_completion(uct_completion_t *self);
+
+void ucp_ep_flush_mem_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 
@@ -1085,17 +1112,49 @@ ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
- * Invalidate lanes a peer token reported as failed.
+ * Mark lanes a remote token reported as failed.
  *
- * The transport endpoint stays on the lane in @ref UCP_EP_TF_LANE_INVALIDATED
- * until the error handler holds it. Non-zero @a request_id and @a peer_id are
- * recorded. Already held lanes only record @a peer_id.
+ * The transport endpoint stays on the lane in
+ * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_retire_unaware_lanes
+ * purges it. Non-zero @a request_id and @a peer_id are recorded. Already held
+ * lanes only record @a peer_id.
  *
  * @return Lanes left invalidated. Any other lane is not on the token path.
  */
 ucp_lane_map_t
 ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                            uint32_t request_id, uint32_t peer_id);
+
+
+/**
+ * Purge invalidated lanes and take their UCT endpoints off the lanes.
+ *
+ * Each retired endpoint is returned in @a retired and is not stored on the
+ * lane. The lane is marked failed and points at the failed stub. The caller
+ * destroys the returned endpoints with @ref ucp_ep_tf_destroy_retired_lanes
+ * after any token derive that still needs the queue pair.
+ */
+void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
+                                    uct_ep_h retired[]);
+
+
+/**
+ * Take invalidated lanes off the endpoint and keep their transport endpoints
+ * until an RX token purges them.
+ *
+ * The reply can carry a rebuilt address while the old endpoint stays held.
+ * Lanes whose token snapshot failed are returned for the software discard
+ * path. Reconfiguration failure fails the whole endpoint and is not returned.
+ */
+ucp_lane_map_t
+ucp_ep_tf_hold_invalidated_lanes(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/**
+ * Destroy endpoints returned by @ref ucp_ep_tf_retire_unaware_lanes and drop
+ * their token state.
+ */
+void ucp_ep_tf_destroy_retired_lanes(ucp_ep_h ep, uct_ep_h retired[]);
 
 
 /**

@@ -121,7 +121,7 @@ uct_ze_copy_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
      * or selects a single device deterministically.
      */
     if (full_count > 1) {
-        ucs_warn("ze_copy: %u devices found, limiting to 1 "
+        ucs_diag("ze_copy: %u devices found, limiting to 1 "
                  "for memtype ep compatibility",
                  full_count);
         *num_tl_devices_p = 1;

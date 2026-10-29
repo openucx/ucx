@@ -14,17 +14,19 @@
 #include "proto_common.inl"
 
 #include <ucp/core/ucp_ep.inl>
-#include <ucs/sys/string.h>
+#include <ucp/core/ucp_rkey.inl>
 
 #include <string.h>
 
 
 /* Operations outstanding purge reports.
- * The lane must support all of them since we have single protocol for reposting. */
+ * The lane must support all of them since we have a single protocol
+ * for reposting. */
 #define UCP_PROTO_REPOST_TL_CAP_FLAGS \
     (UCT_IFACE_FLAG_AM_SHORT  | UCT_IFACE_FLAG_AM_BCOPY  | \
      UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_PUT_BCOPY | \
-     UCT_IFACE_FLAG_PUT_ZCOPY)
+     UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_GET_BCOPY | \
+     UCT_IFACE_FLAG_GET_ZCOPY)
 
 
 typedef struct {
@@ -67,11 +69,7 @@ static void ucp_proto_repost_probe(const ucp_proto_init_params_t *params)
     num_lanes = ucp_proto_common_find_lanes(params, 0, UCP_LANE_TYPE_LAST,
                                             UCP_PROTO_REPOST_TL_CAP_FLAGS, 0,
                                             1, 0, NULL, &lane);
-    if (num_lanes == 0) {
-        return;
-    }
-
-    rpriv.lane = lane;
+    rpriv.lane = (num_lanes == 0) ? UCP_NULL_LANE : lane;
 
     status = ucp_proto_perf_create("repost", &perf);
     if (status != UCS_OK) {
@@ -88,8 +86,7 @@ static void ucp_proto_repost_probe(const ucp_proto_init_params_t *params)
         return;
     }
 
-    ucp_proto_select_add_proto(params, UCS_MEMUNITS_AUTO, 0, perf, &rpriv,
-                               sizeof(rpriv));
+    ucp_proto_select_add_proto(params, 0, 0, perf, &rpriv, sizeof(rpriv));
 }
 
 static ucs_status_t
@@ -184,6 +181,7 @@ ucp_proto_repost_assert_fields(const uct_ep_op_info_t *info UCS_V_UNUSED)
                                       UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA));
         break;
     case UCT_EP_OP_PUT_ZCOPY:
+    case UCT_EP_OP_GET_ZCOPY:
         ucs_assert(ucs_test_all_flags(info->field_mask,
                                       UCT_EP_OP_INFO_FIELD_OPERATION |
                                       UCT_EP_OP_INFO_FIELD_RMA));
@@ -191,6 +189,15 @@ ucp_proto_repost_assert_fields(const uct_ep_op_info_t *info UCS_V_UNUSED)
                                       UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
                                       UCT_EP_OP_INFO_RMA_FIELD_RKEY |
                                       UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY));
+        break;
+    case UCT_EP_OP_GET_BCOPY:
+        ucs_assert(ucs_test_all_flags(info->field_mask,
+                                      UCT_EP_OP_INFO_FIELD_OPERATION |
+                                      UCT_EP_OP_INFO_FIELD_RMA));
+        ucs_assert(ucs_test_all_flags(info->rma.field_mask,
+                                      UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                      UCT_EP_OP_INFO_RMA_FIELD_RKEY |
+                                      UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK));
         break;
     default:
         break;
@@ -226,15 +233,15 @@ ucp_proto_repost_save(ucp_request_t *req, const uct_ep_op_info_t *op_info)
                                             info->rma.payload.data.length);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
+    case UCT_EP_OP_GET_ZCOPY:
         status = ucp_proto_repost_copy_iov(req);
+        break;
+    case UCT_EP_OP_GET_BCOPY:
+        status = UCS_OK;
         break;
     default:
         status = UCS_ERR_UNSUPPORTED;
         break;
-    }
-
-    if (status != UCS_OK) {
-        ucp_proto_repost_cleanup(req);
     }
 
     return status;
@@ -258,6 +265,106 @@ static uct_completion_t *ucp_proto_repost_origin_comp(const ucp_request_t *req)
     return NULL;
 }
 
+/* Protocol v2 stores this completion in the origin request. */
+static ucp_request_t *ucp_proto_repost_origin_req(const ucp_request_t *req)
+{
+    uct_completion_t *origin = ucp_proto_repost_origin_comp(req);
+    ucp_request_t *origin_req;
+
+    if (origin == NULL) {
+        return NULL;
+    }
+
+    ucs_assert(origin->func != ucp_ep_flush_mem_completion);
+    origin_req = ucs_container_of(origin, ucp_request_t, send.state.uct_comp);
+    ucs_assert(origin_req->flags & UCP_REQUEST_FLAG_PROTO_SEND);
+    return origin_req;
+}
+
+static ucp_rkey_h ucp_proto_repost_origin_rkey(const ucp_request_t *origin)
+{
+    ucp_operation_id_t op_id;
+
+    ucs_assert(origin->send.proto_config != NULL);
+
+    op_id = ucp_proto_select_op_id(&origin->send.proto_config->select_param);
+    /* A repost request stores the copied payload where rma.rkey sits. */
+    ucs_assert(op_id != UCP_OP_ID_REPOST);
+    if ((op_id >= UCP_OP_ID_RNDV_FIRST) && (op_id < UCP_OP_ID_RNDV_LAST)) {
+        return origin->send.rndv.rkey;
+    }
+
+    return origin->send.rma.rkey;
+}
+
+static ucs_status_t
+ucp_proto_repost_tl_rkey(ucp_request_t *req, ucp_lane_index_t lane,
+                         uct_rkey_t *tl_rkey_p)
+{
+    const uct_ep_op_info_t *info = req->send.repost.info;
+    ucp_request_t *origin;
+    ucp_md_index_t dst_md_index;
+    ucp_rkey_h rkey;
+    unsigned rkey_index;
+
+    if (ucp_proto_repost_origin_comp(req) == NULL) {
+        *tl_rkey_p = info->rma.rkey;
+        return UCS_OK;
+    }
+
+    origin = ucp_proto_repost_origin_req(req);
+    if (origin == NULL) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    rkey = ucp_proto_repost_origin_rkey(origin);
+    if (rkey == NULL) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    dst_md_index = ucp_ep_config(req->send.ep)->key.lanes[lane].dst_md_index;
+    if ((dst_md_index == UCP_NULL_RESOURCE) ||
+        !(rkey->md_map & UCS_BIT(dst_md_index))) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    rkey_index = ucs_bitmap2idx(rkey->md_map, dst_md_index);
+    *tl_rkey_p = ucp_rkey_get_tl_rkey(rkey, rkey_index);
+    return UCS_OK;
+}
+
+/* Copied zcopy IOV still holds the failed device memory handle. */
+static ucs_status_t
+ucp_proto_repost_zcopy_memh(ucp_request_t *req, ucp_lane_index_t lane)
+{
+    uct_ep_op_info_t *op_info = req->send.repost.info;
+    ucp_request_t *origin     = ucp_proto_repost_origin_req(req);
+    ucp_md_index_t md_index;
+    uct_mem_h uct_memh;
+    ucp_mem_h memh;
+    uct_iov_t *iov;
+    size_t i;
+
+    if ((origin == NULL) ||
+        (origin->send.state.dt_iter.dt_class != UCP_DATATYPE_CONTIG)) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    memh     = origin->send.state.dt_iter.type.contig.memh;
+    md_index = ucp_ep_md_index(req->send.ep, lane);
+    if ((memh == NULL) || !(memh->md_map & UCS_BIT(md_index))) {
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    uct_memh = ucp_datatype_iter_uct_memh(memh, md_index);
+    iov      = (uct_iov_t*)op_info->rma.payload.zcopy.iov;
+    for (i = 0; i < op_info->rma.payload.zcopy.iovcnt; ++i) {
+        iov[i].memh = uct_memh;
+    }
+
+    return UCS_OK;
+}
+
 
 static void ucp_proto_repost_completion(uct_completion_t *self)
 {
@@ -279,9 +386,13 @@ static void ucp_proto_repost_completion(uct_completion_t *self)
 
 static void ucp_proto_repost_abort(ucp_request_t *req, ucs_status_t status)
 {
-    if (ucp_proto_repost_origin_comp(req) != NULL) {
-        ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
-        return;
+    uct_completion_t *origin = ucp_proto_repost_origin_comp(req);
+
+    /* The repost completion is installed only after a successful save, so an
+     * unsupported operation must complete the purged operation directly. */
+    if (origin != NULL) {
+        req->send.repost.info->comp = NULL;
+        ucp_invoke_uct_completion(origin, status);
     }
 
     ucp_proto_repost_release(req, status);
@@ -293,11 +404,17 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
                                                             send.uct);
     const ucp_proto_repost_priv_t *rpriv = req->send.proto_config->priv;
     const uct_ep_op_info_t *info         = req->send.repost.info;
+    uct_rkey_t tl_rkey                   = UCT_INVALID_RKEY;
     ucp_proto_repost_pack_t pack;
     uct_completion_t *comp;
     ucs_status_t status;
     uct_ep_h uct_ep;
     ssize_t packed;
+
+    if (rpriv->lane == UCP_NULL_LANE) {
+        ucp_proto_repost_abort(req, UCS_ERR_UNREACHABLE);
+        return UCS_OK;
+    }
 
     uct_ep = ucp_ep_get_lane(req->send.ep, rpriv->lane);
     if (uct_ep == NULL) {
@@ -308,6 +425,18 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     comp = (ucp_proto_repost_origin_comp(req) != NULL) ?
             &req->send.state.uct_comp : NULL;
     ucp_proto_repost_assert_fields(info);
+
+    if ((info->operation == UCT_EP_OP_PUT_SHORT) ||
+        (info->operation == UCT_EP_OP_PUT_BCOPY) ||
+        (info->operation == UCT_EP_OP_PUT_ZCOPY) ||
+        (info->operation == UCT_EP_OP_GET_BCOPY) ||
+        (info->operation == UCT_EP_OP_GET_ZCOPY)) {
+        status = ucp_proto_repost_tl_rkey(req, rpriv->lane, &tl_rkey);
+        if (status != UCS_OK) {
+            ucp_proto_repost_abort(req, status);
+            return UCS_OK;
+        }
+    }
 
     switch (info->operation) {
     case UCT_EP_OP_AM_SHORT:
@@ -326,19 +455,40 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     case UCT_EP_OP_PUT_SHORT:
         status = uct_ep_put_short(uct_ep, info->rma.payload.data.buffer,
                                   info->rma.payload.data.length,
-                                  info->rma.remote_addr, info->rma.rkey);
+                                  info->rma.remote_addr, tl_rkey);
         break;
     case UCT_EP_OP_PUT_BCOPY:
         pack.buffer = info->rma.payload.data.buffer;
         pack.length = info->rma.payload.data.length;
         packed      = uct_ep_put_bcopy(uct_ep, ucp_proto_repost_pack, &pack,
-                                       info->rma.remote_addr, info->rma.rkey);
+                                       info->rma.remote_addr, tl_rkey);
         status      = ucp_proto_bcopy_send_func_status(packed);
         break;
     case UCT_EP_OP_PUT_ZCOPY:
+        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
+        if (status != UCS_OK) {
+            break;
+        }
+
         status = uct_ep_put_zcopy(uct_ep, info->rma.payload.zcopy.iov,
                                   info->rma.payload.zcopy.iovcnt,
-                                  info->rma.remote_addr, info->rma.rkey, comp);
+                                  info->rma.remote_addr, tl_rkey, comp);
+        break;
+    case UCT_EP_OP_GET_BCOPY:
+        status = uct_ep_get_bcopy(uct_ep, info->rma.payload.unpack.unpack_cb,
+                                  info->rma.payload.unpack.arg,
+                                  info->rma.payload.unpack.length,
+                                  info->rma.remote_addr, tl_rkey, comp);
+        break;
+    case UCT_EP_OP_GET_ZCOPY:
+        status = ucp_proto_repost_zcopy_memh(req, rpriv->lane);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        status = uct_ep_get_zcopy(uct_ep, info->rma.payload.zcopy.iov,
+                                  info->rma.payload.zcopy.iovcnt,
+                                  info->rma.remote_addr, tl_rkey, comp);
         break;
     default:
         ucp_proto_repost_abort(req, UCS_ERR_UNSUPPORTED);
@@ -360,16 +510,28 @@ static ucs_status_t ucp_proto_repost_progress(uct_pending_req_t *self)
     return UCS_OK;
 }
 
+/* Keep the saved operation. Restart posts this request on the new lane. */
+static ucs_status_t ucp_proto_repost_reset(ucp_request_t *req)
+{
+    if (ucp_proto_repost_origin_comp(req) != NULL) {
+        ucp_proto_completion_init(&req->send.state.uct_comp,
+                                  ucp_proto_repost_completion);
+    }
+
+    return UCS_OK;
+}
+
+
 ucp_proto_t ucp_repost_proto = {
     .name     = "repost",
     .desc     = "repost an undelivered operation",
-    .flags    = 0,
+    .flags    = UCP_PROTO_FLAG_INVALID,
     .dt_mask  = UCP_DT_MASK_ALL,
     .probe    = ucp_proto_repost_probe,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_repost_progress},
     .abort    = ucp_proto_repost_abort,
-    .reset    = (ucp_request_reset_func_t)ucs_empty_function_return_success
+    .reset    = ucp_proto_repost_reset
 };
 
 
@@ -405,17 +567,38 @@ ucp_proto_repost_config(ucp_ep_h ep)
 ucs_status_t
 ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
 {
-    const ucp_proto_config_t *config = ucp_proto_repost_config(ep);
+    const ucp_proto_config_t *config;
     const ucp_proto_repost_priv_t *rpriv;
     ucp_request_t *req;
     ucs_status_t status;
 
+    /* A memory flush completion is not in the origin request. The caller
+     * completes it; a later flush uses the reconfigured lanes. */
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL) &&
+        (op_info->comp->func == ucp_ep_flush_mem_completion)) {
+        return UCS_ERR_CANCELED;
+    }
+
+    /* This completion is the live repost request. Saving op_info again would
+     * replace the user completion with it. */
+    if ((op_info->field_mask & UCT_EP_OP_INFO_FIELD_COMP) &&
+        (op_info->comp != NULL) &&
+        (op_info->comp->func == ucp_proto_repost_completion)) {
+        req = ucs_container_of(op_info->comp, ucp_request_t,
+                                              send.state.uct_comp);
+        ucp_proto_request_restart(req);
+        return UCS_OK;
+    }
+
+    config = ucp_proto_repost_config(ep);
     if (config == NULL) {
         return UCS_ERR_UNREACHABLE;
     }
 
     rpriv = config->priv;
-    if (ucp_ep_get_lane(ep, rpriv->lane) == NULL) {
+    if ((rpriv->lane == UCP_NULL_LANE) ||
+        (ucp_ep_get_lane(ep, rpriv->lane) == NULL)) {
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -435,8 +618,13 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
 
     status = ucp_proto_repost_save(req, op_info);
     if (status != UCS_OK) {
-        ucp_request_put(req);
-        return status;
+        /* Abort frees the descriptor, so sample it before the call. */
+        int stored = (req->send.repost.info != NULL);
+
+        /* A stored descriptor makes this abort complete the origin. Return
+         * success so the purge callback does not complete it again. */
+        ucp_proto_repost_abort(req, status);
+        return stored ? UCS_OK : status;
     }
 
     if (ucp_proto_repost_origin_comp(req) != NULL) {

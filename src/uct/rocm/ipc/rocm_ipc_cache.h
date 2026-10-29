@@ -13,7 +13,7 @@
 #include "rocm_ipc_md.h"
 
 
-typedef struct uct_cuda_ipc_cache_region {
+typedef struct {
     ucs_pgt_region_t        super;        /**< Base class - page table region */
     ucs_list_link_t         list;         /**< List element */
     uct_rocm_ipc_key_t      key;          /**< Remote memory key */
