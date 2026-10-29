@@ -117,6 +117,27 @@ protected:
         }
     }
 
+    // Read the PCIe devices, skip the test if there are not enough of them
+    void require_pcie_devices(size_t min_hcas)
+    {
+        read_pcie_devices();
+        if ((m_hcas.size() < min_hcas) || m_gpus.empty() || m_dmas.empty()) {
+            UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
+        }
+    }
+
+    // Same as require_pcie_devices(), and find a GPU and a sibling DMA engine
+    // for the first HCA, skip the test if there is none
+    void get_siblings_or_skip(size_t min_hcas, std::string &gpu_bdf,
+                              std::string &dma_bdf)
+    {
+        require_pcie_devices(min_hcas);
+        get_siblings(m_hcas[0], gpu_bdf, dma_bdf);
+        if (dma_bdf.empty()) {
+            UCS_TEST_SKIP_R("No sibling DMA device found");
+        }
+    }
+
 public:
     virtual void init()
     {
@@ -895,11 +916,7 @@ UCS_TEST_F(test_topo, sibling_error) {
 UCS_TEST_F(test_topo, sibling) {
     constexpr int count = 3;
 
-    read_pcie_devices();
-    if ((m_hcas.size() < count) || (m_gpus.size() == 0) ||
-        (m_dmas.size() == 0)) {
-        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
-    }
+    require_pcie_devices(count);
 
     std::string sibling_gpu, sibling_dma;
     get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
@@ -955,16 +972,8 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
     static const uintptr_t user_value1 = 1;
     static const uintptr_t user_value2 = 2;
 
-    read_pcie_devices();
-    if ((m_hcas.empty()) || (m_gpus.empty()) || (m_dmas.empty())) {
-        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
-    }
-
     std::string sibling_gpu, sibling_dma;
-    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
-    if (sibling_dma.empty()) {
-        UCS_TEST_SKIP_R("No sibling DMA device found");
-    }
+    get_siblings_or_skip(1, sibling_gpu, sibling_dma);
 
     auto hca_dev = register_device("hca0", m_hcas[0]);
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
@@ -1013,17 +1022,8 @@ protected:
     // set_sys_dev_aux), or network devices first (matched by enable_aux_path)
     void run_test(bool mem_first)
     {
-        read_pcie_devices();
-        if ((m_hcas.size() < (num_planes + 1)) || m_gpus.empty() ||
-            m_dmas.empty()) {
-            UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
-        }
-
         std::string sibling_gpu, sibling_dma;
-        get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
-        if (sibling_dma.empty()) {
-            UCS_TEST_SKIP_R("No sibling DMA device found");
-        }
+        get_siblings_or_skip(num_planes + 1, sibling_gpu, sibling_dma);
 
         // Memory devices: the same GPU BDF with distinct user values
         std::vector<ucs_sys_device_t> mems;
@@ -1110,16 +1110,8 @@ UCS_TEST_F(test_topo_multi_dev_sibling, devs_first)
 // A pairing must not outlive the role or the auxiliary device it was made for
 UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
 {
-    read_pcie_devices();
-    if ((m_hcas.size() < 2) || m_gpus.empty() || m_dmas.empty()) {
-        UCS_TEST_SKIP_R("Not enough HCA, GPU and DMA PCIe device");
-    }
-
     std::string sibling_gpu, sibling_dma;
-    get_siblings(m_hcas[0], sibling_gpu, sibling_dma);
-    if (sibling_dma.empty()) {
-        UCS_TEST_SKIP_R("No sibling DMA device found");
-    }
+    get_siblings_or_skip(2, sibling_gpu, sibling_dma);
 
     auto gpu_dev = register_device("gpu0", sibling_gpu);
     ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
