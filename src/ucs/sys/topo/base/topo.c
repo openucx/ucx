@@ -1428,6 +1428,7 @@ ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
         goto out;
     }
 
+    /* Already a memory device: keep the existing matches and skip the rescan */
     if (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
         UCS_TOPO_SIBLING_ROLE_MEM) {
         status = UCS_OK;
@@ -1464,6 +1465,7 @@ ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
         goto out;
     }
 
+    /* Same auxiliary device as before: skip the rescan */
     if ((ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
          UCS_TOPO_SIBLING_ROLE_DEV) &&
         (ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux == sys_dev_aux)) {
