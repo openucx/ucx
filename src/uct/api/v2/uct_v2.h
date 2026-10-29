@@ -489,10 +489,11 @@ struct uct_ep_attr {
     void                    *tx_token;
 
     /**
-     * Latest endpoint bandwidth, in bytes per second.
-     * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
+     * Latest endpoint bandwidth model. The dedicated and shared components
+     * are expressed in bytes per second. Valid when
+     * @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
      */
-    double                  bandwidth;
+    uct_ppn_bandwidth_t     bandwidth;
 };
 
 
