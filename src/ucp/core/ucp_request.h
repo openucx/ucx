@@ -256,6 +256,7 @@ struct ucp_request {
                     struct {
                         const uint64_t   *remote_addrs;
                         ucp_rkey_h const *rkeys;
+                        size_t           length; /* Total length in bytes */
                     } sgl;
                 } rma;
 
