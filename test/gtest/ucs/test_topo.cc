@@ -79,6 +79,19 @@ protected:
         return ucs_topo_get_sysfs_dev(name.c_str(), path.c_str(), 0);
     }
 
+    // Register a device, abort the test if it cannot be registered
+    ucs_sys_device_t
+    register_device_checked(const std::string &name, const std::string &bdf)
+    {
+        auto sys_dev = register_device(name, bdf);
+        if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            UCS_TEST_ABORT("failed to register device " << name << " (" << bdf
+                                                        << ")");
+        }
+
+        return sys_dev;
+    }
+
     void read_pcie_devices();
 
     // Find a sibling DMA engine for a GPU
@@ -90,16 +103,13 @@ protected:
             std::string gpu_path = get_sysfs_device_path(gpu);
 
             for (const auto &dma : m_dmas) {
-                auto gpu_dev = register_device("gpu0", gpu);
-                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+                auto gpu_dev = register_device_checked("gpu0", gpu);
 
                 ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
 
-                auto hca_dev = register_device("hca0", hca_bdf);
-                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
+                auto hca_dev = register_device_checked("hca0", hca_bdf);
 
-                auto dma_dev = register_device("dma", dma);
-                ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+                auto dma_dev = register_device_checked("dma", dma);
 
                 ASSERT_UCS_OK(
                         ucs_topo_sys_device_set_sys_dev_aux(hca_dev, dma_dev));
@@ -290,8 +300,7 @@ UCS_TEST_F(test_topo, pci_id) {
         UCS_TEST_SKIP_R("No PCI device with vendor and device IDs found");
     }
 
-    sys_dev = register_device("pci_device", bdf);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, sys_dev);
+    sys_dev = register_device_checked("pci_device", bdf);
     pci_id = ucs_topo_sys_device_get_pci_id(sys_dev);
     EXPECT_EQ(expected_vendor, pci_id.vendor);
     EXPECT_EQ(expected_device, pci_id.device);
@@ -923,9 +932,8 @@ UCS_TEST_F(test_topo, sibling) {
 
     std::vector<ucs_sys_device_t> hca_devs;
     for (int i = 0; i < count; ++i) {
-        hca_devs.push_back(
-                register_device("hca" + std::to_string(i), m_hcas[i]));
-        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_devs.back());
+        hca_devs.push_back(register_device_checked("hca" + std::to_string(i),
+                                                   m_hcas[i]));
     }
 
     auto dma = m_dmas[0];
@@ -937,10 +945,8 @@ UCS_TEST_F(test_topo, sibling) {
                          << "dma=" << dma << " gpu=" << gpu;
     }
 
-    auto dma_dev = register_device("dma", dma);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
-    auto gpu_dev = register_device("gpu0", gpu);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+    auto dma_dev = register_device_checked("dma", dma);
+    auto gpu_dev = register_device_checked("gpu0", gpu);
 
     // Link DMA with its HCA
     ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(hca_devs[0], dma_dev));
@@ -975,12 +981,9 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
     std::string sibling_gpu, sibling_dma;
     get_siblings_or_skip(1, sibling_gpu, sibling_dma);
 
-    auto hca_dev = register_device("hca0", m_hcas[0]);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, hca_dev);
-    auto dma_dev = register_device("dma", sibling_dma);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
-    auto gpu_dev0 = register_device("gpu0", sibling_gpu);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev0);
+    auto hca_dev = register_device_checked("hca0", m_hcas[0]);
+    auto dma_dev = register_device_checked("dma", sibling_dma);
+    auto gpu_dev0 = register_device_checked("gpu0", sibling_gpu);
 
     ucs_sys_bus_id_t gpu_bus_id;
     ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev0, &gpu_bus_id));
@@ -1027,8 +1030,7 @@ protected:
 
         // Memory devices: the same GPU BDF with distinct user values
         std::vector<ucs_sys_device_t> mems;
-        auto gpu_dev = register_device("gpu0", sibling_gpu);
-        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
+        auto gpu_dev = register_device_checked("gpu0", sibling_gpu);
         mems.push_back(gpu_dev);
 
         ucs_sys_bus_id_t gpu_bus_id;
@@ -1041,8 +1043,7 @@ protected:
             mems.push_back(mem_alias);
         }
 
-        auto dma_dev = register_device("dma", sibling_dma);
-        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
+        auto dma_dev = register_device_checked("dma", sibling_dma);
 
         if (mem_first) {
             for (auto mem : mems) {
@@ -1053,16 +1054,14 @@ protected:
         // All planes report the same auxiliary device
         std::vector<ucs_sys_device_t> planes;
         for (int i = 0; i < num_planes; ++i) {
-            auto plane = register_device("plane" + std::to_string(i),
-                                         m_hcas[i]);
-            ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, plane);
+            auto plane = register_device_checked("plane" + std::to_string(i),
+                                                 m_hcas[i]);
             ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
             planes.push_back(plane);
         }
 
         // A device whose auxiliary device is not behind the GPU's bridge
-        auto other = register_device("other", m_hcas[num_planes]);
-        ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, other);
+        auto other = register_device_checked("other", m_hcas[num_planes]);
         ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
 
         if (!mem_first) {
@@ -1113,17 +1112,13 @@ UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
     std::string sibling_gpu, sibling_dma;
     get_siblings_or_skip(2, sibling_gpu, sibling_dma);
 
-    auto gpu_dev = register_device("gpu0", sibling_gpu);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, gpu_dev);
-    auto dma_dev = register_device("dma", sibling_dma);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, dma_dev);
-    auto plane = register_device("plane", m_hcas[0]);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, plane);
+    auto gpu_dev = register_device_checked("gpu0", sibling_gpu);
+    auto dma_dev = register_device_checked("dma", sibling_dma);
+    auto plane = register_device_checked("plane", m_hcas[0]);
 
     // An auxiliary device which is not behind the GPU's bridge. This depends
     // on the PCIe topology of the machine.
-    auto other = register_device("other", m_hcas[1]);
-    ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, other);
+    auto other = register_device_checked("other", m_hcas[1]);
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev));
     ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(other, other));
     if (ucs_topo_is_sibling(other, gpu_dev)) {
