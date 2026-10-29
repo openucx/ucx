@@ -10,9 +10,80 @@
 def matrix = new com.mellanox.cicd.Matrix()
 
 import ipp.blossom.*
+import hudson.console.ConsoleNote
+import io.jenkins.blueocean.rest.hal.Link
+import io.jenkins.blueocean.rest.impl.pipeline.PipelineNodeGraphVisitor
+import io.jenkins.blueocean.rest.model.BlueRun.BlueRunResult
+import org.jenkinsci.plugins.workflow.actions.LogAction
 
 def githubHelper = null
 def pipelineOverviewUrl = ""
+
+// Error lines with context plus the log tail of each failed matrix row.
+@NonCPS
+String failureExcerpt(String jobName, String buildNumber) {
+  def errRe = ~/(: (fatal )?error\b|\bError \d+\b|\bERROR\b|\[  FAILED  \]|make(\[\d+\])?: \*\*\*|Segmentation fault|core dumped|[Tt]imed out|Timeout)/
+  def run = Jenkins.instance.getItemByFullName(jobName).getBuildByNumber(buildNumber as int)
+  def nodes = new PipelineNodeGraphVisitor(run).getPipelineNodes(
+      new Link("/blue/rest/organizations/jenkins/pipelines/${jobName}/runs/${run.id}"))
+  def out = new StringBuilder()
+  nodes.findAll { it.type == 'PARALLEL' && it.result == BlueRunResult.FAILURE }.each { node ->
+    def steps = node.steps.collect { it.flowNodeWrapper }
+    int failed = steps.findIndexOf { it.status.result == BlueRunResult.FAILURE }
+    def err = (failed < 0) ? "" : (steps[failed].nodeError() ?: steps[failed].blockError() ?: "")
+    out << "===== ${node.displayName}: ${err} =====\n"
+    def logged = steps.take((failed < 0) ? steps.size() : failed + 1).findAll {
+      it.node.getAction(LogAction)?.logText?.length() > 0
+    }
+    if (!logged) {
+      return
+    }
+    // Only the last 2 MB: a test step log can reach the 1 GB output cap.
+    def text = logged.last().node.getAction(LogAction).logText
+    def bos = new ByteArrayOutputStream()
+    text.writeLogTo(Math.max(0L, text.length() - 2L * 1024 * 1024), bos)
+    def lines = ConsoleNote.removeNotes(bos.toString('UTF-8')).readLines().collect {
+      (it.length() > 300) ? it.take(300) + " [...]" : it
+    }
+    def keep = new TreeSet<Integer>()
+    int hits = 0
+    lines.eachWithIndex { line, i ->
+      if ((hits < 40) && (line =~ errRe)) {
+        hits++
+        (Math.max(0, i - 3)..Math.min(lines.size() - 1, i + 3)).each { keep << it }
+      }
+    }
+    (Math.max(0, lines.size() - 150)..<lines.size()).each { keep << it }
+    int prev = -2
+    keep.each { i ->
+      if (i != prev + 1) {
+        out << "...\n"
+      }
+      out << lines[i] << "\n"
+      prev = i
+    }
+  }
+  return out.toString()
+}
+
+// Publishes the excerpt to GitHub through the Blossom log upload workflow.
+def uploadFailureExcerpt(githubHelper) {
+  try {
+    def excerpt = failureExcerpt(env.JOB_NAME, env.BUILD_NUMBER) ?:
+        "No failed matrix row, the build ended with ${currentBuild.currentResult}.\n"
+    def guardRegEx = [/[\w.-]+\.nvidia\.com/, /[\w.-]+\.mellanox\.com/, /[\w.-]+\.mlnx\b/]
+    excerpt = githubHelper.hideSensitiveData(excerpt,
+        Jenkins.instance.getItemByFullName(env.JOB_NAME).getBuildByNumber(env.BUILD_NUMBER as int),
+        null, guardRegEx)
+    def fileName = githubHelper.getRepoName().replace("/", "_") + "_" + env.JOB_NAME.replace("/", "_") +
+        "_build_" + env.BUILD_NUMBER + "_log.txt"
+    def url = githubHelper.requestDataJson.artifactory_server + "/" + fileName
+    githubHelper.uploadToArtifactory(this, url, excerpt)
+    githubHelper.startWorkflow(this, url, env.JOB_NAME, env.BUILD_NUMBER)
+  } catch (Exception ex) {
+    echo "WARNING: failed to upload the failure log: ${ex}"
+  }
+}
 
 if (params.githubData) {
   withCredentials([usernamePassword(credentialsId: 'github-token', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
@@ -32,12 +103,15 @@ try {
   throw ex
 } finally {
   if (params.githubData) {
+    def passed = currentBuild.resultIsBetterOrEqualTo('SUCCESS')
     githubHelper.updateCommitStatus(
       pipelineOverviewUrl,
       "CI completed",
-      currentBuild.resultIsBetterOrEqualTo('SUCCESS') ? GitHubCommitState.SUCCESS : GitHubCommitState.FAILURE,
+      passed ? GitHubCommitState.SUCCESS : GitHubCommitState.FAILURE,
       env.JOB_BASE_NAME
     )
-    githubHelper.uploadLogs(this, env.JOB_NAME, env.BUILD_NUMBER, null, null)
+    if (!passed) {
+      uploadFailureExcerpt(githubHelper)
+    }
   }
 }
