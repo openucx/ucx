@@ -283,21 +283,20 @@ ucp_proto_buffer_copy_factor_id(ucs_memory_type_t local_mem_type,
     int h2h = UCP_MEM_IS_HOST(local_mem_type) &&
               UCP_MEM_IS_HOST(remote_mem_type);
 
-    /* RNDV mtype protocols which do async copy set ZCOPY as `memtype_op`
+    /* Protocols which access the payload directly set LAST, which is allowed
+     * only for CPU accessible memory */
+    ucs_assertv((memtype_op != UCT_EP_OP_LAST) ||
+                (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) &&
+                 UCP_MEM_IS_ACCESSIBLE_FROM_CPU(remote_mem_type)),
+                "local_mem_type=%s remote_mem_type=%s",
+                ucs_memory_type_names[local_mem_type],
+                ucs_memory_type_names[remote_mem_type]);
+
+    /* RNDV mtype protocols which do async copy set ZCOPY as `memtype_op`,
      * while eager protocols that imply blocking copy set SHORT */
     if ((memtype_op == UCT_EP_OP_GET_SHORT) ||
-        (memtype_op == UCT_EP_OP_PUT_SHORT) || h2h) {
-        return ucp_proto_buffer_copy_cpu_factor_id(is_local);
-    }
-
-    /* Direct buffer access is allowed only when both buffers are CPU
-     * accessible, in which case the copy is done by the CPU */
-    if (memtype_op == UCT_EP_OP_LAST) {
-        ucs_assertv(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(local_mem_type) &&
-                    UCP_MEM_IS_ACCESSIBLE_FROM_CPU(remote_mem_type),
-                    "local_mem_type=%s remote_mem_type=%s",
-                    ucs_memory_type_names[local_mem_type],
-                    ucs_memory_type_names[remote_mem_type]);
+        (memtype_op == UCT_EP_OP_PUT_SHORT) ||
+        (memtype_op == UCT_EP_OP_LAST) || h2h) {
         return ucp_proto_buffer_copy_cpu_factor_id(is_local);
     }
 
