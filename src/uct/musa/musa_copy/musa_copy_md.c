@@ -43,9 +43,9 @@ static ucs_status_t uct_musa_md_query(uct_md_h uct_md,
     return UCS_OK;
 }
 
-ucs_status_t uct_musa_md_mem_query(uct_md_h md, const void *address,
-                                    size_t length,
-                                    uct_md_mem_attr_v2_t *mem_attr)
+static ucs_status_t
+uct_musa_md_mem_query(uct_md_h md, const void *address, size_t length,
+                      uct_md_mem_attr_v2_t *mem_attr)
 {
     uct_musa_md_t *musa_md = ucs_derived_of(md, uct_musa_md_t);
 
@@ -152,12 +152,15 @@ static uct_md_ops_t uct_musa_md_ops = {
 };
 
 static ucs_status_t
-uct_musa_md_open(uct_component_h component, const char *,
-                 const uct_md_config_t *, uct_md_h *md_p)
+uct_musa_md_open(uct_component_h component, const char *md_name,
+                 const uct_md_config_t *config, uct_md_h *md_p)
 {
     uct_musa_md_t *md;
     unsigned device_count;
     ucs_status_t status;
+
+    (void)md_name;
+    (void)config;
 
     status = uct_musa_base_get_device_count(&device_count);
     if (status != UCS_OK) {
