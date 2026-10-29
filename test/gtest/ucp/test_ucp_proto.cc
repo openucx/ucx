@@ -1139,8 +1139,12 @@ UCS_TEST_P(test_ucp_proto_cpu_accessible, small_msg_eager)
     const ucp_proto_threshold_elem_t *thresh;
     unsigned mem_type;
 
-    ucs_for_each_bit(mem_type, UCS_MEMORY_TYPES_CPU_ACCESSIBLE &
-                               ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+    ucs_memory_type_for_each(mem_type) {
+        if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
+            !(UCS_MEMORY_TYPES_CPU_ACCESSIBLE & UCS_BIT(mem_type))) {
+            continue;
+        }
+
         thresh = select_tag_send_protocol(
                 static_cast<ucs_memory_type_t>(mem_type), 1);
         ASSERT_NE(nullptr, thresh);
