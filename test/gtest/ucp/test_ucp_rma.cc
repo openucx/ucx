@@ -1929,8 +1929,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
 
 class test_ucp_rma_sgl_err : public test_ucp_rma_sgl {
 public:
-    /* Short get from GPU memory (rendezvous) asserts on a force close, also
-       for a regular get */
+    /* TODO: Short get from GPU memory (rendezvous) asserts on a force close,
+       also for a regular get. Run on all memory types once it is fixed */
     void require_host_get() const {
         require_get();
         if (mem_type() != UCS_MEMORY_TYPE_HOST) {
@@ -1978,7 +1978,7 @@ UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_ep_close_force) {
 
     /* The parent is completed exactly once, either with the data fetched or
        canceled */
-    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(20);
+    ucs_time_t deadline = ucs::get_deadline();
     while ((cb.count == 0) && (ucs_get_time() < deadline)) {
         progress();
     }
