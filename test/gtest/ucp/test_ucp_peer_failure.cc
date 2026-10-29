@@ -37,8 +37,11 @@ protected:
         TEST_TAG = UCS_BIT(1),
         TEST_RMA = UCS_BIT(2),
         FAIL_IMM = UCS_BIT(3),
-        WAKEUP   = UCS_BIT(4)
+        WAKEUP   = UCS_BIT(4),
+        TEST_SGL = UCS_BIT(5)
     };
+
+    static const size_t SGL_COUNT = 4;
 
     enum {
         STABLE_EP_INDEX,
@@ -57,6 +60,8 @@ protected:
     entity& stable_receiver();
     entity& failing_receiver();
     void *send_nb(ucp_ep_h ep, ucp_rkey_h rkey);
+    void *put_sgl_nb(ucp_ep_h ep, ucp_request_param_t *param);
+    bool has_put_zcopy_rma_bw_lane();
     static ucs_log_func_rc_t
     warn_unreleased_rdesc_handler(const char *file, unsigned line,
                                   const char *function,
@@ -89,6 +94,11 @@ protected:
     std::unique_ptr<mem_buffer> m_sbuf, m_rbuf;
     mem_handle_t                m_stable_memh, m_failing_memh;
     ucs::handle<ucp_rkey_h>     m_stable_rkey, m_failing_rkey;
+    /* UCP keeps pointers to the SGL arrays until the request completes */
+    std::vector<void*>          m_sgl_buffers;
+    std::vector<size_t>         m_sgl_lengths;
+    std::vector<uint64_t>       m_sgl_remote_addrs;
+    std::vector<ucp_rkey_h>     m_sgl_rkeys[2];
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
@@ -115,6 +125,10 @@ void test_ucp_peer_failure::get_test_variants(
                            "am_fail_imm");
     add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA | FAIL_IMM,
                            "rma_fail_imm");
+    add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA | TEST_SGL,
+                           "rma_sgl");
+    add_variant_with_value(variants, UCP_FEATURE_RMA,
+                           TEST_RMA | TEST_SGL | FAIL_IMM, "rma_sgl_fail_imm");
 }
 
 ucp_ep_params_t test_ucp_peer_failure::get_ep_params() {
@@ -201,12 +215,66 @@ void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey)
                                &param);
     } else if (get_variant_value() & TEST_TAG) {
         return ucp_tag_send_nbx(ep, m_sbuf->ptr(), m_sbuf->size(), 0, &param);
+    } else if (get_variant_value() & TEST_SGL) {
+        return put_sgl_nb(ep, &param);
     } else if (get_variant_value() & TEST_RMA) {
         return ucp_put_nbx(ep, m_sbuf->ptr(), m_sbuf->size(),
                            (uintptr_t)m_rbuf->ptr(), rkey, &param);
     } else {
         ucs_fatal("invalid test case");
     }
+}
+
+void *test_ucp_peer_failure::put_sgl_nb(ucp_ep_h ep, ucp_request_param_t *param)
+{
+    int ep_index               = (ep == stable_sender()) ? STABLE_EP_INDEX :
+                                                           FAILING_EP_INDEX;
+    ucp_dt_local_sgl_t local   = {};
+    ucp_dt_remote_sgl_t remote = {};
+
+    local.field_mask    = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                          UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+    local.buffers       = m_sgl_buffers.data();
+    local.lengths       = m_sgl_lengths.data();
+    remote.field_mask   = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                          UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                          UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+    remote.remote_addrs = m_sgl_remote_addrs.data();
+    remote.lengths      = m_sgl_lengths.data();
+    remote.rkeys        = m_sgl_rkeys[ep_index].data();
+
+    param->op_attr_mask   |= UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                             UCP_OP_ATTR_FIELD_REMOTE |
+                             UCP_OP_ATTR_FIELD_REMOTE_COUNT;
+    param->datatype        = ucp_dt_make_sgl();
+    param->remote_datatype = ucp_dt_make_sgl();
+    param->remote          = &remote;
+    param->remote_count    = SGL_COUNT;
+    return ucp_put_nbx(ep, &local, SGL_COUNT, UCP_REMOTE_ADDR_INVALID,
+                       UCP_RKEY_INVALID, param);
+}
+
+/* SGL put protocols use only RMA_BW lanes which support put zcopy */
+bool test_ucp_peer_failure::has_put_zcopy_rma_bw_lane()
+{
+    ucp_ep_h ep                    = failing_sender();
+    const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+    ucp_lane_index_t lane;
+
+    for (ucp_lane_index_t i = 0; i < key.num_lanes; ++i) {
+        lane = key.rma_bw_lanes[i];
+        if (lane == UCP_NULL_LANE) {
+            break;
+        }
+
+        if (ucp_worker_iface_get_attr(sender().worker(),
+                                      ucp_ep_get_rsc_index(ep, lane))
+                    ->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 ucs_log_func_rc_t
@@ -336,6 +404,11 @@ void test_ucp_peer_failure::set_rkeys() {
         get_rkey(stable_sender(), stable_receiver(), m_stable_memh,
                  m_stable_rkey);
     }
+
+    if (get_variant_value() & TEST_SGL) {
+        m_sgl_rkeys[FAILING_EP_INDEX].assign(SGL_COUNT, m_failing_rkey);
+        m_sgl_rkeys[STABLE_EP_INDEX].assign(SGL_COUNT, m_stable_rkey);
+    }
 }
 
 void test_ucp_peer_failure::send_cb(void *request, ucs_status_t status,
@@ -364,6 +437,10 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     sender().connect(&failing_receiver(), get_ep_params(), FAILING_EP_INDEX);
     set_am_handler(stable_receiver());
     set_am_handler(failing_receiver());
+
+    if ((get_variant_value() & TEST_SGL) && !has_put_zcopy_rma_bw_lane()) {
+        UCS_TEST_SKIP_R("no rma_bw lane with put zcopy");
+    }
 
     set_rkeys();
 
@@ -484,6 +561,23 @@ void test_ucp_peer_failure::cleanup_rndv_descs() {
 void test_ucp_peer_failure::init_buffers(size_t msg_size) {
     m_sbuf.reset(new mem_buffer(msg_size, memtype(), TX_SEED));
     m_rbuf.reset(new mem_buffer(msg_size, memtype(), RX_SEED));
+
+    if (!(get_variant_value() & TEST_SGL)) {
+        return;
+    }
+
+    /* Split the buffers into SGL elements, the last one takes the remainder */
+    size_t elem_size = msg_size / SGL_COUNT;
+    m_sgl_buffers.clear();
+    m_sgl_lengths.clear();
+    m_sgl_remote_addrs.clear();
+    for (size_t i = 0; i < SGL_COUNT; ++i) {
+        size_t offset = i * elem_size;
+        m_sgl_buffers.push_back(UCS_PTR_BYTE_OFFSET(m_sbuf->ptr(), offset));
+        m_sgl_remote_addrs.push_back((uintptr_t)m_rbuf->ptr() + offset);
+        m_sgl_lengths.push_back((i == (SGL_COUNT - 1)) ? (msg_size - offset) :
+                                                         elem_size);
+    }
 }
 
 ucs_memory_type_t test_ucp_peer_failure::memtype() const
