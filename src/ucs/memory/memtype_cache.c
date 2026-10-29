@@ -353,7 +353,7 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
     ucs_memtype_cache_region_t *region, *tmp;
     ucs_pgt_addr_t start, end;
     UCS_LIST_HEAD(region_list);
-    ucs_status_t status;
+    ucs_status_t status, status_remove;
 
     if ((memtype_cache == NULL) || memtype_cache->has_events || (size == 0) ||
         (size > UINTPTR_MAX - addr - (UCS_PGT_ADDR_ALIGN - 1))) {
@@ -365,9 +365,18 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
 
     ucs_spin_lock(&memtype_cache->lock);
 
-    if ((ucs_memtype_cache_split(memtype_cache, start) != UCS_OK) ||
-        (ucs_memtype_cache_split(memtype_cache, end) != UCS_OK)) {
-        goto out_unlock;
+    status = ucs_memtype_cache_split(memtype_cache, start);
+    if (status == UCS_OK) {
+        status = ucs_memtype_cache_split(memtype_cache, end);
+    }
+
+    if (status != UCS_OK) {
+        /* The range is about to be freed, so a stale region must not stay in
+         * the cache. Drop every overlapping region, even if it is also used by
+         * a neighbor: a cache miss is safe, a stale hit is not. */
+        ucs_warn("failed to split memtype cache regions: %s, removing all "
+                 "regions overlapping %p..%p", ucs_status_string(status),
+                 (void*)start, (void*)end);
     }
 
     ucs_pgtable_search_range(&memtype_cache->pgtable, start, end - 1,
@@ -375,20 +384,22 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
                              &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
         ucs_assert(region->refcount > 0);
-        if (--region->refcount > 0) {
+        if ((status == UCS_OK) && (--region->refcount > 0)) {
             continue;
         }
 
-        status = ucs_pgtable_remove(&memtype_cache->pgtable, &region->super);
-        ucs_assertv_always(status == UCS_OK,
+        status_remove = ucs_pgtable_remove(&memtype_cache->pgtable,
+                                           &region->super);
+        ucs_assertv_always(status_remove == UCS_OK,
                            "failed to remove explicit memtype region: %s",
-                           ucs_status_string(status));
+                           ucs_status_string(status_remove));
         ucs_free(region);
     }
 
-    ucs_memtype_cache_merge(memtype_cache, start, end);
+    if (status == UCS_OK) {
+        ucs_memtype_cache_merge(memtype_cache, start, end);
+    }
 
-out_unlock:
     ucs_spin_unlock(&memtype_cache->lock);
 }
 
