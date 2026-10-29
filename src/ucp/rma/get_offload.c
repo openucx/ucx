@@ -118,7 +118,7 @@ ucp_proto_get_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .sgl_min_frag_offs   = UCP_PROTO_COMMON_OFFSET_INVALID
+        .min_sgl_frag_offs   = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_GET))) {
@@ -240,7 +240,7 @@ ucp_proto_get_offload_zcopy_probe_param(
         .middle.tl_v2_cap_flags     = tl_v2_cap_flags,
         .middle.lane_type           = UCP_LANE_TYPE_RMA_BW,
         .opt_align_offs             = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .sgl_min_frag_offs          = is_sgl ? min_zcopy_offs :
+        .min_sgl_frag_offs          = is_sgl ? min_zcopy_offs :
                                       UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
@@ -293,6 +293,7 @@ ucp_proto_get_sgl_short_elem_completion(void *request, ucs_status_t status,
 {
     ucp_request_t *req = user_data;
 
+    ucs_assert(req != NULL);
     ucp_request_free(request);
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }

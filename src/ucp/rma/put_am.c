@@ -199,7 +199,7 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM,
         .opt_align_offs      = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .sgl_min_frag_offs   = UCP_PROTO_COMMON_OFFSET_INVALID
+        .min_sgl_frag_offs   = UCP_PROTO_COMMON_OFFSET_INVALID
     };
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT))) {

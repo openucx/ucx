@@ -878,7 +878,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
 
         lpriv->min_sgl_frag   = ucp_proto_common_get_iface_attr_field(
                 ucp_proto_common_get_iface_attr(&params->super.super, lane),
-                params->sgl_min_frag_offs, 0);
+                params->min_sgl_frag_offs, 0);
 
         if (v2_cap_flags & (UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
                             UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
