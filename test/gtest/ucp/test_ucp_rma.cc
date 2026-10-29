@@ -1802,7 +1802,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_completion_order) {
 
     /* The parent request must not complete before all the elements arrived, so
        the data is verified right after the completion, without a flush */
-    while (cb.count == 0) {
+    ucs_time_t deadline = ucs::get_deadline();
+    while ((cb.count == 0) && (ucs_get_time() < deadline)) {
         ucp_worker_progress(sender().worker());
         ucp_worker_progress(receiver().worker());
         if (cb.count == 0) {
@@ -1875,9 +1876,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
     cb_state cb;
     ucs_status_ptr_t sptr = post_sgl_with_cb(ctx, cb);
     ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-    while (cb.count == 0) {
-        progress();
-    }
+    wait_for_flag(&cb.count);
+    ASSERT_EQ(1u, cb.count);
     EXPECT_UCS_OK(cb.status);
     ucp_request_release(sptr);
 
@@ -1889,6 +1889,10 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_layout) {
 UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
            "PROTOS=get/sgl/offload,reconfig") {
     require_get();
+    if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_ZCOPY,
+                                     UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
 
     /* Complete the wireup, so that the operation below is posted rather than
        added to a pending queue */
@@ -1908,9 +1912,7 @@ UCS_TEST_P(test_ucp_rma_sgl, short_element_sync_failure,
     ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
     EXPECT_EQ(0u, cb.count);
 
-    while (cb.count == 0) {
-        progress();
-    }
+    wait_for_flag(&cb.count);
 
     /* The parent fails only after the previous element was fetched, and the
        next elements are not posted */
