@@ -1425,7 +1425,7 @@ protected:
         for (size_t i = begin; i < end; i++) {
             uint8_t expected = static_cast<uint8_t>(i + 1);
             void *result     = (op() == SGL_OP_PUT) ? ctx.dst[i].ptr() :
-                                                    ctx.src[i].ptr();
+                                                      ctx.src[i].ptr();
             std::vector<uint8_t> host_buf(ctx.lengths[i]);
             mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
                                   mtype);
@@ -1470,7 +1470,7 @@ protected:
         ASSERT_FALSE(expect_immediate_completion && use_callback);
 
         uint64_t zcopy_cap = (op() == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
-                                                  UCT_IFACE_FLAG_GET_ZCOPY;
+                                                    UCT_IFACE_FLAG_GET_ZCOPY;
         if (m_require_zcopy_lane && !sender().has_lane_with_caps(zcopy_cap)) {
             UCS_TEST_SKIP_R("zcopy is not supported");
         }
@@ -1510,8 +1510,7 @@ protected:
             param.user_data = &cb;
         }
 
-        ucs_status_ptr_t sptr = sgl_op_nbx(&local, num,
-                                           UCP_REMOTE_ADDR_INVALID,
+        ucs_status_ptr_t sptr = sgl_op_nbx(&local, num, UCP_REMOTE_ADDR_INVALID,
                                            UCP_RKEY_INVALID, &param);
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
@@ -1593,8 +1592,8 @@ protected:
         }
 
         scoped_log_handler wrap_err(wrap_errors_logger);
-        ucs_status_ptr_t sptr = sgl_op_nbx(&local, count, remote_addr,
-                                           rkey, &param);
+        ucs_status_ptr_t sptr = sgl_op_nbx(&local, count, remote_addr, rkey,
+                                           &param);
         EXPECT_EQ(expected_status, UCS_PTR_STATUS(sptr));
     }
 
