@@ -354,43 +354,34 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     const ucp_rkey_config_key_t *rkey_config_key = init_params->rkey_config_key;
     ucp_context_h context                        = init_params->worker->context;
+    ucp_memory_info_t mem_info                   =
+            ucp_proto_common_select_param_mem_info(select_param);
+    ucp_dt_class_t dt_class                      = select_param->dt_class;
+    uint8_t sg_count                             = select_param->sg_count;
     ucp_proto_select_param_t remote_select_param;
-    ucp_memory_info_t mem_info;
-    ucp_dt_class_t dt_class;
     uint32_t op_attr_mask;
-    uint8_t sg_count;
+
+    if (rkey_config_key != NULL) {
+        /* A remote key always describes a contiguous buffer */
+        dt_class = UCP_DATATYPE_CONTIG;
+        sg_count = 1;
+
+        /* Keep the local memory info if the local context cannot model the
+         * remote memory type, e.g. GPU memory of another vendor */
+        if (UCS_BIT_GET(context->supported_mem_type_mask,
+                        rkey_config_key->mem_type)) {
+            mem_info.type  = rkey_config_key->mem_type;
+            mem_info.flags = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
+            /* The local system device is a namespace-safe proxy only when the
+             * memory types match */
+            if (mem_info.type != select_param->mem_type) {
+                mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            }
+        }
+    }
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    UCP_OP_ATTR_FLAG_MULTI_SEND;
-    /* Construct select parameter for the remote protocol */
-    if ((rkey_config_key == NULL) ||
-        !UCS_BIT_GET(context->supported_mem_type_mask,
-                     rkey_config_key->mem_type)) {
-        /* Remote buffer is unknown, or its memory type is not supported by the
-         * local context (e.g. GPU memory of another vendor), so the protocols
-         * on it cannot be estimated: assume same params as local */
-        mem_info.type    = select_param->mem_type;
-        mem_info.sys_dev = select_param->sys_dev;
-        mem_info.flags   = select_param->op.mem_flags;
-    } else {
-        mem_info.type    = rkey_config_key->mem_type;
-        /* If the local and remote memory types match, use the local system
-         * device as a namespace-safe proxy for remote protocol estimation. */
-        mem_info.sys_dev = (mem_info.type == select_param->mem_type) ?
-                                   select_param->sys_dev :
-                                   UCS_SYS_DEVICE_ID_UNKNOWN;
-        mem_info.flags   = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
-    }
-
-    /* A remote key always describes a contiguous buffer */
-    if (rkey_config_key == NULL) {
-        dt_class = select_param->dt_class;
-        sg_count = select_param->sg_count;
-    } else {
-        dt_class = UCP_DATATYPE_CONTIG;
-        sg_count = 1;
-    }
-
     ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                 op_attr_mask, params->remote_op_flags, dt_class,
                                 &mem_info, sg_count);
