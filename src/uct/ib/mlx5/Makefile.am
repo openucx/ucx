@@ -35,7 +35,6 @@ noinst_HEADERS = \
 if HAVE_TL_RC
 noinst_HEADERS += \
 	rc/rc_mlx5.h \
-	rc/rc_mlx5_ext.h \
 	rc/rc_mlx5.inl \
 	rc/rc_mlx5_common.h
 
