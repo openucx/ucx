@@ -836,6 +836,8 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
                  (sys_dev < ucs_topo_global_ctx.num_devices) &&
                  (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
                  (sys_dev_mem < ucs_topo_global_ctx.num_devices) &&
+                 (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+                  UCS_TOPO_SIBLING_ROLE_DEV) &&
                  /*
                   * The MEM side holds every matched DEV, including all planes
                   * of a multiplane NIC.
