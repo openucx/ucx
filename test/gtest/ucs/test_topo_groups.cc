@@ -70,6 +70,7 @@ protected:
         device.device_class    = device_class;
         device.class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device.sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
+        UCS_STATIC_BITMAP_RESET_ALL(&device.siblings);
 
         sys_dev = static_cast<ucs_sys_device_t>(m_devices.size());
         m_devices.push_back(device);
