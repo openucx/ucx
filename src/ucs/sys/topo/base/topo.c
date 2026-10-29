@@ -1403,6 +1403,10 @@ static void ucs_topo_sys_device_clear_siblings(ucs_sys_device_t sys_dev)
     unsigned peer;
 
     UCS_STATIC_BITMAP_FOR_EACH_BIT(peer, &device->siblings) {
+        if (peer >= ucs_topo_global_ctx.num_devices) {
+            break;
+        }
+
         UCS_STATIC_BITMAP_RESET(&ucs_topo_global_ctx.devices[peer].siblings,
                                 sys_dev);
     }
