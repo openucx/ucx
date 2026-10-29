@@ -36,7 +36,10 @@ absent.
 - Memory-type classification of pointers happens through the global
   `ucs_memtype_cache` (`src/ucs/memory/memtype_cache.c`); CUDA modules
   feed it via the `ucm/cuda` event hooks rather than calling
-  `cuPointerGetAttributes` per request on the fast path.
+  `cuPointerGetAttributes` per request on the fast path. When UCM events are
+  unavailable and `UCX_MEMTYPE_CACHE=y`, `cuda_copy` registers memory it allocates
+  with `ucs_memtype_cache_register()` and releases it with
+  `ucs_memtype_cache_unregister()` using the same range.
 - IPC (`cuda_ipc_cache`) entries are keyed per-handle and invalidated on
   the matching `cudaFree` event from `ucm/cuda`. When invalidating, drop
   the full cache entry — never a partial mapping.

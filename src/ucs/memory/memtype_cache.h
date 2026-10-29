@@ -40,9 +40,9 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    ucs_spinlock_t                    lock; /**< Protects cache state */
-    ucs_pgtable_t                     pgtable; /**< Cached regions */
-    int                               has_events; /**< UCM events active */
+    ucs_spinlock_t lock;       /**< Protects cache state */
+    ucs_pgtable_t  pgtable;    /**< Cached regions */
+    int            has_events; /**< UCM events active */
 };
 
 
@@ -72,8 +72,12 @@ void ucs_memtype_cache_cleanup(void);
  * @return UCS_OK              - an element was found and the memory info is
  *                               valid.
  * @return UCS_ERR_NO_ELEM     - an element was not found in the event cache.
- * @return UCS_ERR_UNSUPPORTED - the cache is disabled or an explicit-only
- *                               region was not found.
+ * @return UCS_ERR_UNSUPPORTED - the cache is disabled, or it has no UCM events
+ *                               and the address is not in a registered region.
+ *                               The memory type cannot be assumed to be host.
+ *
+ * Without UCM events, a range which spans adjacent registered regions with the
+ * same attributes is a hit, and alloc_length covers all of them.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);

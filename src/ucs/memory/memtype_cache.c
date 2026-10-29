@@ -218,9 +218,10 @@ static void ucs_memtype_cache_region_set_end(ucs_memtype_cache_t *memtype_cache,
 
 /* The cache lock must be held. Make addr a region boundary, keeping the
  * attributes and the reference count on both sides.
- * @return 0 on success, or -1 if the second half could not be created. */
-static int ucs_memtype_cache_split(ucs_memtype_cache_t *memtype_cache,
-                                   ucs_pgt_addr_t addr)
+ * @return UCS_OK on success, or UCS_ERR_NO_MEMORY if the second half could not
+ *         be created. */
+static ucs_status_t ucs_memtype_cache_split(ucs_memtype_cache_t *memtype_cache,
+                                            ucs_pgt_addr_t addr)
 {
     ucs_memtype_cache_region_t *region;
     ucs_pgt_region_t *pgt_region;
@@ -228,7 +229,7 @@ static int ucs_memtype_cache_split(ucs_memtype_cache_t *memtype_cache,
 
     pgt_region = ucs_pgtable_lookup(&memtype_cache->pgtable, addr);
     if ((pgt_region == NULL) || (pgt_region->start == addr)) {
-        return 0;
+        return UCS_OK;
     }
 
     region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
@@ -237,10 +238,10 @@ static int ucs_memtype_cache_split(ucs_memtype_cache_t *memtype_cache,
     if (ucs_memtype_cache_insert(memtype_cache, addr, end, region->mem_type,
                                  region->sys_dev, region->mem_flags,
                                  region->refcount) == NULL) {
-        return -1;
+        return UCS_ERR_NO_MEMORY;
     }
 
-    return 0;
+    return UCS_OK;
 }
 
 /* The cache lock must be held. Merge neighbors of the range [start, end) which
@@ -305,8 +306,8 @@ void ucs_memtype_cache_register(const void *address, size_t size,
 
     ucs_spin_lock(&memtype_cache->lock);
 
-    if ((ucs_memtype_cache_split(memtype_cache, start) != 0) ||
-        (ucs_memtype_cache_split(memtype_cache, end) != 0)) {
+    if ((ucs_memtype_cache_split(memtype_cache, start) != UCS_OK) ||
+        (ucs_memtype_cache_split(memtype_cache, end) != UCS_OK)) {
         goto out_unlock;
     }
 
@@ -364,8 +365,8 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
 
     ucs_spin_lock(&memtype_cache->lock);
 
-    if ((ucs_memtype_cache_split(memtype_cache, start) != 0) ||
-        (ucs_memtype_cache_split(memtype_cache, end) != 0)) {
+    if ((ucs_memtype_cache_split(memtype_cache, start) != UCS_OK) ||
+        (ucs_memtype_cache_split(memtype_cache, end) != UCS_OK)) {
         goto out_unlock;
     }
 
@@ -598,6 +599,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     ucs_status_t status;
 
     if (memtype_cache == NULL) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    /* Without UCM events the cache holds only explicit registrations, so skip
+     * the lock when there are none. A racing registration is not visible yet,
+     * which is the same as a miss. */
+    if (!memtype_cache->has_events &&
+        (memtype_cache->pgtable.num_regions == 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
