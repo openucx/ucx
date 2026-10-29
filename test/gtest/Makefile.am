@@ -353,7 +353,8 @@ gtest_SOURCES += \
 	uct/ze/test_ze_ipc_md.cc \
 	uct/ze/test_ze_ipc_cache.cc \
 	uct/ze/test_ze_ipc_rma.cc \
-	uct/ze/test_ze_copy_md.cc
+	uct/ze/test_ze_copy_md.cc \
+	uct/ze/test_ze_copy_import_rma.cc
 gtest_CPPFLAGS += \
 	$(ZE_CPPFLAGS)
 gtest_LDFLAGS += \
@@ -381,6 +382,7 @@ noinst_HEADERS = \
 	uct/uct_test.h \
 	uct/test_md.h \
 	uct/test_peer_failure.h \
+	uct/ze/test_ze_copy_import.h \
 	\
 	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
