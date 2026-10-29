@@ -275,7 +275,7 @@ uct_gdaki_md_check_uar(const uct_ib_md_t *md, uint32_t flags, size_t length)
         goto out;
     }
 
-    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemHostUnregister(uar->reg_addr));
+    UCT_CUDADRV_FUNC_LOG_WARN(cuMemHostUnregister(uar->reg_addr));
     ret = 1;
 
 out:
@@ -867,7 +867,8 @@ uct_rc_gdaki_ep_init_channels_pooled(uct_rc_gdaki_iface_t *iface,
     return UCS_OK;
 }
 
-static void uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
+static UCS_F_ALWAYS_INLINE void
+uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
 {
     ep->mem.umem      = NULL;
     ep->mem.gpu_mem   = NULL;
@@ -1327,9 +1328,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     char *gpu_name, *ib_name;
     char pci_addr[UCS_SYS_BDF_NAME_MAX];
     ucs_status_t status;
-    CUdevice cuda_dev;
     int cuda_id;
     int ret;
+    CUdevice cuda_dev;
 
     if (config->num_channels > UINT8_MAX + 1) {
          ucs_error("num_channels exceeds maximum value of 256");

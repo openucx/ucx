@@ -173,6 +173,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp_common(uct_ib_iface_t *iface,
             goto err;
         }
     } else {
+        ucs_assert(attr->uar->super.mode == mmio_mode);
         uar = attr->uar;
     }
 
