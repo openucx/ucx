@@ -137,7 +137,6 @@ protected:
             ASSERT_LT(uar_mode, ucs_static_array_size(test_device_uar_modes));
             modify_config("UAR_ALLOC_MODE", test_device_uar_modes[uar_mode]);
             modify_config("NUM_CHANNELS", "4");
-            check_uar_mode(uar_mode);
         }
 
         uct_test::init();
@@ -179,50 +178,6 @@ protected:
     entity *m_receiver;
 
 private:
-    void check_uar_mode(unsigned uar_mode)
-    {
-        if (uar_mode == 0) {
-            return;
-        }
-
-        ucs::handle<ucs_async_context_t*> async;
-        ucs::handle<uct_worker_h> worker;
-        ucs::handle<uct_md_h> md;
-
-        UCS_TEST_CREATE_HANDLE(ucs_async_context_t*, async,
-                               ucs_async_context_destroy,
-                               ucs_async_context_create,
-                               UCS_ASYNC_MODE_THREAD_SPINLOCK);
-        UCS_TEST_CREATE_HANDLE(uct_worker_h, worker, uct_worker_destroy,
-                               uct_worker_create, async,
-                               UCS_THREAD_MODE_SINGLE);
-        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_md_h, md, uct_md_close,
-                                            uct_md_open, GetParam()->component,
-                                            GetParam()->md_name.c_str(),
-                                            m_md_config);
-
-        uct_iface_params_t params = {};
-        uct_iface_h iface;
-        ucs_status_t status;
-
-        params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
-                                      UCT_IFACE_PARAM_FIELD_DEVICE;
-        params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
-        params.mode.device.tl_name  = GetParam()->tl_name.c_str();
-        params.mode.device.dev_name = GetParam()->dev_name.c_str();
-        {
-            scoped_log_handler slh(wrap_errors_logger);
-            status = uct_iface_open(md, worker, &params, m_iface_config,
-                                    &iface);
-        }
-        if (status == UCS_ERR_UNSUPPORTED) {
-            UCS_TEST_SKIP_R("dedicated NC UAR is not supported");
-        }
-
-        ASSERT_UCS_OK(status);
-        uct_iface_close(iface);
-    }
-
     CUdevice m_cuda_dev;
 };
 

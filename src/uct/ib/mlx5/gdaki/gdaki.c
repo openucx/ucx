@@ -63,8 +63,7 @@ static const char *uct_rc_gdaki_uar_alloc_mode_names[] = {
 
 enum {
     UCT_GDAKI_SUPPORTED   = UCS_BIT(0),
-    UCT_GDAKI_DMABUF_UMEM = UCS_BIT(1),
-    UCT_GDAKI_NC_UAR      = UCS_BIT(2)
+    UCT_GDAKI_DMABUF_UMEM = UCS_BIT(1)
 };
 
 typedef struct {
@@ -101,7 +100,7 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
     {"UAR_ALLOC_MODE", "shared",
      "UAR allocation mode for QP doorbell registers.\n"
      " - shared    : use the worker-level UAR shared by all QPs\n"
-     " - dedicated : use a separate non-coherent UAR per channel per endpoint.\n"
+     " - dedicated : use a separate UAR per channel per endpoint.\n"
      "               With EP_ALLOC_MODE=pool, each chunk consumes\n"
      "               NUM_PRE_ALLOC_EPS * NUM_CHANNELS UARs, which can exhaust\n"
      "               UAR BAR space. EP_ALLOC_MODE=direct allocates on demand.",
@@ -257,20 +256,20 @@ static int uct_gdaki_is_dmabuf_supported(const uct_ib_md_t *md)
     return dmabuf_supported;
 }
 
-static int
-uct_gdaki_md_check_uar(const uct_ib_md_t *md, uint32_t flags, size_t length)
+static int uct_gdaki_md_check_uar(const uct_ib_md_t *md)
 {
     int ret = 0;
     struct mlx5dv_devx_uar *uar;
     ucs_status_t status;
 
-    uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context, flags);
+    uar = mlx5dv_devx_alloc_uar(md->dev.ibv_context, 0);
     if (uar == NULL) {
         return 0;
     }
 
     status = UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuMemHostRegister(uar->reg_addr, length, UCT_GDAKI_CUDA_REG_FLAGS));
+            cuMemHostRegister(uar->reg_addr, UCT_IB_MLX5_BF_REG_SIZE,
+                              UCT_GDAKI_CUDA_REG_FLAGS));
     if (status != UCS_OK) {
         goto out;
     }
@@ -326,7 +325,7 @@ uct_gdaki_check_cuda_ctx_dependent_features(const uct_ib_md_t *md)
         return features;
     }
 
-    if (!uct_gdaki_md_check_uar(md, 0, UCT_IB_MLX5_BF_REG_SIZE)) {
+    if (!uct_gdaki_md_check_uar(md)) {
         ucs_diag("GDAKI not supported, please add NVreg_RegistryDwords="
                  "\"PeerMappingOverride=1;\" option for nvidia kernel driver");
         goto out;
@@ -350,11 +349,6 @@ uct_gdaki_check_cuda_ctx_dependent_features(const uct_ib_md_t *md)
     }
 
     features |= UCT_GDAKI_SUPPORTED;
-
-    if (uct_gdaki_md_check_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
-                               sizeof(uint64_t))) {
-        features |= UCT_GDAKI_NC_UAR;
-    }
 
 out:
     uct_cuda_ctx_primary_pop_and_release(cuda_dev);
@@ -514,26 +508,6 @@ static void uct_rc_gdaki_shared_uar_cleanup(uct_rc_gdaki_shared_uar_t *data)
     uct_rc_gdaki_uar_reg_cleanup(&data->reg);
 }
 
-static ucs_status_t
-uct_rc_gdaki_channel_uar_init(uct_rc_gdaki_iface_t *iface,
-                              uct_rc_gdaki_channel_t *channel, uint32_t flags)
-{
-    uct_ib_mlx5_devx_uar_t *uar = &channel->uar.dedicated.qp_uar;
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                          uct_ib_mlx5_md_t);
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_alloc_uar(md, flags, &uar->uar);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    uar->super.addr.ptr = uar->uar->reg_addr;
-    uar->super.mode     = UCT_IB_MLX5_MMIO_MODE_DB;
-    uar->ctx            = md->super.dev.ibv_context;
-    return UCS_OK;
-}
-
 static void uct_rc_gdaki_channel_uar_cleanup(uct_rc_gdaki_iface_t *iface,
                                              uct_rc_gdaki_channel_t *channel)
 {
@@ -672,8 +646,11 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
             }
 
             if (dedicated_uar) {
-                status = uct_rc_gdaki_channel_uar_init(
-                        iface, channel, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC);
+                status = uct_ib_mlx5_devx_uar_init(
+                        &channel->uar.dedicated.qp_uar,
+                        ucs_derived_of(iface->super.super.super.super.md,
+                                       uct_ib_mlx5_md_t),
+                        qp_attr.mmio_mode);
                 if (status != UCS_OK) {
                     goto err_destroy_cq;
                 }
@@ -1340,13 +1317,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
     self->num_channels   = ucs_roundup_pow2(config->num_channels);
     self->ep_alloc_mode  = config->ep_alloc_mode;
     self->uar_alloc_mode = config->uar_alloc_mode;
-
-    if ((self->uar_alloc_mode == UCT_RC_GDAKI_UAR_ALLOC_MODE_DEDICATED) &&
-        !(uct_gdaki_get_driver_features(&md->super) & UCT_GDAKI_NC_UAR)) {
-        ucs_error("dedicated uar mode: nc uar allocation or cuda "
-                  "registration not supported");
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap_devx.rc,
