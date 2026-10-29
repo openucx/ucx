@@ -377,14 +377,12 @@ ucp_proto_multi_rma_init_func(ucp_request_t *req)
     return ucp_ep_rma_handle_fence(req->send.ep, req, mpriv->lane_map);
 }
 
-/* Post a batch of SGL elements on a single lane */
 typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
         const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
 
-/* Adjust a single SGL element fragment before it is posted. May be NULL.
- * Returns UCS_INPROGRESS if the fragment was already submitted */
+/* Returns UCS_INPROGRESS if the fragment was already submitted */
 typedef ucs_status_t (*ucp_proto_rma_sgl_adjust_func_t)(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         size_t elem_index, void **buffer_p, size_t *length_p,
