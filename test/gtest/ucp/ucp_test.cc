@@ -54,6 +54,16 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
 const ucp_datatype_t ucp_test::DATATYPE     = ucp_dt_make_contig(1);
 const ucp_datatype_t ucp_test::DATATYPE_IOV = ucp_dt_make_iov();
 
+void ucp_test::mock_ep_flush(ucp_ep_h ep, ucs::mock &mock,
+                             uct_ep_flush_func_t flush_func)
+{
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        mock.setup(&ucp_ep_get_lane(ep, lane)->iface->ops.ep_flush, flush_func);
+    }
+}
+
 ucp_test::ucp_test() {
     ucs_status_t status;
     status = ucp_config_read(NULL, NULL, &m_ucp_config);
@@ -564,6 +574,13 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
                            << name.c_str() << " to " << value.c_str() << ": "
                            << ucs_status_string(status));
         }
+    }
+
+    /* The gpu-nic assignment rejects the old protocols with an error, and the
+     * default value 'auto' enables it on some hardware, so turn it off
+     * explicitly */
+    if ((name == "PROTO_ENABLE") && !is_proto_enabled()) {
+        modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
     }
 }
 

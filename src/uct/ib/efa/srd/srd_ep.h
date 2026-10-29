@@ -20,17 +20,18 @@ typedef enum uct_srd_ep_flag {
 } uct_srd_ep_flag_t;
 
 
-typedef struct uct_srd_ep {
+struct uct_srd_ep {
     uct_base_ep_t       super;
     unsigned            flags;            /* Endpoint state tracking */
     uint64_t            ep_uuid;          /* Random EP identifier */
     uint32_t            dest_qpn;         /* Remote QP */
-    struct ibv_ah       *ah;              /* Remote peer */
+    /* AH cache reference, also holds the peer LID/GID */
+    uct_ib_ah_entry_t   *ah_entry;
     uct_srd_psn_t       psn;              /* Next PSN to send */
     uint8_t             path_index;
     ucs_arbiter_group_t pending_group;    /* Queue of pending requests */
     ucs_list_link_t     outstanding_list; /* Ordered outstanding list */
-} uct_srd_ep_t;
+};
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_srd_ep_t, uct_ep_t, const uct_ep_params_t*);
@@ -67,7 +68,8 @@ ucs_status_t uct_srd_ep_flush(uct_ep_h ep_h, unsigned flags,
                               uct_completion_t *comp);
 void uct_srd_ep_send_op_purge(uct_srd_ep_t *ep);
 
-void uct_srd_ep_send_op_completion(uct_srd_send_op_t *send_op);
+void uct_srd_ep_send_op_completion(uct_srd_iface_t *iface,
+                                   uct_srd_send_op_t *send_op);
 
 ucs_status_t
 uct_srd_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req, unsigned flags);

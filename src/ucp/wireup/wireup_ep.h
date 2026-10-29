@@ -20,19 +20,22 @@
  */
 enum {
     /* next_ep should replace wireup_ep */
-    UCP_WIREUP_EP_FLAG_READY            = UCS_BIT(0),
+    UCP_WIREUP_EP_FLAG_READY              = UCS_BIT(0),
 
     /* Debug: next_ep connected to remote address */
-    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED  = UCS_BIT(1),
+    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED    = UCS_BIT(1),
 
     /* Remote peer has connected to next_ep */
-    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2),
+    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED   = UCS_BIT(2),
 
     /* Send client id */
-    UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3),
+    UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID     = UCS_BIT(3),
 
     /* Indicates that aux_ep is CONNECT_TO_EP */
-    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4)
+    UCP_WIREUP_EP_FLAG_AUX_P2P            = UCS_BIT(4),
+
+    /* Wireup endpoint prevents worker flush from completing */
+    UCP_WIREUP_EP_FLAG_BLOCK_WORKER_FLUSH = UCS_BIT(5)
 };
 
 
@@ -63,7 +66,7 @@ struct ucp_wireup_ep {
 /**
  * Create a proxy endpoint for wireup.
  */
-ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep,
+ucs_status_t ucp_wireup_ep_create(ucp_ep_h ep, int block_worker_flush,
                                   uct_ep_h *ep_p);
 
 

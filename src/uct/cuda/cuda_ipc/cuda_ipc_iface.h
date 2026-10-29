@@ -19,6 +19,25 @@
 #define UCT_CUDA_IPC_MAX_PEERS 128
 
 
+typedef enum {
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL  = UCS_BIT(0),
+    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC = UCS_BIT(1)
+} uct_cuda_ipc_device_addr_flags_t;
+
+
+typedef struct {
+    uint64_t system_uuid;
+    uint8_t  flags; /* uct_cuda_ipc_device_addr_flags_t */
+} UCS_S_PACKED uct_cuda_ipc_device_addr_t;
+
+
+/* Device address extended with the NVLink domain, sent if FLAG_MNNVL is set */
+typedef struct {
+    uct_cuda_ipc_device_addr_t super;
+    uint64_t                   nvlink_domain;
+} UCS_S_PACKED uct_cuda_ipc_mnnvl_device_addr_t;
+
+
 typedef struct {
     unsigned                max_poll;            /* query attempts w.o success */
     unsigned                max_streams;         /* # concurrent streams for || progress*/
@@ -27,6 +46,7 @@ typedef struct {
     double                  bandwidth;           /* estimated bandwidth */
     double                  latency;             /* estimated latency */
     double                  overhead;            /* estimated CPU overhead */
+    int                     enable_same_process; /* enable cuda_ipc for same pid same device */
 } uct_cuda_ipc_iface_config_params_t;
 
 

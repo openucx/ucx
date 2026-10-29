@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -245,7 +245,7 @@ ucp_rkey_h test_ucp_mmap::mem_chunk::unpack(ucp_ep_h ep, ucp_md_map_t md_map)
         // Different MD map means different config index on proto v2
         ASSERT_UCS_OK(ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_size,
                                                   md_map, 0,
-                                                  UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                  UCS_SYS_DEVICE_ID_UNKNOWN, 0,
                                                   &rkey));
     }
 
@@ -497,7 +497,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     /* Unpack remote key buffer */
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack_reachable(receiver().ep(), &rkey_buffer[0],
-                                          rkey_size, &rkey);
+                                          rkey_size, 0, &rkey);
     ASSERT_UCS_OK(status);
 
     /* Check rkey configuration and lanes distances */
@@ -1357,26 +1357,32 @@ public:
     {
         add_variant(variants, UCP_FEATURE_TAG);
     }
+
+protected:
+    void test_limits_memh_md_map(ucs_memory_type_t mem_type);
 };
 
-UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
+void test_ucp_mmap_max_hca::test_limits_memh_md_map(ucs_memory_type_t mem_type)
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA is not supported");
+    if (!mem_buffer::is_mem_type_supported(mem_type)) {
+        UCS_TEST_SKIP_R(mem_buffer::mem_type_name(mem_type) +
+                        " is not supported");
     }
 
     modify_config("MAX_HCA_PER_GPU", "inf");
     entity *e_all         = create_entity();
     ucp_context_h ctx_all = e_all->ucph();
 
-    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all);
+    ucp_md_map_t net_md_map = ucp_context_get_net_md_map(ctx_all) &
+                              ctx_all->reg_md_map[mem_type];
 
     if (ucs_popcount(net_md_map) < 2) {
-        UCS_TEST_SKIP_R("need at least 2 network MDs");
+        UCS_TEST_SKIP_R("need at least 2 network MDs which can register " +
+                        mem_buffer::mem_type_name(mem_type));
     }
 
     const size_t size = 4096;
-    void *ptr         = mem_buffer::allocate(size, UCS_MEMORY_TYPE_CUDA);
+    void *ptr         = mem_buffer::allocate(size, mem_type);
 
     ucp_mem_map_params_t params;
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -1386,9 +1392,16 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
 
     ucp_mem_h memh;
     ASSERT_UCS_OK(ucp_mem_map(ctx_all, &params, &memh));
+    ucs_sys_device_t sys_dev = memh->sys_dev;
     ucp_md_map_t net_all     = memh->md_map & net_md_map;
     ucp_md_map_t non_net_all = memh->md_map & ~net_md_map;
     ASSERT_UCS_OK(ucp_mem_unmap(ctx_all, memh));
+
+    /* The policy applies only to memory with a known system device */
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        mem_buffer::release(ptr, mem_type);
+        UCS_TEST_SKIP_R("memory has no system device");
+    }
 
     /* LIMIT=1: at most 1 network MD */
     modify_config("MAX_HCA_PER_GPU", "1");
@@ -1409,13 +1422,23 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map)
     ucp_md_map_t net_close = memh->md_map & net_md_map;
     ASSERT_UCS_OK(ucp_mem_unmap(ctx_close, memh));
 
-    mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
+    mem_buffer::release(ptr, mem_type);
 
     EXPECT_GT(ucs_popcount(net_all), 0);
     EXPECT_LE(ucs_popcount(net_lim), 1);
     EXPECT_GT(ucs_popcount(net_close), 0);
     EXPECT_LE(ucs_popcount(net_close), ucs_popcount(net_all));
     EXPECT_EQ(non_net_all, non_net_lim);
+}
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map_cuda)
+{
+    test_limits_memh_md_map(UCS_MEMORY_TYPE_CUDA);
+}
+
+UCS_TEST_P(test_ucp_mmap_max_hca, limits_memh_md_map_rocm)
+{
+    test_limits_memh_md_map(UCS_MEMORY_TYPE_ROCM);
 }
 
 UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
@@ -1439,7 +1462,7 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         UCS_TEST_SKIP_R("need at least 2 network MDs");
     }
 
-    int orig_dev = mem_buffer::get_device();
+    scoped_cuda_device device_guard;
 
     const size_t size = 4096;
     ucp_mem_map_params_t params;
@@ -1461,8 +1484,6 @@ UCS_TEST_P(test_ucp_mmap_max_hca, limits_per_gpu)
         ASSERT_UCS_OK(ucp_mem_unmap(ctx, memh));
         mem_buffer::release(ptr, UCS_MEMORY_TYPE_CUDA);
     }
-
-    mem_buffer::set_device(orig_dev);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap_max_hca, all, "all")

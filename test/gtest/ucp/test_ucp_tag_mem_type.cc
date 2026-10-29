@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,6 +7,7 @@
 #include <common/test.h>
 #include <common/mem_buffer.h>
 
+#include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_tag.h"
 #include "ucp_datatype.h"
 
@@ -314,3 +315,74 @@ UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
 
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_tag_mem_type);
+
+
+class test_ucp_tag_mem_type_gpu_nic :
+    protected gpu_nic_assignment_checks,
+    public test_ucp_tag_mem_type {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        size_t mode;
+
+        for (mode = 0; mode < ucs_static_array_size(gpu_nic_assignment_modes);
+             ++mode) {
+            add_variant_with_value(variants, get_ctx_params(), mode,
+                                   gpu_nic_assignment_modes[mode]);
+        }
+    }
+
+    virtual void init() override
+    {
+        if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA memory is not supported");
+        }
+
+        /* Both sides resolve their assignment from their own CUDA buffer */
+        m_send_mem_type = UCS_MEMORY_TYPE_CUDA;
+        m_recv_mem_type = UCS_MEMORY_TYPE_CUDA;
+
+        modify_config("GPU_NIC_ASSIGNMENT_MODE",
+                      gpu_nic_assignment_modes[get_variant_value()]);
+        /* Enough lanes to use every NIC assigned to a GPU */
+        modify_config("MAX_EAGER_LANES", "4");
+        modify_config("MAX_RNDV_LANES", "8");
+        /* Count protocol selections, which expect_assigned_lanes() checks */
+        modify_config("PROTO_INFO", "used");
+        test_ucp_tag::init();
+    }
+
+protected:
+    void test_xfer_sizes(const std::vector<size_t> &sizes)
+    {
+        if (!is_buffer_gpu_assigned(sender().ucph())) {
+            UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
+        }
+
+        ucs::detail::message_stream ms("INFO");
+
+        for (auto length : sizes) {
+            mem_buffer recv_mem_buf(length, m_recv_mem_type);
+            mem_buffer send_mem_buf(length, m_send_mem_type);
+            do_basic_xfer(send_mem_buf, recv_mem_buf, length, ms);
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_mem_type_gpu_nic, eager, "RNDV_THRESH=inf")
+{
+    /* The lanes are not checked, since the eager protocols keep the first AM
+     * lane even on an unassigned NIC */
+    test_xfer_sizes({1, 1024, 64 * UCS_KBYTE, UCS_MBYTE + 4});
+}
+
+UCS_TEST_P(test_ucp_tag_mem_type_gpu_nic, rndv, "RNDV_THRESH=0",
+           "RNDV_SCHEME=get_zcopy")
+{
+    test_xfer_sizes({1, 64 * UCS_KBYTE, UCS_MBYTE + 4, 4 * UCS_MBYTE});
+    expect_assigned_lanes(entities(), "rndv/get/zcopy");
+}
+
+/* Network lanes only, since the assignment restricts only NIC lanes */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_mem_type_gpu_nic, rcx_cuda,
+                              "rc_x,cuda_copy")

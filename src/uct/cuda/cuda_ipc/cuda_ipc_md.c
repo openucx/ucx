@@ -39,6 +39,7 @@
 typedef struct {
     const void *mapped_addr;
     CUdevice   cu_dev;
+    int        free_unused_mapping;
 } uct_cuda_ipc_rkey_handle_t;
 
 typedef struct {
@@ -208,7 +209,7 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
                                 UCT_MD_FLAG_INVALIDATE |
                                 UCT_MD_FLAG_INVALIDATE_RMA |
                                 UCT_MD_FLAG_INVALIDATE_AMO |
-                                UCT_MD_FLAG_MEMTYPE_COPY |
+                                UCT_MD_FLAG_IPC_MEMTYPE_COPY |
                                 UCT_MD_FLAG_RKEY_PTR;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
@@ -401,7 +402,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 legacy_path:
     key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY;
     status              = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)addr));
+            cuIpcGetMemHandle(&key->ph.handle.legacy, (CUdeviceptr)key->d_bptr));
     if (status != UCS_OK) {
         goto out_pop_ctx;
     }
@@ -474,7 +475,8 @@ found:
                                                     memh->dev_num));
 }
 
-static uct_cuda_ipc_rkey_handle_t *uct_cuda_ipc_create_rkey_handle()
+static uct_cuda_ipc_rkey_handle_t *
+uct_cuda_ipc_create_rkey_handle(uint64_t flags)
 {
     uct_cuda_ipc_rkey_handle_t *rkey_handle;
 
@@ -484,8 +486,10 @@ static uct_cuda_ipc_rkey_handle_t *uct_cuda_ipc_create_rkey_handle()
         return NULL;
     }
 
-    rkey_handle->mapped_addr = NULL;
-    rkey_handle->cu_dev      = CU_DEVICE_INVALID;
+    rkey_handle->mapped_addr         = NULL;
+    rkey_handle->cu_dev              = CU_DEVICE_INVALID;
+    rkey_handle->free_unused_mapping = !!(
+            flags & UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING);
     return rkey_handle;
 }
 
@@ -562,6 +566,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     uct_cuda_ipc_unpacked_rkey_t *unpacked;
     uct_cuda_ipc_rkey_handle_t *rkey_handle;
     ucs_sys_device_t sys_dev;
+    uint64_t flags;
     CUdevice cuda_device;
     CUdevice avail_cuda_device;
     ucs_status_t status;
@@ -569,6 +574,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
                               SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
+    flags   = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, flags, FLAGS, 0);
 
     unpacked = ucs_malloc(sizeof(*unpacked), "uct_cuda_ipc_unpacked_rkey_t");
     if (NULL == unpacked) {
@@ -580,7 +586,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     unpacked->super.super      = *packed;
     unpacked->super.super.pid &= ~UCT_CUDA_IPC_RKEY_FLAG_PID_NS;
 
-    rkey_handle = uct_cuda_ipc_create_rkey_handle();
+    rkey_handle = uct_cuda_ipc_create_rkey_handle(flags);
     if (rkey_handle == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_key;
@@ -633,8 +639,12 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     uct_cuda_ipc_extended_rkey_t *extended_rkey;
     uct_cuda_ipc_rkey_t *rkey;
 
-    if ((uct_rkey == 0) || (rkey_handle == NULL) ||
-        (rkey_handle->mapped_addr == NULL)) {
+    if ((uct_rkey == 0) || (rkey_handle == NULL)) {
+        return;
+    }
+
+    if ((rkey_handle->mapped_addr == NULL) &&
+        !rkey_handle->free_unused_mapping) {
         return;
     }
 
@@ -644,7 +654,8 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
 
     uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
                                  rkey_handle->mapped_addr, rkey_handle->cu_dev,
-                                 uct_cuda_ipc_component.enable_remote_cache);
+                                 uct_cuda_ipc_component.enable_remote_cache &&
+                                         !rkey_handle->free_unused_mapping);
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
@@ -697,19 +708,20 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     return UCS_OK;
 }
 
-static int
-uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
-                                  ucs_ternary_auto_value_t mnnvl_enable)
+/* Set MNNVL support and the NVLink domain of the MD from the GPU fabric info */
+static void uct_cuda_ipc_md_init_mnnvl(uct_cuda_ipc_md_t *md,
+                                       ucs_ternary_auto_value_t mnnvl_enable)
 {
 #if !HAVE_NVML_FABRIC_INFO
     static int mnnvl_supported = 0;
 #else
     static int mnnvl_supported = -1;
+    static uint64_t nvlink_domain;
     nvmlGpuFabricInfoV_t fabric_info;
     nvmlDevice_t device;
     ucs_status_t status;
     char buf[64];
-    int64_t *cluster_uuid;
+    uint64_t cluster_uuid[2];
 
     if (mnnvl_supported != -1) {
         goto out;
@@ -732,16 +744,24 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
         goto out_not_supported;
     }
 
-    ucs_debug("fabric_info: state=%u status=%u uuid=%s", fabric_info.state,
-              fabric_info.status,
+    ucs_debug("fabric_info: state=%u status=%u uuid=%s clique=%u",
+              fabric_info.state, fabric_info.status,
               ucs_str_dump_hex(fabric_info.clusterUuid,
                                NVML_GPU_FABRIC_UUID_LEN, buf, sizeof(buf),
-                               SIZE_MAX));
+                               SIZE_MAX),
+              fabric_info.cliqueId);
 
-    cluster_uuid = (int64_t*)fabric_info.clusterUuid;
+    /* Copy to avoid an unaligned access */
+    UCS_STATIC_ASSERT(NVML_GPU_FABRIC_UUID_LEN == sizeof(cluster_uuid));
+    memcpy(cluster_uuid, fabric_info.clusterUuid, sizeof(cluster_uuid));
     if ((fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
         (fabric_info.status == NVML_SUCCESS) &&
         (cluster_uuid[0] | cluster_uuid[1]) != 0) {
+        /* Fold the cluster UUID and clique ID into 64 bits, to keep the device
+         * address short. Peers compare the folded values, so the formula is
+         * part of the wire protocol and must not change between versions. */
+        nvlink_domain = cluster_uuid[0] ^ cluster_uuid[1] ^
+                        fabric_info.cliqueId;
         mnnvl_supported = 1;
         goto out;
     }
@@ -749,15 +769,15 @@ uct_cuda_ipc_md_check_fabric_info(uct_cuda_ipc_md_t *md,
 out_not_supported:
     mnnvl_supported = 0;
 out:
+    md->nvlink_domain = nvlink_domain;
 #endif
+    md->enable_mnnvl = mnnvl_supported;
     if ((mnnvl_enable == UCS_YES) && !mnnvl_supported) {
         ucs_error("multi-node NVLINK support is requested but not supported");
     } else {
         ucs_debug("multi-node NVLINK support is %s", mnnvl_supported ?
                   "enabled" : "disabled");
     }
-
-    return mnnvl_supported;
 }
 
 static void uct_cuda_ipc_md_close(uct_md_h md)
@@ -861,9 +881,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     md->super.ops        = &md_ops;
     md->super.component  = &uct_cuda_ipc_component.super;
-    md->enable_mnnvl     = uct_cuda_ipc_md_check_fabric_info(
-                                                  md, ipc_config->enable_mnnvl);
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
+    uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);

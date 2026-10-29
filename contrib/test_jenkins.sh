@@ -17,6 +17,8 @@
 #  - TEST_PERF         : whether to validate performance
 #  - ASAN_CHECK        : set to enable Address Sanitizer instrumentation build
 #  - VALGRIND_CHECK    : set to enable running tests with Valgrind
+#  - BUILD_ONLY_TARBALL: build for tests, pack the tree into this tarball, exit
+#  - PREBUILT_TARBALL  : use the build tree from this tarball instead of building
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
@@ -170,6 +172,24 @@ run_loopback_app() {
 	pid=$!
 
 	wait ${pid} || true
+}
+
+expect_failure() {
+	local expected_error=$1
+	local output
+	shift
+
+	if output=$("$@" 2>&1); then
+		printf '%s\n' "$output"
+		log_error "Command unexpectedly succeeded: $*"
+		return 1
+	fi
+
+	if ! grep -qF "$expected_error" <<< "$output"; then
+		printf '%s\n' "$output"
+		log_error "Expected error not found: $expected_error"
+		return 1
+	fi
 }
 
 run_client_server_app() {
@@ -607,6 +627,13 @@ run_ucx_perftest() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_short_ucp \
 				-b $ucx_inst_ptest/msg_pow2_short -w 1"
 
+	if [ $with_mpi -ne 1 ]; then
+		expect_failure "device id is not supported for memory allocator" \
+			"$ucx_perftest" -t tag_lat -m host:0 -l
+		expect_failure "device API is not supported for host" \
+			"$ucx_perftest" -t ucp_put_lat -a -m host -l
+	fi
+
 	# IP ifaces
 	ip_ifaces=$(get_active_ip_ifaces)
 
@@ -690,11 +717,19 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory ===="
 
+		expect_failure "device API is not supported for" \
+			"$ucx_perftest" -t ucp_put_lat -a -m cuda,host -l
+		"$ucx_perftest" -t tag_lat -m cuda:0,host -s 8 -n 1 -w 0 -l -f
+		expect_failure "device ids must match in loopback mode" \
+			"$ucx_perftest" -t tag_lat -m cuda:0,cuda:1 -l
+		expect_failure "cuda device index 2147483647 is invalid" \
+			"$ucx_perftest" -t tag_lat -m cuda:2147483647 -s 8 -l
+
 		if $ucx_perftest -h 2>&1 | grep -q "cuda-async"
 		then
 			echo "==== Running ucx_perf with cuda-async memory ===="
 			cuda_async_test_args="-t tag_lat -D contig,contig"
-			cuda_async_test_args+=" -m cuda-async,cuda-async -s 8 -n 10 -w 1"
+			cuda_async_test_args+=" -m cuda-async,cuda-async:0 -s 8 -n 10 -w 1"
 			run_client_server_app "$ucx_perftest" "$cuda_async_test_args" \
 					      "$(hostname)" 0 0
 		else
@@ -834,10 +869,14 @@ run_ucx_perftest_cuda_device() {
 		return 0
 	fi
 
-	if [ "$(get_num_gpus)" -eq 0 ]; then
+	num_gpus=$(get_num_gpus)
+	if [ "$num_gpus" -eq 0 ]; then
 		echo "==== No NVIDIA GPUs found, skipping CUDA device tests ===="
 		return 0
 	fi
+
+	# Pin both peers without constraining the installed batch configuration
+	export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
 
     echo "==== Running ucx_perftest with cuda kernel ===="
 	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
@@ -845,7 +884,7 @@ run_ucx_perftest_cuda_device() {
 	ucp_test_args="-b $ucx_inst_ptest/test_types_ucp_device_cuda"
 
 	# TODO: Run on all GPUs & NICs combinations
-	ucp_client_args="-a cuda:0 $(hostname)"
+	ucp_client_args="-a $(hostname)"
 	gda_tls="cuda_copy,rc,rc_gda"
 	cuda_ipc_tls="cuda_copy,rc,cuda_ipc"
 
@@ -856,6 +895,34 @@ run_ucx_perftest_cuda_device() {
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$ucp_client_args" 0 0
 	done
 	unset UCX_TLS
+	unset CUDA_VISIBLE_DEVICES
+}
+
+#
+# Run UCX one-sided performance test with IOV datatype
+#
+run_ucx_perftest_rma_iov() {
+	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
+	ucx_perftest="$ucx_inst/bin/ucx_perftest"
+
+	if [ "X$have_cuda" != "Xno" ] && [ "$(get_num_gpus)" -gt 0 ]; then
+		cat $ucx_inst_ptest/test_types_ucp_rma_iov | \
+			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+	else
+		echo "==== CUDA not available, running host-only IOV RMA tests ===="
+		cat $ucx_inst_ptest/test_types_ucp_rma_iov | grep -v cuda | \
+			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
+	fi
+
+	ucp_test_args="-b $ucx_inst_ptest/test_types_rma_iov_ucp -w 1"
+
+	for ucx_dev in $(get_active_ib_devices)
+	do
+		echo "==== Running ucx_perftest IOV RMA on $ucx_dev ===="
+		export UCX_NET_DEVICES=$ucx_dev
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_NET_DEVICES
+	done
 }
 
 #
@@ -915,7 +982,8 @@ run_mpi_tests() {
 					-mca orte_allowed_exit_without_sync 1 \
 					-mca coll ^hcoll,ml,ucc"
 
-			run_ucx_perftest 1
+			# One worker runs the MPI tests, so cover all devices here
+			worker=0 nworkers=1 run_ucx_perftest 1
 
 			test_malloc_hooks_mpi
 
@@ -933,24 +1001,8 @@ run_mpi_tests() {
 						./test/mpi/test_mpi_cuda
 			fi
 
-			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_rma_cuda ]
-			then
-				echo "==== Running RMA CUDA tests ===="
-				${MPIRUN_COMMON} -np 2 ./test/mpi/test_rma_cuda
-			fi
-
-			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_ucp_rkey_destroy ]
-			then
-				echo "==== Running UCP RKEY destroy tests ===="
-				# The test checks that after destroying a UCP remote key on the
-				# remote process, the local memory can be released. However, the
-				# internal caches may hold references to the memory, e.g. via
-				# opened CUDA IPC memory handle. All the caches are disabled
-				# to be able to release the memory after the remote key is
-				# destroyed.
-				${MPIRUN_COMMON} -np 2 -x UCX_MEMTYPE_CACHE=n \
-								./test/mpi/test_ucp_rkey_destroy
-			fi
+			# test_rma_cuda and test_ucp_rkey_destroy are not run: they fail
+			# on the CI GPU hosts
 
 			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
 			# from installation directory
@@ -1436,19 +1488,29 @@ run_configure_tests() {
 }
 
 #
+# Build for devel tests and gtest, or for ASAN
+#
+build_for_tests() {
+	if [[ "$ASAN_CHECK" == "yes" ]]; then
+		build devel --enable-gtest --enable-asan --without-valgrind
+		return
+	fi
+
+	export UCX_PROTO_REQUEST_RESET=y
+
+	# configuration related tests
+	run_configure_tests
+
+	build devel --enable-gtest --without-valgrind
+}
+
+#
 # Run all tests
 #
 run_tests() {
 	export UCX_PROTO_REQUEST_RESET=y
 
-	# all are running mpi tests
-	run_mpi_tests
-
-	# configuration related tests
-	run_configure_tests
-
-	# build for devel tests and gtest
-	build devel --enable-gtest --without-valgrind
+	[ -n "$PREBUILT_TARBALL" ] || build_for_tests
 
 	# devel mode tests
 	do_distributed_task 0 4 test_unused_env_var
@@ -1462,6 +1524,7 @@ run_tests() {
 	do_distributed_task 0 4 test_no_cuda_context
 	do_distributed_task 1 4 run_ucx_perftest_with_daemon
 	do_distributed_task 1 4 run_ucx_perftest_cuda_device
+	do_distributed_task 2 4 run_ucx_perftest_rma_iov
 
 	# long devel tests
 	do_distributed_task 0 4 run_ucp_hello
@@ -1483,10 +1546,13 @@ run_tests() {
 
 	# fault tolerance tests
 	do_distributed_task 1 4 run_ucx_perftest_fault_tolerance
+
+	# mpi tests, last: they rebuild the tree
+	do_distributed_task 1 4 run_mpi_tests
 }
 
 run_asan_check() {
-	build devel --enable-gtest --enable-asan --without-valgrind
+	[ -n "$PREBUILT_TARBALL" ] || build_for_tests
 
 	if ! ldd ${WORKSPACE}/build-test/test/gtest/gtest | grep -q "libasan.so"
 	then
@@ -1518,12 +1584,33 @@ run_valgrind_check() {
 prepare
 try_load_cuda_env
 
+if [ -n "$PREBUILT_TARBALL" ]
+then
+	# Give the whole tree one timestamp, newer than the fresh checkout, so make
+	# treats every prebuilt target as up to date
+	tar -xf "$PREBUILT_TARBALL" -C ${WORKSPACE}
+	now=$(date +%s.%N)
+	find ${WORKSPACE}/build-test ${WORKSPACE}/install -exec touch -h -d "@${now}" {} +
+
+	# The tree holds absolute paths, so it only works at the path it was built in
+	prebuilt_workspace=$(cat ${WORKSPACE}/build-test/prebuilt_workspace)
+	if [ "${prebuilt_workspace}" != "${WORKSPACE}" ]
+	then
+		log_error "Prebuilt tree is from ${prebuilt_workspace}, workspace is ${WORKSPACE}"
+		exit 1
+	fi
+fi
+
 if [ "$RUN_TESTS" == "yes" ]
 then
     check_machine
     set_ucx_common_test_env
 
-    if [[ "$ASAN_CHECK" == "yes" ]]; then
+    if [ -n "$BUILD_ONLY_TARBALL" ]; then
+        build_for_tests
+        echo "${WORKSPACE}" > ${WORKSPACE}/build-test/prebuilt_workspace
+        tar -cf "$BUILD_ONLY_TARBALL" -C ${WORKSPACE} build-test install
+    elif [[ "$ASAN_CHECK" == "yes" ]]; then
         run_asan_check
     elif [[ "$VALGRIND_CHECK" == "yes" ]]; then
         run_valgrind_check

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2019. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2017-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -9,6 +9,7 @@
 
 #include "gdr_copy_md.h"
 
+#include <dlfcn.h>
 #include <string.h>
 #include <limits.h>
 #include <ucs/debug/log.h>
@@ -23,6 +24,7 @@
 #include <ucm/api/ucm.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_md.h>
+#include <uct/cuda/base/cuda_util.h>
 
 
 #define UCT_GDR_COPY_RCACHE_OVERHEAD_AUTO 50.0e-9
@@ -63,6 +65,83 @@ uct_gdr_copy_use_pcie_params_get(ucs_ternary_auto_value_t use_pcie,
     *pin_pcie_fallback_p = 0;
     return UCS_OK;
 #endif
+}
+
+static int uct_gdr_copy_using_dmabuf(gdr_t gdr_ctx)
+{
+#if HAVE_DECL_GDR_GET_ATTRIBUTE && HAVE_DECL_GDR_ATTR_USING_DMA_BUF_MMAP
+    typedef int (*uct_gdr_get_attribute_func_t)(gdr_t, gdr_attr_t, int*);
+    uct_gdr_get_attribute_func_t get_attribute;
+    Dl_info lib_info, attr_info;
+    void *dl_handle;
+    const char *error;
+    int using_dmabuf;
+    int ret;
+
+    /* Resolve the optional query in the runtime which created this context. */
+    if (dladdr(gdr_open, &lib_info) == 0) {
+        ucs_debug("could not identify GDRCopy runtime providing gdr_open");
+        return 0;
+    }
+
+    dl_handle = dlopen(lib_info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+    if (dl_handle == NULL) {
+        error = dlerror();
+        ucs_debug("could not open loaded GDRCopy runtime: %s",
+                  (error != NULL) ? error : "unknown error");
+        return 0;
+    }
+
+    get_attribute = (uct_gdr_get_attribute_func_t)dlsym(dl_handle,
+                                                        "gdr_get_attribute");
+    if (get_attribute == NULL) {
+        ucs_debug("gdr_get_attribute is not available in loaded GDRCopy "
+                  "runtime");
+        goto err_dlclose;
+    }
+
+    if (dladdr(get_attribute, &attr_info) == 0) {
+        ucs_debug("could not identify GDRCopy runtime providing "
+                  "gdr_get_attribute");
+        goto err_dlclose;
+    }
+
+    if (attr_info.dli_fbase != lib_info.dli_fbase) {
+        ucs_debug("gdr_get_attribute library %p differs from gdr_open "
+                  "library %p",
+                  attr_info.dli_fbase, lib_info.dli_fbase);
+        goto err_dlclose;
+    }
+
+    ret = get_attribute(gdr_ctx, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dmabuf);
+    dlclose(dl_handle);
+    if (ret != 0) {
+        ucs_debug("failed to query GDRCopy DMA-BUF backend: %d", ret);
+        return 0;
+    }
+
+    return using_dmabuf;
+
+err_dlclose:
+    dlclose(dl_handle);
+    return 0;
+#else
+    return 0;
+#endif
+}
+
+int uct_gdr_copy_cuda_async_detect(gdr_t gdr_ctx)
+{
+    int major, minor, driver_version;
+
+    gdr_runtime_get_version(&major, &minor);
+    if ((major < 2) || ((major == 2) && (minor < 6)) ||
+        !uct_gdr_copy_using_dmabuf(gdr_ctx) ||
+        (uct_cuda_driver_get_version(&driver_version) != UCS_OK)) {
+        return 0;
+    }
+
+    return driver_version >= UCT_GDR_COPY_CUDA_ASYNC_MIN_DRIVER_VERSION;
 }
 
 typedef struct {
@@ -116,11 +195,14 @@ uct_gdr_copy_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
-    md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
-    md_attr->rkey_packed_size = sizeof(uct_gdr_copy_key_t);
-    md_attr->reg_cost         = md->reg_cost;
+    md_attr->flags              = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
+    md_attr->reg_mem_types      = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->access_mem_types   = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->rkey_packed_size   = sizeof(uct_gdr_copy_key_t);
+    md_attr->reg_cost           = md->reg_cost;
+    /* Pinning goes through nvidia_p2p_get_pages, which the driver refuses
+     * for memory it did not allocate as GPUDirect RDMA capable */
+    md_attr->required_mem_flags = UCS_MEM_FLAG_GDR_CAPABLE;
 
     /* In absence of own cache require proper alignment from the global cache */
     if (md->rcache == NULL) {
@@ -224,7 +306,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
 
     ret = gdr_get_info(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->info);
     if (ret) {
-        ucs_error("gdr_get_info failed. ret:%d", ret);
+        ucs_log(log_level, "gdr_get_info failed. ret:%d", ret);
         goto unmap_buffer;
     }
 
@@ -277,6 +359,7 @@ static ucs_status_t
 uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
+    unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
     uct_gdr_copy_mem_t *mem_hndl = NULL;
     ucs_status_t status;
 
@@ -289,7 +372,7 @@ uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t length,
     }
 
     ucs_ptr_check_align(address, length, GPU_PAGE_SIZE);
-    status = uct_gdr_copy_mem_reg_internal(uct_md, address, length, 0,
+    status = uct_gdr_copy_mem_reg_internal(uct_md, address, length, flags,
                                            mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);

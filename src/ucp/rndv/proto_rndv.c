@@ -16,6 +16,17 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+static int
+ucp_proto_rndv_ctrl_skip_inter_node_md(
+        const ucp_proto_common_init_params_t *params,
+        const uct_md_attr_v2_t *md_attr)
+{
+    return (md_attr->flags & UCT_MD_FLAG_IPC_MEMTYPE_COPY) &&
+           ucp_ep_config_is_inter_node(params->super.ep_config_key) &&
+           !(params->reg_mem_info.flags &
+             UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE);
+}
+
 static void
 ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                                ucp_md_map_t *md_map,
@@ -84,6 +95,15 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
                           "mem_flags 0x%x",
                           lane, context->tl_mds[md_index].rsc.md_name,
                           md_attr->required_mem_flags,
+                          params->super.reg_mem_info.flags);
+            continue;
+        }
+
+        /* Inter-node memory-type copy requires an exportable memory handle. */
+        if (ucp_proto_rndv_ctrl_skip_inter_node_md(&params->super, md_attr)) {
+            ucs_trace_req("lane[%d]: md %s cannot copy memory inter-node, "
+                          "mem_flags 0x%x",
+                          lane, context->tl_mds[md_index].rsc.md_name,
                           params->super.reg_mem_info.flags);
             continue;
         }
@@ -168,8 +188,16 @@ ucp_proto_rndv_rkey_mem_flags_estimate(const ucp_proto_init_params_t *params)
         }
 
         /*
-         * Derive UCS_MEM_FLAG_REGISTRABLE from matching local MDs which
-         * require it and whose remote MDs are present in the rkey.
+         * Derive the memory flags required by matching local MDs whose remote
+         * MDs are present in the rkey.
+         *
+         * UCS_MEM_FLAG_MEMTYPE_COPY_INTER_NODE is intentionally not inferred
+         * here: it is not an MD required_mem_flags bit,
+         * and is checked only when packing keys in
+         * ucp_proto_rndv_ctrl_get_md_map(). Runtime packing uses the real
+         * local buffer flags; omitting it from this estimate can only make
+         * nested ctrl modeling (e.g. peer rndv/rtr) slightly pessimistic
+         * for fabric-exportable remotes, not incorrect.
          */
         md_index   = context->tl_rscs[lane_cfg->rsc_index].md_index;
         mem_flags |= context->tl_mds[md_index].attr.required_mem_flags;
@@ -235,7 +263,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     ucs_trace("rndv select remote protocols rkey_config->md_map=0x%" PRIx64,
               rkey_config_key.md_map);
 
-    rkey_config   = &ucs_array_elem(&worker->rkey_config, rkey_cfg_index);
+    rkey_config   = ucp_worker_rkey_config(worker, rkey_cfg_index);
     *remote_proto = ucp_proto_select_lookup_slow(worker,
                                                  &rkey_config->proto_select, 1,
                                                  ep_cfg_index, rkey_cfg_index,
@@ -340,11 +368,12 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
                                     select_param->dt_class,
                                     &mem_info, select_param->sg_count);
     } else {
-        /* If we know the remote buffer parameters, these are actually the local
-         * parameters for the remote protocol
-         */
-        mem_info.sys_dev = init_params->rkey_config_key->sys_dev;
         mem_info.type    = init_params->rkey_config_key->mem_type;
+        /* If the local and remote memory types match, use the local system
+         * device as a namespace-safe proxy for remote protocol estimation. */
+        mem_info.sys_dev = (mem_info.type == select_param->mem_type) ?
+                                   select_param->sys_dev :
+                                   UCS_SYS_DEVICE_ID_UNKNOWN;
         mem_info.flags   = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     op_attr_mask, params->remote_op_flags,
@@ -828,7 +857,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
          */
         status = ucp_ep_rkey_unpack_internal(
                 ep, rkey_buffer, rkey_length, ep_config->key.reachable_md_map,
-                ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, &rkey);
+                ep_config->rndv.proto_rndv_rkey_skip_mds, sys_dev, 0, &rkey);
         if (status != UCS_OK) {
             goto err;
         }
@@ -1030,15 +1059,11 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                                  const ucp_rndv_rtr_req_hdr_t *rtr_req)
 {
     const ucp_rndv_rtr_hdr_t *rtr = &rtr_req->super;
-    ucp_memory_info_t mem_info    = {
-        .type    = rtr_req->mem_type,
-        .sys_dev = rtr_req->sys_dev
-    };
-    ucp_memory_info_t local_mem_info;
+    ucp_memory_info_t mem_info;
 
-    ucp_memory_detect(ep->worker->context, (void*)(uintptr_t)rtr_req->address,
-                      rtr->size, &local_mem_info);
-    mem_info.flags = local_mem_info.flags;
+    ucp_proto_rndv_memory_detect(ep->worker->context, rtr_req->address,
+                                 rtr->size, rtr_req->mem_type, rtr_req->sys_dev,
+                                 &mem_info);
 
     ucp_proto_request_send_init(req, ep,
                                 UCP_REQUEST_FLAG_RNDV_SEND_INTERNAL);
@@ -1046,7 +1071,7 @@ ucp_proto_rndv_rtr_req_sreq_init(ucp_ep_h ep, ucp_request_t *req,
                              ucp_proto_rndv_rtr_req_send_complete);
     req->send.buffer              = (void*)(uintptr_t)rtr_req->address;
     req->send.length              = rtr->size;
-    req->send.mem_type            = rtr_req->mem_type;
+    req->send.mem_type            = mem_info.type;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
     req->send.rndv.rkey           = NULL;
     req->send.rndv.remote_address = rtr_req->address;

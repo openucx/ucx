@@ -21,7 +21,9 @@ noinst_HEADERS = \
 
 doxygen_doc_files = $(noinst_HEADERS)
 
-doc_dir = $(pkgdatadir)/doc
+dist_doc_DATA = \
+	LICENSE \
+	THIRD_PARTY_NOTICES
 
 if !DOCS_ONLY
 perftest_dir = $(pkgdatadir)/perftest
@@ -32,6 +34,7 @@ dist_perftest__DATA = \
 	contrib/ucx_perftest_config/test_types_uct \
 	contrib/ucx_perftest_config/test_types_ucp \
 	contrib/ucx_perftest_config/test_types_ucp_rma \
+	contrib/ucx_perftest_config/test_types_ucp_rma_iov \
 	contrib/ucx_perftest_config/test_types_ucp_amo \
 	contrib/ucx_perftest_config/test_types_ucp_daemon \
 	contrib/ucx_perftest_config/test_types_ucp_device_cuda \
@@ -84,8 +87,6 @@ EXTRA_DIST += debian/rules
 EXTRA_DIST += debian/source/format
 EXTRA_DIST += ucx.pc.in
 EXTRA_DIST += ucx.spec
-EXTRA_DIST += LICENSE
-
 endif #!DOCS_ONLY
 EXTRA_DIST += docs/uml/uct.dot
 

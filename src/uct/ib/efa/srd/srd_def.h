@@ -19,6 +19,7 @@
 typedef ucs_frag_list_sn_t uct_srd_psn_t;
 
 typedef struct uct_srd_ep        uct_srd_ep_t;
+typedef struct uct_srd_iface     uct_srd_iface_t;
 typedef struct uct_srd_send_op   uct_srd_send_op_t;
 typedef struct uct_srd_send_desc uct_srd_send_desc_t;
 
@@ -46,9 +47,9 @@ typedef struct uct_srd_ctl_hdr {
 
 
 typedef struct uct_srd_ctl_op {
-    ucs_queue_elem_t queue; /* Entry in iface tx pending control queue */
-    struct ibv_ah    *ah;
-    uint32_t         remote_qpn;
+    ucs_queue_elem_t   queue;    /* Entry in iface tx pending control queue */
+    uct_ib_ah_entry_t  *ah_entry; /* Owns one AH cache reference */
+    uint32_t           remote_qpn;
 } uct_srd_ctl_op_t;
 
 
@@ -75,6 +76,10 @@ struct uct_srd_send_op {
     uct_srd_ep_t           *ep;        /* Sender EP */
     uct_completion_t       *user_comp; /* User completion, NULL if none */
     uct_srd_send_op_comp_t comp_cb;    /* Send operation completion */
+    /* Owns one AH reference, keeping the AH alive while the device may still
+     * consume the posted WQE. Valid only while @ref ep is NULL, as otherwise
+     * the sender EP holds the reference. */
+    uct_ib_ah_entry_t      *ah_entry;
 } UCS_V_ALIGNED(UCT_SRD_SEND_OP_ALIGN);
 
 
