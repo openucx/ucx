@@ -136,6 +136,34 @@ protected:
         }
     }
 
+    // MLOPart aliases: the same BDF with distinct user values. Appends mem_dev
+    // and its (num_aliases - 1) aliases to mems
+    void register_mem_aliases(ucs_sys_device_t mem_dev, int num_aliases,
+                              std::vector<ucs_sys_device_t> &mems)
+    {
+        ucs_sys_bus_id_t bus_id;
+
+        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(mem_dev, &bus_id));
+        mems.push_back(mem_dev);
+
+        for (int i = 1; i < num_aliases; ++i) {
+            ucs_sys_device_t alias;
+            ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
+                    &bus_id, i, &alias));
+            ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, alias);
+            mems.push_back(alias);
+        }
+    }
+
+    // Register the first num_planes HCAs as the planes of a multiplane NIC
+    void register_planes(int num_planes, std::vector<ucs_sys_device_t> &planes)
+    {
+        for (int i = 0; i < num_planes; ++i) {
+            auto name = "plane" + std::to_string(i);
+            planes.push_back(register_device_checked(name, m_hcas[i]));
+        }
+    }
+
     // Same as require_pcie_devices(), and find a GPU and a sibling DMA engine
     // for the first HCA, skip the test if there is none
     void get_siblings_or_skip(size_t min_hcas, std::string &gpu_bdf,
@@ -975,22 +1003,18 @@ UCS_TEST_F(test_topo, sibling) {
 
 // Multiple GPUs with same HCA sibling can be seen with MPS MLOPart
 UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
-    static const uintptr_t user_value1 = 1;
-    static const uintptr_t user_value2 = 2;
-
     std::string sibling_gpu, sibling_dma;
     get_siblings_or_skip(1, sibling_gpu, sibling_dma);
 
-    auto hca_dev = register_device_checked("hca0", m_hcas[0]);
-    auto dma_dev = register_device_checked("dma", sibling_dma);
+    auto hca_dev  = register_device_checked("hca0", m_hcas[0]);
+    auto dma_dev  = register_device_checked("dma", sibling_dma);
     auto gpu_dev0 = register_device_checked("gpu0", sibling_gpu);
 
-    ucs_sys_bus_id_t gpu_bus_id;
-    ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev0, &gpu_bus_id));
-
-    ucs_sys_device_t gpu_dev1, gpu_dev2;
-    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
-            &gpu_bus_id, user_value1, &gpu_dev1));
+    std::vector<ucs_sys_device_t> gpu_devs;
+    register_mem_aliases(gpu_dev0, 3, gpu_devs);
+    ASSERT_EQ(3u, gpu_devs.size());
+    auto gpu_dev1 = gpu_devs[1];
+    auto gpu_dev2 = gpu_devs[2];
 
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev0));
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev1));
@@ -1005,8 +1029,7 @@ UCS_TEST_F(test_topo, sibling_multiple_memory_devices) {
     expect_sibling(gpu_dev0);
     expect_sibling(gpu_dev1);
 
-    ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
-            &gpu_bus_id, user_value2, &gpu_dev2));
+    // Another memory alias, enabled after the auxiliary device was set
     ASSERT_UCS_OK(ucs_topo_sys_device_enable_aux_path(gpu_dev2));
 
     expect_sibling(gpu_dev0);
@@ -1031,17 +1054,7 @@ protected:
         // Memory devices: the same GPU BDF with distinct user values
         std::vector<ucs_sys_device_t> mems;
         auto gpu_dev = register_device_checked("gpu0", sibling_gpu);
-        mems.push_back(gpu_dev);
-
-        ucs_sys_bus_id_t gpu_bus_id;
-        ASSERT_UCS_OK(ucs_topo_get_device_bus_id(gpu_dev, &gpu_bus_id));
-        for (int i = 1; i < num_mems; ++i) {
-            ucs_sys_device_t mem_alias;
-            ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(
-                    &gpu_bus_id, i, &mem_alias));
-            ASSERT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_alias);
-            mems.push_back(mem_alias);
-        }
+        register_mem_aliases(gpu_dev, num_mems, mems);
 
         auto dma_dev = register_device_checked("dma", sibling_dma);
 
@@ -1053,11 +1066,9 @@ protected:
 
         // All planes report the same auxiliary device
         std::vector<ucs_sys_device_t> planes;
-        for (int i = 0; i < num_planes; ++i) {
-            auto plane = register_device_checked("plane" + std::to_string(i),
-                                                 m_hcas[i]);
+        register_planes(num_planes, planes);
+        for (auto plane : planes) {
             ASSERT_UCS_OK(ucs_topo_sys_device_set_sys_dev_aux(plane, dma_dev));
-            planes.push_back(plane);
         }
 
         // A device whose auxiliary device is not behind the GPU's bridge
@@ -1114,7 +1125,9 @@ UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
 
     auto gpu_dev = register_device_checked("gpu0", sibling_gpu);
     auto dma_dev = register_device_checked("dma", sibling_dma);
-    auto plane = register_device_checked("plane", m_hcas[0]);
+    std::vector<ucs_sys_device_t> planes;
+    register_planes(1, planes);
+    auto plane = planes[0];
 
     // An auxiliary device which is not behind the GPU's bridge. This depends
     // on the PCIe topology of the machine.
