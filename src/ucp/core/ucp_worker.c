@@ -479,11 +479,18 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
          * means failure on the UCP EP. A token-capable lane is taken off the
          * endpoint here; the transport keeps it only when this returns
          * UCS_INPROGRESS. */
-        if ((wireup_ep == NULL) &&
-            (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK)) {
-            /* Purge after return, once the outstanding range is recorded. */
-            ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
-            return UCS_INPROGRESS;
+        if (wireup_ep == NULL) {
+            /* This endpoint is already held. Keep it until its completion. */
+            if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
+                return UCS_INPROGRESS;
+            }
+
+            if (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK) {
+                /* Purge after return, once the outstanding range is
+                 * recorded. */
+                ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
+                return UCS_INPROGRESS;
+            }
         }
 
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);

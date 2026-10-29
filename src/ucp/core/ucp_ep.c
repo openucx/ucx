@@ -3569,6 +3569,8 @@ void ucp_ep_tf_schedule_token_purge(ucp_ep_h ep, ucp_lane_index_t lane)
     purge_arg->lane = lane;
     ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                               ucp_ep_tf_purge_held_progress, purge_arg);
+    /* A worker in wait() does not run this callback until it is signaled. */
+    ucp_worker_signal_internal(ep->worker);
 }
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
