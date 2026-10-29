@@ -147,6 +147,7 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_MUSA]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -160,6 +161,7 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = 128,
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = 128,
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = 128,
+    [UCS_MEMORY_TYPE_MUSA]         = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
