@@ -9,7 +9,6 @@
 
 #include "proto_multi.h"
 
-#include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/rma/rma.inl>
 
@@ -407,8 +406,7 @@ ucp_proto_rma_sgl_max_elem_count(const ucp_proto_multi_lane_priv_t *lpriv,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rma_sgl_offload_send_frag(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        size_t max_frag_length, ucp_datatype_iter_t *next_iter,
-        ucp_proto_rma_sgl_post_func_t post_func,
+        ucp_datatype_iter_t *next_iter, ucp_proto_rma_sgl_post_func_t post_func,
         ucp_proto_rma_sgl_adjust_func_t adjust_func)
 {
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
@@ -424,7 +422,7 @@ ucp_proto_rma_sgl_offload_send_frag(
 
     if (ucp_datatype_iter_next_sgl_frags(dt_iter,
                                          req->send.rma.sgl.remote_addrs, 1,
-                                         max_frag_length, next_iter, &buffer,
+                                         lpriv->max_frag, next_iter, &buffer,
                                          &length, &remote_addr,
                                          &elem_index) == 0) {
         return UCS_OK;
@@ -488,9 +486,8 @@ ucp_proto_rma_sgl_offload_send_func(
                      !ucp_proto_rma_sgl_elem_fits(lengths[start_index],
                                                   min_frag_length,
                                                   max_frag_length))) {
-        return ucp_proto_rma_sgl_offload_send_frag(req, lpriv, max_frag_length,
-                                                   next_iter, post_func,
-                                                   adjust_func);
+        return ucp_proto_rma_sgl_offload_send_frag(req, lpriv, next_iter,
+                                                   post_func, adjust_func);
     }
 
     uct_rkeys = ucs_alloc_on_stack(uct_rkeys_size, "uct_sgl_rkeys");

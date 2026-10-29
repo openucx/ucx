@@ -443,8 +443,7 @@ ucp_proto_get_sgl_offload_sw_send_func(ucp_request_t *req,
                                        ucp_lane_index_t *lane_shift)
 {
     return ucp_proto_rma_sgl_offload_send_frag(
-            req, lpriv, lpriv->max_frag, next_iter,
-            ucp_proto_get_sgl_offload_sw_post,
+            req, lpriv, next_iter, ucp_proto_get_sgl_offload_sw_post,
             ucp_proto_get_sgl_adjust_min_frag);
 }
 
