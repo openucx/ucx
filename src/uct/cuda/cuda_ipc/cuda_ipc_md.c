@@ -76,6 +76,17 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_remote_cache),
      UCS_CONFIG_TYPE_BOOL},
 
+    {"FD_EXCHANGE_DIR", "",
+     "Directory for passing POSIX file descriptor handles of CUDA VMM memory\n"
+     "to peers which cannot take them with pidfd_getfd(), such as processes\n"
+     "in another PID namespace. It must exist and be visible to the peers at\n"
+     "the same absolute path, for example a volume mounted into every\n"
+     "container, and its path can be at most 32 characters long. Descriptors\n"
+     "are passed only between processes with the same user and group IDs.\n"
+     "Empty disables the exchange.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, fd_exchange_dir),
+     UCS_CONFIG_TYPE_STRING},
+
     {NULL}
 };
 
@@ -222,7 +233,75 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
 static ucs_status_t
-uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
+uct_cuda_ipc_md_fd_server_create(uct_cuda_ipc_md_t *md, const char *dir)
+{
+    char *local_dir = uct_cuda_ipc_component.fd_exchange_dir;
+    ucs_status_t status = UCS_OK;
+    const char *path;
+
+    if (dir[0] == '\0') {
+        return UCS_OK;
+    }
+
+    /* Importers accept only sockets under the directory of this process, so
+     * all its memory domains must use the same one */
+    pthread_mutex_lock(&uct_cuda_ipc_component.lock);
+    if ((local_dir[0] != '\0') && (strcmp(local_dir, dir) != 0)) {
+        ucs_error("inconsistent CUDA IPC FD exchange directory %s, the first "
+                  "memory domain uses %s", dir, local_dir);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_unlock;
+    }
+
+    status = ucs_fd_exchange_server_create(dir, &md->fd_server);
+    if (status != UCS_OK) {
+        ucs_warn("cuda_ipc: POSIX FD handles will not be passed to other PID "
+                 "namespaces through %s", dir);
+        status = UCS_OK;
+        goto out_unlock;
+    }
+
+    path = ucs_fd_exchange_server_path(md->fd_server);
+    if (strlen(path) >= UCT_CUDA_IPC_FD_SOCK_PATH_MAX) {
+        ucs_warn("cuda_ipc: POSIX FD exchange socket path %s is longer than %d "
+                 "characters, use a shorter directory", path,
+                 UCT_CUDA_IPC_FD_SOCK_PATH_MAX - 1);
+        ucs_fd_exchange_server_destroy(md->fd_server);
+        md->fd_server = NULL;
+        goto out_unlock;
+    }
+
+    ucs_strncpy_zero(local_dir, dir, UCT_CUDA_IPC_FD_SOCK_PATH_MAX);
+
+out_unlock:
+    pthread_mutex_unlock(&uct_cuda_ipc_component.lock);
+    return status;
+}
+
+static void uct_cuda_ipc_mem_serve_posix_fd(uct_cuda_ipc_md_t *md,
+                                            uct_cuda_ipc_lkey_t *key)
+{
+    int fd = key->ph.handle.posix_fd.fd;
+    ucs_status_t status;
+
+    if (md->fd_server == NULL) {
+        return;
+    }
+
+    /* The descriptor number is unique in this process, so it is the key */
+    status = ucs_fd_exchange_server_add_fd(md->fd_server, fd, fd);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucs_strncpy_zero(key->ph.handle.posix_fd.sock_path,
+                     ucs_fd_exchange_server_path(md->fd_server),
+                     sizeof(key->ph.handle.posix_fd.sock_path));
+}
+
+static ucs_status_t uct_cuda_ipc_mem_export_posix_fd(uct_cuda_ipc_md_t *md,
+                                                     void *addr,
+                                                     uct_cuda_ipc_lkey_t *key)
 {
     CUmemGenericAllocationHandle alloc_handle;
     ucs_status_t status;
@@ -245,9 +324,11 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 
     key->ph.handle_type               = UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD;
     key->ph.handle.posix_fd.system_id = ucs_get_system_id();
-    ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64,
-              addr, key->ph.handle.posix_fd.fd, getpid(),
-              key->ph.handle.posix_fd.system_id);
+    uct_cuda_ipc_mem_serve_posix_fd(md, key);
+    ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64
+              " sock_path=%s", addr, key->ph.handle.posix_fd.fd, getpid(),
+              key->ph.handle.posix_fd.system_id,
+              key->ph.handle.posix_fd.sock_path);
     return UCS_OK;
 }
 #endif
@@ -313,8 +394,8 @@ static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
 #endif /* HAVE_CUDA_FABRIC */
 
 static ucs_status_t
-uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
-                         uct_cuda_ipc_lkey_t **key_p)
+uct_cuda_ipc_mem_add_reg(uct_cuda_ipc_md_t *md, void *addr,
+                         uct_cuda_ipc_memh_t *memh, uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
@@ -389,7 +470,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
     if (allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
-        status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
+        status = uct_cuda_ipc_mem_export_posix_fd(md, addr, key);
         if (status == UCS_OK) {
             goto common_path;
         }
@@ -446,7 +527,8 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
         }
     }
 
-    status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
+    status = uct_cuda_ipc_mem_add_reg(ucs_derived_of(md, uct_cuda_ipc_md_t),
+                                      address, memh, &key);
     if (status != UCS_OK) {
         return status;
     }
@@ -692,13 +774,19 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
 static ucs_status_t
 uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
-    uct_cuda_ipc_memh_t *memh = params->memh;
+    uct_cuda_ipc_md_t *cuda_md = ucs_derived_of(md, uct_cuda_ipc_md_t);
+    uct_cuda_ipc_memh_t *memh  = params->memh;
     uct_cuda_ipc_lkey_t *key, *tmp;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
         if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {
+            if (key->ph.handle.posix_fd.sock_path[0] != '\0') {
+                ucs_fd_exchange_server_remove_fd(cuda_md->fd_server,
+                                                 key->ph.handle.posix_fd.fd);
+            }
+
             close(key->ph.handle.posix_fd.fd);
         }
         ucs_free(key);
@@ -782,7 +870,13 @@ out:
 
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
-    ucs_free(md);
+    uct_cuda_ipc_md_t *cuda_md = ucs_derived_of(md, uct_cuda_ipc_md_t);
+
+    if (cuda_md->fd_server != NULL) {
+        ucs_fd_exchange_server_destroy(cuda_md->fd_server);
+    }
+
+    ucs_free(cuda_md);
 }
 
 static ucs_status_t
@@ -861,6 +955,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                                                           uct_cuda_ipc_md_config_t);
     static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
     uct_cuda_ipc_md_t* md;
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    ucs_status_t status;
+#endif
 
     UCS_INIT_ONCE(&init_enable_remote_cache) {
         uct_cuda_ipc_component.enable_remote_cache =
@@ -883,6 +980,19 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component  = &uct_cuda_ipc_component.super;
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
     uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+
+    /* The POSIX FD handle, with its socket path, must not grow the handle
+     * union beyond the legacy handle, which sets the remote key size */
+    UCS_STATIC_ASSERT(ucs_field_sizeof(uct_cuda_ipc_md_handle_t,
+                                       handle.posix_fd) <=
+                      sizeof(CUipcMemHandle));
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    status = uct_cuda_ipc_md_fd_server_create(md, ipc_config->fd_exchange_dir);
+    if (status != UCS_OK) {
+        ucs_free(md);
+        return status;
+    }
+#endif
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);

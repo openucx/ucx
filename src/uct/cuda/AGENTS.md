@@ -19,7 +19,9 @@ absent.
   the CUDA driver API (`cuMemcpyAsync`, async streams). Default GPU
   staging path.
 - `cuda_ipc/` — inter-process device memory sharing using `cuIpcGetMemHandle`
-  / `cuIpcOpenMemHandle`. Includes a per-handle cache (`cuda_ipc_cache.[ch]`)
+  / `cuIpcOpenMemHandle`, fabric handles, or POSIX FD handles of VMM memory
+  (taken with `pidfd_getfd()`, or over `UCX_CUDA_IPC_FD_EXCHANGE_DIR` from
+  another PID namespace). Includes a per-handle cache (`cuda_ipc_cache.[ch]`)
   to amortize the open/close cost. `cuda_ipc.cuh` is a CUDA-syntax header
   pulled in by callers that need device-side declarations.
 - `gdr_copy/` — GPUDirect RDMA via the gdrcopy library. Maps device memory
