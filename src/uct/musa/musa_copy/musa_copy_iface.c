@@ -247,7 +247,7 @@ uct_musa_copy_query_devices(uct_md_h md,
      * deterministically (same limitation as ze_copy). The copy EP selects the
      * device from the pointer attributes, so a single iface is sufficient. */
     if (full_count > 1) {
-        ucs_warn("musa_copy: %u devices found, limiting to 1 "
+        ucs_diag("musa_copy: %u devices found, limiting to 1 "
                  "for memtype ep compatibility",
                  full_count);
         *num_tl_devices_p = 1;

@@ -26,6 +26,7 @@ is `api/ucm.h`; everything else is internal.
   `reloc.c` (ELF relocation walking), `log.c`, `sys.c`, `khash_safe.h`.
 - `cuda/` — `cudamem` hooks for `cudaMalloc`/`cudaFree` and friends. Built
   as a module; emits `MEM_TYPE_ALLOC`/`FREE` events.
+- `musa/` — `musamem` hooks for `musaMalloc`/`musaFree`.
 - `rocm/` — analogous hooks for `hipMalloc`/`hipFree`.
 - `ze/` — Intel Level Zero allocations.
 - `ptmalloc286/` — third-party allocator, only built when in-tree malloc

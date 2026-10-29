@@ -14,10 +14,13 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
+#include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 
 #include <pthread.h>
+#include <string.h>
+#include <sys/mman.h>
 
 static musaError_t ucm_musaMalloc(void **address, size_t size);
 static musaError_t ucm_musaFree(void *address);
@@ -123,9 +126,36 @@ out:
     return status;
 }
 
+static int
+ucm_musamem_scan_regions_cb(void *arg, void *addr, size_t length, int prot,
+                            const char *path)
+{
+    static const char musa_path_pattern[] = "/dev/musa";
+    ucm_event_handler_t *handler = arg;
+    ucm_event_t event;
+
+    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
+        strncmp(path, musa_path_pattern, sizeof(musa_path_pattern) - 1)) {
+        return 0;
+    }
+
+    event.mem_type.address   = addr;
+    event.mem_type.size      = length;
+    event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST;
+    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+
+    ucm_event_enter();
+    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
+    ucm_event_leave();
+    return 0;
+}
+
 static void ucm_musamem_get_existing_alloc(ucm_event_handler_t *handler)
 {
-    (void)handler;
+    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
+        ucm_parse_proc_self_maps(ucm_musamem_scan_regions_cb, handler);
+    }
 }
 
 static ucm_event_installer_t ucm_musa_initializer = {

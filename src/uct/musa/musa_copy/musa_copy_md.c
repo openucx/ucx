@@ -152,19 +152,19 @@ static uct_md_ops_t uct_musa_md_ops = {
 };
 
 static ucs_status_t
-uct_musa_md_open(uct_component_h component, const char *md_name,
-                 const uct_md_config_t *config, uct_md_h *md_p)
+uct_musa_md_open(uct_component_h component, const char *,
+                 const uct_md_config_t *, uct_md_h *md_p)
 {
     uct_musa_md_t *md;
     unsigned device_count;
     ucs_status_t status;
 
-    (void)md_name;
-    (void)config;
-
     status = uct_musa_base_get_device_count(&device_count);
     if (status != UCS_OK) {
         return status;
+    }
+    if (device_count == 0) {
+        return UCS_ERR_NO_DEVICE;
     }
 
     md = ucs_calloc(1, sizeof(*md), "musa md");
@@ -176,7 +176,6 @@ uct_musa_md_open(uct_component_h component, const char *md_name,
     md->super.component = component;
     md->have_dmabuf     = uct_musa_base_has_dmabuf();
 
-    (void)device_count;
     *md_p = &md->super;
 
     /* Keep the global cache lazy, but install its handler before MUSA events

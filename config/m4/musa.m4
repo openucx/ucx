@@ -7,7 +7,7 @@ AC_DEFUN([UCX_CHECK_MUSA],[
     AS_IF([test "x$musa_checked" != "xyes"], [
         AC_ARG_WITH([musa],
                     [AS_HELP_STRING([--with-musa=(DIR)],
-                                    [Enable MUSA 5.2.0 support (default is guess).])],
+                                    [Enable MUSA support (default is guess).])],
                     [],
                     [with_musa=guess])
 
@@ -80,6 +80,12 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                                  [musa_happy=no])
                 ])
                 AS_IF([test "x$musa_happy" = "xyes"], [
+                    AC_CHECK_LIB([musa], [muMemGetHandleForAddressRange],
+                                 [AC_DEFINE([HAVE_MUSA_DMABUF], [1],
+                                            [MUSA supports DMA-BUF export])],
+                                 [])
+                ])
+                AS_IF([test "x$musa_happy" = "xyes"], [
                     AC_LINK_IFELSE(
                         [AC_LANG_PROGRAM(
                             [[#include <stddef.h>
@@ -115,9 +121,9 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                 AC_SUBST([MUSA_ROOT])
             ], [
                 AS_IF([test "x$with_musa" != "xguess"], [
-                    AC_MSG_ERROR([MUSA support was requested but MUSA 5.2.0 headers and libraries were not found])
+                    AC_MSG_ERROR([MUSA support was requested but MUSA headers and libraries were not found])
                 ], [
-                    AC_MSG_WARN([MUSA 5.2.0 not found])
+                    AC_MSG_WARN([MUSA headers and libraries not found])
                 ])
             ])
         ])

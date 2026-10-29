@@ -34,19 +34,17 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_musa_copy_ep_t, uct_ep_t,
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_musa_copy_ep_t, uct_ep_t);
 
 static ucs_status_t
-uct_musa_copy_ep_copy(uct_ep_h tl_ep, const void *src, void *dst, size_t length)
+uct_musa_copy_ep_copy(uct_ep_h, const void *src, void *dst, size_t length)
 {
-    (void)tl_ep;
     return uct_musa_base_copy(src, dst, length, -1);
 }
 
 ucs_status_t uct_musa_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                         unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t rkey)
+                                        uct_rkey_t)
 {
     ucs_status_t status;
 
-    (void)rkey;
     status = uct_musa_copy_ep_copy(tl_ep, buffer, (void*)remote_addr, length);
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     return status;
@@ -54,11 +52,10 @@ ucs_status_t uct_musa_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
 ucs_status_t uct_musa_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t rkey)
+                                        uct_rkey_t)
 {
     ucs_status_t status;
 
-    (void)rkey;
     status = uct_musa_copy_ep_copy(tl_ep, (void*)remote_addr, buffer, length);
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     return status;
@@ -86,12 +83,10 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 
 ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
-                                        uct_rkey_t rkey, uct_completion_t *comp)
+                                        uct_rkey_t, uct_completion_t *)
 {
     ucs_status_t status;
 
-    (void)rkey;
-    (void)comp;
     status = uct_musa_copy_ep_zcopy(tl_ep, iov, iovcnt, remote_addr, 1);
     if (status == UCS_OK) {
         UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
@@ -102,12 +97,10 @@ ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 
 ucs_status_t uct_musa_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
-                                        uct_rkey_t rkey, uct_completion_t *comp)
+                                        uct_rkey_t, uct_completion_t *)
 {
     ucs_status_t status;
 
-    (void)rkey;
-    (void)comp;
     status = uct_musa_copy_ep_zcopy(tl_ep, iov, iovcnt, remote_addr, 0);
     if (status == UCS_OK) {
         UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
