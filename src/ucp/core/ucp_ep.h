@@ -1138,7 +1138,7 @@ void ucp_ep_tf_schedule_token_purge(ucp_ep_h ep, ucp_lane_index_t lane);
 
 
 /** Nonzero when @a request_id is newer than @a seen. 0 is unseen. */
-int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id);
+int ucp_ep_tf_peer_req_is_newer(uint16_t seen, uint16_t request_id);
 
 
 /** Nonzero when @a lanes is not empty and @a request_id is accepted. */

@@ -109,6 +109,8 @@ static void ucp_ep_tf_arg_init(ucp_ep_recovery_arg_t *arg);
 static ucp_ep_lane_tf_t *ucp_ep_tf_get(ucp_ep_h ep, ucp_lane_index_t lane);
 static void ucp_ep_tf_set_request_id(ucp_ep_h ep, ucp_lane_map_t lanes,
                                      uint32_t request_id);
+static int ucp_ep_tf_purge_remove_filter(const ucs_callbackq_elem_t *elem,
+                                         void *arg);
 static uct_iface_h ucp_failed_tl_iface;
 static ucs_init_once_t ucp_failed_tl_iface_once = UCS_INIT_ONCE_INITIALIZER;
 
@@ -522,9 +524,6 @@ static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
 {
     return (elem->cb == ucp_wireup_eps_progress) && (elem->arg == arg);
 }
-
-static int
-ucp_ep_tf_purge_remove_filter(const ucs_callbackq_elem_t *elem, void *arg);
 
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
@@ -2104,10 +2103,6 @@ static void ucp_ep_tf_seen_peer_id_set(ucp_ep_h ep, uint16_t peer_id)
 
     ucs_assert(!ucp_ep_has_cm_lane(ep));
 
-    if (ucp_ep_has_cm_lane(ep)) {
-        return;
-    }
-
     arg = ucp_ep_recovery_arg(ep);
     if (arg != NULL) {
         arg->seen_peer_id = peer_id;
@@ -2755,7 +2750,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
 }
 
 /* 0 is unseen. A wrapped id stays newer until half the counter space. */
-int ucp_ep_tf_peer_req_is_newer(uint32_t seen, uint32_t request_id)
+int ucp_ep_tf_peer_req_is_newer(uint16_t seen, uint16_t request_id)
 {
     if (seen == 0) {
         return 1;
@@ -2769,8 +2764,9 @@ int ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
 {
     ucs_assert(!ucp_ep_has_cm_lane(ep));
 
-    if (ucp_ep_has_cm_lane(ep) || (request_id == 0) || (lanes == 0) ||
-        !ucp_ep_tf_peer_req_is_newer(ucp_ep_tf_seen_peer_id(ep), request_id)) {
+    if ((request_id == 0) || (lanes == 0) ||
+        !ucp_ep_tf_peer_req_is_newer(ucp_ep_tf_seen_peer_id(ep),
+                                      (uint16_t)request_id)) {
         return 0;
     }
 
@@ -3485,7 +3481,6 @@ static unsigned ucp_ep_tf_purge_held_progress(void *arg)
         goto out;
     }
 
-    tf->purged = 1;
     uct_ep_destroy(tf->uct_ep);
     ucp_ep_tf_lane_release(ep, tf);
 
