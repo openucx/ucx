@@ -167,7 +167,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    xfer_args.ucp = create_ucp();
+    xfer_args.ucp = create_ucp(UCP_FEATURE_RMA | UCP_FEATURE_WAKEUP);
 
     for (operation_idx = 0; operation_idx < ucs_static_array_size(operations);
          ++operation_idx) {

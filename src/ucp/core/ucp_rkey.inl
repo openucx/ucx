@@ -67,13 +67,14 @@ ucp_rkey_get_tl_rkey(ucp_rkey_h rkey, ucp_md_index_t rkey_index)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
-                             ucp_rkey_h *rkey_p)
+                             uint64_t uct_flags, ucp_rkey_h *rkey_p)
 {
     ucp_ep_config_t *config = &ucs_array_elem(&ep->worker->ep_config,
                                               ep->cfg_index);
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        config->key.reachable_md_map, 0,
-                                       UCS_SYS_DEVICE_ID_UNKNOWN, rkey_p);
+                                       UCS_SYS_DEVICE_ID_UNKNOWN, uct_flags,
+                                       rkey_p);
 }
 
 static UCS_F_ALWAYS_INLINE int
