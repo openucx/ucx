@@ -25,18 +25,6 @@
 
 #include <pthread.h>
 
-typedef enum {
-    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL  = UCS_BIT(0),
-    UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC = UCS_BIT(1)
-} uct_cuda_ipc_device_addr_flags_t;
-
-
-typedef struct {
-    uint64_t     system_uuid;
-    uint8_t      flags; /* uct_cuda_ipc_device_addr_flags_t */
-} UCS_S_PACKED uct_cuda_ipc_device_addr_t;
-
-
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 
     {"", "", NULL,
@@ -87,7 +75,9 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
-    uct_cuda_ipc_device_addr_t *dev_addr = (uct_cuda_ipc_device_addr_t*)addr;
+    uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr =
+            (uct_cuda_ipc_mnnvl_device_addr_t*)addr;
+    uct_cuda_ipc_device_addr_t *dev_addr = &mnnvl_addr->super;
     uct_cuda_ipc_iface_t *iface          = ucs_derived_of(tl_iface,
                                                           uct_cuda_ipc_iface_t);
     uct_cuda_ipc_md_t *md                = ucs_derived_of(iface->super.super.md,
@@ -96,7 +86,8 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
     if (md->enable_mnnvl || md->fabric_supported) {
         dev_addr->flags = 0;
         if (md->enable_mnnvl) {
-            dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+            dev_addr->flags          |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
+            mnnvl_addr->nvlink_domain = md->nvlink_domain;
         }
 
         if (md->fabric_supported) {
@@ -141,6 +132,19 @@ uct_cuda_ipc_iface_mnnvl_supported(uct_cuda_ipc_md_t *md,
             UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL);
 }
 
+/* Return the device address extended with the NVLink domain, or NULL if the
+ * peer did not send it */
+static const uct_cuda_ipc_mnnvl_device_addr_t *
+uct_cuda_ipc_iface_mnnvl_dev_addr(const uct_device_addr_t *addr,
+                                  size_t dev_addr_len)
+{
+    if (dev_addr_len < sizeof(uct_cuda_ipc_mnnvl_device_addr_t)) {
+        return NULL;
+    }
+
+    return (const uct_cuda_ipc_mnnvl_device_addr_t*)addr;
+}
+
 static int
 uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
@@ -149,6 +153,7 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     uct_cuda_ipc_md_t *md       = ucs_derived_of(iface->super.super.md,
                                                  uct_cuda_ipc_md_t);
     const uct_cuda_ipc_device_addr_t *dev_addr;
+    const uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr;
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
     int local_fabric_supported, remote_fabric_supported;
@@ -175,10 +180,28 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!same_uuid &&
-        !uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
-        uct_iface_fill_info_str_buf(params, "different machine and no MNNVL");
-        return 0;
+    if (!same_uuid) {
+        if (!uct_cuda_ipc_iface_mnnvl_supported(md, dev_addr, dev_addr_len)) {
+            uct_iface_fill_info_str_buf(params,
+                                        "different machine and no MNNVL");
+            return 0;
+        }
+
+        /* Multi-node NVLINK connects only GPUs in the same NVLink domain. All
+         * GPUs of a host are assumed to be in the same domain (it is probed
+         * from GPU 0), so the domain is checked only against other hosts. */
+        mnnvl_addr = uct_cuda_ipc_iface_mnnvl_dev_addr(params->device_addr,
+                                                       dev_addr_len);
+        if (mnnvl_addr == NULL) {
+            ucs_debug("peer does not advertise NVLink domain, using legacy "
+                      "MNNVL reachability");
+        } else if (mnnvl_addr->nvlink_domain != md->nvlink_domain) {
+            uct_iface_fill_info_str_buf(
+                    params,
+                    "different NVLink domain local 0x%" PRIx64 " vs 0x%" PRIx64,
+                    md->nvlink_domain, mnnvl_addr->nvlink_domain);
+            return 0;
+        }
     }
 
     /* Legacy CUDA IPC handles cannot be exchanged across PID namespaces;
@@ -324,6 +347,17 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
     return ULONG_MAX;
 }
 
+static size_t uct_cuda_ipc_iface_device_addr_length(const uct_cuda_ipc_md_t *md)
+{
+    if (md->enable_mnnvl) {
+        return sizeof(uct_cuda_ipc_mnnvl_device_addr_t);
+    } else if (md->fabric_supported) {
+        return sizeof(uct_cuda_ipc_device_addr_t);
+    }
+
+    return sizeof(uint64_t);
+}
+
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
@@ -334,10 +368,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     uct_base_iface_query(&iface->super.super, iface_attr);
 
     iface_attr->iface_addr_len          = uct_cuda_ipc_iface_address_length();
-    iface_attr->device_addr_len         = (md->enable_mnnvl ||
-                                           md->fabric_supported) ?
-                                          sizeof(uct_cuda_ipc_device_addr_t) :
-                                          sizeof(uint64_t);
+    iface_attr->device_addr_len         =
+            uct_cuda_ipc_iface_device_addr_length(md);
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
