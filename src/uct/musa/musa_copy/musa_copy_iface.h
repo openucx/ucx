@@ -15,6 +15,7 @@ typedef uint64_t uct_musa_copy_iface_addr_t;
 typedef struct {
     uct_base_iface_t           super;
     uct_musa_copy_iface_addr_t id;
+    int                        device;
     struct {
         double                 latency;
         double                 bandwidth;

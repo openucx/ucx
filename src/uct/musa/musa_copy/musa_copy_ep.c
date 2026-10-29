@@ -34,14 +34,18 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_musa_copy_ep_t, uct_ep_t,
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_musa_copy_ep_t, uct_ep_t);
 
 static ucs_status_t
-uct_musa_copy_ep_copy(uct_ep_h, const void *src, void *dst, size_t length)
+uct_musa_copy_ep_copy(uct_ep_h tl_ep, const void *src, void *dst,
+                      size_t length)
 {
-    return uct_musa_base_copy(src, dst, length, -1);
+    uct_musa_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_musa_copy_iface_t);
+
+    return uct_musa_base_copy(src, dst, length, iface->device);
 }
 
 ucs_status_t uct_musa_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                         unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t)
+                                        uct_rkey_t rkey)
 {
     ucs_status_t status;
 
@@ -52,7 +56,7 @@ ucs_status_t uct_musa_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
 ucs_status_t uct_musa_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t)
+                                        uct_rkey_t rkey)
 {
     ucs_status_t status;
 
@@ -83,7 +87,7 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 
 ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
-                                        uct_rkey_t, uct_completion_t *)
+                                        uct_rkey_t rkey, uct_completion_t *comp)
 {
     ucs_status_t status;
 
@@ -97,7 +101,7 @@ ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 
 ucs_status_t uct_musa_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
-                                        uct_rkey_t, uct_completion_t *)
+                                        uct_rkey_t rkey, uct_completion_t *comp)
 {
     ucs_status_t status;
 

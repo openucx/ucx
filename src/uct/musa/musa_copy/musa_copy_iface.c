@@ -122,12 +122,6 @@ uct_musa_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
-static unsigned uct_musa_copy_iface_progress(uct_iface_h tl_iface)
-{
-    (void)tl_iface;
-    return 0;
-}
-
 static uct_iface_ops_t uct_musa_copy_iface_ops = {
     .ep_get_short             = uct_musa_copy_ep_get_short,
     .ep_put_short             = uct_musa_copy_ep_put_short,
@@ -145,7 +139,8 @@ static uct_iface_ops_t uct_musa_copy_iface_ops = {
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
-    .iface_progress           = uct_musa_copy_iface_progress,
+    .iface_progress           = (uct_iface_progress_func_t)
+                                ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(
                                     uct_musa_copy_iface_t),
     .iface_query              = uct_musa_copy_iface_query,
@@ -210,6 +205,7 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
     }
 
     self->id               = ucs_generate_uuid((uintptr_t)self);
+    self->device           = device;
     self->config.latency   = config->latency;
     self->config.bandwidth = config->bandwidth;
     return UCS_OK;
