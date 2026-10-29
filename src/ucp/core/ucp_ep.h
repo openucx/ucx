@@ -1154,10 +1154,10 @@ ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes);
  * Mark lanes a remote token reported as failed.
  *
  * The transport endpoint stays on the lane in
- * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_invalidate_transport
- * or @ref ucp_ep_tf_retire_unaware_lanes moves it to error and the error
- * completion holds it. Non-zero @a request_id and @a peer_id are recorded.
- * Already held lanes only record @a peer_id.
+ * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_invalidate_uct_eps
+ * moves it to error and the error completion holds it. Non-zero
+ * @a request_id and @a peer_id are recorded. Already held lanes only
+ * record @a peer_id.
  *
  * @return Lanes left invalidated. Any other lane is not on the token path.
  */
@@ -1170,23 +1170,21 @@ ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
 ucp_lane_map_t ucp_ep_tf_lanes_to_invalidate(ucp_ep_h ep, ucp_lane_map_t lanes);
 
 
-/** Move invalidated lanes to error. The queue pair stays until completion. */
+/**
+ * Move invalidated lanes to error.
+ *
+ * The transport endpoint stays on the lane. The error completion holds it
+ * and records the outstanding range, so the caller must not purge here.
+ *
+ * @return Lanes moved to error. A lane left out still has its transport
+ *         endpoint.
+ */
 ucp_lane_map_t
-ucp_ep_tf_invalidate_transport(ucp_ep_h ep, ucp_lane_map_t lanes);
+ucp_ep_tf_invalidate_uct_eps(ucp_ep_h ep, ucp_lane_map_t lanes);
 
 
 /** Nonzero when @a lane is held and still owns @a uct_ep. */
 int ucp_ep_tf_is_held(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
-
-
-/**
- * Move invalidated lanes to error. The completion holds each queue pair.
- *
- * @a retired is unused. The queue pair stays on the lane until that
- * completion, so a token derive in this handler can still see it.
- */
-void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
-                                    uct_ep_h retired[]);
 
 
 /**
@@ -1202,13 +1200,6 @@ ucp_ep_tf_hold_invalidated_lanes(ucp_ep_h ep, ucp_lane_map_t lanes);
 
 
 /**
- * Destroy endpoints returned by @ref ucp_ep_tf_retire_unaware_lanes and drop
- * their token state.
- */
-void ucp_ep_tf_destroy_retired_lanes(ucp_ep_h ep, uct_ep_h retired[]);
-
-
-/**
  * TX token length to publish on a message with @a request_id, or 0 when this
  * lane did not publish its snapshot for that id. @a token_p is set to the
  * snapshot.
@@ -1220,8 +1211,9 @@ uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
 /**
  * Derive an RX token from a peer TX token. The returned buffer is allocated
  * and owned by the caller. @a require_open rejects a lane that is not held
- * or invalidated. A reply passes 0 so a released lane is still looked up by
- * QPN; a destroyed queue pair returns @ref UCS_ERR_NO_ELEM.
+ * or invalidated. A reply passes 0 so the transport resolves a released
+ * lane from the TX token. A destroyed transport endpoint returns
+ * @ref UCS_ERR_NO_ELEM.
  */
 ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const void *tx_token, uint8_t tx_len,
@@ -1245,8 +1237,8 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
  * A reply matches the lane's own request_id. An ACK matches peer_id.
  * @a from_ack selects which one. A successful purge destroys the UCT
  * endpoint and releases the hold only for lanes in @a release_lanes. Any
- * other lane stays held, so a later reply can still read that queue pair
- * while building the ACK token.
+ * other lane stays held, so a later reply can still read that transport
+ * endpoint while building the ACK token.
  */
 void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
                                        uint32_t request_id, int from_ack,

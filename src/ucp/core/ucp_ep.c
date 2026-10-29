@@ -2865,8 +2865,8 @@ ucp_lane_map_t ucp_ep_tf_lanes_to_invalidate(ucp_ep_h ep, ucp_lane_map_t lanes)
     return pending;
 }
 
-/* Move those queue pairs to error. The completion holds the lane. */
-ucp_lane_map_t ucp_ep_tf_invalidate_transport(ucp_ep_h ep, ucp_lane_map_t lanes)
+/* Move those transport endpoints to error. The completion records the range. */
+ucp_lane_map_t ucp_ep_tf_invalidate_uct_eps(ucp_ep_h ep, ucp_lane_map_t lanes)
 {
     uct_ep_invalidate_params_t params;
     ucp_lane_map_t armed = 0;
@@ -2923,7 +2923,8 @@ ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
     *rx_len_p   = 0;
 
     /* The request path derives only while the lane is held or invalidated.
-     * A reply looks the queue pair up by QPN after that record is released. */
+     * A reply resolves the transport endpoint from the TX token after that
+     * record is released. */
     if (require_open && !ucp_ep_tf_exchange_open(ep, lane)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -3115,8 +3116,8 @@ ucp_ep_tf_purge_cancel(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
               tf->uct_ep);
     uct_ep_pending_purge(tf->uct_ep, ucp_request_purge_enqueue_cb,
                          &ucp_ep_recovery_arg(ep)->tf_pending_q);
-    /* The token purge already walked this queue. Another walk is empty and
-     * the transport rejects it. */
+    /* The token purge already walked these outstanding operations. Another
+     * walk is empty and the transport rejects it. */
     if (!tf->purged) {
         params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
                             UCT_EP_OUTSTANDING_FIELD_ARG;
@@ -3191,9 +3192,9 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
             ucs_trace("ep %p: lane %d already purged uct_ep %p", ep, lane,
                       tf->uct_ep);
         } else {
-            /* A missing token can mean the query failed, not that the queue
-             * pair is gone. Replaying every send would duplicate operations
-             * the peer already completed. */
+            /* A missing token can mean the query failed, not that the
+             * transport endpoint is gone. Replaying every send would
+             * duplicate operations the peer already completed. */
             if (tf->rx_token == NULL) {
                 ucs_debug("ep %p: lane %d: no rx token, skip purge", ep, lane);
                 continue;
@@ -3210,8 +3211,9 @@ void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
             tf->purged = 1;
         }
 
-        /* The ACK token is this queue pair's receive position. Destroying
-         * it before that token is sent leaves the peer held forever. */
+        /* The ACK token is the transport endpoint's receive position.
+         * Destroying the endpoint before that token is sent leaves the peer
+         * held forever. */
         if (!(release_lanes & UCS_BIT(lane))) {
             ucs_debug("ep %p: lane %d keep uct_ep %p until the ACK token", ep,
                       lane, tf->uct_ep);
@@ -3567,38 +3569,6 @@ void ucp_ep_tf_schedule_token_purge(ucp_ep_h ep, ucp_lane_index_t lane)
     purge_arg->lane = lane;
     ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                               ucp_ep_tf_purge_held_progress, purge_arg);
-}
-
-void ucp_ep_tf_retire_unaware_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
-                                    uct_ep_h retired[])
-{
-    /* The completion holds the queue pair and records the outstanding range.
-     * Purging here would walk WQEs from the unset sentinel. */
-    (void)retired;
-    ucp_ep_tf_invalidate_transport(ep, lanes);
-}
-
-void ucp_ep_tf_destroy_retired_lanes(ucp_ep_h ep, uct_ep_h retired[])
-{
-    ucp_lane_index_t lane;
-    ucp_ep_lane_tf_t *tf;
-
-    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
-        if (retired[lane] == NULL) {
-            continue;
-        }
-
-        uct_ep_destroy(retired[lane]);
-        retired[lane] = NULL;
-
-        tf = ucp_ep_tf_get(ep, lane);
-        if (tf == NULL) {
-            continue;
-        }
-
-        tf->uct_ep = NULL;
-        ucp_ep_tf_lane_release(ep, tf);
-    }
 }
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
