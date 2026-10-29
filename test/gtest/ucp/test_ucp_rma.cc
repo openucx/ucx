@@ -1217,13 +1217,15 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
     static void get_base_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA);
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+    }
+
+    static void get_src_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_base_variants,
-                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                             UCS_BIT(UCS_MEMORY_TYPE_HOST));
+        add_variant_memtypes(variants, get_src_variants, SGL_MEM_TYPES_MASK);
     }
 
     virtual void init() override {
@@ -1231,11 +1233,18 @@ public:
         test_ucp_rma::init();
     }
 
-    ucs_memory_type_t mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value());
+    ucs_memory_type_t src_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value(1));
+    }
+
+    ucs_memory_type_t dst_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value(2));
     }
 
 protected:
+    static constexpr uint64_t SGL_MEM_TYPES_MASK =
+            UCS_BIT(UCS_MEMORY_TYPE_HOST) | UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+
     enum sgl_op_t {
         SGL_OP_PUT,
         SGL_OP_GET
@@ -1259,8 +1268,7 @@ protected:
 
     void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
                       sgl_op_t op = SGL_OP_PUT) {
-        ucs_memory_type_t mtype = mem_type();
-        size_t num              = elem_sizes.size();
+        size_t num = elem_sizes.size();
 
         ctx.rkey_handles.resize(num);
         ctx.buffers.resize(num);
@@ -1272,8 +1280,8 @@ protected:
         ctx.dst.reserve(num);
 
         for (size_t i = 0; i < num; i++) {
-            ctx.src.emplace_back(elem_sizes[i], sender(), 0, mtype);
-            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, mtype);
+            ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_mem_type());
+            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_mem_type());
         }
 
         for (size_t i = 0; i < num; i++) {
@@ -1454,14 +1462,13 @@ protected:
         }
 
         auto verify_sgl_buffers = [&]() {
-            ucs_memory_type_t mtype = mem_type();
             for (size_t i = 0; i < num; i++) {
-                uint8_t expected = static_cast<uint8_t>(i + 1);
-                void *result     = (op == SGL_OP_PUT) ? ctx.dst[i].ptr() :
-                                                        ctx.src[i].ptr();
+                uint8_t expected            = static_cast<uint8_t>(i + 1);
+                const mapped_buffer &result = (op == SGL_OP_PUT) ? ctx.dst[i] :
+                                                                   ctx.src[i];
                 std::vector<uint8_t> host_buf(ctx.lengths[i]);
-                mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
-                                      mtype);
+                mem_buffer::copy_from(host_buf.data(), result.ptr(),
+                                      ctx.lengths[i], result.mem_type());
                 for (size_t j = 0; j < ctx.lengths[i]; j++) {
                     ASSERT_EQ(expected, host_buf[j])
                         << "Mismatch at element " << i << " byte " << j;
