@@ -56,6 +56,16 @@ typedef enum uct_ep_operation {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Endpoint-specific asynchronous event types.
+ */
+enum uct_ep_event_types {
+    /** Endpoint path speed changed. */
+    UCT_EP_EVENT_PATH_SPEED_CHANGE = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Endpoint-aware asynchronous event callback.
  *
  * The transport invokes this callback synchronously from its asynchronous
@@ -65,7 +75,7 @@ typedef enum uct_ep_operation {
  *                       @ref uct_iface_set_async_ep_event_handler.
  * @param [in]  ep       Endpoint associated with the event. It is valid only
  *                       for the duration of the callback.
- * @param [in]  events   Event flags from @ref uct_iface_event_types.
+ * @param [in]  events   Event flags from @ref uct_ep_event_types.
  */
 typedef void (*uct_async_ep_event_cb_t)(void *arg, uct_ep_h ep,
                                         unsigned events);
@@ -480,8 +490,7 @@ struct uct_ep_attr {
 
     /**
      * Latest endpoint bandwidth, in bytes per second.
-     * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask
-     * and the interface advertises @ref UCT_IFACE_FLAG_V2_EP_QUERY_BW.
+     * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
      */
     double                  bandwidth;
 };
@@ -1265,8 +1274,6 @@ enum uct_iface_attr_field {
                                                                support token query, and
                                                                @ref uct_ep_outstanding_purge
                                                                is supported. */
-#define UCT_IFACE_FLAG_V2_EP_QUERY_BW         UCS_BIT(3)  /**< @ref uct_ep_query can
-                                                               report endpoint bandwidth */
 /**
  * @}
  */

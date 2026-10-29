@@ -466,9 +466,6 @@ typedef enum uct_atomic_op {
                                                        is supported */
 #define UCT_IFACE_FLAG_EVENT_ASYNC_CB  UCS_BIT(4) /**< Event notification through asynchronous
                                                        callback invocation is supported */
-#define UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE UCS_BIT(5) /**< Endpoint path
-                                                                speed change
-                                                                notification is supported */
 /**
  * @}
  */
@@ -502,15 +499,11 @@ typedef enum {
  *       on the receiver. Otherwise, UCT_EVENT_RECV should be triggered.
  */
 enum uct_iface_event_types {
-    UCT_EVENT_SEND_COMP         = UCS_BIT(0), /**< Send completion event */
-    UCT_EVENT_RECV              = UCS_BIT(1), /**< Tag or active message
-                                                   received */
-    UCT_EVENT_RECV_SIG          = UCS_BIT(2), /**< Signaled tag or active message
-                                                   received */
-    UCT_EVENT_SPEED_CHANGE      = UCS_BIT(3), /**< Interface speed change event */
-    UCT_EVENT_PATH_SPEED_CHANGE = UCS_BIT(4) /**< Endpoint path speed changed.
-                                                   The endpoint is provided to
-                                                   the endpoint callback. */
+    UCT_EVENT_SEND_COMP     = UCS_BIT(0), /**< Send completion event */
+    UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
+    UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
+                                               received */
+    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3)  /**< Speed change event */
 };
 
 
