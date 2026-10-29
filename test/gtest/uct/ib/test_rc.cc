@@ -150,15 +150,11 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                 UCT_IFACE_FLAG_PENDING  |
-                                 UCT_IFACE_FLAG_PUT_SHORT))
+void test_rc::test_sgl_reserve(bool add_pending)
 {
     uct_iface_attr_v2_t attr = {};
     const size_t length      = 64;
     const size_t count       = 2;
-    unsigned n;
     ucs_status_t status;
     uct_pending_req_t pend_req;
 
@@ -178,26 +174,28 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
     uint64_t raddrs[]  = {r0.addr(), r1.addr()};
     uct_rkey_t rkeys[] = {r0.rkey(), r1.rkey()};
 
-    n = 0;
-    while (uct_rc_txqp_available(&rc_ep(m_e1)->txqp) > (int16_t)(count - 1)) {
-        ASSERT_LT(n++, 1024u);
+    /* A single PUT SHORT consumes exactly one TXQP credit */
+    const int16_t initial = uct_rc_txqp_available(&rc_ep(m_e1)->txqp);
+    for (int16_t i = initial; i > (int16_t)(count - 1); --i) {
         ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
                                        r0.rkey()));
     }
 
-    ASSERT_GT(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), 0);
-    ASSERT_LT(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)count);
+    ASSERT_EQ(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)(count - 1));
     ASSERT_GT(rc_iface(m_e1)->tx.cq_available, (int16_t)(count - 1));
 
     status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs, raddrs,
                                   rkeys, NULL, NULL, count, NULL);
     ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_GT(rc_ep(m_e1)->txqp_reserve, 0);
 
-    pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
-        return UCS_ERR_NO_RESOURCE;
-    };
+    if (add_pending) {
+        pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
+            return UCS_ERR_NO_RESOURCE;
+        };
 
-    ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+        ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+    }
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
@@ -205,8 +203,32 @@ UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
     EXPECT_EQ(UCS_ERR_NO_RESOURCE,
               uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
 
-    uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    if (add_pending) {
+        /* The pending request never completes, so purge it to drop the
+         * reserve */
+        uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    }
+
+    /* Without pending requests, the reserve is dropped on TX completion */
     flush();
+
+    EXPECT_EQ(0, rc_ep(m_e1)->txqp_reserve);
+    EXPECT_EQ(0, rc_ep(m_e1)->cq_reserve);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING  |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_reserve_released_on_completion,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
@@ -1412,11 +1434,12 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and dispatch the pending queue.
-     * Can't send AM/PUT for that, because it is blocked while FC grant is
-     * queued. */
+    /* Enable send capabilities of m_e2 and send short put message to force
+     * pending queue dispatch. Can't send AM message for that, because it may
+     * trigger reordering assert due to disable/enable entity hack. */
     enable_entity(m_e2);
-    uct_rc_iface_arbiter_dispatch(rc_iface(m_e2));
+    set_tx_moderation(m_e2, 0);
+    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);
