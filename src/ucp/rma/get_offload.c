@@ -429,6 +429,8 @@ ucp_proto_get_sgl_offload_sw_post(ucp_request_t *req,
         .count  = 1
     };
 
+    ucs_assertv(count == 1, "count=%zu", count);
+
     return uct_ep_get_zcopy(ucp_ep_get_lane(req->send.ep, lpriv->super.lane),
                             &iov, 1, remote_addrs[0], rkeys[0],
                             &req->send.state.uct_comp);
