@@ -648,16 +648,13 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
             if (dedicated_uar) {
                 status = uct_ib_mlx5_devx_uar_init(
                         &channel->uar.dedicated.qp_uar,
-                        ucs_derived_of(iface->super.super.super.super.md,
-                                       uct_ib_mlx5_md_t),
+                        uct_ib_mlx5_iface_md(&iface->super.super.super),
                         qp_attr.mmio_mode);
                 if (status != UCS_OK) {
                     goto err_destroy_cq;
                 }
 
                 qp_attr.uar = &channel->uar.dedicated.qp_uar;
-            } else {
-                qp_attr.uar = NULL;
             }
 
             qp_attr.umem_offset = ep_offset + ep_wq_offset + ch_wq_offset;
