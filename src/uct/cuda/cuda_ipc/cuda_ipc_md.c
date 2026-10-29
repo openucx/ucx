@@ -17,6 +17,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/uid.h>
+#include <ucs/time/time.h>
 #include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
 #include <uct/cuda/base/cuda_nvml.h>
@@ -75,6 +76,25 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
     {"CACHE", "y", "Enable remote IPC memory handle mapping cache",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_remote_cache),
      UCS_CONFIG_TYPE_BOOL},
+
+    {"FD_EXCHANGE_DIR", "",
+     "Directory for passing POSIX file descriptor handles of CUDA VMM memory\n"
+     "to peers which cannot take them with pidfd_getfd(), such as processes\n"
+     "in another PID namespace. It must exist and be visible to the peers at\n"
+     "the same absolute path, for example a volume mounted into every\n"
+     "container, and its path can be at most 32 characters long. Descriptors\n"
+     "are passed only between processes with the same user and group IDs.\n"
+     "Empty disables the exchange.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, fd_exchange_dir),
+     UCS_CONFIG_TYPE_STRING},
+
+    {"FD_EXCHANGE_TIMEOUT", "5s",
+     "Time to wait for a POSIX file descriptor handle from the process which\n"
+     "owns it, through the FD exchange socket. The owner replies from its\n"
+     "async thread, so only a stopped owner makes a peer wait this long. The\n"
+     "value of the first memory domain which opens the exchange is used.",
+     ucs_offsetof(uct_cuda_ipc_md_config_t, fd_exchange_timeout),
+     UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
@@ -222,7 +242,98 @@ uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
 static ucs_status_t
-uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
+uct_cuda_ipc_md_fd_server_create(uct_cuda_ipc_md_t *md,
+                                 const uct_cuda_ipc_md_config_t *config)
+{
+    char *local_dir     = uct_cuda_ipc_component.fd_exchange_dir;
+    const char *dir     = config->fd_exchange_dir;
+    ucs_status_t status = UCS_OK;
+    const char *path;
+
+    if (dir[0] == '\0') {
+        return UCS_OK;
+    }
+
+    /* Importers accept only sockets under the directory of this process, so
+     * all its memory domains must use the same one */
+    pthread_mutex_lock(&uct_cuda_ipc_component.lock);
+    if ((local_dir[0] != '\0') && (strcmp(local_dir, dir) != 0)) {
+        ucs_error("inconsistent CUDA IPC FD exchange directory %s, the first "
+                  "memory domain uses %s", dir, local_dir);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_unlock;
+    }
+
+    status = ucs_fd_exchange_server_create(dir, &md->fd_server);
+    if (status != UCS_OK) {
+        ucs_warn("cuda_ipc: POSIX FD handles will not be passed to other PID "
+                 "namespaces through %s", dir);
+        status = UCS_OK;
+        goto out_unlock;
+    }
+
+    path = ucs_fd_exchange_server_path(md->fd_server);
+    if (strlen(path) >= UCT_CUDA_IPC_FD_SOCK_PATH_MAX) {
+        ucs_warn("cuda_ipc: POSIX FD exchange socket path %s is longer than %d "
+                 "characters, use a shorter directory", path,
+                 UCT_CUDA_IPC_FD_SOCK_PATH_MAX - 1);
+        ucs_fd_exchange_server_destroy(md->fd_server);
+        md->fd_server = NULL;
+        goto out_unlock;
+    }
+
+    /* The first server records the directory and the timeout for the importers,
+     * and the last one to close releases the directory, see
+     * uct_cuda_ipc_md_fd_server_destroy() */
+    if (uct_cuda_ipc_component.num_fd_servers++ == 0) {
+        ucs_strncpy_zero(local_dir, dir, UCT_CUDA_IPC_FD_SOCK_PATH_MAX);
+        uct_cuda_ipc_component.fd_exchange_timeout =
+                ucs_time_from_sec(config->fd_exchange_timeout);
+    }
+
+out_unlock:
+    pthread_mutex_unlock(&uct_cuda_ipc_component.lock);
+    return status;
+}
+
+static void uct_cuda_ipc_md_fd_server_destroy(uct_cuda_ipc_md_t *md)
+{
+    ucs_fd_exchange_server_destroy(md->fd_server);
+
+    pthread_mutex_lock(&uct_cuda_ipc_component.lock);
+    ucs_assert(uct_cuda_ipc_component.num_fd_servers > 0);
+    if (--uct_cuda_ipc_component.num_fd_servers == 0) {
+        /* Nothing is served from the directory anymore, so the next memory
+         * domain can use another one */
+        uct_cuda_ipc_component.fd_exchange_dir[0] = '\0';
+    }
+    pthread_mutex_unlock(&uct_cuda_ipc_component.lock);
+}
+
+static void uct_cuda_ipc_mem_serve_posix_fd(uct_cuda_ipc_md_t *md,
+                                            uct_cuda_ipc_lkey_t *key)
+{
+    int fd = key->ph.handle.posix_fd.fd;
+    ucs_status_t status;
+
+    if (md->fd_server == NULL) {
+        return;
+    }
+
+    /* The descriptor number is unique in this process, so it is the key */
+    status = ucs_fd_exchange_server_add_fd(md->fd_server, fd, fd);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucs_strncpy_zero(key->ph.handle.posix_fd.sock_path,
+                     ucs_fd_exchange_server_path(md->fd_server),
+                     sizeof(key->ph.handle.posix_fd.sock_path));
+}
+
+static ucs_status_t uct_cuda_ipc_mem_export_posix_fd(uct_cuda_ipc_md_t *md,
+                                                     void *addr,
+                                                     uct_cuda_ipc_lkey_t *key)
 {
     CUmemGenericAllocationHandle alloc_handle;
     ucs_status_t status;
@@ -245,9 +356,11 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
 
     key->ph.handle_type               = UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD;
     key->ph.handle.posix_fd.system_id = ucs_get_system_id();
-    ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64,
-              addr, key->ph.handle.posix_fd.fd, getpid(),
-              key->ph.handle.posix_fd.system_id);
+    uct_cuda_ipc_mem_serve_posix_fd(md, key);
+    ucs_trace("posix_fd export: addr=%p fd=%d pid=%d system_id=0x%" PRIx64
+              " sock_path=%s", addr, key->ph.handle.posix_fd.fd, getpid(),
+              key->ph.handle.posix_fd.system_id,
+              key->ph.handle.posix_fd.sock_path);
     return UCS_OK;
 }
 #endif
@@ -313,8 +426,8 @@ static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
 #endif /* HAVE_CUDA_FABRIC */
 
 static ucs_status_t
-uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
-                         uct_cuda_ipc_lkey_t **key_p)
+uct_cuda_ipc_mem_add_reg(uct_cuda_ipc_md_t *md, void *addr,
+                         uct_cuda_ipc_memh_t *memh, uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
@@ -389,7 +502,7 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
     if (allowed_handle_types & CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR) {
-        status = uct_cuda_ipc_mem_export_posix_fd(addr, key);
+        status = uct_cuda_ipc_mem_export_posix_fd(md, addr, key);
         if (status == UCS_OK) {
             goto common_path;
         }
@@ -446,7 +559,8 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
         }
     }
 
-    status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
+    status = uct_cuda_ipc_mem_add_reg(ucs_derived_of(md, uct_cuda_ipc_md_t),
+                                      address, memh, &key);
     if (status != UCS_OK) {
         return status;
     }
@@ -502,56 +616,69 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
     ucs_status_t status;
     void *d_mapped;
     uct_cuda_ipc_dev_cache_t *cache;
-    uint8_t *accessible;
+    uint8_t accessible;
 
     rkey_handle->cu_dev = cu_dev;
 
     pthread_mutex_lock(&component->lock);
-
     cache = uct_cuda_ipc_get_dev_cache(component, &rkey->super);
     if (ucs_unlikely(NULL == cache)) {
-        status = UCS_ERR_NO_RESOURCE;
-        goto err;
+        pthread_mutex_unlock(&component->lock);
+        return UCS_ERR_NO_RESOURCE;
     }
 
     /* use unique id for stream id; this means that relative remote
      * device number of multiple peers do not map on the same stream and reduces
      * stream sequentialization */
     rkey->stream_id = cache->dev_num;
-    accessible      = &cache->accessible[cu_dev];
-    if (ucs_unlikely(*accessible == UCS_TRY)) { /* unchecked, add to cache */
+    accessible      = cache->accessible[cu_dev];
+    pthread_mutex_unlock(&component->lock);
 
-        /* Check if peer is reachable by trying to open memory handle. This is
-         * necessary when the device is not visible through CUDA_VISIBLE_DEVICES
-         * and checking peer accessibility through CUDA driver API is not
-         * possible.
-         * Previously, reachability was checked by opening a memory handle
-         * and immediately closing it as the handle to memory handle cache
-         * was not not globally visible. Doing this with multiple threads is an
-         * issue as a thread may first check reachability, and later open the
-         * handle, and save mapped pointer in cache as part of a put/get
-         * operation. At this point another thread can then close the same
-         * memory handle as part of reachability check. This leads to a
-         * cuMemcpyAsync error when accessing the mapped pointer as part of
-         * put/get operation.
-         * Now, we immediately insert into cache to save on calling
-         * OpenMemHandle for the same handle because the cache is globally
-         * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
-                                            UCS_LOG_LEVEL_DEBUG);
-        if (status == UCS_OK) {
-            rkey_handle->mapped_addr = d_mapped;
-        }
-
-        *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
-                      ? UCS_YES : UCS_NO;
+    if (ucs_likely(accessible != UCS_TRY)) {
+        return (accessible == UCS_YES) ? UCS_OK : UCS_ERR_UNREACHABLE;
     }
 
-    status = (*accessible == UCS_YES) ? UCS_OK : UCS_ERR_UNREACHABLE;
+    /* Check if peer is reachable by trying to open memory handle. This is
+     * necessary when the device is not visible through CUDA_VISIBLE_DEVICES
+     * and checking peer accessibility through CUDA driver API is not
+     * possible.
+     * Previously, reachability was checked by opening a memory handle
+     * and immediately closing it as the handle to memory handle cache
+     * was not not globally visible. Doing this with multiple threads is an
+     * issue as a thread may first check reachability, and later open the
+     * handle, and save mapped pointer in cache as part of a put/get
+     * operation. At this point another thread can then close the same
+     * memory handle as part of reachability check. This leads to a
+     * cuMemcpyAsync error when accessing the mapped pointer as part of
+     * put/get operation.
+     * Now, we immediately insert into cache to save on calling
+     * OpenMemHandle for the same handle because the cache is globally
+     * accessible using rkey->pid.
+     * The handle is opened outside the component lock, since taking a POSIX
+     * FD handle from its owner may wait for the owner process, which must not
+     * stall the remote keys of other peers. The device cache lives as long as
+     * the component, and threads which check the same peer at once each open
+     * the handle, which the memory handle cache shares between them. */
+    status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
+                                        UCS_LOG_LEVEL_DEBUG);
+    if (status == UCS_OK) {
+        rkey_handle->mapped_addr = d_mapped;
+    }
 
-err:
-    pthread_mutex_unlock(&component->lock);
-    return status;
+    /* A timeout of the FD exchange is transient, so it is not cached and the
+     * next remote key of the peer tries again */
+    if (status != UCS_ERR_TIMED_OUT) {
+        pthread_mutex_lock(&component->lock);
+        if (cache->accessible[cu_dev] == UCS_TRY) {
+            cache->accessible[cu_dev] = ((status == UCS_OK) ||
+                                         (status == UCS_ERR_ALREADY_EXISTS)) ?
+                                        UCS_YES : UCS_NO;
+        }
+        pthread_mutex_unlock(&component->lock);
+    }
+
+    return ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS)) ?
+           UCS_OK : UCS_ERR_UNREACHABLE;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
@@ -692,13 +819,19 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
 static ucs_status_t
 uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
-    uct_cuda_ipc_memh_t *memh = params->memh;
+    uct_cuda_ipc_md_t *cuda_md = ucs_derived_of(md, uct_cuda_ipc_md_t);
+    uct_cuda_ipc_memh_t *memh  = params->memh;
     uct_cuda_ipc_lkey_t *key, *tmp;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
         if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {
+            if (key->ph.handle.posix_fd.sock_path[0] != '\0') {
+                ucs_fd_exchange_server_remove_fd(cuda_md->fd_server,
+                                                 key->ph.handle.posix_fd.fd);
+            }
+
             close(key->ph.handle.posix_fd.fd);
         }
         ucs_free(key);
@@ -782,7 +915,15 @@ out:
 
 static void uct_cuda_ipc_md_close(uct_md_h md)
 {
-    ucs_free(md);
+    uct_cuda_ipc_md_t *cuda_md = ucs_derived_of(md, uct_cuda_ipc_md_t);
+
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    if (cuda_md->fd_server != NULL) {
+        uct_cuda_ipc_md_fd_server_destroy(cuda_md);
+    }
+#endif
+
+    ucs_free(cuda_md);
 }
 
 static ucs_status_t
@@ -861,6 +1002,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                                                           uct_cuda_ipc_md_config_t);
     static ucs_init_once_t init_enable_remote_cache = UCS_INIT_ONCE_INITIALIZER;
     uct_cuda_ipc_md_t* md;
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    ucs_status_t status;
+#endif
 
     UCS_INIT_ONCE(&init_enable_remote_cache) {
         uct_cuda_ipc_component.enable_remote_cache =
@@ -883,6 +1027,19 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component  = &uct_cuda_ipc_component.super;
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
     uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+
+    /* The POSIX FD handle, with its socket path, must not grow the handle
+     * union beyond the legacy handle, which sets the remote key size */
+    UCS_STATIC_ASSERT(ucs_field_sizeof(uct_cuda_ipc_md_handle_t,
+                                       handle.posix_fd) <=
+                      sizeof(CUipcMemHandle));
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    status = uct_cuda_ipc_md_fd_server_create(md, ipc_config);
+    if (status != UCS_OK) {
+        ucs_free(md);
+        return status;
+    }
+#endif
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
