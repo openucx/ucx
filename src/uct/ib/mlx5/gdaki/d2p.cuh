@@ -23,13 +23,13 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
                                                uint32_t rkey, uint64_t raddr,
                                                uint64_t add, uint16_t flags)
 {
+    ucs_status_t status = UCS_INPROGRESS;
+    unsigned lane_id, num_lanes;
+
     /* A grid-wide descriptor status broadcast is not implemented. */
     if (level == UCS_DEVICE_LEVEL_GRID) {
         return UCS_ERR_UNSUPPORTED;
     }
-
-    ucs_status_t status = UCS_INPROGRESS;
-    unsigned lane_id, num_lanes;
 
     uct_dev_exec_init<level>(lane_id, num_lanes);
 

@@ -72,7 +72,7 @@ UCS_F_DEVICE T uct_dev_bcast(T value, unsigned lane_id)
         return value;
     }
     case UCS_DEVICE_LEVEL_THREAD:
-    case UCS_DEVICE_LEVEL_GRID:
+    case UCS_DEVICE_LEVEL_GRID: /* No grid broadcast; callers must reject GRID. */
     default:
         return value;
     }

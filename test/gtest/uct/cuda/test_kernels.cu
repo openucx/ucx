@@ -106,13 +106,14 @@ static __global__ void gda_reserve_wqe_kernel(unsigned *errors_p)
     if (threadIdx.x == 0) {
         ep->qps[0]               = {};
         ep->qps[0].sq_rsvd_index = base;
-        ep->sq_wqe_num           = 1;
+        ep->sq_wqe_num           = 2;
+        memset(ep->qps[0].cq_buff, 0xff, sizeof(ep->qps[0].cq_buff));
     }
 
     __syncthreads();
 
-    /* Storage includes one QP in the flexible array. A zero CQE and the
-     * +1 in max_alloc_wqe_base allow two indices above 32 bits. */
+    /* The driver's initial CQE counter (0xffff) represents base - 1.
+     * Two queue entries allow base and base + 1, then no resource. */
     for (unsigned i = 0; i < 3; ++i) {
         uint64_t expected = (i < 2) ? base + i : UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
         uint64_t wqe_base = ~expected;
@@ -177,10 +178,14 @@ static __global__ void gda_grid_unsupported_kernel(ucs_status_t *statuses)
 
 ucs_status_t launch_gda_grid_unsupported(unsigned &num_errors)
 {
-    std::vector<ucs_status_t> statuses(132, UCS_INPROGRESS);
+    constexpr unsigned num_blocks  = 2;
+    constexpr unsigned num_threads = 33;
+    std::vector<ucs_status_t> statuses(2 * num_blocks * num_threads,
+                                      UCS_INPROGRESS);
     auto device_statuses = make_device_vector(statuses);
 
-    gda_grid_unsupported_kernel<<<2, 33>>>(device_statuses.ptr());
+    gda_grid_unsupported_kernel<<<num_blocks, num_threads>>>(
+            device_statuses.ptr());
     ucs_status_t status = synchronize();
     if (status != UCS_OK) {
         return status;
