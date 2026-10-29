@@ -3367,48 +3367,6 @@ int ucp_ep_tf_is_held(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
            (tf->uct_ep == uct_ep);
 }
 
-ucp_lane_map_t
-ucp_ep_tf_hold_invalidated_lanes(ucp_ep_h ep, ucp_lane_map_t lanes)
-{
-    ucp_lane_map_t discard = 0;
-    ucp_lane_index_t lane;
-    ucp_ep_lane_tf_t *tf;
-    uct_ep_h uct_ep;
-    ucs_status_t status;
-
-    ucs_for_each_bit(lane, lanes) {
-        tf = ucp_ep_tf_get(ep, lane);
-        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
-            (tf->uct_ep != NULL)) {
-            continue;
-        }
-
-        uct_ep = ucp_ep_get_lane(ep, lane);
-        if ((uct_ep == NULL) || ucp_is_uct_ep_failed(uct_ep) ||
-            ucp_wireup_ep_test(uct_ep)) {
-            continue;
-        }
-
-        status = ucp_ep_tf_hold(ep, lane, uct_ep);
-        if (status == UCS_OK) {
-            continue;
-        }
-
-        /* Detach clears the lane after a failed reconfiguration and leaves
-         * the transport endpoint installed. The endpoint cannot recover. */
-        if (tf->state == UCP_EP_TF_LANE_EMPTY) {
-            ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
-            break;
-        }
-
-        ucs_debug("ep %p: lane %d hold failed: %s", ep, lane,
-                  ucs_status_string(status));
-        discard |= UCS_BIT(lane);
-    }
-
-    return discard;
-}
-
 ucs_status_t
 ucp_ep_failover_reconfig(ucp_ep_h ucp_ep, ucp_lane_map_t failed_lanes,
                          ucs_status_t discard_status)

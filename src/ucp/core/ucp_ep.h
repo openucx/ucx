@@ -1188,18 +1188,6 @@ int ucp_ep_tf_is_held(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
- * Take invalidated lanes off the endpoint and keep their transport endpoints
- * until an RX token purges them.
- *
- * The reply can carry a rebuilt address while the old endpoint stays held.
- * Lanes whose token snapshot failed are returned for the software discard
- * path. Reconfiguration failure fails the whole endpoint and is not returned.
- */
-ucp_lane_map_t
-ucp_ep_tf_hold_invalidated_lanes(ucp_ep_h ep, ucp_lane_map_t lanes);
-
-
-/**
  * TX token length to publish on a message with @a request_id, or 0 when this
  * lane did not publish its snapshot for that id. @a token_p is set to the
  * snapshot.
