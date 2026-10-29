@@ -41,9 +41,6 @@ typedef size_t (*uct_ib_mlx5_ext_max_get_sgl_zcopy_count_func_t)(void);
 
 /* RC-specific provider hooks and timestamped SGL completions. */
 
-#define UCT_RC_MLX5_EXT_API_VERSION 1
-
-
 enum {
     /** Request timestamps on the existing RC transmit completion queue. */
     UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP = UCS_BIT(0)
@@ -92,7 +89,7 @@ typedef void (*uct_rc_mlx5_sgl_completion_func_t)(
 typedef struct uct_rc_mlx5_sgl_completion {
     uct_completion_t                  super;
     uct_ep_h                          ep;
-    size_t                            count;
+    size_t                            sgl_count;
     uct_rc_mlx5_sgl_completion_func_t callback;
     void                             *arg;
 } uct_rc_mlx5_sgl_completion_t;
@@ -101,12 +98,12 @@ typedef struct uct_rc_mlx5_sgl_completion {
 /**
  * @brief Prepare an idle adapter for an RC endpoint with completion timestamps.
  *
- * Count must be at least two: an anchor followed by measured data. UCT captures
- * the first and last completion timestamps internally, without exposing
- * intermediate callbacks or calculating bandwidth.
+ * The SGL entry count must be at least two: an anchor followed by measured
+ * data. UCT captures the first and last completion timestamps internally,
+ * without exposing intermediate callbacks or calculating bandwidth.
  *
  * @param [in]  ep         Existing RC endpoint to bind to the adapter.
- * @param [in]  count      Number of SGL entries, including the timing anchor.
+ * @param [in]  sgl_count  Number of SGL entries, including the timing anchor.
  * @param [in]  callback   Final completion callback.
  * @param [in]  arg        Argument passed to callback.
  * @param [out] completion Idle adapter to initialize, unchanged on failure.
@@ -116,8 +113,9 @@ typedef struct uct_rc_mlx5_sgl_completion {
  * @return UCS_ERR_UNSUPPORTED   The endpoint cannot provide timestamps.
  */
 ucs_status_t uct_rc_mlx5_sgl_completion_init(
-        uct_ep_h ep, size_t count, uct_rc_mlx5_sgl_completion_func_t callback,
-        void *arg, uct_rc_mlx5_sgl_completion_t *completion);
+        uct_ep_h ep, size_t sgl_count,
+        uct_rc_mlx5_sgl_completion_func_t callback, void *arg,
+        uct_rc_mlx5_sgl_completion_t *completion);
 
 
 /**
@@ -125,8 +123,8 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  *
  * Attach this table through uct_ib_mlx5_ext_ops_t::rc_ops and register with
  * uct_ib_mlx5_ext_register. The common registry owns the provider's identity;
- * there is no separate RC registration. Table size and API version describe
- * this callback contract, not the provider-private address wire version.
+ * there is no separate RC registration. The provider owns its address payload
+ * wire format and version.
  *
  * Hooks run under the existing RC worker serialization. The provider owns its
  * timers, scheduling, sampling, estimation and change detection, using existing
@@ -138,18 +136,20 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * cleanup runs after timestamped operations have completed or been canceled.
  * Interface cleanup stops provider-owned timers and drains its queued work.
  *
- * A nonempty address payload requires both pack and connect hooks. Legacy
- * connect requires matching provider configurations on both peers; use
- * uct_ep_connect_to_ep_v2 with the remote address length when provider
- * configurations may differ.
+ * A nonempty address payload requires both pack and connect hooks. With
+ * uct_ep_connect_to_ep_v2 and a supplied remote endpoint-address length, UCT
+ * validates address bounds and provider presence/identity before calling
+ * ep_connect. Missing or incompatible providers and truncated payloads are
+ * rejected, not treated as interoperable. The provider validates its payload's
+ * wire version inside ep_connect.
+ *
+ * Calls without a remote address length, including legacy connect, require
+ * matching provider presence, registry identity, payload length and wire
+ * version on both peers, guaranteed by the caller. Supply the length when
+ * this cannot be guaranteed; a supplied length permits bounds checks, not
+ * compatibility by itself.
  */
 typedef struct uct_rc_mlx5_ext_ops {
-    /** Size of the provider's RC operations table, in bytes. */
-    size_t          struct_size;
-
-    /** Must be UCT_RC_MLX5_EXT_API_VERSION. */
-    uint32_t        api_version;
-
     /** Requirements known before interface creation. */
     uint64_t        requirements;
 
@@ -209,10 +209,15 @@ typedef struct uct_rc_mlx5_ext_ops {
     /**
      * @brief Validate remote payload, including the provider wire version.
      *
+     * UCT validates the provider identity and payload bounds before this hook
+     * when the remote address length is supplied. Otherwise, callers must
+     * satisfy the matching-peer precondition above. Reject unsupported payload
+     * versions without importing remote memory metadata.
+     *
      * @param [in] ep          Existing RC endpoint.
      * @param [in] ep_ctx      Provider context from ep_init.
      * @param [in] payload     Remote provider address payload.
-     * @param [in] payload_len Actual remote payload length, not a local guess.
+     * @param [in] payload_len Remote length; see connection preconditions.
      * @return UCS_OK on success, or an error for an incompatible payload.
      */
     ucs_status_t (*ep_connect)(uct_ep_h ep, void *ep_ctx,
@@ -221,14 +226,25 @@ typedef struct uct_rc_mlx5_ext_ops {
     /**
      * @brief Fill requested attributes from completed samples only.
      *
-     * This hook never starts a measurement. Return UCS_ERR_UNSUPPORTED for
-     * unsupported attributes, UCS_ERR_NO_ELEM before the first sample, or
-     * UCS_ERR_TIMED_OUT when the cached sample is stale.
+     * This optional hook requires the endpoint bandwidth-query attribute
+     * extension. It may be omitted when that extension is unavailable.
+     *
+     * UCT handles standard attributes and calls this hook only when
+     * UCT_EP_ATTR_FIELD_BANDWIDTH is requested. The provider fills only
+     * bandwidth, leaving field_mask and all other attributes unchanged.
+     * Queries without bandwidth, including TX_TOKEN-only queries, never
+     * depend on provider availability or sample freshness.
+     *
+     * This hook never starts a measurement. Return UCS_ERR_UNSUPPORTED when
+     * bandwidth measurement is unsupported, UCS_ERR_NO_ELEM before the first
+     * sample, or UCS_ERR_TIMED_OUT when the cached sample is stale. Leave
+     * attributes unchanged on error; these errors apply only when bandwidth
+     * was requested, including in a mixed-attribute query.
      *
      * @param [in]     ep      Existing RC endpoint.
      * @param [in]     ep_ctx  Provider context from ep_init.
      * @param [in,out] ep_attr Requested attributes and provider-owned outputs.
-     * @return UCS_OK if the requested provider attributes were filled.
+     * @return UCS_OK if the requested bandwidth was filled.
      */
     ucs_status_t (*ep_query)(uct_ep_h ep, void *ep_ctx,
                              uct_ep_attr_t *ep_attr);
@@ -258,9 +274,9 @@ typedef struct uct_ib_mlx5_ext_ops {
      * interfaces, stop provider timers and drain callbacks and queued work.
      * Serialize registry changes with interface creation and plugin dispatch.
      *
-     * UCX and plugin consumers must be rebuilt together. RC table size and
-     * version fields do not provide binary compatibility for the enlarged
-     * transport-private registration structure.
+     * UCX and plugin consumers must be rebuilt together. This enlarged
+     * transport-private registration structure has no binary compatibility
+     * promise.
      */
     const uct_rc_mlx5_ext_ops_t *rc_ops;
 } uct_ib_mlx5_ext_ops_t;
