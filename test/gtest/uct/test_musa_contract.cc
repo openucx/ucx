@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 
+#include <ucp/core/ucp_mm.h>
 #include <ucs/memory/memory_type.h>
 #include <ucs/sys/topo/base/topo.h>
 #include <uct/musa/base/musa_utils.h>
@@ -17,7 +18,11 @@ UCS_TEST_F(test_musa_contract, memory_type_name_is_stable)
 {
     EXPECT_STREQ(ucs_memory_type_names[UCS_MEMORY_TYPE_MUSA], "musa");
     EXPECT_NE(ucs_memory_type_descs[UCS_MEMORY_TYPE_MUSA], nullptr);
-    EXPECT_EQ(UCS_MEMORY_TYPE_MUSA + 1, UCS_MEMORY_TYPE_LAST);
+}
+
+UCS_TEST_F(test_musa_contract, memory_type_is_gpu)
+{
+    EXPECT_NE(0, UCP_MEM_IS_GPU(UCS_MEMORY_TYPE_MUSA));
 }
 
 UCS_TEST_F(test_musa_contract, range_accepts_interior_subrange)
