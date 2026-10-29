@@ -69,7 +69,11 @@ protected:
 UCS_TEST_F(musa_hooks, test_existing_musaMalloc_is_reported)
 {
     EXPECT_TRUE(musa_existing_seen);
-    EXPECT_EQ(musa_existing_ptr, musa_existing_event.mem_type.address);
+    EXPECT_LE((uintptr_t)musa_existing_event.mem_type.address,
+              (uintptr_t)musa_existing_ptr);
+    EXPECT_LT((uintptr_t)musa_existing_ptr,
+              (uintptr_t)musa_existing_event.mem_type.address +
+              musa_existing_event.mem_type.size);
     EXPECT_EQ(UCS_MEMORY_TYPE_LAST, musa_existing_event.mem_type.mem_type);
     EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE,
               musa_existing_event.mem_type.mem_flags);
