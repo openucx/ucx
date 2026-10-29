@@ -229,12 +229,9 @@ _UCT_INSTANTIATE_TEST_CASE(test_device, cuda_ipc)
 class test_gda_device : public ucs::test {
 };
 
-UCS_TEST_F(test_gda_device, reserve_wqe_block)
+UCS_TEST_SKIP_COND_F(test_gda_device, reserve_wqe_block,
+                     !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA))
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory not supported");
-    }
-
     scoped_cuda_device device_guard;
     for (unsigned num_threads : {32u, 33u, 128u}) {
         unsigned errors = 0;
@@ -244,26 +241,33 @@ UCS_TEST_F(test_gda_device, reserve_wqe_block)
     }
 }
 
-UCS_TEST_F(test_gda_device, reserve_wqe_warp)
+UCS_TEST_SKIP_COND_F(test_gda_device, reserve_wqe_warp,
+                     !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA))
 {
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory not supported");
-    }
-
     scoped_cuda_device device_guard;
     unsigned errors = 0;
     ASSERT_UCS_OK(ucx_cuda::launch_gda_reserve_wqe(
             UCS_DEVICE_LEVEL_WARP, UCS_DEVICE_NUM_THREADS_IN_WARP, errors));
     EXPECT_EQ(0u, errors);
 }
-UCS_TEST_F(test_gda_device, grid_unsupported)
-{
-    if (!mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA)) {
-        UCS_TEST_SKIP_R("CUDA memory not supported");
-    }
 
+UCS_TEST_SKIP_COND_F(test_gda_device, reserve_wqe_thread,
+                     !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA))
+{
     scoped_cuda_device device_guard;
     unsigned errors = 0;
+    ASSERT_UCS_OK(ucx_cuda::launch_gda_reserve_wqe(
+            UCS_DEVICE_LEVEL_THREAD, 1, errors));
+    EXPECT_EQ(0u, errors);
+}
+
+UCS_TEST_SKIP_COND_F(test_gda_device, grid_unsupported,
+                     !mem_buffer::is_mem_type_supported(UCS_MEMORY_TYPE_CUDA))
+{
+    scoped_cuda_device device_guard;
+    unsigned errors = 0;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, ucx_cuda::launch_gda_reserve_wqe(
+                                          UCS_DEVICE_LEVEL_GRID, 33, errors));
     ASSERT_UCS_OK(ucx_cuda::launch_gda_grid_unsupported(errors));
     EXPECT_EQ(0u, errors);
 }

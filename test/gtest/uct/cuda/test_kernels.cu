@@ -136,12 +136,21 @@ ucs_status_t launch_gda_reserve_wqe(ucs_device_level_t level,
     device_result_ptr<unsigned> errors = 0;
     ucs_status_t status;
 
-    if (level == UCS_DEVICE_LEVEL_WARP) {
+    switch (level) {
+    case UCS_DEVICE_LEVEL_THREAD:
+        gda_reserve_wqe_kernel<UCS_DEVICE_LEVEL_THREAD>
+                <<<1, 1>>>(errors.device_ptr());
+        break;
+    case UCS_DEVICE_LEVEL_WARP:
         gda_reserve_wqe_kernel<UCS_DEVICE_LEVEL_WARP>
                 <<<1, num_threads>>>(errors.device_ptr());
-    } else {
+        break;
+    case UCS_DEVICE_LEVEL_BLOCK:
         gda_reserve_wqe_kernel<UCS_DEVICE_LEVEL_BLOCK>
                 <<<1, num_threads>>>(errors.device_ptr());
+        break;
+    default:
+        return UCS_ERR_UNSUPPORTED;
     }
     status = synchronize();
     if (status != UCS_OK) {
@@ -154,15 +163,21 @@ ucs_status_t launch_gda_reserve_wqe(ucs_device_level_t level,
 
 static __global__ void gda_grid_unsupported_kernel(ucs_status_t *statuses)
 {
-    statuses[blockIdx.x * blockDim.x + threadIdx.x] =
+    unsigned index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    /* Unsupported levels must not access endpoint or completion state. */
+    statuses[index] =
             uct_rc_mlx5_gda_ep_single<UCS_DEVICE_LEVEL_GRID>(
                     nullptr, nullptr, nullptr, 0, 0, 0, 0, 0, 0, nullptr,
                     MLX5_OPCODE_RDMA_WRITE, false, 0);
+    statuses[gridDim.x * blockDim.x + index] =
+            uct_ib_d2p_post_desc<UCS_DEVICE_LEVEL_GRID>(
+                    nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
 ucs_status_t launch_gda_grid_unsupported(unsigned &num_errors)
 {
-    std::vector<ucs_status_t> statuses(66, UCS_INPROGRESS);
+    std::vector<ucs_status_t> statuses(132, UCS_INPROGRESS);
     auto device_statuses = make_device_vector(statuses);
 
     gda_grid_unsupported_kernel<<<2, 33>>>(device_statuses.ptr());
