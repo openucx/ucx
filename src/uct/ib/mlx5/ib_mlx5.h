@@ -680,7 +680,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     uint32_t                    uar_page_id;
     /* UAR to use for the QP doorbell, instead of the worker-level UAR cache.
      * This is needed when each QP requires its own UAR, e.g. a dedicated
-     * non-coherent UAR mapped into the CUDA address space. The caller keeps
+     * UAR mapped into the CUDA address space. The caller keeps
      * ownership and must release it after the QP is destroyed. */
     uct_ib_mlx5_devx_uar_t      *uar;
 } uct_ib_mlx5_qp_attr_t;

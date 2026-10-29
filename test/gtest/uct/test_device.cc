@@ -136,7 +136,6 @@ protected:
             unsigned uar_mode = GetParam()->variant;
             ASSERT_LT(uar_mode, ucs_static_array_size(test_device_uar_modes));
             modify_config("UAR_ALLOC_MODE", test_device_uar_modes[uar_mode]);
-            modify_config("NUM_CHANNELS", "4");
         }
 
         uct_test::init();
