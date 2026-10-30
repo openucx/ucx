@@ -424,6 +424,9 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 
     status = uct_rc_iface_invoke_pending_cb(iface, req);
     if (status == UCS_OK) {
+        /* Keep the reserve because other requests may still be queued, and new
+         * sends must not pass them. It is reset when the group is empty, on TX
+         * completion or purge. */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
