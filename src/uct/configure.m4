@@ -13,6 +13,10 @@ m4_include([src/uct/ugni/configure.m4])
 m4_include([src/uct/ze/configure.m4])
 m4_include([src/uct/gaudi/configure.m4])
 
+# SYS_pidfd_getfd is used by the cuda_ipc, rocm_ipc, and ze_ipc transports.
+AC_CHECK_DECLS([SYS_pidfd_getfd], [], [],
+               [[#include <sys/syscall.h>]])
+
 AC_DEFINE_UNQUOTED([uct_MODULES], ["${uct_modules}"], [UCT loadable modules])
 
 AC_CONFIG_FILES([src/uct/Makefile
