@@ -6,7 +6,8 @@ no transport or protocol logic — only foundational utilities.
 ## Subdirectory Map
 
 - `algorithm/` — `crc`, `qsort_r`, `string_distance`.
-- `arch/` — per-CPU primitives (`x86_64`, `aarch64`, `ppc64`, `rv64`, `generic`):
+- `arch/` — per-CPU primitives (`x86_64`, `aarch64`, `ppc64`, `rv64`,
+  `loongarch64`, `generic`):
   atomics, bitops, cycle counter, `global_opts`, optimized memcpy.
 - `async/` — async event dispatch, signal/thread/eventfd/pipe backends. Drives
   worker progress for higher layers.

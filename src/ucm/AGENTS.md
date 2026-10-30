@@ -20,7 +20,8 @@ is `api/ucm.h`; everything else is internal.
 - `mmap/` — installation of mmap-family hooks; uses `bistro/` to patch the
   loader-resolved symbols when `LD_PRELOAD` is unavailable.
 - `bistro/` — per-arch binary-instrumentation patcher
-  (`bistro_x86_64.c`, `bistro_aarch64.c`, `bistro_ppc64.c`, `bistro_rv64.c`).
+  (`bistro_x86_64.c`, `bistro_aarch64.c`, `bistro_ppc64.c`, `bistro_rv64.c`,
+  `bistro_loongarch64.c`).
   Used to redirect glibc syscalls without `dlsym`.
 - `util/` — supporting helpers: `replace.c` (PLT/GOT relocation),
   `reloc.c` (ELF relocation walking), `log.c`, `sys.c`, `khash_safe.h`.
