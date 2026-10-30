@@ -925,12 +925,11 @@ uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
 unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
- * Disabled until token failover is complete. Enable with
- * --gtest_also_run_disabled_tests. */
-class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
+/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token, but
+ * only on transports that support token based retransmits. */
+class test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
 public:
-    DISABLED_test_ucp_fault_tolerance_tf() {
+    test_ucp_fault_tolerance_tf() {
         modify_config("FAILOVER_MODE", "token");
         /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected. */
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
@@ -1305,10 +1304,10 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
                 "KEEPALIVE_INTERVAL=0.1s")
 
 UCP_FT_TESTS(test_ucp_fault_tolerance)
-UCP_FT_TESTS(DISABLED_test_ucp_fault_tolerance_tf)
+UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 
 #undef UCP_FT_TEST
 #undef UCP_FT_TESTS
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
-UCP_INSTANTIATE_TEST_CASE(DISABLED_test_ucp_fault_tolerance_tf)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")
