@@ -21,7 +21,8 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
                                                uint8_t opcode, uint32_t length,
                                                uint32_t lkey, uint64_t laddr,
                                                uint32_t rkey, uint64_t raddr,
-                                               uint64_t add, uint16_t flags)
+                                               uint64_t add, uint16_t flags,
+                                               uct_device_completion_t *comp)
 {
     ucs_status_t status = UCS_INPROGRESS;
     unsigned lane_id, num_lanes;
@@ -29,17 +30,26 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
     uct_dev_exec_init<level>(lane_id, num_lanes);
 
     if (lane_id == 0) {
-        auto iface = ep->iface;
-        auto ch    = iface->channels + (channel_id & iface->channel_mask);
-        const long long depth = UCS_BIT(iface->log_depth);
-        unsigned long long pi = READ_ONCE(*ch->pi);
+        auto iface                     = ep->iface;
+        uint64_t cid                   = channel_id & iface->channel_mask;
+        auto ch                        = iface->channels + cid;
+        const unsigned long long depth = UCS_BIT(iface->log_depth);
+        unsigned long long pi          = READ_ONCE(*ch->pi);
+        uint64_t comp_id;
 
         for (;;) {
-            unsigned long long ci = READ_ONCE(*ch->ci);
-            if (static_cast<long long>(pi - ci) >= depth) {
+            const uint64_t stamp = ((pi >> iface->log_depth) & 0x1) ?
+                                           UCT_IB_D2P_AVAIL_STAMP :
+                                           0;
+
+            comp_id = READ_ONCE(ch->ci[pi & (depth - 1)].avail);
+            if ((comp_id & UCT_IB_D2P_AVAIL_STAMP) != stamp) {
+                /* Completion not returned yet: depth ops are in flight */
                 status = UCS_ERR_NO_RESOURCE;
                 break;
             }
+
+            comp_id &= ~UCT_IB_D2P_AVAIL_STAMP;
 
             unsigned long long prev = atomicCAS(ch->pi, pi, pi + 1);
             if (prev == pi) {
@@ -54,6 +64,11 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
                                 ch->queue_base) +
                         slot;
 
+            if (comp != nullptr) {
+                comp->d2p.comp_id    = comp_id;
+                comp->d2p.channel_id = cid;
+            }
+
             desc->opcode         = opcode;
             desc->length         = length;
             desc->ep_idx         = ep->ep_idx;
@@ -62,11 +77,16 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
             desc->rkey           = rkey;
             desc->raddr          = raddr;
             desc->add            = add;
+            desc->comp_id        = comp_id;
             desc->flags          = flags;
             const uint32_t owner = (pi >> iface->log_depth) & 0x1;
             asm volatile("st.release.sys.global.u8 [%0], %1;" ::
                          "l"(&desc->owner), "r"(owner) : "memory");
         }
+    }
+
+    if (comp != nullptr) {
+        uct_dev_sync<level>();
     }
 
     return static_cast<ucs_status_t>(
@@ -94,7 +114,7 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_ep_put(
                                        length, src_ib->lkey,
                                        reinterpret_cast<uint64_t>(address),
                                        rem_ib->rkey, remote_address, 0,
-                                       desc_flags);
+                                       desc_flags, comp);
 }
 
 template<ucs_device_level_t level>
@@ -116,14 +136,21 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_ep_atomic_add(
                                        ep->iface->atomic_result_lkey,
                                        ep->iface->atomic_result_va,
                                        rem_ib->rkey, remote_address, inc_value,
-                                       desc_flags);
+                                       desc_flags, comp);
 }
 
 template<ucs_device_level_t level>
 UCS_F_DEVICE ucs_status_t uct_ib_d2p_ep_check_completion(
         uct_device_ep_h tl_ep, uct_device_completion_t *comp)
 {
-    return UCS_OK;
+    auto ep                = reinterpret_cast<uct_ib_d2p_gpu_ep_t*>(tl_ep);
+    auto iface             = ep->iface;
+    const uint64_t comp_id = comp->d2p.comp_id;
+    auto ci                = iface->channels[comp->d2p.channel_id].ci;
+    const uint64_t done = READ_ONCE(ci[UCT_IB_D2P_COMP_ID_INDEX(comp_id)].done);
+
+    /* done only grows: a completed op stays completed after the reuse */
+    return (done >= UCT_IB_D2P_COMP_ID_GEN(comp_id)) ? UCS_OK : UCS_INPROGRESS;
 }
 
 #endif /* UCT_D2P_CUH_ */
