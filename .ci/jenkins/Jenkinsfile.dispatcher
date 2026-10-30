@@ -48,6 +48,7 @@ def jobs = [
   'ucx-test-oss',
   'ucx-test-gpu-oss',
   'ucx-test-dl-gpu-oss',
+  'ucx-test-wirecompat-gpu-oss',
 ]
 
 try {
