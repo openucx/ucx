@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -104,15 +104,6 @@ void print_progress(void *UCS_V_UNUSED rte_group,
     fflush(stdout);
 }
 
-static void
-get_accel_device_str(const ucx_perf_accel_dev_t *dev, char *str, size_t size)
-{
-    // TODO: retrieve runtime device id
-    ucs_snprintf_safe(str, size, (dev->device_id == UCX_PERF_MEM_DEV_DEFAULT) ?
-                      "%s" : "%s:%d",
-                      ucs_memory_type_names[dev->mem_type], dev->device_id);
-}
-
 static void print_header(struct perftest_context *ctx)
 {
     const char *overhead_lat_str;
@@ -120,7 +111,6 @@ static void print_header(struct perftest_context *ctx)
     const char *test_api_str;
     test_type_t *test;
     unsigned i;
-    char mem_dev_str[16];
 
     test = (ctx->params.test_id == TEST_ID_UNDEFINED) ? NULL :
            &tests[ctx->params.test_id];
@@ -160,13 +150,18 @@ static void print_header(struct perftest_context *ctx)
                ucx_perf_mem_alloc_name(&ctx->params.super, 1));
         printf("| Recv memory:  %-60s                               |\n",
                ucx_perf_mem_alloc_name(&ctx->params.super, 0));
-        if (ctx->params.super.send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
-            get_accel_device_str(&ctx->params.super.send_device, mem_dev_str, sizeof(mem_dev_str));
-            printf("| Send device:  %-60s                               |\n", mem_dev_str);
+        if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_DEVICE) {
+            printf("| Device API:   %-60s                               |\n",
+                   "enabled");
         }
-        if (ctx->params.super.recv_device.mem_type != UCS_MEMORY_TYPE_LAST) {
-            get_accel_device_str(&ctx->params.super.recv_device, mem_dev_str, sizeof(mem_dev_str));
-            printf("| Recv device:  %-60s                               |\n", mem_dev_str);
+        /* TODO: report the device index picked by default placement */
+        if (ctx->params.super.send_device_id != UCX_PERF_MEM_DEV_DEFAULT) {
+            printf("| Send device:  %-60d                               |\n",
+                   ctx->params.super.send_device_id);
+        }
+        if (ctx->params.super.recv_device_id != UCX_PERF_MEM_DEV_DEFAULT) {
+            printf("| Recv device:  %-60d                               |\n",
+                   ctx->params.super.recv_device_id);
         }
         printf("| Message size: %-60zu                               |\n", ucx_perf_get_message_size(&ctx->params.super));
         printf("| Window size:  %-60u                               |\n", ctx->params.super.max_outstanding);

@@ -639,14 +639,23 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     /* use write lock because cache maybe modified */
     pthread_rwlock_wrlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, d_bptr);
-    ucs_assert(pgt_region != NULL);
-    region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+    if (pgt_region == NULL) {
+        ucs_assert(mapped_addr == NULL);
+        pthread_rwlock_unlock(&cache->lock);
+        return;
+    }
 
-    ucs_assert(region->refcount >= 1);
-    region->refcount--;
+    region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+    if (mapped_addr != NULL) {
+        ucs_assert(region->refcount >= 1);
+        region->refcount--;
+    }
 
     if (!region->refcount && !cache_enabled) {
-        ucs_assert(region->mapped_addr == mapped_addr);
+        if (mapped_addr != NULL) {
+            ucs_assert(region->mapped_addr == mapped_addr);
+        }
+
         uct_cuda_ipc_cache_region_destroy(cache, region);
     }
 

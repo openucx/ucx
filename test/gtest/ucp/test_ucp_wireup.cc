@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2015. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -88,6 +88,8 @@ protected:
     bool ep_iface_has_caps(const entity& e, const std::string& tl,
                            uint64_t caps);
 
+    static void unmap_memh(ucp_mem_h memh, ucp_context_h context);
+
 protected:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;
@@ -98,8 +100,6 @@ protected:
 private:
     static void stream_recv_completion(void *request, ucs_status_t status,
                                        size_t length);
-
-    static void unmap_memh(ucp_mem_h memh, ucp_context_h context);
 };
 
 void test_ucp_wireup::get_test_variants(std::vector<ucp_test_variant>& variants,
@@ -471,7 +471,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
     EXPECT_EQ(addr_v, sender().ucph()->config.ext.worker_addr_version);
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl, &sender().worker()->context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl, &sender().worker()->context->tl_bitmap) {
         const ucp_tl_resource_desc_t &rsc =
                 sender().worker()->context->tl_rscs[tl];
         packed_dev_priorities.insert(
@@ -760,6 +760,33 @@ UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
     }
 }
 
+/* The wireup ACK is sent on the AM lane before any protocol selects it, so its
+ * iface has to be progressed already during wireup, without waiting for a data
+ * operation to be issued. */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
+                     !is_proto_enabled())
+{
+    sender().connect(&receiver(), get_ep_params());
+
+    ucp_ep_h ep                 = sender().ep();
+    const ucp_lane_index_t lane = ucp_ep_get_am_lane(ep);
+    if (lane == UCP_NULL_LANE) {
+        /* RMA variants over transports which need no AM emulation */
+        UCS_TEST_SKIP_R("endpoint has no AM lane");
+    }
+
+    /* Only the AM lane aliasing the CM lane has no resource, which cannot
+     * happen when connecting by worker address */
+    const ucp_rsc_index_t rsc_index = ucp_ep_get_rsc_index(ep, lane);
+    ASSERT_NE(UCP_NULL_RESOURCE, rsc_index);
+
+    ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(), rsc_index);
+    ASSERT_TRUE(ucp_worker_iface_is_activated(wiface));
+
+    flush_worker(sender());
+    disconnect(sender());
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
 
 class test_ucp_wireup_2sided : public test_ucp_wireup {
@@ -1008,6 +1035,52 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
 
+class test_ucp_wireup_errh_peer_self : public test_ucp_wireup_errh_peer
+{
+public:
+    void init() override {
+        test_ucp_wireup::init();
+    }
+};
+
+UCS_TEST_P(test_ucp_wireup_errh_peer_self, config)
+{
+    ucp_ep_params_t ep_params = get_ep_params();
+    ucp_address_t *address;
+    ucp_ep_h ep;
+    size_t address_length;
+    ucs_status_t status;
+
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "self",
+                                   UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE));
+
+    status = ucp_worker_get_address(receiver().worker(), &address,
+                                    &address_length);
+    ASSERT_UCS_OK(status);
+
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address     = address;
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        status = ucp_ep_create(sender().worker(), &ep_params, &ep);
+    }
+
+    ucp_worker_release_address(receiver().worker(), address);
+    ASSERT_UCS_OK(status);
+
+    const ucp_ep_config_key_t &key = ucp_ep_config(ep)->key;
+    EXPECT_EQ(UCP_ERR_HANDLING_MODE_PEER, key.err_mode);
+    EXPECT_TRUE(key.flags & UCP_EP_CONFIG_KEY_FLAG_SELF);
+    EXPECT_GT(key.num_lanes, 0);
+    for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+        EXPECT_STREQ("self", ucp_ep_get_tl_rsc(ep, lane)->tl_name);
+    }
+
+    disconnect(ep);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_errh_peer_self, self, "self")
+
 class test_ucp_wireup_fallback : public test_ucp_wireup {
 public:
     test_ucp_wireup_fallback() {
@@ -1031,7 +1104,7 @@ public:
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
         ucp_rsc_index_t rsc_index;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &worker->context->tl_bitmap) {
             ucp_md_index_t md_index         = worker->context->tl_rscs[rsc_index].md_index;
             const uct_md_attr_v2_t *md_attr = &worker->context->tl_mds[md_index].attr;
 
@@ -1542,6 +1615,75 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_amo)
 
+static void test_ucp_wireup_failover_err_cb(void *arg, ucp_ep_h ep,
+                                            ucs_status_t status)
+{
+}
+
+UCS_TEST_P(test_ucp_wireup_fallback_amo, failover_no_device_amo)
+{
+    ucp_ep_params_t params = get_ep_params();
+    ucp_mem_map_params_t map_params;
+    ucp_request_param_t req_param;
+    ucp_mem_h memh;
+    ucp_rkey_h rkey;
+    void *req;
+    void *flush_req;
+    ucs_status_t status;
+
+    params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                             UCP_EP_PARAM_FIELD_ERR_HANDLER;
+    params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+    params.err_handler.cb  = test_ucp_wireup_failover_err_cb;
+    params.err_handler.arg = NULL;
+
+    create_entity(false);
+    create_entity(true);
+    sender().connect(&receiver(), params);
+    EXPECT_FALSE(use_device_amo(sender().ep()));
+
+    m_send_data[0] = 1;
+    clear_recv_data();
+
+    map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    map_params.address    = &m_recv_data[0];
+    map_params.length     = m_recv_data.size() * sizeof(m_recv_data[0]);
+    map_params.flags      = 0;
+    status                = ucp_mem_map(receiver().ucph(), &map_params, &memh);
+    ASSERT_UCS_OK(status);
+    m_memh_receiver.reset(memh, unmap_memh, receiver().ucph());
+
+    rkey = get_rkey(sender().ep(), m_memh_receiver);
+    m_rkeys.push_back(ucs::handle<ucp_rkey_h>(rkey, ucp_rkey_destroy));
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+
+        req_param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+        req_param.datatype     = ucp_dt_make_contig(sizeof(m_send_data[0]));
+        req                    = ucp_atomic_op_nbx(sender().ep(),
+                                                   UCP_ATOMIC_OP_ADD,
+                                                   &m_send_data[0], 1,
+                                                   (uint64_t)&m_recv_data[0],
+                                                   rkey, &req_param);
+        status                 = request_wait(req);
+        if (status == UCS_OK) {
+            /* Post completes locally; flush waits for the remote atomic. */
+            flush_req = sender().flush_ep_nb();
+            status    = request_wait(flush_req);
+        }
+    }
+
+    if (status == UCS_OK) {
+        EXPECT_EQ(m_send_data[0], m_recv_data[0]);
+    }
+
+    test_ucp_wireup::cleanup();
+    EXPECT_EQ(UCS_OK, status);
+}
+
 UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
     std::vector<std::string> tls;
 
@@ -1788,7 +1930,7 @@ public:
         params.iface_addr  = ae->iface_addr;
         params.scope       = UCT_IFACE_REACHABILITY_SCOPE_DEVICE;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             auto wiface = ucp_worker_iface(worker, rsc_index);
 
             /* Compare resources by md_index, transport name, and device */
@@ -2247,7 +2389,7 @@ public:
         unsigned addr_index;
         size_t seg_size;
 
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
             ucp_unpacked_address_for_each(address_entry, remote_address) {
                 addr_index = ucp_unpacked_address_index(remote_address,
                                                         address_entry);
@@ -2521,4 +2663,29 @@ UCS_TEST_F(test_ucp_wireup_token_section, skip_truncated) {
     EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED,
               ucp_wireup_skip_token_section(THREE_LANES, &section[0],
                                             section.size() - 1, &consumed));
+}
+
+/* lengths[] follows set-bit order, not lane index. 0, 3, 5 must not be
+ * stored in slots 0, 1, 2. */
+UCS_TEST_F(test_ucp_wireup_token_section, read_lanes) {
+    std::vector<uint8_t> section = make_section({4, 0, 7});
+    ucp_wireup_lane_token_t slots[UCP_MAX_LANES] = {};
+    const uint8_t *tokens;
+    size_t consumed;
+
+    section.push_back(0xff);
+    ASSERT_UCS_OK(ucp_wireup_read_token_section(THREE_LANES, &section[0],
+                                                section.size(), &consumed,
+                                                slots));
+    EXPECT_EQ(section.size() - 1, consumed);
+
+    tokens = &section[3];
+    EXPECT_EQ(4, slots[0].len);
+    EXPECT_EQ(tokens, static_cast<const uint8_t*>(slots[0].token));
+    EXPECT_EQ(0, slots[3].len);
+    EXPECT_EQ(nullptr, slots[3].token);
+    EXPECT_EQ(7, slots[5].len);
+    EXPECT_EQ(tokens + 4, static_cast<const uint8_t*>(slots[5].token));
+    EXPECT_EQ(0, slots[1].len);
+    EXPECT_EQ(nullptr, slots[1].token);
 }

@@ -18,6 +18,7 @@ typedef struct uct_rocm_ipc_iface_config_params {
     double   latency;
     int      enable_ipc_handle_cache;
     unsigned sigpool_max_elems;
+    int      signal_invalidate;
 } uct_rocm_ipc_iface_config_params_t;
 
 typedef struct uct_rocm_ipc_iface {
@@ -31,5 +32,7 @@ typedef struct uct_rocm_ipc_iface_config {
     uct_iface_config_t                 super;
     uct_rocm_ipc_iface_config_params_t params;
 } uct_rocm_ipc_iface_config_t;
+
+int uct_rocm_ipc_signal_invalidate_enabled(void);
 
 #endif

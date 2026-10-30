@@ -79,6 +79,9 @@ ucs_status_t ucs_wtimer_init(ucs_wtimer_t *t, ucs_twheel_callback_t cb);
  *
  * @note Timers which expired between calls to this function will also be dispatched.
  * @note There is no guarantee on the order of dispatching.
+ * @note A timer rearmed from its callback is not dispatched again in the same
+ *       sweep. An expired timer awaiting dispatch can still be cancelled from
+ *       another callback.
  */
 void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time);
 static inline void ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)

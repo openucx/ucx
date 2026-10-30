@@ -12,8 +12,6 @@
 #include <pthread.h>
 
 
-typedef struct uct_rocm_ipc_cache uct_rocm_ipc_cache_t;
-
 typedef struct uct_rocm_ipc_component {
     uct_component_t super;
 } uct_rocm_ipc_component_t;
@@ -30,6 +28,9 @@ typedef struct uct_rocm_ipc_md_config {
 
 typedef struct uct_rocm_ipc_key {
     hsa_amd_ipc_memory_t ipc;
+    /* Owner sets this signal to 0 when the allocation is released.
+     * Unused when invalidation is disabled or unavailable. */
+    hsa_amd_ipc_signal_t ipc_signal;
     uintptr_t            address;
     size_t               length;
     int                  dev_num;

@@ -15,6 +15,9 @@
 #include <uct/rocm/base/rocm_base.h>
 #include <uct/rocm/base/rocm_signal.h>
 
+#include <ucs/config/parser.h>
+#include <ucs/type/init_once.h>
+
 static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
 
     {"", "", NULL, ucs_offsetof(uct_rocm_ipc_iface_config_t, super),
@@ -37,6 +40,13 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
     {"SIGPOOL_MAX_ELEMS", "1024", "Maximum number of elements in signal pool",
      ucs_offsetof(uct_rocm_ipc_iface_config_t, params.sigpool_max_elems),
      UCS_CONFIG_TYPE_UINT},
+
+    {"SIGNAL_INVALIDATE", "y",
+     "Detach cached ROCm IPC mappings when the exported buffer is freed.\n"
+     "When set to n, a mapping is replaced only when the peer's IPC handle\n"
+     "changes. The packed rkey layout is the same in both cases.",
+     ucs_offsetof(uct_rocm_ipc_iface_config_t, params.signal_invalidate),
+     UCS_CONFIG_TYPE_BOOL},
 
     {NULL}
 };
@@ -121,7 +131,8 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->device_addr_len         = sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
-    iface_attr->cap.flags               = UCT_IFACE_FLAG_GET_ZCOPY |
+    iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                          UCT_IFACE_FLAG_GET_ZCOPY |
                                           UCT_IFACE_FLAG_PUT_ZCOPY | UCT_IFACE_FLAG_PENDING |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                           UCT_IFACE_FLAG_DEVICE_EP;
@@ -195,6 +206,8 @@ static uct_iface_ops_t uct_rocm_ipc_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_ipc_ep_t),
+    .ep_check                 = (uct_ep_check_func_t)
+            ucs_empty_function_return_unsupported,
     .iface_flush              = uct_rocm_ipc_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
@@ -260,3 +273,27 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_ipc_iface_t, uct_iface_t);
 UCT_TL_DEFINE(&uct_rocm_ipc_component.super, rocm_ipc,
               uct_rocm_base_query_devices, uct_rocm_ipc_iface_t, "ROCM_IPC_",
               uct_rocm_ipc_iface_config_table, uct_rocm_ipc_iface_config_t);
+
+int uct_rocm_ipc_signal_invalidate_enabled(void)
+{
+    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
+    static int enabled         = 1;
+
+    UCS_INIT_ONCE(&once) {
+        uct_rocm_ipc_iface_config_t config;
+        ucs_status_t status;
+
+        status = ucs_config_parser_fill_opts(&config, &uct_rocm_ipc_tl.config,
+                                             UCS_DEFAULT_ENV_PREFIX, 0);
+        if (status == UCS_OK) {
+            enabled = config.params.signal_invalidate;
+            ucs_config_parser_release_opts(&config,
+                                           uct_rocm_ipc_iface_config_table);
+        }
+        if (!enabled) {
+            ucs_diag("rocm ipc signal invalidation is disabled");
+        }
+    }
+
+    return enabled;
+}

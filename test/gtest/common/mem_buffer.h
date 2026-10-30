@@ -97,6 +97,10 @@ public:
     /* Set the current CUDA device */
     static void set_device(int device);
 
+    /* If the current CUDA device is not the one set by set_device_context(),
+     * fail the current test and restore the device */
+    static void check_and_restore_device_context();
+
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
@@ -108,6 +112,10 @@ public:
 
     /* NVML NVLink-C2C link count > 0 for CUDA device */
     static bool cuda_gpu_has_c2c(unsigned gpu_index = 0);
+
+    /* Whether the driver allocates device memory as GPUDirect RDMA capable,
+     * which it does not under an MPS MLOPart device */
+    static bool cuda_mem_is_gdr_capable();
 
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */
@@ -178,6 +186,7 @@ private:
                                 const uint64_t mem_types);
 
     static size_t           m_bar1_free_size;
+    static int              m_default_device;
 
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;
@@ -205,6 +214,26 @@ public:
 
 private:
     void *m_ptr;
+};
+
+
+/**
+ * Restores the CUDA device that was current at construction, also when the
+ * scope is left early by a failed assertion or a skip.
+ */
+class scoped_cuda_device {
+public:
+    /* Save the current device, and switch to @a device unless it is -1 */
+    explicit scoped_cuda_device(int device = -1);
+
+    ~scoped_cuda_device();
+
+    /* Non-copyable, non-moveable */
+    scoped_cuda_device(const scoped_cuda_device&) = delete;
+    scoped_cuda_device &operator=(const scoped_cuda_device&) = delete;
+
+private:
+    int m_saved_device;
 };
 
 

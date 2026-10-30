@@ -94,11 +94,12 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
         desc = (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id;
         hdr  = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            if (wc[i].status == IBV_WC_REM_ABORT_ERR) {
-                continue;
-            }
-            /* we can get flushed messages during ep destroy */
-            if (wc[i].status == IBV_WC_WR_FLUSH_ERR) {
+            /* A failed receive does not deliver an active message, so return
+             * its descriptor to the pool. A flushed one arrives during
+             * endpoint destruction. */
+            if ((wc[i].status == IBV_WC_REM_ABORT_ERR) ||
+                (wc[i].status == IBV_WC_WR_FLUSH_ERR)) {
+                ucs_mpool_put_inline(desc);
                 continue;
             }
             UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive", &iface->super.super, i, wc);

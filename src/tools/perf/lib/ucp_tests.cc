@@ -1202,11 +1202,11 @@ static ucp_perf_dispatch_func_t dispatchers[] = {
 
 ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
-    ucs_memory_type_t mem_type   = perf->params.send_device.mem_type;
+    ucs_memory_type_t mem_type   = perf->params.send_mem_type;
     const size_t num_dispatchers = ucs_static_array_size(dispatchers);
     ucs_status_t status;
 
-    if (mem_type != UCS_MEMORY_TYPE_LAST) {
+    if (perf->params.flags & UCX_PERF_TEST_FLAG_DEVICE) {
         auto mem_type_dispatcher = ucx_perf_mem_type_device_dispatchers[mem_type];
         if (mem_type_dispatcher != nullptr) {
             status = (*mem_type_dispatcher->ucp_dispatch)(perf);
