@@ -8,6 +8,8 @@
 
 #include "cuda_ipc_md.h"
 
+#include <ucs/datastruct/dynamic_bitmap.h>
+
 #if HAVE_CUDA_FABRIC
 
 /**
@@ -35,37 +37,62 @@ typedef struct uct_cuda_ipc_vmm_chunk_desc {
 
 /**
  * @brief multi-chunk VMM registration metadata
+ *
+ * The metadata buffer has a descriptor slot for every chunk of the registered
+ * range. A slot is written when its chunk is first packed, and never changes
+ * after that, so peers may read the slots of their keys at any time.
  */
-typedef struct {
-    ucs_list_link_t               link;          /* Entry in metadata list */
-    CUdeviceptr                   d_bptr;        /* Base of all chunks */
-    size_t                        b_len;         /* Length of all chunks */
+struct uct_cuda_ipc_vmm_multi_meta {
     CUdeviceptr                   dev_ptr;       /* Metadata buffer VA */
+    size_t                        alloc_size;    /* Metadata buffer size */
+    /* Identity of the metadata buffer. Each publication allocates a new
+     * buffer and CUDA never reuses an ID, so it names this exact layout. */
+    unsigned long long            buffer_id;
     CUmemFabricHandle             fabric_handle; /* Metadata fabric handle */
-    uct_cuda_ipc_vmm_multi_info_t info;          /* Inline metadata layout */
-} uct_cuda_ipc_vmm_multi_meta_t;
+    uint16_t                      num_chunks;    /* Registered chunks */
+    uct_cuda_ipc_vmm_chunk_desc_t *chunks;       /* Host copy of the slots */
+    ucs_dynamic_bitmap_t          exported;      /* Written slots */
+};
 
 
 /**
- * @brief Release all exporter metadata associated with a local key
+ * @brief Chunks of the metadata covered by one multi-chunk key
  */
-void uct_cuda_ipc_vmm_multi_meta_cleanup(uct_cuda_ipc_lkey_t *key);
+typedef struct {
+    CUdeviceptr                   d_bptr; /* Base of the covered chunks */
+    size_t                        b_len;  /* Length of the covered chunks */
+    uct_cuda_ipc_vmm_multi_info_t info;   /* Slots of the covered chunks */
+} uct_cuda_ipc_vmm_multi_range_t;
+
+
+/**
+ * @brief Release the exporter metadata associated with a memory handle
+ */
+void uct_cuda_ipc_vmm_multi_meta_destroy(uct_cuda_ipc_memh_t *memh);
 
 
 /**
  * @brief Pack a VMM range spanning multiple physical allocations
  *
+ * The first call on @a memh publishes a metadata buffer with a slot for every
+ * chunk of the registered range. Each call exports the chunks of the requested
+ * range which were not packed before, and returns the chunk range covering the
+ * request with its slots in the metadata buffer.
+ *
+ * @param memh     Memory handle registering the range
  * @param key      Local key whose allocation contains @a address
  * @param address  Requested range start
  * @param length   Requested range length
  * @param meta_p   Metadata record used to pack the key
+ * @param range_p  Filled with the chunks and slots covering the request
  *
  * @return UCS_OK on success, UCS_ERR_UNSUPPORTED for a single allocation, or
  *         another error status on failure
  */
 ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
-        uct_cuda_ipc_lkey_t *key, void *address, size_t length,
-        const uct_cuda_ipc_vmm_multi_meta_t **meta_p);
+        uct_cuda_ipc_memh_t *memh, uct_cuda_ipc_lkey_t *key, void *address,
+        size_t length, const uct_cuda_ipc_vmm_multi_meta_t **meta_p,
+        uct_cuda_ipc_vmm_multi_range_t *range_p);
 
 
 #endif

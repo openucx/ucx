@@ -116,30 +116,45 @@ protected:
         return rkey;
     }
 
-    /* Publish the chunk metadata of [address, address + length), a range
-     * spanning allocations. A plain pack of 'alloc_len' bytes at 'address',
-     * within the first allocation, creates the local key it is attached to. */
-    const uct_cuda_ipc_vmm_multi_meta_t *
-    vmm_multi_publish(uct_mem_h memh, void *address, size_t alloc_len,
-                      size_t length)
+    /* Pack [address, address + length), a range spanning allocations. A
+     * plain pack of 'alloc_len' bytes at 'address', within the first
+     * allocation, creates the local key it starts in. */
+    void vmm_multi_publish(uct_mem_h memh, void *address, size_t alloc_len,
+                           size_t length, uct_cuda_ipc_vmm_multi_range_t *range)
     {
         uct_cuda_ipc_memh_t *cuda_memh = static_cast<uct_cuda_ipc_memh_t*>(
                 memh);
-        const uct_cuda_ipc_vmm_multi_meta_t *meta = NULL;
+        const uct_cuda_ipc_vmm_multi_meta_t *meta;
         uct_cuda_ipc_extended_rkey_t rkey;
         uct_cuda_ipc_lkey_t *key;
 
-        EXPECT_UCS_OK(md()->ops->mkey_pack(md(), memh, address, alloc_len,
+        ASSERT_UCS_OK(md()->ops->mkey_pack(md(), memh, address, alloc_len,
                                            NULL, &rkey));
         ucs_list_for_each(key, &cuda_memh->list, link) {
             if (((uintptr_t)address >= key->d_bptr) &&
                 ((uintptr_t)address < (key->d_bptr + key->b_len))) {
-                EXPECT_UCS_OK(uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
-                        key, address, length, &meta));
-                break;
+                ASSERT_UCS_OK(uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
+                        cuda_memh, key, address, length, &meta, range));
+                EXPECT_EQ(cuda_memh->vmm_multi, meta);
+                return;
             }
         }
-        return meta;
+
+        FAIL() << "no local key contains " << address;
+    }
+
+    static const uct_cuda_ipc_vmm_multi_meta_t *vmm_multi_meta(uct_mem_h memh)
+    {
+        return static_cast<uct_cuda_ipc_memh_t*>(memh)->vmm_multi;
+    }
+
+    void mem_dereg(uct_mem_h memh)
+    {
+        uct_md_mem_dereg_params_t params;
+
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        params.memh       = memh;
+        EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
     }
 #endif
 
@@ -353,8 +368,8 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
     constexpr unsigned num_chunks = 4;
     cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, num_chunks);
     std::vector<uct_cuda_ipc_vmm_chunk_desc_t> descs(num_chunks);
+    uct_cuda_ipc_vmm_multi_range_t range, sub_range;
     const uct_cuda_ipc_vmm_multi_meta_t *meta;
-    uct_md_mem_dereg_params_t params;
     unsigned long long buffer_id;
     uct_mem_h memh;
     CUdeviceptr chunk;
@@ -363,23 +378,25 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
                                      &memh));
 
     /* A range starting and ending inside allocations covers them whole */
-    meta = vmm_multi_publish(memh,
-                             UCS_PTR_BYTE_OFFSET(alloc.ptr(),
-                                                 alloc.chunk_size() / 2),
-                             alloc.chunk_size() / 2,
-                             alloc.size() - alloc.chunk_size());
+    ASSERT_NO_FATAL_FAILURE(vmm_multi_publish(
+            memh, UCS_PTR_BYTE_OFFSET(alloc.ptr(), alloc.chunk_size() / 2),
+            alloc.chunk_size() / 2, alloc.size() - alloc.chunk_size(),
+            &range));
+    meta = vmm_multi_meta(memh);
     ASSERT_TRUE(meta != NULL);
-    EXPECT_EQ(meta, vmm_multi_publish(memh, alloc.ptr(), alloc.chunk_size(),
-                                      alloc.size()));
 
-    EXPECT_EQ((CUdeviceptr)alloc.ptr(), meta->d_bptr);
-    EXPECT_EQ(alloc.size(), meta->b_len);
-    EXPECT_EQ(UCT_CUDA_IPC_VMM_MULTI_VERSION, meta->info.version);
-    EXPECT_EQ(num_chunks, meta->info.num_chunks);
+    EXPECT_EQ((CUdeviceptr)alloc.ptr(), range.d_bptr);
+    EXPECT_EQ(alloc.size(), range.b_len);
+    EXPECT_EQ(UCT_CUDA_IPC_VMM_MULTI_VERSION, range.info.version);
+    EXPECT_EQ(0u, range.info.first_chunk);
+    EXPECT_EQ(num_chunks, range.info.num_chunks);
     EXPECT_EQ(sizeof(uct_cuda_ipc_vmm_chunk_desc_t),
-              meta->info.chunk_desc_size);
+              range.info.chunk_desc_size);
+    EXPECT_EQ(meta->alloc_size, range.info.alloc_size);
+    EXPECT_EQ(num_chunks, meta->num_chunks);
+    EXPECT_NE(0ull, meta->buffer_id);
 
-    /* The published descriptors name every allocation, in order */
+    /* The written slots name every allocation, in order */
     ASSERT_EQ(CUDA_SUCCESS,
               cuMemcpyDtoH(descs.data(), meta->dev_ptr,
                            num_chunks * sizeof(descs[0])));
@@ -393,13 +410,73 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
         EXPECT_EQ(buffer_id, descs[i].buffer_id);
     }
 
-    /* A range inside published metadata reuses it */
-    EXPECT_EQ(meta, vmm_multi_publish(memh, alloc.ptr(), alloc.chunk_size(),
-                                      2 * alloc.chunk_size()));
+    /* A sub-range is described by its own slots of the same metadata */
+    ASSERT_NO_FATAL_FAILURE(vmm_multi_publish(
+            memh, UCS_PTR_BYTE_OFFSET(alloc.ptr(), alloc.chunk_size()),
+            alloc.chunk_size(), 2 * alloc.chunk_size(), &sub_range));
+    EXPECT_EQ(meta, vmm_multi_meta(memh));
+    EXPECT_EQ(1u, sub_range.info.first_chunk);
+    EXPECT_EQ(2u, sub_range.info.num_chunks);
+    EXPECT_EQ((CUdeviceptr)alloc.ptr() + alloc.chunk_size(), sub_range.d_bptr);
+    EXPECT_EQ(2 * alloc.chunk_size(), sub_range.b_len);
 
-    params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-    params.memh       = memh;
-    EXPECT_UCS_OK(md()->ops->mem_dereg(md(), &params));
+    mem_dereg(memh);
+#else
+    UCS_TEST_SKIP_R("built without fabric support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, vmm_multi_export_on_demand)
+{
+#if HAVE_CUDA_FABRIC
+    constexpr unsigned num_chunks = 8;
+    cuda_fabric_mem_buffer alloc(1, UCS_MEMORY_TYPE_CUDA, num_chunks);
+    const uct_cuda_ipc_vmm_multi_meta_t *meta;
+    uct_cuda_ipc_vmm_multi_range_t range;
+    uct_mem_h memh;
+
+    auto chunk = [&](unsigned i) {
+        return UCS_PTR_BYTE_OFFSET(alloc.ptr(), i * alloc.chunk_size());
+    };
+    auto exported = [&]() {
+        std::vector<uint8_t> bits;
+
+        for (unsigned i = 0; i < meta->num_chunks; ++i) {
+            bits.push_back(ucs_dynamic_bitmap_get(&meta->exported, i));
+        }
+        return bits;
+    };
+
+    ASSERT_UCS_OK(md()->ops->mem_reg(md(), alloc.ptr(), alloc.size(), NULL,
+                                     &memh));
+
+    /* Only the chunks a pack covers are exported */
+    ASSERT_NO_FATAL_FAILURE(vmm_multi_publish(memh, chunk(2),
+                                              alloc.chunk_size(),
+                                              2 * alloc.chunk_size(), &range));
+    meta = vmm_multi_meta(memh);
+    ASSERT_TRUE(meta != NULL);
+    EXPECT_EQ(num_chunks, meta->num_chunks);
+    EXPECT_EQ(std::vector<uint8_t>({0, 0, 1, 1, 0, 0, 0, 0}), exported());
+
+    /* An overlapping pack exports only its new chunks */
+    ASSERT_NO_FATAL_FAILURE(vmm_multi_publish(memh, chunk(3),
+                                              alloc.chunk_size(),
+                                              3 * alloc.chunk_size(), &range));
+    EXPECT_EQ(std::vector<uint8_t>({0, 0, 1, 1, 1, 1, 0, 0}), exported());
+
+    /* Growing prefixes keep using the one metadata buffer */
+    for (unsigned n = 2; n <= num_chunks; ++n) {
+        ASSERT_NO_FATAL_FAILURE(vmm_multi_publish(memh, alloc.ptr(),
+                                                  alloc.chunk_size(),
+                                                  n * alloc.chunk_size(),
+                                                  &range));
+        EXPECT_EQ(meta, vmm_multi_meta(memh));
+        EXPECT_EQ(n, range.info.num_chunks);
+    }
+    EXPECT_EQ(std::vector<uint8_t>(num_chunks, 1), exported());
+
+    mem_dereg(memh);
 #else
     UCS_TEST_SKIP_R("built without fabric support");
 #endif

@@ -25,16 +25,21 @@ typedef enum {
 
 #if HAVE_CUDA_FABRIC
 /**
- * @brief Inline description of VMM multi-chunk metadata
+ * @brief Inline description of the metadata of a multi-chunk VMM key
  */
 typedef struct {
     uint8_t  version;
     uint8_t  reserved;
+    uint16_t first_chunk;
     uint16_t num_chunks;
     uint16_t info_size;
     uint16_t chunk_desc_size;
+    uint16_t reserved2[3];
     size_t   alloc_size;
 } uct_cuda_ipc_vmm_multi_info_t;
+
+
+typedef struct uct_cuda_ipc_vmm_multi_meta uct_cuda_ipc_vmm_multi_meta_t;
 #endif
 
 
@@ -142,6 +147,11 @@ typedef struct {
     ucs_sys_ns_t    pid_ns;  /* PID namespace */
     int             dev_num; /* GPU Device number */
     ucs_list_link_t list;
+#if HAVE_CUDA_FABRIC
+    CUdeviceptr     reg_address; /* Registered range start */
+    size_t          reg_length; /* Registered range length */
+    uct_cuda_ipc_vmm_multi_meta_t *vmm_multi; /* Multi-chunk VMM metadata */
+#endif
 } uct_cuda_ipc_memh_t;
 
 
@@ -153,9 +163,6 @@ typedef struct {
     CUdeviceptr               d_bptr; /* Allocation base address */
     size_t                    b_len;  /* Allocation size */
     ucs_list_link_t           link;
-#if HAVE_CUDA_FABRIC
-    ucs_list_link_t           vmm_multi_list; /* Published VMM metadata */
-#endif
 } uct_cuda_ipc_lkey_t;
 
 
