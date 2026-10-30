@@ -394,9 +394,9 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
 static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
                                        void *arg)
 {
-    uct_ib_device_t *dev = arg;
+    uct_ib_device_t *dev       = arg;
+    uct_ib_async_event_t event = {0};
     struct ibv_async_event ibevent;
-    uct_ib_async_event_t event;
     int ret;
 
     ret = ibv_get_async_event(dev->ibv_context, &ibevent);
