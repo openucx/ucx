@@ -252,7 +252,8 @@ uct_musa_base_query_pointer(const void *address, size_t length,
 
     info->base_address = (void *)address;
     info->alloc_length = length;
-    if (info->kind == UCT_MUSA_POINTER_HOST) {
+    if ((info->kind == UCT_MUSA_POINTER_HOST) ||
+        (info->kind == UCT_MUSA_POINTER_MANAGED)) {
         return UCS_OK;
     }
 
