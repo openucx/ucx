@@ -753,7 +753,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
     ucs_list_head_init(&self->rx_repost_pending_list);
     self->rx_available = iface->config.rx_max_wr;
-    if (iface->super.config.srq_enabled) {
+    if (iface->srq != NULL) {
         status = uct_rc_verbs_iface_common_prepost_recvs(iface);
     } else {
         status = uct_rc_verbs_ep_prepost_recvs(self);
@@ -812,7 +812,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     uct_rc_ep_cleanup_qp(&self->super, &cleanup_ctx->super, self->qp->qp_num,
                          self->txcnt.pi - self->txcnt.ci);
 
-    if (!iface->super.config.srq_enabled && (cleanup_ctx->rx_remaining == 0)) {
+    if ((iface->srq == NULL) && (cleanup_ctx->rx_remaining == 0)) {
         uct_rc_verbs_iface_qp_cleanup_notify(iface, self->qp->qp_num);
     }
 }
