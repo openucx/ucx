@@ -8,15 +8,16 @@
 #include "ucp_test.h"
 #include <common/mem_buffer.h>
 
+#include <algorithm>
+#include <map>
 #include <memory>
 
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
-#include <ucp/core/ucp_worker.inl>
-#include <ucp/proto/proto.h>
-#include <ucp/proto/proto_select.inl>
+#include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 }
@@ -138,6 +139,8 @@ protected:
 
     void init() override
     {
+        /* Count protocol selections, which used_protos() reports */
+        modify_config("PROTO_INFO", "used");
         test_ucp_mem_type::init();
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
@@ -240,41 +243,102 @@ protected:
         return names.empty() ? "<none>" : names;
     }
 
-    /*
-     * Protocol selected for a tagged send of 'length' bytes from 'mem_type'
-     * memory, with its description as reported by UCX_PROTO_INFO.
-     */
-    std::string tag_send_proto(ucs_memory_type_t mem_type, size_t length,
-                               std::string &desc)
-    {
-        ucp_worker_h worker                 = sender().worker();
-        ucp_worker_cfg_index_t ep_cfg_index = sender().ep()->cfg_index;
-        ucp_memory_info_t mem_info          = {
-            .type    = static_cast<uint8_t>(mem_type),
-            .sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN,
-            .flags   = UCS_MEM_FLAG_REGISTRABLE
-        };
-        const ucp_proto_threshold_elem_t *thresh;
-        ucp_proto_select_param_t select_param;
-        ucp_proto_select_elem_t *select_elem;
-        ucp_proto_query_attr_t attr;
+    struct proto_selections_t {
+        ucp_worker_h      worker;
+        ucs_memory_type_t remote_mem_type; /* UNKNOWN without a remote key */
+        unsigned          selections;
+    };
 
-        ucp_proto_select_param_init(&select_param, UCP_OP_ID_TAG_SEND, 0, 0,
-                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
-        select_elem = ucp_proto_select_lookup_slow(
-                worker,
-                &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select,
-                0, ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL, &select_param);
-        if (select_elem == NULL) {
-            desc.clear();
-            return "";
+    using proto_counts_t = std::map<const ucp_proto_config_t*,
+                                    proto_selections_t>;
+
+    struct used_proto_t {
+        std::string       name;
+        std::string       desc;
+        bool              is_estimation;   /* desc predicts the peer's part */
+        ucs_memory_type_t mem_type;        /* Local buffer */
+        ucs_memory_type_t remote_mem_type; /* Remote key, or UNKNOWN */
+    };
+
+    static void add_selections(ucp_worker_h worker,
+                               const ucp_proto_select_t *proto_select,
+                               ucs_memory_type_t remote_mem_type,
+                               proto_counts_t &counts)
+    {
+        const ucp_proto_threshold_elem_t *thresh;
+        khiter_t khiter;
+
+        for (khiter = kh_begin(proto_select->hash);
+             khiter != kh_end(proto_select->hash); ++khiter) {
+            if (!kh_exist(proto_select->hash, khiter)) {
+                continue;
+            }
+
+            thresh = kh_val(proto_select->hash, khiter).thresholds;
+            do {
+                counts[&thresh->proto_config] = {
+                    worker, remote_mem_type, thresh->proto_config.selections
+                };
+            } while ((thresh++)->max_msg_length < SIZE_MAX);
+        }
+    }
+
+    /*
+     * Selection counters of every protocol configured on the sender and the
+     * receiver, which count requests only with PROTO_INFO=used.
+     */
+    proto_counts_t proto_selections()
+    {
+        proto_counts_t counts;
+        ucp_rkey_config_t **rkey_config_p;
+        ucp_ep_config_t *ep_config;
+
+        for (entity *e : {&sender(), &receiver()}) {
+            ucp_worker_h worker = e->worker();
+
+            ucs_array_for_each(ep_config, &worker->ep_config) {
+                add_selections(worker, &ep_config->proto_select,
+                               UCS_MEMORY_TYPE_UNKNOWN, counts);
+            }
+
+            ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+                add_selections(worker, &(*rkey_config_p)->proto_select,
+                               (*rkey_config_p)->key.mem_type, counts);
+            }
         }
 
-        thresh = ucp_proto_thresholds_search_slow(select_elem->thresholds,
-                                                  length);
-        ucp_proto_config_query(worker, &thresh->proto_config, length, &attr);
-        desc = attr.desc;
-        return thresh->proto_config.proto->name;
+        return counts;
+    }
+
+    /*
+     * Protocols which started a request since 'before' was taken, including
+     * the rendezvous protocols which move the data after the tag/rndv request
+     * is matched.
+     */
+    std::vector<used_proto_t>
+    used_protos(const proto_counts_t &before, size_t length)
+    {
+        std::vector<used_proto_t> used;
+        ucp_proto_query_attr_t attr;
+
+        for (const auto &count : proto_selections()) {
+            auto prev          = before.find(count.first);
+            unsigned prev_sels = (prev == before.end()) ?
+                                         0 : prev->second.selections;
+            if (count.second.selections <= prev_sels) {
+                continue;
+            }
+
+            ucp_proto_config_query(count.second.worker, count.first, length,
+                                   &attr);
+            used.push_back({count.first->proto->name, attr.desc,
+                            static_cast<bool>(attr.is_estimation),
+                            static_cast<ucs_memory_type_t>(
+                                    count.first->select_param.mem_type),
+                            count.second.remote_mem_type});
+        }
+
+        return used;
     }
 
     /*
@@ -297,7 +361,7 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
     ucp_request_param_t param;
     mem_handle_t pad_memh, send_memh, recv_memh;
     std::unique_ptr<mem_buffer> app_buf;
-    std::string proto_name, proto_desc;
+    proto_counts_t sels_before;
     void *send_buf, *recv_buf;
     void *sreq, *rreq;
     bool can_reg;
@@ -326,25 +390,6 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
         UCS_TEST_SKIP_R(
                 std::string("the rendezvous zero-copy lane can register ") +
                 mem_type_name + " memory, nothing to stage");
-    }
-
-    /* A forced zero-copy scheme can fall back to eager or to AM rendezvous when
-     * it cannot access the source, so check the selected protocol as well as
-     * the payload */
-    proto_name = tag_send_proto(send_mem_type, length, proto_desc);
-    UCS_TEST_MESSAGE << "protocol: " << proto_name << ", " << proto_desc;
-    EXPECT_EQ("tag/rndv", proto_name) << "no rendezvous protocol is selected";
-    if (mode == XFER_ZCOPY) {
-        EXPECT_NE(std::string::npos, proto_desc.find("zero-copy"))
-                << "the source memory is not accessed by the transport";
-    } else {
-        EXPECT_EQ(std::string::npos, proto_desc.find("zero-copy"))
-                << "the source memory is accessed by the transport";
-        /* CPU-accessible memory is copied by the CPU instead of being staged */
-        if (!(UCS_BIT(send_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
-            EXPECT_NE(std::string::npos, proto_desc.find("frag host"))
-                    << "device memory is not staged through host fragments";
-        }
     }
 
     if (app_owned) {
@@ -384,6 +429,8 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
     mem_buffer::pattern_fill(send_buf, length, SEED, send_mem_type);
     mem_buffer::pattern_fill(recv_buf, length, 0, UCS_MEMORY_TYPE_HOST);
 
+    sels_before = proto_selections();
+
     param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
     param.memh         = recv_memh;
     rreq = ucp_tag_recv_nbx(receiver().worker(), recv_buf, length, 1, 1,
@@ -400,6 +447,57 @@ void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
     EXPECT_UCS_OK(request_wait(rreq));
 
     mem_buffer::pattern_check(recv_buf, length, SEED, UCS_MEMORY_TYPE_HOST);
+
+    /* A forced zero-copy scheme can fall back to eager or to AM rendezvous when
+     * it cannot access the source, so check the protocols which moved the data
+     * as well as the payload */
+    std::vector<used_proto_t> used = used_protos(sels_before, length);
+    std::string used_str;
+    for (const used_proto_t &proto : used) {
+        used_str += std::string(" [") + proto.name + ": " +
+                    (proto.is_estimation ? "(?) " : "") + proto.desc +
+                    ", local " + ucs_memory_type_names[proto.mem_type] +
+                    ", remote " + ucs_memory_type_names[proto.remote_mem_type] +
+                    "]";
+    }
+    UCS_TEST_MESSAGE << "used protocols:" << used_str;
+
+    /* A zero-copy protocol on the source memory: a PUT or an AM send reads
+     * its local buffer, a GET issued by the receiver reads the remote one */
+    auto is_used_on_source = [&](const std::string &name) {
+        return std::any_of(used.begin(), used.end(),
+                           [&](const used_proto_t &proto) {
+                               return (proto.name == name) &&
+                                      ((proto.mem_type == send_mem_type) ||
+                                       (proto.remote_mem_type ==
+                                        send_mem_type));
+                           });
+    };
+
+    if (mode == XFER_ZCOPY) {
+        EXPECT_TRUE(is_used_on_source(is_get ? "rndv/get/zcopy" :
+                                               "rndv/put/zcopy"))
+                << "the source memory is not accessed by the transport";
+    } else {
+        EXPECT_TRUE(is_used_on_source("tag/rndv"))
+                << "the source memory is not sent by a rendezvous protocol";
+        EXPECT_FALSE(is_used_on_source("rndv/get/zcopy") ||
+                     is_used_on_source("rndv/put/zcopy") ||
+                     is_used_on_source("rndv/am/zcopy"))
+                << "the source memory is accessed by the transport";
+        /* CPU-accessible memory may be copied by the CPU instead of being
+         * staged. The rendezvous request and reply only estimate the peer's
+         * protocol, so skip estimated descriptions. */
+        if (!(UCS_BIT(send_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+            EXPECT_TRUE(std::any_of(used.begin(), used.end(),
+                                    [](const used_proto_t &proto) {
+                                        return !proto.is_estimation &&
+                                               (proto.desc.find("frag host") !=
+                                                std::string::npos);
+                                    }))
+                    << "device memory is not staged through host fragments";
+        }
+    }
 }
 
 /* Small enough for a driver to sub-allocate from a memory pool */
@@ -428,9 +526,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_zcopy, rcv_ze,
 /*
  * With DMA-BUF export disabled, the rendezvous zero-copy lane cannot register
  * Level Zero memory and the payload must be copied through host memory: device
- * memory is staged through fragments, CPU-accessible memory is copied in and
- * out. The rendezvous scheme is left to UCP: forcing a zero-copy scheme would
- * exclude these protocols.
+ * memory is staged through fragments, CPU-accessible memory is staged or copied
+ * in and out. The rendezvous scheme is left to UCP: forcing a zero-copy scheme
+ * would exclude these protocols.
  */
 class test_ucp_mem_type_rndv_staged : public test_ucp_mem_type_rndv_zcopy {
 public:
