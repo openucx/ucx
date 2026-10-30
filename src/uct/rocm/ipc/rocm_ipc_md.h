@@ -39,9 +39,9 @@ typedef struct uct_rocm_ipc_key {
     uintptr_t    address;
     size_t       length;
     int          dev_num;
-    uint8_t      is_vmm; /* 1 = VMM memory, 0 = pool-allocated */
     pid_t        pid;    /* PID of the process that owns the memory */
     ucs_sys_ns_t pid_ns; /* PID namespace of the owner process */
+    uint8_t      is_vmm; /* 1 = VMM memory, 0 = pool-allocated */
 } uct_rocm_ipc_key_t;
 
 #endif

@@ -93,11 +93,13 @@ mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
 #include <map>
 #include <mutex>
 
-/* Opt-in: when GTEST_ROCM_VMM is set, back ROCM allocations with the HIP
- * VMM API (hipMem*) so the existing ROCM transfer tests exercise VMM memory. */
+/* Opt-in: when GTEST_ROCM_VMM is set to a non-zero value, back ROCM allocations
+ * with the HIP VMM API (hipMem*) so the existing ROCM transfer tests exercise
+ * VMM memory. GTEST_ROCM_VMM=0 (or unset) keeps the default pool allocator. */
 static bool mem_buffer_rocm_use_vmm()
 {
-    static const bool use_vmm = (getenv("GTEST_ROCM_VMM") != NULL) &&
+    const char *env           = getenv("GTEST_ROCM_VMM");
+    static const bool use_vmm = (env != NULL) && (atoi(env) != 0) &&
                                 mem_buffer::is_rocm_vmm_supported();
     return use_vmm;
 }

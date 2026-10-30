@@ -44,7 +44,6 @@ typedef struct uct_rocm_copy_mem {
     void        *vaddr;
     void        *dev_ptr;
     size_t      reg_size;
-    uint8_t     is_vmm;     /**< 1 = VMM-allocated GPU memory */
 } uct_rocm_copy_mem_t;
 
 

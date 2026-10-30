@@ -133,11 +133,11 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
 
         key->vmm.reg_id = vmm_reg_id;
         key->address    = (uintptr_t)vmm_base;
-        key->length  = vmm_size;
-        key->dev_num = uct_rocm_base_get_dev_num(agent);
-        key->is_vmm  = 1;
-        key->pid     = getpid();
-        key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+        key->length     = vmm_size;
+        key->dev_num    = uct_rocm_base_get_dev_num(agent);
+        key->is_vmm     = 1;
+        key->pid        = getpid();
+        key->pid_ns     = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
         return HSA_STATUS_SUCCESS;
     }
 #endif
@@ -165,7 +165,7 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     uct_rocm_ipc_key_t *key;
     hsa_status_t status;
 
-    key = ucs_malloc(sizeof(*key), "uct_rocm_ipc_key_t");
+    key = ucs_calloc(1, sizeof(*key), "uct_rocm_ipc_key_t");
     if (NULL == key) {
         ucs_error("Failed to allocate memory for uct_rocm_ipc_key_t");
         return UCS_ERR_NO_MEMORY;
@@ -193,6 +193,7 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
     mem_hndl = params->memh;
 #ifdef HAVE_ROCM_VMM_TYPE
     if (mem_hndl->is_vmm) {
+        /* Close fd on dereg; reg_id guards fd reuse. */
         close(mem_hndl->vmm.fd);
     }
 #endif

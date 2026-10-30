@@ -178,9 +178,12 @@ static ucs_pgt_dir_t *
 uct_rocm_base_vmm_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
     void *ptr;
-    int ret = ucs_posix_memalign(&ptr,
-                                 ucs_max(sizeof(void*), UCS_PGT_ENTRY_MIN_ALIGN),
-                                 sizeof(ucs_pgt_dir_t), "rocm_vmm_pgdir");
+    int ret;
+
+    ret = ucs_posix_memalign(&ptr,
+                             ucs_max(sizeof(void*), UCS_PGT_ENTRY_MIN_ALIGN),
+                             sizeof(ucs_pgt_dir_t), "rocm_vmm_pgdir");
+
     return (ret == 0) ? ptr : NULL;
 }
 
@@ -261,21 +264,41 @@ static void uct_rocm_base_vmm_event_cb(ucm_event_type_t event_type,
 {
     void *address = event->mem_type.address;
     size_t size   = event->mem_type.size;
+    hsa_amd_pointer_type_t hsa_mem_type;
+    hsa_status_t status;
 
     if (size == 0) {
         return;
     }
 
-    ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);
     if (event_type & UCM_EVENT_MEM_TYPE_ALLOC) {
+        /* Only genuine VMEM mappings belong here; skip pool/cuda/reservation events. */
+        status = uct_rocm_base_get_ptr_info(address, size, NULL, NULL,
+                                            &hsa_mem_type, NULL, NULL);
+        if ((status != HSA_STATUS_SUCCESS) ||
+            (hsa_mem_type != HSA_EXT_POINTER_TYPE_HSA_VMEM)) {
+            return;
+        }
+
+        ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);
         uct_rocm_base_vmm_registry_insert(address, size);
+        ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
+
+        /* Grant GPU access once at map time to avoid disrupting in-flight copies. */
+        status = uct_rocm_base_vmm_set_gpu_access(address, size);
+        if (status != HSA_STATUS_SUCCESS) {
+            ucs_warn("failed to grant GPU access to vmm mapping %p size 0x%zx: "
+                     "%d", address, size, status);
+        }
     } else if (event_type & UCM_EVENT_MEM_TYPE_FREE) {
+        /* Remove by range; harmless if the range was never a VMM mapping. */
+        ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);
         uct_rocm_base_vmm_registry_remove(
                 ucs_align_down_pow2((uintptr_t)address, UCS_PGT_ADDR_ALIGN),
                 ucs_align_up_pow2((uintptr_t)address + size,
                                   UCS_PGT_ADDR_ALIGN));
+        ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
     }
-    ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
 }
 
 static void uct_rocm_base_vmm_registry_init(void)
@@ -339,6 +362,50 @@ ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
     }
     ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
     return status;
+}
+
+static void uct_rocm_base_vmm_found_cb(const ucs_pgtable_t *pgtable,
+                                       ucs_pgt_region_t *pgt_region, void *arg)
+{
+    *(int*)arg = 1;
+}
+
+int uct_rocm_base_vmm_range_overlaps(const void *addr, size_t length)
+{
+    ucs_pgt_addr_t start = ucs_align_down_pow2((uintptr_t)addr, UCS_PGT_ADDR_ALIGN);
+    ucs_pgt_addr_t end   = ucs_align_up_pow2((uintptr_t)addr + length,
+                                             UCS_PGT_ADDR_ALIGN);
+    int found            = 0;
+
+    if (!uct_rocm_base_vmm_registry.initialized || (start >= end)) {
+        return 0;
+    }
+
+    ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);
+    ucs_pgtable_search_range(&uct_rocm_base_vmm_registry.pgtable, start, end - 1,
+                             uct_rocm_base_vmm_found_cb, &found);
+    ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
+    return found;
+}
+
+hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size)
+{
+    hsa_amd_memory_access_desc_t *descs;
+    hsa_agent_t *gpu_agents;
+    int num_gpu, i;
+
+    num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
+    if (num_gpu == 0) {
+        return HSA_STATUS_SUCCESS;
+    }
+
+    descs = ucs_alloca(num_gpu * sizeof(*descs));
+    for (i = 0; i < num_gpu; i++) {
+        descs[i].permissions  = HSA_ACCESS_PERMISSION_RW;
+        descs[i].agent_handle = gpu_agents[i];
+    }
+
+    return hsa_amd_vmem_set_access(va, size, descs, num_gpu);
 }
 #endif
 
@@ -506,11 +573,8 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     status = uct_rocm_base_get_ptr_info((void *)addr, length, NULL, NULL,
                                         &hsa_mem_type, &agent, &dev_type);
     if ((status == HSA_STATUS_SUCCESS) &&
-        ((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA)
-#ifdef HAVE_ROCM_VMM_TYPE
-         || (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
-#endif
-        ) && (dev_type == HSA_DEVICE_TYPE_GPU)) {
+        uct_rocm_base_is_gpu_hsa_mem_type(hsa_mem_type) &&
+        (dev_type == HSA_DEVICE_TYPE_GPU)) {
         uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         *mem_type_p = UCS_MEMORY_TYPE_ROCM;
     }
@@ -676,11 +740,8 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    if (((hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA)
-#ifdef HAVE_ROCM_VMM_TYPE
-         || (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
-#endif
-        ) && (dev_type == HSA_DEVICE_TYPE_GPU)) {
+    if (uct_rocm_base_is_gpu_hsa_mem_type(hsa_mem_type) &&
+        (dev_type == HSA_DEVICE_TYPE_GPU)) {
         mem_type = UCS_MEMORY_TYPE_ROCM;
         uct_rocm_base_last_device_agent_used = uct_rocm_base_get_dev_num(agent);
         ucs_status = uct_rocm_base_get_sys_dev(agent, &sys_dev);

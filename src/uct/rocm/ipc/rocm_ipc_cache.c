@@ -97,12 +97,9 @@ uct_rocm_ipc_cache_region_collect_callback(const ucs_pgtable_t *pgtable,
 static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
 {
     hsa_amd_vmem_alloc_handle_t vmem_handle;
-    hsa_amd_memory_access_desc_t *descs;
-    hsa_agent_t *gpu_agents;
     hsa_status_t status;
     void *va     = NULL;
     int local_fd = -1;
-    int num_gpu, i;
 #if HAVE_DECL_SYS_PIDFD_GETFD
     int pidfd;
     int saved_errno;
@@ -153,13 +150,7 @@ static void *uct_rocm_ipc_vmm_map(const uct_rocm_ipc_key_t *key)
     }
 
     /* Grant RW access to all local GPU agents so any copy engine can use it */
-    num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
-    descs   = ucs_alloca(num_gpu * sizeof(*descs));
-    for (i = 0; i < num_gpu; i++) {
-        descs[i].permissions  = HSA_ACCESS_PERMISSION_RW;
-        descs[i].agent_handle = gpu_agents[i];
-    }
-    status = hsa_amd_vmem_set_access(va, key->length, descs, num_gpu);
+    status = uct_rocm_base_vmm_set_gpu_access(va, key->length);
     if (status != HSA_STATUS_SUCCESS) {
         hsa_amd_vmem_unmap(va, key->length);
         goto err_free_va;
