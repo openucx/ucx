@@ -466,9 +466,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_zcopy, rcv_ze,
  */
 class test_ucp_mem_type_rndv_staged : public test_ucp_mem_type_rndv_zcopy {
 public:
-    test_ucp_mem_type_rndv_staged()
+    void init() override
     {
-        m_env.push_back(new ucs::scoped_setenv("UCX_ZE_COPY_DMABUF", "n"));
+        modify_config("ZE_COPY_DMABUF", "n", SETENV_IF_NOT_EXIST);
+        test_ucp_mem_type_rndv_zcopy::init();
     }
 
     /* Disabling DMA-BUF export changes how only Level Zero memory is reached */
