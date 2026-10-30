@@ -379,8 +379,10 @@ static UCS_F_ALWAYS_INLINE void uct_rc_ep_reset_reserve(uct_rc_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_ep_schedule_pending(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+uct_rc_ep_schedule_pending(uct_rc_ep_t *ep)
 {
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+
     if (ucs_arbiter_group_is_empty(&ep->arb_group)) {
         uct_rc_ep_reset_reserve(ep);
     } else {
@@ -402,7 +404,8 @@ uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_rc_ep_reserve_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep, uint16_t value)
+uct_rc_ep_reserve_cqe(const uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                      uint16_t value)
 {
     uint16_t reserve = ucs_max(ep->cq_reserve, value);
 
