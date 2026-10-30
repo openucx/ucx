@@ -31,16 +31,17 @@ AC_DEFUN([UCX_CHECK_MUSA],[
             AS_IF([test -n "$MUSA_ROOT"], [
                 MUSA_CPPFLAGS="-I$MUSA_ROOT/include"
                 MUSA_LDFLAGS="-L$MUSA_ROOT/lib -L$MUSA_ROOT/lib64"
-                MUSA_LIBS="-lmusart -lmusa"
+            ])
+            MUSA_LIBS="-lmusart -lmusa"
 
-                musa_happy=yes
-                save_CPPFLAGS="$CPPFLAGS"
-                save_LDFLAGS="$LDFLAGS"
-                save_LIBS="$LIBS"
+            musa_happy=yes
+            save_CPPFLAGS="$CPPFLAGS"
+            save_LDFLAGS="$LDFLAGS"
+            save_LIBS="$LIBS"
 
-                CPPFLAGS="$MUSA_CPPFLAGS $CPPFLAGS"
-                LDFLAGS="$MUSA_LDFLAGS $LDFLAGS"
-                LIBS="$MUSA_LIBS $LIBS"
+            CPPFLAGS="$MUSA_CPPFLAGS $CPPFLAGS"
+            LDFLAGS="$MUSA_LDFLAGS $LDFLAGS"
+            LIBS="$MUSA_LIBS $LIBS"
 
                 AC_CHECK_HEADERS([musa_runtime_api.h],
                                  [],
@@ -108,10 +109,9 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                         [musa_happy=no])
                 ])
 
-                CPPFLAGS="$save_CPPFLAGS"
-                LDFLAGS="$save_LDFLAGS"
-                LIBS="$save_LIBS"
-            ])
+            CPPFLAGS="$save_CPPFLAGS"
+            LDFLAGS="$save_LDFLAGS"
+            LIBS="$save_LIBS"
 
             AS_IF([test "x$musa_happy" = "xyes"], [
                 AC_DEFINE([HAVE_MUSA], [1], [Enable MUSA support])
