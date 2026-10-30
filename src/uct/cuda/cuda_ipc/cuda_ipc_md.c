@@ -10,6 +10,7 @@
 #include "cuda_ipc.inl"
 #include "cuda_ipc_cache.h"
 #include "cuda_ipc_md.h"
+#include "cuda_ipc_vmm_multi.h"
 
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
@@ -684,6 +685,11 @@ uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     memh->pid     = getpid();
     memh->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
     ucs_list_head_init(&memh->list);
+#if HAVE_CUDA_FABRIC
+    memh->reg_address = (CUdeviceptr)address;
+    memh->reg_length  = length;
+    memh->vmm_multi   = NULL;
+#endif
 
     *memh_p = memh;
     return UCS_OK;
@@ -696,6 +702,10 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
     uct_cuda_ipc_lkey_t *key, *tmp;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+#if HAVE_CUDA_FABRIC
+    uct_cuda_ipc_vmm_multi_meta_destroy(memh);
+#endif
 
     ucs_list_for_each_safe(key, tmp, &memh->list, link) {
         if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) {

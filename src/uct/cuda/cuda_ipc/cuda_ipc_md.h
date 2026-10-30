@@ -23,6 +23,32 @@ typedef enum {
 } uct_cuda_ipc_key_handle_t;
 
 
+#if HAVE_CUDA_FABRIC
+/**
+ * @brief Handle type of the metadata buffer and allocations
+ */
+typedef enum {
+    UCT_CUDA_IPC_VMM_MULTI_HANDLE_FABRIC = 0 /* Fabric handle */
+} uct_cuda_ipc_vmm_multi_handle_t;
+
+
+/**
+ * @brief Inline description of the metadata of a multi-chunk VMM key
+ */
+typedef struct {
+    uint8_t  version;
+    uint8_t  handle_type; /* uct_cuda_ipc_vmm_multi_handle_t */
+    uint8_t  reserved[2];
+    uint16_t first_chunk;
+    uint16_t num_chunks;
+    size_t   meta_size;
+} uct_cuda_ipc_vmm_multi_info_t;
+
+
+typedef struct uct_cuda_ipc_vmm_multi_meta uct_cuda_ipc_vmm_multi_meta_t;
+#endif
+
+
 typedef struct uct_cuda_ipc_md_handle {
     uct_cuda_ipc_key_handle_t handle_type;
     union {
@@ -132,6 +158,12 @@ typedef struct {
     ucs_sys_ns_t    pid_ns;  /* PID namespace */
     int             dev_num; /* GPU Device number */
     ucs_list_link_t list;
+#if HAVE_CUDA_FABRIC
+    CUdeviceptr     reg_address; /* Registered range start */
+    size_t          reg_length;  /* Registered range length */
+    /* Multi-chunk VMM metadata */
+    uct_cuda_ipc_vmm_multi_meta_t *vmm_multi;
+#endif
 } uct_cuda_ipc_memh_t;
 
 
