@@ -50,6 +50,8 @@ public:
 
     void test_iface_ops(int cq_len);
 
+    void test_sgl_reserve(bool add_pending);
+
     static ucs_status_t am_dummy_handler(void *arg, void *data, size_t length,
                                          unsigned flags) {
         return UCS_OK;
@@ -81,6 +83,10 @@ public:
 
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
+    }
+
+    virtual void dispatch_pending(entity *e) {
+        uct_rc_iface_arbiter_dispatch(rc_iface(e));
     }
 
     virtual void set_tx_moderation(entity *e, int val) {
