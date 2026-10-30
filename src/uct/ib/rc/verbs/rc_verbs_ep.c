@@ -715,6 +715,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
 
     if (ucs_unlikely(iface->rx_cq_available < iface->config.rx_max_wr)) {
+        ucs_assert(iface->srq == NULL);
         ucs_error("iface %p: cannot create endpoint without an SRQ, "
                   "RX CQ of %d entries has no room for %u more receive WRs, "
                   "increase " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_MAX_NUM_EPS "

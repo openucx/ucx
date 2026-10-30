@@ -1521,7 +1521,11 @@ protected:
 
     void check_srq_used(uct_iface_h iface)
     {
-        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq != NULL);
+        uct_rc_verbs_iface_t *verbs_iface =
+                ucs_derived_of(iface, uct_rc_verbs_iface_t);
+
+        EXPECT_TRUE(verbs_iface->srq != NULL);
+        EXPECT_EQ(0, verbs_iface->rx_cq_available);
     }
 
     void check_no_srq_fallback()
