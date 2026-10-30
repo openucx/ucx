@@ -9,8 +9,6 @@
 
 #include "cuda_copy_md.h"
 
-#include <string.h>
-#include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
@@ -20,16 +18,19 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/ptr_arith.h>
 #include <uct/cuda/base/cuda_ctx.inl>
+#include <uct/cuda/base/cuda_mem.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/api/v2/uct_v2.h>
+
 #include <cuda.h>
 #if CUDA_VERSION >= 11070
 #include <cudaTypedefs.h>
 #endif
 
+#include <string.h>
+#include <limits.h>
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
-
 
 static const char *uct_cuda_pref_loc[] = {
     [UCT_CUDA_PREF_LOC_CPU]  = "cpu",
@@ -191,101 +192,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_cuda_copy_mem_alloc_fabric(ucs_log_level_t log_level, CUdevice cu_device,
-                               size_t length, size_t *granularity,
-                               uct_cuda_copy_alloc_handle_t *alloc_handle)
-{
-#if HAVE_CUDA_FABRIC
-    CUmemAllocationProp prop    = {};
-    CUmemAccessDesc access_desc = {};
-    ucs_status_t status;
-    uint64_t allowed_types;
-
-    prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
-    prop.requestedHandleTypes            = CU_MEM_HANDLE_TYPE_FABRIC;
-    prop.location.type                   = CU_MEM_LOCATION_TYPE_DEVICE;
-    prop.location.id                     = cu_device;
-    prop.allocFlags.gpuDirectRDMACapable = 1;
-
-    if (*granularity == SIZE_MAX) {
-        status = UCT_CUDADRV_FUNC(
-                cuMemGetAllocationGranularity(granularity, &prop,
-                                              CU_MEM_ALLOC_GRANULARITY_MINIMUM),
-                log_level);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    alloc_handle->length = ucs_align_up(length, *granularity);
-
-    status = UCT_CUDADRV_FUNC(cuMemCreate(&alloc_handle->generic_handle,
-                                          alloc_handle->length, &prop, 0),
-                              log_level);
-    if (status != UCS_OK) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    status = UCT_CUDADRV_FUNC(cuMemAddressReserve(&alloc_handle->ptr,
-                                                  alloc_handle->length,
-                                                  *granularity, 0, 0),
-                              log_level);
-    if (status != UCS_OK) {
-        goto err_mem_release;
-    }
-
-    status = UCT_CUDADRV_FUNC(cuMemMap(alloc_handle->ptr, alloc_handle->length,
-                                       0, alloc_handle->generic_handle, 0),
-                              log_level);
-    if (status != UCS_OK) {
-        goto err_address_free;
-    }
-
-    access_desc.flags         = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-    access_desc.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
-    access_desc.location.id   = cu_device;
-
-    status = UCT_CUDADRV_FUNC(cuMemSetAccess(
-                     alloc_handle->ptr, alloc_handle->length, &access_desc, 1),
-                     log_level);
-    if (status != UCS_OK) {
-        goto err_mem_unmap;
-    }
-
-    status = UCT_CUDADRV_FUNC(
-            cuPointerGetAttribute(&allowed_types,
-                                  CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES,
-                                  alloc_handle->ptr),
-            log_level);
-    if (status != UCS_OK) {
-        goto err_mem_unmap;
-    } else if (!(allowed_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
-        ucs_log(log_level,
-                "allocated memory at %p of size %ld does not have fabric "
-                "property",
-                (void*)alloc_handle->ptr, alloc_handle->length);
-        goto err_mem_unmap;
-    }
-
-    alloc_handle->is_vmm = 1;
-
-    ucs_trace("allocated vmm fabric memory at %p of size %ld",
-              (void*)alloc_handle->ptr, alloc_handle->length);
-    return UCS_OK;
-
-err_mem_unmap:
-    UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuMemUnmap(alloc_handle->ptr, alloc_handle->length));
-err_address_free:
-    UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuMemAddressFree(alloc_handle->ptr, alloc_handle->length));
-err_mem_release:
-    UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemRelease(alloc_handle->generic_handle));
-#endif
-    return UCS_ERR_NO_MEMORY;
-}
-
 typedef CUresult (*uct_cuda_cuCtxSetFlags_t)(unsigned);
 
 ucs_status_t uct_cuda_copy_set_ctx_sync_memops(ucs_log_level_t log_level)
@@ -359,7 +265,7 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
     uct_md_mem_attr_v2_t mem_attr;
     ucs_status_t status;
-    uct_cuda_copy_alloc_handle_t *alloc_handle;
+    uct_cuda_mem_t *cuda_mem;
     ucs_log_level_t log_level;
     CUdevice avail_cuda_device, cuda_device;
 
@@ -371,11 +277,9 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
 
-    alloc_handle = ucs_malloc(sizeof(*alloc_handle),
-                              "uct_cuda_copy_alloc_handle_t");
-    if (NULL == alloc_handle) {
-        ucs_log(log_level,
-                "failed to allocate memory for uct_cuda_copy_alloc_handle_t");
+    cuda_mem = ucs_malloc(sizeof(*cuda_mem), "uct_cuda_mem_t");
+    if (NULL == cuda_mem) {
+        ucs_log(log_level, "failed to allocate memory for uct_cuda_mem_t");
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -383,19 +287,19 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                                              sys_dev, &cuda_device,
                                              &avail_cuda_device, log_level);
     if (status != UCS_OK) {
-        ucs_free(alloc_handle);
+        ucs_free(cuda_mem);
         return UCS_ERR_NO_DEVICE;
     }
 
     status = uct_cuda_mem_alloc(log_level, mem_type, md->config.enable_fabric,
                                 avail_cuda_device, *length_p, &md->granularity,
-                                alloc_handle);
+                                cuda_mem);
     if (status != UCS_OK) {
-        ucs_free(alloc_handle);
+        ucs_free(cuda_mem);
         goto out;
     }
 
-    uct_cuda_copy_sync_memops(alloc_handle->ptr, alloc_handle->is_vmm);
+    uct_cuda_copy_sync_memops(cuda_mem->ptr, cuda_mem->is_vmm);
 
     /* Cache memory flags as part of uct_cuda_copy_md_mem_query() before
      * restoring the CUDA context.
@@ -406,16 +310,16 @@ uct_cuda_copy_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
                           UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH |
                           UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS;
 
-    status = uct_cuda_copy_md_mem_query(uct_md, (void*)alloc_handle->ptr,
-                                        alloc_handle->length, &mem_attr);
+    status = uct_cuda_copy_md_mem_query(uct_md, (void*)cuda_mem->ptr,
+                                        cuda_mem->length, &mem_attr);
     if (status != UCS_OK) {
-        (void)uct_md_mem_free(uct_md, alloc_handle);
+        (void)uct_md_mem_free(uct_md, cuda_mem);
         goto out;
     }
 
-    *memh_p    = alloc_handle;
-    *address_p = (void*)alloc_handle->ptr;
-    *length_p  = alloc_handle->length;
+    *memh_p    = cuda_mem;
+    *address_p = (void*)cuda_mem->ptr;
+    *length_p  = cuda_mem->length;
 
 out:
     if (cuda_device != avail_cuda_device) {
@@ -423,31 +327,6 @@ out:
     }
 
     return status;
-}
-
-static ucs_status_t
-uct_cuda_copy_mem_release_fabric(uct_cuda_copy_alloc_handle_t *alloc_handle)
-{
-#if HAVE_CUDA_FABRIC
-    ucs_status_t status;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemRelease(alloc_handle->generic_handle));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemUnmap(alloc_handle->ptr, alloc_handle->length));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemAddressFree(alloc_handle->ptr, alloc_handle->length));
-#else
-    return UCS_ERR_UNSUPPORTED;
-#endif
 }
 
 static int uct_cuda_copy_detect_vmm(const void *address,
@@ -510,11 +389,10 @@ out:
 
 static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
 {
-    uct_cuda_copy_alloc_handle_t *alloc_handle = (uct_cuda_copy_alloc_handle_t*)
-            memh;
+    uct_cuda_mem_t *cuda_mem = (uct_cuda_mem_t*)memh;
 
-    uct_cuda_mem_free(alloc_handle);
-    ucs_free(alloc_handle);
+    uct_cuda_mem_free(cuda_mem);
+    ucs_free(cuda_mem);
     return UCS_OK;
 }
 
@@ -1200,70 +1078,3 @@ uct_component_t uct_cuda_copy_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);
-
-ucs_status_t
-uct_cuda_mem_alloc(ucs_log_level_t log_level, ucs_memory_type_t mem_type,
-                   ucs_ternary_auto_value_t enable_fabric, CUdevice cu_device,
-                   size_t length, size_t *granularity_p,
-                   uct_cuda_copy_alloc_handle_t *alloc_handle)
-{
-    CUdeviceptr ptr;
-    ucs_status_t status;
-    ucs_log_level_t log_level_fabric;
-
-    if ((mem_type != UCS_MEMORY_TYPE_CUDA) &&
-        (mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED)) {
-        ucs_log(log_level,
-                "unsupported memory type %s, supported types: %s, %s",
-                ucs_memory_type_names[mem_type],
-                ucs_memory_type_names[UCS_MEMORY_TYPE_CUDA],
-                ucs_memory_type_names[UCS_MEMORY_TYPE_CUDA_MANAGED]);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
-        status = UCT_CUDADRV_FUNC(cuMemAllocManaged(&ptr, length,
-                                                    CU_MEM_ATTACH_GLOBAL),
-                                  log_level);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        goto set_non_vmm;
-    }
-
-    if (enable_fabric != UCS_NO) {
-        log_level_fabric = (enable_fabric == UCS_TRY) ? UCS_LOG_LEVEL_DEBUG :
-                                                        log_level;
-        status = uct_cuda_copy_mem_alloc_fabric(log_level_fabric, cu_device,
-                                                length, granularity_p,
-                                                alloc_handle);
-        if ((status == UCS_OK) || (enable_fabric == UCS_YES)) {
-            return status;
-        }
-    }
-
-    status = UCT_CUDADRV_FUNC(cuMemAlloc(&ptr, length), log_level);
-    if (status != UCS_OK) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-set_non_vmm:
-    alloc_handle->ptr    = ptr;
-    alloc_handle->length = length;
-    alloc_handle->is_vmm = 0;
-
-    return UCS_OK;
-}
-
-void uct_cuda_mem_free(uct_cuda_copy_alloc_handle_t *alloc_handle)
-{
-    if (alloc_handle->is_vmm) {
-        (void)uct_cuda_copy_mem_release_fabric(alloc_handle);
-    } else {
-        /* TODO: The more correct behavior is to issue a warning, provided that
-         *       the context still exists for which memory has been allocated */
-        (void)UCT_CUDADRV_FUNC(cuMemFree(alloc_handle->ptr),
-                               UCS_LOG_LEVEL_DIAG);
-    }
-}
