@@ -333,6 +333,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         rx_max_wr                 = 0;
         rx_batch_limit            = ib_config->rx.max_batch;
         rx_cq_len                 = ib_config->rx.queue_len;
+        init_attr.fc_max_wnd_size = ib_config->rx.queue_len;
     } else {
         rx_wr_limit = ucs_min(IBV_DEV_ATTR(&ib_md->dev, max_qp_wr), UINT16_MAX);
         if ((config->rx_max_wr == 0) || (config->rx_max_wr > rx_wr_limit)) {
