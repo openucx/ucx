@@ -328,6 +328,8 @@ include $(top_srcdir)/config/hip.am
 gtest_SOURCES += \
 	ucm/rocm_hooks.cc \
 	uct/rocm/test_kernels_uct.hip \
+	uct/rocm/test_rocm_copy_ep.cc \
+	uct/rocm/test_rocm_copy_md.cc \
 	uct/rocm/test_rocm_ipc_device.hip \
 	uct/rocm/test_rocm_signal.cc
 
