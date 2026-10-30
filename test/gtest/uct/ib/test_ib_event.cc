@@ -26,10 +26,12 @@ public:
     uct_test_event_base(): uct_p2p_test(0), m_event() {}
 
     /* LAST_WQE_REACHED is generated only for QPs attached to an SRQ. */
-    static bool iface_has_srq(entity &e) {
-        uct_rc_iface_t *iface = ucs_derived_of(e.iface(), uct_rc_iface_t);
+    bool iface_has_srq(entity &e) {
+        if (GetParam()->tl_name != "rc_verbs") {
+            return true;
+        }
 
-        return iface->config.srq_enabled;
+        return ucs_derived_of(e.iface(), uct_rc_verbs_iface_t)->srq != NULL;
     }
 
     /* Before init(), no entity exists and the test cannot determine whether

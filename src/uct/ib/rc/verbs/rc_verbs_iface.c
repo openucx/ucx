@@ -253,18 +253,28 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
+static int
+uct_rc_verbs_iface_config_srq_enabled(
+        const uct_ib_md_t *md, const uct_rc_verbs_iface_config_t *config)
+{
+    return (config->srq_enable != UCS_NO) && uct_ib_device_has_srq(&md->dev);
+}
+
 static ucs_status_t
 uct_rc_iface_verbs_init_rx(uct_rc_iface_t *rc_iface,
-                           const uct_rc_iface_common_config_t *config)
+                           const uct_rc_iface_common_config_t *rc_config)
 {
+    const uct_rc_verbs_iface_config_t *config =
+            ucs_derived_of(rc_config, uct_rc_verbs_iface_config_t);
     uct_rc_verbs_iface_t *iface = ucs_derived_of(rc_iface, uct_rc_verbs_iface_t);
 
-    if (rc_iface->config.srq_enabled) {
-        return uct_rc_iface_init_rx(rc_iface, config, &iface->srq);
+    if (!uct_rc_verbs_iface_config_srq_enabled(
+                uct_ib_iface_md(&rc_iface->super), config)) {
+        iface->srq = NULL;
+        return UCS_OK;
     }
 
-    iface->srq = NULL;
-    return UCS_OK;
+    return uct_rc_iface_init_rx(rc_iface, rc_config, &iface->srq);
 }
 
 void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
@@ -305,21 +315,21 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     ucs_status_t status;
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
+    int srq_enabled;
 
     if (ib_md->relaxed_order_required) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     /* Use an SRQ unless disabled or unsupported by the device. */
-    init_attr.srq_enabled = (config->srq_enable != UCS_NO) &&
-                            uct_ib_device_has_srq(&ib_md->dev);
-    if ((config->srq_enable == UCS_YES) && !init_attr.srq_enabled) {
+    srq_enabled = uct_rc_verbs_iface_config_srq_enabled(ib_md, config);
+    if ((config->srq_enable == UCS_YES) && !srq_enabled) {
         ucs_error("%s: SRQ is requested but not supported",
                   uct_ib_device_name(&ib_md->dev));
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (init_attr.srq_enabled) {
+    if (srq_enabled) {
         rx_max_wr                 = 0;
         rx_batch_limit            = ib_config->rx.max_batch;
         rx_cq_len                 = ib_config->rx.queue_len;
