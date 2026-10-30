@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -7,11 +8,16 @@
 #include "ucp_test.h"
 #include <common/mem_buffer.h>
 
+#include <algorithm>
+#include <map>
+#include <memory>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/dt/dt.h>
 }
@@ -100,6 +106,400 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
+
+
+/*
+ * Moves a payload out of memory of the tested type, allocated by UCP or by the
+ * application, over a rendezvous protocol. The zero-copy mode covers the
+ * registration path a network transport uses to reach the memory directly,
+ * including registration through a DMA-BUF handle: memory which is registered
+ * but not readable by the transport is detected by the payload check rather
+ * than silently reported as a successful transfer. The staged mode covers the
+ * transfer when the lane cannot register the memory.
+ */
+class test_ucp_mem_type_rndv_zcopy : public test_ucp_mem_type {
+public:
+    static constexpr uint64_t SEED = 0x1234567890abcdeflu;
+
+    enum xfer_mode {
+        XFER_ZCOPY, /* the transport accesses the source memory directly */
+        XFER_STAGED /* the source is not registered on the rendezvous lane */
+    };
+
+protected:
+    using mem_handle_t = ucs::handle<ucp_mem_h, ucp_context_h>;
+
+    void init() override
+    {
+        /* Count protocol selections, which used_protos() reports */
+        modify_config("PROTO_INFO", "used");
+        test_ucp_mem_type::init();
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    /* Allocate through UCP so that a memory domain performs the allocation */
+    void *alloc_mem(entity &e, size_t length, ucs_memory_type_t mem_type,
+                    mem_handle_t &memh_handle)
+    {
+        ucp_mem_map_params_t params;
+        ucp_mem_h memh;
+        ucs_status_t status;
+
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        params.address     = NULL;
+        params.length      = length;
+        params.flags       = UCP_MEM_MAP_ALLOCATE;
+        params.memory_type = mem_type;
+
+        status = ucp_mem_map(e.ucph(), &params, &memh);
+        if (status != UCS_OK) {
+            UCS_TEST_SKIP_R(std::string("cannot allocate ") +
+                            ucs_memory_type_names[mem_type] + " memory: " +
+                            ucs_status_string(status));
+        }
+
+        memh_handle.reset(memh, [](ucp_mem_h handle, ucp_context_h context) {
+            EXPECT_UCS_OK(ucp_mem_unmap(context, handle));
+        }, e.ucph());
+        return ucp_memh_address(memh);
+    }
+
+    /*
+     * Memory domains used by the endpoint's rendezvous zero-copy lanes, without
+     * the domains used for memory type detection: those register their own
+     * memory type regardless of DMA-BUF support.
+     *
+     * The indices are in the domain space of 'md_entity'. When it is the peer
+     * of 'e', the destination domains are returned, which is what a GET issued
+     * by 'e' addresses on its peer. Otherwise the endpoint's own domains are
+     * returned, which is what a PUT issued by 'e' registers locally.
+     */
+    ucp_md_map_t rndv_zcopy_md_map(entity &e, entity &md_entity)
+    {
+        const ucp_ep_config_t *ep_config = ucp_ep_config(e.ep());
+        const bool remote                = &md_entity != &e;
+        ucp_context_h context            = md_entity.ucph();
+        ucp_md_map_t copy_md_map         = 0;
+        ucp_md_map_t md_map              = 0;
+        ucp_lane_index_t i, lane;
+        ucp_rsc_index_t rsc_index;
+        ucp_md_index_t md_index;
+
+        for (md_index = 0; md_index < context->num_mem_type_detect_mds;
+             ++md_index) {
+            copy_md_map |= UCS_BIT(context->mem_type_detect_mds[md_index]);
+        }
+
+        for (i = 0; i < UCP_MAX_LANES; ++i) {
+            lane = ep_config->key.rma_bw_lanes[i];
+            if (lane == UCP_NULL_LANE) {
+                break;
+            }
+
+            if (remote) {
+                md_map |= UCS_BIT(ep_config->key.lanes[lane].dst_md_index);
+            } else {
+                rsc_index = ep_config->key.lanes[lane].rsc_index;
+                md_map   |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+            }
+        }
+
+        return md_map & ~copy_md_map;
+    }
+
+    /* Selection count of a protocol configuration, which counts requests only
+     * with PROTO_INFO=used */
+    struct proto_count_t {
+        ucp_worker_h      worker;
+        ucs_memory_type_t remote_mem_type; /* UNKNOWN without a remote key */
+        unsigned          selections;
+    };
+
+    using proto_counts_t = std::map<const ucp_proto_config_t*, proto_count_t>;
+
+    struct used_proto_t {
+        const ucp_proto_config_t *config;
+        ucs_memory_type_t        remote_mem_type;
+        ucp_proto_query_attr_t   attr;
+    };
+
+    static void add_counts(ucp_worker_h worker,
+                           const ucp_proto_select_t *select,
+                           ucs_memory_type_t remote_mem_type,
+                           proto_counts_t &counts)
+    {
+        const ucp_proto_threshold_elem_t *thresh;
+        khiter_t iter;
+
+        for (iter = kh_begin(select->hash); iter != kh_end(select->hash);
+             ++iter) {
+            if (kh_exist(select->hash, iter)) {
+                thresh = kh_val(select->hash, iter).thresholds;
+                do {
+                    counts[&thresh->proto_config] = {
+                        worker, remote_mem_type,
+                        thresh->proto_config.selections};
+                } while ((thresh++)->max_msg_length < SIZE_MAX);
+            }
+        }
+    }
+
+    /* Selection counts of the sender's and the receiver's protocols */
+    proto_counts_t proto_counts()
+    {
+        proto_counts_t counts;
+        ucp_rkey_config_t **rkey_config_p;
+        ucp_ep_config_t *ep_config;
+
+        for (entity *e : {&sender(), &receiver()}) {
+            ucs_array_for_each(ep_config, &e->worker()->ep_config) {
+                add_counts(e->worker(), &ep_config->proto_select,
+                           UCS_MEMORY_TYPE_UNKNOWN, counts);
+            }
+            ucs_array_for_each(rkey_config_p, &e->worker()->rkey_config) {
+                add_counts(e->worker(), &(*rkey_config_p)->proto_select,
+                           (*rkey_config_p)->key.mem_type, counts);
+            }
+        }
+
+        return counts;
+    }
+
+    /* Protocols which started a request since 'before', including the
+     * rendezvous protocols which the peers select after tag/rndv */
+    std::vector<used_proto_t>
+    used_protos(const proto_counts_t &before, size_t length)
+    {
+        std::vector<used_proto_t> used;
+
+        for (const auto &count : proto_counts()) {
+            auto prev = before.find(count.first);
+            if (count.second.selections >
+                ((prev == before.end()) ? 0 : prev->second.selections)) {
+                used.push_back({count.first, count.second.remote_mem_type});
+                ucp_proto_config_query(count.second.worker, count.first,
+                                       length, &used.back().attr);
+            }
+        }
+
+        return used;
+    }
+
+    /*
+     * Send 'length' bytes of the tested memory type to a host buffer over a
+     * rendezvous protocol. 'app_owned' allocates the source without UCP and
+     * sends it without a memory handle, like an application would.
+     */
+    void test_xfer_from_mem_type(size_t length, bool is_get, xfer_mode mode,
+                                 bool app_owned);
+};
+
+void test_ucp_mem_type_rndv_zcopy::test_xfer_from_mem_type(size_t length,
+                                                          bool is_get,
+                                                          xfer_mode mode,
+                                                          bool app_owned)
+{
+    const ucs_memory_type_t send_mem_type = mem_type();
+    const char *mem_type_name             =
+            ucs_memory_type_names[send_mem_type];
+    ucp_request_param_t param;
+    mem_handle_t pad_memh, send_memh, recv_memh;
+    std::unique_ptr<mem_buffer> app_buf;
+    proto_counts_t counts_before;
+    void *send_buf, *recv_buf;
+    void *sreq, *rreq;
+    bool can_reg;
+
+    if (!mem_buffer::is_mem_type_supported(send_mem_type)) {
+        UCS_TEST_SKIP_R(std::string(mem_type_name) +
+                        " memory is not supported");
+    }
+
+    /*
+     * Resolve the lanes and the registration capability before allocating, so
+     * that skipping does not leak the memory mappings.
+     */
+    entity &op_entity        = is_get ? receiver() : sender();
+    ucp_md_map_t lane_md_map = rndv_zcopy_md_map(op_entity, sender());
+    if (lane_md_map == 0) {
+        UCS_TEST_SKIP_R("no rendezvous zero-copy lane is available");
+    }
+
+    can_reg = sender().ucph()->reg_md_map[send_mem_type] & lane_md_map;
+    if (can_reg != (mode == XFER_ZCOPY)) {
+        UCS_TEST_SKIP_R(std::string("the rendezvous zero-copy lane ") +
+                        (can_reg ? "can" : "cannot") + " register " +
+                        mem_type_name + " memory");
+    }
+
+    if (app_owned) {
+        app_buf.reset(new mem_buffer(length, send_mem_type));
+        send_buf = app_buf->ptr();
+    } else {
+        /* Keep another buffer of the same size allocated, so that a driver
+         * which sub-allocates both from one memory pool places the source at a
+         * nonzero offset in the pool, where a DMA-BUF exported for an
+         * allocation not created for export does not describe the source */
+        alloc_mem(sender(), length, send_mem_type, pad_memh);
+        send_buf = alloc_mem(sender(), length, send_mem_type, send_memh);
+    }
+    recv_buf = alloc_mem(receiver(), length, UCS_MEMORY_TYPE_HOST, recv_memh);
+
+    if (!app_owned) {
+        if (mode == XFER_ZCOPY) {
+            EXPECT_NE(0u, send_memh->md_map & lane_md_map)
+                    << mem_type_name << " memory is not registered on the "
+                    << "rendezvous zero-copy lane's memory domain";
+        } else {
+            EXPECT_EQ(0u, send_memh->md_map & lane_md_map)
+                    << mem_type_name << " memory is registered on the "
+                    << "rendezvous zero-copy lane's memory domain";
+        }
+    }
+
+    mem_buffer::pattern_fill(send_buf, length, SEED, send_mem_type);
+    mem_buffer::pattern_fill(recv_buf, length, 0, UCS_MEMORY_TYPE_HOST);
+
+    counts_before = proto_counts();
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+    param.memh         = recv_memh;
+    rreq = ucp_tag_recv_nbx(receiver().worker(), recv_buf, length, 1, 1,
+                            &param);
+
+    if (app_owned) {
+        param.op_attr_mask = 0;
+    } else {
+        param.memh = send_memh;
+    }
+    sreq = ucp_tag_send_nbx(sender().ep(), send_buf, length, 1, &param);
+
+    EXPECT_UCS_OK(request_wait(sreq));
+    EXPECT_UCS_OK(request_wait(rreq));
+
+    mem_buffer::pattern_check(recv_buf, length, SEED, UCS_MEMORY_TYPE_HOST);
+
+    /* A forced zero-copy scheme can fall back to eager or to AM rendezvous when
+     * it cannot access the source, so check the protocols which moved the data
+     * as well as the payload */
+    std::vector<used_proto_t> used = used_protos(counts_before, length);
+    std::string used_str;
+    for (const used_proto_t &proto : used) {
+        used_str += std::string(" [") + proto.config->proto->name + ": " +
+                    (proto.attr.is_estimation ? "(?) " : "") + proto.attr.desc +
+                    "]";
+    }
+    UCS_TEST_MESSAGE << "used protocols:" << used_str;
+
+    /* A zero-copy protocol on the source memory: a PUT or an AM send reads
+     * its local buffer, a GET issued by the receiver reads the remote one */
+    auto is_used_on_source = [&](const std::string &name) {
+        return std::any_of(used.begin(), used.end(),
+                           [&](const used_proto_t &proto) {
+                               return (name == proto.config->proto->name) &&
+                                      ((proto.config->select_param.mem_type ==
+                                        send_mem_type) ||
+                                       (proto.remote_mem_type ==
+                                        send_mem_type));
+                           });
+    };
+
+    if (mode == XFER_ZCOPY) {
+        EXPECT_TRUE(is_used_on_source(is_get ? "rndv/get/zcopy" :
+                                               "rndv/put/zcopy"))
+                << "the source memory is not accessed by the transport";
+    } else {
+        EXPECT_TRUE(is_used_on_source("tag/rndv"))
+                << "the source memory is not sent by a rendezvous protocol";
+        EXPECT_FALSE(is_used_on_source("rndv/get/zcopy") ||
+                     is_used_on_source("rndv/put/zcopy") ||
+                     is_used_on_source("rndv/am/zcopy"))
+                << "the source memory is accessed by the transport";
+        /* CPU-accessible memory may be copied by the CPU instead of being
+         * staged. The rendezvous request and reply only estimate the peer's
+         * protocol, so skip estimated descriptions. */
+        if (!(UCS_BIT(send_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
+            EXPECT_TRUE(std::any_of(used.begin(), used.end(),
+                                    [](const used_proto_t &proto) {
+                                        return !proto.attr.is_estimation &&
+                                               strstr(proto.attr.desc,
+                                                      "frag host");
+                                    }))
+                    << "device memory is not staged through host fragments";
+        }
+    }
+}
+
+/* Small enough for a driver to sub-allocate from a memory pool */
+static constexpr size_t RNDV_ZCOPY_LENGTH = 64 * UCS_KBYTE;
+
+UCS_TEST_P(test_ucp_mem_type_rndv_zcopy, get_zcopy, "RNDV_THRESH=0",
+           "RNDV_SCHEME=get_zcopy")
+{
+    test_xfer_from_mem_type(RNDV_ZCOPY_LENGTH, true, XFER_ZCOPY, false);
+}
+
+UCS_TEST_P(test_ucp_mem_type_rndv_zcopy, put_zcopy, "RNDV_THRESH=0",
+           "RNDV_SCHEME=put_zcopy")
+{
+    test_xfer_from_mem_type(RNDV_ZCOPY_LENGTH, false, XFER_ZCOPY, false);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_mem_type_rndv_zcopy, rcx,
+                                        "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_zcopy, rcx_ze,
+                              "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_zcopy, rcv_ze,
+                              "rc_v,ze_copy")
+
+
+/*
+ * With DMA-BUF export disabled, the rendezvous zero-copy lane cannot register
+ * Level Zero memory and the payload must be copied through host memory: device
+ * memory is staged through fragments, CPU-accessible memory is staged or copied
+ * in and out. The rendezvous scheme is left to UCP: forcing a zero-copy scheme
+ * would exclude these protocols.
+ */
+class test_ucp_mem_type_rndv_staged : public test_ucp_mem_type_rndv_zcopy {
+public:
+    void init() override
+    {
+        modify_config("ZE_COPY_DMABUF", "n", SETENV_IF_NOT_EXIST);
+        test_ucp_mem_type_rndv_zcopy::init();
+    }
+
+    /* Disabling DMA-BUF export changes how only Level Zero memory is reached */
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        static constexpr uint64_t ze_mem_types =
+                UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
+                UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
+                UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
+
+        add_variant_memtypes(variants, get_test_variants_base, ze_mem_types);
+    }
+};
+
+UCS_TEST_P(test_ucp_mem_type_rndv_staged, staged, "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=host")
+{
+    test_xfer_from_mem_type(4 * UCS_MBYTE, false, XFER_STAGED, false);
+}
+
+UCS_TEST_P(test_ucp_mem_type_rndv_staged, staged_app_mem, "RNDV_THRESH=0",
+           "RNDV_FRAG_MEM_TYPES=host")
+{
+    test_xfer_from_mem_type(4 * UCS_MBYTE, false, XFER_STAGED, true);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_staged, rcx_ze,
+                              "rc_x,ze_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_rndv_staged, rcv_ze,
+                              "rc_v,ze_copy")
 
 class test_ucp_cuda : public ucp_test {
 public:
