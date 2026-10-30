@@ -275,6 +275,21 @@ gtest_SOURCES += \
 endif
 endif # HAVE_IB
 
+if HAVE_MUSA
+gtest_SOURCES += \
+	ucm/musa_hooks.cc \
+	uct/test_musa_contract.cc \
+	uct/test_musa_copy_md.cc
+
+gtest_CPPFLAGS += \
+	$(MUSA_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(MUSA_LDFLAGS)
+gtest_LDADD += \
+	$(top_builddir)/src/uct/musa/libuct_musa.la \
+	$(MUSA_LIBS)
+endif
+
 if HAVE_CUDA
 gtest_SOURCES += \
 	ucm/cuda_hooks.cc \

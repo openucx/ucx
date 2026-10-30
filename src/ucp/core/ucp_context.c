@@ -147,6 +147,7 @@ static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_MUSA]         = 4 * UCS_MBYTE,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -160,6 +161,7 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ZE_HOST]      = 128,
     [UCS_MEMORY_TYPE_ZE_DEVICE]    = 128,
     [UCS_MEMORY_TYPE_ZE_MANAGED]   = 128,
+    [UCS_MEMORY_TYPE_MUSA]         = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
@@ -744,6 +746,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - dc/dc_x : dc with accelerated verbs.\n"
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
+   " - musa    : MUSA GPU memory support (musa_copy).\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
    " - ze      : ZE (Intel GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
@@ -834,6 +837,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
+  { "musa",  { "musa_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { "gaudi", { "gaudi_gdr", NULL } },

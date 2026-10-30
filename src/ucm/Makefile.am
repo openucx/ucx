@@ -6,7 +6,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = . cuda rocm ze
+SUBDIRS = . cuda musa rocm ze
 
 lib_LTLIBRARIES    = libucm.la
 libucm_ladir       = $(includedir)/ucm
@@ -62,4 +62,3 @@ libucm_la_SOURCES += \
 noinst_HEADERS += \
     ptmalloc286/malloc-2.8.6.h
 endif
-
