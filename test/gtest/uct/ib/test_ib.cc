@@ -309,6 +309,151 @@ UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_addr);
 
 
+class test_uct_ib_fabric_id : public test_uct_ib {
+public:
+    /* Every test creates its own entities, with the fabric id it needs */
+    void init() {
+        uct_test::init();
+    }
+
+protected:
+    /* Identifier "0x0" puts the interface on the default fabric */
+    void create_entities(const std::string &fabric_id1,
+                         const std::string &fabric_id2) {
+        modify_config("IB_FABRIC_ID", fabric_id1);
+        m_e1 = uct_test::create_entity(0);
+        m_entities.push_back(m_e1);
+
+        modify_config("IB_FABRIC_ID", fabric_id2);
+        m_e2 = uct_test::create_entity(0);
+        m_entities.push_back(m_e2);
+    }
+
+    void cleanup_entities() {
+        m_e1->destroy_eps();
+        m_e2->destroy_eps();
+        m_entities.remove(m_e1);
+        m_entities.remove(m_e2);
+        m_e1 = NULL;
+        m_e2 = NULL;
+    }
+
+    void get_device_address(entity *e, std::vector<uint8_t> &dev_addr) {
+        dev_addr.resize(e->iface_attr().device_addr_len);
+        ASSERT_UCS_OK(uct_iface_get_device_address(
+                e->iface(), (uct_device_addr_t*)&dev_addr[0]));
+    }
+
+    int check_is_reachable(entity *from, entity *to, std::string &info) {
+        /* The buffer must stay valid even for a zero-length iface address */
+        std::vector<uint8_t> iface_addr(to->iface_attr().iface_addr_len + 1);
+        std::vector<uint8_t> dev_addr;
+        uct_iface_is_reachable_params_t params;
+        char info_str[256];
+        int reachable;
+
+        get_device_address(to, dev_addr);
+        EXPECT_UCS_OK(uct_iface_get_address(to->iface(),
+                                            (uct_iface_addr_t*)&iface_addr[0]));
+
+        info_str[0]       = '\0';
+        params.field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                            UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                            UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                            UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH;
+        params.device_addr        = (const uct_device_addr_t*)&dev_addr[0];
+        params.iface_addr         = (const uct_iface_addr_t*)&iface_addr[0];
+        params.info_string        = info_str;
+        params.info_string_length = sizeof(info_str);
+
+        reachable = uct_iface_is_reachable_v2(from->iface(), &params);
+        info      = info_str;
+        return reachable;
+    }
+
+    /* Packed device address length of an interface with the given fabric id */
+    size_t fabric_id_addr_len(const std::string &fabric_id) {
+        size_t addr_len;
+
+        create_entities(fabric_id, fabric_id);
+        addr_len = m_e1->iface_attr().device_addr_len;
+        EXPECT_EQ(addr_len, m_e2->iface_attr().device_addr_len);
+        cleanup_entities();
+
+        return addr_len;
+    }
+};
+
+UCS_TEST_P(test_uct_ib_fabric_id, unset_keeps_address_format) {
+    std::vector<uint8_t> dev_addr;
+    std::string info;
+
+    create_entities("0x0", "0x0");
+
+    /* Nothing is appended to the address, and no address flag is consumed */
+    get_device_address(m_e1, dev_addr);
+    EXPECT_FALSE(((const uct_ib_address_t*)&dev_addr[0])->flags &
+                 UCT_IB_ADDRESS_FLAG_FABRIC_ID);
+
+    EXPECT_TRUE(check_is_reachable(m_e1, m_e2, info)) << info;
+    EXPECT_TRUE(check_is_reachable(m_e2, m_e1, info)) << info;
+
+    cleanup_entities();
+}
+
+UCS_TEST_P(test_uct_ib_fabric_id, set_appends_fabric_id) {
+    size_t unset_len = fabric_id_addr_len("0x0");
+    size_t set_len   = fabric_id_addr_len("0xa");
+
+    EXPECT_EQ(unset_len + sizeof(uint16_t), set_len);
+}
+
+UCS_TEST_P(test_uct_ib_fabric_id, same_id_is_reachable) {
+    std::string info;
+
+    create_entities("0xa", "0xa");
+
+    EXPECT_TRUE(check_is_reachable(m_e1, m_e2, info)) << info;
+    EXPECT_TRUE(check_is_reachable(m_e2, m_e1, info)) << info;
+
+    m_e1->connect(0, *m_e2, 0);
+    m_e2->connect(0, *m_e1, 0);
+    send_recv_short();
+
+    cleanup_entities();
+}
+
+UCS_TEST_P(test_uct_ib_fabric_id, different_id_is_unreachable) {
+    std::string info;
+
+    create_entities("0xa", "0xb");
+
+    EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
+    EXPECT_NE(std::string::npos, info.find("fabric id"));
+    EXPECT_FALSE(check_is_reachable(m_e2, m_e1, info));
+    EXPECT_NE(std::string::npos, info.find("fabric id"));
+
+    cleanup_entities();
+}
+
+UCS_TEST_P(test_uct_ib_fabric_id, missing_remote_id_is_unreachable) {
+    std::string info;
+
+    create_entities("0xa", "0x0");
+
+    /* An unset identifier is the default fabric, not a wildcard, so both
+     * directions are rejected */
+    EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
+    EXPECT_NE(std::string::npos, info.find("fabric id"));
+    EXPECT_FALSE(check_is_reachable(m_e2, m_e1, info));
+    EXPECT_NE(std::string::npos, info.find("fabric id"));
+
+    cleanup_entities();
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_fabric_id);
+
+
 class test_uct_ib_ah_cache : public test_uct_ib {
 public:
     /* Single unconnected entity: some transports (e.g. ud_verbs, srd) keep
