@@ -83,7 +83,7 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
-    unsigned                           rx_max_wr; /* receive WRs per QP */
+    unsigned                           rx_max_wr; /* WRs per QP without SRQ */
     unsigned                           flush_mode;
     ucs_ternary_auto_value_t           srq_enable;
 } uct_rc_verbs_iface_config_t;
@@ -101,7 +101,8 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
     uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
-    int                         rx_cq_available; /* RX CQ space for new EPs */
+    int                         rx_cq_available; /* RX CQ space for new EPs,
+                                                    0 with SRQ */
     ucs_list_link_t             rx_repost_pending_eps; /* used without SRQ */
     struct {
         size_t                  short_desc_size;

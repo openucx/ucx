@@ -376,7 +376,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                               &config->super.super, &init_attr);
 
     self->config.rx_max_wr               = rx_max_wr;
-    self->rx_cq_available                = rx_cq_len;
+    self->rx_cq_available                = srq_enabled ? 0 : rx_cq_len;
     self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
                                                    self->super.config.tx_qp_len);
     self->super.config.tx_moderation     = ucs_min(self->super.config.tx_moderation,
