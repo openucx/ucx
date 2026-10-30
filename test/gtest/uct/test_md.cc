@@ -269,6 +269,18 @@ void test_md::check_memory(void *address, void *expect, size_t size,
     EXPECT_TRUE(mem_buffer::compare(expect, address, size, mem_type));
 }
 
+void test_md::check_mem_query_exact_range(void *address, size_t length)
+{
+    uct_md_mem_attr_t mem_attr;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), address, length, &mem_attr));
+
+    EXPECT_EQ(address, mem_attr.base_address);
+    EXPECT_EQ(length, mem_attr.alloc_length);
+}
+
 void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
 {
     mem_buffer::release(address, mem_type);
