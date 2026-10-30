@@ -1593,3 +1593,97 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_rma_zcopy, get,
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_rma_zcopy, cma)
+
+class test_uct_peer_failure_sgl_zcopy : public test_uct_peer_failure
+{
+public:
+    static const size_t SGL_COUNT  = 4;
+    static const size_t SGL_LENGTH = 256;
+
+    /* Fail one element of the SGL by writing outside of the remote buffer, the
+     * whole operation must complete with the endpoint error status */
+    void test_put_sgl_zcopy_peer_failure(size_t failed_index)
+    {
+        uct_iface_attr_v2_t attr = {};
+        sgl_completion comp      = {};
+        void *buffers[SGL_COUNT];
+        size_t lengths[SGL_COUNT];
+        uct_mem_h memhs[SGL_COUNT];
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        ucs_status_t status;
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                          UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+        ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &attr));
+        if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+            (attr.max_put_sgl_zcopy_count < SGL_COUNT)) {
+            UCS_TEST_SKIP_R("put sgl zcopy is not supported");
+        }
+
+        mapped_buffer sendbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+        mapped_buffer recvbuf(SGL_COUNT * SGL_LENGTH, 0, *m_receivers.front());
+
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            buffers[i]      = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(),
+                                                  i * SGL_LENGTH);
+            lengths[i]      = SGL_LENGTH;
+            memhs[i]        = sendbuf.memh();
+            remote_addrs[i] = recvbuf.addr() + (i * SGL_LENGTH);
+            rkeys[i]        = recvbuf.rkey();
+        }
+
+        remote_addrs[failed_index] = 0;
+        comp.uct.func              = completion_cb;
+        comp.uct.count             = 1;
+        comp.uct.status            = UCS_OK;
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            status = uct_ep_put_sgl_zcopy(ep0(), buffers, lengths, memhs,
+                                          remote_addrs, rkeys, NULL, NULL,
+                                          SGL_COUNT, &comp.uct);
+            ASSERT_EQ(UCS_INPROGRESS, status);
+
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+private:
+    struct sgl_completion {
+        uct_completion_t uct;
+        unsigned         done;
+    };
+
+    static void completion_cb(uct_completion_t *self)
+    {
+        ucs_container_of(self, sgl_completion, uct)->done = 1;
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_first,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
+{
+    test_put_sgl_zcopy_peer_failure(0);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_middle,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
+{
+    test_put_sgl_zcopy_peer_failure(SGL_COUNT / 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_last,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE))
+{
+    test_put_sgl_zcopy_peer_failure(SGL_COUNT - 1);
+}
+
+UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_sgl_zcopy)
