@@ -39,6 +39,18 @@ UCS_CLASS_DEFINE(uct_rocm_ipc_ep_t, uct_base_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_ipc_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_ipc_ep_t, uct_ep_t);
 
+/* Whether the memory comes from an HSA memory pool, whose access is managed
+ * with hsa_amd_agents_allow_access. */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_ipc_ep_is_pool_mem_type(hsa_amd_pointer_type_t mem_type)
+{
+#if HAVE_DECL_HSA_EXT_POINTER_TYPE_HSA_VMEM
+    return mem_type != HSA_EXT_POINTER_TYPE_HSA_VMEM;
+#else
+    return 1;
+#endif
+}
+
 #define uct_rocm_ipc_trace_data(_remote_addr, _rkey, _fmt, ...) \
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                    (_rkey))
@@ -63,8 +75,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     void *tmp_base_ptr;
     size_t tmp_base_size;
     hsa_agent_t *gpu_agents;
-    hsa_amd_pointer_type_t mem_type;
-    int num_gpu;
+    hsa_amd_pointer_type_t mem_type, local_mem_type;
+    int num_gpu, use_cache;
 
     /* no data to deliver */
     if (!size)
@@ -84,8 +96,12 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         ucs_error("local addr %p/%lx is not ROCM memory", local_addr, size);
         return UCS_ERR_INVALID_ADDR;
     }
+    local_mem_type = mem_type;
 
-    if (iface->config.enable_ipc_handle_cache) {
+    /* VMM allocations are only mapped through the cache */
+    use_cache = iface->config.enable_ipc_handle_cache ||
+                (key->handle_type != UCT_ROCM_IPC_KEY_HANDLE_TYPE_IPC);
+    if (use_cache) {
         ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
@@ -116,9 +132,13 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    if (remote_agent.handle == 0) {
+    if ((remote_agent.handle == 0) ||
+        !uct_rocm_ipc_ep_is_pool_mem_type(local_mem_type)) {
         /* No access to remote agent, e.g. because of limited visibility of devices to
-         * this process. Using local_agent as a backup plan. */
+         * this process. Using local_agent as a backup plan.
+         * Memory mapped with hipMemMap is only accessible to the agents granted
+         * access with hipMemSetAccess, which hsa_amd_agents_allow_access cannot
+         * extend, so let the local agent copy it. */
         remote_agent = local_agent;
     } else {
         num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
@@ -163,7 +183,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     rocm_ipc_signal->comp = comp;
-    if (iface->config.enable_ipc_handle_cache) {
+    if (use_cache) {
         rocm_ipc_signal->mapped_addr = NULL;
     } else {
         rocm_ipc_signal->mapped_addr = remote_base_addr;

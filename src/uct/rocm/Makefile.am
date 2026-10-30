@@ -45,13 +45,15 @@ noinst_HEADERS += \
     ipc/rocm_ipc_md.h \
     ipc/rocm_ipc_iface.h \
     ipc/rocm_ipc_ep.h \
-    ipc/rocm_ipc_cache.h
+    ipc/rocm_ipc_cache.h \
+    ipc/rocm_ipc_fd.h
 
 libuct_rocm_la_SOURCES += \
     ipc/rocm_ipc_md.c \
     ipc/rocm_ipc_iface.c \
     ipc/rocm_ipc_ep.c \
-    ipc/rocm_ipc_cache.c
+    ipc/rocm_ipc_cache.c \
+    ipc/rocm_ipc_fd.c
 
 PKG_CONFIG_NAME=rocm
 

@@ -32,4 +32,13 @@ void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache);
 
 ucs_status_t
 uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr);
+
+#if UCT_ROCM_IPC_HAVE_VMEM_IPC
+/* Whether the ROCm runtime supports sharing VMM allocations */
+int uct_rocm_ipc_vmem_ipc_supported(void);
+
+/* Whether this process can map the VMM allocation shared by a remote key */
+ucs_status_t uct_rocm_ipc_vmem_check_import(const uct_rocm_ipc_key_t *key);
+#endif
+
 #endif
