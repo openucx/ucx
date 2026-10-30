@@ -341,6 +341,9 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     md->super.component = &uct_ze_copy_component;
 
     *md_p = (uct_md_h)md;
+
+    /* Install the memtype cache handler before Level Zero allocations. */
+    ucs_memtype_cache_global_create();
     return UCS_OK;
 }
 
