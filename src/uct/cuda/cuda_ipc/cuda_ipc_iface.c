@@ -72,6 +72,14 @@ static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
 /* Forward declaration for the delete function */
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_iface_t)(uct_iface_t*);
 
+/* Whether the device address carries the flags, in addition to the system
+ * UUID which is all that older peers expect */
+static int uct_cuda_ipc_iface_has_dev_addr_flags(const uct_cuda_ipc_md_t *md)
+{
+    return md->enable_mnnvl || md->fabric_supported ||
+           (md->fd_server != NULL);
+}
+
 ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
@@ -83,7 +91,7 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
     uct_cuda_ipc_md_t *md                = ucs_derived_of(iface->super.super.md,
                                                            uct_cuda_ipc_md_t);
 
-    if (md->enable_mnnvl || md->fabric_supported) {
+    if (uct_cuda_ipc_iface_has_dev_addr_flags(md)) {
         dev_addr->flags = 0;
         if (md->enable_mnnvl) {
             dev_addr->flags          |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_MNNVL;
@@ -92,6 +100,10 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 
         if (md->fabric_supported) {
             dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC;
+        }
+
+        if (md->fd_server != NULL) {
+            dev_addr->flags |= UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FD_EXCHANGE;
         }
     }
 
@@ -156,8 +168,8 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
     const uct_cuda_ipc_mnnvl_device_addr_t *mnnvl_addr;
     uct_cuda_ipc_iface_address_t ipc_addr;
     size_t dev_addr_len, iface_addr_len;
-    int local_fabric_supported, remote_fabric_supported;
-    int same_uuid;
+    int same_uuid, fabric_reachable, fd_exchange_reachable;
+    uint8_t remote_flags;
 
     if (!uct_iface_is_reachable_params_addrs_valid(params)) {
         return 0;
@@ -204,21 +216,31 @@ uct_cuda_ipc_iface_is_reachable_v2(const uct_iface_h tl_iface,
         }
     }
 
-    /* Legacy CUDA IPC handles cannot be exchanged across PID namespaces;
-     * both peers must support fabric IPC handles in that case. */
+    /* Legacy CUDA IPC handles cannot be exchanged across PID namespaces; both
+     * peers must support fabric IPC handles in that case, or pass POSIX FD
+     * handles through a shared directory on the same machine. */
     /* Older peers do not send pid_ns, so preserve legacy same-node reachability
-     * and apply the cross-namespace fabric check only to extended addresses. */
+     * and apply the cross-namespace check only to extended addresses. */
     if ((iface_addr_len >= sizeof(ipc_addr)) &&
         (ipc_addr.pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID))) {
-        local_fabric_supported  = md->fabric_supported;
-        remote_fabric_supported = !!(
-                uct_cuda_ipc_iface_dev_addr_flags(dev_addr, dev_addr_len) &
-                UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC);
-        if (!local_fabric_supported || !remote_fabric_supported) {
+        remote_flags          = uct_cuda_ipc_iface_dev_addr_flags(dev_addr,
+                                                                  dev_addr_len);
+        fabric_reachable      = md->fabric_supported &&
+                                (remote_flags &
+                                 UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC);
+        fd_exchange_reachable = same_uuid && (md->fd_server != NULL) &&
+                                (remote_flags &
+                                 UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FD_EXCHANGE);
+        if (!fabric_reachable && !fd_exchange_reachable) {
             uct_iface_fill_info_str_buf(
                     params,
-                    "different PID namespace and FABRIC support local=%d remote=%d",
-                    local_fabric_supported, remote_fabric_supported);
+                    "different PID namespace, FABRIC support local=%d "
+                    "remote=%d, FD exchange local=%d remote=%d",
+                    md->fabric_supported,
+                    !!(remote_flags & UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FABRIC),
+                    md->fd_server != NULL,
+                    !!(remote_flags &
+                       UCT_CUDA_IPC_DEVICE_ADDR_FLAG_FD_EXCHANGE));
             return 0;
         }
     }
@@ -351,7 +373,7 @@ static size_t uct_cuda_ipc_iface_device_addr_length(const uct_cuda_ipc_md_t *md)
 {
     if (md->enable_mnnvl) {
         return sizeof(uct_cuda_ipc_mnnvl_device_addr_t);
-    } else if (md->fabric_supported) {
+    } else if (uct_cuda_ipc_iface_has_dev_addr_flags(md)) {
         return sizeof(uct_cuda_ipc_device_addr_t);
     }
 

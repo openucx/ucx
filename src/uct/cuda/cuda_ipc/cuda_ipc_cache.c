@@ -16,12 +16,22 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/fd_exchange.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/ptr_arith.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/uid.h>
+#include <ucs/time/time.h>
 #include <ucs/type/rwlock.h>
 #include <uct/cuda/base/cuda_ctx.inl>
+
+
+/* The owner serves descriptors from its async thread, so only a stopped owner
+ * process makes an importer wait this long, and it waits outside the locks */
+#define UCT_CUDA_IPC_FD_EXCHANGE_TIMEOUT ucs_time_from_sec(5.0)
+
+
 typedef struct uct_cuda_ipc_cache_hash_key {
     pid_t        pid;
     ucs_sys_ns_t pid_ns;
@@ -461,30 +471,14 @@ err:
 #endif /* HAVE_CUDA_FABRIC */
 
 #if HAVE_DECL_SYS_PIDFD_GETFD
+/* Take the descriptor from the owner process with pidfd_getfd(), which works
+ * only in the PID namespace of the owner and needs ptrace permission */
 static ucs_status_t
-uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_extended_rkey_t *ext_key,
-                                     CUdevice cu_dev, CUdeviceptr *mapped_addr,
-                                     ucs_log_level_t log_level)
+uct_cuda_ipc_posix_fd_import_pidfd(const uct_cuda_ipc_rkey_t *key,
+                                   ucs_log_level_t log_level, int *local_fd_p)
 {
-    uct_cuda_ipc_rkey_t *key = &ext_key->super;
+    ucs_status_t status = UCS_OK;
     int pidfd, local_fd;
-    ucs_status_t status;
-
-    if (key->ph.handle.posix_fd.system_id != ucs_get_system_id()) {
-        ucs_debug("posix_fd import: different machine "
-                  "(remote system_id=0x%" PRIx64
-                  " local system_id=0x%" PRIx64 ")",
-                  key->ph.handle.posix_fd.system_id,
-                  ucs_get_system_id());
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    if (ext_key->pid_ns != ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
-        ucs_debug("posix_fd import: peer pid=%d is in a different pid namespace "
-                  "(remote=%u local=%u)", (int)key->pid, ext_key->pid_ns,
-                  ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
-        return UCS_ERR_UNREACHABLE;
-    }
 
     pidfd = syscall(SYS_pidfd_open, (int)key->pid, 0);
     if (pidfd < 0) {
@@ -497,24 +491,104 @@ uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_extended_rkey_t *ext_key,
         ucs_log(log_level, "pidfd_getfd(pidfd=%d, pid=%d, fd=%d) failed: %m",
                 pidfd, (int)key->pid, key->ph.handle.posix_fd.fd);
         status = UCS_ERR_IO_ERROR;
-        goto close_pidfd;
+    } else {
+        *local_fd_p = local_fd;
     }
 
+    close(pidfd);
+    return status;
+}
+
+/* Whether the socket path of a key is in the FD exchange directory of this
+ * process: the path comes from the peer, and the reply socket is created next
+ * to it, so only the directory which was configured locally is trusted */
+static int uct_cuda_ipc_posix_fd_sock_path_is_local(const char *sock_path)
+{
+    const char *dir = uct_cuda_ipc_component.fd_exchange_dir;
+    size_t dir_len  = strlen(dir);
+
+    return (dir_len != 0) && (strncmp(sock_path, dir, dir_len) == 0) &&
+           (sock_path[dir_len] == '/');
+}
+
+/* Get a local copy of the POSIX FD handle of the owner process */
+static ucs_status_t
+uct_cuda_ipc_posix_fd_import(const uct_cuda_ipc_extended_rkey_t *ext_key,
+                             ucs_log_level_t log_level, int *local_fd_p)
+{
+    const uct_cuda_ipc_rkey_t *key = &ext_key->super;
+    const char *sock_path          = key->ph.handle.posix_fd.sock_path;
+    int has_socket                 = (memchr(sock_path, '\0',
+                                             UCT_CUDA_IPC_FD_SOCK_PATH_MAX) !=
+                                      NULL) &&
+                                     (sock_path[0] != '\0');
+    ucs_status_t status;
+
+    if (has_socket && !uct_cuda_ipc_posix_fd_sock_path_is_local(sock_path)) {
+        ucs_debug("posix_fd import: socket %s is not in the local FD exchange "
+                  "directory", sock_path);
+        has_socket = 0;
+    }
+
+    if (key->ph.handle.posix_fd.system_id != ucs_get_system_id()) {
+        ucs_debug("posix_fd import: different machine "
+                  "(remote system_id=0x%" PRIx64
+                  " local system_id=0x%" PRIx64 ")",
+                  key->ph.handle.posix_fd.system_id,
+                  ucs_get_system_id());
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    if (ext_key->pid_ns == ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID)) {
+        /* A pidfd failure is not an error if the socket can be used instead */
+        status = uct_cuda_ipc_posix_fd_import_pidfd(
+                key, has_socket ? UCS_LOG_LEVEL_DEBUG : log_level, local_fd_p);
+        if ((status == UCS_OK) || !has_socket) {
+            return status;
+        }
+    } else if (!has_socket) {
+        ucs_debug("posix_fd import: peer pid=%d is in a different pid "
+                  "namespace (remote=%u local=%u)", (int)key->pid,
+                  ext_key->pid_ns, ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID));
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    status = ucs_fd_exchange_import(sock_path, key->ph.handle.posix_fd.fd,
+                                    UCT_CUDA_IPC_FD_EXCHANGE_TIMEOUT,
+                                    local_fd_p);
+    if (status != UCS_OK) {
+        ucs_log(log_level, "posix_fd import from pid=%d through %s failed: %s",
+                (int)key->pid, sock_path, ucs_status_string(status));
+    }
+
+    return status;
+}
+
+/* Map the handle with the descriptor which uct_cuda_ipc_map_memhandle took
+ * before the cache locks */
+static ucs_status_t
+uct_cuda_ipc_open_memhandle_posix_fd(uct_cuda_ipc_extended_rkey_t *ext_key,
+                                     CUdevice cu_dev, int local_fd,
+                                     CUdeviceptr *mapped_addr,
+                                     ucs_log_level_t log_level)
+{
+    uct_cuda_ipc_rkey_t *key = &ext_key->super;
+    ucs_status_t status;
+
+    ucs_assert(local_fd >= 0);
     status = uct_cuda_ipc_open_memhandle_vmm(
             key, cu_dev, mapped_addr, (void*)(uintptr_t)local_fd,
             CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, log_level);
-    close(local_fd);
     ucs_trace("posix_fd import from pid=%d: %s", (int)key->pid,
               ucs_status_string(status));
-close_pidfd:
-    close(pidfd);
     return status;
 }
 #endif /* HAVE_DECL_SYS_PIDFD_GETFD */
 
 static ucs_status_t
 uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
-                            CUdevice cu_dev, CUdeviceptr *mapped_addr,
+                            CUdevice cu_dev, int local_fd,
+                            CUdeviceptr *mapped_addr,
                             ucs_log_level_t log_level)
 {
     uct_cuda_ipc_rkey_t *key = &ext_key->super;
@@ -537,8 +611,8 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
 #endif
 #if HAVE_DECL_SYS_PIDFD_GETFD
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD:
-        return uct_cuda_ipc_open_memhandle_posix_fd(ext_key, cu_dev, mapped_addr,
-                                                    log_level);
+        return uct_cuda_ipc_open_memhandle_posix_fd(ext_key, cu_dev, local_fd,
+                                                    mapped_addr, log_level);
 #endif
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC:
         level = UCS_LOG_LEVEL_DEBUG;
@@ -701,7 +775,7 @@ void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
 static ucs_status_t
 uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
                               uct_cuda_ipc_extended_rkey_t *ext_key,
-                              CUdevice cu_dev, void **mapped_addr,
+                              CUdevice cu_dev, int local_fd, void **mapped_addr,
                               ucs_log_level_t log_level)
 {
     uct_cuda_ipc_rkey_t *key = &ext_key->super;
@@ -742,7 +816,17 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
         }
     }
 
-    status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    /* The descriptor of a POSIX FD handle is taken outside the locks by
+     * uct_cuda_ipc_map_memhandle, which retries with it */
+    if ((key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) &&
+        (local_fd < 0)) {
+        status = UCS_ERR_NO_RESOURCE;
+        goto err;
+    }
+#endif
+
+    status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev, local_fd,
                                          (CUdeviceptr*)mapped_addr, log_level);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
@@ -750,7 +834,7 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
             uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
                                                   UCS_PTR_BYTE_OFFSET(key->d_bptr,
                                                                       key->b_len));
-            status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
+            status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev, local_fd,
                                                  (CUdeviceptr*)mapped_addr,
                                                  log_level);
             if (ucs_unlikely(status != UCS_OK)) {
@@ -758,8 +842,8 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
                     /* unmap all cache entries and retry */
                     uct_cuda_ipc_cache_purge(cache, 1);
                     status = uct_cuda_ipc_open_memhandle(
-                            ext_key, cu_dev, (CUdeviceptr*)mapped_addr,
-                            log_level);
+                            ext_key, cu_dev, local_fd,
+                            (CUdeviceptr*)mapped_addr, log_level);
                     if (status != UCS_OK) {
                         ucs_fatal("%s: failed to open ipc mem handle. addr:%p "
                                   "len:%lu (%s)", cache->name,
@@ -836,6 +920,34 @@ err:
     return status;
 }
 
+#if HAVE_DECL_SYS_PIDFD_GETFD
+/* Whether the region of the key is currently mapped from its owner */
+static int
+uct_cuda_ipc_cache_region_is_mapped(uct_cuda_ipc_cache_hash_key_t hash_key,
+                                    const uct_cuda_ipc_rkey_t *key)
+{
+    int is_mapped = 0;
+    uct_cuda_ipc_cache_region_t *region;
+    ucs_pgt_region_t *pgt_region;
+    uct_cuda_ipc_cache_t *cache;
+
+    ucs_rw_spinlock_read_lock(&uct_cuda_ipc_remote_cache.lock);
+    cache = uct_cuda_ipc_remote_cache_get(hash_key);
+    if (cache != NULL) {
+        pthread_rwlock_rdlock(&cache->lock);
+        pgt_region = ucs_pgtable_lookup(&cache->pgtable, key->d_bptr);
+        if (pgt_region != NULL) {
+            region    = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
+            is_mapped = (region->key.ph.buffer_id == key->ph.buffer_id);
+        }
+        pthread_rwlock_unlock(&cache->lock);
+    }
+    ucs_rw_spinlock_read_unlock(&uct_cuda_ipc_remote_cache.lock);
+
+    return is_mapped;
+}
+#endif
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                  (ext_key, cu_dev, mapped_addr, log_level),
                  uct_cuda_ipc_extended_rkey_t *ext_key, CUdevice cu_dev,
@@ -844,9 +956,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
     uct_cuda_ipc_rkey_t *key                     = &ext_key->super;
     const uct_cuda_ipc_cache_hash_key_t hash_key = {key->pid, ext_key->pid_ns,
                                                     cu_dev};
+    int local_fd                                 = -1;
     uct_cuda_ipc_cache_t *cache;
     ucs_status_t status;
     CUuuid uuid;
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    int need_fd;
+#endif
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&uuid, cu_dev));
     if (status != UCS_OK) {
@@ -864,14 +980,48 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
         return UCS_OK;
     }
 
-    ucs_rw_spinlock_write_lock(&uct_cuda_ipc_remote_cache.lock);
-    status = uct_cuda_ipc_remote_cache_put(hash_key, &cache);
-    if (status == UCS_OK) {
-        status = uct_cuda_ipc_cache_put_region(cache, ext_key, cu_dev,
-                                               mapped_addr, log_level);
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    /* Taking a POSIX FD handle from its owner may wait for the owner process,
+     * so do it before the locks, which other mapping threads spin on, unless
+     * the region is mapped already. If another thread maps the region in the
+     * meantime, the descriptor is just not used. */
+    need_fd = (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD) &&
+              !uct_cuda_ipc_cache_region_is_mapped(hash_key, key);
+#endif
+
+    for (;;) {
+#if HAVE_DECL_SYS_PIDFD_GETFD
+        if (need_fd) {
+            status = uct_cuda_ipc_posix_fd_import(ext_key, log_level,
+                                                  &local_fd);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+#endif
+
+        ucs_rw_spinlock_write_lock(&uct_cuda_ipc_remote_cache.lock);
+        status = uct_cuda_ipc_remote_cache_put(hash_key, &cache);
+        if (status == UCS_OK) {
+            status = uct_cuda_ipc_cache_put_region(cache, ext_key, cu_dev,
+                                                   local_fd, mapped_addr,
+                                                   log_level);
+        }
+        ucs_rw_spinlock_write_unlock(&uct_cuda_ipc_remote_cache.lock);
+
+        if (status != UCS_ERR_NO_RESOURCE) {
+            break;
+        }
+
+        /* The region was unmapped after it was found mapped above, so take the
+         * descriptor now, outside the locks, and map it */
+#if HAVE_DECL_SYS_PIDFD_GETFD
+        ucs_assert(local_fd < 0);
+        need_fd = 1;
+#endif
     }
 
-    ucs_rw_spinlock_write_unlock(&uct_cuda_ipc_remote_cache.lock);
+    ucs_close_fd(&local_fd);
     return status;
 }
 

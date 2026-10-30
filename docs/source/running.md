@@ -166,6 +166,8 @@ To see the available transports use `ucx_info -d`.
 
 * To use the shared memory between several containers, add this instead: `--cap-add CAP_SYS_PTRACE --ipc host`.
 
+* `cuda_ipc` shares CUDA VMM memory (for example PyTorch `expandable_segments`) through POSIX file descriptor handles. By default, the peer takes the descriptor with `pidfd_getfd()`, which needs `--pid host` and `--cap-add CAP_SYS_PTRACE`. Instead, mount a directory into every container at the same path and set `UCX_CUDA_IPC_FD_EXCHANGE_DIR` to it, for example `-v /run/ucx-fd:/run/ucx-fd -e UCX_CUDA_IPC_FD_EXCHANGE_DIR=/run/ucx-fd`. The containers must run with the same user and group IDs as the kernel sees them (so no user namespace remapping), use the same path, and the path can be at most 32 characters long.
+
 * To enable RDMA:
   * One of: `rdma-core`, `libibverbs` or `MLNX_OFED` packages has to be installed.
 

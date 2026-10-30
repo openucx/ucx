@@ -12,6 +12,14 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/config/types.h>
+#include <ucs/sys/fd_exchange.h>
+
+
+/* Maximal length of the FD exchange socket path in a POSIX FD handle, which
+ * leaves 32 characters for the exchange directory. The handle must not grow
+ * beyond the legacy IPC handle, which sets the size of the remote key on the
+ * wire. */
+#define UCT_CUDA_IPC_FD_SOCK_PATH_MAX 48
 
 
 typedef enum {
@@ -34,6 +42,9 @@ typedef struct uct_cuda_ipc_md_handle {
             int               fd;            /* POSIX file descriptor */
             uint64_t          system_id;     /* Machine identifier for
                                                 same-machine verification */
+            /* FD exchange server socket of the owner process, empty if the
+             * descriptor is available only through pidfd_getfd() */
+            char              sock_path[UCT_CUDA_IPC_FD_SOCK_PATH_MAX];
         } posix_fd;
     } handle;
 #if HAVE_CUDA_FABRIC
@@ -55,6 +66,9 @@ typedef struct uct_cuda_ipc_md {
      *  different nodes can reach each other over multi-node NVLINK only if
      *  both are equal. */
     uint64_t                 nvlink_domain;
+    /* Serves POSIX FD handles to peers which cannot use pidfd_getfd(), NULL
+     * if disabled */
+    ucs_fd_exchange_server_t *fd_server;
 } uct_cuda_ipc_md_t;
 
 
@@ -107,6 +121,9 @@ typedef struct {
     pthread_mutex_t             lock;
     /** Enable remote IPC memory handle mapping cache */
     int                         enable_remote_cache;
+    /** Directory of the POSIX FD exchange of this process, empty if disabled.
+        Importers take descriptors only from sockets under it. */
+    char                        fd_exchange_dir[UCT_CUDA_IPC_FD_SOCK_PATH_MAX];
 } uct_cuda_ipc_component_t;
 
 extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
@@ -121,6 +138,8 @@ typedef struct uct_cuda_ipc_md_config {
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
     /** Enable remote IPC memory handle mapping cache */
     int                      enable_remote_cache;
+    /** Shared directory for the POSIX FD handle exchange, empty to disable */
+    char                     *fd_exchange_dir;
 } uct_cuda_ipc_md_config_t;
 
 

@@ -11,6 +11,8 @@
 #include "cuda_vmm_mem_buffer.h"
 
 #include <cuda_runtime.h>
+#include <climits>
+#include <functional>
 #include <thread>
 #include <vector>
 
@@ -25,7 +27,9 @@ extern "C" {
 #include <uct/cuda/base/cuda_util.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/sys/fd_exchange.h>
 #include <ucs/sys/ptr_arith.h>
+#include <ucs/sys/sys.h>
 }
 
 class test_cuda_ipc_md : public test_md {
@@ -201,6 +205,40 @@ protected:
         uuid64[1]       = value1;
     }
 
+    /* Run on a separate thread with its own CUDA context, as a peer would */
+    static void run_with_own_context(const std::function<void(CUdevice)> &func)
+    {
+        std::exception_ptr thread_exception;
+        std::thread([&]() {
+            try {
+                CUdevice dev;
+                CUcontext ctx;
+                ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&dev, 0));
+                ASSERT_EQ(CUDA_SUCCESS,
+                          uct_test_cuda_ctx_create_compat(&ctx, 0, dev));
+                func(dev);
+                EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
+            } catch (...) {
+                thread_exception = std::current_exception();
+            }
+        }).join();
+
+        if (thread_exception) {
+            std::rethrow_exception(thread_exception);
+        }
+    }
+
+    static void expect_mapped_data(const void *mapped_addr, size_t size,
+                                   uint8_t value)
+    {
+        std::vector<uint8_t> host_buf(size);
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuMemcpyDtoH(host_buf.data(), (CUdeviceptr)mapped_addr,
+                               size));
+        for (size_t i = 0; i < size; i++) {
+            ASSERT_EQ(value, host_buf[i]) << "Data mismatch at byte " << i;
+        }
+    }
 #endif
 };
 
@@ -366,48 +404,26 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
     uct_component_t *component = md()->component;
 
     /* Unpack on a separate thread with its own CUDA context */
-    std::exception_ptr thread_exception;
-    std::thread([&]() {
-        try {
-            CUdevice dev;
-            CUcontext ctx;
-            ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&dev, 0));
-            ASSERT_EQ(CUDA_SUCCESS,
-                      uct_test_cuda_ctx_create_compat(&ctx, 0, dev));
+    run_with_own_context([&](CUdevice dev) {
+        uct_rkey_unpack_params_t unpack_params = {};
+        uct_rkey_bundle_t rkey_bundle = {};
+        ASSERT_UCS_OK(uct_rkey_unpack_v2(component, &rkey, &unpack_params,
+                                         &rkey_bundle));
 
-            uct_rkey_unpack_params_t unpack_params = {};
-            uct_rkey_bundle_t rkey_bundle = {};
-            ASSERT_UCS_OK(uct_rkey_unpack_v2(component, &rkey, &unpack_params,
-                                             &rkey_bundle));
+        uct_cuda_ipc_unpacked_rkey_t *unpacked =
+                (uct_cuda_ipc_unpacked_rkey_t*)rkey_bundle.rkey;
+        void *mapped_addr;
+        ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
+                &unpacked->super, dev, &mapped_addr, UCS_LOG_LEVEL_ERROR);
+        ASSERT_UCS_OK(map_status);
 
-            uct_cuda_ipc_unpacked_rkey_t *unpacked =
-                    (uct_cuda_ipc_unpacked_rkey_t*)rkey_bundle.rkey;
-            void *mapped_addr;
-            ucs_status_t map_status = uct_cuda_ipc_map_memhandle(
-                    &unpacked->super, dev, &mapped_addr, UCS_LOG_LEVEL_ERROR);
-            ASSERT_UCS_OK(map_status);
+        expect_mapped_data(mapped_addr, size, 0xAB);
 
-            std::vector<uint8_t> host_buf(size);
-            ASSERT_EQ(CUDA_SUCCESS,
-                      cuMemcpyDtoH(host_buf.data(), (CUdeviceptr)mapped_addr,
-                                   size));
-            for (size_t i = 0; i < size; i++) {
-                ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
-            }
-
-            uct_cuda_ipc_unmap_memhandle(
-                    unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
-            EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
-            EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
-        } catch (...) {
-            thread_exception = std::current_exception();
-        }
-    }).join();
-
-    if (thread_exception) {
-        std::rethrow_exception(thread_exception);
-    }
+        uct_cuda_ipc_unmap_memhandle(
+                unpacked->super.super.pid, unpacked->super.pid_ns,
+                unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+        EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
+    });
 
     uct_md_mem_dereg_params_t dereg_params;
     dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
@@ -419,6 +435,160 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
+
+
+/* The MD serves POSIX FD handles over a socket in a shared directory */
+class test_cuda_ipc_md_fd_exchange : public test_cuda_ipc_md {
+protected:
+    void init() override
+    {
+        char dir[] = "/tmp/ucx_cuda_ipc_fd_XXXXXX";
+
+        ASSERT_TRUE(mkdtemp(dir) != NULL) << strerror(errno);
+        m_dir = dir;
+        modify_config("CUDA_IPC_FD_EXCHANGE_DIR", m_dir, FAIL_IF_NOT_EXIST);
+        test_cuda_ipc_md::init();
+    }
+
+    /* init() may skip the test after the MD was opened, and cleanup() does
+     * not run then, so remove the directory here as well */
+    ~test_cuda_ipc_md_fd_exchange()
+    {
+        m_md.reset();
+        if (!m_dir.empty()) {
+            rmdir(m_dir.c_str());
+        }
+    }
+
+    void cleanup() override
+    {
+        test_cuda_ipc_md::cleanup();
+        /* The MD removed its socket directory */
+        EXPECT_EQ(0, rmdir(m_dir.c_str())) << strerror(errno);
+        m_dir.clear();
+    }
+
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    void skip_without_server()
+    {
+        if (ucs_derived_of(md(), uct_cuda_ipc_md_t)->fd_server == NULL) {
+            UCS_TEST_SKIP_R("POSIX FD exchange is not available");
+        }
+    }
+
+    /* Map the memory of a key whose owner cannot be reached with pidfd, so the
+     * descriptor has to come through the socket, and check the data */
+    static void map_through_socket(uct_cuda_ipc_extended_rkey_t &rkey,
+                                   size_t size, uint8_t value)
+    {
+        run_with_own_context([&](CUdevice dev) {
+            void *mapped_addr;
+            ASSERT_UCS_OK(uct_cuda_ipc_map_memhandle(&rkey, dev, &mapped_addr,
+                                                     UCS_LOG_LEVEL_ERROR));
+            expect_mapped_data(mapped_addr, size, value);
+            uct_cuda_ipc_unmap_memhandle(rkey.super.pid, rkey.pid_ns,
+                                         rkey.super.d_bptr, mapped_addr, dev,
+                                         0);
+        });
+    }
+#endif
+
+    std::string m_dir;
+};
+
+UCS_TEST_P(test_cuda_ipc_md_fd_exchange, import_fd)
+{
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
+    uct_cuda_ipc_rkey_t rkey = {};
+    CUmemGenericAllocationHandle handle;
+    uct_mem_h memh;
+    int fd;
+
+    skip_without_server();
+    ASSERT_UCS_OK(pack_posix_fd_key(buf, buf.size(), &memh, &rkey));
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, rkey.ph.handle_type);
+
+    /* The key names a socket in the configured directory */
+    EXPECT_EQ(0, strncmp(rkey.ph.handle.posix_fd.sock_path, m_dir.c_str(),
+                         m_dir.length()));
+
+    /* Take the exported descriptor the way a peer in another PID namespace
+     * does, and check that it is the CUDA allocation */
+    ASSERT_UCS_OK(ucs_fd_exchange_import(rkey.ph.handle.posix_fd.sock_path,
+                                         rkey.ph.handle.posix_fd.fd,
+                                         ucs_time_from_sec(10.0), &fd));
+    EXPECT_EQ(CUDA_SUCCESS,
+              cuMemImportFromShareableHandle(
+                      &handle, (void*)(uintptr_t)fd,
+                      CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR));
+    EXPECT_EQ(CUDA_SUCCESS, cuMemRelease(handle));
+    close(fd);
+
+    /* Deregistration stops serving the descriptor */
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_fd_exchange_import(rkey.ph.handle.posix_fd.sock_path,
+                                     rkey.ph.handle.posix_fd.fd,
+                                     ucs_time_from_sec(10.0), &fd));
+#else
+    UCS_TEST_SKIP_R("built without pidfd support");
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md_fd_exchange, map_from_other_pid_ns)
+{
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
+    size_t size                       = buf.size();
+    uct_cuda_ipc_extended_rkey_t rkey = {};
+    uct_mem_h memh;
+
+    skip_without_server();
+    ASSERT_EQ(CUDA_SUCCESS, cuMemsetD8((CUdeviceptr)buf.ptr(), 0xCD, size));
+    ASSERT_UCS_OK(pack_posix_fd_key(buf, size, &memh, &rkey.super));
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD,
+              rkey.super.ph.handle_type);
+
+    /* As if the owner was in another PID namespace, where pidfd_getfd() cannot
+     * find it */
+    rkey.pid_ns = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID) + 1;
+    map_through_socket(rkey, size, 0xCD);
+
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+#else
+    UCS_TEST_SKIP_R("built without pidfd support");
+#endif
+}
+
+/* pidfd_getfd() fails in the same PID namespace too, for example without
+ * ptrace permission, and the socket has to be used instead */
+UCS_TEST_P(test_cuda_ipc_md_fd_exchange, map_after_pidfd_failure)
+{
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    cuda_posix_fd_mem_buffer buf(4096, UCS_MEMORY_TYPE_CUDA);
+    size_t size                       = buf.size();
+    uct_cuda_ipc_extended_rkey_t rkey = {};
+    uct_mem_h memh;
+
+    skip_without_server();
+    ASSERT_EQ(CUDA_SUCCESS, cuMemsetD8((CUdeviceptr)buf.ptr(), 0xEF, size));
+    ASSERT_UCS_OK(pack_posix_fd_key(buf, size, &memh, &rkey.super));
+    ASSERT_EQ(UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD,
+              rkey.super.ph.handle_type);
+
+    /* A PID which no process in this namespace can have */
+    rkey.pid_ns    = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
+    rkey.super.pid = INT_MAX;
+    map_through_socket(rkey, size, 0xEF);
+
+    EXPECT_UCS_OK(uct_md_mem_dereg(md(), memh));
+#else
+    UCS_TEST_SKIP_R("built without pidfd support");
+#endif
+}
+
+_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md_fd_exchange, cuda_ipc);
 
 
 class test_cuda_ipc_cache_lru : public ucs::test {
