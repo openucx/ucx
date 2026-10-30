@@ -12,6 +12,7 @@ extern "C" {
 
 #include <algorithm>
 #include <deque>
+#include <map>
 #include <random>
 
 
@@ -32,6 +33,7 @@ protected:
 
     virtual void cleanup()
     {
+        s_pci_path.clear();
         ucs_topo_release_groups(&m_groups);
         ucs::test::cleanup();
     }
@@ -188,13 +190,80 @@ protected:
     }
 
     ucs_status_t
-    build(const ucs_sys_device_bitmap_t *net_device_filter = nullptr)
+    build(const ucs_sys_device_bitmap_t *net_device_filter = nullptr,
+          ucs_topo_group_by_t group_by = UCS_TOPO_GROUP_BY_NUMA)
     {
         return ucs_topo_build_groups_inner(m_devices.data(),
                                            static_cast<unsigned>(
                                                    m_devices.size()),
-                                           net_device_filter, &m_groups);
+                                           net_device_filter, group_by,
+                                           pci_switch_depth, &m_groups);
     }
+
+    ucs_status_t build_by_pci_switch()
+    {
+        return build(nullptr, UCS_TOPO_GROUP_BY_PCI_SWITCH);
+    }
+
+    ucs_sys_device_t add_switch_device(const std::string &name,
+                                       ucs_topo_device_class_t device_class,
+                                       int pci_switch)
+    {
+        return add_switch_device(name, device_class,
+                                 std::vector<int>{pci_switch});
+    }
+
+    /* pci_path lists the PCIe switches above the device, from the PCI root */
+    ucs_sys_device_t add_switch_device(const std::string &name,
+                                       ucs_topo_device_class_t device_class,
+                                       const std::vector<int> &pci_path)
+    {
+        const uintptr_t user_value = (device_class ==
+                                      UCS_TOPO_DEVICE_CLASS_ACC) ?
+                                             0 :
+                                             UCS_SYS_DEVICE_USER_VALUE_EMPTY;
+        const ucs_sys_device_t sys_dev = add_device(name, generate_bus_id(),
+                                                    device_class, 0,
+                                                    user_value);
+
+        s_pci_path[sys_dev] = pci_path;
+        return sys_dev;
+    }
+
+    /* Devices without a PCIe path do not share a switch with any device */
+    static unsigned pci_switch_depth(ucs_sys_device_t sys_dev1,
+                                     ucs_sys_device_t sys_dev2)
+    {
+        auto it1 = s_pci_path.find(sys_dev1);
+        auto it2 = s_pci_path.find(sys_dev2);
+        unsigned depth = 0;
+
+        if ((it1 == s_pci_path.end()) || (it2 == s_pci_path.end())) {
+            return 0;
+        }
+
+        while ((depth < it1->second.size()) && (depth < it2->second.size()) &&
+               (it1->second[depth] == it2->second[depth])) {
+            ++depth;
+        }
+
+        return depth;
+    }
+
+    /* Order devices by bus id, as the inventory does */
+    void sort_devices(std::vector<physical_device> &devices) const
+    {
+        std::sort(devices.begin(), devices.end(),
+                  [this](const physical_device &lhs,
+                         const physical_device &rhs) {
+                      return ucs_topo_get_bus_id_bit_repr(
+                                     &m_devices[lhs.front()].bus_id) <
+                             ucs_topo_get_bus_id_bit_repr(
+                                     &m_devices[rhs.front()].bus_id);
+                  });
+    }
+
+    static std::map<ucs_sys_device_t, std::vector<int>> s_pci_path;
 
     void expect_groups(const std::vector<numa_devices> &expected_groups)
     {
@@ -244,6 +313,8 @@ protected:
     std::vector<ucs_topo_sys_device_info_t> m_devices;
     ucs_topo_groups_t m_groups = {};
 };
+
+std::map<ucs_sys_device_t, std::vector<int>> test_topo_groups::s_pci_path;
 
 
 UCS_TEST_F(test_topo_groups, vera_groups_by_numa) {
@@ -323,4 +394,160 @@ UCS_TEST_F(test_topo_groups, nic_only_group) {
     ASSERT_UCS_OK(build());
     ASSERT_EQ(1, ucs_array_length(&m_groups));
     expect_group(ucs_array_elem(&m_groups, 0), {}, {{port0, port1}});
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_groups) {
+    std::vector<numa_devices> expected_groups(3);
+
+    /* One GPU with two NICs, one GPU with one NIC, two GPUs with two NICs */
+    const std::vector<std::pair<int, int>> switches = {{1, 2}, {1, 1}, {2, 2}};
+
+    for (size_t sw = 0; sw < switches.size(); ++sw) {
+        const std::string prefix = "switch" + std::to_string(sw);
+
+        for (int i = 0; i < switches[sw].first; ++i) {
+            expected_groups[sw].gpus.push_back({add_switch_device(
+                    prefix + "_gpu" + std::to_string(i),
+                    UCS_TOPO_DEVICE_CLASS_ACC, sw)});
+        }
+
+        for (int i = 0; i < switches[sw].second; ++i) {
+            expected_groups[sw].nics.push_back({add_switch_device(
+                    prefix + "_nic" + std::to_string(i),
+                    UCS_TOPO_DEVICE_CLASS_NET, sw)});
+        }
+    }
+
+    sort_expected_result(expected_groups);
+
+    ASSERT_UCS_OK(build_by_pci_switch());
+    expect_groups(expected_groups);
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_nested_switches) {
+    std::vector<numa_devices> expected_groups(2);
+
+    /* Both GPUs share upstream switch 0, every NIC must join the GPU below
+     * its deepest switch only */
+    expected_groups[0].gpus = {{add_switch_device(
+            "gpu0", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 1})}};
+    expected_groups[0].nics = {
+        {add_switch_device("nic0", UCS_TOPO_DEVICE_CLASS_NET,
+                           std::vector<int>{0, 1})},
+        {add_switch_device("nic1", UCS_TOPO_DEVICE_CLASS_NET,
+                           std::vector<int>{0, 1, 3})}};
+    expected_groups[1].gpus = {{add_switch_device(
+            "gpu1", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 2})}};
+    expected_groups[1].nics = {
+        {add_switch_device("nic2", UCS_TOPO_DEVICE_CLASS_NET,
+                           std::vector<int>{0, 2})},
+        {add_switch_device("nic3", UCS_TOPO_DEVICE_CLASS_NET,
+                           std::vector<int>{0, 2, 4})}};
+
+    sort_expected_result(expected_groups);
+
+    ASSERT_UCS_OK(build_by_pci_switch());
+    expect_groups(expected_groups);
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_upstream_nic_not_merged) {
+    std::vector<numa_devices> expected_groups(2);
+
+    /* The GPUs decided switches 1 and 2, nic1 is only below switch 0, so it is
+     * not assigned and the GPUs are not merged */
+    expected_groups[0].gpus = {{add_switch_device(
+            "gpu0", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 1})}};
+    expected_groups[0].nics = {{add_switch_device(
+            "nic0", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0, 1})}};
+    expected_groups[1].gpus = {{add_switch_device(
+            "gpu1", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 2})}};
+    expected_groups[1].nics = {{add_switch_device(
+            "nic2", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0, 2})}};
+    const ucs_sys_device_t nic1 = add_switch_device(
+            "nic1", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0});
+
+    sort_expected_result(expected_groups);
+
+    ASSERT_UCS_OK(build_by_pci_switch());
+    ASSERT_EQ(3, ucs_array_length(&m_groups));
+    for (size_t i = 0; i < expected_groups.size(); ++i) {
+        expect_group(ucs_array_elem(&m_groups, i), expected_groups[i].gpus,
+                     expected_groups[i].nics);
+    }
+
+    expect_group(ucs_array_elem(&m_groups, 2), {}, {{nic1}});
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_deepest_switch_wins) {
+    std::vector<numa_devices> expected_groups(2);
+
+    /* gpu0 decided switch 0, which is also above nic2, but nic2 joins gpu1
+     * which decided the deeper switch 2 */
+    expected_groups[0].gpus = {{add_switch_device(
+            "gpu0", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0})}};
+    expected_groups[0].nics = {{add_switch_device(
+            "nic0", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0})}};
+    expected_groups[1].gpus = {{add_switch_device(
+            "gpu1", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 2})}};
+    expected_groups[1].nics = {{add_switch_device(
+            "nic2", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0, 2})}};
+
+    sort_expected_result(expected_groups);
+
+    ASSERT_UCS_OK(build_by_pci_switch());
+    expect_groups(expected_groups);
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_unmatched_devices) {
+    const ucs_sys_device_t local_gpu = add_switch_device(
+            "local_gpu", UCS_TOPO_DEVICE_CLASS_ACC, 0);
+    const ucs_sys_device_t local_nic = add_switch_device(
+            "local_nic", UCS_TOPO_DEVICE_CLASS_NET, 0);
+    const ucs_sys_device_t lonely_gpu = add_switch_device(
+            "lonely_gpu", UCS_TOPO_DEVICE_CLASS_ACC, 1);
+    const ucs_sys_device_t lonely_nic = add_switch_device(
+            "lonely_nic", UCS_TOPO_DEVICE_CLASS_NET, 2);
+    const ucs_sys_device_t root_nic = add_device(
+            "root_nic", generate_bus_id(), UCS_TOPO_DEVICE_CLASS_NET, 0,
+            UCS_SYS_DEVICE_USER_VALUE_EMPTY);
+    std::vector<physical_device> gpus           = {{local_gpu}, {lonely_gpu}};
+    std::vector<physical_device> unmatched_nics = {{lonely_nic}, {root_nic}};
+
+    sort_devices(gpus);
+    sort_devices(unmatched_nics);
+
+    ASSERT_UCS_OK(build_by_pci_switch());
+    ASSERT_EQ(3, ucs_array_length(&m_groups));
+    for (size_t i = 0; i < gpus.size(); ++i) {
+        const std::vector<physical_device> nics =
+                (gpus[i].front() == local_gpu) ?
+                        std::vector<physical_device>{{local_nic}} :
+                        std::vector<physical_device>{};
+
+        expect_group(ucs_array_elem(&m_groups, i), {gpus[i]}, nics);
+    }
+
+    expect_group(ucs_array_elem(&m_groups, 2), {}, unmatched_nics);
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_no_shared_switch) {
+    const std::vector<numa_devices> numa_groups = add_vera_rubin_devices();
+    std::vector<physical_device> gpus, nics;
+
+    for (const auto &numa : numa_groups) {
+        gpus.insert(gpus.end(), numa.gpus.begin(), numa.gpus.end());
+        nics.insert(nics.end(), numa.nics.begin(), numa.nics.end());
+    }
+
+    sort_devices(gpus);
+    sort_devices(nics);
+
+    /* Every GPU forms its own group, and all NICs are unmatched */
+    ASSERT_UCS_OK(build_by_pci_switch());
+    ASSERT_EQ(gpus.size() + 1, ucs_array_length(&m_groups));
+    for (size_t i = 0; i < gpus.size(); ++i) {
+        expect_group(ucs_array_elem(&m_groups, i), {gpus[i]}, {});
+    }
+
+    expect_group(ucs_array_elem(&m_groups, gpus.size()), {}, nics);
 }

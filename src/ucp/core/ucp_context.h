@@ -259,6 +259,8 @@ typedef struct ucp_context_config {
     int                                    connect_all_to_all;
     /** GPU-to-NIC assignment mode */
     ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
+    /** GPU-to-NIC assignment topology grouping criterion */
+    ucp_gpu_nic_assignment_group_by_t      gpu_nic_assignment_group_by;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
