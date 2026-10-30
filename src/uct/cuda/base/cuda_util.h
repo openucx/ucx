@@ -19,6 +19,10 @@
 const char *uct_cuda_cu_get_error_string(CUresult result);
 
 
+/** Query the CUDA driver API version, for example 13050 for CUDA 13.5. */
+ucs_status_t uct_cuda_driver_get_version(int *version_p);
+
+
 #define UCT_CUDADRV_LOG(_func, _log_level, _result) \
     ucs_log((_log_level), "%s failed: %s", UCS_PP_MAKE_STRING(_func), \
             uct_cuda_cu_get_error_string(_result))

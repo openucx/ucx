@@ -1212,6 +1212,8 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
+#define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
+
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
     static void get_base_variants(std::vector<ucp_test_variant>& variants) {
@@ -1225,11 +1227,6 @@ public:
     }
 
     virtual void init() override {
-        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
-            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
-        }
-
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
@@ -1243,6 +1240,8 @@ protected:
         SGL_OP_PUT,
         SGL_OP_GET
     };
+
+    bool m_require_zcopy_lane = true;
 
     struct sgl_ctx {
         std::vector<mapped_buffer>           src;
@@ -1405,7 +1404,7 @@ protected:
 
         uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
                                                   UCT_IFACE_FLAG_GET_ZCOPY;
-        if (!sender().has_lane_with_caps(zcopy_cap)) {
+        if (m_require_zcopy_lane && !sender().has_lane_with_caps(zcopy_cap)) {
             UCS_TEST_SKIP_R("zcopy is not supported");
         }
 
@@ -1433,7 +1432,8 @@ protected:
 
         if (use_callback) {
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                  UCP_OP_ATTR_FIELD_USER_DATA;
+                                  UCP_OP_ATTR_FIELD_USER_DATA |
+                                  UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
             param.cb.send = [](void *request, ucs_status_t status,
                                void *user_data) {
                 cb_state *s  = static_cast<cb_state*>(user_data);
@@ -1453,8 +1453,6 @@ protected:
             return;
         }
 
-        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
         auto verify_sgl_buffers = [&]() {
             ucs_memory_type_t mtype = mem_type();
             for (size_t i = 0; i < num; i++) {
@@ -1471,22 +1469,39 @@ protected:
             }
         };
 
-        if (use_callback) {
-            while (!cb.completed) {
-                ucp_worker_progress(sender().worker());
-                ucp_worker_progress(receiver().worker());
-            }
-            EXPECT_UCS_OK(cb.status);
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
         } else {
-            while (!ucp_request_is_completed(sptr)) {
-                ucp_worker_progress(sender().worker());
-                ucp_worker_progress(receiver().worker());
+            if (use_callback) {
+                while (!cb.completed) {
+                    ucp_worker_progress(sender().worker());
+                    ucp_worker_progress(receiver().worker());
+                }
+                EXPECT_UCS_OK(cb.status);
+            } else {
+                while (!ucp_request_is_completed(sptr)) {
+                    ucp_worker_progress(sender().worker());
+                    ucp_worker_progress(receiver().worker());
+                }
             }
+
+            ucp_request_release(sptr);
         }
 
-        ucp_request_release(sptr);
         flush_ep(sender());
         verify_sgl_buffers();
+    }
+
+    static bool offload_proto_selected(ucs_status_ptr_t sptr) {
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            /* Only the emulation protocol can complete the put in-place, by
+               copying the data to a bounce buffer */
+            return false;
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        return strstr(req->send.proto_config->proto->name,
+                      "put/sgl/offload") != nullptr;
     }
 
     void test_put_sgl(const std::vector<size_t> &elem_sizes,
@@ -1504,6 +1519,52 @@ protected:
         test_put_sgl(std::vector<size_t>(num_elems, buf_size),
                      use_memhs, use_callback, set_remote_count,
                      expect_immediate_completion);
+    }
+
+    /* Post one SGL with the given element count and size, and expect the
+       selected protocol to split it between all its lanes */
+    void test_put_sgl_split(size_t num_elems, size_t buf_size) {
+        /* Complete the wireup, so that the operation below is posted rather
+           than added to a pending queue */
+        test_put_sgl(1, UCS_KBYTE);
+
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, num_elems, buf_size);
+
+        /* init_sgl_ctx() fills every element with one repeated byte, so it
+           cannot detect a fragment which is written to a wrong offset inside
+           its element. Use a pattern which depends on the position instead. */
+        std::vector<uint64_t> seeds(num_elems);
+        for (size_t i = 0; i < num_elems; ++i) {
+            seeds[i] = ucs::rand();
+            ctx.src[i].pattern_fill(seeds[i]);
+        }
+
+        ucp_dt_local_sgl_t local   = make_local_sgl(
+                ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        ucp_request_param_t param  = make_sgl_param(&remote, num_elems);
+        ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, num_elems,
+                                                UCP_REMOTE_ADDR_INVALID,
+                                                UCP_RKEY_INVALID, &param);
+        if (!offload_proto_selected(sptr)) {
+            ASSERT_UCS_OK(request_wait(sptr));
+            flush_ep(sender());
+            UCS_TEST_SKIP_R("SGL offload protocol was not selected");
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        const ucp_proto_multi_priv_t *mpriv =
+                static_cast<const ucp_proto_multi_priv_t*>(
+                        req->send.proto_config->priv);
+        EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
+
+        request_wait(sptr);
+        flush_ep(sender());
+
+        for (size_t i = 0; i < num_elems; ++i) {
+            ctx.dst[i].pattern_check(seeds[i]);
+        }
     }
 
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
@@ -1626,34 +1687,52 @@ UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
     test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
 }
 
+UCS_TEST_P(test_ucp_rma_sgl, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_emulation_with_callback,
+           UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl(10, UCS_KBYTE, true, true);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl, put_emulation_no_memhs,
+           UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl(4, 2 * UCS_KBYTE, false);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_emulation_fragmented,
+                     RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl(4, 256 * UCS_KBYTE);
+}
+
 UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
-    static constexpr size_t NUM_ELEMS = 16;
+    test_put_sgl_split(16, 64 * UCS_KBYTE);
+}
 
-    /* Complete the wireup, so that the operation below is posted rather than
-       added to a pending queue */
-    test_put_sgl(1, UCS_KBYTE);
+UCS_TEST_P(test_ucp_rma_sgl, put_split_single_element) {
+    test_put_sgl_split(1, UCS_MBYTE);
+}
 
-    sgl_ctx ctx;
-    init_sgl_ctx(ctx, NUM_ELEMS, 64 * UCS_KBYTE);
-
-    ucp_dt_local_sgl_t local   = make_local_sgl(
-            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
-    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
-                                            UCP_REMOTE_ADDR_INVALID,
-                                            UCP_RKEY_INVALID, &param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
-    /* All the elements fit into a single post, so at least one outstanding post
-       per lane of the selected protocol means they were split between them */
-    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-    const ucp_proto_multi_priv_t *mpriv =
-            static_cast<const ucp_proto_multi_priv_t*>(
-                    req->send.proto_config->priv);
-    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
-
-    request_wait(sptr);
+/* An element count which is not a multiple of the lane count makes a lane
+   payload end in the middle of an element */
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_split_uneven_elements,
+                     RUNNING_ON_VALGRIND) {
+    static const char *rail_counts[] = {"2", "4"};
+    for (const char *rails : rail_counts) {
+        cleanup();
+        modify_config("MAX_RMA_RAILS", rails);
+        test_ucp_rma::init();
+        test_put_sgl_split(3, UCS_MBYTE);
+        test_put_sgl_split(5, UCS_MBYTE);
+        if (HasFailure() || (num_errors() > 0)) {
+            break;
+        }
+    }
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
@@ -1664,6 +1743,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
         modify_config("MAX_RMA_RAILS", rails);
         test_ucp_rma::init();
         test_put_sgl(100, 2 * UCS_KBYTE);
+        test_put_sgl(1, UCS_MBYTE);
         if (HasFailure() || (num_errors() > 0)) {
             break;
         }
@@ -1909,3 +1989,4 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
