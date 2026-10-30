@@ -908,8 +908,7 @@ UCS_TEST_P(test_ucp_am_nbx, am_header_error)
 {
     scoped_log_handler wrap_err(wrap_errors_logger);
 
-    ucp_request_param_t param;
-    param.op_attr_mask    = 0ul;
+    ucp_request_param_t param = {};
     ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
                                             max_am_hdr() + 1, NULL, 0, &param);
     EXPECT_EQ(UCS_PTR_STATUS(sptr), UCS_ERR_INVALID_PARAM);
@@ -937,9 +936,8 @@ UCS_TEST_P(test_ucp_am_nbx, rx_persistent_data)
     set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_hold_cb, &rx_data,
                         UCP_AM_FLAG_PERSISTENT_DATA);
 
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
 
-    param.op_attr_mask    = 0ul;
     ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
                                             0ul, &data, sizeof(data), &param);
     wait_for_flag(&rx_data);
@@ -1003,8 +1001,7 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     ssize_t length = ucs::rand() % (has_ib ? 32 : 256);
     std::vector<char> sbuf(length, 'd');
 
-    ucp_request_param_t param;
-    param.op_attr_mask = 0ul;
+    ucp_request_param_t param = {};
 
     ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
                                             0ul, sbuf.data(), sbuf.size(),
@@ -2079,9 +2076,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, deferred_reject_rndv)
 
     void *data_desc = NULL;
     std::vector<char> sbuf(10000, 0);
-    ucp_request_param_t param;
-
-    param.op_attr_mask = 0ul;
+    ucp_request_param_t param = {};
 
     struct am_cb_args args = { this,  &data_desc };
     set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_deferred_rndv_cb,

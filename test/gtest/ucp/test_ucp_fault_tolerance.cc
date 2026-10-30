@@ -717,8 +717,7 @@ protected:
         mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
         sbuf.pattern_fill(m_seed, size);
 
-        ucp_request_param_t param;
-        param.op_attr_mask = 0;
+        ucp_request_param_t param = {};
 
         ucs_status_ptr_t sptr = ucp_am_send_nbx(ep, AM_ID, NULL, 0, sbuf.ptr(),
                                                 size, &param);
@@ -762,8 +761,7 @@ protected:
 
     ucs_status_t do_get_and_wait(ucp_ep_h ep, mem_buffer &lbuf, mapped_buffer &rbuf,
                                  ucp_rkey_h rkey, size_t size, bool flush) {
-        ucp_request_param_t param;
-        param.op_attr_mask = 0;
+        ucp_request_param_t param = {};
 
         lbuf.memset(0);
         ucs_status_ptr_t status_ptr       = ucp_get_nbx(ep, lbuf.ptr(), size, uintptr_t(rbuf.ptr()), rkey, &param);

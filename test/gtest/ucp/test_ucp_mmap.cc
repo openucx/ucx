@@ -1356,9 +1356,8 @@ UCS_TEST_P(test_ucp_mmap_atomic, reuse_buffer)
     /* Send/receive from buffers to trigger adding them to registration cache */
     {
         static constexpr uint64_t TAG = 0xdeadbeef;
-        ucp_request_param_t param;
+        ucp_request_param_t param = {};
 
-        param.op_attr_mask = 0;
         auto sreq = ucp_tag_send_nbx(sender().ep(), sbuf.ptr(), sbuf.size(),
                                      TAG, &param);
         auto rreq = ucp_tag_recv_nbx(receiver().worker(), rbuf.ptr(),
