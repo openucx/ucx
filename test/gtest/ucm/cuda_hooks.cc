@@ -14,6 +14,12 @@ class cuda_hooks : public ucs::test {
 protected:
     virtual void init() {
         ucs_status_t result;
+
+        if (RUNNING_ON_VALGRIND) {
+            UCS_TEST_SKIP_R("Valgrind may execute stale translations of "
+                            "Bistro-patched CUDA driver functions");
+        }
+
         ucs::test::init();
 
         /* Avoid memory allocation in event callbacks */
