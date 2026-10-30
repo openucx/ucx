@@ -93,12 +93,51 @@ private:
 static auto &g_test_device_cuda_ctx_guard =
         test_device_cuda_ctx_guard::instance();
 
+static const char *test_device_uar_modes[] = {"shared", "dedicated"};
+
 class test_device : public uct_test {
+public:
+    /* Instantiate rc_gda once per UAR allocation mode, keeping the mode
+     * index in resource::variant */
+    static std::vector<const resource*>
+    enum_resources(const std::string &tl_name)
+    {
+        static std::vector<resource> all_resources;
+
+        if (tl_name != "rc_gda") {
+            return uct_test::enum_resources(tl_name);
+        }
+
+        if (all_resources.empty()) {
+            for (const resource *r : uct_test::enum_resources(tl_name)) {
+                for (unsigned mode = 0;
+                     mode < ucs_static_array_size(test_device_uar_modes);
+                     ++mode) {
+                    resource res(*r);
+                    res.variant      = mode;
+                    res.variant_name = std::string("uar_") +
+                                       test_device_uar_modes[mode];
+                    all_resources.push_back(res);
+                }
+            }
+        }
+
+        return filter_resources<resource>(all_resources,
+                                          resource::is_equal_tl_name, tl_name);
+    }
+
 protected:
     void init()
     {
         CUcontext ctx;
         ucs_status_t status;
+
+        if (has_transport("rc_gda")) {
+            unsigned uar_mode = GetParam()->variant;
+            ASSERT_LT(uar_mode, ucs_static_array_size(test_device_uar_modes));
+            modify_config("RC_GDA_UAR_ALLOC_MODE",
+                          test_device_uar_modes[uar_mode]);
+        }
 
         uct_test::init();
         m_receiver = uct_test::create_entity(0);

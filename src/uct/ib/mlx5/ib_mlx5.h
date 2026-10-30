@@ -51,6 +51,7 @@
 #define UCT_IB_MLX5_MAX_BB               4
 #define UCT_IB_MLX5_WORKER_BF_KEY        0x00c1b7e8u
 #define UCT_IB_MLX5_DEVX_UAR_KEY         0xdea1ab1eU
+#define UCT_IB_MLX5_GDAKI_UAR_KEY        0x67da0001u
 #define UCT_IB_MLX5_RES_DOMAIN_KEY       0x1b1bda7aU
 #define UCT_IB_MLX5_WORKER_DM_KEY        0xacdf1245u
 #define UCT_IB_MLX5_EXTENDED_UD_AV       0x80 /* htonl(0x80000000) */
@@ -677,6 +678,11 @@ typedef struct uct_ib_mlx5_qp_attr {
      * doorbell is rung from a different context than the host worker, e.g. a
      * DPA thread whose outbox maps the FlexIO process UAR. */
     uint32_t                    uar_page_id;
+    /* UAR to use for the QP doorbell, instead of the worker-level UAR cache.
+     * This is needed when each QP requires its own UAR, e.g. a dedicated
+     * UAR mapped into the CUDA address space. The caller keeps
+     * ownership and must release it after the QP is destroyed. */
+    uct_ib_mlx5_devx_uar_t      *uar;
 } uct_ib_mlx5_qp_attr_t;
 
 

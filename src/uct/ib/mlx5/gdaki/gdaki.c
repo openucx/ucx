@@ -49,6 +49,18 @@ static const char *uct_rc_gdaki_ep_alloc_mode_names[] = {
     [UCT_RC_GDAKI_EP_ALLOC_MODE_LAST]   = NULL
 };
 
+typedef enum {
+    UCT_RC_GDAKI_UAR_ALLOC_MODE_SHARED,
+    UCT_RC_GDAKI_UAR_ALLOC_MODE_DEDICATED,
+    UCT_RC_GDAKI_UAR_ALLOC_MODE_LAST
+} uct_rc_gdaki_uar_alloc_mode_t;
+
+static const char *uct_rc_gdaki_uar_alloc_mode_names[] = {
+    [UCT_RC_GDAKI_UAR_ALLOC_MODE_SHARED]    = "shared",
+    [UCT_RC_GDAKI_UAR_ALLOC_MODE_DEDICATED] = "dedicated",
+    [UCT_RC_GDAKI_UAR_ALLOC_MODE_LAST]      = NULL
+};
+
 enum {
     UCT_GDAKI_SUPPORTED   = UCS_BIT(0),
     UCT_GDAKI_DMABUF_UMEM = UCS_BIT(1)
@@ -58,6 +70,7 @@ typedef struct {
     uct_rc_iface_common_config_t      super;
     uct_rc_mlx5_iface_common_config_t mlx5;
     uct_rc_gdaki_ep_alloc_mode_t      ep_alloc_mode;
+    uct_rc_gdaki_uar_alloc_mode_t     uar_alloc_mode;
     unsigned                          num_channels;
     unsigned                          num_eps;
 } uct_rc_gdaki_iface_config_t;
@@ -83,6 +96,16 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
      " - direct : allocate channels per endpoint directly",
      ucs_offsetof(uct_rc_gdaki_iface_config_t, ep_alloc_mode),
      UCS_CONFIG_TYPE_ENUM(uct_rc_gdaki_ep_alloc_mode_names)},
+
+    {"UAR_ALLOC_MODE", "shared",
+     "UAR allocation mode for QP doorbell registers.\n"
+     " - shared    : use the worker-level UAR shared by all QPs\n"
+     " - dedicated : use a separate UAR per channel per endpoint.\n"
+     "               With EP_ALLOC_MODE=pool, each chunk consumes\n"
+     "               NUM_PRE_ALLOC_EPS * NUM_CHANNELS UARs, which can exhaust\n"
+     "               UAR BAR space. EP_ALLOC_MODE=direct allocates on demand.",
+     ucs_offsetof(uct_rc_gdaki_iface_config_t, uar_alloc_mode),
+     UCS_CONFIG_TYPE_ENUM(uct_rc_gdaki_uar_alloc_mode_names)},
 
     {"NUM_PRE_ALLOC_EPS", "32",
      "Expected number of pre-allocated endpoints. The channel pool grows if\n"
@@ -442,6 +465,94 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
+struct uct_rc_gdaki_shared_uar {
+    uct_worker_tl_data_t   super;
+    uct_rc_gdaki_uar_reg_t reg;
+};
+
+static pthread_mutex_t uct_rc_gdaki_uar_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int uct_rc_gdaki_shared_uar_cmp(uct_rc_gdaki_shared_uar_t *data,
+                                       void *addr, size_t length)
+{
+    return (data->reg.addr == addr) && (data->reg.length == length);
+}
+
+static void uct_rc_gdaki_uar_reg_init(uct_rc_gdaki_uar_reg_t *reg, void *addr,
+                                      size_t length)
+{
+    reg->addr       = addr;
+    reg->length     = length;
+    reg->registered = 0;
+}
+
+static void uct_rc_gdaki_uar_reg_cleanup(uct_rc_gdaki_uar_reg_t *reg)
+{
+    pthread_mutex_lock(&uct_rc_gdaki_uar_lock);
+    if (reg->registered) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuMemHostUnregister(reg->addr));
+    }
+    pthread_mutex_unlock(&uct_rc_gdaki_uar_lock);
+}
+
+static ucs_status_t
+uct_rc_gdaki_shared_uar_init(uct_rc_gdaki_shared_uar_t *data, void *addr,
+                             size_t length)
+{
+    uct_rc_gdaki_uar_reg_init(&data->reg, addr, length);
+    return UCS_OK;
+}
+
+static void uct_rc_gdaki_shared_uar_cleanup(uct_rc_gdaki_shared_uar_t *data)
+{
+    uct_rc_gdaki_uar_reg_cleanup(&data->reg);
+}
+
+static void uct_rc_gdaki_channel_uar_cleanup(uct_rc_gdaki_iface_t *iface,
+                                             uct_rc_gdaki_channel_t *channel)
+{
+    if (iface->uar_alloc_mode == UCT_RC_GDAKI_UAR_ALLOC_MODE_DEDICATED) {
+        uct_rc_gdaki_uar_reg_cleanup(&channel->uar.dedicated.reg);
+        uct_ib_mlx5_devx_uar_cleanup(&channel->uar.dedicated.qp_uar);
+    } else {
+        uct_worker_tl_data_put(channel->uar.shared,
+                               uct_rc_gdaki_shared_uar_cleanup);
+        uct_ib_mlx5_qp_mmio_cleanup(&channel->qp.super, channel->qp.reg);
+    }
+}
+
+static ucs_status_t
+uct_rc_gdaki_channel_get_dev_sq_db(uct_rc_gdaki_iface_t *iface,
+                                   uct_rc_gdaki_channel_t *channel,
+                                   CUdeviceptr *sq_db_p)
+{
+    uct_rc_gdaki_uar_reg_t *reg = (iface->uar_alloc_mode ==
+                                   UCT_RC_GDAKI_UAR_ALLOC_MODE_DEDICATED) ?
+                                          &channel->uar.dedicated.reg :
+                                          &channel->uar.shared->reg;
+    ucs_status_t status;
+
+    pthread_mutex_lock(&uct_rc_gdaki_uar_lock);
+    if (!reg->registered) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemHostRegister(reg->addr, reg->length,
+                                  UCT_GDAKI_CUDA_REG_FLAGS));
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        reg->registered = 1;
+    }
+    pthread_mutex_unlock(&uct_rc_gdaki_uar_lock);
+
+    return UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemHostGetDevicePointer(sq_db_p, reg->addr, 0));
+
+err:
+    pthread_mutex_unlock(&uct_rc_gdaki_uar_lock);
+    return status;
+}
+
 static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
                                                 ucs_mpool_t *mp, void *elems,
                                                 unsigned num_elems,
@@ -449,17 +560,24 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
                                                 unsigned end_ch)
 {
     uct_rc_gdaki_channel_block_t *channel_block;
+    uct_rc_gdaki_channel_t *channel;
     unsigned ep_index, channel_index, num_channels;
+    ucs_status_t status;
 
+    status = UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPushCurrent(iface->cuda.ctx));
     for (ep_index = 0; ep_index < num_elems; ++ep_index) {
         channel_block = uct_rc_gdaki_channel_block(iface, mp, elems, ep_index);
         num_channels  = (ep_index < end_ep) ? end_ch + 1 : end_ch;
         for (channel_index = 0; channel_index < num_channels; ++channel_index) {
-            uct_ib_mlx5_devx_destroy_qp_common(
-                    &channel_block->channels[channel_index].qp.super);
-            uct_ib_mlx5_devx_destroy_cq_common(
-                    &channel_block->channels[channel_index].cq);
+            channel = &channel_block->channels[channel_index];
+            uct_ib_mlx5_devx_destroy_qp_common(&channel->qp.super);
+            uct_rc_gdaki_channel_uar_cleanup(iface, channel);
+            uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
         }
+    }
+
+    if (status == UCS_OK) {
+        (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     }
 }
 
@@ -472,11 +590,14 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     uct_ib_iface_init_attr_t init_attr = {};
     uct_ib_mlx5_cq_attr_t cq_attr      = {};
     uct_ib_mlx5_qp_attr_t qp_attr      = {};
+    int dedicated_uar                  = (iface->uar_alloc_mode ==
+                                          UCT_RC_GDAKI_UAR_ALLOC_MODE_DEDICATED);
     uct_ib_mlx5_dbrec_t dbrec;
     size_t ep_offset, ep_qp_offset, ep_wq_offset;
     unsigned ep_index, channel_index;
     uct_rc_gdaki_channel_block_t *channel_block;
     uct_rc_gdaki_channel_t *channel;
+    uct_rc_gdaki_shared_uar_t *shared_uar;
     ucs_status_t status;
 
     init_attr.cq_len[UCT_IB_DIR_TX] = 1;
@@ -524,6 +645,18 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                 goto err_cleanup;
             }
 
+            if (dedicated_uar) {
+                status = uct_ib_mlx5_devx_uar_init(
+                        &channel->uar.dedicated.qp_uar,
+                        uct_ib_mlx5_iface_md(&iface->super.super.super),
+                        qp_attr.mmio_mode);
+                if (status != UCS_OK) {
+                    goto err_destroy_cq;
+                }
+
+                qp_attr.uar = &channel->uar.dedicated.qp_uar;
+            }
+
             qp_attr.umem_offset = ep_offset + ep_wq_offset + ch_wq_offset;
             dbrec.offset        = cq_attr.umem_offset +
                                   ucs_offsetof(uct_rc_gdaki_dev_qp_t, qp_dbrec);
@@ -532,18 +665,45 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                     &iface->super.super.super, &channel->cq, &channel->cq,
                     &channel->qp.super, &channel->qp, &qp_attr);
             if (status != UCS_OK) {
-                uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
-                goto err_cleanup;
+                if (dedicated_uar) {
+                    uct_ib_mlx5_devx_uar_cleanup(
+                            &channel->uar.dedicated.qp_uar);
+                }
+                goto err_destroy_cq;
+            }
+
+            if (dedicated_uar) {
+                uct_rc_gdaki_uar_reg_init(&channel->uar.dedicated.reg,
+                                          channel->qp.reg->addr.ptr,
+                                          sizeof(uint64_t));
+            } else {
+                shared_uar = uct_worker_tl_data_get(
+                        iface->super.super.super.super.worker,
+                        UCT_IB_MLX5_GDAKI_UAR_KEY, uct_rc_gdaki_shared_uar_t,
+                        uct_rc_gdaki_shared_uar_cmp,
+                        uct_rc_gdaki_shared_uar_init, channel->qp.reg->addr.ptr,
+                        UCT_IB_MLX5_BF_REG_SIZE * 2);
+                if (UCS_PTR_IS_ERR(shared_uar)) {
+                    status = UCS_PTR_STATUS(shared_uar);
+                    goto err_destroy_qp;
+                }
+
+                channel->uar.shared = shared_uar;
             }
         }
     }
 
     return UCS_OK;
 
+err_destroy_qp:
+    uct_ib_mlx5_devx_destroy_qp_common(&channel->qp.super);
+    uct_ib_mlx5_qp_mmio_cleanup(&channel->qp.super, channel->qp.reg);
+err_destroy_cq:
+    uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
 err_cleanup:
     uct_rc_gdaki_chunk_channels_destroy(iface, mp, elems, num_elems, ep_index,
                                         channel_index);
-    ucs_error("gdaki channel chunk init: create_cq/qp failed (ch=%u ep=%u)",
+    ucs_error("gdaki channel chunk init: create_cq/qp/uar failed (ch=%u ep=%u)",
               channel_index, ep_index);
     return status;
 }
@@ -834,14 +994,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                  uct_rc_gdaki_iface_t);
-    unsigned i;
-
-    if (self->dev_ep_init) {
-        uct_rc_gdaki_channel_t *channels = self->channel_block->channels;
-        for (i = 0; i < iface->num_channels; i++) {
-            (void)cuMemHostUnregister(channels[i].qp.reg->addr.ptr);
-        }
-    }
     uct_rc_gdaki_ep_cleanup_channels(iface, self);
 }
 
@@ -1044,15 +1196,10 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
 
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
-                                    UCT_IB_MLX5_BF_REG_SIZE * 2,
-                                    UCT_GDAKI_CUDA_REG_FLAGS);
 
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
-                                              0));
+            status = uct_rc_gdaki_channel_get_dev_sq_db(iface, channel, &sq_db);
             if (status != UCS_OK) {
-                goto out_unreg;
+                goto out_free;
             }
 
             dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
@@ -1066,7 +1213,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                 cuMemcpyHtoD((CUdeviceptr)ep->channel_block->gpu_ptr, dev_ep,
                              dev_ep_host_size));
         if (status != UCS_OK) {
-            goto out_unreg;
+            goto out_free;
         }
 
         ucs_free(dev_ep);
@@ -1079,12 +1226,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     pthread_mutex_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
-out_unreg:
-    do {
-        (void)cuMemHostUnregister(
-                ep->channel_block->channels[i].qp.reg->addr.ptr);
-    } while (i-- > 0);
-
+out_free:
     ucs_free(dev_ep);
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
@@ -1169,8 +1311,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
          return UCS_ERR_INVALID_PARAM;
     }
 
-    self->num_channels = ucs_roundup_pow2(config->num_channels);
-    self->ep_alloc_mode = config->ep_alloc_mode;
+    self->num_channels   = ucs_roundup_pow2(config->num_channels);
+    self->ep_alloc_mode  = config->ep_alloc_mode;
+    self->uar_alloc_mode = config->uar_alloc_mode;
 
     status = uct_rc_mlx5_dp_ordering_ooo_init(md, &self->super,
                                               md->dp_ordering_cap_devx.rc,
