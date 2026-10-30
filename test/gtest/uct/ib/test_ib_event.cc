@@ -353,11 +353,8 @@ public:
     }
 
     void fire_software_event() {
-        uct_ib_async_event_t event = {};
-
-        event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
-        event.qp_num     = m_event.qp_num;
-        uct_ib_device_async_event_dispatch(m_event.dev, &event);
+        uct_rc_iface_qp_cleanup_ready(
+                ucs_derived_of(m_e->iface(), uct_rc_iface_t), m_event.qp_num);
     }
 
     void test_software_last_wqe(bool before) {
