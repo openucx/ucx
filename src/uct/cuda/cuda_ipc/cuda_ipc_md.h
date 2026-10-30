@@ -25,16 +25,22 @@ typedef enum {
 
 #if HAVE_CUDA_FABRIC
 /**
+ * @brief Handle type of the metadata buffer and allocations
+ */
+typedef enum {
+    UCT_CUDA_IPC_VMM_MULTI_HANDLE_FABRIC = 0 /* Fabric handle */
+} uct_cuda_ipc_vmm_multi_handle_t;
+
+
+/**
  * @brief Inline description of the metadata of a multi-chunk VMM key
  */
 typedef struct {
     uint8_t  version;
-    uint8_t  reserved;
+    uint8_t  handle_type; /* uct_cuda_ipc_vmm_multi_handle_t */
+    uint8_t  reserved[2];
     uint16_t first_chunk;
     uint16_t num_chunks;
-    uint16_t info_size;
-    uint16_t chunk_desc_size;
-    uint16_t reserved2[3];
     size_t   alloc_size;
 } uct_cuda_ipc_vmm_multi_info_t;
 

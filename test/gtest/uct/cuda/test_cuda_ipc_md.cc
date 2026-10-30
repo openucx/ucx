@@ -388,10 +388,9 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_publish_chunks)
     EXPECT_EQ((CUdeviceptr)alloc.ptr(), range.d_bptr);
     EXPECT_EQ(alloc.size(), range.b_len);
     EXPECT_EQ(UCT_CUDA_IPC_VMM_MULTI_VERSION, range.info.version);
+    EXPECT_EQ(UCT_CUDA_IPC_VMM_MULTI_HANDLE_FABRIC, range.info.handle_type);
     EXPECT_EQ(0u, range.info.first_chunk);
     EXPECT_EQ(num_chunks, range.info.num_chunks);
-    EXPECT_EQ(sizeof(uct_cuda_ipc_vmm_chunk_desc_t),
-              range.info.chunk_desc_size);
     EXPECT_EQ(meta->alloc_size, range.info.alloc_size);
     EXPECT_EQ(num_chunks, meta->num_chunks);
     EXPECT_NE(0ull, meta->buffer_id);

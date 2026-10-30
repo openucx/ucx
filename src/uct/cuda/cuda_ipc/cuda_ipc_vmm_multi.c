@@ -405,16 +405,15 @@ ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
     info       = &range_p->info;
 
     memset(info, 0, sizeof(*info));
-    info->version         = UCT_CUDA_IPC_VMM_MULTI_VERSION;
-    info->first_chunk     = first;
-    info->num_chunks      = (last - first) + 1;
-    info->info_size       = sizeof(*info);
-    info->chunk_desc_size = sizeof(*meta->chunks);
-    info->alloc_size      = meta->alloc_size;
-    range_p->d_bptr       = meta->chunks[first].d_bptr;
-    range_p->b_len        = (last_chunk->d_bptr + last_chunk->b_len) -
-                            range_p->d_bptr;
-    *meta_p               = meta;
+    info->version     = UCT_CUDA_IPC_VMM_MULTI_VERSION;
+    info->handle_type = UCT_CUDA_IPC_VMM_MULTI_HANDLE_FABRIC;
+    info->first_chunk = first;
+    info->num_chunks  = (last - first) + 1;
+    info->alloc_size  = meta->alloc_size;
+    range_p->d_bptr   = meta->chunks[first].d_bptr;
+    range_p->b_len    = (last_chunk->d_bptr + last_chunk->b_len) -
+                        range_p->d_bptr;
+    *meta_p           = meta;
     return UCS_OK;
 }
 
