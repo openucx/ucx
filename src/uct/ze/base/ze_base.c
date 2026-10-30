@@ -514,6 +514,7 @@ ucs_status_t uct_ze_base_query_devices(uct_md_h md,
         /* CRITICAL: All sub-devices on same device share the same sys_dev */
         /* This enables correct IB affinity for all sub-devices */
         resources[i].sys_device = device->sys_dev;
+        resources[i].ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         ucs_debug("sub-device %d: name=%s sys_dev=%u (device %d, sub-device "
                   "%d/%d)",

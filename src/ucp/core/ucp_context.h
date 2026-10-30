@@ -324,6 +324,7 @@ typedef struct ucp_tl_resource_desc {
                                                    different for different
                                                    transports, e.g. ib0/tcp but
                                                    mlx5_0:1/rc_verbs */
+    ucs_sys_device_t              ctl_device;   /* Controlling system device */
     uint8_t                       flags;        /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 

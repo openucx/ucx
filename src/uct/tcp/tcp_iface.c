@@ -1059,6 +1059,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                           (*entry)->d_name);
         devices[num_devices].type       = UCT_DEVICE_TYPE_NET;
         devices[num_devices].sys_device = sys_dev;
+        devices[num_devices].ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
         ++num_devices;
     }
 
