@@ -521,14 +521,12 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
     uint32_t num_packets           = 0;
     const size_t non_data_wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
                                      sizeof(struct mlx5_wqe_raddr_seg);
-    const size_t data_wqe_size     = non_data_wqe_size +
-                                     sizeof(struct mlx5_wqe_data_seg);
     uct_rc_mlx5_iface_common_t *iface;
     struct mlx5_wqe_raddr_seg *raddr;
     struct mlx5_wqe_data_seg *dptr;
-    size_t wqe_size, i;
+    size_t wqe_size, i, j, group_count, message_length;
     uint8_t fm_ce_se;
-    uint16_t pi, res_count;
+    uint16_t pi, res_count, last_start_pi, last_num_bb;
     uint64_t addr;
     uct_rkey_t rkey;
     void *curr;
@@ -536,16 +534,35 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
     ucs_assert(count > 0);
 
     pi = txwq->sw_pi;
+    last_start_pi = pi;
+    last_num_bb   = 1;
 
     ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
-    ucs_assert(ucs_div_round_up(data_wqe_size, MLX5_SEND_WQE_BB) == 1);
 
     curr = txwq->curr;
 
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < count;) {
+        group_count    = 1;
+        message_length = lengths[i];
+        if ((opcode == MLX5_OPCODE_RDMA_WRITE) && (lengths[i] > 0)) {
+            while ((group_count < UCT_RC_MLX5_RMA_MAX_IOV(0)) &&
+                   (i + group_count < count) &&
+                   (lengths[i + group_count] > 0) &&
+                   (rkeys[i + group_count] == rkeys[i]) &&
+                   (remote_addrs[i + group_count] >= remote_addrs[i]) &&
+                   (remote_addrs[i + group_count] - remote_addrs[i] ==
+                    message_length) &&
+                   (message_length <= UCT_IB_MAX_MESSAGE_SIZE -
+                                      lengths[i + group_count])) {
+                message_length += lengths[i + group_count];
+                ++group_count;
+            }
+        }
+
         fm_ce_se = ((i == 0) ? fence_flag : 0) |
-                   ((i == count - 1) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
+                   ((i + group_count == count) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
         ctrl     = curr;
+        last_start_pi = pi;
 
         addr = remote_addrs[i];
         if (resolve_atomic_rkey) {
@@ -563,32 +580,41 @@ uct_rc_mlx5_base_ep_sgl_zcopy_post(uct_rc_mlx5_base_ep_t *ep,
             wqe_size     = non_data_wqe_size;
             num_packets += 1;
         } else {
-            dptr         = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
-            uct_ib_mlx5_set_data_seg(dptr, buffers[i], lengths[i],
-                                     uct_ib_memh_get_lkey(memhs[i]));
-            wqe_size     = data_wqe_size;
-            num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
+            dptr = (struct mlx5_wqe_data_seg*)(raddr + 1);
+            for (j = 0; j < group_count; ++j) {
+                dptr = uct_ib_mlx5_txwq_wrap_any(txwq, dptr);
+                uct_ib_mlx5_set_data_seg(
+                        dptr, buffers[i + j], lengths[i + j],
+                        uct_ib_memh_get_lkey(memhs[i + j]));
+                ++dptr;
+            }
+            wqe_size     = non_data_wqe_size +
+                           group_count * sizeof(*dptr);
+            num_packets += uct_rc_mlx5_num_packets(txwq, message_length);
         }
 
         uct_ib_mlx5_set_ctrl_seg(ctrl, pi, opcode, 0, txwq->super.qp_num,
                                  fm_ce_se, 0, wqe_size);
 
-        curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
-        curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
-        pi++;
-        total += lengths[i];
+        last_num_bb = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
+        curr        = UCS_PTR_BYTE_OFFSET(ctrl,
+                                          last_num_bb * MLX5_SEND_WQE_BB);
+        curr        = uct_ib_mlx5_txwq_wrap_any(txwq, curr);
+        pi         += last_num_bb;
+        total      += message_length;
+        i          += group_count;
     }
 
-    res_count         = pi - 1 - txwq->prev_sw_pi;
+    res_count         = last_start_pi - txwq->prev_sw_pi;
     txwq->prev_sw_pi += res_count;
     txwq->sw_pi       = pi;
     txwq->curr        = curr;
-    txwq->sig_pi      = txwq->prev_sw_pi;
+    txwq->sig_pi      = last_start_pi;
 
     iface = ucs_derived_of(ep->super.super.super.iface,
                            uct_rc_mlx5_iface_common_t);
     uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
-    uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
+    uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, last_num_bb);
     uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
 
     uct_rc_txqp_add_send_comp_sgl_always(
