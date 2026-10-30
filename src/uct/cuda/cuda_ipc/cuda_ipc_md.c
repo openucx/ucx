@@ -892,9 +892,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
-ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
-                                   void *handle, uint64_t remote_addr,
-                                   void **local_addr_p)
+static ucs_status_t
+uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey, void *handle,
+                      uint64_t remote_addr, void **local_addr_p)
 {
     uct_cuda_ipc_rkey_handle_t *rkey_handle     = handle;
     uct_cuda_ipc_extended_rkey_t *extended_rkey =
