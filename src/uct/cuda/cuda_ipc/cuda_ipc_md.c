@@ -500,7 +500,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 CUdevice cu_dev)
 {
     ucs_status_t status;
-    void *d_mapped;
+    void *mapped_addr;
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
 
@@ -537,10 +537,10 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * Now, we immediately insert into cache to save on calling
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
+        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &mapped_addr,
                                             UCS_LOG_LEVEL_DEBUG);
         if (status == UCS_OK) {
-            rkey_handle->mapped_addr = d_mapped;
+            rkey_handle->mapped_addr = mapped_addr;
         }
 
         *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
@@ -893,21 +893,23 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 }
 
 ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
-                                   void *handle, uint64_t raddr, void **laddr_p)
+                                   void *handle, uint64_t remote_addr,
+                                   void **local_addr_p)
 {
     uct_cuda_ipc_rkey_handle_t *rkey_handle     = handle;
     uct_cuda_ipc_extended_rkey_t *extended_rkey =
             (uct_cuda_ipc_extended_rkey_t*)rkey;
 
     if (rkey_handle->mapped_addr != NULL) {
-        *laddr_p = uct_cuda_ipc_rkey_get_local_address(
-                &extended_rkey->super, raddr, rkey_handle->mapped_addr);
+        *local_addr_p = uct_cuda_ipc_rkey_get_local_addr(
+                &extended_rkey->super, remote_addr, rkey_handle->mapped_addr);
         return UCS_OK;
     }
 
-    return uct_cuda_ipc_get_remote_address(extended_rkey, raddr,
-                                           rkey_handle->cu_dev, laddr_p,
-                                           &rkey_handle->mapped_addr);
+    return uct_cuda_ipc_map_remote_addr(extended_rkey, remote_addr,
+                                        rkey_handle->cu_dev,
+                                        &rkey_handle->mapped_addr,
+                                        local_addr_p);
 }
 
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {
