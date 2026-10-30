@@ -9,6 +9,8 @@
 
 #include "topo.h"
 
+#include <ucs/datastruct/static_bitmap.h>
+
 BEGIN_C_DECLS
 
 /* Possible role of a current device wrt its sibling */
@@ -22,6 +24,13 @@ typedef enum {
     /* Device that could access memory from its sibling */
     UCS_TOPO_SIBLING_ROLE_DEV
 } ucs_topo_sibling_role_t;
+
+
+/**
+ * @ingroup UCS_RESOURCE
+ * Bitmap of system devices.
+ */
+typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT) ucs_sys_device_bitmap_t;
 
 
 typedef struct {
@@ -43,8 +52,10 @@ typedef struct {
     ucs_sys_device_t        sys_dev_aux;
 
     ucs_topo_sibling_role_t sibling_role; /* Role of the current device */
-    /* MEM role: matched DEV. DEV role: one representative matched MEM. */
-    ucs_sys_device_t        sibling_sys_dev;
+    /* Matched siblings: all DEVs for the MEM role, all MEMs for the DEV role.
+     * Several DEVs can share one auxiliary device (e.g. planes of a multiplane
+     * NIC), and several MEMs can sit behind it (e.g. MPS MLOPart aliases). */
+    ucs_sys_device_bitmap_t siblings;
 } ucs_topo_sys_device_info_t;
 
 
