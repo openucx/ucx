@@ -1,0 +1,135 @@
+# Check that every commit a PR adds is covered by a UCF CLA: it must have a
+# verified signature, and its author and committer emails must be listed as
+# individual signers or belong to a corporate signer's email domain.
+# The lists live in a private repo and change only through reviewed PRs.
+# Commits already on master or a release branch were checked when they landed.
+# Findings fail the check; it blocks merging only once marked as required.
+name: CLA
+
+# pull_request_target passes secrets to fork PRs; PR code is never checked out.
+# Always runs the default branch copy of this file, for release branch PRs too.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches: [master, 'v*.*.x']
+
+permissions: {}
+
+jobs:
+  cla:
+    name: CLA
+    runs-on: ubuntu-latest
+    # Forks have no CLA app secrets
+    if: github.repository == 'openucx/ucx'
+    permissions:
+      contents: read
+    env:
+      # Private repo with emails.txt and domains.txt
+      CLA_REPO: ucx_cla
+    steps:
+      - name: Get CLA list token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CLA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ env.CLA_REPO }}
+          permission-contents: read
+
+      - name: Check CLA signers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIST_TOKEN: ${{ steps.app-token.outputs.token }}
+          ORG: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          for f in emails.txt domains.txt; do
+              GH_TOKEN="$LIST_TOKEN" gh api "repos/$ORG/$CLA_REPO/contents/$f" \
+                  -H "Accept: application/vnd.github.raw" > "$f"
+          done
+
+          # One entry per line; # starts a comment
+          read_list() {
+              sed 's/#.*//' "$1" | tr -d '[:blank:]\r' | tr '[:upper:]' '[:lower:]' |
+                  grep -v '^$' || true
+          }
+
+          emails=$(read_list emails.txt)
+          domains=$(read_list domains.txt)
+          # Fail loudly on an empty list, not as missing CLAs
+          if [ -z "$domains" ]; then
+              echo "::error::No domains in $ORG/$CLA_REPO/domains.txt"
+              exit 1
+          fi
+
+          # Commits only, no trees or blobs: PR code is never checked out
+          git init -q repo
+          git -C repo fetch -q --filter=tree:0 --no-tags \
+              "https://github.com/$REPO.git" \
+              "+refs/heads/master:refs/remotes/origin/master" \
+              "+refs/heads/v*:refs/remotes/origin/v*" "$HEAD_SHA"
+          new=$(git -C repo rev-list "$HEAD_SHA" --not --remotes=origin)
+          echo "Checking $(wc -w <<< "$new") new commits"
+
+          # GitHub's web-flow committer signs web UI commits, whose author email
+          # GitHub takes from the user's verified emails
+          declare -A missing=()
+          unsigned=()
+          for sha in $new; do
+              # shellcheck disable=SC2016
+              gh api "repos/$REPO/commits/$sha" --jq '
+                  select(.author.type != "Bot") |
+                  if .commit.verification.verified | not then
+                      "unsigned \(.sha[0:10])"
+                  else
+                      "author \(.sha[0:10]) \(.commit.author.email)",
+                      if .committer.login == "web-flow" or
+                         .commit.committer.email == .commit.author.email then empty
+                      else "committer \(.sha[0:10]) \(.commit.committer.email)" end
+                  end' > commit.txt
+
+              while read -r kind short email; do
+                  if [ "$kind" = "unsigned" ]; then
+                      unsigned+=("$short")
+                      continue
+                  fi
+                  email=${email,,}
+                  if grep -qxF "$email" <<< "$emails" ||
+                     grep -qxF "${email##*@}" <<< "$domains"; then
+                      continue
+                  fi
+                  missing[$email]+=" $short"
+              done < commit.txt
+          done
+
+          if [ ${#missing[@]} -eq 0 ] && [ ${#unsigned[@]} -eq 0 ]; then
+              echo "All commits are covered by a signed UCF CLA" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+          fi
+
+          {
+              echo "### UCF CLA check failed"
+              if [ ${#unsigned[@]} -gt 0 ]; then
+                  echo "- Commits without a verified signature: ${unsigned[*]}."
+                  echo "  Please sign your commits with a GPG or SSH key registered on your GitHub account"
+                  echo "  (git config --global commit.gpgsign true, so merge commits are signed too)."
+              fi
+              if [ ${#missing[@]} -gt 0 ]; then
+                  echo "- No signed CLA on file for these commit emails:"
+                  for email in "${!missing[@]}"; do
+                      echo "  - $email:${missing[$email]}"
+                  done
+                  echo
+                  echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
+                  echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
+                  echo "Commit with the email named on the CLA. Once the CLA is countersigned, a maintainer"
+                  echo "adds that email (or your company's email domain) to the CLA list; then push a new"
+                  echo "commit or ask for a re-run of this check."
+              fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::error::UCF CLA check failed, see the job summary"
+          exit 1
