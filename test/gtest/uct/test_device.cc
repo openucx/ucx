@@ -135,7 +135,8 @@ protected:
         if (has_transport("rc_gda")) {
             unsigned uar_mode = GetParam()->variant;
             ASSERT_LT(uar_mode, ucs_static_array_size(test_device_uar_modes));
-            modify_config("UAR_ALLOC_MODE", test_device_uar_modes[uar_mode]);
+            modify_config("RC_GDA_UAR_ALLOC_MODE",
+                          test_device_uar_modes[uar_mode]);
         }
 
         uct_test::init();
