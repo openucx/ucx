@@ -33,6 +33,9 @@ absent.
   errors are logged consistently and the `CUcontext` is set/popped
   correctly. Direct calls to `cuCtxPushCurrent` outside `base/` are a
   smell.
+- The CUDA driver is initialized lazily through `uct_cuda_driver_init()`,
+  never by calling `cuInit()` from a library constructor: the first
+  `cuInit()` can `dlopen()`, which deadlocks under the loader lock.
 - Memory-type classification of pointers happens through the global
   `ucs_memtype_cache` (`src/ucs/memory/memtype_cache.c`); CUDA modules
   feed it via the `ucm/cuda` event hooks rather than calling

@@ -1698,6 +1698,9 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     uct_ib_mlx5_md_t *ib_mlx5_md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_md_t *ib_md           = &ib_mlx5_md->super;
 
+    /* The cuda components may not have been queried yet */
+    uct_cuda_driver_init();
+
     if (!(uct_gdaki_get_driver_features(ib_md) & UCT_GDAKI_SUPPORTED)) {
         ucs_debug("%s: GDAKI is not supported",
                   uct_ib_device_name(&ib_md->dev));
