@@ -20,6 +20,10 @@
 #if HAVE_CUDA_FABRIC
 
 
+UCS_ARRAY_DECLARE_TYPE(uct_cuda_ipc_vmm_chunk_array_t, uint32_t,
+                       uct_cuda_ipc_vmm_chunk_desc_t);
+
+
 static void
 uct_cuda_ipc_vmm_multi_meta_free_buffer(uct_cuda_ipc_vmm_multi_meta_t *meta)
 {
@@ -43,9 +47,6 @@ void uct_cuda_ipc_vmm_multi_meta_destroy(uct_cuda_ipc_memh_t *memh)
     memh->vmm_multi = NULL;
 }
 
-UCS_ARRAY_DECLARE_TYPE(uct_cuda_ipc_vmm_chunk_array_t, uint32_t,
-                       uct_cuda_ipc_vmm_chunk_desc_t);
-
 static ucs_status_t
 uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
                                        uct_cuda_ipc_vmm_chunk_desc_t **chunks_p,
@@ -53,9 +54,18 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
 {
     uct_cuda_ipc_vmm_chunk_array_t chunks;
     uct_cuda_ipc_vmm_chunk_desc_t *elem;
+    uint64_t allowed_handle_types;
+    unsigned long long buffer_id;
+    CUpointer_attribute attr_type[2];
+    void *attr_data[2];
     CUdeviceptr pos, chunk_base;
     size_t chunk_size;
     ucs_status_t status;
+
+    attr_type[0] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
+    attr_data[0] = &allowed_handle_types;
+    attr_type[1] = CU_POINTER_ATTRIBUTE_BUFFER_ID;
+    attr_data[1] = &buffer_id;
 
     ucs_array_init_dynamic(&chunks);
 
@@ -74,14 +84,29 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
             goto err;
         }
 
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuPointerGetAttributes(ucs_static_array_size(attr_data),
+                                       attr_type, attr_data, chunk_base));
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
+            ucs_debug("VMM chunk 0x%llx does not allow fabric handles",
+                      chunk_base);
+            status = UCS_ERR_UNSUPPORTED;
+            goto err;
+        }
+
         elem = ucs_array_append(&chunks, {
             status = UCS_ERR_NO_MEMORY;
             goto err;
         });
 
         memset(elem, 0, sizeof(*elem));
-        elem->d_bptr = chunk_base;
-        elem->b_len  = chunk_size;
+        elem->d_bptr    = chunk_base;
+        elem->b_len     = chunk_size;
+        elem->buffer_id = buffer_id;
     }
 
     *num_chunks_p = (uint16_t)ucs_array_length(&chunks);
@@ -96,30 +121,8 @@ err:
 static ucs_status_t
 uct_cuda_ipc_vmm_multi_export_chunk(uct_cuda_ipc_vmm_chunk_desc_t *desc)
 {
-    unsigned long long buffer_id;
-    uint64_t allowed_handle_types;
     CUmemGenericAllocationHandle handle;
-    CUpointer_attribute attr_type[2];
-    void *attr_data[2];
     ucs_status_t status;
-
-    attr_type[0] = CU_POINTER_ATTRIBUTE_BUFFER_ID;
-    attr_data[0] = &buffer_id;
-    attr_type[1] = CU_POINTER_ATTRIBUTE_ALLOWED_HANDLE_TYPES;
-    attr_data[1] = &allowed_handle_types;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
-                                   attr_data, desc->d_bptr));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (!(allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC)) {
-        ucs_debug("VMM chunk 0x%llx does not allow fabric handles",
-                  desc->d_bptr);
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
             cuMemRetainAllocationHandle(&handle, (void*)desc->d_bptr));
@@ -130,12 +133,7 @@ uct_cuda_ipc_vmm_multi_export_chunk(uct_cuda_ipc_vmm_chunk_desc_t *desc)
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
             &desc->fabric_handle, handle, CU_MEM_HANDLE_TYPE_FABRIC, 0));
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    desc->buffer_id = buffer_id;
-    return UCS_OK;
+    return status;
 }
 
 static ucs_status_t uct_cuda_ipc_vmm_multi_meta_alloc_buffer(
@@ -322,8 +320,8 @@ uct_cuda_ipc_vmm_multi_export_range(uct_cuda_ipc_vmm_multi_meta_t *meta,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_check_and_push_ctx(meta->chunks[first].d_bptr,
-                                             &cuda_device, &is_ctx_pushed);
+    status = uct_cuda_ipc_check_and_push_ctx(meta->dev_ptr, &cuda_device,
+                                             &is_ctx_pushed);
     if (status != UCS_OK) {
         return status;
     }
@@ -363,8 +361,8 @@ out_pop:
 }
 
 ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
-        uct_cuda_ipc_memh_t *memh, uct_cuda_ipc_lkey_t *key, void *address,
-        size_t length, const uct_cuda_ipc_vmm_multi_meta_t **meta_p,
+        uct_cuda_ipc_memh_t *memh, void *address, size_t length,
+        const uct_cuda_ipc_vmm_multi_meta_t **meta_p,
         uct_cuda_ipc_vmm_multi_range_t *range_p)
 {
     CUdeviceptr start = (CUdeviceptr)address;
@@ -374,11 +372,6 @@ ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
     uct_cuda_ipc_vmm_multi_meta_t *meta;
     unsigned first, last;
     ucs_status_t status;
-
-    /* Contained in the lkey's own allocation, so it cannot span chunks */
-    if (end <= (key->d_bptr + key->b_len)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     ucs_assertv((start >= memh->reg_address) &&
                 (end <= (memh->reg_address + memh->reg_length)),

@@ -80,18 +80,18 @@ void uct_cuda_ipc_vmm_multi_meta_destroy(uct_cuda_ipc_memh_t *memh);
  * request with its slots in the metadata buffer.
  *
  * @param memh     Memory handle registering the range
- * @param key      Local key whose allocation contains @a address
  * @param address  Requested range start
  * @param length   Requested range length
  * @param meta_p   Metadata record used to pack the key
  * @param range_p  Filled with the chunks and slots covering the request
  *
- * @return UCS_OK on success, UCS_ERR_UNSUPPORTED for a single allocation, or
- *         another error status on failure
+ * @return UCS_OK on success, UCS_ERR_UNSUPPORTED if a chunk of the registered
+ *         range does not allow fabric handles, or another error status on
+ *         failure
  */
 ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
-        uct_cuda_ipc_memh_t *memh, uct_cuda_ipc_lkey_t *key, void *address,
-        size_t length, const uct_cuda_ipc_vmm_multi_meta_t **meta_p,
+        uct_cuda_ipc_memh_t *memh, void *address, size_t length,
+        const uct_cuda_ipc_vmm_multi_meta_t **meta_p,
         uct_cuda_ipc_vmm_multi_range_t *range_p);
 
 
