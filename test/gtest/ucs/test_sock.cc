@@ -794,3 +794,46 @@ UCS_TEST_F(test_socket, sockaddr_get_ipstr) {
     saddr->sa_family = AF_UNIX;
     sockaddr_get_ipstr_check(saddr, UCS_ERR_INVALID_PARAM);
 }
+
+
+static std::string socket_bound_device(int fd)
+{
+    char if_name[IFNAMSIZ] = {};
+    socklen_t len          = sizeof(if_name);
+
+    EXPECT_EQ(0, getsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, &len))
+            << strerror(errno);
+    return if_name;
+}
+
+UCS_TEST_F(test_socket, bind_to_device) {
+    struct sockaddr_in sin = {};
+    int fd;
+
+    /* Older kernels require CAP_NET_RAW for SO_BINDTODEVICE */
+    ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd));
+    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, "lo", sizeof("lo")) != 0) {
+        std::string err = strerror(errno);
+        ucs_close_fd(&fd);
+        UCS_TEST_SKIP_R("SO_BINDTODEVICE is not permitted: " + err);
+    }
+    ucs_close_fd(&fd);
+
+    ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd));
+    ASSERT_UCS_OK(ucs_socket_bind_to_device(fd, "lo"));
+    EXPECT_EQ("lo", socket_bound_device(fd));
+    ucs_close_fd(&fd);
+
+    sin.sin_family      = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    ASSERT_UCS_OK(ucs_socket_server_init((struct sockaddr*)&sin, sizeof(sin),
+                                         1, 0, 0, "lo", &fd));
+    EXPECT_EQ("lo", socket_bound_device(fd));
+    ucs_close_fd(&fd);
+
+    ASSERT_UCS_OK(ucs_socket_server_init((struct sockaddr*)&sin, sizeof(sin),
+                                         1, 0, 0, NULL, &fd));
+    EXPECT_EQ("", socket_bound_device(fd));
+    ucs_close_fd(&fd);
+}

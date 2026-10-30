@@ -612,10 +612,35 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 
         status = ucs_socket_server_init((struct sockaddr*)&bind_addr, addr_len,
                                         ucs_socket_max_conn(), retry, 0,
+                                        uct_tcp_iface_vrf_name(iface),
                                         &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
     return status;
+}
+
+static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
+{
+    int vrf_index;
+
+    iface->config.vrf_name[0] = '\0';
+
+    /* Addresses of a VRF slave can be used only by sockets bound to the VRF,
+     * so bind all sockets of the interface to the VRF device */
+    vrf_index = uct_tcp_netif_vrf_index(iface->if_name);
+    if (vrf_index == -1) {
+        return;
+    }
+
+    if (if_indextoname(vrf_index, iface->config.vrf_name) == NULL) {
+        ucs_diag("tcp_iface %p: failed to get name of VRF device index %d: %m",
+                 iface, vrf_index);
+        iface->config.vrf_name[0] = '\0';
+        return;
+    }
+
+    ucs_debug("tcp_iface %p: %s is enslaved to VRF %s", iface, iface->if_name,
+              iface->config.vrf_name);
 }
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
@@ -852,6 +877,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
+    uct_tcp_iface_vrf_init(self);
+
     ucs_list_head_init(&self->ep_list);
     ucs_conn_match_init(&self->conn_match_ctx, self->config.sockaddr_len,
                         UCT_TCP_CM_CONN_SN_MAX, &uct_tcp_cm_conn_match_ops);
@@ -986,7 +1013,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     uct_tl_device_resource_t *devices, *tmp;
     struct dirent **entries, **entry;
     unsigned num_devices;
-    int is_active, i, n;
+    int is_active, vrf_index, i, n;
     ucs_status_t status;
     const char *sysfs_path;
     char *path_buffer;
@@ -1035,6 +1062,21 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             uct_tcp_is_bridge((*entry)->d_name)) {
             ucs_debug("filtered out bridge device %s", (*entry)->d_name);
             continue;
+        }
+
+        vrf_index = uct_tcp_netif_vrf_index((*entry)->d_name);
+        if (vrf_index != -1) {
+            if (!tcp_md->config.vrf_enable) {
+                ucs_debug("filtered out VRF slave device %s",
+                          (*entry)->d_name);
+                continue;
+            }
+
+            if (!uct_tcp_netif_vrf_bind_allowed(vrf_index)) {
+                ucs_diag("filtered out VRF slave device %s: not permitted to "
+                         "bind sockets to its VRF", (*entry)->d_name);
+                continue;
+            }
         }
 
         tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),

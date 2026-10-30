@@ -241,6 +241,12 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
+ucs_status_t ucs_socket_bind_to_device(int fd, const char *if_name)
+{
+    return ucs_socket_setopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name,
+                             strlen(if_name) + 1);
+}
+
 ucs_status_t ucs_socket_getopt(int fd, int level, int optname,
                                void *optval, socklen_t optlen)
 {
@@ -462,7 +468,8 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
                                     int backlog, int silent_bind,
-                                    int reuse_addr, int *listen_fd)
+                                    int reuse_addr, const char *bind_if_name,
+                                    int *listen_fd)
 {
     int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -486,6 +493,13 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
     if (reuse_addr) {
         status = ucs_socket_setopt(fd, SOL_SOCKET, SO_REUSEADDR,
                                    &so_reuse_optval, sizeof(so_reuse_optval));
+        if (status != UCS_OK) {
+            goto err_close_socket;
+        }
+    }
+
+    if (bind_if_name != NULL) {
+        status = ucs_socket_bind_to_device(fd, bind_if_name);
         if (status != UCS_OK) {
             goto err_close_socket;
         }

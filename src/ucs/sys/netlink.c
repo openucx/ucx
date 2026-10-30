@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <linux/rtnetlink.h>
 #include <pthread.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -44,6 +45,11 @@ UCS_ARRAY_DECLARE_TYPE(ucs_netlink_rt_rules_t, unsigned,
 KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
            kh_int_hash_func, kh_int_hash_equal);
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
+
+/* Network interface index -> index of the VRF device it is enslaved to */
+KHASH_INIT(ucs_netlink_vrf_cache, khint32_t, int, 1, kh_int_hash_func,
+           kh_int_hash_equal);
+static khash_t(ucs_netlink_vrf_cache) ucs_netlink_vrf_master_cache;
 
 static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
 {
@@ -78,13 +84,20 @@ err:
 
 static ucs_status_t
 ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *done_p)
 {
     ucs_status_t status        = UCS_INPROGRESS;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
 
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           !ucs_netlink_is_msg_done(nlh)) {
+    *done_p = 0;
+
+    /* NLMSG_DONE may follow other messages of a dump in the same datagram */
+    for (; NLMSG_OK(nlh, msg_len); nlh = NLMSG_NEXT(nlh, msg_len)) {
+        if (ucs_netlink_is_msg_done(nlh)) {
+            *done_p = 1;
+            break;
+        }
+
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
             ucs_error("received error response from netlink err=%d: %s\n",
@@ -92,8 +105,9 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, arg);
-        nlh    = NLMSG_NEXT(nlh, msg_len);
+        if (status == UCS_INPROGRESS) {
+            status = parse_cb(nlh, arg);
+        }
     }
 
     return UCS_OK;
@@ -163,8 +177,8 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
             goto out;
         }
 
-        status   = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
-        msg_done = ucs_netlink_is_msg_done((const struct nlmsghdr *)recv_msg);
+        status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg,
+                                       &msg_done);
         ucs_free(recv_msg);
     } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
 
@@ -319,14 +333,24 @@ static void ucs_netlink_lookup_route(ucs_netlink_route_info_t *info)
                                                           iface_rules);
 }
 
-static int ucs_netlink_max_netmask_len(const struct sockaddr *sa_remote)
+static int
+ucs_netlink_max_netmask_len(int if_index, const struct sockaddr *sa_remote)
 {
+    int vrf_index       = ucs_netlink_get_vrf_master_index(if_index);
     int max_netmask_len = -1;
     ucs_netlink_rt_rules_t iface_rules;
+    khint32_t curr_if_index;
 
-    kh_foreach_value(&ucs_netlink_routing_table_cache, iface_rules, {
-        int curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
-                                                                 &iface_rules);
+    kh_foreach(&ucs_netlink_routing_table_cache, curr_if_index, iface_rules, {
+        int curr_netmask_len;
+
+        /* Longest prefix match is done only within one routing domain */
+        if (ucs_netlink_get_vrf_master_index(curr_if_index) != vrf_index) {
+            continue;
+        }
+
+        curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
+                                                             &iface_rules);
         if (curr_netmask_len > max_netmask_len) {
             max_netmask_len = curr_netmask_len;
         }
@@ -394,5 +418,79 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
     /* Accept the route if it is the best match. In relaxed mode, this check is
      * reached only for a default route, so the default is accepted only when
      * no interface has a more specific route. */
-    return (ucs_netlink_max_netmask_len(sa_remote) == netmask_len);
+    return (ucs_netlink_max_netmask_len(if_index, sa_remote) == netmask_len);
+}
+
+static ucs_status_t
+ucs_netlink_parse_vrf_master_cb(const struct nlmsghdr *nlh, void *arg)
+{
+    const struct ifinfomsg *ifi_msg = NLMSG_DATA(nlh);
+    int master_index                = -1;
+    int is_vrf_slave                = 0;
+    const struct rtattr *rta, *info_rta;
+    int len, info_len, khret;
+    khiter_t iter;
+
+    if (nlh->nlmsg_type != RTM_NEWLINK) {
+        return UCS_INPROGRESS;
+    }
+
+    len = IFLA_PAYLOAD(nlh);
+    for (rta = IFLA_RTA(ifi_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if (rta->rta_type == IFLA_MASTER) {
+            master_index = *(const int*)RTA_DATA(rta);
+        } else if (rta->rta_type == IFLA_LINKINFO) {
+            info_len = RTA_PAYLOAD(rta);
+            for (info_rta = RTA_DATA(rta); RTA_OK(info_rta, info_len);
+                 info_rta = RTA_NEXT(info_rta, info_len)) {
+                if ((info_rta->rta_type == IFLA_INFO_SLAVE_KIND) &&
+                    (RTA_PAYLOAD(info_rta) == sizeof("vrf")) &&
+                    !memcmp(RTA_DATA(info_rta), "vrf", sizeof("vrf"))) {
+                    is_vrf_slave = 1;
+                }
+            }
+        }
+    }
+
+    if (!is_vrf_slave || (master_index == -1)) {
+        return UCS_INPROGRESS;
+    }
+
+    iter = kh_put(ucs_netlink_vrf_cache, &ucs_netlink_vrf_master_cache,
+                  ifi_msg->ifi_index, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to put net iface index (%d) in the VRF cache",
+                  ifi_msg->ifi_index);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    kh_val(&ucs_netlink_vrf_master_cache, iter) = master_index;
+    return UCS_INPROGRESS;
+}
+
+static void ucs_netlink_init_vrf_master_cache(void)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    struct ifinfomsg ifi_msg         = {.ifi_family = AF_UNSPEC};
+
+    UCS_INIT_ONCE(&init_once) {
+        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, NLM_F_DUMP,
+                                 &ifi_msg, sizeof(ifi_msg),
+                                 ucs_netlink_parse_vrf_master_cb, NULL);
+    }
+}
+
+int ucs_netlink_get_vrf_master_index(int if_index)
+{
+    khiter_t iter;
+
+    ucs_netlink_init_vrf_master_cache();
+
+    iter = kh_get(ucs_netlink_vrf_cache, &ucs_netlink_vrf_master_cache,
+                  if_index);
+    if (iter == kh_end(&ucs_netlink_vrf_master_cache)) {
+        return -1;
+    }
+
+    return kh_val(&ucs_netlink_vrf_master_cache, iter);
 }

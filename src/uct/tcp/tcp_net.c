@@ -11,6 +11,7 @@
 
 #include "tcp.h"
 
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/string.h>
 #include <linux/sockios.h>
 #include <linux/types.h>
@@ -139,4 +140,36 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
 out:
     fclose(f);
     return UCS_OK;
+}
+
+int uct_tcp_netif_vrf_index(const char *if_name)
+{
+    unsigned if_index = if_nametoindex(if_name);
+
+    if (if_index == 0) {
+        return -1;
+    }
+
+    return ucs_netlink_get_vrf_master_index(if_index);
+}
+
+int uct_tcp_netif_vrf_bind_allowed(int vrf_index)
+{
+    char vrf_name[IFNAMSIZ];
+    int fd, ret;
+
+    if (if_indextoname(vrf_index, vrf_name) == NULL) {
+        return 0;
+    }
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return 0;
+    }
+
+    /* Binding to a VRF requires CAP_NET_RAW on kernels older than 5.7 */
+    ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, vrf_name,
+                     strlen(vrf_name) + 1);
+    ucs_close_fd(&fd);
+    return (ret == 0);
 }

@@ -6,9 +6,12 @@
 #include <common/test.h>
 #include <uct/uct_test.h>
 
+#include <set>
+
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/tcp/tcp.h>
+#include <ucs/sys/netlink.h>
 }
 
 class test_uct_tcp : public uct_test {
@@ -189,6 +192,14 @@ private:
         status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, 0, &fd);
         ASSERT_UCS_OK(status);
 
+        // Addresses in a VRF are reachable only from sockets bound to the VRF
+        const char *vrf_name = uct_tcp_iface_vrf_name(
+                (uct_tcp_iface_t*)to.iface());
+        if (vrf_name != NULL) {
+            status = ucs_socket_bind_to_device(fd, vrf_name);
+            ASSERT_UCS_OK(status);
+        }
+
         status = ucs_socket_connect(fd, (struct sockaddr*)&dest_addr);
         ASSERT_UCS_OK(status);
 
@@ -231,6 +242,41 @@ private:
     }
 
 protected:
+    void query_devices(const char *vrf_enable, std::set<std::string> &devices)
+    {
+        uct_md_config_t *md_config;
+        uct_tl_resource_desc_t *resources;
+        unsigned num_resources;
+        uct_md_h md;
+
+        ASSERT_UCS_OK(uct_md_config_read(GetParam()->component, NULL, NULL,
+                                         &md_config));
+        ucs_status_t status = uct_config_modify(md_config, "TCP_VRF_ENABLE",
+                                                vrf_enable);
+        if (status == UCS_OK) {
+            status = uct_md_open(GetParam()->component,
+                                 GetParam()->md_name.c_str(), md_config, &md);
+        }
+        uct_config_release(md_config);
+        ASSERT_UCS_OK(status);
+
+        status = uct_md_query_tl_resources(md, &resources, &num_resources);
+        if (status == UCS_OK) {
+            for (unsigned i = 0; i < num_resources; ++i) {
+                devices.insert(resources[i].dev_name);
+            }
+            uct_release_tl_resource_list(resources);
+        }
+        uct_md_close(md);
+        ASSERT_UCS_OK(status);
+    }
+
+    static int vrf_master_index(const std::string &dev_name)
+    {
+        return ucs_netlink_get_vrf_master_index(
+                if_nametoindex(dev_name.c_str()));
+    }
+
     uct_tcp_iface *m_tcp_iface;
     entity        *m_ent;
 };
@@ -308,6 +354,46 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
     EXPECT_EQ(sizeof(uct_tcp_iface_addr_t), iface_attr.iface_addr_len);
     EXPECT_EQ(sizeof(uct_tcp_ep_addr_t), iface_attr.ep_addr_len);
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_enable)
+{
+    std::set<std::string> devices, vrf_devices;
+
+    query_devices("n", devices);
+    query_devices("y", vrf_devices);
+
+    // VRF slaves are reported only when VRF_ENABLE is set
+    for (const auto &dev_name : devices) {
+        EXPECT_EQ(-1, vrf_master_index(dev_name)) << dev_name;
+        EXPECT_EQ(1u, vrf_devices.count(dev_name)) << dev_name;
+    }
+
+    for (const auto &dev_name : vrf_devices) {
+        if (devices.count(dev_name) == 0) {
+            EXPECT_NE(-1, vrf_master_index(dev_name)) << dev_name;
+            UCS_TEST_MESSAGE << dev_name << " is reported only with VRF_ENABLE";
+        }
+    }
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_bind_to_device)
+{
+    const char *iface_vrf_name   = uct_tcp_iface_vrf_name(m_tcp_iface);
+    int vrf_index                = vrf_master_index(m_tcp_iface->if_name);
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    char vrf_name[IFNAMSIZ]      = {};
+
+    if (vrf_index != -1) {
+        ASSERT_NE(nullptr, if_indextoname(vrf_index, vrf_name));
+    }
+    EXPECT_STREQ(vrf_name, (iface_vrf_name != NULL) ? iface_vrf_name : "");
+
+    // The listener must be bound to the VRF device, if any
+    ASSERT_EQ(0, getsockopt(m_tcp_iface->listen_fd, SOL_SOCKET,
+                            SO_BINDTODEVICE, bound_if_name, &len));
+    EXPECT_STREQ(vrf_name, bound_if_name);
 }
 
 
