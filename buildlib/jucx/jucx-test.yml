@@ -6,6 +6,9 @@ parameters:
 jobs:
   - job: jucx_test_${{ parameters.arch }}
     displayName: JUCX Test ${{ parameters.arch }}
+    ${{ if eq(parameters.name, 'gpu') }}:
+      variables:
+        UCX_CI_GPU_JOB: yes
     workspace:
       clean: all
 
