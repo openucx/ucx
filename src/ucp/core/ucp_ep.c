@@ -3136,14 +3136,14 @@ ucp_ep_tf_purge_lane(ucp_ep_h ep, ucp_lane_index_t lane, ucp_ep_lane_tf_t *tf)
     uct_ep_outstanding_purge_params_t params;
     ucs_status_t status;
 
+    ucs_assert(tf->rx_token != NULL);
+
     params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
-                        UCT_EP_OUTSTANDING_FIELD_ARG;
+                        UCT_EP_OUTSTANDING_FIELD_ARG |
+                        UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
     params.cb         = ucp_ep_tf_outstanding_purge_cb;
     params.arg        = ep;
-    if (tf->rx_token != NULL) {
-        params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
-        params.rx_token    = tf->rx_token;
-    }
+    params.rx_token   = tf->rx_token;
 
     status = uct_ep_outstanding_purge(tf->uct_ep, &params);
     if (status != UCS_OK) {
@@ -3762,6 +3762,7 @@ out:
 
 ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 {
+    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ucp_ep);
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
@@ -3772,8 +3773,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
 
         if ((ucp_ep_config(ucp_ep)->key.lanes[lane].lane_types &
              UCS_BIT(UCP_LANE_TYPE_FAILED)) &&
-            (ucp_ep_recovery_arg(ucp_ep) != NULL) &&
-            (ucp_ep_recovery_arg(ucp_ep)->tf[lane].uct_ep == uct_ep)) {
+            (arg != NULL) && (arg->tf[lane].uct_ep == uct_ep)) {
             ucs_debug("ep %p: lookup held lane %d for uct_ep %p", ucp_ep, lane,
                       uct_ep);
             return lane;
