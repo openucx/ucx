@@ -20,6 +20,7 @@ typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
+    UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM_MULTI, /* Multi-chunk VMM memory */
 } uct_cuda_ipc_key_handle_t;
 
 
@@ -63,7 +64,10 @@ typedef struct uct_cuda_ipc_md_handle {
         } posix_fd;
     } handle;
 #if HAVE_CUDA_FABRIC
-    CUmemPoolPtrExportData    ptr;
+    union {
+        CUmemPoolPtrExportData        ptr;
+        uct_cuda_ipc_vmm_multi_info_t vmm_multi;
+    };
     CUmemoryPool              pool;
 #endif
     unsigned long long        buffer_id;
