@@ -83,7 +83,7 @@ UCS_TEST_F(test_musa_copy_md, reject_managed_memory_registration)
     ucs_status_t status;
     musaError_t error;
 
-    error = musaMallocManaged(&address, 4096, 0);
+    error = musaMallocManaged(&address, 4096, musaMemAttachGlobal);
     if (error != musaSuccess) {
         UCS_TEST_SKIP_R(std::string("MUSA managed allocation is unavailable: ") +
                         musaGetErrorString(error));
