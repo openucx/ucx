@@ -31,7 +31,7 @@ UCM_DEFINE_REPLACE_DLSYM_FUNC(musaFree, musaError_t, musaErrorUnknown, void *)
 
 static void
 ucm_dispatch_musa_mem_type_event(ucm_event_type_t event_type, void *address,
-                                 size_t length)
+                                 size_t length, ucs_memory_type_t mem_type)
 {
     ucm_event_t event;
 
@@ -41,7 +41,7 @@ ucm_dispatch_musa_mem_type_event(ucm_event_type_t event_type, void *address,
 
     event.mem_type.address   = address;
     event.mem_type.size      = length;
-    event.mem_type.mem_type  = UCS_MEMORY_TYPE_MUSA;
+    event.mem_type.mem_type  = mem_type;
     event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
     event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
     ucm_event_dispatch(event_type, &event);
@@ -69,7 +69,7 @@ static musaError_t ucm_musaMalloc(void **address, size_t size)
     status = ucm_orig_musaMalloc(address, size);
     if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
         ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
-                                         size);
+                                         size, UCS_MEMORY_TYPE_LAST);
     }
     ucm_event_leave();
     return status;
@@ -82,7 +82,8 @@ static musaError_t ucm_musaFree(void *address)
 
     ucm_event_enter();
     length = ucm_musa_mem_size(address);
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, address, length);
+    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, address, length,
+                                     UCS_MEMORY_TYPE_MUSA);
     status = ucm_orig_musaFree(address);
     ucm_event_leave();
     return status;

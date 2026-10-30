@@ -86,7 +86,7 @@ UCS_TEST_F(musa_hooks, test_musaMalloc_musaFree)
     ASSERT_EQ(musaSuccess, musaMalloc(&ptr, 64));
     EXPECT_EQ(ptr, musa_alloc_event.mem_type.address);
     EXPECT_EQ(64ul, musa_alloc_event.mem_type.size);
-    EXPECT_EQ(UCS_MEMORY_TYPE_MUSA, musa_alloc_event.mem_type.mem_type);
+    EXPECT_EQ(UCS_MEMORY_TYPE_LAST, musa_alloc_event.mem_type.mem_type);
     EXPECT_EQ(UCS_MEM_FLAG_REGISTRABLE, musa_alloc_event.mem_type.mem_flags);
 
     ASSERT_EQ(musaSuccess, musaFree(ptr));
