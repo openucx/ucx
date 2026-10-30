@@ -102,15 +102,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_qp_cleanup_notify(uct_rc_verbs_iface_t *iface,
                                      uint32_t qp_num)
 {
-    uct_ib_async_event_t event;
-
     ucs_assertv(iface->srq == NULL,
                 "software LAST_WQE is not allowed for SRQ QP 0x%x", qp_num);
-
-    event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
-    event.qp_num     = qp_num;
-    uct_ib_device_async_event_dispatch(uct_ib_iface_device(&iface->super.super),
-                                       &event);
+    uct_rc_iface_qp_cleanup_ready(&iface->super, qp_num);
 }
 
 /* Account for a receive WR flush completion after its QP was removed from the

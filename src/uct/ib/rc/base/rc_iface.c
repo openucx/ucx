@@ -751,6 +751,18 @@ err:
     return status;
 }
 
+void uct_rc_iface_qp_cleanup_ready(uct_rc_iface_t *iface, uint32_t qp_num)
+{
+    uct_ib_async_event_t event;
+
+    /* TODO: signal the cleanup context directly instead of using the
+     * hardware LAST_WQE event. */
+    event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
+    event.qp_num     = qp_num;
+    uct_ib_device_async_event_dispatch(uct_ib_iface_device(&iface->super),
+                                       &event);
+}
+
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
 {
     uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx = arg;

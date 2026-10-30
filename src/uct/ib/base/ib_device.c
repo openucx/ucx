@@ -418,7 +418,12 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
+        event.qp_num = ibevent.element.qp->qp_num;
+        break;
     case IBV_EVENT_QP_LAST_WQE_REACHED:
+        ucs_assertv(ibevent.element.qp->srq != NULL,
+                    "LAST_WQE on QP 0x%x without SRQ",
+                    ibevent.element.qp->qp_num);
         event.qp_num = ibevent.element.qp->qp_num;
         break;
     case IBV_EVENT_SRQ_ERR:
