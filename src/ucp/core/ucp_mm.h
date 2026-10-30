@@ -117,6 +117,7 @@ typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h        worker;
     ucs_memory_type_t   mem_type;
     ucs_sys_device_t    sys_dev;
+    uint8_t             pool;       /* UCP_WORKER_RNDV_FRAG_POOL_* */
 } ucp_rndv_mpool_priv_t;
 
 

@@ -182,6 +182,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_sockaddr.cc \
 	ucp/ucp_test.cc \
 	ucp/ucp_datatype.cc \
+	ucp/rndv_frag_mpools.cc \
 	\
 	ucs/test_algorithm.cc \
 	ucs/test_arbiter.cc \
