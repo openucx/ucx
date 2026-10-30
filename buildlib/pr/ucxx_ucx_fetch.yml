@@ -1,0 +1,16 @@
+# Steps: fetch the PR-built UCX artifact (published by the UCXX_ucx stage)
+# and stage it at /tmp/ucx-pr, where the ucxx build/test scripts expect it.
+steps:
+  - bash: echo "##vso[task.setvariable variable=UCX_PR_SLICE]$(uname -m)_cuda${RAPIDS_CUDA_VERSION%%.*}"
+    displayName: Resolve UCX (PR) artifact slice
+  - task: DownloadBuildArtifacts@1
+    displayName: Fetch UCX (PR) artifact
+    inputs:
+      buildType: current
+      artifactName: ucx-pr-$(UCX_PR_SLICE)
+      downloadPath: $(System.DefaultWorkingDirectory)/_dl_ucx_pr
+  - bash: |
+      rm -rf /tmp/ucx-pr
+      tar -C /tmp -xzf "$(System.DefaultWorkingDirectory)/_dl_ucx_pr/ucx-pr-$(UCX_PR_SLICE)/ucx-pr.tar.gz"
+      /tmp/ucx-pr/bin/ucx_info -v | head -3
+    displayName: Stage UCX (PR)
