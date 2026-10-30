@@ -79,6 +79,14 @@ uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
 
     packed->vaddr   = (uint64_t) mem_hndl->vaddr;
     packed->dev_ptr = mem_hndl->dev_ptr;
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* Detect VMM from the actual user address (always in-mapping) so the rkey
+     * flag is authoritative and independent of a stale/merged cached region;
+     * the short path can then trust it without a per-op registry lookup. */
+    packed->is_vmm = uct_rocm_base_vmm_range_overlaps(address, length);
+#else
+    packed->is_vmm = 0;
+#endif
 
     return UCS_OK;
 }
@@ -99,6 +107,7 @@ uct_rocm_copy_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 
     key->vaddr   = packed->vaddr;
     key->dev_ptr = packed->dev_ptr;
+    key->is_vmm  = packed->is_vmm;
 
     *handle_p = NULL;
     *rkey_p   = (uintptr_t)key;
@@ -133,6 +142,7 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         int pg_align_addr, uct_rocm_copy_mem_t *mem_hndl)
 {
     void *dev_addr = NULL;
+    int is_vmm     = 0;
     hsa_status_t status;
     hsa_amd_pointer_type_t mem_type;
 
@@ -145,9 +155,16 @@ static ucs_status_t uct_rocm_copy_mem_reg_internal(
         return UCS_ERR_IO_ERROR;
     }
 
-    if (mem_type == HSA_EXT_POINTER_TYPE_HSA) {
-        /* This covers device memory and memory allocated
-           with hipHostMalloc */
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* rcache region start may be outside the mapping; registry overlap catches VMM. */
+    is_vmm = (mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM) ||
+             uct_rocm_base_vmm_range_overlaps(address, length);
+#endif
+
+    if ((mem_type == HSA_EXT_POINTER_TYPE_HSA) || is_vmm) {
+        /* This covers device memory, hipHostMalloc, and VMM-mapped memory.
+         * VMM memory is already device-accessible; hsa_amd_memory_lock hangs
+         * on it. */
         dev_addr = address;
     } else {
         if (pg_align_addr) {

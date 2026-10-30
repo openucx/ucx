@@ -36,6 +36,29 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size, void **base_ptr,
                                         hsa_amd_pointer_type_t *hsa_mem_type,
                                         hsa_agent_t *agent,
                                         hsa_device_type_t *dev_type);
+
+/* True for GPU-accessible HSA pointer types: pool (HSA) and VMM-mapped (HSA_VMEM). */
+static UCS_F_ALWAYS_INLINE int
+uct_rocm_base_is_gpu_hsa_mem_type(hsa_amd_pointer_type_t hsa_mem_type)
+{
+    return (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA)
+#ifdef HAVE_ROCM_VMM_TYPE
+           || (hsa_mem_type == HSA_EXT_POINTER_TYPE_HSA_VMEM)
+#endif
+        ;
+}
+
+#ifdef HAVE_ROCM_VMM_TYPE
+/* Resolve a VMM pointer to its exact map base/size and stable reg_id (may be NULL). */
+ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
+                                           size_t *size, uint64_t *reg_id);
+
+/* Grant RW access to VMM mapping [va, va+size) for all local GPU agents. */
+hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size);
+
+/* True if [addr, addr+length) overlaps any registered VMM mapping. */
+int uct_rocm_base_vmm_range_overlaps(const void *addr, size_t length);
+#endif
 ucs_status_t uct_rocm_base_get_last_device_pool(hsa_amd_memory_pool_t *pool);
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
