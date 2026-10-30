@@ -41,7 +41,7 @@ typedef struct {
     uint8_t  reserved[2];
     uint16_t first_chunk;
     uint16_t num_chunks;
-    size_t   alloc_size;
+    size_t   meta_size;
 } uct_cuda_ipc_vmm_multi_info_t;
 
 

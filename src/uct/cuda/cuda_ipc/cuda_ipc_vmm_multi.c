@@ -87,6 +87,16 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
             goto err;
         }
 
+        /* Some drivers report a zero base for host-located allocations */
+        if ((pos < chunk_base) || (pos >= (chunk_base + chunk_size))) {
+            ucs_debug("VMM region 0x%llx..0x%llx: allocation range "
+                      "0x%llx..0x%llx does not contain 0x%llx", va_base,
+                      va_base + va_len, chunk_base, chunk_base + chunk_size,
+                      pos);
+            status = UCS_ERR_UNSUPPORTED;
+            goto err;
+        }
+
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuPointerGetAttributes(ucs_static_array_size(attr_data),
                                        attr_type, attr_data, chunk_base));
@@ -405,7 +415,7 @@ ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
     info->handle_type = UCT_CUDA_IPC_VMM_MULTI_HANDLE_FABRIC;
     info->first_chunk = first;
     info->num_chunks  = (last - first) + 1;
-    info->alloc_size  = meta->alloc_size;
+    info->meta_size   = meta->alloc_size;
     range_p->d_bptr   = meta->chunks[first].d_bptr;
     range_p->b_len    = (last_chunk->d_bptr + last_chunk->b_len) -
                         range_p->d_bptr;
