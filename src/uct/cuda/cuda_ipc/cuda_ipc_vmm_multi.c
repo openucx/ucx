@@ -78,9 +78,12 @@ uct_cuda_ipc_vmm_multi_discover_chunks(CUdeviceptr va_base, size_t va_len,
             goto err;
         }
 
-        status = UCT_CUDADRV_FUNC_LOG_ERR(
+        status = UCT_CUDADRV_FUNC_LOG_DEBUG(
                 cuMemGetAddressRange(&chunk_base, &chunk_size, pos));
         if (status != UCS_OK) {
+            ucs_debug("VMM region 0x%llx..0x%llx is not mapped at 0x%llx",
+                      va_base, va_base + va_len, pos);
+            status = UCS_ERR_UNSUPPORTED;
             goto err;
         }
 

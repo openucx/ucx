@@ -85,9 +85,9 @@ void uct_cuda_ipc_vmm_multi_meta_destroy(uct_cuda_ipc_memh_t *memh);
  * @param meta_p   Metadata record used to pack the key
  * @param range_p  Filled with the chunks and slots covering the request
  *
- * @return UCS_OK on success, UCS_ERR_UNSUPPORTED if a chunk of the registered
- *         range does not allow fabric handles, or another error status on
- *         failure
+ * @return UCS_OK on success, UCS_ERR_UNSUPPORTED if the registered range is not
+ *         fully mapped or a chunk of it does not allow fabric handles, or
+ *         another error status on failure
  */
 ucs_status_t uct_cuda_ipc_mkey_pack_vmm_multi_chunk(
         uct_cuda_ipc_memh_t *memh, void *address, size_t length,

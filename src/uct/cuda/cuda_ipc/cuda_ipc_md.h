@@ -160,8 +160,9 @@ typedef struct {
     ucs_list_link_t list;
 #if HAVE_CUDA_FABRIC
     CUdeviceptr     reg_address; /* Registered range start */
-    size_t          reg_length; /* Registered range length */
-    uct_cuda_ipc_vmm_multi_meta_t *vmm_multi; /* Multi-chunk VMM metadata */
+    size_t          reg_length;  /* Registered range length */
+    /* Multi-chunk VMM metadata */
+    uct_cuda_ipc_vmm_multi_meta_t *vmm_multi;
 #endif
 } uct_cuda_ipc_memh_t;
 
