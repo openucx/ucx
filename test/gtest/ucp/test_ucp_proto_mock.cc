@@ -74,6 +74,11 @@ public:
                        sys_device);
     }
 
+    void set_perf_mock(const std::string &dev_name, perf_attr_func_t perf_cb)
+    {
+        m_perf_attrs_funcs.at(dev_name) = std::move(perf_cb);
+    }
+
     void add_mock_iface_on_real_device(
             const std::string &dev_name,
             iface_attr_func_t cb = [](uct_iface_attr_t &iface_attr) {},
@@ -1065,6 +1070,175 @@ UCS_TEST_P(test_ucp_proto_mock_rcx, rma_put_2_lanes,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_bandwidth : public test_ucp_proto_mock {
+public:
+    test_ucp_proto_mock_rcx_bandwidth()
+    {
+        mock_transport("rc_mlx5");
+    }
+
+    virtual void init() override
+    {
+        for (unsigned port = 1; port <= num_ports(); ++port) {
+            add_mock_iface(
+                    "mock:" + std::to_string(port),
+                    [port](uct_iface_attr_t &attr) {
+                        attr.cap.put.max_zcopy   = 64 * UCS_KBYTE;
+                        attr.bandwidth.dedicated = 0;
+                        attr.bandwidth.shared    = (port == 1) ? 28e9 : 24e9;
+                        attr.latency.c           = 500e-9;
+                        attr.latency.m           = 0;
+                    });
+        }
+
+        modify_config("NUM_PPN", "1");
+        modify_config("SINGLE_NET_DEVICE", "n");
+        modify_config("ZCOPY_THRESH", "0");
+        modify_config("MIN_RMA_CHUNK_SIZE", "8k");
+        modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "64k");
+        test_ucp_proto_mock::init();
+    }
+
+protected:
+    virtual unsigned num_ports() const
+    {
+        return 1;
+    }
+
+    void check_put_bandwidth(const std::map<std::string, unsigned> &paths,
+                             double bandwidth,
+                             const std::set<std::string> &shared_ifaces =
+                                     {"mock:1", "mock:2"})
+    {
+        for (unsigned port = 1; port <= num_ports(); ++port) {
+            std::string name = "mock:" + std::to_string(port);
+            bool shared      = shared_ifaces.count(name) != 0;
+            set_perf_mock(name, [shared](uct_perf_attr_t &perf) {
+                perf.flags = shared ?
+                             UCT_PERF_ATTR_FLAGS_SHARED_PATH_BANDWIDTH : 0;
+            });
+        }
+
+        auto index = send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_PUT);
+        const ucp_memory_info_t mem_info = {UCS_MEMORY_TYPE_HOST,
+                                           UCS_SYS_DEVICE_ID_UNKNOWN,
+                                           UCS_MEM_FLAG_REGISTRABLE};
+        ucp_proto_select_param_t param;
+        ucp_proto_select_param_init(&param, UCP_OP_ID_PUT, 0, 0,
+                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
+        auto threshold = ucp_proto_select_lookup(
+                sender().worker(),
+                &ucp_worker_rkey_config(sender().worker(), index)->proto_select,
+                ep_config_index(sender()), index, &param, 64 * UCS_KBYTE);
+        ASSERT_NE(nullptr, threshold);
+        ASSERT_STREQ("put/offload/zcopy", threshold->proto_config.proto->name);
+        ASSERT_NE(nullptr, threshold->proto_config.init_elem);
+        auto segment = ucp_proto_perf_find_segment_lb(
+                threshold->proto_config.init_elem->perf, 4 * UCS_KBYTE);
+        ASSERT_NE(nullptr, segment);
+        ASSERT_LE(ucp_proto_perf_segment_start(segment), 4 * UCS_KBYTE);
+        EXPECT_NEAR(1.0 / bandwidth,
+                    ucp_proto_perf_segment_func(
+                            segment, UCP_PROTO_PERF_FACTOR_LOCAL_TL).m,
+                    1e-4 / bandwidth);
+
+        auto priv = static_cast<const ucp_proto_multi_priv_t*>(
+                threshold->proto_config.priv);
+        std::map<std::string, unsigned> selected_paths;
+        std::set<ucp_rsc_index_t> devices;
+        std::vector<double> lane_bandwidths;
+        double total_bandwidth = 0;
+        double min_bandwidth   = 28e9;
+        const auto &ep_key     = ucp_ep_config(sender().ep())->key;
+        for (unsigned i = 0; i < priv->num_lanes; ++i) {
+            auto rsc_index = ep_key.lanes[priv->lanes[i].super.lane].rsc_index;
+            const auto &rsc = sender().ucph()->tl_rscs[rsc_index];
+            std::string name = rsc.tl_rsc.dev_name;
+            ASSERT_TRUE((name == "mock:1") || (name == "mock:2"));
+            double lane_bandwidth = (name == "mock:1") ? 28e9 : 24e9;
+            ++selected_paths[name];
+            devices.insert(rsc.dev_index);
+            lane_bandwidths.push_back(lane_bandwidth);
+            total_bandwidth += lane_bandwidth;
+            min_bandwidth    = std::min(min_bandwidth, lane_bandwidth);
+        }
+
+        EXPECT_EQ(paths, selected_paths);
+        EXPECT_EQ(paths.size(), devices.size());
+        size_t min_end_offset = 0;
+        for (unsigned i = 0; i < priv->num_lanes; ++i) {
+            EXPECT_NEAR(lane_bandwidths[i] / total_bandwidth,
+                        static_cast<double>(priv->lanes[i].weight) /
+                                UCP_PROTO_MULTI_WEIGHT_MAX,
+                        1.0 / UCP_PROTO_MULTI_WEIGHT_MAX);
+            EXPECT_EQ(static_cast<size_t>(0.5 + 64 * UCS_KBYTE *
+                                                   lane_bandwidths[i] / 28e9),
+                      priv->lanes[i].max_frag);
+            min_end_offset += static_cast<size_t>(8 * UCS_KBYTE *
+                                                  lane_bandwidths[i] /
+                                                  min_bandwidth);
+            EXPECT_EQ(min_end_offset, priv->lanes[i].min_end_offset);
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, shared_paths_2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=2")
+{
+    check_put_bandwidth({{"mock:1", 2}}, 28e9);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, shared_paths_4,
+           "IB_NUM_PATHS?=4", "MAX_RMA_RAILS=4")
+{
+    check_put_bandwidth({{"mock:1", 4}}, 28e9);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, legacy_paths_2,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=2")
+{
+    check_put_bandwidth({{"mock:1", 2}}, 56e9, {});
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth, legacy_paths_4,
+           "IB_NUM_PATHS?=4", "MAX_RMA_RAILS=4")
+{
+    check_put_bandwidth({{"mock:1", 4}}, 112e9, {});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_bandwidth, rcx, "rc_x")
+
+class test_ucp_proto_mock_rcx_bandwidth_multi_port :
+    public test_ucp_proto_mock_rcx_bandwidth {
+protected:
+    virtual unsigned num_ports() const override
+    {
+        return 2;
+    }
+};
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth_multi_port, independent_resources,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2")
+{
+    check_put_bandwidth({{"mock:1", 1}, {"mock:2", 1}}, 52e9);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth_multi_port, asymmetric_paths,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=3")
+{
+    /* Two 28GB/s paths carry 70% of the data on one shared interface. */
+    check_put_bandwidth({{"mock:1", 2}, {"mock:2", 1}}, 40e9);
+}
+
+UCS_TEST_P(test_ucp_proto_mock_rcx_bandwidth_multi_port, mixed_paths,
+           "IB_NUM_PATHS?=2", "MAX_RMA_RAILS=3")
+{
+    check_put_bandwidth({{"mock:1", 2}, {"mock:2", 1}}, 80e9, {"mock:2"});
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_bandwidth_multi_port, rcx,
+                              "rc_x")
 
 class test_ucp_proto_mock_rcx2 : public test_ucp_proto_mock {
 public:
