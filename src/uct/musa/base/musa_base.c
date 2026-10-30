@@ -236,7 +236,7 @@ uct_musa_base_query_pointer(const void *address, size_t length,
 {
     MUdeviceptr allocation_base;
     size_t allocation_length;
-    int current_device;
+    int current_device = -1;
     int have_current_device;
     ucs_status_t status;
 
@@ -305,7 +305,7 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
 {
 #ifdef HAVE_MUSA_DMABUF
     uct_musa_pointer_info_t info;
-    int current_device;
+    int current_device = -1;
     int have_current_device;
     int fd;
     ucs_status_t status;
@@ -494,7 +494,7 @@ ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
     uct_musa_pointer_info_t src_info;
     uct_musa_pointer_info_t dst_info;
     enum musaMemcpyKind kind;
-    int current_device;
+    int current_device = -1;
     int have_current_device;
     ucs_status_t status;
 
