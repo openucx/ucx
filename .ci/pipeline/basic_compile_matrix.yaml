@@ -1,0 +1,48 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+---
+job: ucx-basic-compile
+
+failFast: false
+timeout_minutes: 30
+
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 8000m}"
+  requests: "{memory: 8Gi, cpu: 8000m}"
+
+runs_on_dockers:
+  - { name: "ubuntu2404-doca2.9", url: "harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0", arch: x86_64 }
+
+taskName: '${arch}/${name}'
+
+env:
+  BUILD_ID: "${BUILD_NUMBER}"
+  parallel_jobs: "8"
+
+steps:
+  # Fast compile-only gate; the dispatcher starts the other jobs only when it passes.
+  - name: Basic compile
+    parallel: false
+    timeout: 20
+    run: |
+      set -eEx
+      # Workspace UID differs from container UID; trust it for git.
+      git config --global --add safe.directory '*'
+      source buildlib/tools/common.sh
+      prepare_build
+      "${WORKSPACE}/contrib/configure-devel" \
+          --disable-gtest \
+          --disable-examples \
+          --disable-test-apps \
+          --disable-dependency-tracking \
+          --disable-static \
+          --without-go \
+          --without-java \
+          --without-valgrind \
+          --enable-compiler-opt=0 \
+          CFLAGS="-g0" \
+          CXXFLAGS="-g0"
+      make -j${parallel_jobs}
