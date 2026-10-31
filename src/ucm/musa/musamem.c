@@ -24,10 +24,24 @@
 
 static musaError_t ucm_musaMalloc(void **address, size_t size);
 static musaError_t ucm_musaFree(void *address);
+static musaError_t ucm_musaMallocManaged(void **address, size_t size,
+                                         unsigned flags);
+static musaError_t ucm_musaMallocHost(void **address, size_t size);
+static musaError_t ucm_musaFreeHost(void *address);
+static MUresult ucm_muMemFree(MUdeviceptr address);
+static MUresult ucm_muMemFree_v2(MUdeviceptr address);
 
 UCM_DEFINE_REPLACE_DLSYM_FUNC(musaMalloc, musaError_t, musaErrorUnknown,
                               void **, size_t)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(musaFree, musaError_t, musaErrorUnknown, void *)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(musaMallocManaged, musaError_t, musaErrorUnknown,
+                              void **, size_t, unsigned)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(musaMallocHost, musaError_t, musaErrorUnknown,
+                              void **, size_t)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(musaFreeHost, musaError_t, musaErrorUnknown,
+                              void *)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(muMemFree, MUresult, -1, MUdeviceptr)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(muMemFree_v2, MUresult, -1, MUdeviceptr)
 
 static void
 ucm_dispatch_musa_mem_type_event(ucm_event_type_t event_type, void *address,
@@ -89,9 +103,85 @@ static musaError_t ucm_musaFree(void *address)
     return status;
 }
 
+static musaError_t
+ucm_musaMallocManaged(void **address, size_t size, unsigned flags)
+{
+    musaError_t status;
+
+    ucm_event_enter();
+    status = ucm_orig_musaMallocManaged(address, size, flags);
+    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
+        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
+                                         size, UCS_MEMORY_TYPE_LAST);
+    }
+    ucm_event_leave();
+    return status;
+}
+
+static musaError_t ucm_musaMallocHost(void **address, size_t size)
+{
+    musaError_t status;
+
+    ucm_event_enter();
+    status = ucm_orig_musaMallocHost(address, size);
+    if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
+        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
+                                         size, UCS_MEMORY_TYPE_HOST);
+    }
+    ucm_event_leave();
+    return status;
+}
+
+static musaError_t ucm_musaFreeHost(void *address)
+{
+    musaError_t status;
+
+    ucm_event_enter();
+    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, address, 1,
+                                     UCS_MEMORY_TYPE_HOST);
+    status = ucm_orig_musaFreeHost(address);
+    ucm_event_leave();
+    return status;
+}
+
+static MUresult ucm_muMemFree(MUdeviceptr address)
+{
+    MUresult status;
+
+    ucm_event_enter();
+    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE,
+                                     (void *)(uintptr_t)address,
+                                     ucm_musa_mem_size(
+                                             (void *)(uintptr_t)address),
+                                     UCS_MEMORY_TYPE_MUSA);
+    status = ucm_orig_muMemFree(address);
+    ucm_event_leave();
+    return status;
+}
+
+static MUresult ucm_muMemFree_v2(MUdeviceptr address)
+{
+    MUresult status;
+
+    ucm_event_enter();
+    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE,
+                                     (void *)(uintptr_t)address,
+                                     ucm_musa_mem_size(
+                                             (void *)(uintptr_t)address),
+                                     UCS_MEMORY_TYPE_MUSA);
+    status = ucm_orig_muMemFree_v2(address);
+    ucm_event_leave();
+    return status;
+}
+
 static ucm_reloc_patch_t ucm_musa_patches[] = {
     {UCS_PP_MAKE_STRING(musaMalloc), ucm_override_musaMalloc},
     {UCS_PP_MAKE_STRING(musaFree), ucm_override_musaFree},
+    {UCS_PP_MAKE_STRING(musaMallocManaged), ucm_override_musaMallocManaged},
+    {UCS_PP_MAKE_STRING(musaMallocHost), ucm_override_musaMallocHost},
+    {UCS_PP_MAKE_STRING(musaFreeHost), ucm_override_musaFreeHost},
+    {UCS_PP_MAKE_STRING(muMemFree), ucm_override_muMemFree},
+    {UCS_PP_MAKE_STRING(muMemFree_v2), ucm_override_muMemFree_v2},
     {NULL, NULL}
 };
 
@@ -100,6 +190,7 @@ static ucs_status_t ucm_musamem_install(int events)
     static int installed;
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
     ucm_reloc_patch_t *patch;
+    void *func_ptr;
     ucs_status_t status = UCS_OK;
 
     if (!(events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE))) {
@@ -112,6 +203,11 @@ static ucs_status_t ucm_musamem_install(int events)
     }
 
     for (patch = ucm_musa_patches; patch->symbol != NULL; ++patch) {
+        func_ptr = ucm_reloc_get_orig(patch->symbol, patch->value);
+        if (func_ptr == NULL) {
+            continue;
+        }
+
         status = ucm_reloc_modify(patch);
         if (status != UCS_OK) {
             ucm_warn("failed to install MUSA hook for '%s'", patch->symbol);

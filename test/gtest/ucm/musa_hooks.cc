@@ -5,6 +5,7 @@
 
 #include <ucm/api/ucm.h>
 #include <common/test.h>
+#include <musa.h>
 #include <musa_runtime_api.h>
 #include <stdint.h>
 
@@ -92,4 +93,29 @@ UCS_TEST_F(musa_hooks, test_musaMalloc_musaFree)
     ASSERT_EQ(musaSuccess, musaFree(ptr));
     EXPECT_EQ(ptr, musa_free_event.mem_type.address);
     EXPECT_EQ(UCS_MEMORY_TYPE_MUSA, musa_free_event.mem_type.mem_type);
+}
+
+UCS_TEST_F(musa_hooks, test_musaMallocHost_musaFreeHost)
+{
+    void *ptr;
+
+    ASSERT_EQ(musaSuccess, musaMallocHost(&ptr, 64));
+    EXPECT_EQ(ptr, musa_alloc_event.mem_type.address);
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, musa_alloc_event.mem_type.mem_type);
+
+    ASSERT_EQ(musaSuccess, musaFreeHost(ptr));
+    EXPECT_EQ(ptr, musa_free_event.mem_type.address);
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, musa_free_event.mem_type.mem_type);
+}
+
+UCS_TEST_F(musa_hooks, test_musaMallocManaged_is_reported)
+{
+    void *ptr;
+
+    ASSERT_EQ(musaSuccess,
+              musaMallocManaged(&ptr, 64, musaMemAttachGlobal));
+    EXPECT_EQ(ptr, musa_alloc_event.mem_type.address);
+    EXPECT_EQ(UCS_MEMORY_TYPE_LAST, musa_alloc_event.mem_type.mem_type);
+
+    ASSERT_EQ(musaSuccess, musaFree(ptr));
 }

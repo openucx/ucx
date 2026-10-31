@@ -34,4 +34,7 @@ ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         uct_rkey_t rkey,
                                         uct_completion_t *comp);
 
+ucs_status_t uct_musa_copy_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                    uct_completion_t *comp);
+
 #endif

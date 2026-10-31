@@ -281,7 +281,8 @@ if HAVE_MUSA
 gtest_SOURCES += \
 	ucm/musa_hooks.cc \
 	uct/test_musa_contract.cc \
-	uct/test_musa_copy_md.cc
+	uct/test_musa_copy_md.cc \
+	uct/test_musa_copy.cc
 
 gtest_CPPFLAGS += \
 	$(MUSA_CPPFLAGS)
