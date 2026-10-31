@@ -70,36 +70,36 @@ uct_musa_copy_ep_get_copy_context(uct_musa_copy_iface_t *iface,
                                   const void *src, void *dst, size_t length,
                                   ucs_memory_type_t *src_mem_type_p,
                                   ucs_memory_type_t *dst_mem_type_p,
-                                  int *device_p)
+                                  int *device_p,
+                                  uct_musa_pointer_info_t *src_info_p,
+                                  uct_musa_pointer_info_t *dst_info_p)
 {
-    uct_musa_pointer_info_t src_info;
-    uct_musa_pointer_info_t dst_info;
     ucs_status_t status;
 
-    status = uct_musa_base_query_pointer(src, length, &src_info);
+    status = uct_musa_base_query_copy_pointer(src, length, src_info_p);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = uct_musa_base_query_pointer(dst, length, &dst_info);
+    status = uct_musa_base_query_copy_pointer(dst, length, dst_info_p);
     if (status != UCS_OK) {
         return status;
     }
 
-    if ((src_info.kind == UCT_MUSA_POINTER_MANAGED) ||
-        (dst_info.kind == UCT_MUSA_POINTER_MANAGED)) {
+    if ((src_info_p->kind == UCT_MUSA_POINTER_MANAGED) ||
+        (dst_info_p->kind == UCT_MUSA_POINTER_MANAGED)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    *src_mem_type_p = (src_info.kind == UCT_MUSA_POINTER_DEVICE) ?
+    *src_mem_type_p = (src_info_p->kind == UCT_MUSA_POINTER_DEVICE) ?
                       UCS_MEMORY_TYPE_MUSA : UCS_MEMORY_TYPE_HOST;
-    *dst_mem_type_p = (dst_info.kind == UCT_MUSA_POINTER_DEVICE) ?
+    *dst_mem_type_p = (dst_info_p->kind == UCT_MUSA_POINTER_DEVICE) ?
                       UCS_MEMORY_TYPE_MUSA : UCS_MEMORY_TYPE_HOST;
 
-    if (src_info.device >= 0) {
-        *device_p = src_info.device;
-    } else if (dst_info.device >= 0) {
-        *device_p = dst_info.device;
+    if (src_info_p->device >= 0) {
+        *device_p = src_info_p->device;
+    } else if (dst_info_p->device >= 0) {
+        *device_p = dst_info_p->device;
     } else {
         *device_p = iface->device;
     }
@@ -118,6 +118,8 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     uct_musa_copy_queue_desc_t *queue_desc;
     ucs_memory_type_t src_mem_type;
     ucs_memory_type_t dst_mem_type;
+    uct_musa_pointer_info_t src_info;
+    uct_musa_pointer_info_t dst_info;
     void *src;
     void *dst;
     size_t length;
@@ -138,7 +140,7 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 
     status = uct_musa_copy_ep_get_copy_context(iface, src, dst, length,
                                                &src_mem_type, &dst_mem_type,
-                                               &device);
+                                               &device, &src_info, &dst_info);
     if (status != UCS_OK) {
         return status;
     }
@@ -160,7 +162,8 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
     }
 
     status = uct_musa_base_copy_async(src, dst, length, device,
-                                      queue_desc->stream);
+                                      queue_desc->stream, &src_info,
+                                      &dst_info);
     if (status != UCS_OK) {
         return status;
     }

@@ -53,7 +53,13 @@ ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
                                 int device);
 
 ucs_status_t uct_musa_base_copy_async(const void *src, void *dst, size_t length,
-                                      int device, musaStream_t stream);
+                                      int device, musaStream_t stream,
+                                      const uct_musa_pointer_info_t *src_info,
+                                      const uct_musa_pointer_info_t *dst_info);
+
+ucs_status_t
+uct_musa_base_query_copy_pointer(const void *address, size_t length,
+                                 uct_musa_pointer_info_t *info);
 
 ucs_status_t uct_musa_base_status(musaError_t error, const char *operation);
 

@@ -35,7 +35,7 @@ static ucs_config_field_t uct_musa_copy_iface_config_table[] = {
      ucs_offsetof(uct_musa_copy_iface_config_t, max_events),
      UCS_CONFIG_TYPE_UINT},
 
-    {"LAT", "1e-7", "Latency",
+    {"LAT", "8us", "Latency",
      ucs_offsetof(uct_musa_copy_iface_config_t, latency), UCS_CONFIG_TYPE_TIME},
 
     {"BW", "10000MBs", "Effective memory bandwidth",
@@ -49,9 +49,6 @@ static void
 uct_musa_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     uct_musa_copy_event_desc_t *event_desc = obj;
-
-    (void)mp;
-    (void)chunk;
 
     event_desc->event = NULL;
     event_desc->comp  = NULL;
@@ -335,10 +332,7 @@ uct_musa_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
     uct_musa_copy_flush_desc_t *flush;
     ucs_queue_iter_t queue_iter;
     ucs_status_t status;
-    unsigned count;
     unsigned i;
-
-    (void)flags;
 
     for (i = 0; i < iface->num_devices; ++i) {
         if (!ucs_queue_is_empty(&iface->device_rscs[i].active_queue)) {
@@ -360,27 +354,21 @@ uct_musa_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
         return UCS_ERR_NO_MEMORY;
     }
 
-    count         = 0;
+    flush->count  = 0;
     flush->comp   = comp;
     flush->status = UCS_OK;
-    for (i = 0; i < iface->num_devices; ++i) {
-        device_rsc = &iface->device_rscs[i];
-        ucs_queue_for_each_safe(queue_desc, queue_iter,
-                                &device_rsc->active_queue, queue) {
-            ++count;
-        }
-    }
-    flush->count = count;
 
     for (i = 0; i < iface->num_devices; ++i) {
         device_rsc = &iface->device_rscs[i];
         ucs_queue_for_each_safe(queue_desc, queue_iter,
                                 &device_rsc->active_queue, queue) {
+            ++flush->count;
             status = uct_musa_copy_iface_post_event(device_rsc, queue_desc,
                                                     NULL, flush);
             if (status != UCS_INPROGRESS) {
+                --flush->count;
                 flush->comp = NULL;
-                if (--flush->count == 0) {
+                if (flush->count == 0) {
                     ucs_free(flush);
                 }
                 return status;
@@ -442,8 +430,6 @@ uct_musa_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
                                           UCT_IFACE_FLAG_GET_ZCOPY |
                                           UCT_IFACE_FLAG_PUT_ZCOPY |
                                           UCT_IFACE_FLAG_PENDING;
-    iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP;
-
     iface_attr->cap.put.max_short       = UINT_MAX;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
@@ -575,8 +561,8 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
 
     self->config.max_poll   = config->max_poll;
     self->config.max_events = config->max_events;
-    self->config.latency   = config->latency;
-    self->config.bandwidth = config->bandwidth;
+    self->config.latency    = config->latency;
+    self->config.bandwidth  = config->bandwidth;
 
     for (i = 0; i < device_count; ++i) {
         self->device_rscs[i].device = i;

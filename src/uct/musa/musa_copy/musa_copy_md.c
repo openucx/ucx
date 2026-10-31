@@ -159,9 +159,6 @@ uct_musa_md_open(uct_component_h component, const char *md_name,
     unsigned device_count;
     ucs_status_t status;
 
-    (void)md_name;
-    (void)config;
-
     status = uct_musa_base_get_device_count(&device_count);
     if (status != UCS_OK) {
         return status;
