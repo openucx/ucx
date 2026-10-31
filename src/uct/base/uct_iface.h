@@ -326,7 +326,6 @@ typedef ucs_status_t (*uct_ep_get_sgl_zcopy_func_t)(
         uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
         size_t count, uct_completion_t *comp);
 
-
 /* Purge outstanding operations from an endpoint */
 typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
@@ -876,6 +875,10 @@ void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg);
+
+void uct_iface_set_async_ep_event_params(const uct_iface_params_t *params,
+                                         uct_async_ep_event_cb_t *event_cb,
+                                         void **event_arg);
 
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);
