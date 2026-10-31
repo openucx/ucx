@@ -385,7 +385,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->super.progress                 = uct_rc_verbs_iface_progress;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
-    ucs_list_head_init(&self->rx_repost_pending_eps);
+    self->rx_repost_needed = 0;
 
     /* A QP must be able to reach the repost threshold. */
     self->super.super.config.rx_max_batch =
@@ -547,26 +547,27 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
     return count;
 }
 
-void uct_rc_verbs_iface_repost_pending(uct_rc_verbs_iface_t *iface)
+void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface)
 {
-    unsigned batch         = iface->super.super.config.rx_max_batch;
-    ucs_list_link_t *queue = &iface->rx_repost_pending_eps;
+    ucs_list_link_t *head = &iface->super.ep_list;
+    uct_rc_ep_t *rc_ep;
     uct_rc_verbs_ep_t *ep;
 
-    /* A full batch restores receive progress; later completions drive further
-     * reposting. Keep only endpoints which still need a retry in the queue. */
-    while (!ucs_list_is_empty(queue)) {
-        ep = ucs_list_head(queue, uct_rc_verbs_ep_t, rx_repost_pending_list);
-        if (uct_rc_verbs_ep_can_post_recv(ep) &&
-            (ep->rx_available >= batch)) {
-            if (uct_rc_verbs_iface_post_recv_common(iface, ep, 0) < batch) {
-                /* Keep the endpoint first while the pool is short */
-                return;
-            }
+    iface->rx_repost_needed = 0;
+    ucs_list_for_each(rc_ep, head, list) {
+        ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
+        if (!uct_rc_verbs_ep_can_post_recv(ep) ||
+            (ep->rx_available != iface->config.rx_max_wr)) {
+            continue;
         }
 
-        ucs_list_del(&ep->rx_repost_pending_list);
-        ucs_list_head_init(&ep->rx_repost_pending_list);
+        if (uct_rc_verbs_iface_post_recv_common(iface, ep, 0) == 0) {
+            /* Resume at this QP without skipping the preceding list entries
+             * on subsequent scans. Stop iterating after moving the sentinel. */
+            ucs_list_del(head);
+            ucs_list_insert_before(&rc_ep->list, head);
+            return;
+        }
     }
 }
 

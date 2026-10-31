@@ -26,7 +26,7 @@ uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-void uct_rc_verbs_iface_repost_pending(uct_rc_verbs_iface_t *iface);
+void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_rx_error(uct_rc_verbs_iface_t *iface,
                                  const struct ibv_wc *wc,
@@ -57,13 +57,9 @@ uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
 
     posted = uct_rc_verbs_iface_post_recv_always(iface, ep, count);
 
-    /* A QP with no posted receive WRs cannot generate a receive completion.
-     * Retry from progress when the shared receive buffer pool cannot supply a
-     * full batch. */
-    if ((ep != NULL) && (posted < count) && (ep->rx_available >= batch) &&
-        ucs_list_is_empty(&ep->rx_repost_pending_list)) {
-        ucs_list_add_tail(&iface->rx_repost_pending_eps,
-                          &ep->rx_repost_pending_list);
+    /* An empty QP cannot generate a completion to retry receive posting. */
+    if ((ep != NULL) && (ep->rx_available == iface->config.rx_max_wr)) {
+        iface->rx_repost_needed = 1;
     }
 
     return posted;
@@ -164,6 +160,11 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
     ucs_status_t status;
     uct_rc_hdr_t *hdr;
 
+    /* Give empty QPs returned buffers before CQ polling refills active QPs. */
+    if (srq_disabled && ucs_unlikely(iface->rx_repost_needed)) {
+        uct_rc_verbs_iface_repost_recv(iface);
+    }
+
     status = uct_ib_poll_cq(iface->super.super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
     if (status != UCS_OK) {
         num_wcs = 0;
@@ -197,11 +198,7 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
                              UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
-    if (srq_disabled) {
-        if (ucs_unlikely(!ucs_list_is_empty(&iface->rx_repost_pending_eps))) {
-            uct_rc_verbs_iface_repost_pending(iface);
-        }
-    } else {
+    if (!srq_disabled) {
         iface->super.rx.srq.available += num_wcs;
         uct_rc_verbs_iface_post_recv_common(iface, NULL, 0);
     }
