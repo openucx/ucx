@@ -64,7 +64,6 @@ typedef struct uct_rc_verbs_ep {
     uct_ib_fence_info_t    fi;
     uint16_t               rx_available; /* free receive WR slots without SRQ */
     struct ibv_qp          *qp;
-    ucs_list_link_t        rx_repost_pending_list; /* used without SRQ */
 } uct_rc_verbs_ep_t;
 
 
@@ -103,7 +102,7 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
     int                         rx_cq_available; /* RX CQ space for new EPs,
                                                     0 with SRQ */
-    ucs_list_link_t             rx_repost_pending_eps; /* used without SRQ */
+    uint8_t                     rx_repost_needed; /* empty QPs need RX WRs */
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;

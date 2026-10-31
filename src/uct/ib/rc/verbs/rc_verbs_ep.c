@@ -693,8 +693,7 @@ static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
 
-    /* Post as many receive WRs as the shared buffer pool can supply. Progress
-     * retries the remaining WRs after descriptors are returned to the pool. */
+    /* Post as many receive WRs as the shared buffer pool can supply. */
     while ((ep->rx_available > 0) &&
            (uct_rc_verbs_iface_post_recv_common(iface, ep, 1) > 0)) {
     }
@@ -752,7 +751,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
-    ucs_list_head_init(&self->rx_repost_pending_list);
     self->rx_available = iface->config.rx_max_wr;
     if (iface->srq != NULL) {
         status = uct_rc_verbs_iface_common_prepost_recvs(iface);
@@ -773,7 +771,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 
 
 err_remove_qp:
-    ucs_list_del(&self->rx_repost_pending_list);
     uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
 err_event_unreg:
     uct_ib_device_async_event_unregister(&md->dev,
@@ -790,9 +787,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
-
-    /* The endpoint no longer posts receive WRs */
-    ucs_list_del(&self->rx_repost_pending_list);
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
                                   UCS_ERR_CANCELED, self->txcnt.pi, 1);

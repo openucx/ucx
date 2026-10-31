@@ -710,19 +710,15 @@ protected:
 
     /* Whether some QP waits for receive buffers to post its receive WRs */
     bool rx_post_recv_pending(entity *e) {
-        return !ucs_list_is_empty(&verbs_iface(e)->rx_repost_pending_eps);
-    }
-
-    uct_rc_verbs_ep_t *verbs_ep(entity *e, int ep_idx) {
-        return ucs_derived_of(rc_ep(e, ep_idx), uct_rc_verbs_ep_t);
+        return verbs_iface(e)->rx_repost_needed;
     }
 
     bool rx_post_recv_waits(entity *e, int ep_idx) {
-        return !ucs_list_is_empty(&verbs_ep(e, ep_idx)->rx_repost_pending_list);
+        return rx_available(e, ep_idx) == rx_max_wr(e);
     }
 
-    /* Hold received descriptors until a receive-posting attempt cannot obtain
-     * a full batch and requests a retry from progress. */
+    /* Hold received descriptors until a QP runs out of receive WRs and
+     * requests a retry from progress. */
     void exhaust_rx_bufs(std::vector<void*> &descs, int num_eps = NUM_EPS) {
         ucs_time_t deadline = ucs::get_deadline(10.0);
         size_t expected     = descs.size();
@@ -732,12 +728,27 @@ protected:
 
         while (!rx_post_recv_pending(m_e2) && (ucs_get_time() < deadline)) {
             for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
+                if (rx_post_recv_waits(m_e2, ep_idx)) {
+                    continue;
+                }
+
                 status = send_am_message(m_e1, 0, ep_idx);
                 if (status == UCS_OK) {
                     expected++;
+                    /* Do not send past the last hardware WR while its CQE
+                     * still awaits receive-slot accounting. */
+                    wait_for_cond([&]() { return descs.size() == expected; },
+                                  [this]() { progress(); }, 5.0);
+                    if (descs.size() != expected) {
+                        UCS_TEST_ABORT("preparation receive did not complete");
+                    }
                 } else if (status != UCS_ERR_NO_RESOURCE) {
                     UCS_TEST_ABORT("failed to send: " <<
                                    ucs_status_string(status));
+                }
+
+                if (rx_post_recv_pending(m_e2)) {
+                    break;
                 }
             }
 
@@ -769,65 +780,53 @@ protected:
     /* Index of the endpoint which gets receive buffers first once they are
      * returned. */
     int first_waiting_ep_index() {
-        ucs_list_link_t *queue = &verbs_iface(m_e2)->rx_repost_pending_eps;
+        uct_rc_ep_t *ep;
 
-        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-            if ((m_e2->ep(ep_idx) != NULL) &&
-                (queue->next ==
-                 &verbs_ep(m_e2, ep_idx)->rx_repost_pending_list)) {
-                return ep_idx;
+        ucs_list_for_each(ep, &rc_iface(m_e2)->ep_list, list) {
+            for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+                if ((m_e2->ep(ep_idx) != NULL) &&
+                    (rc_ep(m_e2, ep_idx) == ep) &&
+                    rx_post_recv_waits(m_e2, ep_idx)) {
+                    return ep_idx;
+                }
             }
         }
 
         UCS_TEST_ABORT("no waiting endpoint found");
     }
 
-    /* Number of endpoints which got at least one batch of receive WRs since
-     * their free slots were counted. */
-    int count_reposted_eps(const uint16_t *prev_available, unsigned batch) {
-        int reposted = 0;
-
-        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-            if (rx_available(m_e2, ep_idx) <= prev_available[ep_idx] - batch) {
-                reposted++;
-            }
-        }
-
-        return reposted;
-    }
-
-    /* Exhaust the receive buffer pool until every QP waits for receive
-     * buffers, and report the free receive WR slots of every QP, which all need
-     * room for @a min_available receive WRs. */
-    void exhaust_rx_bufs_with_room(std::vector<void*> &descs,
-                                   uint16_t *prev_available,
-                                   unsigned min_available) {
+    /* Drain every QP while holding descriptors, so recovery cannot depend on
+     * an unpolled preparation completion or a receive WR still on the QP. */
+    void exhaust_empty_rx_qps(std::vector<void*> &descs,
+                              uint16_t *prev_available) {
         ucs_time_t deadline;
 
-        ASSERT_LT(min_available, rx_max_wr(m_e2));
         exhaust_rx_bufs(descs);
         deadline = ucs::get_deadline(5.0);
 
-        /* Build the required free slots while keeping every descriptor. Wait
-         * for each receive so no preparation CQE reaches the retry phase. */
         for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-            while (((rx_available(m_e2, ep_idx) < min_available) ||
-                    !rx_post_recv_waits(m_e2, ep_idx)) &&
+            while (!rx_post_recv_waits(m_e2, ep_idx) &&
                    (ucs_get_time() < deadline)) {
                 size_t expected = descs.size() + 1;
 
                 send_am_message_wait(m_e1, ep_idx);
                 wait_for_cond([&]() { return descs.size() == expected; },
                               [this]() { progress(); }, 5.0);
-                ASSERT_EQ(expected, descs.size());
+                if (descs.size() != expected) {
+                    UCS_TEST_ABORT("preparation receive did not complete");
+                }
             }
+
+            if (rx_available(m_e2, ep_idx) != rx_max_wr(m_e2)) {
+                UCS_TEST_ABORT("receive queue did not become empty");
+            }
+
+            prev_available[ep_idx] = rx_available(m_e2, ep_idx);
         }
 
         flush(ucs::get_deadline(5.0));
-        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-            ASSERT_GE(rx_available(m_e2, ep_idx), min_available);
-            ASSERT_TRUE(rx_post_recv_waits(m_e2, ep_idx));
-            prev_available[ep_idx] = rx_available(m_e2, ep_idx);
+        if (!rx_post_recv_pending(m_e2)) {
+            UCS_TEST_ABORT("empty receive queues did not request a retry");
         }
     }
 
@@ -857,37 +856,28 @@ protected:
         std::vector<void*> descs;
         uint16_t prev_available[NUM_EPS];
 
-        /* Both QPs wait for receive buffers with room for a full batch, so
-         * progress can either skip a QP or post one batch to it. */
-        exhaust_rx_bufs_with_room(descs, prev_available, batch);
-
+        exhaust_empty_rx_qps(descs, prev_available);
         rc_ep(m_e2, 0)->flags |= ep_mark;
-
-        /* Return enough descriptors for progress to post receives. */
         release_rx_bufs(descs, 0, descs.size());
-
         progress_loop();
 
-        /* The marked QP is unchanged, while the other QP receives at least one
-         * batch. */
         EXPECT_EQ(prev_available[0], rx_available(m_e2, 0));
-        EXPECT_LE(rx_available(m_e2, 1), prev_available[1] - batch);
+        EXPECT_EQ(prev_available[1] - batch, rx_available(m_e2, 1));
+        EXPECT_FALSE(rx_post_recv_pending(m_e2));
+        rc_ep(m_e2, 0)->flags &= ~ep_mark;
 
-        /* The marked QP must still have receive WRs posted, to reach the
-         * completion path below. */
-        if (rx_available(m_e2, 0) >= rx_max_wr(m_e2)) {
-            UCS_TEST_SKIP_R("no receive WR is posted on the marked QP");
-        }
-
-        /* A completion must not post receives on a marked endpoint either,
-         * although its free slots are enough for a full batch. */
-        send_am_messages(m_e1, 1, UCS_OK, 0, 0);
+        /* The other QP was refilled by progress, so its next completion can
+         * exercise the guard without directly posting receive WRs. */
+        prev_available[1] = rx_available(m_e2, 1);
+        ASSERT_LT(prev_available[1], rx_max_wr(m_e2));
+        ASSERT_UCS_OK(send_am_message(m_e1, 0, 1));
+        rc_ep(m_e2, 1)->flags |= ep_mark;
         progress_loop();
-        EXPECT_EQ(prev_available[0] + 1, rx_available(m_e2, 0));
+        EXPECT_EQ(prev_available[1] + 1, rx_available(m_e2, 1));
 
         /* A marked endpoint ignores flow control requests and must not have
          * anything scheduled on it later, so do not leave it in this state. */
-        rc_ep(m_e2, 0)->flags &= ~ep_mark;
+        rc_ep(m_e2, 1)->flags &= ~ep_mark;
     }
 
 };
@@ -1170,42 +1160,52 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_order,
                      UCT_TEST_NO_RX_BUFS_CONFIG)
 {
     scoped_log_handler slh(no_rx_bufs_log_handler);
-    unsigned batch = verbs_iface(m_e2)->super.super.config.rx_max_batch;
+    unsigned batch    = verbs_iface(m_e2)->super.super.config.rx_max_batch;
+    unsigned am_count = 0;
     std::vector<void*> descs;
     uint16_t prev_available[NUM_EPS];
-    int ep_idx, short_ep, first_ep;
+    int short_ep, first_ep;
 
-    /* Keep enough free slots to verify that a successful repost removes the
-     * QP from the queue even when another batch could be posted. */
-    exhaust_rx_bufs_with_room(descs, prev_available, 2 * batch);
-    ASSERT_GE(descs.size(), 2 * batch);
+    exhaust_empty_rx_qps(descs, prev_available);
+    ASSERT_GT(batch, 1u);
+    ASSERT_GE(descs.size(), batch + 1);
     first_ep = first_waiting_ep_index();
 
-    /* One batch of descriptors is enough for a single QP only. */
-    release_rx_bufs(descs, 0, batch);
+    /* A single WR is enough to resume completion-driven reposting. */
+    release_rx_bufs(descs, 0, 1);
     progress_loop();
-    EXPECT_EQ(1, count_reposted_eps(prev_available, batch));
+    EXPECT_EQ(prev_available[first_ep] - 1, rx_available(m_e2, first_ep));
     EXPECT_FALSE(rx_post_recv_waits(m_e2, first_ep));
-    EXPECT_GE(rx_available(m_e2, first_ep), batch);
+    EXPECT_TRUE(rx_post_recv_pending(m_e2));
 
-    /* The QP which got nothing must be first in line. */
     short_ep = first_waiting_ep_index();
-    EXPECT_GT(rx_available(m_e2, short_ep), prev_available[short_ep] - batch);
-
-    /* The next batch must reach that QP rather than the one already served. */
-    release_rx_bufs(descs, batch, 2 * batch);
+    EXPECT_NE(first_ep, short_ep);
+    EXPECT_EQ(prev_available[short_ep], rx_available(m_e2, short_ep));
+    EXPECT_EQ(&rc_ep(m_e2, short_ep)->list, rc_iface(m_e2)->ep_list.next);
     progress_loop();
+    EXPECT_TRUE(rx_post_recv_pending(m_e2));
+    EXPECT_EQ(&rc_ep(m_e2, short_ep)->list, rc_iface(m_e2)->ep_list.next);
 
+    /* The next batch reaches the empty QP, not the partially filled one. */
+    release_rx_bufs(descs, 1, batch + 1);
+    progress_loop();
+    EXPECT_EQ(prev_available[first_ep] - 1, rx_available(m_e2, first_ep));
+    EXPECT_EQ(prev_available[short_ep] - batch, rx_available(m_e2, short_ep));
     EXPECT_FALSE(rx_post_recv_pending(m_e2));
-    for (ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-        EXPECT_LE(rx_available(m_e2, ep_idx),
-                  prev_available[ep_idx] - batch);
-    }
-    release_rx_bufs(descs, 2 * batch, descs.size());
+    release_rx_bufs(descs, batch + 1, descs.size());
+
+    /* Consuming the single posted WR must trigger completion-driven refill. */
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                             am_count_handler, &am_count, 0);
+    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+    send_am_message_wait(m_e1, first_ep, RECOVERY_AM_ID);
+    wait_for_value(&am_count, 1u, true);
+    EXPECT_EQ(prev_available[first_ep] - batch, rx_available(m_e2, first_ep));
+    flush(ucs::get_deadline(5.0));
 }
 
-/* Verify that destroying an endpoint which waits for receive buffers removes it
- * from the queue, and that the other endpoint still gets receive WRs. */
+/* Verify that destroying an empty QP at the retry position leaves the other
+ * QP reachable by the next scan. */
 UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_ep_destroy,
                      (RUNNING_ON_VALGRIND ||
                       !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
@@ -1217,7 +1217,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_ep_destroy,
     uint16_t prev_available[NUM_EPS];
     int first_ep, other_ep;
 
-    exhaust_rx_bufs_with_room(descs, prev_available, batch);
+    exhaust_empty_rx_qps(descs, prev_available);
     first_ep = first_waiting_ep_index();
     other_ep = (first_ep == 0) ? 1 : 0;
 
@@ -1227,9 +1227,30 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_ep_destroy,
     /* The remaining QP must still get receive WRs posted. */
     release_rx_bufs(descs, 0, descs.size());
     progress_loop();
-    EXPECT_LE(rx_available(m_e2, other_ep),
-              prev_available[other_ep] - batch);
+    EXPECT_EQ(prev_available[other_ep] - batch,
+              rx_available(m_e2, other_ep));
+    EXPECT_FALSE(rx_post_recv_pending(m_e2));
 
+    wait_qp_gc_list_empty();
+}
+
+/* Verify that destroying all empty QPs clears a stale interface retry flag. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_all_eps_destroy,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    std::vector<void*> descs;
+    uint16_t prev_available[NUM_EPS];
+
+    exhaust_empty_rx_qps(descs, prev_available);
+    m_e2->destroy_eps();
+    EXPECT_TRUE(ucs_list_is_empty(&rc_iface(m_e2)->ep_list));
+    EXPECT_TRUE(rx_post_recv_pending(m_e2));
+    uct_iface_progress(m_e2->iface());
+    EXPECT_FALSE(rx_post_recv_pending(m_e2));
+    release_rx_bufs(descs, 0, descs.size());
     wait_qp_gc_list_empty();
 }
 
