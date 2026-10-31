@@ -258,9 +258,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
     }
 }
 
-static void
-uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
-                                   const uct_ib_async_event_t *event)
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event)
 {
     ucs_spin_lock(&dev->async_event_lock);
     uct_ib_device_async_event_dispatch_nolock(dev, event);
@@ -419,7 +418,12 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
+        event.qp_num = ibevent.element.qp->qp_num;
+        break;
     case IBV_EVENT_QP_LAST_WQE_REACHED:
+        ucs_assertv(ibevent.element.qp->srq != NULL,
+                    "LAST_WQE on QP 0x%x without SRQ",
+                    ibevent.element.qp->qp_num);
         event.qp_num = ibevent.element.qp->qp_num;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -808,7 +812,7 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
     }
 
     if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
-        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+        if (!uct_ib_device_has_srq(dev)) {
             ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
                       port_num);
             return UCS_ERR_UNSUPPORTED;

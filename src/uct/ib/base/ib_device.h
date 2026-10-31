@@ -441,6 +441,11 @@ static inline int uct_ib_device_has_pci_atomics(uct_ib_device_t *dev)
               (sizeof(uint32_t) | sizeof(uint64_t)));
 }
 
+static inline int uct_ib_device_has_srq(const uct_ib_device_t *dev)
+{
+    return IBV_DEV_ATTR(dev, max_srq) != 0;
+}
+
 const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver);
 
 const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size);
@@ -464,6 +469,11 @@ ucs_status_t
 uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
                                    uint32_t resource_id);
+
+/* Mark a registered event as fired and schedule the callbacks of its waiters.
+ * An event which is not registered is ignored. */
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event);
 
 /* Invoke the callback defined by 'wait_ctx' from callback queue when the event
  * fires. If it has already been fired, the callback is scheduled immediately to

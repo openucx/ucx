@@ -1275,6 +1275,26 @@ run_malloc_hook_gtest() {
 			make -C test/gtest test
 }
 
+run_rc_verbs_nosrq_gtest() {
+	gtest_filter='rc_verbs/test_rc*'
+	gtest_filter+=':rc_verbs/test_uct_peer_failure*'
+	gtest_filter+=':rc_verbs/test_uct_pending*'
+	gtest_filter+=':rc_verbs/uct_flush_test*'
+	gtest_filter+=':rc_verbs/uct_p2p_am_test*'
+	gtest_filter+=':rc/test_ucp_peer_failure*'
+	gtest_filter+=':rc/test_ucp_tag_match*'
+	gtest_filter+=':rc/test_ucp_wireup*'
+	gtest_filter+=':-*test_rc_no_srq*:*test_rc_srq_select*'
+
+	echo "==== Running rc_verbs gtest with SRQ disabled ===="
+	$TIMEOUT env \
+		UCX_RC_VERBS_SRQ_ENABLE=n \
+		UCX_RC_VERBS_MAX_NUM_EPS=4096 \
+		UCX_RC_VERBS_RX_MAX_WR=48 \
+		GTEST_FILTER="$gtest_filter" \
+		make -C test/gtest test
+}
+
 set_gtest_common_test_flags() {
 	export GTEST_RANDOM_SEED=0
 	export GTEST_SHUFFLE=1
@@ -1317,10 +1337,11 @@ run_specific_tests() {
 	set_gtest_common_test_flags
 
 	# Run specific tests
-	do_distributed_task 0 4 run_cuda_usr_ctx_gtest
-	do_distributed_task 1 4 run_malloc_hook_gtest
-	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
-	do_distributed_task 3 4 test_memtrack
+	do_distributed_task 0 5 run_cuda_usr_ctx_gtest
+	do_distributed_task 1 5 run_malloc_hook_gtest
+	do_distributed_task 2 5 run_gtest_watchdog_test 5 60 300
+	do_distributed_task 3 5 test_memtrack
+	do_distributed_task 4 5 run_rc_verbs_nosrq_gtest
 
 	unset_test_flags
 }

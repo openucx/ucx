@@ -721,7 +721,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
          * TODO: Make wnd size to be a property of the particular interface.
          * We could distribute it via rc address then.*/
         self->config.fc_wnd_size    = ucs_min(config->fc.wnd_size,
-                                              config->super.rx.queue_len);
+                                              init_attr->fc_max_wnd_size);
         self->config.fc_hard_thresh = ucs_max((int)(self->config.fc_wnd_size *
                                               config->fc.hard_thresh), 1);
     } else {
@@ -745,6 +745,18 @@ err_destroy_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err:
     return status;
+}
+
+void uct_rc_iface_qp_cleanup_ready(uct_rc_iface_t *iface, uint32_t qp_num)
+{
+    uct_ib_async_event_t event;
+
+    /* TODO: signal the cleanup context directly instead of using the
+     * hardware LAST_WQE event. */
+    event.event_type = IBV_EVENT_QP_LAST_WQE_REACHED;
+    event.qp_num     = qp_num;
+    uct_ib_device_async_event_dispatch(uct_ib_iface_device(&iface->super),
+                                       &event);
 }
 
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
@@ -810,11 +822,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
-                            unsigned max_send_wr, struct ibv_srq *srq)
+                            unsigned max_send_wr, unsigned max_recv_wr,
+                            struct ibv_srq *srq)
 {
     attr->srq                        = srq;
     attr->cap.max_send_wr            = max_send_wr;
-    attr->cap.max_recv_wr            = 0;
+    attr->cap.max_recv_wr            = max_recv_wr;
     attr->cap.max_send_sge           = iface->config.tx_min_sge;
     attr->cap.max_recv_sge           = 1;
     attr->cap.max_inline_data        = iface->config.tx_min_inline;
@@ -826,9 +839,9 @@ void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     uct_ib_qp_attr_t *attr, unsigned max_send_wr,
-                                    struct ibv_srq *srq)
+                                    unsigned max_recv_wr, struct ibv_srq *srq)
 {
-    uct_rc_iface_fill_attr(iface, attr, max_send_wr, srq);
+    uct_rc_iface_fill_attr(iface, attr, max_send_wr, max_recv_wr, srq);
 
     return uct_ib_iface_create_qp(&iface->super, attr, qp_p);
 }

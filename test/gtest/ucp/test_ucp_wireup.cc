@@ -1196,13 +1196,12 @@ private:
 
 UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
     unsigned long test_min_max_eps, min_max_eps;
+    std::set<unsigned long> tested_max_eps;
 
     test_est_num_eps_fallback(1, test_min_max_eps);
 
-    size_t prev_min_max_eps = 0;
     while ((test_min_max_eps != UCS_ULUNITS_INF) &&
-           /* number of EPs was changed between iterations */
-           (test_min_max_eps != prev_min_max_eps)) {
+           tested_max_eps.insert(test_min_max_eps).second) {
         if (test_min_max_eps > 1) {
             EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps - 1,
                                                   min_max_eps));
@@ -1213,7 +1212,6 @@ UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
 
         EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps + 1,
                                               min_max_eps));
-        prev_min_max_eps = test_min_max_eps;
         test_min_max_eps = min_max_eps;
     }
 }
