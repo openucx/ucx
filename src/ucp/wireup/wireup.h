@@ -126,6 +126,10 @@ typedef struct {
      * Zero allows only scores equal according to ucs_fp_compare(). */
     double                       score_tolerance;
 
+    /* Minimal lane bandwidth: candidates whose local or remote interface
+     * bandwidth is lower are not selected. Zero disables the check. */
+    double                       min_lane_bw;
+
     /* Flags that describe TL specifics */
     uint8_t                      tl_rsc_flags;
 
