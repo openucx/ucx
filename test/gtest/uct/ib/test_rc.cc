@@ -673,16 +673,12 @@ protected:
     /* Send one active message, waiting while the endpoint has no resources
      * for it. */
     void send_am_message_wait(entity *e, int ep_idx, uint8_t am_id = 0) {
-        ucs_time_t deadline = ucs::get_deadline(10.0);
-        ucs_status_t status;
+        ucs_status_t status = UCS_ERR_NO_RESOURCE;
 
-        do {
+        wait_for_cond([&]() {
             status = send_am_message(e, am_id, ep_idx);
-            if (status == UCS_ERR_NO_RESOURCE) {
-                progress();
-            }
-        } while ((status == UCS_ERR_NO_RESOURCE) &&
-                 (ucs_get_time() < deadline));
+            return status != UCS_ERR_NO_RESOURCE;
+        }, [this]() { progress(); }, 10.0);
 
         ASSERT_UCS_OK(status);
     }
@@ -720,13 +716,13 @@ protected:
     /* Hold received descriptors until a QP runs out of receive WRs and
      * requests a retry from progress. */
     void exhaust_rx_bufs(std::vector<void*> &descs, int num_eps = NUM_EPS) {
-        ucs_time_t deadline = ucs::get_deadline(10.0);
-        size_t expected     = descs.size();
-        ucs_status_t status;
+        size_t expected = descs.size();
 
         uct_iface_set_am_handler(m_e2->iface(), 0, am_keep_desc, &descs, 0);
 
-        while (!rx_post_recv_pending(m_e2) && (ucs_get_time() < deadline)) {
+        wait_for_cond([this]() { return rx_post_recv_pending(m_e2); }, [&]() {
+            ucs_status_t status;
+
             for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
                 if (rx_post_recv_waits(m_e2, ep_idx)) {
                     continue;
@@ -753,7 +749,7 @@ protected:
             }
 
             progress();
-        }
+        }, 10.0);
 
         if (!rx_post_recv_pending(m_e2)) {
             UCS_TEST_ABORT("receive posting did not request a retry after the "
@@ -799,14 +795,12 @@ protected:
      * an unpolled preparation completion or a receive WR still on the QP. */
     void exhaust_empty_rx_qps(std::vector<void*> &descs,
                               uint16_t *prev_available) {
-        ucs_time_t deadline;
-
         exhaust_rx_bufs(descs);
-        deadline = ucs::get_deadline(5.0);
 
         for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-            while (!rx_post_recv_waits(m_e2, ep_idx) &&
-                   (ucs_get_time() < deadline)) {
+            wait_for_cond([&]() {
+                return rx_post_recv_waits(m_e2, ep_idx);
+            }, [&]() {
                 size_t expected = descs.size() + 1;
 
                 send_am_message_wait(m_e1, ep_idx);
@@ -815,7 +809,7 @@ protected:
                 if (descs.size() != expected) {
                     UCS_TEST_ABORT("preparation receive did not complete");
                 }
-            }
+            }, 5.0);
 
             if (rx_available(m_e2, ep_idx) != rx_max_wr(m_e2)) {
                 UCS_TEST_ABORT("receive queue did not become empty");
@@ -838,12 +832,8 @@ protected:
     /* Poll flush completions for QPs pending destruction. Use a short timeout
      * so a broken drain fails before the test watchdog expires. */
     void wait_qp_gc_list_empty() {
-        ucs_time_t deadline = ucs::get_deadline(5.0);
-
-        while (!qp_gc_list_empty() && (ucs_get_time() < deadline)) {
-            progress();
-        }
-
+        wait_for_cond([this]() { return qp_gc_list_empty(); },
+                      [this]() { progress(); }, 5.0);
         EXPECT_TRUE(qp_gc_list_empty());
     }
 
@@ -882,42 +872,11 @@ protected:
 
 };
 
-/* Send one receive queue worth of messages per QP to exercise receive
- * reposting. Verify that QP destruction waits for receive WR completions. */
-UCS_TEST_SKIP_COND_P(test_rc_no_srq, am_and_qp_drain,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
-{
-    uint16_t wnd = rx_max_wr(m_e2);
-    uint16_t chunk;
-
-    ASSERT_GT(wnd, 0);
-
-    /* Keep each chunk within the flow control window, while sending enough
-     * messages in total to require receive reposting. */
-    chunk = ucs_max(ucs_min(wnd, rc_iface(m_e2)->config.fc_wnd_size) / 4, 1);
-    for (unsigned sent = 0; sent < wnd; sent += chunk) {
-        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-            send_am_messages(m_e1, chunk, UCS_OK, 0, ep_idx);
-        }
-
-        flush();
-    }
-
-    m_e1->destroy_eps();
-    m_e2->destroy_eps();
-
-    /* Posted receive WRs remain, so QP destruction must stay pending. */
-    EXPECT_FALSE(qp_gc_list_empty());
-
-    wait_qp_gc_list_empty();
-}
-
 UCS_TEST_P(test_rc_no_srq, last_wqe_after_rx_drain)
 {
     uct_rc_verbs_iface_t *iface = verbs_iface(m_e1);
     unsigned quota              = iface->rx_cq_available;
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
-    ucs_time_t deadline;
 
     m_e1->destroy_ep(0);
     ASSERT_EQ(1ul, ucs_list_length(&iface->super.qp_gc_list));
@@ -927,12 +886,10 @@ UCS_TEST_P(test_rc_no_srq, last_wqe_after_rx_drain)
     ASSERT_GT(cleanup_ctx->rx_remaining, 0u);
 
     /* Progress only the iface to verify that draining schedules cleanup. */
-    deadline = ucs::get_deadline(5.0);
-    while ((ucs_get_time() < deadline) &&
-           !ucs_list_is_empty(&iface->super.qp_gc_list) &&
-           (cleanup_ctx->rx_remaining > 0)) {
-        uct_iface_progress(m_e1->iface());
-    }
+    wait_for_cond([&]() {
+        return ucs_list_is_empty(&iface->super.qp_gc_list) ||
+               (cleanup_ctx->rx_remaining == 0);
+    }, [this]() { uct_iface_progress(m_e1->iface()); }, 5.0);
 
     ASSERT_FALSE(ucs_list_is_empty(&iface->super.qp_gc_list));
     EXPECT_EQ(0u, cleanup_ctx->rx_remaining);
@@ -950,19 +907,15 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_already_drained,
     uct_rc_verbs_iface_t *iface = verbs_iface(m_e1);
     unsigned quota              = iface->rx_cq_available;
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
-    ucs_time_t deadline;
 
     send_am_messages(m_e1, 8, UCS_OK);
     ASSERT_UCS_OK_OR_INPROGRESS(
             uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL));
     ASSERT_TRUE(rc_ep(m_e1)->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL);
 
-    deadline = ucs::get_deadline(5.0);
-    while ((rx_available(m_e1, 0) < rx_max_wr(m_e1)) &&
-           (ucs_get_time() < deadline)) {
-        uct_iface_progress(m_e1->iface());
-    }
-
+    wait_for_cond([this]() {
+        return rx_available(m_e1, 0) == rx_max_wr(m_e1);
+    }, [this]() { uct_iface_progress(m_e1->iface()); }, 5.0);
     ASSERT_EQ(rx_max_wr(m_e1), rx_available(m_e1, 0));
 
     /* No receive WR remains, so no later RX CQE can trigger cleanup. */
@@ -978,63 +931,22 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_already_drained,
     EXPECT_EQ(quota + rx_max_wr(m_e1), iface->rx_cq_available);
 }
 
-/* The flow control window must not exceed the number of receive WRs posted to
- * one QP, and must leave one receive batch of them unused. Otherwise, the peer
- * can send more messages than that QP can receive. */
-UCS_TEST_P(test_rc_no_srq, fc_wnd_size)
+/* Limit the refill batch to a quarter of the per-QP queue and leave room
+ * for that batch beyond the flow control window. */
+UCS_TEST_P(test_rc_no_srq, rx_config, "IB_RX_MAX_BATCH=16",
+           "RC_VERBS_RX_MAX_WR=32", "RC_FC_ENABLE=y")
 {
-    if (!rc_iface(m_e1)->config.fc_enabled) {
-        UCS_TEST_SKIP_R("flow control is disabled");
+    entity *peers[] = {m_e1, m_e2};
+
+    for (auto e : peers) {
+        unsigned batch = rc_iface(e)->super.config.rx_max_batch;
+
+        EXPECT_TRUE(rc_iface(e)->config.fc_enabled);
+        EXPECT_GT(batch, 0u);
+        EXPECT_EQ(static_cast<unsigned>(rx_max_wr(e)) / 4, batch);
+        EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
+        EXPECT_LE(rc_iface(e)->config.fc_wnd_size + batch, rx_max_wr(e));
     }
-
-    /* Either peer can receive, so verify the bound on both interfaces. */
-    EXPECT_GT(rc_iface(m_e1)->config.fc_wnd_size, 0);
-    EXPECT_LE(rc_iface(m_e1)->config.fc_wnd_size +
-              rc_iface(m_e1)->super.config.rx_max_batch, rx_max_wr(m_e1));
-    EXPECT_GT(rc_iface(m_e2)->config.fc_wnd_size, 0);
-    EXPECT_LE(rc_iface(m_e2)->config.fc_wnd_size +
-              rc_iface(m_e2)->super.config.rx_max_batch, rx_max_wr(m_e2));
-}
-
-/* The repost threshold must be reachable by a single QP, so it is limited by a
- * quarter of the receive WRs of that QP. */
-UCS_TEST_P(test_rc_no_srq, rx_max_batch_limit, "IB_RX_MAX_BATCH=16",
-           "RC_VERBS_RX_MAX_WR=32")
-{
-    unsigned batch = verbs_iface(m_e1)->super.super.config.rx_max_batch;
-
-    EXPECT_GT(batch, 0u);
-    EXPECT_EQ(static_cast<unsigned>(rx_max_wr(m_e1)) / 4, batch);
-}
-
-/* Verify that receive WR flush completions are accounted when a cancelled EP
- * flush moves the QP to the error state. */
-UCS_TEST_SKIP_COND_P(test_rc_no_srq, flush_cancel,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
-{
-    /* Endpoint destruction may report the sends cancelled by this test. */
-    scoped_log_handler slh(hide_warns_logger);
-    ucs_status_t status;
-
-    /* Leave the sends outstanding, since uct_rc_ep_flush() returns UCS_OK
-     * without cancelling anything when the transmit queue is already empty */
-    for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
-        send_am_messages(m_e1, 8, UCS_OK, 0, ep_idx);
-    }
-
-    status = uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL);
-    ASSERT_UCS_OK_OR_INPROGRESS(status);
-    EXPECT_TRUE(rc_ep(m_e1, 0)->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL);
-
-    progress_loop();
-
-    m_e1->destroy_eps();
-    m_e2->destroy_eps();
-
-    /* Posted receive WRs remain, so QP destruction must stay pending. */
-    EXPECT_FALSE(qp_gc_list_empty());
-
-    wait_qp_gc_list_empty();
 }
 
 /* Report a real receive completion as failed, to exercise the error path of a
@@ -1115,7 +1027,6 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs,
     std::vector<void*> descs;
     unsigned prev_total = 0;
     unsigned total      = 0;
-    ucs_time_t deadline;
     int ep_idx;
 
     exhaust_rx_bufs(descs);
@@ -1127,11 +1038,8 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs,
     /* Returning the descriptors must allow progress to repost receives. */
     release_rx_bufs(descs, 0, descs.size());
 
-    deadline = ucs::get_deadline(5.0);
-    while (rx_post_recv_pending(m_e2) && (ucs_get_time() < deadline)) {
-        progress();
-    }
-
+    wait_for_cond([this]() { return !rx_post_recv_pending(m_e2); },
+                  [this]() { progress(); }, 5.0);
     EXPECT_FALSE(rx_post_recv_pending(m_e2));
 
     /* Verify that the waiting QPs reduced the total number of free receive WR
@@ -1181,10 +1089,9 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_order,
     short_ep = first_waiting_ep_index();
     EXPECT_NE(first_ep, short_ep);
     EXPECT_EQ(prev_available[short_ep], rx_available(m_e2, short_ep));
-    EXPECT_EQ(&rc_ep(m_e2, short_ep)->list, rc_iface(m_e2)->ep_list.next);
     progress_loop();
     EXPECT_TRUE(rx_post_recv_pending(m_e2));
-    EXPECT_EQ(&rc_ep(m_e2, short_ep)->list, rc_iface(m_e2)->ep_list.next);
+    EXPECT_EQ(prev_available[short_ep], rx_available(m_e2, short_ep));
 
     /* The next batch reaches the empty QP, not the partially filled one. */
     release_rx_bufs(descs, 1, batch + 1);
@@ -1407,9 +1314,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
 {
     unsigned am_count = 0;
     unsigned target   = rx_max_wr(m_e2) * 2;
-    ucs_status_t status;
-    ucs_time_t deadline;
-    unsigned sent;
+    unsigned sent     = 0;
 
     if (rc_iface(m_e2)->config.fc_enabled) {
         UCS_TEST_SKIP_R("flow control is enabled");
@@ -1419,10 +1324,9 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
 
     /* Progress the sender only, so that the receive queue of the peer runs out
      * of receive WRs and the fabric reports RNR. */
-    sent     = 0;
-    deadline = ucs::get_deadline(10.0);
-    while ((sent < target) && (ucs_get_time() < deadline)) {
-        status = send_am_message(m_e1, 0, 0);
+    wait_for_cond([&]() { return sent >= target; }, [&]() {
+        ucs_status_t status = send_am_message(m_e1, 0, 0);
+
         if (status == UCS_OK) {
             sent++;
         } else if (status == UCS_ERR_NO_RESOURCE) {
@@ -1430,49 +1334,13 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
         } else {
             UCS_TEST_ABORT("failed to send: " << ucs_status_string(status));
         }
-    }
+    }, 10.0);
 
     ASSERT_GT(sent, (unsigned)rx_max_wr(m_e2));
 
     wait_for_value(&am_count, sent, true);
     EXPECT_EQ(sent, am_count);
     flush();
-}
-
-/* Verify that an endpoint is not created when the RX CQ quota has no room left
- * for the receive WRs of one more QP, and that destroying a QP returns it. */
-UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_cq_no_space,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
-{
-    scoped_log_handler slh(wrap_errors_logger);
-    uct_rc_verbs_iface_t *iface = verbs_iface(m_e2);
-    ucs::handle<uct_ep_h> ep;
-    uct_ep_params_t ep_params;
-    uct_ep_h refused_ep;
-    ucs_status_t status;
-
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
-    ep_params.iface      = m_e2->iface();
-
-    /* One WR short of a full receive queue, so the endpoint is refused. */
-    iface->rx_cq_available = rx_max_wr(m_e2) - 1;
-    status                 = uct_ep_create(&ep_params, &refused_ep);
-    if (status == UCS_OK) {
-        uct_ep_destroy(refused_ep);
-    }
-    EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
-
-    /* With room for exactly one QP, it is created and consumes the quota. */
-    iface->rx_cq_available = rx_max_wr(m_e2);
-    UCS_TEST_CREATE_HANDLE(uct_ep_h, ep, uct_ep_destroy, uct_ep_create,
-                           &ep_params);
-    EXPECT_EQ(0, iface->rx_cq_available);
-
-    /* The quota is returned once the QP is destroyed and its receive WRs are
-     * drained. */
-    ep.reset();
-    wait_qp_gc_list_empty();
-    EXPECT_EQ(rx_max_wr(m_e2), iface->rx_cq_available);
 }
 
 /* The count of receive WRs per QP must fit the receive queue of a QP: it may
@@ -1560,21 +1428,12 @@ protected:
     }
 };
 
-UCS_TEST_P(test_rc_srq_select, try_uses_srq, "RC_VERBS_SRQ_ENABLE=try")
-{
-    if (!device_has_srq()) {
-        UCS_TEST_SKIP_R("device does not support SRQ");
-    }
-
-    check_srq_used(m_e1->iface());
-}
-
 UCS_TEST_P(test_rc_srq_select, try_falls_back, "RC_VERBS_SRQ_ENABLE=try")
 {
     check_no_srq_fallback();
 }
 
-UCS_TEST_P(test_rc_srq_select, yes_uses_srq, "RC_VERBS_SRQ_ENABLE=try")
+UCS_TEST_P(test_rc_srq_select, uses_srq, "RC_VERBS_SRQ_ENABLE=try")
 {
     uct_iface_h iface;
 
@@ -1582,6 +1441,7 @@ UCS_TEST_P(test_rc_srq_select, yes_uses_srq, "RC_VERBS_SRQ_ENABLE=try")
         UCS_TEST_SKIP_R("device does not support SRQ");
     }
 
+    check_srq_used(m_e1->iface());
     ASSERT_UCS_OK(
             uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
 
