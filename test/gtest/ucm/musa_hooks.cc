@@ -99,9 +99,9 @@ UCS_TEST_F(musa_hooks, test_musaMallocHost_musaFreeHost)
 {
     void *ptr;
 
+    musa_alloc_event.mem_type.address = NULL;
     ASSERT_EQ(musaSuccess, musaMallocHost(&ptr, 64));
-    EXPECT_EQ(ptr, musa_alloc_event.mem_type.address);
-    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, musa_alloc_event.mem_type.mem_type);
+    EXPECT_EQ(nullptr, musa_alloc_event.mem_type.address);
 
     ASSERT_EQ(musaSuccess, musaFreeHost(ptr));
     EXPECT_EQ(ptr, musa_free_event.mem_type.address);

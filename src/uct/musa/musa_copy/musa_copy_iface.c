@@ -362,17 +362,16 @@ uct_musa_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
         device_rsc = &iface->device_rscs[i];
         ucs_queue_for_each_safe(queue_desc, queue_iter,
                                 &device_rsc->active_queue, queue) {
-            ++flush->count;
             status = uct_musa_copy_iface_post_event(device_rsc, queue_desc,
                                                     NULL, flush);
             if (status != UCS_INPROGRESS) {
-                --flush->count;
                 flush->comp = NULL;
                 if (flush->count == 0) {
                     ucs_free(flush);
                 }
                 return status;
             }
+            ++flush->count;
         }
     }
 
@@ -520,7 +519,7 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
 {
     uct_musa_copy_iface_config_t *config =
             ucs_derived_of(tl_config, uct_musa_copy_iface_config_t);
-    const char *device_name = params->mode.device.dev_name;
+    const char *device_name = NULL;
     char *end;
     long device;
     unsigned device_count;
@@ -537,7 +536,13 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
                               UCS_STATS_ARG(UCT_MUSA_COPY_TL_NAME));
 
     device = 0;
-    if ((device_name != NULL) && (strncmp(device_name, "musa", 4) == 0)) {
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_DEVICE) {
+        device_name = params->mode.device.dev_name;
+        if ((device_name == NULL) ||
+            (strncmp(device_name, "musa", 4) != 0)) {
+            return UCS_ERR_NO_DEVICE;
+        }
+
         device = strtol(device_name + 4, &end, 10);
         if ((end == (device_name + 4)) || (*end != '\0') || (device < 0)) {
             return UCS_ERR_INVALID_PARAM;
