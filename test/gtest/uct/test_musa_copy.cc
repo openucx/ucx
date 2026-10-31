@@ -36,6 +36,7 @@ UCS_TEST_SKIP_COND_P(test_musa_copy, put_zcopy_is_async,
                             sendbuf.memh(),
                             sender().iface_attr().cap.put.max_iov);
 
+    ++comp()->count;
     ucs_status_t status = uct_ep_put_zcopy(sender_ep(), iov, iovcnt,
                                            recvbuf.addr(), recvbuf.rkey(),
                                            comp());

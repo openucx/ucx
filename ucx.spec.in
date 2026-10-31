@@ -5,6 +5,7 @@
 %bcond_without ib
 %bcond_with    knem
 %bcond_without rdmacm
+%bcond_with    musa
 %bcond_with    rocm
 %bcond_with    ugni
 %bcond_with    xpmem
@@ -134,6 +135,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg efa efa \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
+           %_with_arg musa musa \
            %_with_arg rocm rocm \
            %_with_arg xpmem xpmem \
            %_with_arg vfs fuse3 \
@@ -255,6 +257,21 @@ technology for direct data transfer between GPU and RDMA devices.
 %{_libdir}/ucx/libucm_cuda.so.*
 %{_libdir}/ucx/libuct_cuda.so.*
 %{_includedir}/uct/cuda/*
+%endif
+
+%if %{with musa}
+%package musa
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Requires: libmusart
+Summary: UCX MUSA support
+Group: System Environment/Libraries
+
+%description musa
+Provides Moore Threads MUSA Runtime support for UCX.
+
+%files musa
+%{_libdir}/ucx/libuct_musa.so.*
+%{_libdir}/ucx/libucm_musa.so.*
 %endif
 
 %if %{with gdrcopy}

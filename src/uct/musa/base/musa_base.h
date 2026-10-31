@@ -52,6 +52,11 @@ ucs_status_t uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
 ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
                                 int device);
 
+ucs_status_t
+uct_musa_base_select_device(const uct_musa_pointer_info_t *src_info,
+                            const uct_musa_pointer_info_t *dst_info,
+                            int default_device, int *device_p);
+
 ucs_status_t uct_musa_base_copy_async(const void *src, void *dst, size_t length,
                                       int device, musaStream_t stream,
                                       const uct_musa_pointer_info_t *src_info,

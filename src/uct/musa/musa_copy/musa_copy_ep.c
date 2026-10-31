@@ -86,25 +86,13 @@ uct_musa_copy_ep_get_copy_context(uct_musa_copy_iface_t *iface,
         return status;
     }
 
-    if ((src_info_p->kind == UCT_MUSA_POINTER_MANAGED) ||
-        (dst_info_p->kind == UCT_MUSA_POINTER_MANAGED)) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     *src_mem_type_p = (src_info_p->kind == UCT_MUSA_POINTER_DEVICE) ?
                       UCS_MEMORY_TYPE_MUSA : UCS_MEMORY_TYPE_HOST;
     *dst_mem_type_p = (dst_info_p->kind == UCT_MUSA_POINTER_DEVICE) ?
                       UCS_MEMORY_TYPE_MUSA : UCS_MEMORY_TYPE_HOST;
 
-    if (src_info_p->device >= 0) {
-        *device_p = src_info_p->device;
-    } else if (dst_info_p->device >= 0) {
-        *device_p = dst_info_p->device;
-    } else {
-        *device_p = iface->device;
-    }
-
-    return UCS_OK;
+    return uct_musa_base_select_device(src_info_p, dst_info_p, iface->device,
+                                       device_p);
 }
 
 static ucs_status_t
