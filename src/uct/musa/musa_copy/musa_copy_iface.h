@@ -58,11 +58,11 @@ typedef struct {
 } uct_musa_copy_iface_t;
 
 typedef struct {
-    uct_iface_config_t         super;
-    unsigned                    max_poll;
-    unsigned                    max_events;
-    double                     latency;
-    double                     bandwidth;
+    uct_iface_config_t super;
+    unsigned           max_poll;
+    unsigned           max_events;
+    double             latency;
+    double             bandwidth;
 } uct_musa_copy_iface_config_t;
 
 ucs_status_t

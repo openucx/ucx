@@ -53,6 +53,19 @@
 
 #endif
 
+#if HAVE_MUSA
+#include <musa_runtime_api.h>
+
+#define MUSA_CALL(_code) \
+    do { \
+        musaError_t merr = _code; \
+        if (merr != musaSuccess) { \
+            UCS_TEST_ABORT(#_code << " failed: " \
+                           << musaGetErrorString(merr)); \
+        } \
+    } while (0)
+#endif
+
 #if HAVE_CUDA && CUDART_VERSION >= 13000
 static cudaError_t
 mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
@@ -126,6 +139,17 @@ bool mem_buffer::is_cuda_supported()
 #endif
 }
 
+bool mem_buffer::is_musa_supported()
+{
+#if HAVE_MUSA
+    int num_devices = 0;
+    musaError_t status = musaGetDeviceCount(&num_devices);
+    return (status == musaSuccess) && (num_devices > 0);
+#else
+    return false;
+#endif
+}
+
 bool mem_buffer::is_rocm_supported()
 {
 #if HAVE_ROCM
@@ -148,7 +172,8 @@ bool mem_buffer::is_ze_supported()
 
 bool mem_buffer::is_gpu_supported()
 {
-    return is_cuda_supported() || is_rocm_supported() || is_ze_supported();
+    return is_cuda_supported() || is_musa_supported() ||
+           is_rocm_supported() || is_ze_supported();
 }
 
 bool mem_buffer::is_rocm_managed_supported()
@@ -209,6 +234,9 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
             vec.push_back(UCS_MEMORY_TYPE_CUDA);
             vec.push_back(UCS_MEMORY_TYPE_CUDA_MANAGED);
         }
+        if (is_musa_supported()) {
+            vec.push_back(UCS_MEMORY_TYPE_MUSA);
+        }
         if (is_rocm_supported()) {
             vec.push_back(UCS_MEMORY_TYPE_ROCM);
         }
@@ -258,6 +286,12 @@ void mem_buffer::set_device_context()
     }
 #endif
 
+#if HAVE_MUSA
+    if (is_musa_supported()) {
+        MUSA_CALL(musaSetDevice(0));
+    }
+#endif
+
 #if HAVE_ZE
     is_ze_supported();
 #endif
@@ -273,6 +307,12 @@ int mem_buffer::get_device_count()
         return -1;
     }
     return num_gpus;
+#elif HAVE_MUSA
+    int num_devices = 0;
+    if (musaGetDeviceCount(&num_devices) != musaSuccess) {
+        return -1;
+    }
+    return num_devices;
 #else
     return -1;
 #endif
@@ -284,6 +324,10 @@ int mem_buffer::get_device()
     int device = -1;
     CUDA_CALL(cudaGetDevice(&device), "");
     return device;
+#elif HAVE_MUSA
+    int device = -1;
+    MUSA_CALL(musaGetDevice(&device));
+    return device;
 #else
     return -1;
 #endif
@@ -293,6 +337,8 @@ void mem_buffer::set_device(int device)
 {
 #if HAVE_CUDA
     CUDA_CALL(cudaSetDevice(device), ": device=" << device);
+#elif HAVE_MUSA
+    MUSA_CALL(musaSetDevice(device));
 #else
     (void)device;
 #endif
@@ -600,6 +646,16 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
         }
         return ptr;
 #endif
+#if HAVE_MUSA
+    case UCS_MEMORY_TYPE_MUSA:
+        if (async) {
+            MUSA_CALL(musaMallocAsync(&ptr, size, 0));
+            MUSA_CALL(musaStreamSynchronize(0));
+        } else {
+            MUSA_CALL(musaMalloc(&ptr, size));
+        }
+        return ptr;
+#endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
         ROCM_CALL(hipMalloc(&ptr, size));
@@ -685,6 +741,17 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
 #endif
             } else {
                 CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
+            }
+            break;
+#endif
+#if HAVE_MUSA
+        case UCS_MEMORY_TYPE_MUSA:
+            if (async) {
+                MUSA_CALL(musaStreamSynchronize(0));
+                MUSA_CALL(musaFreeAsync(ptr, 0));
+                MUSA_CALL(musaStreamSynchronize(0));
+            } else {
+                MUSA_CALL(musaFree(ptr));
             }
             break;
 #endif
@@ -824,6 +891,12 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
         CUDA_CALL(cudaDeviceSynchronize(), "");
         break;
 #endif
+#if HAVE_MUSA
+    case UCS_MEMORY_TYPE_MUSA:
+        MUSA_CALL(musaMemset(buffer, c, length));
+        MUSA_CALL(musaDeviceSynchronize());
+        break;
+#endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
         if (length <= 8) {
@@ -898,6 +971,13 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDefault),
                   ": dst=" << dst << " src=" << src << " length=" << length);
         CUDA_CALL(cudaDeviceSynchronize(), "");
+#endif
+#if HAVE_MUSA
+    } else if (check_mem_types(dst_mem_type, src_mem_type,
+                               host_mem_types |
+                               UCS_BIT(UCS_MEMORY_TYPE_MUSA))) {
+        MUSA_CALL(musaMemcpy(dst, src, length, musaMemcpyDefault));
+        MUSA_CALL(musaDeviceSynchronize());
 #endif
 #if HAVE_ROCM
     } else if (check_mem_types(dst_mem_type, src_mem_type, rocm_mem_types)) {
