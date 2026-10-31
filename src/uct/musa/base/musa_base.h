@@ -52,6 +52,17 @@ ucs_status_t uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
 ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
                                 int device);
 
+ucs_status_t uct_musa_base_copy_async(const void *src, void *dst, size_t length,
+                                      int device, musaStream_t stream);
+
+ucs_status_t uct_musa_base_status(musaError_t error, const char *operation);
+
+ucs_status_t uct_musa_base_get_current_device(int *device_p);
+
+ucs_status_t uct_musa_base_set_device(int device);
+
+void uct_musa_base_restore_device(int device, int valid);
+
 int uct_musa_base_has_dmabuf(void);
 
 ucs_status_t uct_musa_base_export_dmabuf(const void *address, size_t length,

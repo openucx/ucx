@@ -66,23 +66,106 @@ ucs_status_t uct_musa_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
 }
 
 static ucs_status_t
-uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                       uint64_t remote_addr, int is_put)
+uct_musa_copy_ep_get_copy_context(uct_musa_copy_iface_t *iface,
+                                  const void *src, void *dst, size_t length,
+                                  ucs_memory_type_t *src_mem_type_p,
+                                  ucs_memory_type_t *dst_mem_type_p,
+                                  int *device_p)
 {
+    uct_musa_pointer_info_t src_info;
+    uct_musa_pointer_info_t dst_info;
+    ucs_status_t status;
+
+    status = uct_musa_base_query_pointer(src, length, &src_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_musa_base_query_pointer(dst, length, &dst_info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((src_info.kind == UCT_MUSA_POINTER_MANAGED) ||
+        (dst_info.kind == UCT_MUSA_POINTER_MANAGED)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *src_mem_type_p = (src_info.kind == UCT_MUSA_POINTER_DEVICE) ?
+                      UCS_MEMORY_TYPE_MUSA : UCS_MEMORY_TYPE_HOST;
+    *dst_mem_type_p = (dst_info.kind == UCT_MUSA_POINTER_DEVICE) ?
+                      UCS_MEMORY_TYPE_MUSA : UCS_MEMORY_TYPE_HOST;
+
+    if (src_info.device >= 0) {
+        *device_p = src_info.device;
+    } else if (dst_info.device >= 0) {
+        *device_p = dst_info.device;
+    } else {
+        *device_p = iface->device;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                       uint64_t remote_addr, uct_completion_t *comp,
+                       int is_put)
+{
+    uct_musa_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_musa_copy_iface_t);
+    uct_musa_copy_device_rsc_t *device_rsc;
+    uct_musa_copy_queue_desc_t *queue_desc;
+    ucs_memory_type_t src_mem_type;
+    ucs_memory_type_t dst_mem_type;
+    void *src;
+    void *dst;
     size_t length;
+    int device;
+    ucs_status_t status;
 
     if ((iovcnt != 1) || (iov[0].count != 1)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     length = uct_iov_get_length(iov);
-    if (is_put) {
-        return uct_musa_copy_ep_copy(tl_ep, iov[0].buffer, (void*)remote_addr,
-                                     length);
+    if (length == 0) {
+        return UCS_OK;
     }
 
-    return uct_musa_copy_ep_copy(tl_ep, (void*)remote_addr, iov[0].buffer,
-                                 length);
+    src    = is_put ? iov[0].buffer : (void*)remote_addr;
+    dst    = is_put ? (void*)remote_addr : iov[0].buffer;
+
+    status = uct_musa_copy_ep_get_copy_context(iface, src, dst, length,
+                                               &src_mem_type, &dst_mem_type,
+                                               &device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
+        (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
+        return uct_musa_copy_ep_copy(tl_ep, src, dst, length);
+    }
+
+    device_rsc = uct_musa_copy_iface_get_device_rsc(iface, device);
+    if (device_rsc == NULL) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    queue_desc = &device_rsc->queue_desc[src_mem_type][dst_mem_type];
+    status = uct_musa_copy_iface_get_stream(device_rsc, queue_desc);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_musa_base_copy_async(src, dst, length, device,
+                                      queue_desc->stream);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_musa_copy_iface_post_event(device_rsc, queue_desc, comp, NULL);
 }
 
 ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
@@ -91,8 +174,8 @@ ucs_status_t uct_musa_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 {
     ucs_status_t status;
 
-    status = uct_musa_copy_ep_zcopy(tl_ep, iov, iovcnt, remote_addr, 1);
-    if (status == UCS_OK) {
+    status = uct_musa_copy_ep_zcopy(tl_ep, iov, iovcnt, remote_addr, comp, 1);
+    if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                           uct_iov_total_length(iov, iovcnt));
     }
@@ -105,10 +188,16 @@ ucs_status_t uct_musa_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 {
     ucs_status_t status;
 
-    status = uct_musa_copy_ep_zcopy(tl_ep, iov, iovcnt, remote_addr, 0);
-    if (status == UCS_OK) {
+    status = uct_musa_copy_ep_zcopy(tl_ep, iov, iovcnt, remote_addr, comp, 0);
+    if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                           uct_iov_total_length(iov, iovcnt));
     }
     return status;
+}
+
+ucs_status_t uct_musa_copy_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                    uct_completion_t *comp)
+{
+    return uct_musa_copy_iface_flush(tl_ep->iface, flags, comp);
 }
