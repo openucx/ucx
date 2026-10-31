@@ -30,6 +30,7 @@
 #include <ucp/core/ucp_listener.h>
 #include <ucp/rma/rma.inl>
 #include <ucp/rma/rma.h>
+#include <uct/base/uct_iface.h>
 
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/init_once.h>
@@ -145,6 +146,21 @@ static const uct_iface_ops_t ucp_failed_tl_iface_ops = {
     .ep_get_address      = (uct_ep_get_address_func_t)ucp_ep_failed_op
 };
 
+static uct_iface_internal_ops_t ucp_failed_tl_iface_internal_ops = {
+    .iface_query_v2        = uct_iface_base_query_v2,
+    .iface_estimate_perf   = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
+    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query              = (uct_ep_query_func_t)ucp_ep_failed_op,
+    .ep_invalidate         = (uct_ep_invalidate_func_t)ucp_ep_failed_op,
+    .ep_connect_to_ep_v2   = (uct_ep_connect_to_ep_v2_func_t)ucp_ep_failed_op,
+    .iface_is_reachable_v2 = (uct_iface_is_reachable_v2_func_t)ucs_empty_function_return_zero,
+    .ep_is_connected       = (uct_ep_is_connected_func_t)ucs_empty_function_return_zero,
+    .ep_get_device_ep      = (uct_ep_get_device_ep_func_t)ucp_ep_failed_op,
+    .ep_put_sgl_zcopy      = (uct_ep_put_sgl_zcopy_func_t)ucp_ep_failed_op,
+    .ep_get_sgl_zcopy      = (uct_ep_get_sgl_zcopy_func_t)ucp_ep_failed_op,
+    .ep_outstanding_purge  = (uct_ep_outstanding_purge_func_t)ucp_ep_failed_op
+};
+
 static ucp_ep_discard_lanes_arg_t ucp_failed_tl_ep_discard_arg = {
     .deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL,
     .status               = UCS_ERR_CANCELED
@@ -165,6 +181,8 @@ static void ucp_failed_tl_iface_init(void)
         ucp_failed_tl_iface->ops                     = ucp_failed_tl_iface_ops;
         ucp_failed_tl_iface->ops.iface_close         = stub_close;
         ucp_failed_tl_ep_discard_arg.failed_ep.iface = ucp_failed_tl_iface;
+        ucs_derived_of(ucp_failed_tl_iface, uct_base_iface_t)->internal_ops =
+                &ucp_failed_tl_iface_internal_ops;
     }
 }
 
