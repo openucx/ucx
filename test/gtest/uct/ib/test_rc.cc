@@ -636,6 +636,8 @@ public:
         m_entities.push_back(m_entity_flush_rkey);
     }
 
+    void test_put_fence_no_flush_remote();
+
     using map_size_t = std::map<std::string, std::pair<size_t, size_t>>;
 
     void check_sizes(entity *e, const map_size_t &sizes)
@@ -672,11 +674,9 @@ UCS_TEST_P(test_rc_iface_flush_remote, size_flush_remote)
     check_sizes(m_entity_flush_rkey, sizes);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
-                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY),
-                     "IB_PCI_RELAXED_ORDERING?=try")
+void test_rc_iface_flush_remote::test_put_fence_no_flush_remote()
 {
-    mapped_buffer sendbuf(64, 0ul, *m_e1);
+    mapped_buffer sendbuf(64, 1ul, *m_e1);
     mapped_buffer recvbuf(64, 0ul, *m_e2);
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 64, sendbuf.memh(),
                             1);
@@ -693,10 +693,32 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
                                recvbuf.rkey(), &comp));
     wait_for_value(&comp.count, 0, true);
     EXPECT_EQ(0, comp.count);
+    EXPECT_EQ(UCS_OK, comp.status);
     EXPECT_EQ(0, m_err_count);
+    recvbuf.pattern_check(1ul);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY),
+                     "IB_PCI_RELAXED_ORDERING?=try")
+{
+    test_put_fence_no_flush_remote();
 }
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
+
+class test_rc_mlx5_iface_flush_remote : public test_rc_iface_flush_remote {
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_iface_flush_remote, put_fence_no_flush_remote_no_devx,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY),
+                     "IB_PCI_RELAXED_ORDERING?=try", "IB_MLX5_DEVX=no",
+                     "RC_FENCE=weak")
+{
+    test_put_fence_no_flush_remote();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_iface_flush_remote, rc_mlx5)
 
 
 class test_rc_get_limit : public test_rc {
