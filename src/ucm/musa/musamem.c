@@ -34,7 +34,6 @@ static musaError_t ucm_musaMallocAsync(void **address, size_t size,
 static musaError_t
 ucm_musaMallocFromPoolAsync(void **address, size_t size,
                             musaMemPool_t pool, musaStream_t stream);
-static musaError_t ucm_musaMallocHost(void **address, size_t size);
 static musaError_t ucm_musaFreeHost(void *address);
 static musaError_t ucm_musaFreeAsync(void *address, musaStream_t stream);
 static MUresult ucm_muMemAlloc(MUdeviceptr *address, size_t size);
@@ -45,7 +44,7 @@ static MUresult ucm_muMemAllocAsync(MUdeviceptr *address, size_t size,
                                     MUstream stream);
 static MUresult
 ucm_muMemAllocFromPoolAsync(MUdeviceptr *address, size_t size,
-                            MUmemPool pool, MUstream stream);
+                            MUmemoryPool pool, MUstream stream);
 static MUresult ucm_muMemAllocPitch(MUdeviceptr *address, size_t *pitch,
                                     size_t width, size_t height,
                                     unsigned element_size);
@@ -56,37 +55,44 @@ static MUresult ucm_muMemFree(MUdeviceptr address);
 static MUresult ucm_muMemFree_v2(MUdeviceptr address);
 static MUresult ucm_muMemFreeAsync(MUdeviceptr address, MUstream stream);
 
-#define UCM_MUSA_FUNC(_name, _rettype, _fail_val, ...) \
-    UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(_name, _rettype, _fail_val, __VA_ARGS__)
-
-UCM_MUSA_FUNC(musaMalloc, musaError_t, musaErrorUnknown, void **, size_t)
-UCM_MUSA_FUNC(musaFree, musaError_t, musaErrorUnknown, void *)
-UCM_MUSA_FUNC(musaMallocManaged, musaError_t, musaErrorUnknown, void **,
-              size_t, unsigned)
-UCM_MUSA_FUNC(musaMallocPitch, musaError_t, musaErrorUnknown, void **,
-              size_t *, size_t, size_t)
-UCM_MUSA_FUNC(musaMallocAsync, musaError_t, musaErrorUnknown, void **, size_t,
-              musaStream_t)
-UCM_MUSA_FUNC(musaMallocFromPoolAsync, musaError_t, musaErrorUnknown, void **,
-              size_t, musaMemPool_t, musaStream_t)
-UCM_MUSA_FUNC(musaMallocHost, musaError_t, musaErrorUnknown, void **, size_t)
-UCM_MUSA_FUNC(musaFreeHost, musaError_t, musaErrorUnknown, void *)
-UCM_MUSA_FUNC(musaFreeAsync, musaError_t, musaErrorUnknown, void *,
-              musaStream_t)
-UCM_MUSA_FUNC(muMemAlloc, MUresult, -1, MUdeviceptr *, size_t)
-UCM_MUSA_FUNC(muMemAlloc_v2, MUresult, -1, MUdeviceptr *, size_t)
-UCM_MUSA_FUNC(muMemAllocManaged, MUresult, -1, MUdeviceptr *, size_t,
-              unsigned)
-UCM_MUSA_FUNC(muMemAllocAsync, MUresult, -1, MUdeviceptr *, size_t, MUstream)
-UCM_MUSA_FUNC(muMemAllocFromPoolAsync, MUresult, -1, MUdeviceptr *, size_t,
-              MUmemPool, MUstream)
-UCM_MUSA_FUNC(muMemAllocPitch, MUresult, -1, MUdeviceptr *, size_t *, size_t,
-              size_t, unsigned)
-UCM_MUSA_FUNC(muMemAllocPitch_v2, MUresult, -1, MUdeviceptr *, size_t *,
-              size_t, size_t, unsigned)
-UCM_MUSA_FUNC(muMemFree, MUresult, -1, MUdeviceptr)
-UCM_MUSA_FUNC(muMemFree_v2, MUresult, -1, MUdeviceptr)
-UCM_MUSA_FUNC(muMemFreeAsync, MUresult, -1, MUdeviceptr, MUstream)
+/* Invoke directly so SDK aliases do not expand before token concatenation. */
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaMalloc, musaError_t, musaErrorUnknown,
+                                  void **, size_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaFree, musaError_t, musaErrorUnknown,
+                                  void *)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaMallocManaged, musaError_t,
+                                  musaErrorUnknown, void **, size_t, unsigned)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaMallocPitch, musaError_t,
+                                  musaErrorUnknown, void **, size_t *, size_t,
+                                  size_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaMallocAsync, musaError_t,
+                                  musaErrorUnknown, void **, size_t,
+                                  musaStream_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaMallocFromPoolAsync, musaError_t,
+                                  musaErrorUnknown, void **, size_t,
+                                  musaMemPool_t, musaStream_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaFreeHost, musaError_t, musaErrorUnknown,
+                                  void *)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(musaFreeAsync, musaError_t, musaErrorUnknown,
+                                  void *, musaStream_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAlloc, MUresult, -1, MUdeviceptr *, size_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAlloc_v2, MUresult, -1, MUdeviceptr *,
+                                  size_t)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocManaged, MUresult, -1, MUdeviceptr *,
+                                  size_t, unsigned)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocAsync, MUresult, -1, MUdeviceptr *,
+                                  size_t, MUstream)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocFromPoolAsync, MUresult, -1,
+                                  MUdeviceptr *, size_t, MUmemoryPool, MUstream)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocPitch, MUresult, -1, MUdeviceptr *,
+                                  size_t *, size_t, size_t, unsigned)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocPitch_v2, MUresult, -1,
+                                  MUdeviceptr *, size_t *, size_t, size_t,
+                                  unsigned)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFree, MUresult, -1, MUdeviceptr)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFree_v2, MUresult, -1, MUdeviceptr)
+UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFreeAsync, MUresult, -1, MUdeviceptr,
+                                  MUstream)
 
 static void
 ucm_dispatch_musa_mem_type_event(ucm_event_type_t event_type, void *address,
@@ -210,16 +216,6 @@ ucm_musaMallocFromPoolAsync(void **address, size_t size, musaMemPool_t pool,
     return status;
 }
 
-static musaError_t ucm_musaMallocHost(void **address, size_t size)
-{
-    musaError_t status;
-
-    ucm_event_enter();
-    status = ucm_orig_musaMallocHost(address, size);
-    ucm_event_leave();
-    return status;
-}
-
 static musaError_t ucm_musaFreeHost(void *address)
 {
     musaError_t status;
@@ -311,7 +307,7 @@ ucm_muMemAllocAsync(MUdeviceptr *address, size_t size, MUstream stream)
 
 static MUresult
 ucm_muMemAllocFromPoolAsync(MUdeviceptr *address, size_t size,
-                            MUmemPool pool, MUstream stream)
+                            MUmemoryPool pool, MUstream stream)
 {
     MUresult status;
 
@@ -413,7 +409,7 @@ typedef struct {
 } ucm_musa_func_t;
 
 #define UCM_MUSA_FUNC_ENTRY(_func) \
-    {{UCS_PP_MAKE_STRING(_func), ucm_override_##_func}, \
+    {{#_func, ucm_override_##_func}, \
       (void**)&ucm_orig_##_func}
 
 static ucm_musa_func_t ucm_musa_driver_funcs[] = {
@@ -437,7 +433,6 @@ static ucm_musa_func_t ucm_musa_runtime_funcs[] = {
     UCM_MUSA_FUNC_ENTRY(musaMallocPitch),
     UCM_MUSA_FUNC_ENTRY(musaMallocAsync),
     UCM_MUSA_FUNC_ENTRY(musaMallocFromPoolAsync),
-    UCM_MUSA_FUNC_ENTRY(musaMallocHost),
     UCM_MUSA_FUNC_ENTRY(musaFreeHost),
     UCM_MUSA_FUNC_ENTRY(musaFreeAsync),
     {{NULL}, NULL}

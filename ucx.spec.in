@@ -262,7 +262,6 @@ technology for direct data transfer between GPU and RDMA devices.
 %if %{with musa}
 %package musa
 Requires: %{name}%{?_isa} = %{version}-%{release}
-Requires: libmusart
 Summary: UCX MUSA support
 Group: System Environment/Libraries
 

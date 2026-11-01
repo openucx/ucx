@@ -187,7 +187,7 @@ uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
                                                        UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p)
 {
     unsigned i;
@@ -262,36 +262,44 @@ static ucs_status_t
 uct_musa_base_query_pointer_attributes(const void *address,
                                        uct_musa_pointer_info_t *info)
 {
-    struct musaPointerAttributes attributes;
-    musaError_t error;
+    unsigned mem_type;
+    unsigned is_managed;
+    int device;
+    MUresult result;
 
-    memset(&attributes, 0, sizeof(attributes));
-    error = musaPointerGetAttributes(&attributes, address);
-    if (error == musaErrorInvalidValue) {
-        (void)musaGetLastError();
-        info->kind = UCT_MUSA_POINTER_HOST;
+    result = muPointerGetAttribute(&mem_type, MU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                    (MUdeviceptr)address);
+    if ((result == MUSA_ERROR_INVALID_VALUE) ||
+        ((result == MUSA_SUCCESS) && (mem_type == MU_MEMORYTYPE_HOST))) {
+        info->kind   = UCT_MUSA_POINTER_HOST;
         info->device = -1;
         return UCS_OK;
     }
 
-    if (error != musaSuccess) {
-        ucs_debug("musaPointerGetAttributes(%p) failed: %s", address,
-                  uct_musa_error_string(error));
-        return UCS_ERR_IO_ERROR;
+    if (result != MUSA_SUCCESS) {
+        goto err;
     }
 
-    if (attributes.type == musaMemoryTypeDevice) {
-        info->kind   = UCT_MUSA_POINTER_DEVICE;
-        info->device = attributes.device;
-    } else if (attributes.type == musaMemoryTypeManaged) {
-        info->kind   = UCT_MUSA_POINTER_MANAGED;
-        info->device = attributes.device;
-    } else {
-        info->kind   = UCT_MUSA_POINTER_HOST;
-        info->device = -1;
+    result = muPointerGetAttribute(&is_managed, MU_POINTER_ATTRIBUTE_IS_MANAGED,
+                                    (MUdeviceptr)address);
+    if (result != MUSA_SUCCESS) {
+        goto err;
     }
 
+    result = muPointerGetAttribute(&device, MU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                                    (MUdeviceptr)address);
+    if (result != MUSA_SUCCESS) {
+        goto err;
+    }
+
+    info->kind   = is_managed ? UCT_MUSA_POINTER_MANAGED :
+                               UCT_MUSA_POINTER_DEVICE;
+    info->device = device;
     return UCS_OK;
+
+err:
+    ucs_debug("muPointerGetAttribute(%p) failed: 0x%x", address, result);
+    return UCS_ERR_IO_ERROR;
 }
 
 ucs_status_t
@@ -612,7 +620,6 @@ uct_musa_base_copy_kind(const uct_musa_pointer_info_t *src_info,
 
 static ucs_status_t
 uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
-                             int device,
                              const uct_musa_pointer_info_t *src_info,
                              const uct_musa_pointer_info_t *dst_info,
                              musaError_t (*copy_func)(void *, const void *,
@@ -622,10 +629,6 @@ uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
                              musaStream_t stream, const char *copy_name)
 {
     enum musaMemcpyKind kind;
-    int current_device = -1;
-    int have_current_device;
-    int switched_device;
-    ucs_status_t status;
 
     if ((src_info->kind == UCT_MUSA_POINTER_HOST) &&
         (dst_info->kind == UCT_MUSA_POINTER_HOST)) {
@@ -633,30 +636,24 @@ uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
         return UCS_OK;
     }
 
+    /* The caller has made the stream's device current. */
     uct_musa_base_copy_kind(src_info, dst_info, &kind);
-    have_current_device =
-            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    switched_device = !have_current_device || (current_device != device);
-    if (switched_device) {
-        status = uct_musa_base_set_device(device);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    status = uct_musa_base_status(
+    return uct_musa_base_status(
             copy_func(dst, src, length, kind, stream), copy_name);
-    if (switched_device) {
-        uct_musa_base_restore_device(current_device, have_current_device);
-    }
-    return status;
 }
 
 static musaError_t
 uct_musa_base_memcpy(void *dst, const void *src, size_t length,
                      enum musaMemcpyKind kind, musaStream_t stream)
 {
-    return musaMemcpy(dst, src, length, kind);
+    musaError_t error;
+
+    error = musaMemcpyAsync(dst, src, length, kind, stream);
+    if (error != musaSuccess) {
+        return error;
+    }
+
+    return musaStreamSynchronize(stream);
 }
 
 static musaError_t
@@ -667,32 +664,21 @@ uct_musa_base_memcpy_async(void *dst, const void *src, size_t length,
 }
 
 ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
-                                int device)
+                                musaStream_t stream,
+                                const uct_musa_pointer_info_t *src_info,
+                                const uct_musa_pointer_info_t *dst_info)
 {
-    uct_musa_pointer_info_t src_info;
-    uct_musa_pointer_info_t dst_info;
-    ucs_status_t status;
-
     if (length == 0) {
         return UCS_OK;
     }
 
-    status = uct_musa_base_query_copy_pointer(src, length, &src_info);
-    if (status != UCS_OK) {
-        return status;
-    }
-    status = uct_musa_base_query_copy_pointer(dst, length, &dst_info);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return uct_musa_base_copy_with_info(src, dst, length, device, &src_info,
-                                        &dst_info, uct_musa_base_memcpy,
-                                        NULL, "musaMemcpy");
+    return uct_musa_base_copy_with_info(src, dst, length, src_info,
+                                        dst_info, uct_musa_base_memcpy,
+                                        stream, "MUSA short copy");
 }
 
 ucs_status_t
-uct_musa_base_copy_async(const void *src, void *dst, size_t length, int device,
+uct_musa_base_copy_async(const void *src, void *dst, size_t length,
                          musaStream_t stream,
                          const uct_musa_pointer_info_t *src_info,
                          const uct_musa_pointer_info_t *dst_info)
@@ -701,7 +687,7 @@ uct_musa_base_copy_async(const void *src, void *dst, size_t length, int device,
         return UCS_OK;
     }
 
-    return uct_musa_base_copy_with_info(src, dst, length, device, src_info,
+    return uct_musa_base_copy_with_info(src, dst, length, src_info,
                                         dst_info, uct_musa_base_memcpy_async,
                                         stream, "musaMemcpyAsync");
 }

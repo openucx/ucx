@@ -97,3 +97,49 @@ UCS_TEST_F(test_musa_copy_md, reject_managed_memory_registration)
 
     EXPECT_EQ(musaSuccess, musaFree(address));
 }
+
+UCS_TEST_F(test_musa_copy_md, allocates_device_memory)
+{
+    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+    uct_mem_alloc_params_t params;
+    uct_allocated_memory_t mem;
+    ucs_status_t status;
+    uct_md_h md_ref = md;
+
+    params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
+                        UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
+                        UCT_MEM_ALLOC_PARAM_FIELD_MDS       |
+                        UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags      = UCT_MD_MEM_ACCESS_ALL;
+    params.mem_type   = UCS_MEMORY_TYPE_MUSA;
+    params.mds.mds    = &md_ref;
+    params.mds.count  = 1;
+    params.name       = "test_musa_copy_md";
+
+    status = uct_mem_alloc(4096, &method, 1, &params, &mem);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(UCS_MEMORY_TYPE_MUSA, mem.mem_type);
+    EXPECT_EQ(md, mem.md);
+    EXPECT_NE(nullptr, mem.address);
+    EXPECT_NE(nullptr, mem.memh);
+
+    EXPECT_UCS_OK(uct_mem_free(&mem));
+}
+
+UCS_TEST_F(test_musa_copy_md, host_detection_preserves_runtime_error)
+{
+    char buffer[64];
+    ucs_memory_type_t mem_type;
+
+    EXPECT_NE(musaSuccess, musaSetDevice(-1));
+    musaError_t error = musaPeekAtLastError();
+    UCS_TEST_SCOPE_EXIT() {
+        (void)musaGetLastError();
+    } UCS_TEST_SCOPE_EXIT_END
+
+    ASSERT_NE(musaSuccess, error);
+    ASSERT_UCS_OK(uct_md_detect_memory_type(md, buffer, sizeof(buffer),
+                                           &mem_type));
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, mem_type);
+    EXPECT_EQ(error, musaPeekAtLastError());
+}
