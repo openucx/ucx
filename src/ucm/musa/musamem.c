@@ -440,14 +440,20 @@ static ucm_musa_func_t ucm_musa_funcs[] = {
 };
 
 static ucs_status_t
-ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_p)
+ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, uint64_t *installed_p)
 {
     ucm_musa_func_t *func;
     void *func_ptr;
     ucs_status_t status;
     int count;
 
-    if (*installed_p) {
+    if (*installed_p & UCS_BIT(mode)) {
+        return UCS_OK;
+    }
+
+    if (!(ucm_global_opts.musa_hook_modes & UCS_BIT(mode))) {
+        ucm_debug("MUSA memory hooks mode %s is disabled",
+                  ucm_mmap_hook_modes[mode]);
         return UCS_OK;
     }
 
@@ -462,8 +468,10 @@ ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_p)
             status = ucm_bistro_patch(func_ptr, func->patch.value,
                                       func->patch.symbol, func->orig_func_ptr,
                                       NULL);
-        } else {
+        } else if (mode == UCM_MMAP_HOOK_RELOC) {
             status = ucm_reloc_modify(&func->patch);
+        } else {
+            status = UCS_ERR_UNSUPPORTED;
         }
         if (status != UCS_OK) {
             return status;
@@ -471,7 +479,7 @@ ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_p)
         ++count;
     }
 
-    *installed_p = 1;
+    *installed_p |= UCS_BIT(mode);
     ucm_info("MUSA memory hooks mode %s: installed %d hooks",
              ucm_mmap_hook_modes[mode], count);
     return UCS_OK;
@@ -479,26 +487,49 @@ ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, int *installed_p)
 
 static ucs_status_t ucm_musamem_install(int events)
 {
-    static int installed;
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
-    ucm_mmap_hook_mode_t mode;
-    ucs_status_t status = UCS_OK;
+    static uint64_t installed_hooks;
+    ucs_status_t bistro_status;
+    ucs_status_t reloc_status;
+    ucs_status_t status;
 
     if (!(events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE))) {
         return UCS_OK;
     }
 
-    mode = ucm_mmap_hook_mode();
-    if (mode == UCM_MMAP_HOOK_NONE) {
+    if (!(ucm_global_opts.musa_hook_modes & UCM_GPU_HOOK_MODES_MASK)) {
+        ucm_info("MUSA memory hooks are disabled by configuration");
         return UCS_ERR_UNSUPPORTED;
     }
 
     pthread_mutex_lock(&install_mutex);
-    status = ucm_musa_install_hooks(mode, &installed);
-    if (status != UCS_OK) {
-        ucm_diag("failed to install MUSA hooks: %s",
-                 ucs_status_string(status));
+    bistro_status = ucm_musa_install_hooks(UCM_MMAP_HOOK_BISTRO,
+                                           &installed_hooks);
+    if (bistro_status != UCS_OK) {
+        ucm_debug("failed to install MUSA bistro hooks");
     }
+
+    reloc_status = ucm_musa_install_hooks(UCM_MMAP_HOOK_RELOC,
+                                          &installed_hooks);
+    if (reloc_status != UCS_OK) {
+        ucm_debug("failed to install MUSA reloc hooks");
+    }
+
+    if (installed_hooks & UCM_GPU_HOOK_MODES_MASK) {
+        status = UCS_OK;
+        if ((bistro_status != UCS_OK) || (reloc_status != UCS_OK)) {
+            ucm_warn("MUSA hooks installed with one mechanism only "
+                     "(bistro: %s, reloc: %s)",
+                     ucs_status_string(bistro_status),
+                     ucs_status_string(reloc_status));
+        } else {
+            ucm_info("MUSA hooks are ready");
+        }
+    } else {
+        status = (bistro_status != UCS_OK) ? bistro_status : reloc_status;
+        ucm_diag("failed to install MUSA hooks: %s", ucs_status_string(status));
+    }
+
     pthread_mutex_unlock(&install_mutex);
     return status;
 }

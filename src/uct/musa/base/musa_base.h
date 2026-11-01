@@ -22,6 +22,7 @@ typedef enum {
 typedef struct {
     uct_musa_pointer_kind_t kind;
     int                     device;
+    ucs_sys_device_t        sys_dev;
     void                   *base_address;
     size_t                  alloc_length;
 } uct_musa_pointer_info_t;

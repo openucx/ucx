@@ -512,6 +512,8 @@ protected:
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
 
+#define UCT_TEST_MUSA_MEM_TYPE_TLS musa_copy
+
 #define UCT_TEST_ZE_MEM_TYPE_TLS ze_copy
 
 #define UCT_TEST_NO_GPU_MEM_TYPE_TLS \
@@ -521,7 +523,8 @@ protected:
 #define UCT_TEST_TLS \
     UCT_TEST_NO_GPU_MEM_TYPE_TLS, \
     UCT_TEST_ROCM_MEM_TYPE_TLS, \
-    UCT_TEST_CUDA_MEM_TYPE_TLS
+    UCT_TEST_CUDA_MEM_TYPE_TLS, \
+    UCT_TEST_MUSA_MEM_TYPE_TLS
 
 /**
  * Instantiate the parametrized test case for all transports.

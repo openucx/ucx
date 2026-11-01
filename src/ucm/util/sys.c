@@ -49,6 +49,7 @@ ucm_global_config_t ucm_global_opts = {
     .enable_malloc_reloc        = 0,
     .cuda_hook_modes            = UCM_DEFAULT_GPU_HOOK_MODES,
     .rocm_hook_modes            = UCM_DEFAULT_GPU_HOOK_MODES,
+    .musa_hook_modes            = UCM_DEFAULT_GPU_HOOK_MODES,
     .enable_dynamic_mmap_thresh = 1,
     .alloc_alignment            = 16,
     .dlopen_process_rpath       = 1,
@@ -403,4 +404,3 @@ void UCS_F_CTOR ucm_init()
     ucm_init_log();
     ucm_init_malloc_hook();
 }
-
