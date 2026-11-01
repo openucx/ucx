@@ -7,13 +7,13 @@
 #  include "config.h"
 #endif
 
+#include "musa_copy_md.h"
+
 #include <uct/musa/base/musa_base.h>
 
 #include <ucs/debug/log.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/class.h>
-
-extern uct_component_t uct_musa_component;
 
 /* Handle returned for MUSA-allocated memory: no registration is needed for
  * the copy transport, but a valid handle keeps this md in the packed rkey,
@@ -25,15 +25,22 @@ typedef struct {
     int      have_dmabuf;
 } uct_musa_md_t;
 
+typedef struct {
+    void *address;
+    int  device;
+} uct_musa_alloc_handle_t;
+
 static ucs_status_t uct_musa_md_query(uct_md_h uct_md,
                                       uct_md_attr_v2_t *md_attr)
 {
     uct_musa_md_t *md = ucs_derived_of(uct_md, uct_musa_md_t);
 
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = UCT_MD_FLAG_REG;
+    md_attr->flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
     md_attr->reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_MUSA);
+    md_attr->cache_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_MUSA);
+    md_attr->alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_MUSA);
     md_attr->access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_MUSA);
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_MUSA);
@@ -41,6 +48,89 @@ static ucs_status_t uct_musa_md_query(uct_md_h uct_md,
                                 UCS_BIT(UCS_MEMORY_TYPE_MUSA) : 0;
     md_attr->max_alloc        = SIZE_MAX;
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_musa_md_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
+                      ucs_memory_type_t mem_type, ucs_sys_device_t sys_dev,
+                      unsigned flags, const char *alloc_name,
+                      uct_mem_h *memh_p)
+{
+    uct_musa_alloc_handle_t *alloc_handle;
+    ucs_status_t status;
+    musaError_t error;
+    int current_device = -1;
+    int have_current_device;
+    int device = -1;
+
+    if (mem_type != UCS_MEMORY_TYPE_MUSA) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    alloc_handle = ucs_malloc(sizeof(*alloc_handle), alloc_name);
+    if (alloc_handle == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        status = uct_musa_base_get_device_by_sys_dev(sys_dev, &device);
+        if (status != UCS_OK) {
+            goto err_free_handle;
+        }
+    }
+
+    have_current_device =
+            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
+    if (device >= 0) {
+        status = uct_musa_base_set_device(device);
+        if (status != UCS_OK) {
+            goto err_free_handle;
+        }
+    } else if (have_current_device) {
+        device = current_device;
+    }
+
+    error = musaMalloc(address_p, *length_p);
+    status = uct_musa_base_status(error, "musaMalloc");
+    uct_musa_base_restore_device(current_device, have_current_device);
+    if (status != UCS_OK) {
+        goto err_free_handle;
+    }
+
+    alloc_handle->address = *address_p;
+    alloc_handle->device  = device;
+    *memh_p               = alloc_handle;
+    return UCS_OK;
+
+err_free_handle:
+    ucs_free(alloc_handle);
+    return status;
+}
+
+static ucs_status_t
+uct_musa_md_mem_free(uct_md_h uct_md, uct_mem_h memh)
+{
+    uct_musa_alloc_handle_t *alloc_handle = memh;
+    ucs_status_t status;
+    musaError_t error;
+    int current_device = -1;
+    int have_current_device;
+
+    have_current_device =
+            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
+    if (alloc_handle->device >= 0) {
+        status = uct_musa_base_set_device(alloc_handle->device);
+        if (status != UCS_OK) {
+            ucs_free(alloc_handle);
+            return status;
+        }
+    }
+
+    error = musaFree(alloc_handle->address);
+    status = uct_musa_base_status(error, "musaFree");
+    uct_musa_base_restore_device(current_device, have_current_device);
+    ucs_free(alloc_handle);
+    return status;
 }
 
 static ucs_status_t
@@ -132,10 +222,8 @@ uct_musa_md_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 static uct_md_ops_t uct_musa_md_ops = {
     .close              = uct_musa_md_close,
     .query              = uct_musa_md_query,
-    .mem_alloc          = (uct_md_mem_alloc_func_t)
-                          ucs_empty_function_return_unsupported,
-    .mem_free           = (uct_md_mem_free_func_t)
-                          ucs_empty_function_return_unsupported,
+    .mem_alloc          = uct_musa_md_mem_alloc,
+    .mem_free           = uct_musa_md_mem_free,
     .mem_advise         = (uct_md_mem_advise_func_t)
                           ucs_empty_function_return_unsupported,
     .mem_reg            = uct_musa_md_mem_reg,
@@ -198,10 +286,10 @@ uct_component_t uct_musa_component = {
     .rkey_release       = (uct_component_rkey_release_func_t)
                           ucs_empty_function_return_success,
     .rkey_compare       = uct_base_rkey_compare,
-    .name               = "musa",
+    .name               = "musa_cpy",
     .md_config          = {
         .name   = "MUSA memory domain",
-        .prefix = "MUSA_",
+        .prefix = "MUSA_COPY_",
         .table  = uct_md_config_table,
         .size   = sizeof(uct_md_config_t)
     },

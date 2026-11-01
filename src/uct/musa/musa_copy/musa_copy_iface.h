@@ -17,9 +17,9 @@ typedef uint64_t uct_musa_copy_iface_addr_t;
 typedef struct uct_musa_copy_flush_desc uct_musa_copy_flush_desc_t;
 
 typedef struct {
-    ucs_queue_elem_t            queue;
-    musaEvent_t                 event;
-    uct_completion_t             *comp;
+    ucs_queue_elem_t           queue;
+    musaEvent_t                event;
+    uct_completion_t          *comp;
     uct_musa_copy_flush_desc_t *flush;
 } uct_musa_copy_event_desc_t;
 
@@ -31,6 +31,7 @@ typedef struct {
 
 typedef struct {
     int                              device;
+    musaStream_t                     short_stream;
     ucs_queue_head_t                 active_queue;
     uct_musa_copy_queue_desc_t       queue_desc[UCS_MEMORY_TYPE_LAST]
                                                [UCS_MEMORY_TYPE_LAST];
@@ -76,11 +77,16 @@ uct_musa_copy_iface_get_device_rsc(uct_musa_copy_iface_t *iface, int device);
 
 ucs_status_t
 uct_musa_copy_iface_get_stream(uct_musa_copy_device_rsc_t *device_rsc,
-                               uct_musa_copy_queue_desc_t *queue_desc);
+                               musaStream_t *stream_p);
+
+ucs_status_t
+uct_musa_copy_iface_get_event(uct_musa_copy_device_rsc_t *device_rsc,
+                              uct_musa_copy_event_desc_t **event_desc_p);
 
 ucs_status_t uct_musa_copy_iface_post_event(
         uct_musa_copy_device_rsc_t *device_rsc,
         uct_musa_copy_queue_desc_t *queue_desc,
+        uct_musa_copy_event_desc_t *event_desc,
         uct_completion_t *comp,
         uct_musa_copy_flush_desc_t *flush);
 

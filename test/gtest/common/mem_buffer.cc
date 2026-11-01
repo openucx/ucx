@@ -288,6 +288,7 @@ void mem_buffer::set_device_context()
 
 #if HAVE_MUSA
     if (is_musa_supported()) {
+        m_default_device = 0;
         MUSA_CALL(musaSetDevice(0));
     }
 #endif
@@ -363,6 +364,24 @@ void mem_buffer::check_and_restore_device_context()
         ADD_FAILURE() << "cudaSetDevice(" << m_default_device
                       << ") failed: " << cudaGetErrorString(cerr)
                       << ", later tests run on CUDA device " << device;
+    }
+#elif HAVE_MUSA
+    musaError_t merr;
+    int device;
+
+    if ((m_default_device < 0) || (musaGetDevice(&device) != musaSuccess) ||
+        (device == m_default_device)) {
+        return;
+    }
+
+    ADD_FAILURE() << "test left MUSA device " << device
+                  << " as the current device";
+
+    merr = musaSetDevice(m_default_device);
+    if (merr != musaSuccess) {
+        ADD_FAILURE() << "musaSetDevice(" << m_default_device
+                      << ") failed: " << musaGetErrorString(merr)
+                      << ", later tests run on MUSA device " << device;
     }
 #endif
 }
@@ -1118,6 +1137,13 @@ scoped_cuda_device::~scoped_cuda_device()
     if (cerr != cudaSuccess) {
         ADD_FAILURE() << "cudaSetDevice(" << m_saved_device
                       << ") failed: " << cudaGetErrorString(cerr);
+    }
+#elif HAVE_MUSA
+    /* Must not throw, so report a failure instead of using MUSA_CALL */
+    musaError_t merr = musaSetDevice(m_saved_device);
+    if (merr != musaSuccess) {
+        ADD_FAILURE() << "musaSetDevice(" << m_saved_device
+                      << ") failed: " << musaGetErrorString(merr);
     }
 #endif
 }

@@ -520,19 +520,26 @@ protected:
     UCT_TEST_NO_SELF_TLS, \
     self
 
+#define UCT_TEST_GPU_MEM_TYPE_TLS \
+    UCT_TEST_ROCM_MEM_TYPE_TLS, \
+    UCT_TEST_CUDA_MEM_TYPE_TLS, \
+    UCT_TEST_MUSA_MEM_TYPE_TLS
+
 #define UCT_TEST_TLS \
     UCT_TEST_NO_GPU_MEM_TYPE_TLS, \
-    UCT_TEST_ROCM_MEM_TYPE_TLS, \
-    UCT_TEST_CUDA_MEM_TYPE_TLS
+    UCT_TEST_GPU_MEM_TYPE_TLS
 
 /**
  * Instantiate the parametrized test case for all transports.
+ * Expand GPU and non-GPU lists separately to fit UCS_PP_MAX_ARGS.
  *
  * @param _test_case  Test case class, derived from uct_test.
  */
 #define UCT_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, UCT_TEST_MUSA_MEM_TYPE_TLS)
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, \
+                   UCT_TEST_NO_GPU_MEM_TYPE_TLS) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, \
+                   UCT_TEST_GPU_MEM_TYPE_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
     INSTANTIATE_TEST_SUITE_P(_tl_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));

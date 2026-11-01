@@ -9,6 +9,7 @@
 
 #include "musa_copy_iface.h"
 #include "musa_copy_ep.h"
+#include "musa_copy_md.h"
 
 #include <uct/musa/base/musa_base.h>
 
@@ -18,8 +19,6 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-
-extern uct_component_t uct_musa_component;
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_musa_copy_iface_t)(uct_iface_t *);
 
@@ -110,13 +109,13 @@ uct_musa_copy_iface_get_device_rsc(uct_musa_copy_iface_t *iface, int device)
 
 ucs_status_t
 uct_musa_copy_iface_get_stream(uct_musa_copy_device_rsc_t *device_rsc,
-                               uct_musa_copy_queue_desc_t *queue_desc)
+                               musaStream_t *stream_p)
 {
     ucs_status_t status;
     int current_device = -1;
     int have_current_device;
 
-    if (queue_desc->stream != NULL) {
+    if (*stream_p != NULL) {
         return UCS_OK;
     }
 
@@ -128,16 +127,15 @@ uct_musa_copy_iface_get_stream(uct_musa_copy_device_rsc_t *device_rsc,
     }
 
     status = uct_musa_base_status(
-            musaStreamCreateWithFlags(&queue_desc->stream,
-                                      musaStreamNonBlocking),
+            musaStreamCreateWithFlags(stream_p, musaStreamNonBlocking),
             "musaStreamCreateWithFlags");
     uct_musa_base_restore_device(current_device, have_current_device);
     return status;
 }
 
-static ucs_status_t
-uct_musa_copy_get_event(uct_musa_copy_device_rsc_t *device_rsc,
-                        uct_musa_copy_event_desc_t **event_desc_p)
+ucs_status_t
+uct_musa_copy_iface_get_event(uct_musa_copy_device_rsc_t *device_rsc,
+                              uct_musa_copy_event_desc_t **event_desc_p)
 {
     uct_musa_copy_event_desc_t *event_desc;
     ucs_status_t status;
@@ -181,42 +179,16 @@ err_put:
 ucs_status_t
 uct_musa_copy_iface_post_event(uct_musa_copy_device_rsc_t *device_rsc,
                                uct_musa_copy_queue_desc_t *queue_desc,
+                               uct_musa_copy_event_desc_t *event_desc,
                                uct_completion_t *comp,
                                uct_musa_copy_flush_desc_t *flush)
 {
-    uct_musa_copy_event_desc_t *event_desc;
     ucs_status_t status;
-    int current_device = -1;
-    int have_current_device;
-    int switched_device;
 
-    status = uct_musa_copy_iface_get_stream(device_rsc, queue_desc);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_musa_copy_get_event(device_rsc, &event_desc);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    have_current_device =
-            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    switched_device = !have_current_device ||
-                      (current_device != device_rsc->device);
-    if (switched_device) {
-        status = uct_musa_base_set_device(device_rsc->device);
-    } else {
-        status = UCS_OK;
-    }
-    if (status == UCS_OK) {
-        status = uct_musa_base_status(
-                musaEventRecord(event_desc->event, queue_desc->stream),
-                "musaEventRecord");
-    }
-    if (switched_device) {
-        uct_musa_base_restore_device(current_device, have_current_device);
-    }
+    /* The caller owns a descriptor and has selected the stream's device. */
+    status = uct_musa_base_status(
+            musaEventRecord(event_desc->event, queue_desc->stream),
+            "musaEventRecord");
     if (status != UCS_OK) {
         ucs_mpool_put(event_desc);
         return status;
@@ -267,7 +239,7 @@ uct_musa_copy_progress_device(uct_musa_copy_iface_t *iface,
     ucs_queue_iter_t queue_iter;
     ucs_queue_iter_t event_iter;
     ucs_status_t status;
-    musaError_t error;
+    MUresult result;
     unsigned count = 0;
 
     ucs_queue_for_each_safe(queue_desc, queue_iter,
@@ -278,14 +250,16 @@ uct_musa_copy_progress_device(uct_musa_copy_iface_t *iface,
                 return count;
             }
 
-            error = musaEventQuery(event_desc->event);
-            if (error == musaErrorNotReady) {
-                (void)musaGetLastError();
+            result = muEventQuery((MUevent)event_desc->event);
+            if (result == MUSA_ERROR_NOT_READY) {
                 break;
             }
 
             ucs_queue_del_iter(&queue_desc->event_queue, event_iter);
-            status = uct_musa_base_status(error, "musaEventQuery");
+            status = (result == MUSA_SUCCESS) ? UCS_OK : UCS_ERR_IO_ERROR;
+            if (status != UCS_OK) {
+                ucs_debug("muEventQuery failed: 0x%x", result);
+            }
             uct_musa_copy_complete_event(event_desc, status);
             ucs_mpool_put(event_desc);
             ++count;
@@ -345,10 +319,14 @@ uct_musa_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                                   uct_musa_copy_iface_t);
     uct_musa_copy_device_rsc_t *device_rsc;
     uct_musa_copy_queue_desc_t *queue_desc;
+    uct_musa_copy_event_desc_t *event_desc;
     uct_musa_copy_flush_desc_t *flush;
     ucs_queue_iter_t queue_iter;
     ucs_status_t status;
     unsigned i;
+    int current_device = -1;
+    int have_current_device;
+    int switched_device;
 
     for (i = 0; i < iface->num_devices; ++i) {
         if (!ucs_queue_is_empty(&iface->device_rscs[i].active_queue)) {
@@ -378,8 +356,26 @@ uct_musa_copy_iface_flush(uct_iface_h tl_iface, unsigned flags,
         device_rsc = &iface->device_rscs[i];
         ucs_queue_for_each_safe(queue_desc, queue_iter,
                                 &device_rsc->active_queue, queue) {
-            status = uct_musa_copy_iface_post_event(device_rsc, queue_desc,
-                                                    NULL, flush);
+            status = uct_musa_copy_iface_get_event(device_rsc, &event_desc);
+            if (status == UCS_OK) {
+                have_current_device = (uct_musa_base_get_current_device(
+                                               &current_device) == UCS_OK);
+                switched_device = !have_current_device ||
+                                  (current_device != device_rsc->device);
+                if (switched_device) {
+                    status = uct_musa_base_set_device(device_rsc->device);
+                }
+                if (status == UCS_OK) {
+                    status = uct_musa_copy_iface_post_event(
+                            device_rsc, queue_desc, event_desc, NULL, flush);
+                } else {
+                    ucs_mpool_put(event_desc);
+                }
+                if (switched_device) {
+                    uct_musa_base_restore_device(current_device,
+                                                 have_current_device);
+                }
+            }
             if (status != UCS_INPROGRESS) {
                 flush->comp = NULL;
                 if (flush->count == 0) {
@@ -586,7 +582,8 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
     self->config.bandwidth  = config->bandwidth;
 
     for (i = 0; i < device_count; ++i) {
-        self->device_rscs[i].device = i;
+        self->device_rscs[i].device       = i;
+        self->device_rscs[i].short_stream = NULL;
         ucs_queue_head_init(&self->device_rscs[i].active_queue);
         for (j = 0; j < UCS_MEMORY_TYPE_LAST; ++j) {
             for (k = 0; k < UCS_MEMORY_TYPE_LAST; ++k) {
@@ -597,7 +594,7 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
 
         ucs_mpool_params_reset(&mp_params);
         mp_params.elem_size       = sizeof(uct_musa_copy_event_desc_t);
-        mp_params.elems_per_chunk = 128;
+        mp_params.elems_per_chunk = ucs_min(128, config->max_events);
         mp_params.max_elems       = config->max_events;
         mp_params.ops             = &uct_musa_copy_event_desc_mpool_ops;
         mp_params.name            = "musa_copy_event_descriptors";
@@ -623,6 +620,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
 {
     uct_musa_copy_device_rsc_t *device_rsc;
     uct_musa_copy_queue_desc_t *queue_desc;
+    uct_musa_copy_event_desc_t *event_desc;
     unsigned i;
     unsigned j;
     unsigned k;
@@ -634,12 +632,19 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
 
     for (i = 0; i < self->num_devices; ++i) {
         device_rsc = &self->device_rscs[i];
-        ucs_mpool_cleanup(&device_rsc->event_mp, 1);
 
         have_current_device =
                 (uct_musa_base_get_current_device(&current_device) == UCS_OK);
         if (uct_musa_base_set_device(device_rsc->device) != UCS_OK) {
-            continue;
+            ucs_fatal("failed to select MUSA device %d during cleanup",
+                      device_rsc->device);
+        }
+
+        if ((device_rsc->short_stream != NULL) &&
+            (uct_musa_base_status(musaStreamDestroy(device_rsc->short_stream),
+                                  "musaStreamDestroy") != UCS_OK)) {
+            ucs_warn("failed to destroy MUSA short stream on device %d",
+                     device_rsc->device);
         }
 
         for (j = 0; j < UCS_MEMORY_TYPE_LAST; ++j) {
@@ -649,11 +654,24 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
                     continue;
                 }
 
-                if (!ucs_queue_is_empty(&queue_desc->event_queue)) {
-                    ucs_warn("MUSA stream for device %d has %zu "
-                             "outstanding events",
-                             device_rsc->device,
-                             ucs_queue_length(&queue_desc->event_queue));
+                if (uct_musa_base_status(
+                            musaStreamSynchronize(queue_desc->stream),
+                            "musaStreamSynchronize") != UCS_OK) {
+                    ucs_fatal("failed to drain MUSA stream during cleanup");
+                }
+
+                /* Retire internal references without dispatching user callbacks
+                 * from the iface destructor. DMA no longer owns the buffers. */
+                while (!ucs_queue_is_empty(&queue_desc->event_queue)) {
+                    event_desc = ucs_queue_pull_elem_non_empty(
+                            &queue_desc->event_queue,
+                            uct_musa_copy_event_desc_t, queue);
+                    event_desc->comp = NULL;
+                    if (event_desc->flush != NULL) {
+                        event_desc->flush->comp = NULL;
+                    }
+                    uct_musa_copy_complete_event(event_desc, UCS_ERR_CANCELED);
+                    ucs_mpool_put(event_desc);
                 }
 
                 if (uct_musa_base_status(
@@ -665,6 +683,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
             }
         }
 
+        ucs_queue_head_init(&device_rsc->active_queue);
+        ucs_mpool_cleanup(&device_rsc->event_mp, 1);
         uct_musa_base_restore_device(current_device, have_current_device);
     }
 

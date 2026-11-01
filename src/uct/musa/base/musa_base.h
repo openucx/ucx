@@ -51,7 +51,9 @@ ucs_status_t uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
                                               ucs_memory_type_t *mem_type_p);
 
 ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
-                                int device);
+                                musaStream_t stream,
+                                const uct_musa_pointer_info_t *src_info,
+                                const uct_musa_pointer_info_t *dst_info);
 
 ucs_status_t
 uct_musa_base_select_device(const uct_musa_pointer_info_t *src_info,
@@ -59,7 +61,7 @@ uct_musa_base_select_device(const uct_musa_pointer_info_t *src_info,
                             int default_device, int *device_p);
 
 ucs_status_t uct_musa_base_copy_async(const void *src, void *dst, size_t length,
-                                      int device, musaStream_t stream,
+                                      musaStream_t stream,
                                       const uct_musa_pointer_info_t *src_info,
                                       const uct_musa_pointer_info_t *dst_info);
 
@@ -72,6 +74,9 @@ ucs_status_t uct_musa_base_status(musaError_t error, const char *operation);
 ucs_status_t uct_musa_base_get_current_device(int *device_p);
 
 ucs_status_t uct_musa_base_set_device(int device);
+
+ucs_status_t
+uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p);
 
 void uct_musa_base_restore_device(int device, int valid);
 
