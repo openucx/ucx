@@ -1179,6 +1179,7 @@ public:
 
 protected:
     using lane_devs_t = std::multiset<std::pair<unsigned, unsigned>>;
+    using dev_names_t = std::set<std::string>;
 
     static iface_attr_func_t iface_attr_func(double bandwidth)
     {
@@ -1208,6 +1209,64 @@ protected:
 
         return result;
     }
+
+    /* Local devices of all lanes */
+    static dev_names_t lane_dev_names(ucp_ep_h ep)
+    {
+        dev_names_t result;
+
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            result.insert(ucp_ep_get_tl_rsc(ep, lane)->dev_name);
+        }
+
+        return result;
+    }
+
+    /* Select the sender lanes from the receiver address as if the receiver had
+     * the given release version */
+    void select_lanes(unsigned dst_version, ucp_ep_config_key_t &key)
+    {
+        ucp_worker_h worker = receiver().worker();
+        unsigned addr_indices[UCP_MAX_LANES];
+        ucp_unpacked_address_t remote_address;
+        ucp_address_t *address;
+        size_t address_length;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(ucp_worker_get_address(worker, &address,
+                                             &address_length));
+
+        status = ucp_address_unpack(
+                sender().worker(), address,
+                ucp_worker_default_address_pack_flags(worker),
+                &remote_address);
+        if (status == UCS_OK) {
+            remote_address.dst_version = dst_version;
+            ucp_ep_config_key_reset(&key);
+            key.dst_version = dst_version;
+            status = ucp_wireup_select_lanes(sender().ep(), 0,
+                                             ucp_tl_bitmap_max, &remote_address,
+                                             addr_indices, &key, 1);
+            ucs_free(remote_address.address_list);
+        }
+
+        ucp_worker_release_address(worker, address);
+        ASSERT_UCS_OK(status);
+    }
+
+    static unsigned
+    num_lanes(const ucp_ep_config_key_t &key, ucp_lane_type_t lane_type)
+    {
+        unsigned result = 0;
+
+        for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
+            if (key.lanes[lane].lane_types & UCS_BIT(lane_type)) {
+                ++result;
+            }
+        }
+
+        return result;
+    }
 };
 
 /* The receiver selects its lanes from the address in the wireup request, which
@@ -1216,13 +1275,32 @@ protected:
 UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, wireup_request_lanes,
            "IB_NUM_PATHS?=2")
 {
-    ucp_worker_h worker = receiver().worker();
+    const dev_names_t fast_devs = {"mock_0:1", "mock_1:1"};
+    ucp_worker_h worker         = receiver().worker();
 
     ASSERT_EQ(1u, worker->num_all_eps);
     ucp_ep_h receiver_ep = ucs_list_head(&worker->all_eps, ucp_ep_ext_t,
                                          ep_list)->ep;
 
+    EXPECT_EQ(fast_devs, lane_dev_names(sender().ep()));
+    EXPECT_EQ(fast_devs, lane_dev_names(receiver_ep));
     EXPECT_EQ(lane_devs(sender().ep(), false), lane_devs(receiver_ep, true));
+}
+
+/* A peer of an older release selects the slow lanes and drops them only after
+ * the selection, so one of the 4 AM_BW lanes is selected on the slow device and
+ * dropped. The selection with such a peer must be the same, so that both sides
+ * get the same lanes. */
+UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, older_peer_lanes,
+           "IB_NUM_PATHS?=2", "MAX_EAGER_RAILS=4")
+{
+    ucp_ep_config_key_t key;
+
+    select_lanes(UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION, key);
+    EXPECT_EQ(4u, num_lanes(key, UCP_LANE_TYPE_AM_BW));
+
+    select_lanes(UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION - 1, key);
+    EXPECT_EQ(3u, num_lanes(key, UCP_LANE_TYPE_AM_BW));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_slow_dev, rcx, "rc_x")

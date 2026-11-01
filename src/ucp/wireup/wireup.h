@@ -66,6 +66,14 @@ enum {
 #define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
+/*
+ * Minimal peer release version which skips the slow BW lanes during the
+ * pairwise selection. Older peers select them and drop them after the
+ * selection, so the same is done with such peers.
+ */
+#define UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION 24
+
+
 /**
  * Calculates a score of a potential transport. Used both for the primary
  * selection score and for the tiebreak score.
