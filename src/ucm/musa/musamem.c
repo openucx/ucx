@@ -538,7 +538,7 @@ static int
 ucm_musamem_is_device_region(int prot, const char *path)
 {
     static const char render_path[] =
-            "/dev/dri/renderD"; /* codespell:ignore renderD */
+            "/dev/dri/renderD";
     static const char mtgpu_path[]  = "/dev/mtgpu";
 
     if (!(prot & (PROT_READ | PROT_WRITE | PROT_EXEC))) {
