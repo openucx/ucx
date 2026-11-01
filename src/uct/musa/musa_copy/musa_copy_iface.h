@@ -18,7 +18,7 @@ typedef struct uct_musa_copy_flush_desc uct_musa_copy_flush_desc_t;
 
 typedef struct {
     ucs_queue_elem_t            queue;
-    musaEvent_t                  event;
+    musaEvent_t                 event;
     uct_completion_t             *comp;
     uct_musa_copy_flush_desc_t *flush;
 } uct_musa_copy_event_desc_t;

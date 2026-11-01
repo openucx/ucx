@@ -283,7 +283,6 @@ static UCS_F_ALWAYS_INLINE size_t ucp_memh_length(const ucp_mem_h memh)
                                     UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED) | \
                                     UCS_BIT(UCS_MEMORY_TYPE_MUSA)))
 #define UCP_DEVICE_MEM_TYPES \
-    (UCS_BIT(UCS_MEMORY_TYPE_CUDA) | UCS_BIT(UCS_MEMORY_TYPE_ROCM) | \
-     UCS_BIT(UCS_MEMORY_TYPE_MUSA))
+    (UCS_BIT(UCS_MEMORY_TYPE_CUDA) | UCS_BIT(UCS_MEMORY_TYPE_ROCM))
 
 #endif
