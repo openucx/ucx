@@ -151,8 +151,20 @@ get_num_gpus() {
 }
 
 #
+# Print configure flags to build device code only for the local GPU, if present.
+# Prebuilt tarballs use these flags too, assuming all agents in the GPU pool
+# have the same GPU architecture.
+#
+get_nvcc_gencode_flags() {
+    if [ "$(get_num_gpus)" -gt 0 ]; then
+        echo "--with-nvcc-gencode=-arch=native"
+    fi
+}
+
+#
 # Set cuda_configure_flags to build with local CUDA 12+ if available, otherwise
 # with CUDA module, and gdrcopy_configure_flags if GDRCopy module is available.
+# If a GPU is present, build device code only for its architecture.
 # Leave the flags empty if not found.
 #
 load_cuda_configure_flags() {
@@ -169,6 +181,7 @@ load_cuda_configure_flags() {
         az_module_load ${CUDA_MODULE} || return 0
         cuda_configure_flags="--with-cuda"
     fi
+    cuda_configure_flags+=" $(get_nvcc_gencode_flags)"
 
     # Load GDRCopy module if available
     az_module_load ${GDRCOPY_MODULE} || return 0

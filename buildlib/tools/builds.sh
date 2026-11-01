@@ -288,16 +288,19 @@ build_cuda() {
 		return
 	fi
 
+	# TODO: Use load_cuda_configure_flags
 	if ! az_module_load $CUDA_MODULE
 	then
 		echo "==== Not building with cuda flags ===="
 		return
 	fi
 
+	nvcc_gencode_flags=$(get_nvcc_gencode_flags)
 	if az_module_load $GDRCOPY_MODULE
 	then
 		echo "==== Build with enable cuda, gdr_copy ===="
-		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst \
+			--with-cuda --with-gdrcopy $nvcc_gencode_flags
 		$MAKEP
 		make_clean distclean
 
@@ -306,7 +309,8 @@ build_cuda() {
 		# GDRCopy subcomponent does not include CUDA headers
 		cuda_path=$(dirname $(dirname $(which nvcc)))
 		az_module_unload $CUDA_MODULE
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda=$cuda_path --with-gdrcopy
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
+			--with-cuda=$cuda_path --with-gdrcopy $nvcc_gencode_flags
 		$MAKEP
 		make_clean distclean
 		az_module_load $CUDA_MODULE
@@ -316,7 +320,8 @@ build_cuda() {
 
 	echo "==== Build with enable cuda, w/o gdr_copy and w/o GDA-KI ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
-		--with-cuda --without-gdrcopy --without-gda --disable-gtest
+		--with-cuda --without-gdrcopy --without-gda --disable-gtest \
+		$nvcc_gencode_flags
 	$MAKEP
 	check_no_gda
 

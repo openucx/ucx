@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
             args="$args -Xcompiler -fPIC"
             shift
             ;;
-        -O*|-I*|-D*|-G|-g|-MD|-MMD|-gencode=*|-std=*)
+        -O*|-I*|-D*|-G|-g|-MD|-MMD|-gencode=*|-arch=*|-std=*)
             args="$args $1"
             shift
             ;;
