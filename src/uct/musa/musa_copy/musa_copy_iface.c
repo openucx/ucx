@@ -188,6 +188,7 @@ uct_musa_copy_iface_post_event(uct_musa_copy_device_rsc_t *device_rsc,
     ucs_status_t status;
     int current_device = -1;
     int have_current_device;
+    int switched_device;
 
     status = uct_musa_copy_iface_get_stream(device_rsc, queue_desc);
     if (status != UCS_OK) {
@@ -201,13 +202,21 @@ uct_musa_copy_iface_post_event(uct_musa_copy_device_rsc_t *device_rsc,
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    status = uct_musa_base_set_device(device_rsc->device);
+    switched_device = !have_current_device ||
+                      (current_device != device_rsc->device);
+    if (switched_device) {
+        status = uct_musa_base_set_device(device_rsc->device);
+    } else {
+        status = UCS_OK;
+    }
     if (status == UCS_OK) {
         status = uct_musa_base_status(
                 musaEventRecord(event_desc->event, queue_desc->stream),
                 "musaEventRecord");
     }
-    uct_musa_base_restore_device(current_device, have_current_device);
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
     if (status != UCS_OK) {
         ucs_mpool_put(event_desc);
         return status;
@@ -271,6 +280,7 @@ uct_musa_copy_progress_device(uct_musa_copy_iface_t *iface,
 
             error = musaEventQuery(event_desc->event);
             if (error == musaErrorNotReady) {
+                (void)musaGetLastError();
                 break;
             }
 
@@ -298,6 +308,7 @@ unsigned uct_musa_copy_iface_progress(uct_iface_h tl_iface)
     unsigned i;
     int current_device = -1;
     int have_current_device;
+    int switched_device;
 
     for (i = 0; i < iface->num_devices; ++i) {
         device_rsc = &iface->device_rscs[i];
@@ -307,12 +318,17 @@ unsigned uct_musa_copy_iface_progress(uct_iface_h tl_iface)
 
         have_current_device =
                 (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-        if (uct_musa_base_set_device(device_rsc->device) != UCS_OK) {
+        switched_device = !have_current_device ||
+                          (current_device != device_rsc->device);
+        if (switched_device &&
+            (uct_musa_base_set_device(device_rsc->device) != UCS_OK)) {
             continue;
         }
 
         count += uct_musa_copy_progress_device(iface, device_rsc);
-        uct_musa_base_restore_device(current_device, have_current_device);
+        if (switched_device) {
+            uct_musa_base_restore_device(current_device, have_current_device);
+        }
         if (count >= iface->config.max_poll) {
             break;
         }

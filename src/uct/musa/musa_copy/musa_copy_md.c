@@ -93,6 +93,7 @@ uct_musa_md_mem_reg(uct_md_h uct_md, void *address, size_t length,
                 UCS_LOG_LEVEL_ERROR;
     err       = musaHostRegister(address, length, musaHostRegisterPortable);
     if (err == musaErrorHostMemoryAlreadyRegistered) {
+        (void)musaGetLastError();
         *memh_p = &uct_musa_dummy_memh;
         return UCS_OK;
     }
