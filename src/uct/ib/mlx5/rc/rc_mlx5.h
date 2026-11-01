@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_H
 
 #include "rc_mlx5_common.h"
+#include "rc_mlx5_ext.h"
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -48,7 +49,8 @@ enum {
     /* EP address includes flush_rkey value */
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
     /* atomic key has no offset */
-    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1)
+    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1),
+    UCT_RC_MLX5_EP_ADDR_FLAG_EXT              = UCS_BIT(2)
 };
 
 
@@ -57,6 +59,7 @@ enum {
  */
 typedef struct uct_rc_mlx5_base_ep {
     uct_rc_ep_t              super;
+    void                    *ext_ctx;
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
@@ -65,6 +68,23 @@ typedef struct uct_rc_mlx5_base_ep {
 
 typedef __be32 uct_rc_mlx5_tx_token_t;
 typedef __be32 uct_rc_mlx5_rx_token_t;
+
+typedef struct uct_rc_mlx5_sgl_context uct_rc_mlx5_sgl_context_t;
+
+typedef struct uct_rc_mlx5_sgl_checkpoint {
+    uct_rc_iface_send_op_with_info_t op;
+    uct_rc_mlx5_sgl_context_t        *context;
+    unsigned                         index;
+} uct_rc_mlx5_sgl_checkpoint_t;
+
+struct uct_rc_mlx5_sgl_context {
+    uct_rc_mlx5_sgl_completion_t   *completion;
+    uct_rc_mlx5_sgl_checkpoint_cb_t callback;
+    void                          *arg;
+    uint16_t                       first_sn;
+    uint16_t                       count;
+    uct_rc_mlx5_sgl_checkpoint_t   checkpoints[];
+};
 
 
 /**
@@ -105,6 +125,37 @@ typedef struct uct_rc_mlx5_ep_ext_address {
     uct_rc_mlx5_ep_address_t super;
     uint8_t                  flags;
 } UCS_S_PACKED uct_rc_mlx5_ep_ext_address_t;
+
+typedef struct uct_rc_mlx5_ep_ext_wire_hdr {
+    uint32_t provider_id;
+    uint16_t payload_len;
+    uint8_t  api_version;
+    uint8_t  reserved;
+} UCS_S_PACKED uct_rc_mlx5_ep_ext_wire_hdr_t;
+
+
+static UCS_F_ALWAYS_INLINE size_t
+uct_rc_mlx5_iface_get_ep_address_len(uct_rc_mlx5_iface_common_t *iface)
+{
+    size_t length;
+
+    if (!uct_rc_iface_flush_rkey_enabled(&iface->super) &&
+        (iface->ext_ops == NULL)) {
+        return sizeof(uct_rc_mlx5_ep_address_t);
+    }
+
+    length = sizeof(uct_rc_mlx5_ep_ext_address_t);
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
+        length += sizeof(uint16_t);
+    }
+
+    if (iface->ext_ops != NULL) {
+        length += sizeof(uct_rc_mlx5_ep_ext_wire_hdr_t) +
+                  iface->ext_ops->ep_addr_len;
+    }
+
+    return length;
+}
 
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);

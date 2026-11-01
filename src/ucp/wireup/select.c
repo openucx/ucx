@@ -147,13 +147,17 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_EP_CHECK)]         = "ep check",
     [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive",
     [ucs_ilog2(UCT_IFACE_FLAG_DEVICE_EP)]        = "device ep",
-    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_DEVICE)]    = "device atomic"
+    [ucs_ilog2(UCT_IFACE_FLAG_ATOMIC_DEVICE)]    = "device atomic",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_QUERY_BW)]      = "ep bandwidth query"
 };
 
 static const char *ucp_wireup_event_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)] = "send completion event",
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV)]      = "tag or active message event",
-    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]  = "signaled message event"
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]  = "signaled message event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_ASYNC_CB)]  = "async callback event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE)] =
+            "path speed change event"
 };
 
 static const char *ucp_wireup_peer_flags[] = {

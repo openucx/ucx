@@ -257,7 +257,10 @@ enum {
      * TX CQ len by the number of IB paths (when it is properly initialized). */
     UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2),
     /* Whether device and transport supports DDP */
-    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3)
+    UCT_IB_DDP_SUPPORTED             = UCS_BIT(3),
+
+    /* Request hardware completion timestamps on the existing CQ. */
+    UCT_IB_CQ_COMPLETION_TIMESTAMP   = UCS_BIT(4)
 };
 
 

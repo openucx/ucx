@@ -388,6 +388,19 @@ void uct_rc_ep_short_dm_desc_handler(uct_rc_iface_send_op_t *op,
     ucs_mpool_put_inline(op);
 }
 
+void uct_rc_ep_send_op_with_info_handler(uct_rc_iface_send_op_t *op,
+                                         const void *resp)
+{
+    uct_rc_iface_send_op_with_info_t *op_with_info =
+            ucs_derived_of(op, uct_rc_iface_send_op_with_info_t);
+    const uct_rc_send_op_completion_info_t *comp_info =
+            op_with_info->comp_info;
+
+    (void)resp;
+    op_with_info->comp_info = NULL;
+    op_with_info->handler(op, comp_info);
+}
+
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags)
 {
