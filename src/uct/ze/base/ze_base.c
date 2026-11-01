@@ -398,15 +398,6 @@ int uct_ze_base_get_num_devices(void)
     return uct_ze_base.num_devices;
 }
 
-int uct_ze_base_get_num_subdevices(void)
-{
-    if (uct_ze_base_init() != ZE_RESULT_SUCCESS) {
-        return 0;
-    }
-
-    return ze_num_subdevices;
-}
-
 ze_device_handle_t
 uct_ze_base_get_device_handle_from_subdevice(const uct_ze_subdevice_t *subdevice)
 {
@@ -491,18 +482,16 @@ uct_ze_base_get_queue_ordinal(ze_device_handle_t device,
     uint32_t num_queue_groups = 0;
     ze_command_queue_group_properties_t *queue_props;
     ucs_status_t status;
-    ze_result_t ret;
     int ordinal;
     uint32_t i;
 
     /* Query the group count first: the driver fills at most the given count
      * and may leave the count itself unchanged */
-    ret = zeDeviceGetCommandQueueGroupProperties(device, &num_queue_groups,
-                                                 NULL);
-    if (ret != ZE_RESULT_SUCCESS) {
-        ucs_log(log_level, "zeDeviceGetCommandQueueGroupProperties failed "
-                           "for device %p with 0x%x", device, ret);
-        return UCS_ERR_IO_ERROR;
+    status = UCT_ZE_FUNC(zeDeviceGetCommandQueueGroupProperties(
+                                 device, &num_queue_groups, NULL),
+                         log_level);
+    if (status != UCS_OK) {
+        return status;
     }
 
     if (num_queue_groups == 0) {
@@ -520,12 +509,10 @@ uct_ze_base_get_queue_ordinal(ze_device_handle_t device,
         queue_props[i].stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
     }
 
-    ret = zeDeviceGetCommandQueueGroupProperties(device, &num_queue_groups,
-                                                 queue_props);
-    if (ret != ZE_RESULT_SUCCESS) {
-        ucs_log(log_level, "zeDeviceGetCommandQueueGroupProperties failed "
-                           "for device %p with 0x%x", device, ret);
-        status = UCS_ERR_IO_ERROR;
+    status = UCT_ZE_FUNC(zeDeviceGetCommandQueueGroupProperties(
+                                 device, &num_queue_groups, queue_props),
+                         log_level);
+    if (status != UCS_OK) {
         goto out;
     }
 

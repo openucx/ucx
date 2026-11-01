@@ -193,6 +193,21 @@ protected:
         return ucs_derived_of(sender().iface(), uct_ze_copy_iface_t);
     }
 
+    /* All sub-devices: the global IDs are contiguous from 0, and the lookup
+     * returns NULL past the last one */
+    static std::vector<const uct_ze_subdevice_t*> subdevices()
+    {
+        std::vector<const uct_ze_subdevice_t*> result;
+        const uct_ze_subdevice_t *subdevice;
+
+        while ((subdevice = uct_ze_base_get_subdevice_by_global_id(
+                        (int)result.size())) != NULL) {
+            result.push_back(subdevice);
+        }
+
+        return result;
+    }
+
     /* Return a device other than the MD device, preferring one on another
      * card over another tile of the same card, or NULL if there is none */
     ze_device_handle_t other_device()
@@ -200,23 +215,18 @@ protected:
         ze_device_handle_t md_device           = ze_md()->ze_device;
         const uct_ze_subdevice_t *md_subdevice = NULL;
         ze_device_handle_t other_tile          = NULL;
-        int num_subdevices                     =
-                uct_ze_base_get_num_subdevices();
-        const uct_ze_subdevice_t *subdevice;
+        const auto all_subdevices              = subdevices();
         ze_device_handle_t device;
-        int id;
 
-        for (id = 0; id < num_subdevices; ++id) {
-            subdevice = uct_ze_base_get_subdevice_by_global_id(id);
+        for (const uct_ze_subdevice_t *subdevice : all_subdevices) {
             if (uct_ze_base_get_device_handle_from_subdevice(subdevice) ==
                 md_device) {
                 md_subdevice = subdevice;
             }
         }
 
-        for (id = 0; id < num_subdevices; ++id) {
-            subdevice = uct_ze_base_get_subdevice_by_global_id(id);
-            device    = uct_ze_base_get_device_handle_from_subdevice(subdevice);
+        for (const uct_ze_subdevice_t *subdevice : all_subdevices) {
+            device = uct_ze_base_get_device_handle_from_subdevice(subdevice);
             if ((device == NULL) || (device == md_device)) {
                 continue;
             }
