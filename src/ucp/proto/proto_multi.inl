@@ -59,13 +59,25 @@ ucp_proto_multi_scaled_length(uint32_t weight, size_t length)
 }
 
 static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_multi_lane_payload(const ucp_proto_multi_lane_priv_t *lpriv,
+                             size_t length, size_t remaining, size_t max_frag)
+{
+    /* Do not split very small sends to chunks, it's not worth it, and
+       generic datatype may not be able to pack to a smaller buffer */
+    if (remaining < lpriv->min_end_offset) {
+        return max_frag;
+    }
+
+    return ucs_min(ucp_proto_multi_scaled_length(lpriv->weight, length),
+                   max_frag);
+}
+
+static UCS_F_ALWAYS_INLINE size_t
 ucp_proto_multi_max_payload(ucp_request_t *req,
                             const ucp_proto_multi_lane_priv_t *lpriv,
                             size_t hdr_size)
 {
     size_t length = req->send.state.dt_iter.length;
-    size_t offset = length - req->send.state.dt_iter.offset;
-    size_t max_frag;
     size_t max_payload;
 
     /* If header is greater than max_frag - that's ok, we allow it, but we send
@@ -74,16 +86,9 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
         return 0;
     }
 
-    max_frag = lpriv->max_frag - hdr_size;
-
-    /* Do not split very small sends to chunks, it's not worth it, and
-       generic datatype may not be able to pack to a smaller buffer */
-    if (offset < lpriv->min_end_offset) {
-        return max_frag;
-    }
-
-    max_payload = ucs_min(ucp_proto_multi_scaled_length(lpriv->weight, length),
-                          max_frag);
+    max_payload = ucp_proto_multi_lane_payload(
+            lpriv, length, length - req->send.state.dt_iter.offset,
+            lpriv->max_frag - hdr_size);
     ucs_assertv(max_payload > 0,
                 "length=%zu weight=%zu%% lpriv->max_frag=%zu hdr_size=%zu",
                 length, ucp_proto_multi_scaled_length(lpriv->weight, 100),
