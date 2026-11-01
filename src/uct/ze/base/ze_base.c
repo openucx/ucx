@@ -457,15 +457,42 @@ ucs_sys_device_t uct_ze_base_get_sys_dev_from_handle(ze_device_handle_t device)
     return UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
-ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
-                                          ucs_log_level_t log_level,
-                                          uint32_t *ordinal_p,
-                                          uint32_t *num_queues_p)
+/* Index of the first queue group with all of the required flags and none of
+ * the avoided ones, or -1 */
+static int
+uct_ze_base_find_queue_group(const ze_command_queue_group_properties_t *props,
+                             uint32_t num_groups,
+                             ze_command_queue_group_property_flags_t required,
+                             ze_command_queue_group_property_flags_t avoided)
+{
+    uint32_t i;
+
+    for (i = 0; i < num_groups; i++) {
+        if (((props[i].flags & required) == required) &&
+            !(props[i].flags & avoided)) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+/* Find the queue group of a device for the engine named in the log: a group
+ * with the required flags and without the avoided ones, or else any group
+ * with the required flags */
+static ucs_status_t
+uct_ze_base_get_queue_ordinal(ze_device_handle_t device,
+                              ucs_log_level_t log_level,
+                              ze_command_queue_group_property_flags_t required,
+                              ze_command_queue_group_property_flags_t avoided,
+                              const char *engine_name, uint32_t *ordinal_p,
+                              uint32_t *num_queues_p)
 {
     uint32_t num_queue_groups = 0;
     ze_command_queue_group_properties_t *queue_props;
     ucs_status_t status;
     ze_result_t ret;
+    int ordinal;
     uint32_t i;
 
     /* Query the group count first: the driver fills at most the given count
@@ -502,42 +529,55 @@ ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
         goto out;
     }
 
-    /* First pass: find dedicated copy engine (COPY flag but NOT COMPUTE) */
-    for (i = 0; i < num_queue_groups; i++) {
-        if ((queue_props[i].flags &
-             ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) &&
-            !(queue_props[i].flags &
-              ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
-            ucs_debug("device %p: using dedicated copy engine queue group "
-                      "%u (numQueues=%u)",
-                      device, i, queue_props[i].numQueues);
-            goto out_found;
-        }
+    ordinal = uct_ze_base_find_queue_group(queue_props, num_queue_groups,
+                                           required, avoided);
+    if ((ordinal < 0) && (avoided != 0)) {
+        ordinal = uct_ze_base_find_queue_group(queue_props, num_queue_groups,
+                                               required, 0);
     }
 
-    /* Second pass: find any queue group that supports COPY */
-    for (i = 0; i < num_queue_groups; i++) {
-        if (queue_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
-            ucs_debug("device %p: using copy-capable queue group %u "
-                      "(numQueues=%u)",
-                      device, i, queue_props[i].numQueues);
-            goto out_found;
-        }
+    if (ordinal < 0) {
+        ucs_log(log_level, "device %p: no %s queue group found", device,
+                engine_name);
+        status = UCS_ERR_NO_DEVICE;
+        goto out;
     }
 
-    ucs_log(log_level, "device %p: no copy-capable queue group found", device);
-    status = UCS_ERR_NO_DEVICE;
-    goto out;
+    ucs_debug("device %p: using queue group %d as %s, flags 0x%x, %u queues",
+              device, ordinal, engine_name, queue_props[ordinal].flags,
+              queue_props[ordinal].numQueues);
 
-out_found:
-    *ordinal_p = i;
+    *ordinal_p = ordinal;
     if (num_queues_p != NULL) {
-        *num_queues_p = queue_props[i].numQueues;
+        *num_queues_p = queue_props[ordinal].numQueues;
     }
     status = UCS_OK;
 out:
     ucs_free(queue_props);
     return status;
+}
+
+ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
+                                          ucs_log_level_t log_level,
+                                          uint32_t *ordinal_p,
+                                          uint32_t *num_queues_p)
+{
+    /* A dedicated copy engine first, or else any group which can copy */
+    return uct_ze_base_get_queue_ordinal(
+            device, log_level, ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY,
+            ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE, "copy engine",
+            ordinal_p, num_queues_p);
+}
+
+ucs_status_t uct_ze_base_get_compute_ordinal(ze_device_handle_t device,
+                                             ucs_log_level_t log_level,
+                                             uint32_t *ordinal_p)
+{
+    /* The group has to copy as well, since its queues run memory copies */
+    return uct_ze_base_get_queue_ordinal(
+            device, log_level, ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE |
+            ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY, 0, "compute engine",
+            ordinal_p, NULL);
 }
 
 /**

@@ -74,6 +74,13 @@ ucs_status_t uct_ze_base_get_copy_ordinal(ze_device_handle_t device,
                                           uint32_t *ordinal_p,
                                           uint32_t *num_queues_p);
 
+/* Find the queue group to run memory copies on the compute engine of a
+ * device: a group with both the compute and the copy flag. A failure is
+ * logged at log_level. */
+ucs_status_t uct_ze_base_get_compute_ordinal(ze_device_handle_t device,
+                                             ucs_log_level_t log_level,
+                                             uint32_t *ordinal_p);
+
 /* Get root device handle by ordinal, returns NULL if out of range */
 ze_device_handle_t uct_ze_base_get_device(int ordinal);
 
