@@ -150,8 +150,7 @@ static hsa_status_t uct_rocm_hsa_agent_callback(hsa_agent_t agent, void* data)
  * Unlike the memtype cache it never merges adjacent regions: each vmem_map() is
  * a distinct allocation whose base is the exact key required by
  * hsa_amd_vmem_retain_alloc_handle(), and merging would return a neighbouring
- * mapping's base. Pool allocations are tracked too (events do not distinguish
- * them) but are never looked up on the VMM path, so they are harmless.
+ * mapping's base; adjacency also lets the IPC path flag pool chunks (is_pooled).
  */
 typedef struct uct_rocm_base_vmm_region {
     ucs_pgt_region_t super;  /**< page-aligned [start, end) for the page table */
@@ -362,6 +361,28 @@ ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
     }
     ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
     return status;
+}
+
+/* Non-zero if [base, base+size) abuts another VMM mapping -- the signal the IPC
+ * path uses to treat it as a pool chunk (e.g. hipMallocAsync) and stage it. */
+int uct_rocm_base_vmm_is_pooled(const void *base, size_t size)
+{
+    uintptr_t start = (uintptr_t)base;
+    uintptr_t end   = start + size;
+    int pooled;
+
+    if (!uct_rocm_base_vmm_registry.initialized) {
+        return 0;
+    }
+
+    ucs_spin_lock(&uct_rocm_base_vmm_registry.lock);
+    pooled = (ucs_pgtable_lookup(&uct_rocm_base_vmm_registry.pgtable,
+                                 (ucs_pgt_addr_t)end) != NULL) ||
+             ((start > 0) &&
+              (ucs_pgtable_lookup(&uct_rocm_base_vmm_registry.pgtable,
+                                  (ucs_pgt_addr_t)(start - 1)) != NULL));
+    ucs_spin_unlock(&uct_rocm_base_vmm_registry.lock);
+    return pooled;
 }
 
 static void uct_rocm_base_vmm_found_cb(const ucs_pgtable_t *pgtable,
