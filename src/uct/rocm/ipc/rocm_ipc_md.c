@@ -57,28 +57,29 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     return UCS_OK;
 }
 
-static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
+static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
 {
     void *base_ptr = NULL;
     size_t size    = 0;
-    hsa_status_t status;
+    hsa_status_t hsa_status;
+    ucs_status_t status;
     hsa_agent_t agent;
     hsa_amd_pointer_type_t mem_type;
 
-    status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size,
-                                        &mem_type, &agent, NULL);
-    if ((status != HSA_STATUS_SUCCESS) ||
+    hsa_status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size,
+                                            &mem_type, &agent, NULL);
+    if ((hsa_status != HSA_STATUS_SUCCESS) ||
         (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
         ucs_error("failed to get base ptr for %p/%lx, ROCm returned %p/%lx",
                    address, length, base_ptr, size);
-        return status;
+        return UCS_ERR_INVALID_ADDR;
     }
 
-    status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
-    if (status != HSA_STATUS_SUCCESS) {
+    hsa_status = hsa_amd_ipc_memory_create(base_ptr, size, &key->ipc);
+    if (hsa_status != HSA_STATUS_SUCCESS) {
         ucs_error("Failed to create ipc for %p/%lx", address, length);
-        return status;
+        return UCS_ERR_INVALID_ADDR;
     }
 
     key->address = (uintptr_t)base_ptr;
@@ -87,7 +88,16 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     key->pid     = getpid();
     key->pid_ns  = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
 
-    return HSA_STATUS_SUCCESS;
+    /* One IPC signal per allocation. Every importer of this key watches it. */
+    memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+    status = uct_rocm_ipc_export_add(key->address, key->length,
+                                     &key->ipc_signal);
+    if (status != UCS_OK) {
+        ucs_diag("failed to export rocm ipc invalidation signal for %p: %s",
+                 address, ucs_status_string(status));
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -95,7 +105,7 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
                      const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
 {
     uct_rocm_ipc_key_t *key;
-    hsa_status_t status;
+    ucs_status_t status;
 
     key = ucs_malloc(sizeof(*key), "uct_rocm_ipc_key_t");
     if (NULL == key) {
@@ -104,9 +114,9 @@ uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t length,
     }
 
     status = uct_rocm_ipc_pack_key(address, length, key);
-    if (status != HSA_STATUS_SUCCESS) {
+    if (status != UCS_OK) {
         ucs_free(key);
-        return UCS_ERR_INVALID_ADDR;
+        return status;
     }
 
     *memh_p = key;
@@ -122,6 +132,7 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
+    /* The IPC signal is owned by the export table and stays until free. */
     mem_hndl = params->memh;
     ucs_free(mem_hndl);
     return UCS_OK;
@@ -132,27 +143,38 @@ uct_rocm_ipc_md_mem_elem_pack(uct_md_h md_h, uct_mem_h memh, uct_rkey_t rkey,
                               uct_device_mem_elem_t *mem_elem_p,
                               void **release_handle_p)
 {
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
+    uct_rocm_ipc_unpacked_rkey_t *unpacked =
+            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
+                           uct_rocm_ipc_unpacked_rkey_t);
     uct_rocm_ipc_device_mem_element_t *rocm_ipc_mem_element =
             (uct_rocm_ipc_device_mem_element_t*)mem_elem_p;
+    uct_rocm_ipc_cache_region_t *region;
     void *mapped_addr;
     ucs_status_t status;
 
-    status = uct_rocm_ipc_cache_map_memhandle(key, &mapped_addr);
+    /* GPU kernels use the mapping directly, so it must outlive the element */
+    status = uct_rocm_ipc_cache_map_memhandle(&unpacked->super, &mapped_addr,
+                                              &region);
     if (status != UCS_OK) {
         ucs_error("Failed to map IPC handle: %s", ucs_status_string(status));
         return status;
     }
 
     /* Calculate offset: base_address - mapped_address */
-    rocm_ipc_mem_element->mapped_offset = UCS_PTR_BYTE_DIFF(key->address,
-                                                            mapped_addr);
+    rocm_ipc_mem_element->mapped_offset =
+            UCS_PTR_BYTE_DIFF(unpacked->super.address, mapped_addr);
 
     ucs_trace("rocm_ipc mem_elem_pack: key_addr=%p mapped=%p offset=%ld",
-              (void*)key->address, mapped_addr,
+              (void*)unpacked->super.address, mapped_addr,
               rocm_ipc_mem_element->mapped_offset);
 
+    *release_handle_p = region;
     return UCS_OK;
+}
+
+static void uct_rocm_ipc_md_mem_elem_release(uct_md_h md, void *release_handle)
+{
+    uct_rocm_ipc_cache_unpin(release_handle);
 }
 
 static ucs_status_t
@@ -178,13 +200,14 @@ uct_rocm_ipc_md_open(uct_component_h component, const char *md_name,
                 ucs_empty_function_return_unsupported,
         .detect_memory_type = (uct_md_detect_memory_type_func_t)
                 ucs_empty_function_return_unsupported,
-        .mem_elem_release = (uct_md_mem_elem_release_func_t)ucs_empty_function
+        .mem_elem_release   = uct_rocm_ipc_md_mem_elem_release
     };
     static uct_md_t md         = {
         .ops       = &md_ops,
         .component = &uct_rocm_ipc_component.super,
     };
 
+    uct_rocm_ipc_export_init();
     *md_p = &md;
     return UCS_OK;
 }
@@ -195,17 +218,19 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
                          uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_rocm_ipc_key_t *packed = (uct_rocm_ipc_key_t *)rkey_buffer;
-    uct_rocm_ipc_key_t *key;
+    uct_rocm_ipc_unpacked_rkey_t *unpacked;
 
-    key = ucs_malloc(sizeof(uct_rocm_ipc_key_t), "uct_rocm_ipc_key_t");
-    if (NULL == key) {
-        ucs_error("Failed to allocate memory for uct_rocm_ipc_key_t");
+    unpacked = ucs_malloc(sizeof(*unpacked), "uct_rocm_ipc_unpacked_rkey_t");
+    if (NULL == unpacked) {
+        ucs_error("Failed to allocate memory for uct_rocm_ipc_unpacked_rkey_t");
         return UCS_ERR_NO_MEMORY;
     }
 
-    *key      = *packed;
-    *handle_p = NULL;
-    *rkey_p   = (uintptr_t)key;
+    unpacked->super       = *packed;
+    unpacked->region      = NULL;
+    unpacked->mapped_addr = NULL;
+    *handle_p             = NULL;
+    *rkey_p               = (uintptr_t)unpacked;
 
     return UCS_OK;
 }
@@ -213,31 +238,45 @@ uct_rocm_ipc_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
 static ucs_status_t uct_rocm_ipc_rkey_release(uct_component_t *component,
                                               uct_rkey_t rkey, void *handle)
 {
+    uct_rocm_ipc_unpacked_rkey_t *unpacked =
+            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
+                           uct_rocm_ipc_unpacked_rkey_t);
+
     ucs_assert(NULL == handle);
-    ucs_free((void *)rkey);
+    if (unpacked->region != NULL) {
+        uct_rocm_ipc_cache_unpin(unpacked->region);
+    }
+    ucs_free(unpacked);
     return UCS_OK;
 }
 
 ucs_status_t uct_rocm_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                                    void *handle, uint64_t raddr, void **laddr_p)
 {
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
-    void *mapped_addr;
+    uct_rocm_ipc_unpacked_rkey_t *unpacked =
+            ucs_derived_of((uct_rocm_ipc_key_t*)rkey,
+                           uct_rocm_ipc_unpacked_rkey_t);
     ptrdiff_t offset;
     ucs_status_t status;
 
-    status = uct_rocm_ipc_cache_map_memhandle(key, &mapped_addr);
-    if (status != UCS_OK) {
-        ucs_error("Failed to map IPC handle: %s", ucs_status_string(status));
-        return status;
+    /* The returned address is valid until the rkey is released */
+    if (unpacked->region == NULL) {
+        status = uct_rocm_ipc_cache_map_memhandle(&unpacked->super,
+                                                  &unpacked->mapped_addr,
+                                                  &unpacked->region);
+        if (status != UCS_OK) {
+            ucs_error("Failed to map IPC handle: %s",
+                      ucs_status_string(status));
+            return status;
+        }
     }
 
     /* Calculate offset from base address */
-    offset   = UCS_PTR_BYTE_DIFF(key->address, raddr);
-    *laddr_p = UCS_PTR_BYTE_OFFSET(mapped_addr, offset);
+    offset   = UCS_PTR_BYTE_DIFF(unpacked->super.address, raddr);
+    *laddr_p = UCS_PTR_BYTE_OFFSET(unpacked->mapped_addr, offset);
 
     ucs_trace("rocm_ipc rkey_ptr: raddr=%p mapped=%p offset=%ld laddr=%p",
-              (void*)raddr, mapped_addr, offset, *laddr_p);
+              (void*)raddr, unpacked->mapped_addr, offset, *laddr_p);
 
     return UCS_OK;
 }
