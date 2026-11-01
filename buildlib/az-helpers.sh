@@ -12,6 +12,8 @@ if [ -z "$AGENT_ID" ]; then
     RUNNING_IN_AZURE="no"
 fi
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/common.sh"
+
 # Report error and exit
 function error() {
     msg=$1
@@ -148,6 +150,36 @@ get_num_gpus() {
     echo "$num_gpus"
 }
 
+#
+# Set cuda_configure_flags to build with local CUDA 12+ if available, otherwise
+# with CUDA module, and gdrcopy_configure_flags if GDRCopy module is available.
+# Leave the flags empty if not found.
+#
+load_cuda_configure_flags() {
+    cuda_configure_flags=""
+    gdrcopy_configure_flags=""
+
+    # Try loading CUDA module if local CUDA 12+ is not found
+    # TODO: Remove CUDA 11 from testing and accept any local CUDA version
+    cuda_dir="/usr/local/cuda"
+    if find ${cuda_dir}/ -name 'libcudart.so.1[2-9]*' 2>/dev/null | grep -q .
+    then
+        cuda_configure_flags="--with-cuda=${cuda_dir}"
+    else
+        az_module_load ${CUDA_MODULE} || return 0
+        cuda_configure_flags="--with-cuda"
+    fi
+
+    # Load GDRCopy module if available
+    az_module_load ${GDRCOPY_MODULE} || return 0
+    gdrcopy_configure_flags="--with-gdrcopy"
+}
+
+unload_cuda_configure_flags() {
+    az_module_unload ${GDRCOPY_MODULE}
+    az_module_unload ${CUDA_MODULE}
+}
+
 # Ensure that GPU is present
 check_gpu() {
     name=$1
@@ -179,8 +211,8 @@ check_nv_peer_mem() {
 #
 try_load_cuda_env() {
     num_gpus=0
-    have_cuda=no
-    have_gdrcopy=no
+    cuda_configure_flags=""
+    gdrcopy_configure_flags=""
 
     # List relevant modules
     lsmod | grep -P "^(nvidia|nv.*_peer.*mem|gdrdrv)\W" || true
@@ -199,27 +231,13 @@ try_load_cuda_env() {
     num_gpus=$(get_num_gpus)
     [ "${num_gpus}" -gt 0 ] || return 0
 
-    # Prefer local CUDA if available
-    cuda_local_dir="/usr/local/cuda"
-    if find ${cuda_local_dir}/ -name 'libcudart.so.1[2-9]*' | grep -q .; then
-        have_cuda="${cuda_local_dir}"
-    else
-        # Fallback to env module
-        az_module_load dev/cuda13.0.2 || return 0
-        have_cuda=yes
-    fi
-
-    # Check gdrcopy. Load it inside the if so a missing module does not
-    # fail this function under set -e.
-    if [ -w "/dev/gdrdrv" ] && az_module_load dev/gdrcopy2.5.1_cuda13.0.2
-    then
-        have_gdrcopy=yes
-    fi
+    # Load CUDA configure flags and return if CUDA libraries are not found
+    load_cuda_configure_flags
 }
 
 load_cuda_env() {
     try_load_cuda_env
-    if [ "${have_cuda}" == "no" ] ; then
+    if [ -z "${cuda_configure_flags}" ] ; then
         if [ "${ucx_gpu}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1

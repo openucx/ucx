@@ -77,9 +77,6 @@ build_soname_suffix() {
 
 	if [ "${soname_suffix_check_hw}" = "yes" ]; then
 		echo "==== Enable CUDA and IB for SONAME suffix build ===="
-		cuda_local_dir="/usr/local/cuda"
-		have_gdrcopy=no
-
 		if ! nvidia-smi -L; then
 			azure_log_error "SONAME suffix CUDA/IB check requires a GPU"
 			exit 1
@@ -90,23 +87,14 @@ build_soname_suffix() {
 			exit 1
 		fi
 
-		if [ -d "$cuda_local_dir" ] &&
-		   find "$cuda_local_dir" -name 'libcudart.so.1[2-9]*' | grep -q .; then
-			common_soname_config_args+=(--with-cuda=$cuda_local_dir)
-		elif az_module_load $CUDA_MODULE; then
-			common_soname_config_args+=(--with-cuda)
-		else
+		load_cuda_configure_flags
+		if [ -z "${cuda_configure_flags}" ]; then
 			azure_log_error "SONAME suffix CUDA/IB check requires CUDA"
 			exit 1
 		fi
 
-		if [ -w "/dev/gdrdrv" ] && az_module_load $GDRCOPY_MODULE; then
-			have_gdrcopy=yes
-			common_soname_config_args+=(--with-gdrcopy)
-		else
-			common_soname_config_args+=(--without-gdrcopy)
-		fi
-
+		common_soname_config_args+=($cuda_configure_flags)
+		common_soname_config_args+=(${gdrcopy_configure_flags:---without-gdrcopy})
 		common_soname_config_args+=(--with-verbs --with-rdmacm)
 	else
 		common_soname_config_args+=(
@@ -171,7 +159,7 @@ build_soname_suffix() {
 				"libuct-${suffix}.so.0" \
 				"libucs-${suffix}.so.0"
 		done
-		if [ "${have_gdrcopy}" = "yes" ]; then
+		if [ -n "${gdrcopy_configure_flags}" ]; then
 			check_uct_module_linkage cuda_gdrcopy $suffix \
 				"libuct_cuda-${suffix}.so.0"
 		fi

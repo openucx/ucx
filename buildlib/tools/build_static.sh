@@ -6,7 +6,6 @@
 #
 
 realdir=$(realpath $(dirname $0))
-source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 long_test=${long_test:-no}
 

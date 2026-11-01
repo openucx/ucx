@@ -26,7 +26,6 @@
 #
 
 source $(dirname $0)/../buildlib/az-helpers.sh
-source $(dirname $0)/../buildlib/tools/common.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
@@ -280,7 +279,7 @@ run_ucp_hello() {
 
 	mem_types_list="host "
 
-	if [ "X$have_cuda" != "Xno" ]
+	if [ -n "$cuda_configure_flags" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -317,7 +316,7 @@ run_ucp_hello() {
 run_uct_hello() {
 	mem_types_list="host "
 
-	if [ "X$have_cuda" != "Xno" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	if [ -n "$cuda_configure_flags" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
 	then
 		mem_types_list+="cuda-managed "
 		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
@@ -353,7 +352,7 @@ run_client_server() {
 	msg_size_list="1 16 256 4096 65534"
 	api_list="am tag stream"
 
-	if [ "X$have_cuda" != "Xno" ]
+	if [ -n "$cuda_configure_flags" ]
 	then
 		mem_types_list+=" cuda cuda-managed "
 	fi
@@ -394,7 +393,7 @@ run_io_demo() {
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	mem_types_list="host "
 
-	if [ "X$have_cuda" != "Xno" ]
+	if [ -n "$cuda_configure_flags" ]
 	then
 		mem_types_list+="cuda cuda-managed "
 	fi
@@ -699,7 +698,7 @@ run_ucx_perftest() {
 
 	# run cuda tests if cuda module was loaded and GPU is found, and only in
 	# client/server mode, to reduce testing time
-	if [ "X$have_cuda" != "Xno" ] && [ $with_mpi -ne 1 ]
+	if [ -n "$cuda_configure_flags" ] && [ $with_mpi -ne 1 ]
 	then
 		gdr_options="n "
 		if (lsmod | grep -q 'nv.*_peer.*mem')
@@ -859,13 +858,8 @@ run_ucx_perftest_with_daemon() {
 # Run UCX performance cuda device test
 #
 run_ucx_perftest_cuda_device() {
-	if [ "X$have_cuda" == "Xno" ]; then
+	if [ -z "$cuda_configure_flags" ]; then
 		echo "==== CUDA not available, skipping CUDA device tests ===="
-		return 0
-	fi
-
-	if ! has_gpunetio_devel; then
-		echo "==== DOCA not available, skipping CUDA device tests ===="
 		return 0
 	fi
 
@@ -905,7 +899,7 @@ run_ucx_perftest_rma_iov() {
 	ucx_inst_ptest=$ucx_inst/share/ucx/perftest
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 
-	if [ "X$have_cuda" != "Xno" ] && [ "$(get_num_gpus)" -gt 0 ]; then
+	if [ -n "$cuda_configure_flags" ] && [ "$(get_num_gpus)" -gt 0 ]; then
 		cat $ucx_inst_ptest/test_types_ucp_rma_iov | \
 			sort -R > $ucx_inst_ptest/test_types_rma_iov_ucp
 	else
@@ -987,7 +981,7 @@ run_mpi_tests() {
 
 			test_malloc_hooks_mpi
 
-			if [ "X$have_cuda" != "Xno" ] && [ -x ./test/mpi/test_mpi_cuda ]
+			if [ -n "$cuda_configure_flags" ] && [ -x ./test/mpi/test_mpi_cuda ]
 			then
 				echo "==== Running MPI CUDA tests ===="
 				${MPIRUN_COMMON} -np 2 ./test/mpi/test_mpi_cuda
@@ -1193,7 +1187,7 @@ test_malloc_hook() {
 
 test_no_cuda_context() {
 	echo "==== Running no CUDA context test ===="
-	if [ "X$have_cuda" != "Xno" ] && [ -x ./test/apps/test_no_cuda_ctx ]
+	if [ -n "$cuda_configure_flags" ] && [ -x ./test/apps/test_no_cuda_ctx ]
 	then
 		./test/apps/test_no_cuda_ctx
 	fi

@@ -7,7 +7,6 @@
 
 realdir=$(realpath $(dirname $0))
 requested_gcc_module=${GCC_MODULE:-}
-source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 build_mode=${build_mode:-}
 
