@@ -10,13 +10,10 @@ libuct_musa_la_CPPFLAGS = $(BASE_CPPFLAGS) $(MUSA_CPPFLAGS)
 libuct_musa_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_musa_la_LDFLAGS  = $(MUSA_LDFLAGS) -version-info $(SOVERSION) \
                           $(UCX_LT_RELEASE) \
-                          $(patsubst %, -Xlinker %, -L$(MUSA_ROOT)/lib -rpath $(MUSA_ROOT)/lib) \
-                          $(patsubst %, -Xlinker %, --enable-new-dtags) \
-                          $(patsubst %, -Xlinker %, -rpath $(MUSA_ROOT)/lib64)
+                          $(patsubst %, -Xlinker %, $(MUSA_RPATH))
 libuct_musa_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la \
                           $(MUSA_LIBS)
-libuct_musa_ladir       = $(includedir)/uct/musa
 
 noinst_HEADERS = \
 	base/musa_utils.h \
@@ -26,6 +23,7 @@ libuct_musa_la_SOURCES = \
 	base/musa_base.c
 
 noinst_HEADERS += \
+	musa_copy/musa_copy_md.h \
 	musa_copy/musa_copy_iface.h \
 	musa_copy/musa_copy_ep.h
 

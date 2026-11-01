@@ -50,7 +50,7 @@ extern "C" {
                    rocm_cpy, \
                    rocm_ipc, \
                    ze_cpy, \
-                   musa, \
+                   musa_cpy, \
                    ib, \
                    ugni, \
                    gdr_copy, \

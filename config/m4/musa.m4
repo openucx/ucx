@@ -15,6 +15,7 @@ AC_DEFUN([UCX_CHECK_MUSA],[
         MUSA_CPPFLAGS=""
         MUSA_LDFLAGS=""
         MUSA_LIBS=""
+        MUSA_RPATH=""
         MUSA_ROOT=""
 
         AS_IF([test "x$with_musa" = "xno"], [
@@ -31,6 +32,7 @@ AC_DEFUN([UCX_CHECK_MUSA],[
             AS_IF([test -n "$MUSA_ROOT"], [
                 MUSA_CPPFLAGS="-I$MUSA_ROOT/include"
                 MUSA_LDFLAGS="-L$MUSA_ROOT/lib -L$MUSA_ROOT/lib64"
+                MUSA_RPATH="-rpath $MUSA_ROOT/lib --enable-new-dtags -rpath $MUSA_ROOT/lib64"
             ])
             MUSA_LIBS="-lmusart -lmusa"
 
@@ -61,15 +63,22 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                                  [musa_happy=no])
                 ])
                 AS_IF([test "x$musa_happy" = "xyes"], [
-                    AC_CHECK_LIB([musa], [muMemGetHandleForAddressRange],
-                                 [AC_CHECK_DECLS(
-                                     [MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD],
-                                     [AC_DEFINE(
-                                         [HAVE_MUSA_DMABUF], [1],
-                                         [MUSA supports DMA-BUF export])],
-                                     [],
-                                     [[#include <musa.h>]])],
-                                 [])
+                    AC_CHECK_DECLS(
+                        [MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD],
+                        [AC_LINK_IFELSE(
+                            [AC_LANG_PROGRAM(
+                                [[#include <musa.h>]],
+                                [[int fd = -1;
+                                  return (int)muMemGetHandleForAddressRange(
+                                      &fd, 0, 0,
+                                      MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
+                                      0);]])],
+                            [AC_DEFINE(
+                                [HAVE_MUSA_DMABUF], [1],
+                                [MUSA supports DMA-BUF export])],
+                            [])],
+                        [],
+                        [[#include <musa.h>]])
                 ])
                 AS_IF([test "x$musa_happy" = "xyes"], [
                     AC_LINK_IFELSE(
@@ -87,19 +96,32 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                               musaStream_t runtime_stream = 0;
                               musaEvent_t event = 0;
                               char pci_bus_id[64];
-                              MUmemPool driver_pool = 0;
+                              MUmemoryPool driver_pool = 0;
                               MUstream driver_stream = 0;
+                              unsigned memory_type = 0;
+                              unsigned is_managed = 0;
                               musaGetDeviceCount(&count);
                               musaGetDevice(&device);
                               musaSetDevice(device);
                               musaDeviceGetPCIBusId(pci_bus_id,
                                                      sizeof(pci_bus_id),
                                                      device);
-                              musaPointerGetAttributes(NULL, address);
+                              muPointerGetAttribute(
+                                  &memory_type,
+                                  MU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                  (MUdeviceptr)address);
+                              muPointerGetAttribute(
+                                  &is_managed, MU_POINTER_ATTRIBUTE_IS_MANAGED,
+                                  (MUdeviceptr)address);
+                              muPointerGetAttribute(
+                                  &device, MU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                                  (MUdeviceptr)address);
                               musaGetErrorString(musaSuccess);
                               musaGetLastError();
                               muMemGetAddressRange(&base, &size,
                                                    (MUdeviceptr)address);
+                              musaMalloc(&address, size);
+                              musaFree(address);
                               musaMallocManaged(&address, size, 0);
                               musaMallocPitch(&address, &pitch, size, 1);
                               musaMallocAsync(&address, size, runtime_stream);
@@ -117,6 +139,10 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                                               runtime_stream);
                               musaEventRecord(event, runtime_stream);
                               musaEventQuery(event);
+                              if (muEventQuery((MUevent)event) ==
+                                  MUSA_ERROR_NOT_READY) {
+                                  count = 0;
+                              }
                               musaEventDestroy(event);
                               musaStreamSynchronize(runtime_stream);
                               musaStreamDestroy(runtime_stream);
@@ -147,6 +173,7 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                 AC_SUBST([MUSA_CPPFLAGS])
                 AC_SUBST([MUSA_LDFLAGS])
                 AC_SUBST([MUSA_LIBS])
+                AC_SUBST([MUSA_RPATH])
                 AC_SUBST([MUSA_ROOT])
             ], [
                 AS_IF([test "x$with_musa" != "xguess"], [
