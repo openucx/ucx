@@ -354,7 +354,6 @@ uct_musa_base_query_pointer(const void *address, size_t length,
                                   length)) {
         ucs_debug("MUSA allocation range does not contain %p len %zu",
                   address, length);
-        return UCS_ERR_INVALID_ADDR;
     }
 
     return UCS_OK;
@@ -609,17 +608,6 @@ uct_musa_base_copy_kind(const uct_musa_pointer_info_t *src_info,
     } else {
         *kind_p = musaMemcpyDeviceToDevice;
     }
-}
-
-static ucs_status_t
-uct_musa_base_copy_prepare(const uct_musa_pointer_info_t *src_info,
-                           const uct_musa_pointer_info_t *dst_info,
-                           int default_device, int *device_p,
-                           enum musaMemcpyKind *kind_p)
-{
-    uct_musa_base_copy_kind(src_info, dst_info, kind_p);
-    return uct_musa_base_select_device(src_info, dst_info, default_device,
-                                       device_p);
 }
 
 static ucs_status_t

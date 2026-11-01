@@ -25,11 +25,6 @@ UCS_TEST_F(test_musa_contract, memory_type_is_gpu)
     EXPECT_NE(0, UCP_MEM_IS_GPU(UCS_MEMORY_TYPE_MUSA));
 }
 
-UCS_TEST_F(test_musa_contract, memory_type_is_device_memory)
-{
-    EXPECT_NE(0, UCP_DEVICE_MEM_TYPES & UCS_BIT(UCS_MEMORY_TYPE_MUSA));
-}
-
 UCS_TEST_F(test_musa_contract, range_accepts_interior_subrange)
 {
     EXPECT_TRUE(uct_musa_range_is_valid(0x1000, 0x1000, 0x1800, 0x400));

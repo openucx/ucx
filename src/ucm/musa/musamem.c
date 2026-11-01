@@ -416,16 +416,7 @@ typedef struct {
     {{UCS_PP_MAKE_STRING(_func), ucm_override_##_func}, \
       (void**)&ucm_orig_##_func}
 
-static ucm_musa_func_t ucm_musa_funcs[] = {
-    UCM_MUSA_FUNC_ENTRY(musaMalloc),
-    UCM_MUSA_FUNC_ENTRY(musaFree),
-    UCM_MUSA_FUNC_ENTRY(musaMallocManaged),
-    UCM_MUSA_FUNC_ENTRY(musaMallocPitch),
-    UCM_MUSA_FUNC_ENTRY(musaMallocAsync),
-    UCM_MUSA_FUNC_ENTRY(musaMallocFromPoolAsync),
-    UCM_MUSA_FUNC_ENTRY(musaMallocHost),
-    UCM_MUSA_FUNC_ENTRY(musaFreeHost),
-    UCM_MUSA_FUNC_ENTRY(musaFreeAsync),
+static ucm_musa_func_t ucm_musa_driver_funcs[] = {
     UCM_MUSA_FUNC_ENTRY(muMemAlloc),
     UCM_MUSA_FUNC_ENTRY(muMemAlloc_v2),
     UCM_MUSA_FUNC_ENTRY(muMemAllocManaged),
@@ -439,8 +430,22 @@ static ucm_musa_func_t ucm_musa_funcs[] = {
     {{NULL}, NULL}
 };
 
+static ucm_musa_func_t ucm_musa_runtime_funcs[] = {
+    UCM_MUSA_FUNC_ENTRY(musaMalloc),
+    UCM_MUSA_FUNC_ENTRY(musaFree),
+    UCM_MUSA_FUNC_ENTRY(musaMallocManaged),
+    UCM_MUSA_FUNC_ENTRY(musaMallocPitch),
+    UCM_MUSA_FUNC_ENTRY(musaMallocAsync),
+    UCM_MUSA_FUNC_ENTRY(musaMallocFromPoolAsync),
+    UCM_MUSA_FUNC_ENTRY(musaMallocHost),
+    UCM_MUSA_FUNC_ENTRY(musaFreeHost),
+    UCM_MUSA_FUNC_ENTRY(musaFreeAsync),
+    {{NULL}, NULL}
+};
+
 static ucs_status_t
-ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, uint64_t *installed_p)
+ucm_musa_install_hooks(ucm_musa_func_t *funcs, ucm_mmap_hook_mode_t mode,
+                       uint64_t *installed_p)
 {
     ucm_musa_func_t *func;
     void *func_ptr;
@@ -458,7 +463,7 @@ ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, uint64_t *installed_p)
     }
 
     count = 0;
-    for (func = ucm_musa_funcs; func->patch.symbol != NULL; ++func) {
+    for (func = funcs; func->patch.symbol != NULL; ++func) {
         func_ptr = ucm_reloc_get_orig(func->patch.symbol, func->patch.value);
         if (func_ptr == NULL) {
             continue;
@@ -488,9 +493,11 @@ ucm_musa_install_hooks(ucm_mmap_hook_mode_t mode, uint64_t *installed_p)
 static ucs_status_t ucm_musamem_install(int events)
 {
     static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
-    static uint64_t installed_hooks;
+    static uint64_t installed_driver_hooks;
+    static uint64_t installed_runtime_hooks;
     ucs_status_t bistro_status;
-    ucs_status_t reloc_status;
+    ucs_status_t driver_reloc_status;
+    ucs_status_t runtime_reloc_status;
     ucs_status_t status;
 
     if (!(events & (UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE))) {
@@ -503,30 +510,45 @@ static ucs_status_t ucm_musamem_install(int events)
     }
 
     pthread_mutex_lock(&install_mutex);
-    bistro_status = ucm_musa_install_hooks(UCM_MMAP_HOOK_BISTRO,
-                                           &installed_hooks);
+    bistro_status = ucm_musa_install_hooks(ucm_musa_driver_funcs,
+                                           UCM_MMAP_HOOK_BISTRO,
+                                           &installed_driver_hooks);
     if (bistro_status != UCS_OK) {
         ucm_debug("failed to install MUSA bistro hooks");
     }
 
-    reloc_status = ucm_musa_install_hooks(UCM_MMAP_HOOK_RELOC,
-                                          &installed_hooks);
-    if (reloc_status != UCS_OK) {
-        ucm_debug("failed to install MUSA reloc hooks");
+    driver_reloc_status = ucm_musa_install_hooks(ucm_musa_driver_funcs,
+                                                 UCM_MMAP_HOOK_RELOC,
+                                                 &installed_driver_hooks);
+    if (driver_reloc_status != UCS_OK) {
+        ucm_debug("failed to install MUSA driver reloc hooks");
     }
 
-    if (installed_hooks & UCM_GPU_HOOK_MODES_MASK) {
+    runtime_reloc_status = ucm_musa_install_hooks(ucm_musa_runtime_funcs,
+                                                  UCM_MMAP_HOOK_RELOC,
+                                                  &installed_runtime_hooks);
+    if (runtime_reloc_status != UCS_OK) {
+        ucm_debug("failed to install MUSA runtime reloc hooks");
+    }
+
+    if ((installed_driver_hooks | installed_runtime_hooks) &
+        UCM_GPU_HOOK_MODES_MASK) {
         status = UCS_OK;
-        if ((bistro_status != UCS_OK) || (reloc_status != UCS_OK)) {
-            ucm_warn("MUSA hooks installed with one mechanism only "
-                     "(bistro: %s, reloc: %s)",
+        if ((bistro_status != UCS_OK) ||
+            (driver_reloc_status != UCS_OK) ||
+            (runtime_reloc_status != UCS_OK)) {
+            ucm_warn("MUSA hooks installed partially "
+                     "(bistro: %s, driver reloc: %s, runtime reloc: %s)",
                      ucs_status_string(bistro_status),
-                     ucs_status_string(reloc_status));
+                     ucs_status_string(driver_reloc_status),
+                     ucs_status_string(runtime_reloc_status));
         } else {
             ucm_info("MUSA hooks are ready");
         }
     } else {
-        status = (bistro_status != UCS_OK) ? bistro_status : reloc_status;
+        status = (bistro_status != UCS_OK) ? bistro_status :
+                 (driver_reloc_status != UCS_OK) ? driver_reloc_status :
+                                                   runtime_reloc_status;
         ucm_diag("failed to install MUSA hooks: %s", ucs_status_string(status));
     }
 
