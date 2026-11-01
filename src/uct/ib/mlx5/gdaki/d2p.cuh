@@ -35,14 +35,16 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
         auto ch                        = iface->channels + cid;
         const unsigned long long depth = UCS_BIT(iface->log_depth);
         unsigned long long pi          = READ_ONCE(*ch->pi);
+        uint32_t owner, slot;
         uint64_t comp_id;
 
         for (;;) {
-            const uint64_t stamp = ((pi >> iface->log_depth) & 0x1) ?
-                                           UCT_IB_D2P_AVAIL_STAMP :
-                                           0;
+            owner = (pi >> iface->log_depth) & 0x1;
+            slot  = pi & (depth - 1);
 
-            comp_id = READ_ONCE(ch->ci[pi & (depth - 1)].avail);
+            const uint64_t stamp = owner ? UCT_IB_D2P_AVAIL_STAMP : 0;
+
+            comp_id = READ_ONCE(ch->ci[slot].avail);
             if ((comp_id & UCT_IB_D2P_AVAIL_STAMP) != stamp) {
                 /* Completion not returned yet: depth ops are in flight */
                 status = UCS_ERR_NO_RESOURCE;
@@ -59,7 +61,6 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
         }
 
         if (status == UCS_INPROGRESS) {
-            const uint32_t slot = pi & UCS_MASK(iface->log_depth);
             auto desc = reinterpret_cast<volatile uct_ib_d2p_desc_t*>(
                                 ch->queue_base) +
                         slot;
@@ -79,7 +80,6 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
             desc->add            = add;
             desc->comp_id        = comp_id;
             desc->flags          = flags;
-            const uint32_t owner = (pi >> iface->log_depth) & 0x1;
             asm volatile("st.release.sys.global.u8 [%0], %1;" ::
                          "l"(&desc->owner), "r"(owner) : "memory");
         }
