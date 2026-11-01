@@ -150,7 +150,8 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * compatibility by itself.
  */
 typedef struct uct_rc_mlx5_ext_ops {
-    /** Requirements known before interface creation. */
+    /** Requirements known before interface creation; see
+     *  @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP. */
     uint64_t        requirements;
 
     /** Provider-private bytes appended to the existing endpoint address. */
