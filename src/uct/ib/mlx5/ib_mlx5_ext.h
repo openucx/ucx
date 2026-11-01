@@ -214,6 +214,11 @@ typedef struct uct_rc_mlx5_ext_ops {
      * satisfy the matching-peer precondition above. Reject unsupported payload
      * versions without importing remote memory metadata.
      *
+     * Called before QP connection and setting UCT_RC_EP_FLAG_CONNECTED.
+     * Errors follow the required/best-effort provider policy. Failed calls
+     * must unwind partial imports. If QP connection subsequently fails,
+     * normal ep_cleanup releases the imported state.
+     *
      * @param [in] ep          Existing RC endpoint.
      * @param [in] ep_ctx      Provider context from ep_init.
      * @param [in] payload     Remote provider address payload.
