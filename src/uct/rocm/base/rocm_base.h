@@ -53,6 +53,10 @@ uct_rocm_base_is_gpu_hsa_mem_type(hsa_amd_pointer_type_t hsa_mem_type)
 ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
                                            size_t *size, uint64_t *reg_id);
 
+/* Non-zero if [base, base+size) abuts another VMM mapping (signals a pool
+ * chunk such as hipMallocAsync). */
+int uct_rocm_base_vmm_is_pooled(const void *base, size_t size);
+
 /* Grant RW access to VMM mapping [va, va+size) for all local GPU agents. */
 hsa_status_t uct_rocm_base_vmm_set_gpu_access(void *va, size_t size);
 

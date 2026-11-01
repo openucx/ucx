@@ -55,6 +55,18 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     uct_rocm_ipc_key_t *packed = mkey_buffer;
     uct_rocm_ipc_key_t *key    = memh;
 
+#ifdef HAVE_ROCM_VMM_TYPE
+    /* A VMM rkey covers a single chunk; a range crossing the chunk boundary
+     * cannot be packed, so fall back to staging. */
+    if (key->is_vmm &&
+        (((uintptr_t)address < key->address) ||
+         (((uintptr_t)address + length) > (key->address + key->length)))) {
+        ucs_debug("VMM rkey range [%p, +0x%zx) exceeds mapping [0x%lx, +0x%zx)",
+                  address, length, (unsigned long)key->address, key->length);
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
     *packed = *key;
 
     return UCS_OK;
@@ -107,6 +119,13 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                 ucs_debug("VMM buffer [%p, +0x%zx) straddles mapping "
                           "[%p, +0x%zx); falling back from rocm_ipc", address,
                           length, vmm_base, vmm_size);
+                return UCS_ERR_INVALID_ADDR;
+            }
+            /* Importing a pooled buffer's many chunks over IPC starts failing
+             * past a point, so stage it and keep IPC for standalone mappings. */
+            if (uct_rocm_base_vmm_is_pooled(vmm_base, vmm_size)) {
+                ucs_debug("VMM buffer [%p, +0x%zx) is a pooled chunk; falling "
+                          "back from rocm_ipc", address, length);
                 return UCS_ERR_INVALID_ADDR;
             }
         } else {
@@ -207,8 +226,8 @@ uct_rocm_ipc_mem_dereg(uct_md_h md,
     /* The IPC signal is owned by the export table and stays until free. */
     mem_hndl = params->memh;
 #ifdef HAVE_ROCM_VMM_TYPE
+    /* The exported dmabuf fd is owned by this registration. */
     if (mem_hndl->is_vmm) {
-        /* Close fd on dereg; reg_id guards fd reuse. */
         close(mem_hndl->vmm.fd);
     }
 #endif
