@@ -268,6 +268,7 @@ uct_musa_base_query_pointer_attributes(const void *address,
     memset(&attributes, 0, sizeof(attributes));
     error = musaPointerGetAttributes(&attributes, address);
     if (error == musaErrorInvalidValue) {
+        (void)musaGetLastError();
         info->kind = UCT_MUSA_POINTER_HOST;
         info->device = -1;
         return UCS_OK;
@@ -594,11 +595,10 @@ uct_musa_base_select_device(const uct_musa_pointer_info_t *src_info,
     return (*device_p >= 0) ? UCS_OK : UCS_ERR_NO_DEVICE;
 }
 
-static ucs_status_t
-uct_musa_base_copy_prepare(const uct_musa_pointer_info_t *src_info,
-                           const uct_musa_pointer_info_t *dst_info,
-                           int default_device, int *device_p,
-                           enum musaMemcpyKind *kind_p)
+static void
+uct_musa_base_copy_kind(const uct_musa_pointer_info_t *src_info,
+                        const uct_musa_pointer_info_t *dst_info,
+                        enum musaMemcpyKind *kind_p)
 {
     if ((src_info->kind == UCT_MUSA_POINTER_HOST) &&
         (dst_info->kind == UCT_MUSA_POINTER_DEVICE)) {
@@ -609,14 +609,22 @@ uct_musa_base_copy_prepare(const uct_musa_pointer_info_t *src_info,
     } else {
         *kind_p = musaMemcpyDeviceToDevice;
     }
+}
 
+static ucs_status_t
+uct_musa_base_copy_prepare(const uct_musa_pointer_info_t *src_info,
+                           const uct_musa_pointer_info_t *dst_info,
+                           int default_device, int *device_p,
+                           enum musaMemcpyKind *kind_p)
+{
+    uct_musa_base_copy_kind(src_info, dst_info, kind_p);
     return uct_musa_base_select_device(src_info, dst_info, default_device,
                                        device_p);
 }
 
 static ucs_status_t
 uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
-                             int default_device,
+                             int device,
                              const uct_musa_pointer_info_t *src_info,
                              const uct_musa_pointer_info_t *dst_info,
                              musaError_t (*copy_func)(void *, const void *,
@@ -626,7 +634,6 @@ uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
                              musaStream_t stream, const char *copy_name)
 {
     enum musaMemcpyKind kind;
-    int device;
     int current_device = -1;
     int have_current_device;
     int switched_device;
@@ -638,12 +645,7 @@ uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
         return UCS_OK;
     }
 
-    status = uct_musa_base_copy_prepare(src_info, dst_info, default_device,
-                                        &device, &kind);
-    if (status != UCS_OK) {
-        return status;
-    }
-
+    uct_musa_base_copy_kind(src_info, dst_info, &kind);
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
     switched_device = !have_current_device || (current_device != device);
