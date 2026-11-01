@@ -104,6 +104,21 @@ static ucs_config_field_t ucm_global_config_table[] = {
    ,ucs_offsetof(ucm_global_config_t, rocm_hook_modes),
                  UCS_CONFIG_TYPE_BITMAP(ucm_mmap_hook_modes)},
 
+  {"MUSA_HOOK_MODE",
+#if UCM_BISTRO_HOOKS
+   UCM_MMAP_HOOK_BISTRO_STR "," UCM_MMAP_HOOK_RELOC_STR,
+#else
+   UCM_MMAP_HOOK_RELOC_STR,
+#endif
+   "MUSA memory hook modes. A combination of:\n"
+   " none   - Don't set MUSA hooks.\n"
+   " reloc  - Use ELF relocation table to set hooks."
+#if UCM_BISTRO_HOOKS
+   "\n bistro - Use binary instrumentation to set hooks."
+#endif
+   ,ucs_offsetof(ucm_global_config_t, musa_hook_modes),
+                 UCS_CONFIG_TYPE_BITMAP(ucm_mmap_hook_modes)},
+
   {"DYNAMIC_MMAP_THRESH", "yes",
    "Enable dynamic mmap threshold: for every released block, the\n"
    "mmap threshold is adjusted upward to the size of the size of\n"

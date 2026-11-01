@@ -29,6 +29,9 @@
 static pthread_once_t uct_musa_base_once = PTHREAD_ONCE_INIT;
 static ucs_status_t  uct_musa_base_init_status;
 static unsigned      uct_musa_base_num_devices;
+static pthread_once_t uct_musa_base_sys_dev_once = PTHREAD_ONCE_INIT;
+static ucs_status_t  uct_musa_base_sys_dev_status;
+static ucs_sys_device_t *uct_musa_base_sys_devices;
 
 static const char *uct_musa_error_string(musaError_t error)
 {
@@ -103,7 +106,7 @@ uct_musa_base_query_md_resources(uct_component_h component,
 }
 
 static ucs_status_t
-uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
+uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
 {
     ucs_sys_bus_id_t bus_id;
     ucs_sys_device_t sys_dev;
@@ -144,6 +147,66 @@ uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
     return UCS_OK;
 }
 
+static void uct_musa_base_init_sys_devs(void)
+{
+    unsigned i;
+
+    uct_musa_base_sys_dev_status =
+            uct_musa_base_get_device_count(&uct_musa_base_num_devices);
+    if (uct_musa_base_sys_dev_status != UCS_OK) {
+        return;
+    }
+
+    uct_musa_base_sys_devices =
+            ucs_calloc(uct_musa_base_num_devices,
+                       sizeof(*uct_musa_base_sys_devices), "musa sys devices");
+    if (uct_musa_base_sys_devices == NULL) {
+        uct_musa_base_sys_dev_status = UCS_ERR_NO_MEMORY;
+        return;
+    }
+
+    for (i = 0; i < uct_musa_base_num_devices; ++i) {
+        uct_musa_base_sys_devices[i] = UCS_SYS_DEVICE_ID_UNKNOWN;
+        uct_musa_base_query_sys_dev(i, &uct_musa_base_sys_devices[i]);
+    }
+}
+
+static ucs_status_t
+uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
+{
+    pthread_once(&uct_musa_base_sys_dev_once, uct_musa_base_init_sys_devs);
+    if (uct_musa_base_sys_dev_status != UCS_OK) {
+        return uct_musa_base_sys_dev_status;
+    }
+    if (device >= uct_musa_base_num_devices) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *sys_dev_p = uct_musa_base_sys_devices[device];
+    return (*sys_dev_p == UCS_SYS_DEVICE_ID_UNKNOWN) ? UCS_ERR_NO_DEVICE :
+                                                       UCS_OK;
+}
+
+static ucs_status_t
+uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p)
+{
+    unsigned i;
+
+    pthread_once(&uct_musa_base_sys_dev_once, uct_musa_base_init_sys_devs);
+    if (uct_musa_base_sys_dev_status != UCS_OK) {
+        return uct_musa_base_sys_dev_status;
+    }
+
+    for (i = 0; i < uct_musa_base_num_devices; ++i) {
+        if (uct_musa_base_sys_devices[i] == sys_dev) {
+            *device_p = i;
+            return UCS_OK;
+        }
+    }
+
+    return UCS_ERR_NO_DEVICE;
+}
+
 ucs_status_t
 uct_musa_base_query_devices(uct_md_h md,
                             uct_tl_device_resource_t **tl_devices_p,
@@ -165,10 +228,9 @@ uct_musa_base_query_devices(uct_md_h md,
     }
 
     for (i = 0; i < count; ++i) {
-        devices[i].type     = UCT_DEVICE_TYPE_ACC;
-        if (uct_musa_base_get_sys_dev(i, &devices[i].sys_device) != UCS_OK) {
-            devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
-        }
+        devices[i].type        = UCT_DEVICE_TYPE_ACC;
+        devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        uct_musa_base_get_sys_dev(i, &devices[i].sys_device);
         ucs_snprintf_zero(devices[i].name, sizeof(devices[i].name), "musa%u",
                           i);
     }
@@ -246,6 +308,7 @@ uct_musa_base_query_pointer(const void *address, size_t length,
     }
 
     memset(info, 0, sizeof(*info));
+    info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     status = uct_musa_base_query_pointer_attributes(address, info);
     if (status != UCS_OK) {
         return status;
@@ -265,6 +328,11 @@ uct_musa_base_query_pointer(const void *address, size_t length,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if ((info->device >= 0) &&
+        (uct_musa_base_get_sys_dev(info->device, &info->sys_dev) != UCS_OK)) {
+        info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
     allocation_base   = 0;
@@ -378,11 +446,7 @@ uct_musa_base_mem_query(const void *address, size_t length, int have_dmabuf,
     }
 
     mem_type = UCS_MEMORY_TYPE_MUSA;
-    sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
-    if (uct_musa_base_get_sys_dev(info.device, &sys_dev) != UCS_OK) {
-        ucs_debug("failed to map MUSA device %d to a system device",
-                  info.device);
-    }
+    sys_dev = info.sys_dev;
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
         mem_attr_p->mem_type = mem_type;
     }
@@ -466,18 +530,27 @@ uct_musa_base_query_copy_pointer(const void *address, size_t length,
         memset(info, 0, sizeof(*info));
         info->kind         = UCT_MUSA_POINTER_HOST;
         info->device       = -1;
+        info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
         info->base_address = (void *)address;
         info->alloc_length = length;
         return UCS_OK;
     }
 
     if ((status == UCS_OK) && (mem_info.type == UCS_MEMORY_TYPE_MUSA)) {
-        status = uct_musa_base_query_pointer_attributes(address, info);
-        if (status == UCS_OK) {
+        if (mem_info.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            memset(info, 0, sizeof(*info));
+            info->kind         = UCT_MUSA_POINTER_DEVICE;
+            info->device       = -1;
+            info->sys_dev      = mem_info.sys_dev;
             info->base_address = (void *)address;
             info->alloc_length = length;
+            if (uct_musa_base_get_device_by_sys_dev(info->sys_dev,
+                                                    &info->device) == UCS_OK) {
+                return UCS_OK;
+            }
         }
-        return status;
+
+        return uct_musa_base_query_pointer(address, length, info);
     }
 
     if ((status == UCS_OK) &&
@@ -501,9 +574,19 @@ uct_musa_base_select_device(const uct_musa_pointer_info_t *src_info,
     if ((src_info->kind == UCT_MUSA_POINTER_DEVICE) &&
         (src_info->device >= 0)) {
         *device_p = src_info->device;
+    } else if ((src_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+               (src_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+               (uct_musa_base_get_device_by_sys_dev(src_info->sys_dev,
+                                                    device_p) == UCS_OK)) {
+        /* Device index was recovered from the memory cache. */
     } else if ((dst_info->kind == UCT_MUSA_POINTER_DEVICE) &&
                (dst_info->device >= 0)) {
         *device_p = dst_info->device;
+    } else if ((dst_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+               (dst_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+               (uct_musa_base_get_device_by_sys_dev(dst_info->sys_dev,
+                                                    device_p) == UCS_OK)) {
+        /* Device index was recovered from the memory cache. */
     } else {
         *device_p = default_device;
     }
