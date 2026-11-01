@@ -744,11 +744,6 @@ static void uct_cuda_ipc_md_init_mnnvl(uct_cuda_ipc_md_t *md,
         goto out;
     }
 
-    if (mnnvl_enable == UCS_NO) {
-        mnnvl_supported = 0;
-        goto out;
-    }
-
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device);
     if (status != UCS_OK) {
         goto out_not_supported;
@@ -958,8 +953,9 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
     md->system_uuid      = ucs_get_system_id();
 
-    if (!strcmp(ipc_config->nvlink_domain, "auto") ||
-        (ipc_config->enable_mnnvl == UCS_NO)) {
+    if (ipc_config->enable_mnnvl == UCS_NO) {
+        ucs_debug("multi-node NVLINK support is disabled");
+    } else if (!strcmp(ipc_config->nvlink_domain, "auto")) {
         uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
     } else {
         status = uct_cuda_ipc_md_emulate_nvlink_domain(
