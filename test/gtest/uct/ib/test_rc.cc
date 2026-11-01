@@ -1434,9 +1434,8 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and dispatch the pending queue.
-     * Can't send AM/PUT for that, because it is blocked while FC grant is
-     * queued. */
+    /* Enable send capabilities of m_e2 and dispatch the pending queue directly,
+     * so it does not depend on a send to generate a TX completion. */
     enable_entity(m_e2);
     dispatch_pending(m_e2);
 
