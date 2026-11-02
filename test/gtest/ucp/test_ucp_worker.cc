@@ -1200,11 +1200,6 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
     }
 
-    test_worker_cpu_mask() :
-        m_rlimit(RLIMIT_NOFILE, m_fd_per_cpu * ucs_sys_get_num_cpus())
-    {
-    }
-
 protected:
     void init() override
     {
@@ -1225,9 +1220,6 @@ protected:
         m_cpu = cpu;
     }
 
-    ucs::rlimit_setter   m_rlimit;
-    static constexpr int m_fd_per_cpu = 60;
-
 private:
     unsigned m_cpu = 0;
 };
@@ -1239,13 +1231,12 @@ UCS_TEST_P(test_worker_cpu_mask, all_cpus)
     CPU_ZERO(&mask);
     ASSERT_GE(ucs_sys_getaffinity(&mask), 0);
 
-    long num_cpus = ucs_min(m_rlimit.limit() / m_fd_per_cpu,
-                            ucs_sys_get_num_cpus());
-    for (auto cpu = 0; cpu < num_cpus; ++cpu) {
+    for (auto cpu = 0; cpu < ucs_sys_get_num_cpus(); ++cpu) {
         if (CPU_ISSET(cpu, &mask)) {
             set_cpu(cpu);
             UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
             create_entity();
+            ucp_test::cleanup();
         }
     }
 }
