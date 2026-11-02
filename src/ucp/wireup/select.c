@@ -1957,7 +1957,10 @@ static int ucp_wireup_add_bw_lanes_pairwise(
                  * takes a path of its devices, and the peer may repeat the
                  * selection with our wireup address, which has only the devices
                  * of the added lanes. For the same reason, the candidates which
-                 * were not selected do not affect the threshold. */
+                 * were not selected do not affect the threshold, and a selected
+                 * lane is kept even if a faster lane is selected after it. This
+                 * is rare, since normally the first selected lane is the
+                 * fastest one. */
                 bw_info->criteria.min_lane_bw = max_bw * max_ratio;
             }
 
