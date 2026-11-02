@@ -1217,15 +1217,15 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
     static void get_base_variants(std::vector<ucp_test_variant>& variants) {
+        /* Keep the base flags clear (flush worker, no user memh), so the
+         * memory types land at variant values 1 and 2 */
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
     }
 
-    static void get_src_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
-    }
-
+    /* Parameter validation tests do not depend on the memory type, so they
+     * run with a single memory type for both source and destination */
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_src_variants, SGL_MEM_TYPES_MASK);
+        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
     virtual void init() override {
@@ -1233,12 +1233,12 @@ public:
         test_ucp_rma::init();
     }
 
-    ucs_memory_type_t src_mem_type() const {
+    virtual ucs_memory_type_t src_mem_type() const {
         return static_cast<ucs_memory_type_t>(get_variant_value(1));
     }
 
-    ucs_memory_type_t dst_mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+    virtual ucs_memory_type_t dst_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value(1));
     }
 
 protected:
@@ -1651,7 +1651,28 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_counts) {
+/* Tests which verify the transferred data run for every combination of source
+ * and destination memory types */
+class test_ucp_rma_sgl_data : public test_ucp_rma_sgl {
+public:
+    static void get_src_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_src_variants, SGL_MEM_TYPES_MASK);
+    }
+
+    virtual ucs_memory_type_t src_mem_type() const override {
+        return static_cast<ucs_memory_type_t>(get_variant_value(1));
+    }
+
+    virtual ucs_memory_type_t dst_mem_type() const override {
+        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_data, put_various_counts) {
     static const size_t counts[] = {1, 2, 4, 10, 1024};
     for (size_t count : counts) {
         test_put_sgl(count, 2 * UCS_KBYTE);
@@ -1668,7 +1689,7 @@ UCS_TEST_P(test_ucp_rma_sgl, put_various_counts) {
     }
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_various_sizes) {
     static const size_t buf_sizes[] = {1, 256, UCS_KBYTE, 4 * UCS_KBYTE};
     for (size_t buf_size : buf_sizes) {
         test_put_sgl(4, buf_size);
@@ -1678,56 +1699,56 @@ UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
     }
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_lengths) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_various_lengths) {
     test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_with_callback) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_with_callback) {
     test_put_sgl(10, UCS_KBYTE, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_no_memhs) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_no_memhs) {
     test_put_sgl(4, 2 * UCS_KBYTE, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_no_remote_count) {
     test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation, UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_emulation_with_callback,
+UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_with_callback,
            UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_put_sgl(10, UCS_KBYTE, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_emulation_no_memhs,
+UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_no_memhs,
            UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_put_sgl(4, 2 * UCS_KBYTE, false);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_emulation_fragmented,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_emulation_fragmented,
                      RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
     m_require_zcopy_lane = false;
     test_put_sgl(4, 256 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_split_between_lanes) {
     test_put_sgl_split(16, 64 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_split_single_element) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_split_single_element) {
     test_put_sgl_split(1, UCS_MBYTE);
 }
 
 /* An element count which is not a multiple of the lane count makes a lane
    payload end in the middle of an element */
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_split_uneven_elements,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_split_uneven_elements,
                      RUNNING_ON_VALGRIND) {
     static const char *rail_counts[] = {"2", "4"};
     for (const char *rails : rail_counts) {
@@ -1742,7 +1763,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_split_uneven_elements,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_multi_rail,
                      RUNNING_ON_VALGRIND) {
     static const char *rail_counts[] = {"1", "4", "6", "8"};
     for (const char *rails : rail_counts) {
@@ -1757,7 +1778,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_fragmented_elements,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_fragmented_elements,
                      RUNNING_ON_VALGRIND) {
     cleanup();
     modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
@@ -1997,3 +2018,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")
