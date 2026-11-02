@@ -10,8 +10,7 @@ libucm_musa_la_CFLAGS   = $(BASE_CFLAGS) $(MUSA_CFLAGS) $(LT_CFLAGS)
 libucm_musa_la_LIBADD   = ../libucm.la $(MUSA_LIBS)
 libucm_musa_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                           $(patsubst %, -Xlinker %, $(MUSA_LDFLAGS)) \
-                          -version-info $(SOVERSION) $(UCX_LT_RELEASE) \
-                          $(patsubst %, -Xlinker %, $(MUSA_RPATH))
+                          -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 
 libucm_musa_la_SOURCES = \
 	musamem.c

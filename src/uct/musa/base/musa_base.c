@@ -312,7 +312,8 @@ uct_musa_base_query_pointer(const void *address, size_t length,
     int have_current_device;
     ucs_status_t status;
 
-    if ((address == NULL) || (length == 0)) {
+    if ((address == NULL) || (length == 0) ||
+        ((uintptr_t)address > (UINTPTR_MAX - length))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -355,22 +356,41 @@ uct_musa_base_query_pointer(const void *address, size_t length,
         return status;
     }
 
-    info->base_address = (void *)(uintptr_t)allocation_base;
-    info->alloc_length = allocation_length;
-    if (!uct_musa_range_is_valid((uintptr_t)info->base_address,
-                                  info->alloc_length, (uintptr_t)address,
-                                  length)) {
-        ucs_debug("MUSA allocation range does not contain %p len %zu",
-                  address, length);
+    /* Metadata queries may extend past the allocation, but their starting
+     * address must belong to the allocation returned by the driver. */
+    if (!uct_musa_range_is_valid((uintptr_t)allocation_base, allocation_length,
+                                (uintptr_t)address, 1)) {
+        ucs_debug("invalid MUSA allocation range for address %p", address);
+        return UCS_ERR_INVALID_ADDR;
     }
 
+    info->base_address = (void *)(uintptr_t)allocation_base;
+    info->alloc_length = allocation_length;
     return UCS_OK;
 }
 
 int uct_musa_base_has_dmabuf(void)
 {
 #ifdef HAVE_MUSA_DMABUF
-    return 1;
+    unsigned count;
+    unsigned i;
+    int supported;
+    MUresult result;
+
+    if (uct_musa_base_get_device_count(&count) != UCS_OK) {
+        return 0;
+    }
+
+    /* The MD covers every device, so advertise only a shared capability. */
+    for (i = 0; i < count; ++i) {
+        result = muDeviceGetAttribute(&supported,
+                                      MU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, i);
+        if ((result != MUSA_SUCCESS) || !supported) {
+            return 0;
+        }
+    }
+
+    return count != 0;
 #else
     return 0;
 #endif
@@ -387,6 +407,10 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
     int fd;
     ucs_status_t status;
     MUresult result;
+    uintptr_t aligned_start;
+    uintptr_t aligned_end;
+    uintptr_t allocation_end;
+    size_t page_size;
 #endif
 
     *fd_p     = UCT_DMABUF_FD_INVALID;
@@ -395,10 +419,6 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
 #ifndef HAVE_MUSA_DMABUF
     return UCS_ERR_UNSUPPORTED;
 #else
-    if (!uct_musa_base_has_dmabuf()) {
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     status = uct_musa_base_query_pointer(address, length, &info);
     if (status != UCS_OK) {
         return status;
@@ -406,6 +426,25 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
     if (info.kind != UCT_MUSA_POINTER_DEVICE) {
         return UCS_ERR_INVALID_ADDR;
     }
+
+    if (!uct_musa_range_is_valid((uintptr_t)info.base_address,
+                                info.alloc_length, (uintptr_t)address,
+                                length)) {
+        ucs_debug("MUSA DMA-BUF range does not contain %p len %zu",
+                  address, length);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    page_size      = ucs_get_page_size();
+    allocation_end = (uintptr_t)info.base_address + info.alloc_length;
+    if (allocation_end > (UINTPTR_MAX - (page_size - 1))) {
+        ucs_debug("MUSA DMA-BUF range overflows after page alignment");
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    aligned_start = ucs_align_down_pow2((uintptr_t)info.base_address,
+                                       page_size);
+    aligned_end   = ucs_align_up_pow2(allocation_end, page_size);
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
@@ -416,7 +455,7 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
 
     fd = UCT_DMABUF_FD_INVALID;
     result = muMemGetHandleForAddressRange(
-            &fd, (MUdeviceptr)info.base_address, info.alloc_length,
+            &fd, (MUdeviceptr)aligned_start, aligned_end - aligned_start,
             UCT_MUSA_DMABUF_HANDLE_TYPE, 0);
     uct_musa_base_restore_device(current_device, have_current_device);
     if (result != MUSA_SUCCESS) {
@@ -425,7 +464,7 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
     }
 
     *fd_p = fd;
-    *offset_p = UCS_PTR_BYTE_DIFF(info.base_address, address);
+    *offset_p = (uintptr_t)address - aligned_start;
     return UCS_OK;
 #endif
 }
