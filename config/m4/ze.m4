@@ -1,5 +1,5 @@
 #
-# Copyright (c) Intel Corporation, 2023. ALL RIGHTS RESERVED.
+# Copyright (c) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 

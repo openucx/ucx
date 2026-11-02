@@ -502,6 +502,8 @@ uct_ze_base_get_queue_ordinal(ze_device_handle_t device,
     queue_props = ucs_calloc(num_queue_groups, sizeof(*queue_props),
                              "ze_queue_group_props");
     if (queue_props == NULL) {
+        ucs_log(log_level, "device %p: failed to allocate %u queue group "
+                "properties", device, num_queue_groups);
         return UCS_ERR_NO_MEMORY;
     }
 

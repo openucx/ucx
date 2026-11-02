@@ -261,14 +261,9 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     ze_result_t ret;
 
     if (engine == UCT_ZE_COPY_ENGINE_COPY) {
-        /* The driver recommends a copy engine for copies to a peer or to
-         * host, and there the copies do not compete with the application's
-         * kernels */
         status = uct_ze_base_get_copy_ordinal(device, log_level, &ordinal,
                                               NULL);
     } else {
-        /* The driver keeps its own copies within one device on the compute
-         * engine, which can be faster for cache-resident copies */
         status = uct_ze_base_get_compute_ordinal(device, log_level, &ordinal);
     }
 
@@ -360,9 +355,8 @@ unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
         }
     } else if (src_is_device) {
         /* A copy within one device runs on the compute engine of that
-         * device, as the driver does with its own copies; it can be faster
-         * there for cache-resident copies. Shared memory may reside on the
-         * host, so it does not count. */
+         * device. Shared memory may reside on the host, so it does not
+         * count. */
         dst_device = uct_ze_copy_iface_get_mem_device(iface, dst,
                                                       &dst_is_device);
         if (dst_is_device && (dst_device == device)) {

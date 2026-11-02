@@ -337,9 +337,9 @@ protected:
      * group, dedicated when its device has one, or a compute group */
     void check_queue_engine(const uct_ze_copy_queue_t &queue)
     {
-        const ze_command_queue_group_property_flags_t copy_only =
+        constexpr ze_command_queue_group_property_flags_t copy_only =
                 ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY;
-        const ze_command_queue_group_property_flags_t copy_compute =
+        constexpr ze_command_queue_group_property_flags_t copy_compute =
                 ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY |
                 ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE;
         uint32_t num_groups   = 0;
@@ -354,7 +354,6 @@ protected:
                                                          &num_groups, NULL));
         groups.resize(num_groups);
         for (auto &group : groups) {
-            group       = {};
             group.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
         }
         ASSERT_EQ(ZE_RESULT_SUCCESS,

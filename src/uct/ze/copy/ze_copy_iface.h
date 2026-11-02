@@ -18,9 +18,9 @@ typedef uint64_t uct_ze_copy_iface_addr_t;
 
 
 /* Engine which runs the copies of a queue: the driver recommends a copy
- * engine for copies to host or to another device, and keeps copies within
- * one device on the compute engine, which can be faster for cache-resident
- * same-device copies */
+ * engine for copies to host or to another device, where they do not compete
+ * with the application's kernels, and keeps copies within one device on the
+ * compute engine, which can be faster for cache-resident same-device copies */
 typedef enum {
     UCT_ZE_COPY_ENGINE_COPY,
     UCT_ZE_COPY_ENGINE_COMPUTE
