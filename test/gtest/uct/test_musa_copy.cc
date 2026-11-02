@@ -140,7 +140,7 @@ class test_musa_copy_limited_events : public test_musa_copy {
 protected:
     void init() override
     {
-        modify_config("MAX_EVENTS", "1");
+        modify_config("MUSA_COPY_MAX_EVENTS", "1");
         test_musa_copy::init();
     }
 };
