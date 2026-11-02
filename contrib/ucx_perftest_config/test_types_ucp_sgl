@@ -3,25 +3,33 @@
 #
 
 # host -> host
-sgl_put_lat_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -n 10000
+sgl_put_lat_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -V -n 10000
 sgl_put_bw_HH    -t ucp_put_bw  -D sgl -m host,host -s 1024,1024,1024,1024 -n 10000
 
+# host -> host, non-uniform element sizes
+sgl_put_lat_mixed_HH    -t ucp_put_lat -D sgl -m host,host -s 8,4096,64,1 -V -n 10000
+sgl_put_bw_mixed_HH     -t ucp_put_bw  -D sgl -m host,host -s 8,4096,64,1 -n 10000
+
+# host -> host, pre-registered memory
+sgl_put_lat_prereg_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -z -V -n 10000
+sgl_put_bw_prereg_HH    -t ucp_put_bw  -D sgl -m host,host -s 1024,1024,1024,1024 -z -n 10000
+
 # host -> host, strided
-sgl_put_lat_stride_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -i 2048 -n 10000
+sgl_put_lat_stride_HH   -t ucp_put_lat -D sgl -m host,host -s 1024,1024,1024,1024 -i 2048 -V -n 10000
 sgl_put_bw_stride_HH    -t ucp_put_bw  -D sgl -m host,host -s 1024,1024,1024,1024 -i 2048 -n 10000
 
 # host -> host, strided with zero-length elements
-sgl_put_lat_zero_HH     -t ucp_put_lat -D sgl -m host,host -s 1024,0,1024,0 -i 2048 -n 10000
+sgl_put_lat_zero_HH     -t ucp_put_lat -D sgl -m host,host -s 1024,0,1024,0 -i 2048 -V -n 10000
 sgl_put_bw_zero_HH      -t ucp_put_bw  -D sgl -m host,host -s 1024,0,1024,0 -i 2048 -n 10000
 
 # cuda -> cuda
-sgl_put_lat_DD   -t ucp_put_lat -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -n 10000
+sgl_put_lat_DD   -t ucp_put_lat -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -V -n 10000
 sgl_put_bw_DD    -t ucp_put_bw  -D sgl -m cuda,cuda -s 1024,1024,1024,1024 -n 10000
 
 # host -> cuda
-sgl_put_lat_HD   -t ucp_put_lat -D sgl -m host,cuda -s 1024,1024,1024,1024 -n 10000
+sgl_put_lat_HD   -t ucp_put_lat -D sgl -m host,cuda -s 1024,1024,1024,1024 -V -n 10000
 sgl_put_bw_HD    -t ucp_put_bw  -D sgl -m host,cuda -s 1024,1024,1024,1024 -n 10000
 
 # cuda -> host
-sgl_put_lat_DH   -t ucp_put_lat -D sgl -m cuda,host -s 1024,1024,1024,1024 -n 10000
+sgl_put_lat_DH   -t ucp_put_lat -D sgl -m cuda,host -s 1024,1024,1024,1024 -V -n 10000
 sgl_put_bw_DH    -t ucp_put_bw  -D sgl -m cuda,host -s 1024,1024,1024,1024 -n 10000

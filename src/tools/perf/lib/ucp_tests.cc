@@ -502,11 +502,29 @@ public:
 
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, size_t length, ucp_datatype_t datatype,
-         psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false,
-         bool force_contig = false)
+         psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false)
     {
-        const bool use_sgl         = m_sgl_put && !force_contig;
-        uint64_t value             = 0;
+        return send_impl(ep, buffer, length, datatype, sn, remote_addr, rkey,
+                         get_info, m_sgl_put);
+    }
+
+    /* Send a contiguous buffer, even if the test uses SGL for the data path.
+     * Used for the 1-byte ack. */
+    ucs_status_t UCS_F_ALWAYS_INLINE
+    send_contig(ucp_ep_h ep, void *buffer, size_t length,
+                ucp_datatype_t datatype, psn_t sn, uint64_t remote_addr,
+                ucp_rkey_h rkey)
+    {
+        return send_impl(ep, buffer, length, datatype, sn, remote_addr, rkey,
+                         false, false);
+    }
+
+    ucs_status_t UCS_F_ALWAYS_INLINE
+    send_impl(ucp_ep_h ep, void *buffer, size_t length, ucp_datatype_t datatype,
+              psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info,
+              bool use_sgl)
+    {
+        uint64_t value = 0;
         ucp_request_param_t *param;
         void *request;
         ucs_status_t status;
@@ -776,8 +794,8 @@ public:
             return;
         }
 
-        send(m_perf.ucp.ep, buffer, 1, datatype, 0, m_perf.ucp.remote_addr,
-             m_perf.ucp.rkey, false, true);
+        send_contig(m_perf.ucp.ep, buffer, 1, datatype, 0,
+                    m_perf.ucp.remote_addr, m_perf.ucp.rkey);
         wait_send_window(m_max_outstanding);
     }
 
