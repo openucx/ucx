@@ -3401,11 +3401,15 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         cm_lane == UCP_NULL_LANE) {
         reconfig_status = ucp_ep_failover_reconfig(ucp_ep, lanes, status);
         if (reconfig_status == UCS_OK) {
+            /* These lanes produce no error completion, so the parked
+             * reply must not keep waiting for one. */
+            ucp_wireup_tf_reply_lanes_failed(ucp_ep, lanes);
             return;
         }
     }
 
-    /* else: unrecoverable error, mark the endpoint as failed. */
+    /* Unrecoverable. A failed endpoint cannot send the parked reply. */
+    ucp_wireup_tf_reply_discard(ucp_ep);
     ucp_ep_set_failed(ucp_ep,
                       ((cm_lane != UCP_NULL_LANE) &&
                        (lanes == UCS_BIT(cm_lane)) ?

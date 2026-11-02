@@ -476,7 +476,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     /* The lane slot may already be the replacement. This error belongs
      * to the transport endpoint that is still held. */
     if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
-        ucp_wireup_tf_lane_errored(ucp_ep, lane);
+        ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
         return UCS_INPROGRESS;
     }
 
@@ -493,13 +493,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                  * recorded. The hold is the error this request was waiting
                  * for. A deferred reply rebuilds the lane only after it. */
                 ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
-                ucp_wireup_tf_lane_errored(ucp_ep, lane);
+                ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
                 return UCS_INPROGRESS;
             }
         }
 
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
-        ucp_wireup_tf_lane_errored(ucp_ep, lane);
+        ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
         return UCS_OK;
     }
 

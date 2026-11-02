@@ -1566,18 +1566,17 @@ static void ucp_wireup_tf_reply_disarm(ucp_ep_h ep, ucp_lane_map_t not_armed)
     ucp_wireup_tf_reply_schedule(ep);
 }
 
-void ucp_wireup_tf_lane_errored(ucp_ep_h ep, ucp_lane_index_t lane)
+void ucp_wireup_tf_reply_lanes_failed(ucp_ep_h ep, ucp_lane_map_t lanes)
 {
     ucp_wireup_tf_reply_t *reply = ucp_wireup_tf_reply_get(ep);
 
-    if ((reply == NULL) || (lane >= UCP_MAX_LANES) ||
-        !(reply->waiting & UCS_BIT(lane))) {
+    if ((reply == NULL) || ((reply->waiting & lanes) == 0)) {
         return;
     }
 
-    reply->waiting &= ~UCS_BIT(lane);
-    ucs_debug("ep %p: lane %d error, reply waiting 0x%" PRIx64, ep, lane,
-              (uint64_t)reply->waiting);
+    reply->waiting &= ~lanes;
+    ucs_debug("ep %p: reply waiting 0x%" PRIx64 " cleared 0x%" PRIx64, ep,
+              (uint64_t)reply->waiting, (uint64_t)lanes);
     ucp_wireup_tf_reply_schedule(ep);
 }
 

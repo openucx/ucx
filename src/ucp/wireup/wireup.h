@@ -313,9 +313,9 @@ void ucp_wireup_send_lanes_addr_msg(
         const ucp_wireup_lane_token_t *rx_tokens);
 
 
-/* An error completion arrived for @a lane. A LANES_ADDR reply that was
- * waiting for this completion is sent once every such lane has completed. */
-void ucp_wireup_tf_lane_errored(ucp_ep_h ep, ucp_lane_index_t lane);
+/* Drop @a lanes from a parked LANES_ADDR reply. The reply is sent once
+ * nothing is waiting. */
+void ucp_wireup_tf_reply_lanes_failed(ucp_ep_h ep, ucp_lane_map_t lanes);
 
 
 /* Drop a LANES_ADDR reply that is still waiting for error completions. */
