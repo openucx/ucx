@@ -44,7 +44,7 @@ UCS_TEST_F(test_rc_extension, registration)
     uct_rc_mlx5_ext_ops_t rc_ops = {};
     uct_ib_mlx5_ext_ops_t ops   = {};
 
-    strcpy(ops.name, "test_rc_extension");
+    strcpy(ops.name, "test_rc_hooks");
     ops.rc_ops = &rc_ops;
     ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
     const auto provider = uct_ib_mlx5_ext_get_rc_provider();
@@ -140,7 +140,7 @@ protected:
 
         provider_guard()
         {
-            strcpy(registry_ops.name, "test_rc_extension_transport");
+            strcpy(registry_ops.name, "test_rc_life");
             registry_ops.rc_ops = &ops;
         }
 
@@ -234,7 +234,7 @@ public:
     {
         uct_test::init();
         m_ops.requirements = UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP;
-        strcpy(m_registry_ops.name, "test_rc_sgl_completion");
+        strcpy(m_registry_ops.name, "test_rc_sgl_ts");
         m_registry_ops.rc_ops = &m_ops;
         ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&m_registry_ops));
         m_registered = true;
