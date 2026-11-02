@@ -44,6 +44,7 @@ public class UcpMemoryTest extends UcxTest {
         UcpMemory allocatedMemory = context.memoryMap(new UcpMemMapParams()
             .allocate().setProtection(UcpConstants.UCP_MEM_MAP_PROT_LOCAL_READ)
             .setLength(MEM_SIZE).nonBlocking());
+        // UCP may round the allocation size up to a page-size multiple.
         assertTrue(allocatedMemory.getLength() >= MEM_SIZE);
 
         allocatedMemory.deregister();
