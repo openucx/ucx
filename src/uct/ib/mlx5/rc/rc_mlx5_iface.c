@@ -104,6 +104,10 @@ uct_rc_mlx5_iface_check_rx_completion(uct_ib_iface_t   *ib_iface,
     return NULL;
 }
 
+enum {
+    UCT_RC_MLX5_POLL_FLAG_TIMESTAMP = UCS_BIT(5)
+};
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_progress(void *arg, int flags)
 {
@@ -111,48 +115,72 @@ uct_rc_mlx5_iface_progress(void *arg, int flags)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(iface, flags);
-    if (ucs_likely(iface->ext_ops == NULL)) {
-        if (!uct_rc_iface_poll_tx(&iface->super, count)) {
-            return count;
-        }
-
-        return count + uct_rc_mlx5_iface_poll_tx(iface, flags);
+    if (!uct_rc_iface_poll_tx(&iface->super, count)) {
+        return count;
     }
 
-    if (uct_rc_iface_poll_tx(&iface->super, count)) {
-        if (iface->tx.cqe_timestamp) {
-            count += uct_rc_mlx5_iface_poll_tx_with_info(iface, flags);
-        } else {
-            count += uct_rc_mlx5_iface_poll_tx(iface, flags);
-        }
+    /* Every caller passes constant flags, selecting the CQ path at setup. */
+    if (flags & UCT_RC_MLX5_POLL_FLAG_TIMESTAMP) {
+        return count + uct_rc_mlx5_iface_poll_tx_with_info(iface, flags);
     }
 
-    return count;
+    return count + uct_rc_mlx5_iface_poll_tx(iface, flags);
 }
 
 static unsigned uct_rc_mlx5_iface_progress_cyclic(void *arg)
 {
-    return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP);
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_cyclic_timestamp(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
+                        UCT_RC_MLX5_POLL_FLAG_TIMESTAMP);
 }
 
 static unsigned uct_rc_mlx5_iface_progress_cyclic_zip(void *arg)
 {
-    return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
-                                           UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP | UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_cyclic_zip_timestamp(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP | UCT_IB_MLX5_POLL_FLAG_CQE_ZIP |
+                        UCT_RC_MLX5_POLL_FLAG_TIMESTAMP);
 }
 
 static unsigned uct_rc_mlx5_iface_progress_ll(void *arg)
 {
-    return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
-                                           UCT_IB_MLX5_POLL_FLAG_LINKED_LIST |
-                                           UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP | UCT_IB_MLX5_POLL_FLAG_LINKED_LIST |
+                        UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_ll_timestamp(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP | UCT_IB_MLX5_POLL_FLAG_LINKED_LIST |
+                        UCT_IB_MLX5_POLL_FLAG_CQE_ZIP |
+                        UCT_RC_MLX5_POLL_FLAG_TIMESTAMP);
 }
 
 static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 {
-    return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
-                                           UCT_IB_MLX5_POLL_FLAG_TM |
-                                           UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP | UCT_IB_MLX5_POLL_FLAG_TM |
+                        UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_tm_timestamp(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(
+            arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP | UCT_IB_MLX5_POLL_FLAG_TM |
+                        UCT_IB_MLX5_POLL_FLAG_CQE_ZIP |
+                        UCT_RC_MLX5_POLL_FLAG_TIMESTAMP);
 }
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -1074,6 +1102,23 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                                          worker, params, config, &init_attr);
     if (status != UCS_OK) {
         return status;
+    }
+
+    if (self->super.tx.cqe_timestamp) {
+        if (self->super.super.progress == uct_rc_mlx5_iface_progress_tm) {
+            self->super.super.progress =
+                    uct_rc_mlx5_iface_progress_tm_timestamp;
+        } else if (self->super.super.progress == uct_rc_mlx5_iface_progress_ll) {
+            self->super.super.progress =
+                    uct_rc_mlx5_iface_progress_ll_timestamp;
+        } else if (self->super.super.progress ==
+                   uct_rc_mlx5_iface_progress_cyclic_zip) {
+            self->super.super.progress =
+                    uct_rc_mlx5_iface_progress_cyclic_zip_timestamp;
+        } else {
+            self->super.super.progress =
+                    uct_rc_mlx5_iface_progress_cyclic_timestamp;
+        }
     }
 
     self->super.ext_ops = ext_ops;

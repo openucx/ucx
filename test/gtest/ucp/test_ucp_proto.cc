@@ -900,6 +900,24 @@ UCS_TEST_P(test_ucp_proto, path_bw_rejects_stale_lane_generation)
     EXPECT_EQ(nullptr, ep->ext->path_bw_update);
 }
 
+UCS_TEST_P(test_ucp_proto, path_bw_accepts_event_after_lane_generation_change)
+{
+    flush_ep(sender());
+    auto ep = sender().ep();
+    const auto old_cfg = ep->cfg_index;
+    uct_ppn_bandwidth_t bandwidth = {UCS_MBYTE * 4000.0, 0};
+
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    ++ep->ext->lane_generation;
+    bandwidth.dedicated /= 2;
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    short_progress_loop();
+    EXPECT_NE(old_cfg, ep->cfg_index);
+    EXPECT_EQ(bandwidth.dedicated,
+              ucp_ep_config(ep)->key.lanes[0].path_bandwidth.dedicated);
+    EXPECT_EQ(nullptr, ep->ext->path_bw_update);
+}
+
 UCS_TEST_P(test_ucp_proto, path_bw_rejects_invalid_sample)
 {
     auto ep = sender().ep();

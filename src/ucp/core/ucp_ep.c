@@ -1885,6 +1885,11 @@ ucs_status_t ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t lane,
                                   ucp_ep_path_bw_progress, update);
     }
 
+    if (update->lane_generation != ep->ext->lane_generation) {
+        update->lane_generation = ep->ext->lane_generation;
+        update->lanes           = 0;
+    }
+
     update->lanes          |= UCS_BIT(lane);
     update->bandwidth[lane] = *bandwidth;
     return UCS_OK;
