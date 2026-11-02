@@ -1279,6 +1279,7 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, wireup_request_lanes,
     const dev_names_t fast_devs = {"mock_0:1", "mock_1:1"};
     ucp_worker_h worker         = receiver().worker();
 
+    wait_for_value(&worker->num_all_eps, 1u);
     ASSERT_EQ(1u, worker->num_all_eps);
     ucp_ep_h receiver_ep = ucs_list_head(&worker->all_eps, ucp_ep_ext_t,
                                          ep_list)->ep;
