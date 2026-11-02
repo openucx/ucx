@@ -939,12 +939,66 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_event_common(wiface);
 }
 
+static ucs_status_t
+ucp_worker_ep_refresh_path_bw(ucp_ep_h ep, ucp_lane_index_t trigger_lane)
+{
+    const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    uct_ep_attr_t attr;
+    ucp_lane_index_t i, lane;
+    uct_ep_h uct_ep;
+    ucs_status_t status;
+
+    attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
+    status = uct_ep_query(ucp_ep_get_lane(ep, trigger_lane), &attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucp_ep_path_bw_changed(ep, trigger_lane, &attr.bandwidth);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Refresh every candidate, including currently unused paths. Comparing
+     * only the changed lane's measured bandwidth against other lanes' initial
+     * nominal bandwidth can prevent recovery indefinitely. These are cached
+     * queries on this endpoint only, not new probes or interface-wide updates.
+     * All valid samples merge into the same deferred reconfiguration.
+     */
+    for (i = 0; (i < key->num_lanes) &&
+                (key->rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
+        lane = key->rma_bw_lanes[i];
+        if ((lane == trigger_lane) ||
+            (key->lanes[lane].rsc_index == UCP_NULL_RESOURCE) ||
+            (key->lanes[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+            continue;
+        }
+
+        uct_ep = ucp_ep_get_lane(ep, lane);
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
+        status         = uct_ep_query(uct_ep, &attr);
+        if (status == UCS_OK) {
+            status = ucp_ep_path_bw_changed(ep, lane, &attr.bandwidth);
+        }
+
+        if (status != UCS_OK) {
+            ucs_debug("ep %p lane[%u] skip unavailable path bandwidth: %s",
+                      ep, lane, ucs_status_string(status));
+        }
+    }
+
+    return UCS_OK;
+}
+
 static void ucp_worker_iface_async_ep_event_cb(void *arg, uct_ep_h uct_ep,
                                                unsigned events)
 {
     ucp_worker_iface_t *wiface = arg;
     ucp_worker_h worker        = wiface->worker;
-    uct_ep_attr_t ep_attr;
     ucp_lane_index_t lane;
     ucp_ep_h ep;
     ucs_status_t status;
@@ -962,12 +1016,7 @@ static void ucp_worker_iface_async_ep_event_cb(void *arg, uct_ep_h uct_ep,
     }
 
     if (ep != NULL) {
-        ep_attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
-        status             = uct_ep_query(uct_ep, &ep_attr);
-        if (status == UCS_OK) {
-            status = ucp_ep_path_bw_changed(ep, lane, &ep_attr.bandwidth);
-        }
-
+        status = ucp_worker_ep_refresh_path_bw(ep, lane);
         ucs_debug("ep %p lane[%u] path bandwidth event: %s",
                   ep, lane, ucs_status_string(status));
     }

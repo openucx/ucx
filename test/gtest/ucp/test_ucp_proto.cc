@@ -909,6 +909,49 @@ UCS_TEST_P(test_ucp_proto, path_bw_rejects_stale_lane_generation)
     EXPECT_EQ(nullptr, ep->ext->path_bw_update);
 }
 
+UCS_TEST_P(test_ucp_proto, path_bw_candidate_snapshot_is_coalesced)
+{
+    sender().connect(&receiver(), get_ep_params(), 1);
+    flush_ep(sender());
+    flush_ep(sender(), 0, 1);
+    auto ep                = sender().ep();
+    auto sibling           = sender().ep(0, 1);
+    const auto key         = ucp_ep_config(ep)->key;
+    const auto old_cfg     = ep->cfg_index;
+    const auto sibling_cfg = sibling->cfg_index;
+    const auto old_epoch   = worker()->epoch;
+    ucp_lane_map_t candidates = UCS_BIT(0);
+    ucp_lane_index_t i, lane;
+    uct_ppn_bandwidth_t bandwidth = {UCS_MBYTE * 4000.0, 0};
+
+    /* Include an event source even when it is not an RMA bandwidth lane. */
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    auto pending = ep->ext->path_bw_update;
+    for (i = 0; (i < key.num_lanes) &&
+                (key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
+        lane = key.rma_bw_lanes[i];
+        candidates |= UCS_BIT(lane);
+        ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, lane, &bandwidth));
+        EXPECT_EQ(pending, ep->ext->path_bw_update);
+    }
+
+    EXPECT_EQ(old_cfg, ep->cfg_index);
+    short_progress_loop();
+    EXPECT_EQ(nullptr, ep->ext->path_bw_update);
+    EXPECT_NE(old_cfg, ep->cfg_index);
+    EXPECT_EQ(old_epoch + 1, worker()->epoch);
+    EXPECT_EQ(sibling_cfg, sibling->cfg_index);
+    for (lane = 0; lane < key.num_lanes; ++lane) {
+        const auto measured =
+                ucp_ep_config(ep)->key.lanes[lane].path_bandwidth;
+        EXPECT_EQ((candidates & UCS_BIT(lane)) ? bandwidth.dedicated : 0,
+                  measured.dedicated);
+        EXPECT_DOUBLE_EQ(0, measured.shared);
+        EXPECT_DOUBLE_EQ(0, ucp_ep_config(sibling)->key.lanes[lane].
+                                   path_bandwidth.dedicated);
+    }
+}
+
 UCS_TEST_P(test_ucp_proto, path_bw_accepts_event_after_lane_generation_change)
 {
     flush_ep(sender());
