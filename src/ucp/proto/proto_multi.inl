@@ -426,6 +426,14 @@ ucp_proto_rma_sgl_offload_send_frags(
     ucs_assert(max_frag_count <= UCP_MAX_IOV);
     ucs_assert((adjust_func == NULL) || (max_frag_count == 1));
 
+    if (adjust_func != NULL) {
+        /* Silence compiler warning, the first fragment is passed to the adjust
+         * function below */
+        buffers[0]      = NULL;
+        lengths[0]      = 0;
+        remote_addrs[0] = 0;
+    }
+
     frag_count = ucp_datatype_iter_next_sgl_frags(
             dt_iter, req->send.rma.sgl.remote_addrs, max_frag_count,
             ucp_proto_rma_sgl_max_payload(req, lpriv), next_iter, buffers,
