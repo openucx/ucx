@@ -70,6 +70,7 @@ static const char *ucs_handle_error_modes[] = {
     [UCS_HANDLE_ERROR_LAST]      = NULL
 };
 
+
 static UCS_CONFIG_DEFINE_ARRAY(signo,
                                sizeof(int),
                                UCS_CONFIG_TYPE_SIGNO);
@@ -168,9 +169,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    "Enable memory type cache:\n"
    " n   - disabled.\n"
    " try - enabled only when UCM memory type events are available.\n"
-   " y   - use UCM events when available; otherwise cache only memory\n"
-   "       mapped by ucp_mem_map() or allocated by UCX. Mapped memory must\n"
-   "       remain allocated until ucp_mem_unmap().",
+   " y   - use UCM events when available. If memory events are disabled\n"
+   "       (UCX_MEM_EVENTS=n), cache only memory mapped by ucp_mem_map() or\n"
+   "       allocated by UCX. Mapped memory must remain allocated until\n"
+   "       ucp_mem_unmap().",
    ucs_offsetof(ucs_global_opts_t, enable_memtype_cache),
    UCS_CONFIG_TYPE_TERNARY},
 

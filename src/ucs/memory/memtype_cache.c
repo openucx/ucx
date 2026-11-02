@@ -687,19 +687,14 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
                                    UCM_EVENT_FLAG_EXISTING_ALLOC,
                                    1000, ucs_memtype_cache_event_callback,
                                    self);
-    if (status != UCS_OK) {
-        if (ucs_global_opts.enable_memtype_cache != UCS_YES) {
-            ucs_diag("failed to set UCM memtype event handler: %s",
-                     ucs_status_string(status));
-            goto err_cleanup_pgtable;
-        }
-
-        if (ucm_global_opts.enable_events) {
-            ucs_warn("failed to set UCM memtype event handler: %s; "
-                     "using explicit registration", ucs_status_string(status));
-        }
-    } else {
+    if (status == UCS_OK) {
         self->has_events = 1;
+    } else if ((ucs_global_opts.enable_memtype_cache != UCS_YES) ||
+               ucm_global_opts.enable_events) {
+        /* Explicit registration is used only if memory events were disabled */
+        ucs_diag("failed to set UCM memtype event handler: %s",
+                 ucs_status_string(status));
+        goto err_cleanup_pgtable;
     }
 
     return UCS_OK;
@@ -737,4 +732,6 @@ void ucs_memtype_cache_cleanup()
         UCS_CLASS_DELETE(ucs_memtype_cache_t, ucs_memtype_cache_global_instance);
         ucs_memtype_cache_global_instance = NULL;
     }
+
+    ucs_memtype_cache_failed = 0;
 }

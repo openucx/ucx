@@ -824,17 +824,21 @@ UCS_TEST_F(test_memtype_explicit, events_preferred_when_available) {
     ucs_memtype_cache_cleanup();
     ucs_memtype_cache_global_init();
     ucm_global_opts.enable_events = 1;
-    ucs_memtype_cache_global_create();
-    if (ucs_memtype_cache_global_instance == NULL) {
-        UCS_TEST_SKIP_R("UCM memory events are unavailable");
+    {
+        /* With events enabled, a failure to install the hooks is an error and
+         * does not fall back to explicit registration */
+        scoped_log_handler slh(hide_warns_logger);
+        ucs_memtype_cache_global_create();
     }
-    if (!ucs_memtype_cache_global_instance->has_events) {
+    if (ucs_memtype_cache_global_instance == NULL) {
         UCS_TEST_SKIP_R("UCM memory event handler could not be installed");
     }
+    ASSERT_TRUE(ucs_memtype_cache_global_instance->has_events);
 
+    unsigned num_regions = ucs_memtype_cache_global_instance->pgtable.num_regions;
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
                                UCS_SYS_DEVICE_ID_UNKNOWN, 1);
-    EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
+    EXPECT_EQ(num_regions, ucs_memtype_cache_global_instance->pgtable.num_regions);
 
     event.mem_type.address   = base;
     event.mem_type.size      = 0x1000;
