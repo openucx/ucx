@@ -3048,26 +3048,6 @@ static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
     }
 }
 
-ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes)
-{
-    ucp_lane_map_t dropped = 0;
-    ucp_lane_index_t lane;
-    ucp_ep_lane_tf_t *tf;
-
-    ucs_for_each_bit(lane, lanes) {
-        tf = ucp_ep_tf_get(ep, lane);
-        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
-            (tf->uct_ep != NULL)) {
-            continue;
-        }
-
-        ucp_ep_tf_lane_release(ep, tf);
-        dropped |= UCS_BIT(lane);
-    }
-
-    return dropped;
-}
-
 static void
 ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
 {

@@ -1609,8 +1609,7 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
 {
     ucp_wireup_tf_reply_t immediate;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
-    ucp_wireup_tf_reply_t *parked;
-    ucp_lane_map_t invalidated, pending, already, armed, stuck;
+    ucp_lane_map_t invalidated, pending, already, armed;
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
@@ -1635,24 +1634,8 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens, 1);
-        /* The initiator timed out and sent a newer request. Drop the parked
-         * reply. Lanes still waiting were already moved to error and will not
-         * complete, so fail them and let this request rebuild. */
-        parked = ucp_wireup_tf_reply_get(ep);
-        if ((parked != NULL) && (parked->waiting != 0) &&
-            ucp_ep_tf_peer_req_is_newer((uint16_t)parked->request_id,
-                                        (uint16_t)request_id)) {
-            stuck = parked->waiting;
-            ucs_debug("ep %p: LANES_ADDR_REQ id 0x%x restarts reply id 0x%x"
-                      " waiting 0x%" PRIx64,
-                      ep, request_id, parked->request_id, (uint64_t)stuck);
-            ucp_wireup_tf_reply_discard(ep);
-            stuck = ucp_ep_tf_drop_invalidated(ep, stuck);
-            if (stuck != 0) {
-                ucp_ep_set_lanes_failed(ep, stuck, UCS_ERR_CONNECTION_RESET);
-            }
-        }
-
+        /* A newer request can name another lane while that lane's error
+         * completion is still queued. Leave its waiting bit set. */
         already = 0;
         if (ucp_wireup_tf_reply_get(ep) != NULL) {
             already = ucp_wireup_tf_reply_get(ep)->waiting;

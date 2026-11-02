@@ -1149,10 +1149,6 @@ int ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
                               uint32_t request_id);
 
 
-/** Drop invalidated lanes whose error completion will not arrive. */
-ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes);
-
-
 /**
  * Mark lanes a remote token reported as failed.
  *
