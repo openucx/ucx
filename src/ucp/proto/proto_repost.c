@@ -587,6 +587,8 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
         (op_info->comp->func == ucp_proto_repost_completion)) {
         req = ucs_container_of(op_info->comp, ucp_request_t,
                                               send.state.uct_comp);
+        ucp_trace_req(req, "repost restart op %s",
+                      uct_ep_operation_names[op_info->operation]);
         ucp_proto_request_restart(req);
         return UCS_OK;
     }
@@ -632,6 +634,9 @@ ucp_proto_repost_submit(ucp_ep_h ep, const uct_ep_op_info_t *op_info)
                                   ucp_proto_repost_completion);
     }
 
+    ucp_trace_req(req, "repost submit op %s lane %u",
+                  uct_ep_operation_names[op_info->operation],
+                  (unsigned)rpriv->lane);
     ucp_request_send(req);
     return UCS_OK;
 }
