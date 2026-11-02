@@ -862,6 +862,7 @@ UCS_TEST_P(test_ucp_proto, path_bw_coalescing_and_isolation)
     auto sibling = sender().ep(0, 1);
     const auto old_cfg     = ep->cfg_index;
     const auto sibling_cfg = sibling->cfg_index;
+    const auto old_ep_count = ucp_ep_config(ep)->ep_count;
     uct_ppn_bandwidth_t bandwidth = {UCS_MBYTE * 4000.0, 0};
 
     ASSERT_GT(ucp_ep_num_lanes(ep), 0);
@@ -874,16 +875,23 @@ UCS_TEST_P(test_ucp_proto, path_bw_coalescing_and_isolation)
     short_progress_loop();
     EXPECT_EQ(nullptr, ep->ext->path_bw_update);
     EXPECT_NE(old_cfg, ep->cfg_index);
+    EXPECT_EQ(old_ep_count - 1,
+              ucs_array_elem(&worker()->ep_config, old_cfg).ep_count);
+    EXPECT_EQ(1u, ucp_ep_config(ep)->ep_count);
     EXPECT_EQ(bandwidth.dedicated,
               ucp_ep_config(ep)->key.lanes[0].path_bandwidth.dedicated);
     EXPECT_EQ(sibling_cfg, sibling->cfg_index);
     EXPECT_DOUBLE_EQ(0,
               ucp_ep_config(sibling)->key.lanes[0].path_bandwidth.dedicated);
+    const auto degraded_cfg = ep->cfg_index;
     bandwidth.dedicated *= 2;
     ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
     short_progress_loop();
     EXPECT_EQ(bandwidth.dedicated,
               ucp_ep_config(ep)->key.lanes[0].path_bandwidth.dedicated);
+    EXPECT_EQ(0u,
+              ucs_array_elem(&worker()->ep_config, degraded_cfg).ep_count);
+    EXPECT_EQ(1u, ucp_ep_config(ep)->ep_count);
     EXPECT_EQ(sibling_cfg, sibling->cfg_index);
 }
 

@@ -1845,6 +1845,11 @@ static unsigned ucp_ep_path_bw_progress(void *arg)
     if (!ucp_ep_config_is_equal(&key, &ucp_ep_config(ep)->key)) {
         ++worker->epoch;
         status = ucp_ep_reconfig_key(ep, 0, &key);
+        if (status == UCS_OK) {
+            ucp_ep_config_reactivate_worker_ifaces(worker, old_cfg,
+                                                   ep->cfg_index);
+        }
+
         ucs_info("dlb_ucp_rebalance ep %p cfg %u -> %u epoch %"PRIu64
                  " status %s", ep, old_cfg, ep->cfg_index, worker->epoch,
                  ucs_status_string(status));
