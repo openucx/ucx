@@ -655,26 +655,30 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_zero_length) {
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_mixed_lengths) {
-    static constexpr size_t MAX_FRAG  = 32;
+    static constexpr size_t MAX_TOTAL = 32;
     static constexpr size_t MAX_COUNT = 2;
 
     init_sgl_iter(3, {16, 80, 16});
 
-    /* A whole element is batched with the first fragment of the next one */
-    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
+    /* A whole element is batched with a part of the next one */
+    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_TOTAL));
     check_desc(0, 0, 0, 16);
-    check_desc(1, 1, 0, MAX_FRAG);
-    check_next_iter(1, MAX_FRAG);
+    check_desc(1, 1, 0, 16);
+    check_next_iter(1, 16);
     advance();
 
-    /* Two more fragments of the same element, the last one is the remainder */
-    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
-    check_desc(0, 1, MAX_FRAG, MAX_FRAG);
-    check_desc(1, 1, 2 * MAX_FRAG, 80 - (2 * MAX_FRAG));
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 1, 16, MAX_TOTAL);
+    check_next_iter(1, 16 + MAX_TOTAL);
+    advance();
+
+    /* The fragment ends exactly at the end of the element */
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 1, 48, MAX_TOTAL);
     check_next_iter(2, 0);
     advance();
 
-    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_FRAG));
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
     check_desc(0, 2, 0, 16);
     check_next_iter(3, 0);
     advance();
