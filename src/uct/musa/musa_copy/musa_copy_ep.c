@@ -204,7 +204,9 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
         return UCS_ERR_NO_DEVICE;
     }
 
-    queue_desc = &device_rsc->queue_desc[src_mem_type][dst_mem_type];
+    queue_desc = &device_rsc->queue_desc
+                 [uct_musa_copy_queue_kind(src_mem_type)]
+                 [uct_musa_copy_queue_kind(dst_mem_type)];
     status = uct_musa_copy_iface_get_stream(device_rsc, &queue_desc->stream);
     if (status != UCS_OK) {
         return status;
@@ -287,5 +289,32 @@ ucs_status_t uct_musa_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 ucs_status_t uct_musa_copy_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                     uct_completion_t *comp)
 {
+    uct_base_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_base_ep_t);
+    uct_musa_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_musa_copy_iface_t);
+    unsigned i;
+
+    for (i = 0; i < iface->num_devices; ++i) {
+        if (!ucs_queue_is_empty(&iface->device_rscs[i].active_queue)) {
+            break;
+        }
+    }
+
+    if (i == iface->num_devices) {
+        UCT_TL_EP_STAT_FLUSH(ep);
+        return UCS_OK;
+    }
+
+    /* Outstanding events are still in flight. */
+    UCT_TL_EP_STAT_FLUSH_WAIT(ep);
+
+    if (comp == NULL) {
+        /* Per the uct_ep_flush() contract, a NULL completion means "report
+         * the current state" - outstanding events are still in flight. */
+        return UCS_INPROGRESS;
+    }
+
+    /* Delegate to the iface flush, which enqueues a flush event per
+     * outstanding copy and completes the user completion. */
     return uct_musa_copy_iface_flush(tl_ep->iface, flags, comp);
 }

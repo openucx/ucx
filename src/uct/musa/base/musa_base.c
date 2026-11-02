@@ -262,9 +262,9 @@ static ucs_status_t
 uct_musa_base_query_pointer_attributes(const void *address,
                                        uct_musa_pointer_info_t *info)
 {
-    unsigned mem_type;
-    unsigned is_managed;
-    int device;
+    unsigned mem_type   = 0;
+    unsigned is_managed = 0;
+    int device          = 0;
     MUresult result;
 
     result = muPointerGetAttribute(&mem_type, MU_POINTER_ATTRIBUTE_MEMORY_TYPE,
@@ -574,10 +574,21 @@ uct_musa_base_query_copy_pointer(const void *address, size_t length,
 
     status = ucs_memtype_cache_lookup(address, length, &mem_info);
     if (status == UCS_ERR_NO_ELEM) {
+        /* The memtype cache tracks only MUSA allocations reported by the
+         * hooks, so a miss is usually a host buffer. Ask the driver before
+         * assuming host memory: with the hooks disabled or bypassed, a device
+         * pointer would otherwise be classified as host and copied by CPU
+         * memcpy() (cuda_copy is immune because every copy is issued as a
+         * driver copy, which only fails on a wrong pointer type). Keep the
+         * heavier musaSetDevice()/muMemGetAddressRange() queries out of this
+         * path; the driver classification sets kind and device directly. */
         memset(info, 0, sizeof(*info));
-        info->kind         = UCT_MUSA_POINTER_HOST;
-        info->device       = -1;
-        info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+        info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        status = uct_musa_base_query_pointer_attributes(address, info);
+        if (status != UCS_OK) {
+            return status;
+        }
+
         info->base_address = (void *)address;
         info->alloc_length = length;
         return UCS_OK;
