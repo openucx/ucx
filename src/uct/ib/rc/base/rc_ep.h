@@ -533,15 +533,31 @@ uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
+uct_rc_txqp_completion_desc_with_info(
+        uct_rc_txqp_t *txqp, uint16_t sn,
+        const uct_rc_send_op_completion_info_t *comp_info)
 {
     uct_rc_iface_send_op_t *op;
 
     ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
+        if ((comp_info != NULL) && (op->sn == sn) &&
+            (op->handler == uct_rc_ep_send_op_with_info_handler)) {
+            ucs_derived_of(op, uct_rc_iface_send_op_with_info_t)->comp_info =
+                    comp_info;
+        }
+
+        uct_rc_txqp_completion_op(op,
+                ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
     }
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
+{
+    /* NULL is compile-time constant on the ordinary completion path. */
+    uct_rc_txqp_completion_desc_with_info(txqp, sn, NULL);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -554,26 +570,6 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY));
         uct_rc_txqp_completion_op(op, resp);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void uct_rc_txqp_set_completion_info(
-        uct_rc_txqp_t *txqp, uint16_t sn,
-        const uct_rc_send_op_completion_info_t *comp_info)
-{
-    uct_rc_iface_send_op_t *op;
-
-    /* Set metadata before callbacks can change the completed queue prefix. */
-    ucs_queue_for_each(op, &txqp->outstanding, queue) {
-        if (UCS_CIRCULAR_COMPARE16(op->sn, >, sn)) {
-            return;
-        }
-
-        if ((op->sn == sn) &&
-            (op->handler == uct_rc_ep_send_op_with_info_handler)) {
-            ucs_derived_of(op, uct_rc_iface_send_op_with_info_t)->comp_info =
-                    comp_info;
-        }
     }
 }
 

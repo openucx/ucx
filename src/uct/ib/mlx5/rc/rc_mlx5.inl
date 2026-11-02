@@ -105,8 +105,12 @@ static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_txqp_process_tx_cqe_with_info(
         be64toh(cqe->timestamp)
     };
 
-    uct_rc_txqp_set_completion_info(txqp, hw_ci, &comp_info);
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
+    if (cqe->op_own & (MLX5_INLINE_SCATTER_32 | MLX5_INLINE_SCATTER_64)) {
+        /* RDMA WRITE checkpoints never have inline response data. */
+        uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
+    } else {
+        uct_rc_txqp_completion_desc_with_info(txqp, hw_ci, &comp_info);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
