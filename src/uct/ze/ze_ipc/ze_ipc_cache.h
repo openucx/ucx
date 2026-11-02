@@ -15,7 +15,6 @@
 
 typedef struct uct_ze_ipc_cache uct_ze_ipc_cache_t;
 typedef struct uct_ze_ipc_cache_region uct_ze_ipc_cache_region_t;
-typedef struct uct_ze_ipc_iface uct_ze_ipc_iface_t;
 
 
 typedef ucs_status_t

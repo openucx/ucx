@@ -20,6 +20,7 @@ extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <ucs/datastruct/pgtable.h>
@@ -313,11 +314,35 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 #endif
 }
 
-UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
+UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
 {
-    /* Currently MNNVL is always disabled in CI */
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
-    EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+    bool expected                  = false;
+#if HAVE_NVML_FABRIC_INFO
+    nvmlGpuFabricInfoV_t fabric_info;
+    nvmlDevice_t device;
+    uint64_t cluster_uuid[2] = {};
+
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    if ((UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device) ==
+         UCS_OK) &&
+        (UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV, device,
+                                 &fabric_info) == UCS_OK)) {
+        /* MNNVL is enabled only if GPU 0 completed joining an NVLink fabric */
+        memcpy(cluster_uuid, fabric_info.clusterUuid, sizeof(cluster_uuid));
+        expected = (fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
+                   (fabric_info.status == NVML_SUCCESS) &&
+                   ((cluster_uuid[0] | cluster_uuid[1]) != 0);
+    }
+#endif
+
+    ASSERT_EQ(expected, !!cuda_ipc_md->enable_mnnvl);
+#if HAVE_NVML_FABRIC_INFO
+    if (expected) {
+        EXPECT_EQ(cluster_uuid[0] ^ cluster_uuid[1] ^ fabric_info.cliqueId,
+                  cuda_ipc_md->nvlink_domain);
+    }
+#endif
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
@@ -715,71 +740,3 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
-
-
-class test_cuda_copy_md : public test_md {
-};
-
-UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
-    /* A single byte per chunk is rounded up to the allocation granularity, so
-     * the buffer is backed by 3 distinct physical handles */
-    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 3);
-    uct_md_mem_attr_t mem_attr;
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
-
-    /* Query the full multi-handle range; the guard preserves the caller's
-     * requested extent instead of shrinking to the single chunk that
-     * contains the base pointer. */
-    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                   &mem_attr));
-
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-    EXPECT_GE(mem_attr.alloc_length, buffer.size());
-}
-
-UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
-#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
-    ASSERT_EQ(cudaSuccess, cudaSetDevice(0));
-
-    auto check_domain = [this](unsigned char domain_id,
-                               ucs_sys_device_t &sys_dev) {
-        cuda_vmm_mem_buffer buffer;
-        CUresult ret = buffer.alloc(64, 0,
-                                    CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN,
-                                    1, domain_id);
-        if (ret != CUDA_SUCCESS) {
-            return false;
-        }
-
-        uct_md_mem_attr_t mem_attr;
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-
-        ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                       &mem_attr));
-        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
-        sys_dev = mem_attr.sys_dev;
-        return true;
-    };
-
-    ucs_sys_device_t sys_dev0, sys_dev1;
-    if (!check_domain(0, sys_dev0)) {
-        UCS_TEST_SKIP_R("failed to allocate locality-domain 0 VMM memory");
-    }
-
-    if (!check_domain(1, sys_dev1)) {
-        ADD_FAILURE() << "locality domain 1 allocation failed even though "
-                         "domain 0 succeeded";
-        return;
-    }
-
-    EXPECT_EQ(sys_dev0, sys_dev1);
-#else
-    UCS_TEST_SKIP_R("built without locality-domain support");
-#endif
-}
-
-_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);

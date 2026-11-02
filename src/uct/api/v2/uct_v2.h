@@ -764,8 +764,23 @@ typedef struct uct_rkey_compare_params {
  * @brief Rkey unpack parameters field mask.
  */
 typedef enum {
-    UCT_RKEY_UNPACK_FIELD_SYS_DEVICE = UCS_BIT(0)  /**< sys_device field */
+    UCT_RKEY_UNPACK_FIELD_SYS_DEVICE = UCS_BIT(0), /**< sys_device field */
+    UCT_RKEY_UNPACK_FIELD_FLAGS      = UCS_BIT(1) /**< flags field */
 } uct_rkey_unpack_field_mask_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Rkey unpack flags.
+ */
+typedef enum {
+    /**
+     * When the remote key is released (see @ref uct_rkey_release), free the
+     * local mapping of the remote memory which was created for this remote key
+     * and is not used by any other remote key or operation.
+     */
+    UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING = UCS_BIT(0)
+} uct_rkey_unpack_flags_t;
 
 
 /**
@@ -785,6 +800,12 @@ typedef struct uct_rkey_unpack_params {
      * (default behavior).
      */
     ucs_sys_device_t     sys_device;
+
+    /**
+     * Flags to unpack the rkey with, using bits from
+     * @ref uct_rkey_unpack_flags_t.
+     */
+    uint64_t             flags;
 } uct_rkey_unpack_params_t;
 
 
@@ -1947,13 +1968,9 @@ typedef struct {
  * @ref uct_ep_outstanding_purge_params_t::cb is invoked once for each
  * undelivered outstanding operation, in the original endpoint posting order.
  *
- * @note This routine invalidates @a ep and reports undelivered operations.
- *       A later completion does not call the error handler. It can also be
- *       used after the error handler returns @ref UCS_INPROGRESS. The
- *       interface must support @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
- *
- * @note The pending queue of @a ep must be empty. Remove posted requests
- *       with @ref uct_ep_pending_purge.
+ * @note This routine should be called only after the error handler for @a ep
+ *       returns @ref UCS_INPROGRESS. It can be used only if the interface
+ *       supports @c UCT_IFACE_FLAG_V2_QUERY_TOKEN.
  *
  * @note If @ref UCT_EP_OUTSTANDING_FIELD_RX_TOKEN is omitted, @a cb may also
  *       be invoked for operations the peer already received. Reposting those

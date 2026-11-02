@@ -951,7 +951,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
 
     ucp_request_set_super(rndv_req, rreq);
 
-    status = ucp_ep_rkey_unpack(ep, rkey_buf, &rndv_req->send.rndv.rkey);
+    status = ucp_ep_rkey_unpack_wo_flags(ep, rkey_buf,
+                                         &rndv_req->send.rndv.rkey);
     if (status != UCS_OK) {
         ucs_fatal("failed to unpack rendezvous remote key received from %s: %s",
                   ucp_ep_peer_name(ep), ucs_status_string(status));
@@ -1123,7 +1124,7 @@ ucp_rndv_send_frag_update_get_rkey(ucp_worker_h worker, ucp_request_t *freq,
                            &rkey_buffer, &rkey_size);
     ucs_assert_always(status == UCS_OK);
 
-    status = ucp_ep_rkey_unpack(mem_type_ep, rkey_buffer, rkey_p);
+    status = ucp_ep_rkey_unpack_wo_flags(mem_type_ep, rkey_buffer, rkey_p);
     ucs_assert_always(status == UCS_OK);
     ucp_rkey_buffer_release(rkey_buffer);
 }
@@ -1361,8 +1362,8 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
      * Step 3: Send ATS for RNDV request
      */
 
-    status = ucp_ep_rkey_unpack(rndv_req->send.ep, rkey_buffer,
-                                &rndv_req->send.rndv.rkey);
+    status = ucp_ep_rkey_unpack_wo_flags(rndv_req->send.ep, rkey_buffer,
+                                         &rndv_req->send.rndv.rkey);
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_fatal("failed to unpack rendezvous remote key received from %s: %s",
                   ucp_ep_peer_name(rndv_req->send.ep), ucs_status_string(status));
@@ -1562,7 +1563,7 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
 
     ucp_trace_req(rndv_req, "start rkey_ptr rndv rreq %p", rreq);
 
-    status = ucp_ep_rkey_unpack(ep, rkey_buf, &rkey);
+    status = ucp_ep_rkey_unpack_wo_flags(ep, rkey_buf, &rkey);
     if (status != UCS_OK) {
         ucs_fatal("failed to unpack rendezvous remote key received from %s: %s",
                   ucp_ep_peer_name(ep), ucs_status_string(status));
@@ -2185,7 +2186,8 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
     ucp_trace_req(sreq, "using put rndv pipeline protocol: va %p size %zu",
                   (void*)rndv_rtr_hdr->address, rndv_rtr_hdr->size);
 
-    status = ucp_ep_rkey_unpack(ep, rndv_rtr_hdr + 1, &sreq->send.rndv.rkey);
+    status = ucp_ep_rkey_unpack_wo_flags(ep, rndv_rtr_hdr + 1,
+                                         &sreq->send.rndv.rkey);
     if (status != UCS_OK) {
         ucs_fatal("failed to unpack rendezvous remote key received from %s: %s",
                   ucp_ep_peer_name(ep), ucs_status_string(status));
@@ -2387,8 +2389,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
              * and we have to use PUT_ZCOPY RNDV scheme instead */
         }
 
-        status = ucp_ep_rkey_unpack(ep, rndv_rtr_hdr + 1,
-                                    &sreq->send.rndv.rkey);
+        status = ucp_ep_rkey_unpack_wo_flags(ep, rndv_rtr_hdr + 1,
+                                             &sreq->send.rndv.rkey);
         if (status != UCS_OK) {
             ucs_fatal("failed to unpack rendezvous remote key received from %s: %s",
                       ucp_ep_peer_name(ep), ucs_status_string(status));

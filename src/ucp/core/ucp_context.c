@@ -185,7 +185,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "MD whose distance is queried when evaluating transport selection score",
    ucs_offsetof(ucp_context_config_t, select_distance_md), UCS_CONFIG_TYPE_STRING},
 
-  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda,rocm",
    "Memory types which have whole allocations registered.\n"
    "Allowed memory types: cuda, rocm, rocm-managed, ze-host, ze-device, ze-managed",
    ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
@@ -856,7 +856,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
-  { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "rocm",  { "rocm_copy", "rocm_ipc", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
@@ -2586,6 +2586,20 @@ ucp_dynamic_tl_switch_config_valid(const ucp_context_config_t *config)
     return 1;
 }
 
+static int ucp_max_rails_config_valid(const char *env_prefix, const char *name,
+                                      unsigned max_rails)
+{
+    const unsigned max_lanes = ucs_min(UCP_MAX_LANES, UCP_PROTO_MAX_LANES);
+
+    if (max_rails > max_lanes) {
+        ucs_error("%s%s %u exceeds the maximal number of lanes %u", env_prefix,
+                  name, max_rails, max_lanes);
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -2668,6 +2682,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.ext.min_rma_chunk_size == 0) {
         ucs_error("minimum chunk size for RMA protocol must be greater"
                   " than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_config_ext;
+    }
+
+    if (!ucp_max_rails_config_valid(config->env_prefix, "MAX_EAGER_RAILS",
+                                    context->config.ext.max_eager_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RNDV_RAILS",
+                                    context->config.ext.max_rndv_lanes) ||
+        !ucp_max_rails_config_valid(config->env_prefix, "MAX_RMA_RAILS",
+                                    context->config.ext.max_rma_lanes)) {
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_config_ext;
     }

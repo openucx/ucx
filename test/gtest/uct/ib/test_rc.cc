@@ -9,8 +9,12 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
 
+#include <memory>
+#include <vector>
+
 extern "C" {
 #include <ucs/arch/cpu.h>
+#include <uct/api/v2/uct_v2.h>
 }
 
 #ifdef HAVE_MLX5_DV
@@ -179,6 +183,111 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
     }
 
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+}
+
+/* Synthesize an error receive completion by replacing the poll_cq() operation
+ * of the device context: receive work requests go to the shared receive queue,
+ * which verbs can not move to an error state. */
+static struct {
+    struct ibv_cq      *cq;
+    void               *desc;
+    int                inject;
+} failed_rx;
+
+static int failed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
+                             struct ibv_wc *wc)
+{
+    if ((cq != failed_rx.cq) || (num_entries < 1) || !failed_rx.inject) {
+        return 0;
+    }
+
+    failed_rx.inject = 0;
+    wc[0].status     = IBV_WC_REM_ABORT_ERR;
+    wc[0].wr_id      = (uintptr_t)failed_rx.desc;
+    return 1;
+}
+
+static bool is_desc_in_pool(ucs_mpool_t *mp, void *desc)
+{
+    ucs_mpool_elem_t *elem;
+
+    for (elem = mp->freelist; elem != NULL; elem = elem->next) {
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof(*elem));
+        if (UCS_PTR_BYTE_OFFSET(elem, sizeof(*elem)) == desc) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* The repost batch must stay above the single completion reported here, so
+ * that the released descriptor is not posted again. */
+UCS_TEST_SKIP_COND_P(test_rc, failed_rx_release_desc,
+                     GetParam()->tl_name != "rc_verbs", "IB_RX_MAX_BATCH=16")
+{
+    uct_rc_iface_t *rc = rc_iface(m_e2);
+
+    failed_rx.desc = ucs_mpool_get(&rc->rx.mp);
+    ASSERT_TRUE(failed_rx.desc != NULL);
+
+    failed_rx.cq     = rc->super.cq[UCT_IB_DIR_RX];
+    failed_rx.inject = 1;
+
+    ucs::mock mock;
+    mock.setup(&failed_rx.cq->context->ops.poll_cq, failed_rx_poll_cq);
+
+    progress();
+    ASSERT_FALSE(failed_rx.inject);
+
+    /* The completion was reported for a work request the queue never held */
+    rc->rx.srq.available--;
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, failed_rx.desc))
+            << "receive descriptor leaked";
+}
+
+/* A transport which fails to initialize an endpoint must remove it from
+ * iface->ep_list, or uct_rc_iface_flush() would touch freed memory. */
+UCS_TEST_SKIP_COND_P(test_rc, ep_init_failure_removed_from_ep_list,
+                     GetParam()->tl_name != "rc_verbs")
+{
+    /* rx.max_bufs bounds the receive pool below rx.queue_len, and pinning
+     * rx.bufs_grow keeps the pool valid regardless of rx.queue_len. */
+    if (uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS", "8") != UCS_OK) {
+        UCS_TEST_SKIP_R("cannot limit the receive buffer pool");
+    }
+
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_BUFS_GROW", "8"));
+
+    ucs::handle<uct_iface_h> new_iface;
+    UCS_TEST_CREATE_HANDLE(uct_iface_h, new_iface, uct_iface_close,
+                           uct_iface_open, m_e1->md(), m_e1->worker(),
+                           &m_e1->iface_params(), m_iface_config);
+
+    uct_rc_iface_t *rc = ucs_derived_of(new_iface.get(), uct_rc_iface_t);
+    if (rc->rx.srq.quota == 0) {
+        UCS_TEST_SKIP_R("SRQ is disabled");
+    }
+
+    /* Compare the entry rather than walk the list, to not read freed memory. */
+    ucs_list_link_t *first = rc->ep_list.next;
+
+    uct_ep_params_t ep_params;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = new_iface.get();
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    scoped_log_handler wrap_warn(wrap_warns_logger);
+    uct_ep_h ep          = NULL;
+    ucs_status_t status  = uct_ep_create(&ep_params, &ep);
+
+    if (ep != NULL) {
+        uct_ep_destroy(ep); /* an unexpected ep would add a cleanup warning */
+    }
+
+    ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+    EXPECT_EQ(first, rc->ep_list.next);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
@@ -911,6 +1020,71 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
     EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_sgl_no_comp,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    static const size_t num_iters = 64;
+    uct_iface_attr_v2_t attr_v2   = {};
+    std::vector<std::unique_ptr<mapped_buffer> > local, remote;
+    std::vector<void*> buffers;
+    std::vector<size_t> lengths;
+    std::vector<uct_mem_h> memhs;
+    std::vector<uint64_t> remote_addrs;
+    std::vector<uct_rkey_t> rkeys;
+    ucs_status_t status;
+    size_t count, length, i;
+
+    attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                         UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+    if ((uct_iface_query_v2(m_e1->iface(), &attr_v2) != UCS_OK) ||
+        !(attr_v2.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY) ||
+        (attr_v2.max_get_sgl_zcopy_count == 0)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    const uct_iface_attr &attr = m_e1->iface_attr();
+    count  = ucs_min(size_t(2), attr_v2.max_get_sgl_zcopy_count);
+    length = ucs_min(ucs_max(size_t(1024), attr.cap.get.min_zcopy),
+                     attr.cap.get.max_zcopy);
+
+    ASSERT_LE(count * length, m_num_get_bytes);
+
+    for (i = 0; i < count; ++i) {
+        local.emplace_back(new mapped_buffer(length, 0ul, *m_e1));
+        remote.emplace_back(new mapped_buffer(length, 0xABCul + i, *m_e2));
+        buffers.push_back(local[i]->ptr());
+        lengths.push_back(length);
+        memhs.push_back(local[i]->memh());
+        remote_addrs.push_back(remote[i]->addr());
+        rkeys.push_back(remote[i]->rkey());
+    }
+
+    ASSERT_GT(num_iters * count * length, 2 * m_num_get_bytes);
+
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(30 * ucs::test_time_multiplier());
+    for (size_t iter = 0; iter < num_iters; ++iter) {
+        do {
+            status = uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(),
+                                          lengths.data(), memhs.data(),
+                                          remote_addrs.data(), rkeys.data(),
+                                          NULL, NULL, count, NULL);
+            if (status == UCS_ERR_NO_RESOURCE) {
+                progress();
+            }
+        } while ((status == UCS_ERR_NO_RESOURCE) &&
+                 (ucs_get_time() < deadline));
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+    }
+
+    flush();
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+
+    for (i = 0; i < count; ++i) {
+        local[i]->pattern_check(0xABCul + i);
+    }
+}
+
 // Check that it is not possible to send while not all pendings are dispatched
 // yet. RDMA_READ resources are released in get function completion callbacks.
 // Since in RC transports completions are handled after pending dispatch
@@ -1559,6 +1733,11 @@ public:
 
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
+    }
+
+    virtual void inject_error(unsigned idx = 0) override
+    {
+        kill_receiver(idx);
     }
 };
 
