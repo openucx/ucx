@@ -1930,7 +1930,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
                    ep, qp_num, hw_ci);
 
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
-    ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
+    uct_rc_ep_schedule_pending(&ep->super);
     uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
     uct_rc_iface_arbiter_dispatch(&iface->super);
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
