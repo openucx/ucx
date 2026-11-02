@@ -149,6 +149,33 @@ static void uct_musa_md_close(uct_md_h uct_md)
     ucs_free(md);
 }
 
+static ucs_status_t uct_musa_md_ensure_context(void)
+{
+    MUcontext context = NULL;
+    MUresult result;
+    ucs_status_t status;
+    int device;
+
+    result = muCtxGetCurrent(&context);
+    if ((result == MUSA_SUCCESS) && (context != NULL)) {
+        return UCS_OK;
+    }
+
+    if ((result != MUSA_SUCCESS) && (result != MUSA_ERROR_NOT_INITIALIZED)) {
+        ucs_debug("muCtxGetCurrent failed: 0x%x", result);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Driver registration needs a current context; preserve an existing
+     * application context and initialize the runtime only if none exists. */
+    status = uct_musa_base_get_current_device(&device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_musa_base_set_device(device);
+}
+
 static ucs_status_t
 uct_musa_md_mem_reg(uct_md_h uct_md, void *address, size_t length,
                     const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p)
@@ -157,7 +184,12 @@ uct_musa_md_mem_reg(uct_md_h uct_md, void *address, size_t length,
     uct_musa_pointer_info_t info;
     ucs_log_level_t log_level;
     ucs_status_t status;
-    musaError_t err;
+    MUresult result;
+
+    status = uct_musa_md_ensure_context();
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = uct_musa_base_query_pointer(address, length, &info);
     if (status != UCS_OK) {
@@ -174,25 +206,22 @@ uct_musa_md_mem_reg(uct_md_h uct_md, void *address, size_t length,
         return UCS_OK;
     }
 
-    /* Host memory not allocated by MUSA runtime: pin it so the device can
-     * access it through the staging path (same as cuda_copy
-     * cuMemHostRegister). Memory allocated by musaMallocHost is already
-     * pinned and reports "already registered", which is treated as success
-     * with the dummy handle. */
+    /* Driver registration leaves the application's runtime last-error intact.
+     * Already pinned memory uses a dummy handle so dereg cannot unpin it. */
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
-    err       = musaHostRegister(address, length, musaHostRegisterPortable);
-    if (err == musaErrorHostMemoryAlreadyRegistered) {
-        (void)musaGetLastError();
+    result    = muMemHostRegister(address, length, MU_MEMHOSTREGISTER_PORTABLE);
+    if (result == MUSA_ERROR_HOST_MEMORY_ALREADY_REGISTERED) {
         *memh_p = &uct_musa_dummy_memh;
         return UCS_OK;
     }
 
-    if (err != musaSuccess) {
-        ucs_log(log_level, "musaHostRegister(address=%p length=%zu) failed: %s",
-                address, length, musaGetErrorString(err));
-        return (err == musaErrorInvalidValue) ? UCS_ERR_INVALID_PARAM :
-                                                UCS_ERR_IO_ERROR;
+    if (result != MUSA_SUCCESS) {
+        ucs_log(log_level, "muMemHostRegister address %p length %zu "
+                "failed: 0x%x",
+                address, length, result);
+        return (result == MUSA_ERROR_INVALID_VALUE) ? UCS_ERR_INVALID_PARAM :
+                                                     UCS_ERR_IO_ERROR;
     }
 
     *memh_p = address;
@@ -202,17 +231,24 @@ uct_musa_md_mem_reg(uct_md_h uct_md, void *address, size_t length,
 static ucs_status_t
 uct_musa_md_mem_dereg(uct_md_h uct_md, const uct_md_mem_dereg_params_t *params)
 {
-    musaError_t err;
+    MUresult result;
+    ucs_status_t status;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     /* Only memory pinned by mem_reg (memh == base address) needs to be
      * unpinned; dummy handles have nothing to deregister. */
     if (params->memh != &uct_musa_dummy_memh) {
-        err = musaHostUnregister(params->memh);
-        if (err != musaSuccess) {
-            ucs_debug("musaHostUnregister(%p) failed: %s", params->memh,
-                      musaGetErrorString(err));
+        status = uct_musa_md_ensure_context();
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        result = muMemHostUnregister(params->memh);
+        if (result != MUSA_SUCCESS) {
+            ucs_debug("muMemHostUnregister(%p) failed: 0x%x", params->memh,
+                      result);
+            return UCS_ERR_IO_ERROR;
         }
     }
 

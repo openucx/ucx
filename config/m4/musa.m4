@@ -15,7 +15,6 @@ AC_DEFUN([UCX_CHECK_MUSA],[
         MUSA_CPPFLAGS=""
         MUSA_LDFLAGS=""
         MUSA_LIBS=""
-        MUSA_RPATH=""
         MUSA_ROOT=""
 
         AS_IF([test "x$with_musa" = "xno"], [
@@ -32,7 +31,6 @@ AC_DEFUN([UCX_CHECK_MUSA],[
             AS_IF([test -n "$MUSA_ROOT"], [
                 MUSA_CPPFLAGS="-I$MUSA_ROOT/include"
                 MUSA_LDFLAGS="-L$MUSA_ROOT/lib -L$MUSA_ROOT/lib64"
-                MUSA_RPATH="-rpath $MUSA_ROOT/lib --enable-new-dtags -rpath $MUSA_ROOT/lib64"
             ])
             MUSA_LIBS="-lmusart -lmusa"
 
@@ -69,6 +67,11 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                             [AC_LANG_PROGRAM(
                                 [[#include <musa.h>]],
                                 [[int fd = -1;
+                                  int supported = 0;
+                                  muDeviceGetAttribute(
+                                      &supported,
+                                      MU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
+                                      0);
                                   return (int)muMemGetHandleForAddressRange(
                                       &fd, 0, 0,
                                       MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
@@ -98,6 +101,7 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                               char pci_bus_id[64];
                               MUmemoryPool driver_pool = 0;
                               MUstream driver_stream = 0;
+                              MUcontext context = 0;
                               unsigned memory_type = 0;
                               unsigned is_managed = 0;
                               musaGetDeviceCount(&count);
@@ -130,6 +134,17 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                                                       runtime_stream);
                               musaHostRegister(address, size, 0);
                               musaHostUnregister(address);
+                              if (muCtxGetCurrent(&context) ==
+                                  MUSA_ERROR_NOT_INITIALIZED) {
+                                  count = 0;
+                              }
+                              if (muMemHostRegister(
+                                      address, size,
+                                      MU_MEMHOSTREGISTER_PORTABLE) ==
+                                  MUSA_ERROR_HOST_MEMORY_ALREADY_REGISTERED) {
+                                  count = 0;
+                              }
+                              muMemHostUnregister(address);
                               musaStreamCreateWithFlags(&runtime_stream, 0);
                               musaEventCreateWithFlags(&event, 0);
                               musaMemcpy(address, address, size,
@@ -173,7 +188,6 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                 AC_SUBST([MUSA_CPPFLAGS])
                 AC_SUBST([MUSA_LDFLAGS])
                 AC_SUBST([MUSA_LIBS])
-                AC_SUBST([MUSA_RPATH])
                 AC_SUBST([MUSA_ROOT])
             ], [
                 AS_IF([test "x$with_musa" != "xguess"], [

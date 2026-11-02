@@ -636,8 +636,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
         have_current_device =
                 (uct_musa_base_get_current_device(&current_device) == UCS_OK);
         if (uct_musa_base_set_device(device_rsc->device) != UCS_OK) {
-            ucs_fatal("failed to select MUSA device %d during cleanup",
-                      device_rsc->device);
+            if (!ucs_queue_is_empty(&device_rsc->active_queue)) {
+                ucs_fatal("cannot drain outstanding MUSA copies on device %d",
+                          device_rsc->device);
+            }
+
+            ucs_warn("failed to select MUSA device %d during idle cleanup",
+                     device_rsc->device);
+            ucs_mpool_cleanup(&device_rsc->event_mp, 1);
+            continue;
         }
 
         if ((device_rsc->short_stream != NULL) &&
