@@ -48,7 +48,7 @@
       scm:
         - git:
             url: "https://github.com/openucx/ucx.git"
-            branches: [ 'origin/pr/12094/head' ]
+            branches: [ 'master' ]
             refspec: "+refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*"
             browser: githubweb
             browser-url: "https://github.com/openucx/ucx"
