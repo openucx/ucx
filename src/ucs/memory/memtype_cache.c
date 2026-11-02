@@ -198,6 +198,16 @@ ucs_memtype_cache_region_same_attributes(const ucs_memtype_cache_region_t *a,
            (a->mem_flags == b->mem_flags);
 }
 
+static int
+ucs_memtype_cache_region_has_attributes(const ucs_memtype_cache_region_t *region,
+                                        ucs_memory_type_t mem_type,
+                                        ucs_sys_device_t sys_dev,
+                                        uint8_t mem_flags)
+{
+    return (region->mem_type == mem_type) && (region->sys_dev == sys_dev) &&
+           (region->mem_flags == mem_flags);
+}
+
 /* The cache lock must be held. Change the end of a cached region. */
 static void ucs_memtype_cache_region_set_end(ucs_memtype_cache_t *memtype_cache,
                                              ucs_memtype_cache_region_t *region,
@@ -325,11 +335,15 @@ void ucs_memtype_cache_register(const void *address, size_t size,
             goto out_unlock;
         }
 
-        /* Same address means the same allocation, so different attributes
-         * can only belong to a stale entry. The new registration wins. */
-        region->mem_type  = mem_type;
-        region->sys_dev   = sys_dev;
-        region->mem_flags = mem_flags;
+        /* Registrations of the same range with different attributes cannot be
+         * told apart once one of them is released, so stop reporting any type
+         * until the last one is gone. Lookup then falls back to detection. */
+        if (!ucs_memtype_cache_region_has_attributes(region, mem_type, sys_dev,
+                                                     mem_flags)) {
+            region->mem_type  = UCS_MEMORY_TYPE_UNKNOWN;
+            region->sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+            region->mem_flags = 0;
+        }
         ++region->refcount;
         pos = region->super.end;
     }

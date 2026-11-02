@@ -689,19 +689,31 @@ UCS_TEST_F(test_memtype_explicit, nested_registrations) {
     }
 }
 
-UCS_TEST_F(test_memtype_explicit, newer_attributes_win) {
+UCS_TEST_F(test_memtype_explicit, conflicting_attributes_unknown) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x20000);
 
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_REG(base, 0x800, 0x100, UCS_MEMORY_TYPE_CUDA_MANAGED, 2);
 
+    /* Conflict: neither type is trusted */
     ASSERT_UCS_OK(ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 0x800),
                                            0x80, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA_MANAGED, info.type);
-    EXPECT_EQ(2, info.mem_flags);
+    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
 
+    /* The rest of the outer range keeps its own attributes */
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+
+    /* Releasing the inner registration must not restore a wrong type for the
+     * overlapped part, which is still covered by the outer registration */
     EXPLICIT_UNREG(base, 0x800, 0x100);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 0x800),
+                                           0x80, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+
     EXPLICIT_UNREG(base, 0, 0x1000);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
