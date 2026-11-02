@@ -1655,16 +1655,9 @@ protected:
  * and destination memory types */
 class test_ucp_rma_sgl_data : public test_ucp_rma_sgl {
 public:
-    static void get_src_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_src_variants, SGL_MEM_TYPES_MASK);
-    }
-
-    virtual ucs_memory_type_t src_mem_type() const override {
-        return static_cast<ucs_memory_type_t>(get_variant_value(1));
+        add_variant_memtypes(variants, test_ucp_rma_sgl::get_test_variants,
+                             SGL_MEM_TYPES_MASK);
     }
 
     virtual ucs_memory_type_t dst_mem_type() const override {
