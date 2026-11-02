@@ -25,6 +25,8 @@ put_lat_iov_mt_HH       -t ucp_put_lat -D iov,contig -s 1024,1024,1024,1024 -T 2
 put_lat_iov_iov_mt_HH   -t ucp_put_lat -D iov,iov    -s 1024,1024,1024,1024 -T 2 -V -n 1000
 put_bw_iov_mt_HH        -t ucp_put_bw  -D iov,contig -s 1024,1024,1024,1024 -T 2 -n 1000
 put_bw_iov_iov_mt_HH    -t ucp_put_bw  -D iov,iov    -s 1024,1024,1024,1024 -T 2 -n 1000
+get_iov_mt_HH           -t ucp_get     -D iov,contig -s 1024,1024,1024,1024 -T 2 -n 1000
+put_lat_iov_stride_mt_HH -t ucp_put_lat -D iov,contig -s 1024,1024,1024,1024 -i 2048 -T 2 -V -n 1000
 
 # cuda -> cuda
 put_lat_iov_iov_DD      -t ucp_put_lat -D iov,iov -m cuda,cuda -s 1024,1024,1024,1024 -n 1000
