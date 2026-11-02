@@ -9,8 +9,7 @@ module_LTLIBRARIES      = libuct_musa.la
 libuct_musa_la_CPPFLAGS = $(BASE_CPPFLAGS) $(MUSA_CPPFLAGS)
 libuct_musa_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_musa_la_LDFLAGS  = $(MUSA_LDFLAGS) -version-info $(SOVERSION) \
-                          $(UCX_LT_RELEASE) \
-                          $(patsubst %, -Xlinker %, $(MUSA_RPATH))
+                          $(UCX_LT_RELEASE)
 libuct_musa_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la \
                           $(MUSA_LIBS)

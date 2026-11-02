@@ -525,10 +525,6 @@ protected:
     UCT_TEST_CUDA_MEM_TYPE_TLS, \
     UCT_TEST_MUSA_MEM_TYPE_TLS
 
-#define UCT_TEST_TLS \
-    UCT_TEST_NO_GPU_MEM_TYPE_TLS, \
-    UCT_TEST_GPU_MEM_TYPE_TLS
-
 /**
  * Instantiate the parametrized test case for all transports.
  * Expand GPU and non-GPU lists separately to fit UCS_PP_MAX_ARGS.
