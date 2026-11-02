@@ -475,6 +475,32 @@ uct_musa_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_musa_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
+{
+    ucs_memory_type_t src_mem_type = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                    local_memory_type,
+                                                    LOCAL_MEMORY_TYPE,
+                                                    UCS_MEMORY_TYPE_UNKNOWN);
+    ucs_memory_type_t dst_mem_type = UCT_ATTR_VALUE(PERF, perf_attr,
+                                                    remote_memory_type,
+                                                    REMOTE_MEMORY_TYPE,
+                                                    UCS_MEMORY_TYPE_UNKNOWN);
+
+    /* Host-to-host transfers never involve the device and would degrade to a
+     * blocking CPU memcpy() in uct_musa_copy_ep_zcopy(), so let host-only
+     * traffic select another transport (same behavior as cuda_copy). */
+    if ((src_mem_type == UCS_MEMORY_TYPE_HOST) &&
+        (dst_mem_type == UCS_MEMORY_TYPE_HOST)) {
+        ucs_trace("src_mem_type:%s to dst_mem_type:%s is not supported",
+                  ucs_memory_type_names[src_mem_type],
+                  ucs_memory_type_names[dst_mem_type]);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return uct_base_iface_estimate_perf(tl_iface, perf_attr);
+}
+
 static uct_iface_ops_t uct_musa_copy_iface_ops = {
     .ep_get_short             = uct_musa_copy_ep_get_short,
     .ep_put_short             = uct_musa_copy_ep_put_short,
@@ -504,7 +530,7 @@ static uct_iface_ops_t uct_musa_copy_iface_ops = {
 
 static uct_iface_internal_ops_t uct_musa_copy_iface_internal_ops = {
     .iface_query_v2        = uct_iface_base_query_v2,
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
+    .iface_estimate_perf   = uct_musa_copy_estimate_perf,
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query              = (uct_ep_query_func_t)
                              ucs_empty_function_return_unsupported,
@@ -585,8 +611,8 @@ static UCS_CLASS_INIT_FUNC(uct_musa_copy_iface_t, uct_md_h md,
         self->device_rscs[i].device       = i;
         self->device_rscs[i].short_stream = NULL;
         ucs_queue_head_init(&self->device_rscs[i].active_queue);
-        for (j = 0; j < UCS_MEMORY_TYPE_LAST; ++j) {
-            for (k = 0; k < UCS_MEMORY_TYPE_LAST; ++k) {
+        for (j = 0; j < UCT_MUSA_COPY_QUEUE_LAST; ++j) {
+            for (k = 0; k < UCT_MUSA_COPY_QUEUE_LAST; ++k) {
                 uct_musa_copy_queue_desc_init(
                         &self->device_rscs[i].queue_desc[j][k]);
             }
@@ -654,8 +680,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_musa_copy_iface_t)
                      device_rsc->device);
         }
 
-        for (j = 0; j < UCS_MEMORY_TYPE_LAST; ++j) {
-            for (k = 0; k < UCS_MEMORY_TYPE_LAST; ++k) {
+        for (j = 0; j < UCT_MUSA_COPY_QUEUE_LAST; ++j) {
+            for (k = 0; k < UCT_MUSA_COPY_QUEUE_LAST; ++k) {
                 queue_desc = &device_rsc->queue_desc[j][k];
                 if (queue_desc->stream == NULL) {
                     continue;

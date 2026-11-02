@@ -23,6 +23,21 @@ typedef struct {
     uct_musa_copy_flush_desc_t *flush;
 } uct_musa_copy_event_desc_t;
 
+/* Copy directions are indexed by the two memory kinds this TL produces
+ * (host and MUSA) rather than by ucs_memory_type_t. */
+typedef enum {
+    UCT_MUSA_COPY_QUEUE_HOST,
+    UCT_MUSA_COPY_QUEUE_MUSA,
+    UCT_MUSA_COPY_QUEUE_LAST
+} uct_musa_copy_queue_kind_t;
+
+static UCS_F_ALWAYS_INLINE uct_musa_copy_queue_kind_t
+uct_musa_copy_queue_kind(ucs_memory_type_t mem_type)
+{
+    return (mem_type == UCS_MEMORY_TYPE_MUSA) ? UCT_MUSA_COPY_QUEUE_MUSA :
+                                                UCT_MUSA_COPY_QUEUE_HOST;
+}
+
 typedef struct {
     ucs_queue_elem_t      queue;
     musaStream_t          stream;
@@ -33,8 +48,9 @@ typedef struct {
     int                              device;
     musaStream_t                     short_stream;
     ucs_queue_head_t                 active_queue;
-    uct_musa_copy_queue_desc_t       queue_desc[UCS_MEMORY_TYPE_LAST]
-                                               [UCS_MEMORY_TYPE_LAST];
+    uct_musa_copy_queue_desc_t       queue_desc
+                                     [UCT_MUSA_COPY_QUEUE_LAST]
+                                     [UCT_MUSA_COPY_QUEUE_LAST];
     ucs_mpool_t                      event_mp;
 } uct_musa_copy_device_rsc_t;
 

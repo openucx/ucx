@@ -43,141 +43,164 @@ AC_DEFUN([UCX_CHECK_MUSA],[
             LDFLAGS="$MUSA_LDFLAGS $LDFLAGS"
             LIBS="$MUSA_LIBS $LIBS"
 
-                AC_CHECK_HEADERS([musa_runtime_api.h],
-                                 [],
-                                 [musa_happy=no])
-                AC_CHECK_HEADERS([musa.h],
-                                 [],
-                                 [musa_happy=no])
+            AC_CHECK_HEADERS([musa_runtime_api.h],
+                             [],
+                             [musa_happy=no])
+            AC_CHECK_HEADERS([musa.h],
+                             [],
+                             [musa_happy=no])
 
-                AS_IF([test "x$musa_happy" = "xyes"], [
-                    AC_CHECK_LIB([musart], [musaGetDeviceCount],
-                                 [],
-                                 [musa_happy=no])
-                ])
-                AS_IF([test "x$musa_happy" = "xyes"], [
-                    AC_CHECK_LIB([musa], [muMemGetAddressRange],
-                                 [],
-                                 [musa_happy=no])
-                ])
-                AS_IF([test "x$musa_happy" = "xyes"], [
-                    AC_CHECK_DECLS(
-                        [MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD],
-                        [AC_LINK_IFELSE(
-                            [AC_LANG_PROGRAM(
-                                [[#include <musa.h>]],
-                                [[int fd = -1;
-                                  int supported = 0;
-                                  muDeviceGetAttribute(
-                                      &supported,
-                                      MU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
-                                      0);
-                                  return (int)muMemGetHandleForAddressRange(
-                                      &fd, 0, 0,
-                                      MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
-                                      0);]])],
-                            [AC_DEFINE(
-                                [HAVE_MUSA_DMABUF], [1],
-                                [MUSA supports DMA-BUF export])],
-                            [])],
-                        [],
-                        [[#include <musa.h>]])
-                ])
-                AS_IF([test "x$musa_happy" = "xyes"], [
-                    AC_LINK_IFELSE(
+            AS_IF([test "x$musa_happy" = "xyes"], [
+                AC_CHECK_LIB([musart], [musaGetDeviceCount],
+                             [],
+                             [musa_happy=no])
+            ])
+            AS_IF([test "x$musa_happy" = "xyes"], [
+                AC_CHECK_LIB([musa], [muMemGetAddressRange],
+                             [],
+                             [musa_happy=no])
+            ])
+            AS_IF([test "x$musa_happy" = "xyes"], [
+                # Mandatory symbols: referenced directly by the MUSA
+                # components and their tests, so the build must fail early
+                # when one of them is missing.
+                AC_LINK_IFELSE(
+                    [AC_LANG_PROGRAM(
+                        [[#include <stddef.h>
+                          #include <musa.h>
+                          #include <musa_runtime_api.h>]],
+                        [[int count = 0;
+                          int device = 0;
+                          void *address = 0;
+                          MUdeviceptr base = 0;
+                          size_t size = 0;
+                          musaStream_t runtime_stream = 0;
+                          musaEvent_t event = 0;
+                          char pci_bus_id[64];
+                          MUcontext context = 0;
+                          unsigned memory_type = 0;
+                          unsigned is_managed = 0;
+                          musaGetDeviceCount(&count);
+                          musaGetDevice(&device);
+                          musaSetDevice(device);
+                          musaGetErrorString(musaSuccess);
+                          musaGetLastError();
+                          musaPeekAtLastError();
+                          musaDeviceGetPCIBusId(pci_bus_id,
+                                                sizeof(pci_bus_id),
+                                                device);
+                          muPointerGetAttribute(
+                              &memory_type,
+                              MU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                              (MUdeviceptr)address);
+                          muPointerGetAttribute(
+                              &is_managed, MU_POINTER_ATTRIBUTE_IS_MANAGED,
+                              (MUdeviceptr)address);
+                          muPointerGetAttribute(
+                              &device, MU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                              (MUdeviceptr)address);
+                          muMemGetAddressRange(&base, &size,
+                                               (MUdeviceptr)address);
+                          if (muCtxGetCurrent(&context) ==
+                              MUSA_ERROR_NOT_INITIALIZED) {
+                              count = 0;
+                          }
+                          if (muMemHostRegister(
+                                  address, size,
+                                  MU_MEMHOSTREGISTER_PORTABLE) ==
+                              MUSA_ERROR_HOST_MEMORY_ALREADY_REGISTERED) {
+                              count = 0;
+                          }
+                          muMemHostUnregister(address);
+                          musaMalloc(&address, size);
+                          musaMallocHost(&address, size);
+                          musaMallocManaged(&address, size, 0);
+                          musaFreeHost(address);
+                          musaFree(address);
+                          musaStreamCreateWithFlags(&runtime_stream, 0);
+                          musaEventCreateWithFlags(&event, 0);
+                          musaMemcpyAsync(address, address, size,
+                                          musaMemcpyDeviceToDevice,
+                                          runtime_stream);
+                          musaEventRecord(event, runtime_stream);
+                          if (muEventQuery((MUevent)event) ==
+                              MUSA_ERROR_NOT_READY) {
+                              count = 0;
+                          }
+                          musaEventDestroy(event);
+                          musaMemcpy(address, address, size,
+                                     musaMemcpyDeviceToDevice);
+                          musaMemset(address, 0, size);
+                          musaDeviceSynchronize();
+                          musaStreamSynchronize(runtime_stream);
+                          musaStreamDestroy(runtime_stream);
+                          return count < 0;]])],
+                    [],
+                    [musa_happy=no])
+            ])
+            AS_IF([test "x$musa_happy" = "xyes"], [
+                # Optional async/pool allocation family: the memory hooks
+                # resolve these symbols by name and skip the ones the runtime
+                # does not provide, and the async allocation paths of the test
+                # code are compiled only when the whole family is available,
+                # so an older MUSA SDK must not disable MUSA support when they
+                # are missing.
+                AC_LINK_IFELSE(
+                    [AC_LANG_PROGRAM(
+                        [[#include <stddef.h>
+                          #include <musa.h>
+                          #include <musa_runtime_api.h>]],
+                        [[void *address = 0;
+                          size_t size = 0;
+                          size_t pitch = 0;
+                          musaStream_t runtime_stream = 0;
+                          musaMemPool_t runtime_pool = 0;
+                          MUstream driver_stream = 0;
+                          MUmemoryPool driver_pool = 0;
+                          MUdeviceptr base = 0;
+                          musaMallocPitch(&address, &pitch, size, 1);
+                          musaMallocAsync(&address, size, runtime_stream);
+                          musaMallocFromPoolAsync(&address, size,
+                                                  runtime_pool,
+                                                  runtime_stream);
+                          musaFreeAsync(address, runtime_stream);
+                          muMemAlloc_v2(&base, size);
+                          muMemAllocPitch_v2(&base, &pitch, size, 1, 1);
+                          muMemAllocManaged(&base, size, 0);
+                          muMemAllocAsync(&base, size, driver_stream);
+                          muMemAllocFromPoolAsync(&base, size, driver_pool,
+                                                  driver_stream);
+                          muMemFreeAsync(base, driver_stream);
+                          muMemFree_v2(base);
+                          return 0;]])],
+                    [AC_DEFINE([HAVE_MUSA_MEM_POOL_ALLOC], [1],
+                               [MUSA async/pool allocation APIs are available])],
+                    [AC_MSG_NOTICE([MUSA async/pool allocation APIs not found; \
+the corresponding memory hooks will be skipped])])
+            ])
+            AS_IF([test "x$musa_happy" = "xyes"], [
+                AC_CHECK_DECLS(
+                    [MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD],
+                    [AC_LINK_IFELSE(
                         [AC_LANG_PROGRAM(
-                            [[#include <stddef.h>
-                              #include <musa.h>
-                              #include <musa_runtime_api.h>]],
-                            [[int count = 0;
-                              int device = 0;
-                              void *address = 0;
-                              MUdeviceptr base = 0;
-                              size_t size = 0;
-                              size_t pitch = 0;
-                              musaMemPool_t runtime_pool = 0;
-                              musaStream_t runtime_stream = 0;
-                              musaEvent_t event = 0;
-                              char pci_bus_id[64];
-                              MUmemoryPool driver_pool = 0;
-                              MUstream driver_stream = 0;
-                              MUcontext context = 0;
-                              unsigned memory_type = 0;
-                              unsigned is_managed = 0;
-                              musaGetDeviceCount(&count);
-                              musaGetDevice(&device);
-                              musaSetDevice(device);
-                              musaDeviceGetPCIBusId(pci_bus_id,
-                                                     sizeof(pci_bus_id),
-                                                     device);
-                              muPointerGetAttribute(
-                                  &memory_type,
-                                  MU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-                                  (MUdeviceptr)address);
-                              muPointerGetAttribute(
-                                  &is_managed, MU_POINTER_ATTRIBUTE_IS_MANAGED,
-                                  (MUdeviceptr)address);
-                              muPointerGetAttribute(
-                                  &device, MU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
-                                  (MUdeviceptr)address);
-                              musaGetErrorString(musaSuccess);
-                              musaGetLastError();
-                              muMemGetAddressRange(&base, &size,
-                                                   (MUdeviceptr)address);
-                              musaMalloc(&address, size);
-                              musaFree(address);
-                              musaMallocManaged(&address, size, 0);
-                              musaMallocPitch(&address, &pitch, size, 1);
-                              musaMallocAsync(&address, size, runtime_stream);
-                              musaMallocFromPoolAsync(&address, size,
-                                                      runtime_pool,
-                                                      runtime_stream);
-                              musaHostRegister(address, size, 0);
-                              musaHostUnregister(address);
-                              if (muCtxGetCurrent(&context) ==
-                                  MUSA_ERROR_NOT_INITIALIZED) {
-                                  count = 0;
-                              }
-                              if (muMemHostRegister(
-                                      address, size,
-                                      MU_MEMHOSTREGISTER_PORTABLE) ==
-                                  MUSA_ERROR_HOST_MEMORY_ALREADY_REGISTERED) {
-                                  count = 0;
-                              }
-                              muMemHostUnregister(address);
-                              musaStreamCreateWithFlags(&runtime_stream, 0);
-                              musaEventCreateWithFlags(&event, 0);
-                              musaMemcpy(address, address, size,
-                                         musaMemcpyDeviceToDevice);
-                              musaMemcpyAsync(address, address, size,
-                                              musaMemcpyDeviceToDevice,
-                                              runtime_stream);
-                              musaEventRecord(event, runtime_stream);
-                              musaEventQuery(event);
-                              if (muEventQuery((MUevent)event) ==
-                                  MUSA_ERROR_NOT_READY) {
-                                  count = 0;
-                              }
-                              musaEventDestroy(event);
-                              musaStreamSynchronize(runtime_stream);
-                              musaStreamDestroy(runtime_stream);
-                              musaFree(address);
-                              musaFreeAsync(address, runtime_stream);
-                              musaFreeHost(address);
-                              muMemAlloc_v2(&base, size);
-                              muMemAllocPitch_v2(&base, &pitch, size, 1, 1);
-                              muMemAllocManaged(&base, size, 0);
-                              muMemAllocAsync(&base, size, driver_stream);
-                              muMemAllocFromPoolAsync(&base, size,
-                                                      driver_pool,
-                                                      driver_stream);
-                              muMemFreeAsync(base, driver_stream);
-                              muMemFree_v2(base);
-                              muMemFree(base);
-                              return count < 0;]])],
-                        [],
-                        [musa_happy=no])
-                ])
+                            [[#include <musa.h>]],
+                            [[int fd = -1;
+                              int supported = 0;
+                              muDeviceGetAttribute(
+                                  &supported,
+                                  MU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED,
+                                  0);
+                              return (int)muMemGetHandleForAddressRange(
+                                  &fd, 0, 0,
+                                  MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD,
+                                  0);]])],
+                        [AC_DEFINE(
+                            [HAVE_MUSA_DMABUF], [1],
+                            [MUSA supports DMA-BUF export])],
+                        [])],
+                    [],
+                    [[#include <musa.h>]])
+            ])
 
             CPPFLAGS="$save_CPPFLAGS"
             LDFLAGS="$save_LDFLAGS"

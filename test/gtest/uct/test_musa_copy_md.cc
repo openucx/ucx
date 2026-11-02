@@ -9,6 +9,7 @@
 
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/ptr_arith.h>
 #include <ucs/sys/sys.h>
 
 #include <exception>

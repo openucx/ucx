@@ -648,8 +648,14 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type, bool async)
 #if HAVE_MUSA
     case UCS_MEMORY_TYPE_MUSA:
         if (async) {
+#if HAVE_MUSA_MEM_POOL_ALLOC
             MUSA_CALL(musaMallocAsync(&ptr, size, 0));
             MUSA_CALL(musaStreamSynchronize(0));
+#else
+            UCS_TEST_ABORT("asynchronous allocation for " +
+                           std::string(ucs_memory_type_names[mem_type]) +
+                           " memory type is not supported");
+#endif
         } else {
             MUSA_CALL(musaMalloc(&ptr, size));
         }
@@ -746,9 +752,15 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type, bool async)
 #if HAVE_MUSA
         case UCS_MEMORY_TYPE_MUSA:
             if (async) {
+#if HAVE_MUSA_MEM_POOL_ALLOC
                 MUSA_CALL(musaStreamSynchronize(0));
                 MUSA_CALL(musaFreeAsync(ptr, 0));
                 MUSA_CALL(musaStreamSynchronize(0));
+#else
+                UCS_TEST_ABORT("asynchronous release for " +
+                               std::string(ucs_memory_type_names[mem_type]) +
+                               " memory type is not supported");
+#endif
             } else {
                 MUSA_CALL(musaFree(ptr));
             }
