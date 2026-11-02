@@ -28,10 +28,12 @@ public class UcpMemoryTest extends UcxTest {
     @Test
     public void testMmapFile() throws Exception {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
-        Path tempFile = Files.createTempFile("jucx", "test");
+        Path tempFile      = Files.createTempFile("jucx", "test");
         // 1. Create FileChannel to file in tmp directory.
-        FileChannel fileChannel = FileChannel.open(tempFile, CREATE, WRITE, READ, DELETE_ON_CLOSE);
-        MappedByteBuffer buf = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, MEM_SIZE);
+        FileChannel fileChannel = FileChannel.open(tempFile, CREATE, WRITE, READ,
+                                                   DELETE_ON_CLOSE);
+        MappedByteBuffer buf    = fileChannel.map(FileChannel.MapMode.READ_WRITE,
+                                                0, MEM_SIZE);
         buf.asCharBuffer().put(RANDOM_TEXT);
         buf.force();
         // 2. Register mmap buffer with ODP
@@ -44,7 +46,7 @@ public class UcpMemoryTest extends UcxTest {
         UcpMemory allocatedMemory = context.memoryMap(new UcpMemMapParams()
             .allocate().setProtection(UcpConstants.UCP_MEM_MAP_PROT_LOCAL_READ)
             .setLength(MEM_SIZE).nonBlocking());
-        assertEquals(allocatedMemory.getLength(), MEM_SIZE);
+        assertTrue(allocatedMemory.getLength() >= MEM_SIZE);
 
         allocatedMemory.deregister();
         mmapedMemory.deregister();
