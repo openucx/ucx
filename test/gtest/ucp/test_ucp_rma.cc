@@ -1233,12 +1233,12 @@ public:
         test_ucp_rma::init();
     }
 
-    virtual ucs_memory_type_t src_mem_type() const {
+    ucs_memory_type_t src_mem_type() const {
         return static_cast<ucs_memory_type_t>(get_variant_value(1));
     }
 
     virtual ucs_memory_type_t dst_mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value(1));
+        return src_mem_type();
     }
 
 protected:
