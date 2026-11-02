@@ -1384,8 +1384,7 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
-{
+UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration) {
     ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(
             get_variant_value());
     if (!mem_buffer::is_mem_type_supported(mem_type)) {
@@ -1438,8 +1437,7 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     mem_buffer::release(ptr1, mem_type);
 }
 
-UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered) 
-{
+UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered) {
     ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(
             get_variant_value());
     if (!mem_buffer::is_mem_type_supported(mem_type)) {

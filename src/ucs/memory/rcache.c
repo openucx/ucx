@@ -836,7 +836,8 @@ static int ucs_rcache_can_merge_adj_region(ucs_rcache_t *rcache, void *arg,
                                            int prot,
                                            ucs_rcache_region_t *region)
 {
-    return (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) && (region->prot == prot) && rcache->params.ops->can_merge(arg, region);
+    return (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) &&
+           (region->prot == prot) && rcache->params.ops->can_merge(arg, region);
 }
 
 static void ucs_rcache_check_adj_regions(ucs_rcache_t *rcache, void *arg,

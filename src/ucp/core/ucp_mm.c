@@ -1731,8 +1731,7 @@ ucp_mem_rcache_mem_reg_cb(void *ctx, ucs_rcache_t *rcache, void *arg,
     ucp_mem_h memh                    = ucs_derived_of(rregion, ucp_mem_t);
 
     ucp_memh_init(memh, context, 0, reg_ctx->uct_flags, UCT_ALLOC_METHOD_LAST,
-                  reg_ctx->mem_type, reg_ctx->sys_dev,
-                  reg_ctx->mem_flags);
+                  reg_ctx->mem_type, reg_ctx->sys_dev, reg_ctx->mem_flags);
     memh->reg_id = context->next_memh_reg_id++;
 
     if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
@@ -2026,7 +2025,7 @@ ucp_memh_import_slow(ucp_context_h context, ucs_rcache_t *existing_rcache,
 {
     ucs_memory_info_t mem_info = {
         .type         = UCS_MEMORY_TYPE_HOST,
-        .sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN, 
+        .sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN,
         .base_address = NULL,
         .alloc_length = -1,
         .mem_flags    = 0
