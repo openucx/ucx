@@ -1515,9 +1515,7 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
     ucp_wireup_tf_reply_t *reply;
     void *copy = NULL;
 
-    if (arg == NULL) {
-        return UCS_ERR_UNSUPPORTED;
-    }
+    ucs_assert(arg != NULL);
 
     if (address_length > 0) {
         copy = ucs_malloc(address_length, "ucp_tf_reply_addr");
@@ -1667,32 +1665,34 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
         status = ucp_wireup_tf_reply_store(ep, lanes_info, request_id,
                                            invalidated, pending, rx_tokens,
                                            address, address_length);
-        if (status == UCS_OK) {
-            /* Installed before the invalidate, so a completion that arrives
-             * from it can finish the reply. */
-            armed = ucp_ep_tf_invalidate_uct_eps(ep, pending);
-            ucp_wireup_tf_reply_disarm(ep, pending & ~armed);
-            ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map,
-                                        rx_tokens);
-            return;
+        if (status != UCS_OK) {
+            goto err;
         }
 
-        ucs_error("ep %p: failed to defer LANES_ADDR reply: %s", ep,
-                  ucs_status_string(status));
-        if (ucp_wireup_tf_reply_get(ep) != NULL) {
-            ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map,
-                                        rx_tokens);
-            return;
-        }
+        /* Installed before the invalidate, so a completion that arrives
+         * from it can finish the reply. */
+        armed = ucp_ep_tf_invalidate_uct_eps(ep, pending);
+        ucp_wireup_tf_reply_disarm(ep, pending & ~armed);
+    } else {
+        memset(&immediate, 0, sizeof(immediate));
+        immediate.request_id         = request_id;
+        immediate.requested_lane_map = lanes_info->requested_lane_map;
+        immediate.provided_lane_map  = lanes_info->provided_lane_map;
+        immediate.skip_lanes         = invalidated;
+        memcpy(immediate.rx_tokens, rx_tokens, sizeof(immediate.rx_tokens));
+        ucp_wireup_lanes_addr_request_reply(ep, &immediate, remote_address);
     }
 
-    memset(&immediate, 0, sizeof(immediate));
-    immediate.request_id         = request_id;
-    immediate.requested_lane_map = lanes_info->requested_lane_map;
-    immediate.provided_lane_map  = lanes_info->provided_lane_map;
-    immediate.skip_lanes         = invalidated;
-    memcpy(immediate.rx_tokens, rx_tokens, sizeof(immediate.rx_tokens));
-    ucp_wireup_lanes_addr_request_reply(ep, &immediate, remote_address);
+    goto out;
+
+err:
+    ucs_assert(status == UCS_ERR_NO_MEMORY);
+    /* No memory for the deferred reply. Failing lanes cannot recover. */
+    ucs_error("ep %p: failed to defer LANES_ADDR reply: %s", ep,
+              ucs_status_string(status));
+    ucp_wireup_tf_reply_discard(ep);
+    ucp_ep_set_lanes_failed(ep, 0, status);
+out:
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
 }
 
