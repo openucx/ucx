@@ -1438,6 +1438,53 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration)
     mem_buffer::release(ptr1, mem_type);
 }
 
+UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered) 
+{
+    ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(
+            get_variant_value());
+    if (!mem_buffer::is_mem_type_supported(mem_type)) {
+        UCS_TEST_SKIP_R("memory type is not supported");
+    }
+
+    const size_t size     = ucs_get_page_size();
+    void *ptr1            = mem_buffer::allocate(size * 2, mem_type);
+    void *ptr2            = (char*)ptr1 + size;
+    ucp_context_h context = sender().ucph();
+    ucs_rcache_t *rcache  = context->rcache;
+    ucp_mem_map_params_t params;
+    ucp_mem_h memh1, memh2;
+
+    /* Register first half of buffer */
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = ptr1;
+    params.length     = size;
+    ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh1));
+    EXPECT_EQ(ptr1, ucp_memh_address(memh1->parent));
+    EXPECT_EQ(size, ucp_memh_length(memh1->parent));
+    EXPECT_EQ(1, rcache->num_regions);
+
+    /* Clear rcache region registered flag for first memory region */
+    /* This will prevent the merging of the two adjacent memory regions */
+    memh1->parent->super.flags &= ~UCS_RCACHE_REGION_FLAG_REGISTERED;
+
+    /* Register the second half of the buffer */
+    params.address = ptr2;
+    ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh2));
+    /* Verify rcache regions have not merged: memh2 rcache entry points to */
+    /* the same address as ptr2 */
+    EXPECT_EQ(ptr2, ucp_memh_address(memh2->parent));
+    /* Verify rcache regions have not merged: memh2 rcache entry is the same */
+    /* size as buffer pointed to by ptr2 */
+    EXPECT_EQ(size, ucp_memh_length(memh2->parent));
+    EXPECT_EQ(2, rcache->num_regions);
+
+    memh1->parent->super.flags |= UCS_RCACHE_REGION_FLAG_REGISTERED;
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh2));
+    EXPECT_UCS_OK(ucp_mem_unmap(context, memh1));
+    mem_buffer::release(ptr1, mem_type);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rcache_merge, rcx, "rc_x,cuda_copy")
 
 class test_ucp_mmap_max_hca : public ucp_test {
