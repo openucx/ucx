@@ -1242,10 +1242,11 @@ ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
-ucs_status_t ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t lane,
-                                     const uct_ppn_bandwidth_t *bandwidth);
-
 ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
+
+/* Coalesce a completed lane sample for normal worker reconfiguration. */
+ucs_status_t ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t lane,
+                                    const uct_ppn_bandwidth_t *bandwidth);
 
 ucs_status_t ucp_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p);
 

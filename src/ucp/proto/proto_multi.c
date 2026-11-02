@@ -832,7 +832,7 @@ ucp_proto_multi_init_priv(const ucp_proto_multi_init_params_t *params,
             ucs_info("dlb_ucp_weights cfg %u lane %u weight %u/%u "
                      "bandwidth %.2f MiB/s",
                      params->super.super.ep_cfg_index, lane, lpriv->weight,
-                     UCP_PROTO_MULTI_WEIGHT_MAX,
+                     (unsigned)UCP_PROTO_MULTI_WEIGHT_MAX,
                      lane_perf->bandwidth / UCS_MBYTE);
         }
 
