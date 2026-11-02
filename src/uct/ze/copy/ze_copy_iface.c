@@ -237,8 +237,8 @@ static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
-/* Create the queue and list of a device; a failure is logged at log_level,
- * as the caller may be able to continue without them */
+/* Create the queue and list of a device; a driver failure is logged at
+ * log_level, as the caller may be able to continue without them */
 static ucs_status_t
 uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
                                ze_device_handle_t device,
@@ -252,11 +252,7 @@ uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
     uct_ze_copy_queue_t *queue;
     ze_result_t ret;
 
-    queue = ucs_array_append(&iface->queues,
-                             ucs_log(log_level, "ze_copy_iface: could not "
-                                     "allocate a queue entry for device %p",
-                                     device);
-                             return UCS_ERR_NO_MEMORY);
+    queue = ucs_array_append(&iface->queues, return UCS_ERR_NO_MEMORY);
 
     ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc,
                                &queue->cmdq);
@@ -350,15 +346,15 @@ ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
 
     /* The MD device queue can copy any buffer, as it did before queues per
      * device existed. Record the device without a queue, so that the next
-     * copy does not try to create one again. */
-    queue         = ucs_array_append(&iface->queues, return UCS_ERR_NO_MEMORY);
-    queue->device = device;
-    queue->cmdq   = NULL;
-    queue->cmdl   = NULL;
+     * copy does not try to create one again. Without the record the copy
+     * still runs, and the next one tries again. */
+    *queue_index_p = 0;
+    queue          = ucs_array_append(&iface->queues, return UCS_OK);
+    queue->device  = device;
+    queue->cmdq    = NULL;
+    queue->cmdl    = NULL;
     ucs_warn("ze_copy_iface: could not create a queue on device %p, using "
              "the queue of the MD device", device);
-
-    *queue_index_p = 0;
     return UCS_OK;
 }
 
@@ -391,6 +387,9 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
         ucs_array_cleanup_dynamic(&self->queues);
         return status;
     }
+
+    /* The fallback to the MD device queue uses element 0 */
+    ucs_assert(queue_index == 0);
 
     self->id           = ucs_generate_uuid((uintptr_t)self);
     self->multi_device = (uct_ze_base_get_num_subdevices() > 1);
