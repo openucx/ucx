@@ -191,14 +191,6 @@ static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtab
 }
 
 static int
-ucs_memtype_cache_region_same_attributes(const ucs_memtype_cache_region_t *a,
-                                         const ucs_memtype_cache_region_t *b)
-{
-    return (a->mem_type == b->mem_type) && (a->sys_dev == b->sys_dev) &&
-           (a->mem_flags == b->mem_flags);
-}
-
-static int
 ucs_memtype_cache_region_has_attributes(const ucs_memtype_cache_region_t *region,
                                         ucs_memory_type_t mem_type,
                                         ucs_sys_device_t sys_dev,
@@ -206,6 +198,14 @@ ucs_memtype_cache_region_has_attributes(const ucs_memtype_cache_region_t *region
 {
     return (region->mem_type == mem_type) && (region->sys_dev == sys_dev) &&
            (region->mem_flags == mem_flags);
+}
+
+static int
+ucs_memtype_cache_region_same_attributes(const ucs_memtype_cache_region_t *a,
+                                         const ucs_memtype_cache_region_t *b)
+{
+    return ucs_memtype_cache_region_has_attributes(a, b->mem_type, b->sys_dev,
+                                                   b->mem_flags);
 }
 
 /* The cache lock must be held. Change the end of a cached region. */
@@ -653,8 +653,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     }
 
     if (ucs_likely((start + size) <= end)) {
-        mem_info->base_address = (void*)region->super.start;
-        mem_info->alloc_length = end - region->super.start;
+        if (memtype_cache->has_events) {
+            mem_info->base_address = (void*)region->super.start;
+            mem_info->alloc_length = end - region->super.start;
+        } else {
+            /* Regions may merge adjacent registrations, so the boundaries of
+             * the original allocations are unknown. Report only the range
+             * which was looked up. */
+            mem_info->base_address = (void*)address;
+            mem_info->alloc_length = size;
+        }
         mem_info->type         = region->mem_type;
         mem_info->sys_dev      = region->sys_dev;
         mem_info->mem_flags    = region->mem_flags;

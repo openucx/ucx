@@ -615,8 +615,8 @@ UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
     EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, info.sys_dev);
     EXPECT_EQ(5, info.mem_flags);
-    EXPECT_EQ(base, info.base_address);
-    EXPECT_EQ(0x1000, info.alloc_length);
+    EXPECT_EQ(UCS_PTR_BYTE_OFFSET(base, 0x100), info.base_address);
+    EXPECT_EQ(0x100, info.alloc_length);
     EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
                       UCS_PTR_BYTE_OFFSET(base, 0xff0), 0x20, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
@@ -678,8 +678,8 @@ UCS_TEST_F(test_memtype_explicit, nested_registrations) {
             EXPLICIT_UNREG(base, 0x1000, 0x1000);
             /* Regions are merged back into one */
             ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
-            EXPECT_EQ(base, info.base_address);
-            EXPECT_EQ(0x4000, info.alloc_length);
+            EXPECT_EQ(1u,
+                      ucs_memtype_cache_global_instance->pgtable.num_regions);
             EXPLICIT_UNREG(base, 0, 0x4000);
         }
 
@@ -717,6 +717,26 @@ UCS_TEST_F(test_memtype_explicit, conflicting_attributes_unknown) {
     EXPLICIT_UNREG(base, 0, 0x1000);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED,
               ucs_memtype_cache_lookup(base, 0x100, &info));
+}
+
+/* Adjacent registrations may be merged, but a lookup must not report a range
+ * larger than the one which was asked for */
+UCS_TEST_F(test_memtype_explicit, adjacent_registrations) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x40000);
+
+    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
+    EXPLICIT_REG(base, 0x1000, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
+    EXPECT_EQ(1u, ucs_memtype_cache_global_instance->pgtable.num_regions);
+
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x1000, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    EXPECT_EQ(base, info.base_address);
+    EXPECT_EQ(0x1000, info.alloc_length);
+
+    EXPLICIT_UNREG(base, 0, 0x1000);
+    EXPLICIT_UNREG(base, 0x1000, 0x1000);
+    EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
 }
 
 UCS_TEST_F(test_memtype_explicit, duplicate_registrations) {
@@ -847,10 +867,12 @@ UCS_TEST_F(test_memtype_explicit, events_preferred_when_available) {
     }
     ASSERT_TRUE(ucs_memtype_cache_global_instance->has_events);
 
-    unsigned num_regions = ucs_memtype_cache_global_instance->pgtable.num_regions;
+    unsigned num_regions =
+        ucs_memtype_cache_global_instance->pgtable.num_regions;
     ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
                                UCS_SYS_DEVICE_ID_UNKNOWN, 1);
-    EXPECT_EQ(num_regions, ucs_memtype_cache_global_instance->pgtable.num_regions);
+    EXPECT_EQ(num_regions,
+              ucs_memtype_cache_global_instance->pgtable.num_regions);
 
     event.mem_type.address   = base;
     event.mem_type.size      = 0x1000;

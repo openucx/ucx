@@ -77,7 +77,8 @@ void ucs_memtype_cache_cleanup(void);
  *                               The memory type cannot be assumed to be host.
  *
  * Without UCM events, a range which spans adjacent registered regions with the
- * same attributes is a hit, and alloc_length covers all of them.
+ * same attributes is a hit. The boundaries of the registered allocations are
+ * not tracked, so base_address and alloc_length are set to the looked up range.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);
