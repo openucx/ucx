@@ -642,6 +642,102 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic_no_gdr, rcx_cuda,
                               "rc_x,cuda_copy")
 
 
+/* Read by get/rndv from a remote buffer whose memory type is not supported by
+ * the reading context, like GPU memory of another vendor. The reader cannot
+ * estimate the protocols of the peer writing the data from that buffer. */
+class test_ucp_rma_foreign_mem_type : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_memtypes(variants, get_rma_variants,
+                             UCS_MASK(UCS_MEMORY_TYPE_LAST) &
+                             ~UCS_BIT(UCS_MEMORY_TYPE_HOST));
+    }
+
+    void init() override
+    {
+        /* Without GPUDirect RDMA the NIC cannot access the receiver's buffer,
+         * so only the rendezvous protocols can transfer it */
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        test_base::init();
+        create_entity();
+        if (!UCS_BIT_GET(receiver().ucph()->supported_mem_type_mask,
+                         mem_type())) {
+            UCS_TEST_SKIP_R(std::string("no transport detects ") +
+                            ucs_memory_type_names[mem_type()] + " memory");
+        }
+
+        ucp_test_param params = GetParam();
+        params.transports.erase(std::remove_if(params.transports.begin(),
+                                               params.transports.end(),
+                                               is_gpu_transport),
+                                params.transports.end());
+        create_entity(true, params);
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+    void get_b_foreign(size_t size, void *expected_data, ucp_mem_h memh,
+                       void *target_ptr, ucp_rkey_h rkey, void *arg)
+    {
+        EXPECT_EQ(mem_type(), rkey->mem_type);
+        get_b(size, expected_data, memh, target_ptr, rkey, arg);
+    }
+
+protected:
+    static void get_rma_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+    static bool is_gpu_transport(const std::string &tl_name)
+    {
+        static const std::string prefixes[] = {"cuda", "rocm", "ze", "gdr"};
+
+        for (const auto &prefix : prefixes) {
+            if (tl_name.compare(0, prefix.size(), prefix) == 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    ucs_memory_type_t mem_type() const
+    {
+        return static_cast<ucs_memory_type_t>(get_variant_value());
+    }
+
+    void test_sizes(send_func_t send_func)
+    {
+        static const size_t sizes[] = {1, 8, 64, 65, 4 * UCS_KBYTE, UCS_MBYTE};
+        ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_HOST, mem_type()};
+        const ucp_context_h context   = sender().ucph();
+
+        ASSERT_FALSE(UCS_BIT_GET(context->supported_mem_type_mask, mem_type()));
+        ASSERT_EQ(0, context->reg_md_map[mem_type()]);
+        ASSERT_EQ(nullptr, sender().worker()->mem_type_ep[mem_type()]);
+
+        for (size_t size : sizes) {
+            UCS_TEST_MESSAGE << "size " << size;
+            test_xfer(send_func, size, 1, 1, UCS_MEMORY_TYPE_HOST, mem_type(),
+                      0, false, false, mem_types);
+            if (HasFailure() || (num_errors() > 0)) {
+                break;
+            }
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_foreign_mem_type, get_blocking)
+{
+    test_sizes(static_cast<send_func_t>(
+            &test_ucp_rma_foreign_mem_type::get_b_foreign));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_foreign_mem_type, rcx,
+                                        "rc_x")
+
+
 class test_ucp_rma_rndv : public test_ucp_rma {
 public:
     static constexpr size_t SIZE = 512 * UCS_KBYTE;
