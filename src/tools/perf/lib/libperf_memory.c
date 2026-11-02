@@ -346,8 +346,8 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     unsigned flags;
     size_t buffer_size;
 
-    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) && params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
+    if (UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) {
+        buffer_size = ucx_perf_get_thread_buffer_size(params);
     } else {
         buffer_size = ucx_perf_get_message_size(params);
     }

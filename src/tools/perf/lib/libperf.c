@@ -2138,11 +2138,13 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 
         /* Each thread has its own part of the IOV descriptors arrays */
         if (perf->ucp.send_iov != NULL) {
-            perf->ucp.tctx[i].perf.ucp.send_iov += i * perf->params.msg_size_cnt;
+            perf->ucp.tctx[i].perf.ucp.send_iov +=
+                    i * perf->params.msg_size_cnt;
         }
 
         if (perf->ucp.recv_iov != NULL) {
-            perf->ucp.tctx[i].perf.ucp.recv_iov += i * perf->params.msg_size_cnt;
+            perf->ucp.tctx[i].perf.ucp.recv_iov +=
+                    i * perf->params.msg_size_cnt;
         }
 
         if (perf->params.ucp.send_datatype == UCP_PERF_DATATYPE_SGL) {
