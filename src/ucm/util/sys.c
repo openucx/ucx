@@ -140,7 +140,13 @@ void *ucm_sys_realloc(void *ptr, size_t size)
         return ptr;
     }
 
+#if HAVE_DECL_SYS_MREMAP
+    /* Avoid resolving symbols while the relocation lock is held. */
+    newptr = (void*)syscall(SYS_mremap, oldptr, oldsize, sys_size,
+                            MREMAP_MAYMOVE, NULL);
+#else
     newptr = ucm_orig_mremap(oldptr, oldsize, sys_size, MREMAP_MAYMOVE, NULL);
+#endif
     if (newptr == MAP_FAILED) {
         ucm_error("mremap(oldptr=%p oldsize=%zu, newsize=%zu) failed: %m",
                   oldptr, oldsize, sys_size);
