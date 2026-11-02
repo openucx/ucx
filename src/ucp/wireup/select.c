@@ -1873,8 +1873,8 @@ static int ucp_wireup_add_fast_lanes_pairwise(
         ucp_lane_type_t lane_type, double min_lane_bw,
         ucp_wireup_select_context_t *select_ctx)
 {
-    int found_lane        = 0;
-    ucp_context_h context = worker->context;
+    int found_lane                     = 0;
+    ucp_context_h UCS_V_UNUSED context = worker->context;
     ucs_status_t status;
     double lane_bw;
     const ucp_wireup_select_info_t *sinfo;
@@ -1950,11 +1950,12 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
             if (skip_slow_lanes) {
-                /* Skip lanes much slower than the fastest one instead of
-                 * dropping them after the selection: every selected lane takes
-                 * a path of its devices, and the peer may repeat the selection
-                 * with our wireup address, which has only the devices of the
-                 * added lanes */
+                /* Skip lanes much slower than the fastest selected one instead
+                 * of dropping them after the selection: every selected lane
+                 * takes a path of its devices, and the peer may repeat the
+                 * selection with our wireup address, which has only the devices
+                 * of the added lanes. For the same reason, the candidates which
+                 * were not selected do not affect the threshold. */
                 bw_info->criteria.min_lane_bw = max_bw * max_ratio;
             }
 

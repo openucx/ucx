@@ -1233,6 +1233,9 @@ protected:
         size_t address_length;
         ucs_status_t status;
 
+        ucp_ep_config_key_reset(&key);
+        key.dst_version = dst_version;
+
         ASSERT_UCS_OK(ucp_worker_get_address(worker, &address,
                                              &address_length));
 
@@ -1242,8 +1245,6 @@ protected:
                 &remote_address);
         if (status == UCS_OK) {
             remote_address.dst_version = dst_version;
-            ucp_ep_config_key_reset(&key);
-            key.dst_version = dst_version;
             status = ucp_wireup_select_lanes(sender().ep(), 0,
                                              ucp_tl_bitmap_max, &remote_address,
                                              addr_indices, &key, 1);
