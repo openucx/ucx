@@ -1,5 +1,5 @@
 /*
- * Copyright (C) Intell Corporation, 2023-2024. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2023-2026. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -46,9 +46,9 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
     size_t size                = uct_iov_get_length(iov);
     uct_ze_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ze_copy_iface_t);
+    ucs_status_t status        = UCS_OK;
     uct_ze_copy_queue_t *queue;
     unsigned queue_index;
-    ucs_status_t status;
     ze_result_t ret;
     void *src, *dst;
 
@@ -63,12 +63,9 @@ ucs_status_t uct_ze_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         dst = iov->buffer;
     }
 
-    status = uct_ze_copy_iface_get_queue(iface, src, dst, &queue_index);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    queue = &ucs_array_elem(&iface->queues, queue_index);
+    /* Getting the queue may grow the array, so take the element after it */
+    queue_index = uct_ze_copy_iface_get_queue(iface, src, dst);
+    queue       = &ucs_array_elem(&iface->queues, queue_index);
 
     ret = zeCommandListAppendMemoryCopy(queue->cmdl, dst, src, size, NULL, 0,
                                         NULL);

@@ -45,8 +45,7 @@ typedef struct uct_ze_copy_iface {
 
 /* Return the index of the queue to copy from src to dst; the index stays
  * valid for the iface lifetime, an element pointer may not. */
-ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
-                                         const void *src, const void *dst,
-                                         unsigned *queue_index_p);
+unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
+                                     const void *src, const void *dst);
 
 #endif

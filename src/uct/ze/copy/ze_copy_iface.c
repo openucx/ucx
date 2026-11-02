@@ -284,7 +284,8 @@ err_pop:
 /* Return the device which owns the allocation, or NULL for host memory and
  * for allocations the context does not recognize */
 static ze_device_handle_t
-uct_ze_copy_iface_mem_device(uct_ze_copy_iface_t *iface, const void *address)
+uct_ze_copy_iface_get_mem_device(uct_ze_copy_iface_t *iface,
+                                 const void *address)
 {
     uct_ze_copy_md_t *ze_md                 = ucs_derived_of(iface->super.md,
                                                              uct_ze_copy_md_t);
@@ -302,30 +303,28 @@ uct_ze_copy_iface_mem_device(uct_ze_copy_iface_t *iface, const void *address)
     return device;
 }
 
-ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
-                                         const void *src, const void *dst,
-                                         unsigned *queue_index_p)
+unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
+                                     const void *src, const void *dst)
 {
     uct_ze_copy_queue_t *queue;
     ze_device_handle_t device;
+    unsigned queue_index;
     ucs_status_t status;
     unsigned i;
 
     /* With one device every device buffer is on the MD device */
     if (!iface->multi_device) {
-        *queue_index_p = 0;
-        return UCS_OK;
+        return 0;
     }
 
     /* Run the copy on the device which owns the source buffer, so it reads
      * locally, or else on the owner of the destination. A queue on an
      * unrelated device has to reach both buffers over PCIe. */
-    device = uct_ze_copy_iface_mem_device(iface, src);
+    device = uct_ze_copy_iface_get_mem_device(iface, src);
     if (device == NULL) {
-        device = uct_ze_copy_iface_mem_device(iface, dst);
+        device = uct_ze_copy_iface_get_mem_device(iface, dst);
         if (device == NULL) {
-            *queue_index_p = 0;
-            return UCS_OK;
+            return 0;
         }
     }
 
@@ -333,29 +332,27 @@ ucs_status_t uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
         queue = &ucs_array_elem(&iface->queues, i);
         if (queue->device == device) {
             /* A device without a queue of its own uses the MD device queue */
-            *queue_index_p = (queue->cmdq == NULL) ? 0 : i;
-            return UCS_OK;
+            return (queue->cmdq == NULL) ? 0 : i;
         }
     }
 
     status = uct_ze_copy_iface_queue_create(iface, device, UCS_LOG_LEVEL_DEBUG,
-                                            queue_index_p);
+                                            &queue_index);
     if (status == UCS_OK) {
-        return UCS_OK;
+        return queue_index;
     }
 
-    /* The MD device queue can copy any buffer, as it did before queues per
-     * device existed. Record the device without a queue, so that the next
-     * copy does not try to create one again. Without the record the copy
-     * still runs, and the next one tries again. */
-    *queue_index_p = 0;
-    queue          = ucs_array_append(&iface->queues, return UCS_OK);
-    queue->device  = device;
-    queue->cmdq    = NULL;
-    queue->cmdl    = NULL;
+    /* Fall back to the MD device queue, which reaches the buffer if the MD
+     * device has peer access to its device. Record the device without a
+     * queue, so that the next copy does not try to create one again. Without
+     * the record the copy still runs, and the next one tries again. */
+    queue         = ucs_array_append(&iface->queues, return 0);
+    queue->device = device;
+    queue->cmdq   = NULL;
+    queue->cmdl   = NULL;
     ucs_warn("ze_copy_iface: could not create a queue on device %p, using "
              "the queue of the MD device", device);
-    return UCS_OK;
+    return 0;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,

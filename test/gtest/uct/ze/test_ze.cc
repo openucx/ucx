@@ -154,6 +154,10 @@ protected:
             zeContextDestroy(m_context);
         }
 
+        /* Non-copyable, a copy would free the memory twice */
+        external_buffer(const external_buffer&) = delete;
+        external_buffer &operator=(const external_buffer&) = delete;
+
         void *ptr() const
         {
             return m_ptr;
@@ -178,10 +182,10 @@ protected:
      * card over another tile of the same card, or NULL if there is none */
     ze_device_handle_t other_device()
     {
-        ze_device_handle_t md_device            = ze_md()->ze_device;
-        const uct_ze_subdevice_t *md_subdevice  = NULL;
-        ze_device_handle_t other_tile           = NULL;
-        int num_subdevices                      =
+        ze_device_handle_t md_device           = ze_md()->ze_device;
+        const uct_ze_subdevice_t *md_subdevice = NULL;
+        ze_device_handle_t other_tile          = NULL;
+        int num_subdevices                     =
                 uct_ze_base_get_num_subdevices();
         const uct_ze_subdevice_t *subdevice;
         ze_device_handle_t device;
@@ -240,12 +244,14 @@ protected:
      * and the iface then just keeps using the MD device queue */
     void check_buffer_resolved(ze_device_handle_t device, const void *address)
     {
-        if (mem_device(address) == NULL) {
+        ze_device_handle_t owner = mem_device(address);
+
+        if (owner == NULL) {
             UCS_TEST_SKIP_R("the MD context does not resolve memory of "
                             "another context");
         }
 
-        ASSERT_EQ(device, mem_device(address));
+        ASSERT_EQ(device, owner);
     }
 
     void fill_and_copy_through(void *remote_addr, size_t length)
@@ -264,11 +270,7 @@ protected:
 
     unsigned get_queue(const void *src, const void *dst)
     {
-        unsigned queue_index = UINT_MAX;
-
-        EXPECT_EQ(UCS_OK, uct_ze_copy_iface_get_queue(ze_iface(), src, dst,
-                                                      &queue_index));
-        return queue_index;
+        return uct_ze_copy_iface_get_queue(ze_iface(), src, dst);
     }
 
     ze_device_handle_t queue_device(unsigned queue_index)
