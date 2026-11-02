@@ -30,30 +30,28 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
     uct_dev_exec_init<level>(lane_id, num_lanes);
 
     if (lane_id == 0) {
-        auto iface                     = ep->iface;
-        uint64_t cid                   = channel_id & iface->channel_mask;
-        auto ch                        = iface->channels + cid;
-        const unsigned long long depth = UCS_BIT(iface->log_depth);
-        unsigned long long pi          = READ_ONCE(*ch->pi);
-        uint32_t owner, slot;
+        auto iface            = ep->iface;
+        uint32_t cid          = channel_id & iface->channel_mask;
+        auto ch               = iface->channels + cid;
+        unsigned long long pi = READ_ONCE(ch->pi);
+        uint32_t slot;
         uint64_t comp_id;
 
         for (;;) {
-            owner = (pi >> iface->log_depth) & 0x1;
-            slot  = pi & (depth - 1);
+            slot    = static_cast<uint32_t>(pi) & iface->depth_mask;
+            comp_id = READ_ONCE(ch->avail[slot]);
 
-            const uint64_t stamp = owner ? UCT_IB_D2P_AVAIL_STAMP : 0;
-
-            comp_id = READ_ONCE(ch->ci[slot].avail);
-            if ((comp_id & UCT_IB_D2P_AVAIL_STAMP) != stamp) {
+            /* The lap of the entry is bit log_depth, like the one of pi */
+            if (((static_cast<uint32_t>(comp_id) ^ static_cast<uint32_t>(pi)) &
+                 iface->depth) != 0) {
                 /* Completion not returned yet: depth ops are in flight */
                 status = UCS_ERR_NO_RESOURCE;
                 break;
             }
 
-            comp_id &= ~UCT_IB_D2P_AVAIL_STAMP;
+            comp_id &= ~static_cast<uint64_t>(iface->depth);
 
-            unsigned long long prev = atomicCAS(ch->pi, pi, pi + 1);
+            unsigned long long prev = atomicCAS(&ch->pi, pi, pi + 1);
             if (prev == pi) {
                 break;
             }
@@ -80,6 +78,7 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_post_desc(uct_ib_d2p_gpu_ep_t *ep,
             desc->add            = add;
             desc->comp_id        = comp_id;
             desc->flags          = flags;
+            const uint32_t owner = !!(static_cast<uint32_t>(pi) & iface->depth);
             asm volatile("st.release.sys.global.u8 [%0], %1;" ::
                          "l"(&desc->owner), "r"(owner) : "memory");
         }
@@ -146,11 +145,13 @@ UCS_F_DEVICE ucs_status_t uct_ib_d2p_ep_check_completion(
     auto ep                = reinterpret_cast<uct_ib_d2p_gpu_ep_t*>(tl_ep);
     auto iface             = ep->iface;
     const uint64_t comp_id = comp->d2p.comp_id;
-    auto ci                = iface->channels[comp->d2p.channel_id].ci;
-    const uint64_t done = READ_ONCE(ci[UCT_IB_D2P_COMP_ID_INDEX(comp_id)].done);
+    auto done_arr          = iface->channels[comp->d2p.channel_id].done;
+    const uint64_t done    = READ_ONCE(
+            done_arr[static_cast<uint32_t>(comp_id) & iface->depth_mask]);
 
     /* done only grows: a completed op stays completed after the reuse */
-    return (done >= UCT_IB_D2P_COMP_ID_GEN(comp_id)) ? UCS_OK : UCS_INPROGRESS;
+    return (static_cast<int64_t>(done - comp_id) >= 0) ? UCS_OK :
+                                                         UCS_INPROGRESS;
 }
 
 #endif /* UCT_D2P_CUH_ */

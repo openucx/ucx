@@ -10,16 +10,17 @@
 
 #include "d2p_proto.h"
 
-typedef struct {
-    unsigned long long *pi;
-    uct_ib_d2p_ci_t    *ci;
+typedef struct UCS_V_ALIGNED(128) {
+    unsigned long long pi;
     void               *queue_base;
+    uint64_t           *done;
+    uint64_t           *avail;
 } uct_ib_d2p_gpu_channel_t;
 
 typedef struct {
-    uint8_t                  channel_mask;
-    uint8_t                  log_depth;
-    uint8_t                  pad[2];
+    uint32_t                 channel_mask;
+    uint32_t                 depth_mask;
+    uint32_t                 depth;
     uint32_t                 atomic_result_lkey;
     uint64_t                 atomic_result_va;
     uct_ib_d2p_gpu_channel_t channels[];
