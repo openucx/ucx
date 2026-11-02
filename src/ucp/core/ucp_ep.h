@@ -219,6 +219,7 @@ typedef struct ucp_ep_config_key_lane {
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
     uint8_t              port_speed; /* Quantized port speed */
+    uct_ppn_bandwidth_t   path_bandwidth; /* Cached destination/lane sample */
     size_t               seg_size; /* Maximal fragment size which can be
                                       received by the peer */
 } ucp_ep_config_key_lane_t;
@@ -563,11 +564,14 @@ typedef struct ucp_ep_recovery_arg {
 /**
  * Endpoint extension
  */
+struct ucp_ep_path_bw_update;
+
 typedef struct ucp_ep_ext {
     ucp_ep_h                      ep;            /* Back pointer to endpoint */
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    struct ucp_ep_path_bw_update *path_bw_update; /* Coalesced event work */
     uint32_t                      lane_generation; /* Incremented whenever a lane
                                                        is updated */
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
@@ -1238,6 +1242,9 @@ ucs_status_t ucp_ep_failover_reconfig(ucp_ep_h ucp_ep,
  *
  * @return Error code as defined by @ref ucs_status_t
  */
+ucs_status_t ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t lane,
+                                     const uct_ppn_bandwidth_t *bandwidth);
+
 ucs_status_t ucp_ep_update_rkey_config(ucp_ep_h ep, ucp_rkey_h rkey);
 
 ucs_status_t ucp_stub_iface_open(ucs_status_t status, uct_iface_h *iface_p);

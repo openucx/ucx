@@ -343,7 +343,7 @@ static void uct_rc_mlx5_sgl_completion(
             ucs_container_of(op_with_info, uct_rc_mlx5_sgl_checkpoint_t, op);
     uct_rc_mlx5_sgl_context_t *context = checkpoint->context;
     uct_rc_mlx5_sgl_completion_t *completion = context->completion;
-    uct_rc_mlx5_sgl_checkpoint_cb_t callback = context->callback;
+    uct_rc_mlx5_sgl_completion_func_t callback = context->callback;
     void *arg                        = context->arg;
     ucs_status_t status               = UCS_OK;
     uint64_t timestamp               = 0;
@@ -357,13 +357,28 @@ static void uct_rc_mlx5_sgl_completion(
         (comp_info->field_mask &
          UCT_RC_SEND_OP_COMPLETION_INFO_FIELD_TIMESTAMP)) {
         timestamp = comp_info->timestamp;
+    } else if (status == UCS_OK) {
+        status = UCS_ERR_UNSUPPORTED;
     }
 
     ucs_assert(completion->super.count > 0);
     uct_completion_update_status(&completion->super, status);
     last = (--completion->super.count == 0);
-    callback(arg, checkpoint->index, status, timestamp);
+    if (checkpoint->index == 0) {
+        context->start_timestamp = timestamp;
+    } else {
+        context->end_timestamp = timestamp;
+    }
+
     if (last) {
+        status = completion->super.status;
+        if (status != UCS_OK) {
+            context->start_timestamp = 0;
+            context->end_timestamp   = 0;
+        }
+
+        /* The callback may release or reinitialize the now-idle adapter. */
+        callback(arg, status, context->start_timestamp, context->end_timestamp);
         ucs_free(context);
     }
 }
@@ -378,7 +393,8 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
     uct_rc_mlx5_sgl_context_t *context;
     uct_rc_mlx5_sgl_checkpoint_t *checkpoint;
     size_t max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
-    unsigned num_checkpoints = 0, checkpoint_index = 0;
+    const unsigned num_checkpoints = 2;
+    unsigned checkpoint_index = 0;
     size_t i;
     size_t UCS_V_UNUSED total;
     ucs_status_t status;
@@ -390,11 +406,9 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
     }
 
     if ((buffers == NULL) || (lengths == NULL) || (memhs == NULL) ||
-        (remote_addrs == NULL) || (rkeys == NULL) || (count == 0) ||
-        (count > max_count) || (count != completion->count) ||
-        (completion->ep != tl_ep) || (completion->checkpoints == NULL) ||
-        (completion->callback == NULL) ||
-        !completion->checkpoints[count - 1]) {
+        (remote_addrs == NULL) || (rkeys == NULL) || (count < 2) ||
+        (count > max_count) || (count != completion->sgl_count) ||
+        (completion->ep != tl_ep) || (completion->callback == NULL)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -402,9 +416,7 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
         return UCS_ERR_NOT_CONNECTED;
     }
 
-    if ((iface->ext_ops == NULL) ||
-        !(iface->ext_ops->requirements &
-          UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP)) {
+    if (!iface->tx.cqe_timestamp) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -414,7 +426,6 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
             return UCS_ERR_INVALID_PARAM;
         }
 
-        num_checkpoints += !!completion->checkpoints[i];
     }
 
     status = uct_rc_mlx5_base_ep_sgl_zcopy_check(
@@ -424,9 +435,7 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
         return status;
     }
 
-    context = ucs_malloc(sizeof(*context) +
-                         num_checkpoints * sizeof(context->checkpoints[0]),
-                         "rc_mlx5_sgl_checkpoints");
+    context = ucs_malloc(sizeof(*context), "rc_mlx5_sgl_completion");
     if (context == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -434,10 +443,12 @@ static ucs_status_t uct_rc_mlx5_ep_put_sgl_with_completion(
     context->completion = completion;
     context->callback   = completion->callback;
     context->arg        = completion->arg;
+    context->start_timestamp = 0;
+    context->end_timestamp   = 0;
     context->first_sn   = ep->tx.wq.sw_pi;
     context->count      = count;
     for (i = 0; i < count; ++i) {
-        if (!completion->checkpoints[i]) {
+        if ((i != 0) && (i != count - 1)) {
             continue;
         }
 
@@ -2271,9 +2282,9 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
                 ucs_serialize_next(&ptr, uct_rc_mlx5_ep_ext_wire_hdr_t);
 
         ext_addr->flags |= UCT_RC_MLX5_EP_ADDR_FLAG_EXT;
-        hdr->provider_id = htonl(uct_rc_mlx5_ext_provider_id(iface->ext_ops));
+        hdr->provider_id = htonl(iface->ext_provider_id);
         hdr->payload_len = htons(iface->ext_ops->ep_addr_len);
-        hdr->api_version = UCT_RC_MLX5_EXT_API_VERSION;
+        hdr->api_version = UCT_RC_MLX5_EP_EXT_WIRE_VERSION;
         hdr->reserved    = 0;
         if (iface->ext_ops->ep_pack_addr != NULL) {
             return iface->ext_ops->ep_pack_addr(tl_ep, ep->super.ext_ctx, ptr,
@@ -2401,6 +2412,13 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     uint32_t flush_rkey_hi;
     ucs_status_t status;
 
+    addr_length = UCS_PARAM_VALUE(
+            UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params, ep_addr_length,
+            EP_ADDR_LENGTH, uct_rc_mlx5_iface_get_ep_address_len(iface));
+    if (addr_length < sizeof(*rc_addr)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                                  ep->super.super.path_index,
                                                  &ah_attr, &path_mtu);
@@ -2410,40 +2428,10 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        /* For HW TM we need 2 QPs, one of which will be used by the device for
-         * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
-         * should be posted to the send side of the QP which is owned by device. */
-        status = uct_rc_mlx5_ep_connect_qp(
-                iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
-                &ah_attr, path_mtu, ep->super.super.path_index);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        /* Need to connect local ep QP to the one owned by device
-         * (and bound to XRQ) on the peer. */
-        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
-    } else {
-        qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
-    }
-
-    status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
-                                       &ah_attr, path_mtu,
-                                       ep->super.super.path_index);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
-
     ep->super.super.atomic_mr_offset = uct_ib_md_atomic_offset(
             rc_addr->atomic_mr_id);
 
     /* Legacy connect has no remote length and requires symmetric providers. */
-    addr_length = UCS_PARAM_VALUE(
-            UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params, ep_addr_length,
-            EP_ADDR_LENGTH, uct_rc_mlx5_iface_get_ep_address_len(iface));
     if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
         ep->super.super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
         if (iface->ext_ops != NULL) {
@@ -2487,9 +2475,9 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
         remaining   -= sizeof(*hdr);
         payload_len  = ntohs(hdr->payload_len);
         if ((iface->ext_ops == NULL) ||
-            (hdr->api_version != UCT_RC_MLX5_EXT_API_VERSION) ||
+            (hdr->api_version != UCT_RC_MLX5_EP_EXT_WIRE_VERSION) ||
             (ntohl(hdr->provider_id) !=
-             uct_rc_mlx5_ext_provider_id(iface->ext_ops)) ||
+             iface->ext_provider_id) ||
             (payload_len != iface->ext_ops->ep_addr_len) ||
             (remaining < payload_len)) {
             ucs_error("rc_mlx5 extension address mismatch");
@@ -2509,6 +2497,33 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     }
 
 out_connected:
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        /* For HW TM we need 2 QPs, one of which will be used by the device for
+         * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
+         * should be posted to the send side of the QP which is owned by device. */
+        status = uct_rc_mlx5_ep_connect_qp(
+                iface, &ep->tm_qp, uct_ib_unpack_uint24(rc_addr->super.qp_num),
+                &ah_attr, path_mtu, ep->super.super.path_index);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* Need to connect local ep QP to the one owned by device
+         * (and bound to XRQ) on the peer. */
+        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
+    } else {
+        qp_num = uct_ib_unpack_uint24(rc_addr->super.qp_num);
+    }
+
+    status = uct_rc_mlx5_ep_connect_qp(iface, &ep->super.tx.wq.super, qp_num,
+                                       &ah_attr, path_mtu,
+                                       ep->super.super.path_index);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_rc_mlx5_txwq_set_path_mtu(&ep->super.tx.wq, path_mtu);
+
     ep->super.super.flags |= UCT_RC_EP_FLAG_CONNECTED;
     return UCS_OK;
 }

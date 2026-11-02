@@ -940,52 +940,39 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
 }
 
 static void ucp_worker_iface_async_ep_event_cb(void *arg, uct_ep_h uct_ep,
-                                               unsigned flags)
+                                               unsigned events)
 {
     ucp_worker_iface_t *wiface = arg;
-    ucp_worker_h worker = wiface->worker;
+    ucp_worker_h worker        = wiface->worker;
     uct_ep_attr_t ep_attr;
     ucp_lane_index_t lane;
-    ucp_ep_h ucp_ep;
+    ucp_ep_h ep;
     ucs_status_t status;
 
-    if (!(flags & UCT_EVENT_PATH_SPEED_CHANGE)) {
-        ucp_worker_iface_async_cb_event(arg, flags);
+    if (!(events & UCT_EP_EVENT_PATH_SPEED_CHANGE) || (uct_ep == NULL)) {
         return;
     }
 
+    /* Completion and UCP reconfiguration share normal worker serialization. */
+    ucs_assert(!ucs_async_is_from_async(&worker->async));
     UCS_ASYNC_BLOCK(&worker->async);
-    if (uct_ep == NULL) {
-        goto out;
+    ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &lane);
+    if (ep == NULL) {
+        ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep, &lane);
     }
 
-    ucp_ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &lane);
-    if (ucp_ep == NULL) {
-        ucp_ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep, &lane);
+    if (ep != NULL) {
+        ep_attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
+        status             = uct_ep_query(uct_ep, &ep_attr);
+        if (status == UCS_OK) {
+            status = ucp_ep_path_bw_changed(ep, lane, &ep_attr.bandwidth);
+        }
+
+        ucs_debug("ep %p lane[%u] path bandwidth event: %s",
+                  ep, lane, ucs_status_string(status));
     }
 
-    if (ucp_ep == NULL) {
-        goto out;
-    }
-
-    ep_attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH;
-    status             = uct_ep_query(uct_ep, &ep_attr);
-    if (status == UCS_OK) {
-        ucs_info("ep %p to %s lane[%d]: path bandwidth %.2f MiB/s",
-                 ucp_ep, ucp_ep_peer_name(ucp_ep), lane,
-                 ep_attr.bandwidth / UCS_MBYTE);
-    } else {
-        ucs_debug("ep %p to %s lane[%d]: path bandwidth query failed: %s",
-                  ucp_ep, ucp_ep_peer_name(ucp_ep), lane,
-                  ucs_status_string(status));
-    }
-
-out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    flags &= ~UCT_EVENT_PATH_SPEED_CHANGE;
-    if (flags != 0) {
-        ucp_worker_iface_async_cb_event(arg, flags);
-    }
 }
 
 static void
@@ -1526,6 +1513,7 @@ ucp_worker_iface_query_attr_v2(ucp_worker_iface_t *wiface)
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface_p)
 {
+    uct_iface_set_async_ep_event_params_t ep_event_params;
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
     uct_md_h md                      = context->tl_mds[resource->md_index].md;
@@ -1596,15 +1584,10 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB;
     }
 
-    /* The endpoint callback runs synchronously in the transport async context.
-     * The transport must not hold a lock required by endpoint destruction or
-     * interface cleanup while invoking it. */
     iface_params.async_event_arg    = wiface;
     iface_params.async_event_cb     = ucp_worker_iface_async_cb_event;
-    iface_params.async_ep_event_cb  = ucp_worker_iface_async_ep_event_cb;
     iface_params.field_mask        |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
-                                      UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB  |
-                                      UCT_IFACE_PARAM_FIELD_ASYNC_EP_EVENT_CB;
+                                      UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
 
     if (ucp_worker_keepalive_is_enabled(worker)) {
         iface_params.field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
@@ -1635,6 +1618,17 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     }
 
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
+
+    ep_event_params.field_mask =
+            UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB |
+            UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG;
+    ep_event_params.cb  = ucp_worker_iface_async_ep_event_cb;
+    ep_event_params.arg = wiface;
+    status = uct_iface_set_async_ep_event_handler(wiface->iface,
+                                                 &ep_event_params);
+    if (status != UCS_OK) {
+        goto err_close_iface;
+    }
 
     status = uct_iface_query(wiface->iface, &wiface->attr);
     if (status != UCS_OK) {

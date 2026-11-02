@@ -358,6 +358,8 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     ucs_sys_dev_distance_t distance;
     size_t tl_min_frag, tl_max_frag;
     uct_perf_attr_t perf_attr;
+    uct_ppn_bandwidth_t measured_bandwidth;
+    double path_ratio;
     ucs_sys_device_t sys_dev;
     ucs_status_t status;
     char bdf_name[32];
@@ -394,6 +396,17 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     status = ucp_worker_iface_estimate_perf(wiface, &perf_attr);
     if (status != UCS_OK) {
         goto err_deref_perf_node;
+    }
+
+    measured_bandwidth = params->super.ep_config_key->lanes[lane].path_bandwidth;
+    if ((measured_bandwidth.dedicated + measured_bandwidth.shared) > 0) {
+        path_ratio = ucp_proto_common_iface_bandwidth(
+                context, &perf_attr.path_bandwidth) /
+                ucp_proto_common_iface_bandwidth(context, &perf_attr.bandwidth);
+        perf_attr.bandwidth = measured_bandwidth;
+        perf_attr.path_bandwidth.dedicated =
+                measured_bandwidth.dedicated * path_ratio;
+        perf_attr.path_bandwidth.shared = measured_bandwidth.shared * path_ratio;
     }
 
     tl_perf->send_pre_overhead  = perf_attr.send_pre_overhead + params->overhead;

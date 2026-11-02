@@ -54,6 +54,68 @@ typedef enum uct_ep_operation {
 } uct_ep_operation_t;
 
 
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Endpoint-specific asynchronous event types.
+ */
+enum uct_ep_event_types {
+    /** Endpoint path speed changed. */
+    UCT_EP_EVENT_PATH_SPEED_CHANGE = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Endpoint-aware asynchronous event callback.
+ *
+ * The transport invokes this callback in its serialized worker progress
+ * context, not from an asynchronous thread. The callback must not retain @a ep
+ * after it returns.
+ *
+ * @param [in]  arg      User argument registered with
+ *                       @ref uct_iface_set_async_ep_event_handler.
+ * @param [in]  ep       Endpoint associated with the event. It is valid only
+ *                       for the duration of the callback.
+ * @param [in]  events   Event flags from @ref uct_ep_event_types.
+ */
+typedef void (*uct_async_ep_event_cb_t)(void *arg, uct_ep_h ep,
+                                        unsigned events);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_iface_set_async_ep_event_params_t.
+ */
+enum uct_iface_set_async_ep_event_params_field {
+    /** Enables @ref uct_iface_set_async_ep_event_params_t::cb */
+    UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB  = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_set_async_ep_event_params_t::arg */
+    UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for registering an endpoint-aware event callback.
+ */
+typedef struct {
+    /** Mask of valid fields, using bits from
+     *  @ref uct_iface_set_async_ep_event_params_field. */
+    uint64_t                field_mask;
+
+    /** Callback invoked for endpoint-specific events. A NULL callback removes
+     *  the currently registered handler. */
+    uct_async_ep_event_cb_t cb;
+
+    /** User argument passed to
+     *  @ref uct_iface_set_async_ep_event_params_t::cb. */
+    void                    *arg;
+} uct_iface_set_async_ep_event_params_t;
+
+
 /**
  * @ingroup UCT_RESOURCE
  * @brief UCT interface query by @ref uct_iface_estimate_perf parameters field mask.
@@ -432,11 +494,10 @@ struct uct_ep_attr {
     /**
      * Latest completed endpoint bandwidth sample, in bytes per second.
      * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask
-     * and the interface advertises @ref UCT_IFACE_FLAG_EP_QUERY_BW.
-     * A transport may return @ref UCS_ERR_NO_ELEM before the first sample or
+         * A transport may return @ref UCS_ERR_NO_ELEM before the first sample or
      * @ref UCS_ERR_TIMED_OUT when its latest sample is stale.
      */
-    double                  bandwidth;
+    uct_ppn_bandwidth_t      bandwidth;
 };
 
 
@@ -1975,6 +2036,13 @@ ucs_status_t
 uct_ep_outstanding_purge(uct_ep_h ep,
                          const uct_ep_outstanding_purge_params_t *params);
 
+
+/**
+ * Register an endpoint-aware event callback on an existing interface.
+ * Calls and callbacks share worker serialization.
+ */
+ucs_status_t uct_iface_set_async_ep_event_handler(
+        uct_iface_h iface, const uct_iface_set_async_ep_event_params_t *params);
 
 END_C_DECLS
 

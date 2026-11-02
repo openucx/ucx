@@ -439,8 +439,6 @@ typedef enum uct_atomic_op {
 #define UCT_IFACE_FLAG_INTER_NODE      UCS_BIT(54) /**< Interface is inter-node capable */
 #define UCT_IFACE_FLAG_DEVICE_EP       UCS_BIT(55) /**< Interface supports device endpoint */
 #define UCT_IFACE_FLAG_DEVICE_LKEY     UCS_BIT(56) /**< Interface requires lkey for device operations */
-#define UCT_IFACE_FLAG_EP_QUERY_BW     UCS_BIT(57) /**< @ref uct_ep_query can report
-                                                        endpoint bandwidth */
 /**
  * @}
  */
@@ -468,9 +466,6 @@ typedef enum uct_atomic_op {
                                                        is supported */
 #define UCT_IFACE_FLAG_EVENT_ASYNC_CB  UCS_BIT(4) /**< Event notification through asynchronous
                                                        callback invocation is supported */
-#define UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE UCS_BIT(5) /**< Endpoint path
-                                                                speed change
-                                                                notification is supported */
 /**
  * @}
  */
@@ -508,10 +503,7 @@ enum uct_iface_event_types {
     UCT_EVENT_RECV          = UCS_BIT(1), /**< Tag or active message received */
     UCT_EVENT_RECV_SIG      = UCS_BIT(2), /**< Signaled tag or active message
                                                received */
-    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3), /**< Interface speed change event */
-    UCT_EVENT_PATH_SPEED_CHANGE = UCS_BIT(4) /**< Endpoint path speed changed.
-                                                   The endpoint is provided to
-                                                   the endpoint callback. */
+    UCT_EVENT_SPEED_CHANGE  = UCS_BIT(3) /**< Interface speed change event */
 };
 
 
@@ -698,10 +690,7 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17),
 
     /** Enables @ref uct_iface_params_t::features */
-    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18),
-
-    /** Enables @ref uct_iface_params_t::async_ep_event_cb */
-    UCT_IFACE_PARAM_FIELD_ASYNC_EP_EVENT_CB   = UCS_BIT(19)
+    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18)
 };
 
 /**
@@ -1325,14 +1314,6 @@ struct uct_iface_params {
      */
     uint64_t                                     features;
 
-    /**
-     * Endpoint-aware asynchronous event callback. Transports should use this
-     * callback for events that identify a specific endpoint, such as
-     * @ref UCT_EVENT_PATH_SPEED_CHANGE. The callback can be invoked if the
-     * iface has @ref UCT_IFACE_FLAG_EVENT_ASYNC_CB capability. The callback
-     * argument is provided by @ref uct_iface_params_t::async_event_arg.
-     */
-    uct_async_ep_event_cb_t                      async_ep_event_cb;
 };
 
 

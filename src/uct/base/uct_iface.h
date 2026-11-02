@@ -361,6 +361,8 @@ typedef struct uct_base_iface {
     uct_am_tracer_t          am_tracer;        /* Active message tracer */
     void                     *am_tracer_arg;   /* Tracer argument */
     uct_error_handler_t      err_handler;      /* Error handler */
+    uct_async_ep_event_cb_t   async_ep_event_cb;
+    void                     *async_ep_event_arg;
     void                     *err_handler_arg; /* Error handler argument */
     uint32_t                 err_handler_flags; /* Error handler callback flags */
     uct_worker_progress_t    prog;             /* Will be removed once all transports
@@ -876,9 +878,13 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg);
 
-void uct_iface_set_async_ep_event_params(const uct_iface_params_t *params,
-                                         uct_async_ep_event_cb_t *event_cb,
-                                         void **event_arg);
+static inline void uct_iface_invoke_ep_event(uct_base_iface_t *iface,
+                                              uct_ep_h ep, unsigned events)
+{
+    if (iface->async_ep_event_cb != NULL) {
+        iface->async_ep_event_cb(iface->async_ep_event_arg, ep, events);
+    }
+}
 
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);

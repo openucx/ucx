@@ -8,7 +8,7 @@
 #define UCT_RC_MLX5_H
 
 #include "rc_mlx5_common.h"
-#include "rc_mlx5_ext.h"
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -69,6 +69,16 @@ typedef struct uct_rc_mlx5_base_ep {
 typedef __be32 uct_rc_mlx5_tx_token_t;
 typedef __be32 uct_rc_mlx5_rx_token_t;
 
+/* Adapter identification is transport-private. */
+void uct_rc_mlx5_sgl_completion_marker(uct_completion_t *completion);
+
+static inline int
+uct_rc_mlx5_sgl_completion_is_adapter(const uct_completion_t *completion)
+{
+    return (completion != NULL) &&
+           (completion->func == uct_rc_mlx5_sgl_completion_marker);
+}
+
 typedef struct uct_rc_mlx5_sgl_context uct_rc_mlx5_sgl_context_t;
 
 typedef struct uct_rc_mlx5_sgl_checkpoint {
@@ -79,11 +89,13 @@ typedef struct uct_rc_mlx5_sgl_checkpoint {
 
 struct uct_rc_mlx5_sgl_context {
     uct_rc_mlx5_sgl_completion_t   *completion;
-    uct_rc_mlx5_sgl_checkpoint_cb_t callback;
+    uct_rc_mlx5_sgl_completion_func_t callback;
     void                          *arg;
+    uint64_t                       start_timestamp;
+    uint64_t                       end_timestamp;
     uint16_t                       first_sn;
     uint16_t                       count;
-    uct_rc_mlx5_sgl_checkpoint_t   checkpoints[];
+    uct_rc_mlx5_sgl_checkpoint_t   checkpoints[2];
 };
 
 
@@ -125,6 +137,8 @@ typedef struct uct_rc_mlx5_ep_ext_address {
     uct_rc_mlx5_ep_address_t super;
     uint8_t                  flags;
 } UCS_S_PACKED uct_rc_mlx5_ep_ext_address_t;
+
+#define UCT_RC_MLX5_EP_EXT_WIRE_VERSION 1
 
 typedef struct uct_rc_mlx5_ep_ext_wire_hdr {
     uint32_t provider_id;

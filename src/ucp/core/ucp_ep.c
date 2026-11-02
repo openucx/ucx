@@ -40,6 +40,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
+#include <math.h>
 
 __KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
              ucp_ep_peer_mem_data_t, 1,
@@ -277,6 +278,7 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
     ep->ext->peer_mem                     = NULL;
     ep->ext->unflushed_lanes              = 0;
     ep->ext->lane_generation              = 0;
+    ep->ext->path_bw_update               = NULL;
     ep->ext->fence_seq                    = 0;
     ep->ext->uct_eps                      = NULL;
     ep->ext->flush_sys_dev_map            = 0;
@@ -522,13 +524,35 @@ static int ucp_ep_wireup_eps_progress_filter(const ucs_callbackq_elem_t *elem,
     return (elem->cb == ucp_wireup_eps_progress) && (elem->arg == arg);
 }
 
+typedef struct ucp_ep_path_bw_update {
+    ucp_ep_h            ep;
+    uint32_t            lane_generation;
+    ucp_lane_map_t      lanes;
+    uct_ppn_bandwidth_t bandwidth[UCP_MAX_LANES];
+} ucp_ep_path_bw_update_t;
+
+static unsigned ucp_ep_path_bw_progress(void *arg);
+
+static int ucp_ep_path_bw_remove_filter(const ucs_callbackq_elem_t *elem,
+                                         void *arg)
+{
+    if ((elem->cb != ucp_ep_path_bw_progress) || (elem->arg != arg)) {
+        return 0;
+    }
+
+    ucs_free(elem->arg);
+    return 1;
+}
+
 static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
     if (ucp_wireup_msg_ack_cb_pred(elem, arg) ||
         ucp_listener_accept_cb_remove_filter(elem, arg) ||
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
-        ucp_ep_wireup_eps_progress_filter(elem, arg)) {
+        ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_ep_path_bw_remove_filter(elem,
+                ((ucp_ep_h)arg)->ext->path_bw_update)) {
         return 1;
     }
 
@@ -1723,10 +1747,11 @@ ucp_ep_config_key_find_am_lane(const ucp_ep_config_key_t *key)
 }
 
 static ucs_status_t
-ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+ucp_ep_reconfig_key(ucp_ep_h ep, ucp_lane_map_t failed_lanes,
+                      const ucp_ep_config_key_t *updated_key)
 {
     ucp_worker_h worker          = ep->worker;
-    ucp_ep_config_key_t cfg_key  = ucp_ep_config(ep)->key;
+    ucp_ep_config_key_t cfg_key  = *updated_key;
     const unsigned ep_init_flags = (ep->flags & UCP_EP_FLAG_INTERNAL) ?
                                     UCP_EP_INIT_FLAG_INTERNAL : 0;
     int port_speed_changed       = 0;
@@ -1777,6 +1802,91 @@ ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
 
     ucp_ep_set_cfg_index(ep, new_cfg_index, 0);
 out:
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_ep_reconfig_internal(ucp_ep_h ep, ucp_lane_map_t failed_lanes)
+{
+    return ucp_ep_reconfig_key(ep, failed_lanes, &ucp_ep_config(ep)->key);
+}
+
+static unsigned ucp_ep_path_bw_progress(void *arg)
+{
+    ucp_ep_path_bw_update_t *update = arg;
+    ucp_ep_h ep                    = update->ep;
+    ucp_worker_h worker            = ep->worker;
+    ucp_ep_config_key_t key        = ucp_ep_config(ep)->key;
+    ucp_worker_cfg_index_t old_cfg = ep->cfg_index;
+    ucp_lane_index_t lane;
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ep->ext->path_bw_update = NULL;
+    if ((update->lane_generation != ep->ext->lane_generation) ||
+        (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED))) {
+        goto out;
+    }
+
+    for (lane = 0; lane < key.num_lanes; ++lane) {
+        if (!(update->lanes & UCS_BIT(lane))) {
+            continue;
+        }
+
+        ucs_info("dlb_ucp_path_sample ep %p lane %u bandwidth "
+                 "%.2f/%.2f -> %.2f/%.2f MiB/s",
+                 ep, lane, key.lanes[lane].path_bandwidth.dedicated / UCS_MBYTE,
+                 key.lanes[lane].path_bandwidth.shared / UCS_MBYTE,
+                 update->bandwidth[lane].dedicated / UCS_MBYTE,
+                 update->bandwidth[lane].shared / UCS_MBYTE);
+        key.lanes[lane].path_bandwidth = update->bandwidth[lane];
+    }
+
+    if (!ucp_ep_config_is_equal(&key, &ucp_ep_config(ep)->key)) {
+        ++worker->epoch;
+        status = ucp_ep_reconfig_key(ep, 0, &key);
+        ucs_info("dlb_ucp_rebalance ep %p cfg %u -> %u epoch %"PRIu64
+                 " status %s", ep, old_cfg, ep->cfg_index, worker->epoch,
+                 ucs_status_string(status));
+    }
+
+out:
+    ucs_free(update);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+ucs_status_t ucp_ep_path_bw_changed(ucp_ep_h ep, ucp_lane_index_t lane,
+                                    const uct_ppn_bandwidth_t *bandwidth)
+{
+    ucp_ep_path_bw_update_t *update = ep->ext->path_bw_update;
+
+    if ((bandwidth == NULL) || (lane >= ucp_ep_num_lanes(ep)) ||
+        !isfinite(bandwidth->dedicated) || !isfinite(bandwidth->shared) ||
+        (bandwidth->dedicated < 0) || (bandwidth->shared < 0) ||
+        ((bandwidth->dedicated + bandwidth->shared) <= 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) {
+        return UCS_ERR_CANCELED;
+    }
+
+    if (update == NULL) {
+        update = ucs_calloc(1, sizeof(*update), "ucp_path_bw_update");
+        if (update == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        update->ep              = ep;
+        update->lane_generation = ep->ext->lane_generation;
+        ep->ext->path_bw_update  = update;
+        ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
+                                  ucp_ep_path_bw_progress, update);
+    }
+
+    update->lanes          |= UCS_BIT(lane);
+    update->bandwidth[lane] = *bandwidth;
     return UCS_OK;
 }
 
@@ -3666,6 +3776,10 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types) &&
            (config_lane1->port_speed == config_lane2->port_speed) &&
+           (config_lane1->path_bandwidth.dedicated ==
+            config_lane2->path_bandwidth.dedicated) &&
+           (config_lane1->path_bandwidth.shared ==
+            config_lane2->path_bandwidth.shared) &&
            (config_lane1->seg_size == config_lane2->seg_size);
 }
 

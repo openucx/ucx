@@ -11,6 +11,7 @@
 #include <cstring>
 #include <unordered_map>
 #include <memory>
+#include <limits>
 
 extern "C" {
 #include <ucp/core/ucp_rkey.h>
@@ -850,6 +851,78 @@ UCS_TEST_P(test_ucp_proto, dt_iter_mem_reg)
 
         test_dt_iter_mem_reg(mem_type, buffer_size, md_map);
     }
+}
+
+UCS_TEST_P(test_ucp_proto, path_bw_coalescing_and_isolation)
+{
+    sender().connect(&receiver(), get_ep_params(), 1);
+    flush_ep(sender());
+    auto ep      = sender().ep();
+    auto sibling = sender().ep(0, 1);
+    const auto old_cfg     = ep->cfg_index;
+    const auto sibling_cfg = sibling->cfg_index;
+    uct_ppn_bandwidth_t bandwidth = {UCS_MBYTE * 4000.0, 0};
+
+    ASSERT_GT(ucp_ep_num_lanes(ep), 0);
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    auto pending = ep->ext->path_bw_update;
+    bandwidth.dedicated /= 2;
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    EXPECT_EQ(pending, ep->ext->path_bw_update);
+    EXPECT_EQ(old_cfg, ep->cfg_index);
+    short_progress_loop();
+    EXPECT_EQ(nullptr, ep->ext->path_bw_update);
+    EXPECT_NE(old_cfg, ep->cfg_index);
+    EXPECT_EQ(bandwidth.dedicated,
+              ucp_ep_config(ep)->key.lanes[0].path_bandwidth.dedicated);
+    EXPECT_EQ(sibling_cfg, sibling->cfg_index);
+    EXPECT_DOUBLE_EQ(0,
+              ucp_ep_config(sibling)->key.lanes[0].path_bandwidth.dedicated);
+    bandwidth.dedicated *= 2;
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    short_progress_loop();
+    EXPECT_EQ(bandwidth.dedicated,
+              ucp_ep_config(ep)->key.lanes[0].path_bandwidth.dedicated);
+    EXPECT_EQ(sibling_cfg, sibling->cfg_index);
+}
+
+UCS_TEST_P(test_ucp_proto, path_bw_rejects_stale_lane_generation)
+{
+    flush_ep(sender());
+    auto ep = sender().ep();
+    const auto old_cfg = ep->cfg_index;
+    const uct_ppn_bandwidth_t bandwidth = {UCS_MBYTE * 4000.0, 0};
+
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    ++ep->ext->lane_generation;
+    short_progress_loop();
+    EXPECT_EQ(old_cfg, ep->cfg_index);
+    EXPECT_EQ(nullptr, ep->ext->path_bw_update);
+}
+
+UCS_TEST_P(test_ucp_proto, path_bw_rejects_invalid_sample)
+{
+    auto ep = sender().ep();
+    uct_ppn_bandwidth_t bandwidth = {};
+
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    bandwidth.dedicated = -1;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    bandwidth.dedicated = std::numeric_limits<double>::infinity();
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    bandwidth.dedicated = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucp_ep_path_bw_changed(ep, 0, &bandwidth));
+    EXPECT_EQ(nullptr, ep->ext->path_bw_update);
+}
+
+UCS_TEST_P(test_ucp_proto, path_bw_pending_close)
+{
+    flush_ep(sender());
+    const uct_ppn_bandwidth_t bandwidth = {UCS_MBYTE * 4000.0, 0};
+
+    ASSERT_UCS_OK(ucp_ep_path_bw_changed(sender().ep(), 0, &bandwidth));
+    request_wait(sender().disconnect_nb());
+    short_progress_loop();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_proto)

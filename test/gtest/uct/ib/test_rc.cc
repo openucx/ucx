@@ -29,64 +29,29 @@ class test_rc_extension : public ucs::test {
 protected:
     static ucs_status_t query_cb(uct_ep_h, void *ctx, uct_ep_attr_t *attr)
     {
-        attr->bandwidth = *static_cast<double*>(ctx);
+        attr->bandwidth.dedicated = *static_cast<double*>(ctx);
+        attr->bandwidth.shared    = 0;
         return UCS_OK;
     }
 
-    static void checkpoint_cb(void*, unsigned, ucs_status_t, uint64_t)
+    static void final_cb(void*, ucs_status_t, uint64_t, uint64_t)
     {
     }
 };
 
 UCS_TEST_F(test_rc_extension, registration)
 {
-    uct_rc_mlx5_ext_ops_t ops = {};
-    const uct_rc_mlx5_ext_ops_t *acquired;
+    uct_rc_mlx5_ext_ops_t rc_ops = {};
+    uct_ib_mlx5_ext_ops_t ops   = {};
 
-    ops.struct_size  = sizeof(ops);
-    ops.api_version  = UCT_RC_MLX5_EXT_API_VERSION;
-    ops.name         = "test";
-    ops.requirements = UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP;
-    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
-    EXPECT_EQ(UCS_ERR_BUSY, uct_rc_mlx5_ext_register(&ops));
-    acquired = uct_rc_mlx5_ext_acquire();
-    EXPECT_NE(nullptr, acquired);
-    EXPECT_EQ(ops.requirements, acquired->requirements);
-    uct_rc_mlx5_ext_release(acquired);
-    uct_rc_mlx5_ext_unregister(&ops);
-    EXPECT_EQ(nullptr, uct_rc_mlx5_ext_acquire());
-
-    /* A provider built before the optional event field opts into no events. */
-    ops.struct_size = ucs_offsetof(uct_rc_mlx5_ext_ops_t, event_flags);
-    ops.event_flags = UINT64_MAX;
-    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
-    acquired = uct_rc_mlx5_ext_acquire();
-    EXPECT_EQ(0ul, acquired->event_flags);
-    uct_rc_mlx5_ext_release(acquired);
-    uct_rc_mlx5_ext_unregister(&ops);
-
-    ops.struct_size = sizeof(ops);
-    ops.event_flags = UCT_IFACE_FLAG_EVENT_PATH_SPEED_CHANGE;
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
-    ops.ep_query = query_cb;
-    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&ops));
-    acquired = uct_rc_mlx5_ext_acquire();
-    EXPECT_EQ(ops.event_flags, acquired->event_flags);
-    uct_rc_mlx5_ext_release(acquired);
-    uct_rc_mlx5_ext_unregister(&ops);
-}
-
-UCS_TEST_F(test_rc_extension, invalid_registration)
-{
-    uct_rc_mlx5_ext_ops_t ops = {};
-
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(nullptr));
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
-
-    ops.struct_size = sizeof(ops);
-    ops.api_version = UCT_RC_MLX5_EXT_API_VERSION - 1;
-    ops.name        = "test";
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_ext_register(&ops));
+    strcpy(ops.name, "test_rc_extension");
+    ops.rc_ops = &rc_ops;
+    ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&ops));
+    const auto provider = uct_ib_mlx5_ext_get_rc_provider();
+    ASSERT_NE(nullptr, provider);
+    EXPECT_EQ(&rc_ops, provider->rc_ops);
+    uct_ib_mlx5_ext_unregister(ops.name);
+    EXPECT_EQ(nullptr, uct_ib_mlx5_ext_get_rc_provider());
 }
 
 UCS_TEST_F(test_rc_extension, completion_adapter_validation)
@@ -95,25 +60,55 @@ UCS_TEST_F(test_rc_extension, completion_adapter_validation)
     uct_base_iface_t iface                = {};
     uct_ep_t ep                          = {};
     uct_rc_mlx5_sgl_completion_t completion, saved;
-    const uint8_t checkpoints[]          = {1};
 
     memset(&completion, 0x5a, sizeof(completion));
     memcpy(&saved, &completion, sizeof(saved));
     iface.internal_ops = &internal_ops;
     ep.iface           = &iface.super;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_sgl_completion_init(
-            NULL, 1, checkpoints, checkpoint_cb, NULL, &completion));
+            NULL, 1, final_cb, NULL, &completion));
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_sgl_completion_init(
-            &ep, 0, checkpoints, checkpoint_cb, NULL, &completion));
+            &ep, 0, final_cb, NULL, &completion));
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_sgl_completion_init(
-            &ep, 1, NULL, checkpoint_cb, NULL, &completion));
+            &ep, 2, NULL, NULL, &completion));
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_sgl_completion_init(
-            &ep, 1, checkpoints, NULL, NULL, &completion));
+            &ep, 1, final_cb, NULL, &completion));
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, uct_rc_mlx5_sgl_completion_init(
-            &ep, 1, checkpoints, checkpoint_cb, NULL, NULL));
+            &ep, 2, final_cb, NULL, NULL));
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, uct_rc_mlx5_sgl_completion_init(
-            &ep, 1, checkpoints, checkpoint_cb, NULL, &completion));
+            &ep, 2, final_cb, NULL, &completion));
     EXPECT_EQ(0, memcmp(&saved, &completion, sizeof(completion)));
+}
+
+UCS_TEST_F(test_rc_extension, endpoint_event_handler)
+{
+    uct_base_iface_t iface = {};
+    uct_ep_t ep = {};
+    struct event_result {
+        unsigned count;
+        uct_ep_h ep;
+        unsigned events;
+    } result = {};
+    uct_iface_set_async_ep_event_params_t params = {};
+
+    params.field_mask = UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB |
+                        UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG;
+    params.cb = [](void *arg, uct_ep_h ep, unsigned events) {
+        auto result = static_cast<event_result*>(arg);
+        ++result->count;
+        result->ep     = ep;
+        result->events = events;
+    };
+    params.arg = &result;
+    ASSERT_UCS_OK(uct_iface_set_async_ep_event_handler(&iface.super, &params));
+    uct_iface_invoke_ep_event(&iface, &ep, UCT_EP_EVENT_PATH_SPEED_CHANGE);
+    EXPECT_EQ(1u, result.count);
+    EXPECT_EQ(&ep, result.ep);
+    EXPECT_EQ(UCT_EP_EVENT_PATH_SPEED_CHANGE, result.events);
+    params.cb = NULL;
+    ASSERT_UCS_OK(uct_iface_set_async_ep_event_handler(&iface.super, &params));
+    uct_iface_invoke_ep_event(&iface, &ep, UCT_EP_EVENT_PATH_SPEED_CHANGE);
+    EXPECT_EQ(1u, result.count);
 }
 
 UCS_TEST_F(test_rc_extension, bandwidth_query)
@@ -134,24 +129,24 @@ UCS_TEST_F(test_rc_extension, bandwidth_query)
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, uct_rc_mlx5_base_ep_query(tl_ep, &attr));
     ops.ep_query = query_cb;
     ASSERT_UCS_OK(uct_rc_mlx5_base_ep_query(tl_ep, &attr));
-    EXPECT_EQ(bandwidth, attr.bandwidth);
+    EXPECT_EQ(bandwidth, attr.bandwidth.dedicated);
 }
 
 class test_rc_extension_transport : public uct_test {
 protected:
     struct provider_guard {
         uct_rc_mlx5_ext_ops_t ops = {};
+        uct_ib_mlx5_ext_ops_t registry_ops = {};
 
         provider_guard()
         {
-            ops.struct_size = sizeof(ops);
-            ops.api_version = UCT_RC_MLX5_EXT_API_VERSION;
-            ops.name        = "test";
+            strcpy(registry_ops.name, "test_rc_extension_transport");
+            registry_ops.rc_ops = &ops;
         }
 
         ~provider_guard()
         {
-            uct_rc_mlx5_ext_unregister(&ops);
+            uct_ib_mlx5_ext_unregister(registry_ops.name);
         }
     };
 
@@ -182,7 +177,7 @@ UCS_TEST_P(test_rc_extension_transport, completion_without_timestamps)
     completion comp = {};
     provider_guard provider;
 
-    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&provider.ops));
+    ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&provider.registry_ops));
     std::unique_ptr<entity> e(create_entity(0));
     e->connect(0, *e, 0);
 
@@ -208,7 +203,7 @@ UCS_TEST_P(test_rc_extension_transport, failed_provider_not_connected)
     provider_guard provider;
 
     provider.ops.ep_connect = reject_connect;
-    ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&provider.ops));
+    ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&provider.registry_ops));
     std::unique_ptr<entity> e(create_entity(0));
     e->create_ep(0);
     std::vector<char> device_addr(e->iface_attr().device_addr_len);
@@ -238,11 +233,10 @@ public:
     void init() override
     {
         uct_test::init();
-        m_ops.struct_size  = sizeof(m_ops);
-        m_ops.api_version  = UCT_RC_MLX5_EXT_API_VERSION;
-        m_ops.name         = "test";
         m_ops.requirements = UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP;
-        ASSERT_UCS_OK(uct_rc_mlx5_ext_register(&m_ops));
+        strcpy(m_registry_ops.name, "test_rc_sgl_completion");
+        m_registry_ops.rc_ops = &m_ops;
+        ASSERT_UCS_OK(uct_ib_mlx5_ext_register(&m_registry_ops));
         m_registered = true;
         m_entity     = create_entity(0);
         m_entities.push_back(m_entity);
@@ -261,7 +255,7 @@ public:
         }
 
         ASSERT_UCS_OK(uct_rc_mlx5_sgl_completion_init(
-                m_entity->ep(0), element_count, m_checkpoints, checkpoint_cb,
+                m_entity->ep(0), element_count, m_final_cb,
                 this, &m_completion));
     }
 
@@ -275,24 +269,24 @@ public:
         m_source.reset();
         uct_test::cleanup();
         if (m_registered) {
-            uct_rc_mlx5_ext_unregister(&m_ops);
+            uct_ib_mlx5_ext_unregister(m_registry_ops.name);
         }
     }
 
 protected:
     enum { element_count = 3, element_size = 64 * UCS_KBYTE };
     struct result {
-        unsigned     index;
         ucs_status_t status;
-        uint64_t     timestamp;
+        uint64_t     start;
+        uint64_t     end;
         int          remaining;
     };
 
-    static void checkpoint_cb(void *arg, unsigned index, ucs_status_t status,
-                                uint64_t timestamp)
+    static void final_cb(void *arg, ucs_status_t status, uint64_t start,
+                           uint64_t end)
     {
         auto self = static_cast<test_rc_sgl_completion*>(arg);
-        self->m_results.push_back({index, status, timestamp,
+        self->m_results.push_back({status, start, end,
                                    self->m_completion.super.count});
     }
 
@@ -301,16 +295,13 @@ protected:
         comp->status = UCS_ERR_ALREADY_EXISTS;
     }
 
-    static void releasing_checkpoint_cb(void *arg, unsigned index,
-                                         ucs_status_t status,
-                                         uint64_t timestamp)
+    static void releasing_final_cb(void *arg, ucs_status_t status,
+                                    uint64_t start, uint64_t end)
     {
         auto self = static_cast<test_rc_sgl_completion*>(arg);
-        const int remaining = self->m_dynamic_completion->super.count;
-        self->m_results.push_back({index, status, timestamp, remaining});
-        if (remaining == 0) {
-            self->m_dynamic_completion.reset();
-        }
+        self->m_results.push_back({status, start, end,
+                                   self->m_dynamic_completion->super.count});
+        self->m_dynamic_completion.reset();
     }
 
     ucs_status_t post(uct_completion_t *comp)
@@ -326,6 +317,7 @@ protected:
     }
 
     uct_rc_mlx5_ext_ops_t m_ops = {};
+    uct_ib_mlx5_ext_ops_t m_registry_ops = {};
     bool m_registered         = false;
     entity *m_entity          = NULL;
     std::unique_ptr<mapped_buffer> m_source, m_target;
@@ -334,32 +326,23 @@ protected:
     uct_mem_h m_memhs[element_count];
     uint64_t m_remote_addrs[element_count];
     uct_rkey_t m_rkeys[element_count];
-    uint8_t m_checkpoints[element_count] = {1, 0, 1};
     uct_rc_mlx5_sgl_completion_t m_completion = {};
     std::unique_ptr<uct_rc_mlx5_sgl_completion_t> m_dynamic_completion;
     std::vector<result> m_results;
 };
 
-UCS_TEST_P(test_rc_sgl_completion, checkpoints_consumed_on_post)
+UCS_TEST_P(test_rc_sgl_completion, one_final_completion)
 {
     ASSERT_TRUE(uct_rc_mlx5_sgl_completion_is_adapter(&m_completion.super));
     ASSERT_EQ(UCS_INPROGRESS, post(&m_completion.super));
     EXPECT_EQ(2, m_completion.super.count);
-    memset(m_checkpoints, 0, sizeof(m_checkpoints));
     EXPECT_EQ(UCS_ERR_BUSY, post(&m_completion.super));
     m_entity->flush();
-    ASSERT_EQ(2u, m_results.size());
-    EXPECT_EQ(0u, m_results[0].index);
-    EXPECT_EQ(2u, m_results[1].index);
-    EXPECT_EQ(1, m_results[0].remaining);
-    EXPECT_EQ(0, m_results[1].remaining);
-    for (const auto &result : m_results) {
-        EXPECT_EQ(UCS_OK, result.status);
-        EXPECT_NE(0ul, result.timestamp);
-    }
-
+    ASSERT_EQ(1u, m_results.size());
+    EXPECT_EQ(0, m_results[0].remaining);
+    EXPECT_EQ(UCS_OK, m_results[0].status);
+    EXPECT_GT(m_results[0].end - m_results[0].start, 0ul);
     EXPECT_EQ(0, m_completion.super.count);
-    EXPECT_EQ(UCS_OK, m_completion.super.status);
     EXPECT_EQ(0, memcmp(m_source->ptr(), m_target->ptr(),
                         element_count * element_size));
 }
@@ -386,7 +369,7 @@ UCS_TEST_P(test_rc_sgl_completion, failed_post_preserves_adapter)
     ASSERT_EQ(UCS_INPROGRESS, post(&m_completion.super));
     EXPECT_EQ(UCS_ERR_BUSY, post(&m_completion.super));
     m_entity->flush();
-    EXPECT_EQ(2u, m_results.size());
+    EXPECT_EQ(1u, m_results.size());
     EXPECT_EQ(0, m_completion.super.count);
 }
 
@@ -399,58 +382,45 @@ UCS_TEST_P(test_rc_sgl_completion, anchor_and_32_writes)
     std::vector<uct_mem_h> memhs(count, m_source->memh());
     std::vector<uint64_t> remote_addrs(count, m_target->addr());
     std::vector<uct_rkey_t> rkeys(count, m_target->rkey());
-    std::vector<uint8_t> checkpoints(count, 0);
 
     attr.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
     ASSERT_UCS_OK(uct_iface_query_v2(m_entity->iface(), &attr));
     ASSERT_GE(attr.max_put_sgl_zcopy_count, count);
-    checkpoints.front() = checkpoints.back() = 1;
     ASSERT_UCS_OK(uct_rc_mlx5_sgl_completion_init(
-            m_entity->ep(0), count, checkpoints.data(), checkpoint_cb, this,
+            m_entity->ep(0), count, final_cb, this,
             &m_completion));
     ASSERT_EQ(UCS_INPROGRESS, uct_ep_put_sgl_zcopy(
             m_entity->ep(0), buffers.data(), lengths.data(), memhs.data(),
             remote_addrs.data(), rkeys.data(), NULL, NULL, count,
             &m_completion.super));
-    checkpoints.clear();
     m_entity->flush();
-    ASSERT_EQ(2u, m_results.size());
-    EXPECT_EQ(0u, m_results[0].index);
-    EXPECT_EQ(32u, m_results[1].index);
-    EXPECT_EQ(1, m_results[0].remaining);
-    EXPECT_EQ(0, m_results[1].remaining);
-    for (const auto &result : m_results) {
-        EXPECT_EQ(UCS_OK, result.status);
-        EXPECT_NE(0ul, result.timestamp);
-    }
-
+    ASSERT_EQ(1u, m_results.size());
+    EXPECT_EQ(0, m_results[0].remaining);
+    EXPECT_EQ(UCS_OK, m_results[0].status);
+    EXPECT_GT(m_results[0].end - m_results[0].start, 0ul);
     EXPECT_EQ(0, memcmp(m_source->ptr(), m_target->ptr(), element_size));
 }
 
 UCS_TEST_P(test_rc_sgl_completion, prefix_completion_then_purge)
 {
-    memset(m_checkpoints, 1, sizeof(m_checkpoints));
     ASSERT_EQ(UCS_INPROGRESS, post(&m_completion.super));
     const ucs_time_t deadline = ucs::get_deadline();
-    while (m_results.empty() && (ucs_get_time() < deadline)) {
+    while ((m_completion.super.count == 2) && (ucs_get_time() < deadline)) {
         m_entity->progress();
     }
 
-    ASSERT_EQ(1u, m_results.size());
-    EXPECT_EQ(2, m_completion.super.count);
+    ASSERT_EQ(1, m_completion.super.count);
+    EXPECT_TRUE(m_results.empty());
     {
         scoped_log_handler hide_warn(hide_warns_logger);
         m_entity->destroy_ep(0);
     }
-    ASSERT_EQ(3u, m_results.size());
-    EXPECT_EQ(UCS_OK, m_results[0].status);
-    EXPECT_EQ(UCS_ERR_CANCELED, m_results[1].status);
-    EXPECT_EQ(UCS_ERR_CANCELED, m_results[2].status);
-    EXPECT_EQ(0ul, m_results[1].timestamp);
-    EXPECT_EQ(0ul, m_results[2].timestamp);
-    EXPECT_EQ(0, m_results[2].remaining);
-    EXPECT_EQ(0, m_completion.super.count);
-    EXPECT_EQ(UCS_ERR_CANCELED, m_completion.super.status);
+
+    ASSERT_EQ(1u, m_results.size());
+    EXPECT_EQ(UCS_ERR_CANCELED, m_results[0].status);
+    EXPECT_EQ(0ul, m_results[0].start);
+    EXPECT_EQ(0ul, m_results[0].end);
+    EXPECT_EQ(0, m_results[0].remaining);
 }
 
 UCS_TEST_P(test_rc_sgl_completion, final_callback_releases_adapter)
@@ -459,8 +429,8 @@ UCS_TEST_P(test_rc_sgl_completion, final_callback_releases_adapter)
         m_results.clear();
         m_dynamic_completion.reset(new uct_rc_mlx5_sgl_completion_t());
         ASSERT_UCS_OK(uct_rc_mlx5_sgl_completion_init(
-                m_entity->ep(0), element_count, m_checkpoints,
-                releasing_checkpoint_cb, this, m_dynamic_completion.get()));
+                m_entity->ep(0), element_count,
+                releasing_final_cb, this, m_dynamic_completion.get()));
         ASSERT_EQ(UCS_INPROGRESS, post(&m_dynamic_completion->super));
         if (cancel) {
             scoped_log_handler hide_warn(hide_warns_logger);
@@ -469,7 +439,7 @@ UCS_TEST_P(test_rc_sgl_completion, final_callback_releases_adapter)
             m_entity->flush();
         }
 
-        ASSERT_EQ(2u, m_results.size());
+        ASSERT_EQ(1u, m_results.size());
         EXPECT_EQ(cancel ? UCS_ERR_CANCELED : UCS_OK, m_results.back().status);
         EXPECT_EQ(0, m_results.back().remaining);
         EXPECT_FALSE(m_dynamic_completion);
