@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1127,6 +1128,33 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
                               "rc_x,cuda_copy")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
+
+class test_ucp_proto_cpu_accessible : public test_ucp_proto {
+};
+
+/* CPU-accessible memory is packed by memcpy, so small messages have to select
+ * an eager protocol, as for host memory */
+UCS_TEST_P(test_ucp_proto_cpu_accessible, small_msg_eager)
+{
+    const ucp_proto_threshold_elem_t *thresh;
+    unsigned mem_type;
+
+    ucs_memory_type_for_each(mem_type) {
+        if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
+            !(UCS_MEMORY_TYPES_CPU_ACCESSIBLE & UCS_BIT(mem_type))) {
+            continue;
+        }
+
+        thresh = select_tag_send_protocol(
+                static_cast<ucs_memory_type_t>(mem_type), 1);
+        ASSERT_NE(nullptr, thresh);
+        EXPECT_EQ(0, strncmp("egr/", thresh->proto_config.proto->name, 4))
+                << ucs_memory_type_names[mem_type] << ": "
+                << thresh->proto_config.proto->name;
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_proto_cpu_accessible)
 
 class test_perf_node : public test_ucp_proto {
 };

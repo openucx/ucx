@@ -982,7 +982,8 @@ run_mpi_tests() {
 					-mca orte_allowed_exit_without_sync 1 \
 					-mca coll ^hcoll,ml,ucc"
 
-			run_ucx_perftest 1
+			# One worker runs the MPI tests, so cover all devices here
+			worker=0 nworkers=1 run_ucx_perftest 1
 
 			test_malloc_hooks_mpi
 
@@ -1497,9 +1498,6 @@ build_for_tests() {
 
 	export UCX_PROTO_REQUEST_RESET=y
 
-	# all are running mpi tests
-	run_mpi_tests
-
 	# configuration related tests
 	run_configure_tests
 
@@ -1548,6 +1546,9 @@ run_tests() {
 
 	# fault tolerance tests
 	do_distributed_task 1 4 run_ucx_perftest_fault_tolerance
+
+	# mpi tests, last: they rebuild the tree
+	do_distributed_task 1 4 run_mpi_tests
 }
 
 run_asan_check() {

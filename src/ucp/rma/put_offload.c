@@ -485,8 +485,8 @@ ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
                                        ucp_datatype_iter_t *next_iter,
                                        ucp_lane_index_t *lane_shift)
 {
-    return ucp_proto_rma_sgl_offload_send_frag(
-            req, lpriv, next_iter, ucp_proto_put_sgl_offload_sw_post, NULL);
+    return ucp_proto_rma_sgl_offload_send_frags(
+            req, lpriv, 1, next_iter, ucp_proto_put_sgl_offload_sw_post, NULL);
 }
 
 static ucs_status_t

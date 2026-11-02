@@ -780,8 +780,12 @@ static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 static ucs_status_t
 uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
 {
+    static const ucs_config_allow_list_t subnets_allow_all = {
+        .mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL
+    };
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
     const uct_ib_device_spec_t *dev_info;
+    uct_ib_device_gid_info_t gid_info;
     uint8_t required_dev_flags;
     ucs_status_t status;
     unsigned gid_index;
@@ -832,6 +836,15 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
         ucs_trace("%s:%d (%s) does not support flags 0x%x", uct_ib_device_name(dev),
                   port_num, dev_info->name, required_dev_flags);
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (uct_ib_device_is_port_roce(dev, port_num) &&
+        (md->config.gid_index == UCS_ULUNITS_AUTO)) {
+        /* Run the same selection as iface open, to avoid reporting a port
+         * which has no operational gid. The subnet filter is part of the iface
+         * configuration and is not known yet. */
+        return uct_ib_device_select_gid(dev, port_num, &subnets_allow_all,
+                                        &gid_info);
     }
 
     gid_index = uct_ib_device_get_ib_gid_index(md);
@@ -1194,9 +1207,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    gid_info->gid_index             = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
-    gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
-    gid_info->roce_info.addr_family = AF_INET;
+    ucs_debug("%s:%d has no operational gid", uct_ib_device_name(dev),
+              port_num);
+    return UCS_ERR_NO_DEVICE;
 
 out_print:
     ucs_debug("%s:%d using gid_index=%d ver=%d addr_family=%d",
