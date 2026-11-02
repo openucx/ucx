@@ -439,7 +439,7 @@ ucp_wireup_iface_score_bandwidth(const ucp_worker_iface_t *wiface,
                                           &wiface->attr.bandwidth);
     } else {
         /* Compare BW including local distance to prevent EP reconfiguration
-         * since remote distance is included to remote_addr*/
+         * since remote distance is included to remote_addr */
         local_bw = ucp_wireup_iface_bw_distance(wiface);
     }
 
