@@ -211,26 +211,35 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY) &&
                               !((wqe_base ^ wqe_next) & 128);
 
-    if (skip_db) {
-        doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
-        const uint64_t wqe_base_orig = wqe_base;
-        while (!ref.compare_exchange_strong(wqe_base, wqe_next,
-                                            cuda::std::memory_order_relaxed)) {
-            wqe_base = wqe_base_orig;
-        }
-    } else {
-        uint32_t qpn_ds = uct_rc_mlx5_load_const(&qp->qpn_ds);
-        auto *db_ptr = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
-        auto dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
-
-        while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
-        }
-        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
-        doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
-        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
-        ref.store(wqe_next, cuda::std::memory_order_relaxed);
+    /* Publish WQEs before serializing doorbells, so a deferred producer
+     * does not wait for an earlier producer's MMIO writes. */
+    doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
+    const uint64_t wqe_base_orig = wqe_base;
+    while (!ref.compare_exchange_strong(wqe_base, wqe_next,
+                                        cuda::std::memory_order_relaxed)) {
+        wqe_base = wqe_base_orig;
     }
-    doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
+    doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
+
+    if (!skip_db) {
+        doca_gpu_dev_verbs_lock<
+                DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(&qp->sq_lock);
+        const uint64_t old_pi = doca_gpu_dev_verbs_atomic_max<
+                uint64_t, DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU,
+                true>(&qp->sq_wqe_pi, wqe_next);
+        if (old_pi < wqe_next) {
+            const uint32_t qpn_ds = uct_rc_mlx5_load_const(&qp->qpn_ds);
+            auto *db_ptr = (uint64_t*)uct_rc_mlx5_load_const(
+                    (uintptr_t*)&qp->sq_db);
+            auto *dbrec_ptr = &qp->qp_dbrec[MLX5_SND_DBR];
+
+            doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+            doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
+            doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+        }
+        doca_gpu_dev_verbs_unlock<
+                DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU>(&qp->sq_lock);
+    }
 }
 
 UCS_F_DEVICE bool
