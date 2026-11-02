@@ -255,7 +255,7 @@ public:
         }
 
         ASSERT_UCS_OK(uct_rc_mlx5_sgl_completion_init(
-                m_entity->ep(0), element_count, m_final_cb,
+                m_entity->ep(0), element_count, final_cb,
                 this, &m_completion));
     }
 
@@ -537,8 +537,7 @@ UCS_TEST_F(test_rc_completion_info, dispatch)
     ucs_queue_head_init(&txqp.outstanding);
     uct_rc_ep_init_send_op_with_info(&op.op, 0, completion_cb, 0);
     uct_rc_txqp_add_send_op_sn(&txqp, &op.op.super, 7);
-    uct_rc_txqp_set_completion_info(&txqp, 7, &comp_info);
-    uct_rc_txqp_completion_desc(&txqp, 7);
+    uct_rc_txqp_completion_desc_with_info(&txqp, 7, &comp_info);
     EXPECT_EQ(comp_info.field_mask, op.field_mask);
     EXPECT_EQ(comp_info.timestamp, op.timestamp);
     EXPECT_EQ(NULL, op.op.comp_info);
@@ -559,8 +558,7 @@ UCS_TEST_F(test_rc_completion_info, completed_prefix_wraparound)
         uct_rc_txqp_add_send_op_sn(&txqp, &ops[i].op.super, sns[i]);
     }
 
-    uct_rc_txqp_set_completion_info(&txqp, 0, &comp_info);
-    uct_rc_txqp_completion_desc(&txqp, 0);
+    uct_rc_txqp_completion_desc_with_info(&txqp, 0, &comp_info);
     EXPECT_EQ(0ul, ops[0].field_mask);
     EXPECT_EQ(comp_info.timestamp, ops[1].timestamp);
     EXPECT_EQ(comp_info.timestamp, ops[2].timestamp);
