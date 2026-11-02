@@ -1255,14 +1255,19 @@ protected:
         ASSERT_UCS_OK(status);
     }
 
-    static unsigned
-    num_lanes(const ucp_ep_config_key_t &key, ucp_lane_type_t lane_type)
+    /* Local and remote system devices of the sender lanes of the given type */
+    lane_devs_t
+    lane_devs(const ucp_ep_config_key_t &key, ucp_lane_type_t lane_type)
     {
-        unsigned result = 0;
+        ucp_context_h context = sender().ucph();
+        ucp_rsc_index_t rsc_index;
+        lane_devs_t result;
 
         for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
             if (key.lanes[lane].lane_types & UCS_BIT(lane_type)) {
-                ++result;
+                rsc_index = key.lanes[lane].rsc_index;
+                result.emplace(context->tl_rscs[rsc_index].tl_rsc.sys_device,
+                               key.lanes[lane].dst_sys_dev);
             }
         }
 
@@ -1296,13 +1301,21 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, wireup_request_lanes,
 UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, older_peer_lanes,
            "IB_NUM_PATHS?=2", "MAX_EAGER_RAILS=4")
 {
+    const unsigned dev0 = get_mock_sys_dev_by_name("mock_0:1");
+    const unsigned dev1 = get_mock_sys_dev_by_name("mock_1:1");
     ucp_ep_config_key_t key;
 
+    /* Both paths of both fast devices */
     select_lanes(UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION, key);
-    EXPECT_EQ(4u, num_lanes(key, UCP_LANE_TYPE_AM_BW));
+    EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1},
+                           {dev1, dev1}}),
+              lane_devs(key, UCP_LANE_TYPE_AM_BW));
 
+    /* The slow device takes the lane of the second path of mock_1:1 and is
+     * dropped */
     select_lanes(UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION - 1, key);
-    EXPECT_EQ(3u, num_lanes(key, UCP_LANE_TYPE_AM_BW));
+    EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1}}),
+              lane_devs(key, UCP_LANE_TYPE_AM_BW));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_slow_dev, rcx, "rc_x")
