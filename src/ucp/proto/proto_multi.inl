@@ -432,6 +432,7 @@ ucp_proto_rma_sgl_offload_send_frags(
         buffers[0]      = NULL;
         lengths[0]      = 0;
         remote_addrs[0] = 0;
+        elem_indices[0] = 0;
     }
 
     frag_count = ucp_datatype_iter_next_sgl_frags(
