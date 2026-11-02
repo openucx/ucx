@@ -1325,7 +1325,6 @@ typedef struct {
     uint8_t                 scheduled;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
     void                    *address;
-    size_t                  address_length;
 } ucp_wireup_tf_reply_t;
 
 
@@ -1546,7 +1545,6 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
     reply->skip_lanes         = skip_lanes;
     reply->waiting           |= waiting;
     reply->address            = copy;
-    reply->address_length     = address_length;
     memcpy(reply->rx_tokens, rx_tokens, sizeof(reply->rx_tokens));
     memset(rx_tokens, 0, sizeof(reply->rx_tokens));
     ucs_debug("ep %p: LANES_ADDR_REQ defer reply id 0x%x waiting 0x%" PRIx64,

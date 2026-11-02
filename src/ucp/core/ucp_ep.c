@@ -2507,14 +2507,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* A peer request moves the queue pair to error and waits for that
-         * completion before this lane is failed. Recovery stays idle until
-         * the completion holds it. */
-        if ((ucp_ep_recovery_arg(ep) == NULL) ||
-            (ucp_ep_recovery_arg(ep)->tf_reply == NULL)) {
-            ucs_assert(ucp_ep_recovery_arg(ep) == NULL);
-        }
-
+        /* A peer request moves the transport endpoint to error and waits
+         * for that completion before this lane is failed. Recovery stays
+         * idle until the completion holds it. */
+        arg = ucp_ep_recovery_arg(ep);
+        ucs_assert((arg == NULL) || (arg->tf_reply != NULL));
         goto done;
     }
 

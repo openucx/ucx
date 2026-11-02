@@ -594,9 +594,6 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucs_debug("worker %p: uct_ep %p is ep %p lane %d slot %p", worker, uct_ep,
-              ucp_ep, lane, ucp_ep_get_lane(ucp_ep, lane));
-
     status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep,
                                                     status);
 
