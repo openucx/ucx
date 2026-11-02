@@ -23,6 +23,8 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/api/device/uct_device_types.h>
 
+#include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -792,6 +794,25 @@ out:
     }
 }
 
+/* Parse an unsigned number, rejecting a sign or leading whitespace which
+ * strtoul() accepts, and values out of range */
+static ucs_status_t
+uct_cuda_ipc_md_parse_ulong(const char *str, unsigned long *value_p,
+                            char **end_p)
+{
+    if (!isdigit((unsigned char)*str)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    errno    = 0;
+    *value_p = strtoul(str, end_p, 0);
+    if (errno != 0) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 /* Parse "<domain>[:<host>]", <host> defaults to <domain> */
 static ucs_status_t
 uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
@@ -799,8 +820,7 @@ uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
 {
     char *end;
 
-    *domain_p = strtoul(str, &end, 0);
-    if (end == str) {
+    if (uct_cuda_ipc_md_parse_ulong(str, domain_p, &end) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -813,9 +833,8 @@ uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    str     = end + 1;
-    *host_p = strtoul(str, &end, 0);
-    if ((end == str) || (*end != '\0')) {
+    if ((uct_cuda_ipc_md_parse_ulong(end + 1, host_p, &end) != UCS_OK) ||
+        (*end != '\0')) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -844,7 +863,7 @@ uct_cuda_ipc_md_emulate_nvlink_domain(uct_cuda_ipc_md_t *md,
     /* Processes with different emulated hosts look like different hosts to
      * each other, while real hosts stay distinguishable */
     md->system_uuid  ^= (host + 1) * UCT_CUDA_IPC_NVLINK_DOMAIN_HOST_MIX;
-    ucs_debug("emulating host %lu in NVLink domain %lu", host, domain);
+    ucs_diag("emulating host %lu in NVLink domain %lu", host, domain);
     return UCS_OK;
 }
 
