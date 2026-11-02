@@ -1774,7 +1774,8 @@ UCS_TEST_P(test_ucp_rma_sgl, short_elements_with_callback) {
     test_sgl(10, 8, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, many_short_elements) {
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, many_short_elements,
+                     RUNNING_ON_VALGRIND) {
     test_sgl(UCS_KBYTE, 8);
 }
 
@@ -1945,7 +1946,8 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_rma_sgl_err, short_elements_ep_close_force) {
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_err, short_elements_ep_close_force,
+                     RUNNING_ON_VALGRIND) {
     static constexpr size_t NUM_ELEMS = 1024;
 
     require_host_get();
