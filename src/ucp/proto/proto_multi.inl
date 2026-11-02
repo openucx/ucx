@@ -426,9 +426,9 @@ ucp_proto_rma_sgl_offload_send_frags(
     ucs_assert(max_frag_count <= UCP_MAX_IOV);
     ucs_assert((adjust_func == NULL) || (max_frag_count == 1));
 
-    if (adjust_func != NULL) {
-        /* Silence compiler warning, the first fragment is passed to the adjust
-         * function below */
+    if (max_frag_count == 1) {
+        /* Silence compiler warning, a single fragment is read by the adjust
+         * and post functions */
         buffers[0]      = NULL;
         lengths[0]      = 0;
         remote_addrs[0] = 0;
