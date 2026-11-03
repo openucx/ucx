@@ -1306,6 +1306,7 @@ static void ucp_mtype_pack_dereg(ucp_context_h context,
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,
                                       ucp_md_index_t md_index,
+                                      unsigned uct_reg_flags,
                                       ucp_mtype_pack_context_t *pack_context)
 {
     ucp_context_h context            = worker->context;
@@ -1328,7 +1329,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
     if (!(context->cache_md_map[mem_type] & UCS_BIT(md_index))) {
         reg_params.field_mask = UCT_MD_MEM_REG_FIELD_FLAGS;
-        reg_params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        reg_params.flags      = UCT_MD_MEM_ACCESS_ALL | uct_reg_flags;
         if (!(UCS_BIT(mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)) {
             reg_params.field_mask |= UCT_MD_MEM_REG_FIELD_MEM_TYPE;
             reg_params.mem_type    = mem_type;
@@ -1344,7 +1345,8 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
         pack_context->ucp_memh = NULL;
     } else {
         status = ucp_memh_get(context, remote_addr, length, mem_type,
-                              UCS_BIT(md_index), UCT_MD_MEM_ACCESS_ALL,
+                              UCS_BIT(md_index),
+                              UCT_MD_MEM_ACCESS_ALL | uct_reg_flags,
                               "mem_type", &pack_context->ucp_memh);
         if (status != UCS_OK) {
             return status;
