@@ -1548,18 +1548,6 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
     return UCS_OK;
 }
 
-static void ucp_wireup_tf_reply_disarm(ucp_ep_h ep, ucp_lane_map_t not_armed)
-{
-    ucp_wireup_tf_reply_t *reply = ucp_wireup_tf_reply_get(ep);
-
-    if (reply == NULL) {
-        return;
-    }
-
-    reply->waiting &= ~not_armed;
-    ucp_wireup_tf_reply_schedule(ep);
-}
-
 void ucp_wireup_tf_reply_lanes_failed(ucp_ep_h ep, ucp_lane_map_t lanes)
 {
     ucp_wireup_tf_reply_t *reply = ucp_wireup_tf_reply_get(ep);
@@ -1602,7 +1590,7 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
 {
     ucp_wireup_tf_reply_t immediate;
     ucp_wireup_lane_token_t rx_tokens[UCP_MAX_LANES];
-    ucp_lane_map_t invalidated, pending, already, armed;
+    ucp_lane_map_t invalidated, pending, already, armed, not_armed;
     ucs_status_t status;
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
@@ -1646,9 +1634,14 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
         }
 
         /* Installed before the invalidate, so a completion that arrives
-         * from it can finish the reply. */
-        armed = ucp_ep_tf_invalidate_uct_eps(ep, pending);
-        ucp_wireup_tf_reply_disarm(ep, pending & ~armed);
+         * from it can finish the reply. A lane left out has no completion,
+         * so fail it locally instead of leaving it up. */
+        armed     = ucp_ep_tf_invalidate_uct_eps(ep, pending);
+        not_armed = pending & ~armed;
+        if (not_armed != 0) {
+            ucp_ep_set_lanes_failed_schedule(ep, not_armed,
+                                             UCS_ERR_CONNECTION_RESET);
+        }
     } else {
         memset(&immediate, 0, sizeof(immediate));
         immediate.request_id         = request_id;
