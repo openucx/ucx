@@ -130,6 +130,30 @@ protected:
         test_sgl(std::vector<size_t>(count, elem_size(UCS_KBYTE)), &comp);
     }
 
+    void test_sgl_zero_length_element()
+    {
+        static const size_t count       = 3;
+        static const size_t empty_index = 1;
+
+        connect_or_skip();
+
+        if (max_count() < count) {
+            UCS_TEST_SKIP_R("not enough sgl elements");
+        }
+
+        if (elem_size(0) > 0) {
+            UCS_TEST_SKIP_R("zero length is not supported");
+        }
+
+        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(), op(),
+                       std::vector<size_t>(count, elem_size(UCS_KBYTE)));
+        sgl.lengths[empty_index] = 0;
+
+        ASSERT_UCS_OK_OR_INPROGRESS(sgl_op(sgl));
+        m_sender->flush();
+        check_sgl(sgl);
+    }
+
 private:
     enum sgl_op_t {
         SGL_OP_PUT,
@@ -261,10 +285,13 @@ private:
     void check_sgl(const sgl_arrays &sgl)
     {
         for (size_t i = 0; i < sgl.lengths.size(); ++i) {
+            /* The target of a zero-length element keeps its initial data */
+            uint64_t seed = (sgl.lengths[i] == 0) ? SEED2 : (SEED1 + i);
+
             if (op() == SGL_OP_PUT) {
-                sgl.remote[i]->pattern_check(SEED1 + i);
+                sgl.remote[i]->pattern_check(seed);
             } else {
-                sgl.local[i]->pattern_check(SEED1 + i);
+                sgl.local[i]->pattern_check(seed);
             }
         }
     }
@@ -325,6 +352,10 @@ UCS_TEST_P(test_uct_sgl, zero_count) {
 
 UCS_TEST_P(test_uct_sgl, with_callback) {
     test_sgl_with_callback();
+}
+
+UCS_TEST_P(test_uct_sgl, zero_length_element) {
+    test_sgl_zero_length_element();
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_sgl)
