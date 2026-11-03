@@ -134,6 +134,9 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * Init hooks publish their context only on success and unwind their resources
  * on failure. Cleanup hooks run only after successful initialization. Endpoint
  * cleanup runs after timestamped operations have completed or been canceled.
+ * Canceled completion callbacks must not repost or rearm sampling. Providers
+ * must remove or cancel queued work referencing an endpoint context before
+ * releasing it.
  * Interface cleanup stops provider-owned timers and drains its queued work.
  *
  * A nonempty address payload requires both pack and connect hooks. With
