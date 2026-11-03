@@ -38,7 +38,8 @@
 #define UCS_CONFIG_SSCANF_NUMBER(_buf, _fmt, _value) \
     ({ \
         int _length = 0; \
-        (sscanf(_buf, _fmt " %n", _value, &_length) == 1) && \
+        \
+        (sscanf((_buf), _fmt " %n", (_value), &_length) == 1) && \
                 ((_buf)[_length] == '\0'); \
     })
 
@@ -239,7 +240,7 @@ int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
         *(size_t*)dest = UCS_HEXUNITS_AUTO;
         return 1;
     } else if (strncasecmp(buf, "0x", 2) == 0) {
-        return (sscanf(buf + 2, "%x", (unsigned int*)dest));
+        return UCS_CONFIG_SSCANF_NUMBER(buf + 2, "%x", (unsigned int*)dest);
     } else {
         return 0;
     }
@@ -787,7 +788,7 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
     p = strchr(str, '-');
     if (p == NULL) {
         /* got only one value (not a range) */
-        if (1 != sscanf(buf, "%u", &first)) {
+        if (!UCS_CONFIG_SSCANF_NUMBER(buf, "%u", &first)) {
             ret = 0;
             goto out;
         }
@@ -796,8 +797,8 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
         /* got a range of numbers */
         *p = 0;      /* split str */
 
-        if ((1 != sscanf(str, "%u", &first))
-            || (1 != sscanf(p + 1, "%u", &last))) {
+        if (!UCS_CONFIG_SSCANF_NUMBER(str, "%u", &first) ||
+            !UCS_CONFIG_SSCANF_NUMBER(p + 1, "%u", &last)) {
             ret = 0;
             goto out;
         }

@@ -735,8 +735,12 @@ UCS_TEST_F(test_config, set_uint_trailing_chars) {
 }
 
 UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
+    static const char *uint_enum_names[] = {"first", "second", NULL};
     unsigned long ulong_value;
+    ucs_range_spec_t range;
     double double_value;
+    unsigned uint_value;
+    unsigned hex_value;
     unsigned bitmask;
     int int_value;
 
@@ -753,9 +757,38 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     EXPECT_EQ(1.5, double_value);
     EXPECT_FALSE(ucs_config_sscanf_double("1.5abc", &double_value, NULL));
 
+    EXPECT_TRUE(ucs_config_sscanf_ulunits("auto", &ulong_value, NULL));
+    EXPECT_EQ(UCS_ULUNITS_AUTO, ulong_value);
+    EXPECT_TRUE(ucs_config_sscanf_ulunits("16 ", &ulong_value, NULL));
+    EXPECT_EQ(16UL, ulong_value);
+    EXPECT_FALSE(ucs_config_sscanf_ulunits("16abc", &ulong_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_uint_enum("second", &uint_value,
+                                            uint_enum_names));
+    EXPECT_EQ(UCS_CONFIG_UINT_ENUM_INDEX(1), uint_value);
+    EXPECT_TRUE(ucs_config_sscanf_uint_enum("7", &uint_value,
+                                            uint_enum_names));
+    EXPECT_EQ(7U, uint_value);
+    EXPECT_FALSE(ucs_config_sscanf_uint_enum("7abc", &uint_value,
+                                             uint_enum_names));
+
     EXPECT_TRUE(ucs_config_sscanf_bitmask("4", &bitmask, NULL));
     EXPECT_EQ(0xfU, bitmask);
     EXPECT_FALSE(ucs_config_sscanf_bitmask("4abc", &bitmask, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_hex("0x8000", &hex_value, NULL));
+    EXPECT_EQ(0x8000U, hex_value);
+    EXPECT_FALSE(ucs_config_sscanf_hex("0x8000junk", &hex_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_range_spec("100", &range, NULL));
+    EXPECT_EQ(100U, range.first);
+    EXPECT_EQ(100U, range.last);
+    EXPECT_TRUE(ucs_config_sscanf_range_spec("100-200", &range, NULL));
+    EXPECT_EQ(100U, range.first);
+    EXPECT_EQ(200U, range.last);
+    EXPECT_FALSE(ucs_config_sscanf_range_spec("100junk", &range, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_range_spec("100junk-200", &range, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_range_spec("100-200junk", &range, NULL));
 }
 
 UCS_TEST_F(test_config, set_blob)
