@@ -288,14 +288,16 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     uct_cuda_ipc_unpacked_rkey_t *key;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     uct_cuda_ipc_sgl_mapping_t *mapping;
+    uct_cuda_ipc_sgl_entry_t *entry;
     uct_cuda_queue_desc_t *q_desc;
     CUmemcpyAttributes attr;
     void *mapped_addr;
     const void *mapped_base_addr;
-    CUdeviceptr *mapped_addrs;
+    CUdeviceptr *mapped_addrs, *local_addrs;
     CUdeviceptr *dsts, *srcs;
+    size_t *copy_lengths;
     size_t attrs_idx;
-    size_t i, total_length;
+    size_t i, first, total_length;
     CUdevice cuda_device;
     CUstream *stream;
     ucs_status_t status;
@@ -308,7 +310,12 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     }
 
     total_length = 0;
+    first        = count;
     for (i = 0; i < count; i++) {
+        if ((first == count) && (lengths[i] != 0)) {
+            first = i;
+        }
+
         total_length += lengths[i];
     }
 
@@ -318,7 +325,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         return UCS_OK;
     }
 
-    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)buffers[0],
+    status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)buffers[first],
                                              &cuda_device, &is_ctx_pushed);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
@@ -326,7 +333,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
 
     mapping = ucs_malloc(sizeof(*mapping) +
                          count * (sizeof(*mapping->entries) +
-                                  sizeof(CUdeviceptr)),
+                                  (2 * sizeof(CUdeviceptr)) + sizeof(size_t)),
                          "cuda_ipc_sgl_mapping");
     if (ucs_unlikely(mapping == NULL)) {
         ucs_error("Failed to allocate cuda_ipc sgl mapping");
@@ -337,12 +344,19 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     mapping->count   = 0;
     mapping->entries = (uct_cuda_ipc_sgl_entry_t *)(mapping + 1);
     mapped_addrs     = (CUdeviceptr *)(mapping->entries + count);
+    local_addrs      = mapped_addrs + count;
+    copy_lengths     = (size_t *)(local_addrs + count);
 
     memset(&attr, 0, sizeof(attr));
     attr.srcAccessOrder = CU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
     attrs_idx           = 0;
 
     for (i = 0; i < count; i++) {
+        /* cuMemcpyBatchAsync does not accept copies of zero length */
+        if (lengths[i] == 0) {
+            continue;
+        }
+
         key = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[i];
 
         status = uct_cuda_ipc_get_remote_address(&key->super, remote_addrs[i],
@@ -352,23 +366,26 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
             goto out_unmap;
         }
 
-        mapping->entries[i].pid         = key->super.super.pid;
-        mapping->entries[i].pid_ns      = key->super.pid_ns;
-        mapping->entries[i].d_bptr      = (uintptr_t)key->super.super.d_bptr;
-        mapping->entries[i].mapped_addr = mapped_base_addr;
-        mapped_addrs[i]                 = (CUdeviceptr)mapped_addr;
+        entry                        = &mapping->entries[mapping->count];
+        entry->pid                   = key->super.super.pid;
+        entry->pid_ns                = key->super.pid_ns;
+        entry->d_bptr                = (uintptr_t)key->super.super.d_bptr;
+        entry->mapped_addr           = mapped_base_addr;
+        mapped_addrs[mapping->count] = (CUdeviceptr)mapped_addr;
+        local_addrs[mapping->count]  = (CUdeviceptr)buffers[i];
+        copy_lengths[mapping->count] = lengths[i];
         mapping->count++;
     }
 
     if (direction == UCT_CUDA_IPC_PUT) {
         dsts = mapped_addrs;
-        srcs = (CUdeviceptr*)buffers;
+        srcs = local_addrs;
     } else {
-        dsts = (CUdeviceptr*)buffers;
+        dsts = local_addrs;
         srcs = mapped_addrs;
     }
 
-    key    = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[0];
+    key    = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[first];
     status = uct_cuda_ipc_get_stream_and_event(iface, key->stream_id,
                                                &q_desc, &stream,
                                                &cuda_ipc_event);
@@ -377,7 +394,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     }
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(
-            cuMemcpyBatchAsync(dsts, srcs, (size_t *)lengths, count, &attr,
+            cuMemcpyBatchAsync(dsts, srcs, copy_lengths, mapping->count, &attr,
                                &attrs_idx, 1, *stream));
     if (ucs_unlikely(status != UCS_OK)) {
         ucs_mpool_put(cuda_ipc_event);
