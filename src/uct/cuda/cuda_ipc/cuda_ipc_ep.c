@@ -297,7 +297,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     CUdeviceptr *dsts, *srcs;
     size_t *copy_lengths;
     size_t attrs_idx;
-    size_t i, first, total_length;
+    size_t i, j, first, num_nonempty, elem_size, total_length;
     CUdevice cuda_device;
     CUstream *stream;
     ucs_status_t status;
@@ -310,13 +310,10 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     }
 
     total_length = 0;
-    first        = count;
+    num_nonempty = 0;
     for (i = 0; i < count; i++) {
-        if ((first == count) && (lengths[i] != 0)) {
-            first = i;
-        }
-
         total_length += lengths[i];
+        num_nonempty += (lengths[i] != 0);
     }
 
     if (ucs_unlikely(total_length == 0)) {
@@ -325,15 +322,28 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         return UCS_OK;
     }
 
+    /* The context and the stream are taken from the first non-empty element,
+     * which exists because total_length != 0 */
+    first = 0;
+    while (lengths[first] == 0) {
+        first++;
+    }
+
     status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)buffers[first],
                                              &cuda_device, &is_ctx_pushed);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
 
-    mapping = ucs_malloc(sizeof(*mapping) +
-                         count * (sizeof(*mapping->entries) +
-                                  (2 * sizeof(CUdeviceptr)) + sizeof(size_t)),
+    /* If some elements are empty, the local addresses and lengths of the
+     * non-empty ones are compacted into the same allocation, otherwise the
+     * caller arrays are passed to cuMemcpyBatchAsync as is */
+    elem_size = sizeof(*mapping->entries) + sizeof(*mapped_addrs);
+    if (ucs_unlikely(num_nonempty < count)) {
+        elem_size += sizeof(*local_addrs) + sizeof(*copy_lengths);
+    }
+
+    mapping = ucs_malloc(sizeof(*mapping) + (count * elem_size),
                          "cuda_ipc_sgl_mapping");
     if (ucs_unlikely(mapping == NULL)) {
         ucs_error("Failed to allocate cuda_ipc sgl mapping");
@@ -344,8 +354,22 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     mapping->count   = 0;
     mapping->entries = (uct_cuda_ipc_sgl_entry_t *)(mapping + 1);
     mapped_addrs     = (CUdeviceptr *)(mapping->entries + count);
-    local_addrs      = mapped_addrs + count;
-    copy_lengths     = (size_t *)(local_addrs + count);
+
+    if (ucs_unlikely(num_nonempty < count)) {
+        /* Same elements and order as in the mapping loop below */
+        local_addrs  = mapped_addrs + count;
+        copy_lengths = (size_t *)(local_addrs + count);
+        for (i = 0, j = 0; i < count; i++) {
+            if (lengths[i] != 0) {
+                local_addrs[j]  = (CUdeviceptr)buffers[i];
+                copy_lengths[j] = lengths[i];
+                j++;
+            }
+        }
+    } else {
+        local_addrs  = (CUdeviceptr *)buffers;
+        copy_lengths = (size_t *)lengths;
+    }
 
     memset(&attr, 0, sizeof(attr));
     attr.srcAccessOrder = CU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
@@ -353,7 +377,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
 
     for (i = 0; i < count; i++) {
         /* cuMemcpyBatchAsync does not accept copies of zero length */
-        if (lengths[i] == 0) {
+        if (ucs_unlikely(lengths[i] == 0)) {
             continue;
         }
 
@@ -372,8 +396,6 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         entry->d_bptr                = (uintptr_t)key->super.super.d_bptr;
         entry->mapped_addr           = mapped_base_addr;
         mapped_addrs[mapping->count] = (CUdeviceptr)mapped_addr;
-        local_addrs[mapping->count]  = (CUdeviceptr)buffers[i];
-        copy_lengths[mapping->count] = lengths[i];
         mapping->count++;
     }
 
@@ -416,7 +438,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     cuda_ipc_event->cuda_device = cuda_device;
 
     ucs_trace("cuMemcpyBatchAsync issued: count=%zu total_length=%zu",
-              count, total_length);
+              mapping->count, total_length);
 
     *total_length_p = total_length;
     status          = UCS_INPROGRESS;
