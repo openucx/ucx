@@ -130,6 +130,10 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Maximum memory for concurrent rndv fragments per worker (bytes) */
+    size_t                                 rndv_frag_worker_max_mem;
+    /** Fraction of rndv_frag_worker_max_mem which RTR fragments may use */
+    double                                 rndv_frag_rtr_ratio;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -189,6 +193,8 @@ typedef struct ucp_context_config {
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
+    /** Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints */
+    ucp_failover_mode_t                    failover_mode;
     /** Time period between dynamic transport switching rounds */
     ucs_time_t                             dynamic_tl_switch_interval;
     /** Number of usage tracker rounds performed for each progress operation */
@@ -805,7 +811,6 @@ ucp_context_print_transport_tables_enabled(ucp_context_h context)
 
     return value == UCS_CONFIG_ON;
 }
-
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -8,6 +8,14 @@
 #include "test_rc.h"
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
+
+#include <memory>
+#include <vector>
+
+extern "C" {
+#include <ucs/arch/cpu.h>
+#include <uct/api/v2/uct_v2.h>
+}
 
 #ifdef HAVE_MLX5_DV
 extern "C" {
@@ -142,6 +150,87 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
 }
 
+void test_rc::test_sgl_reserve(bool add_pending)
+{
+    uct_iface_attr_v2_t attr = {};
+    const size_t length      = 64;
+    const size_t count       = 2;
+    ucs_status_t status;
+    uct_pending_req_t pend_req;
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+        (attr.max_put_sgl_zcopy_count < count)) {
+        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    }
+
+    mapped_buffer s0(length, 0ul, *m_e1), s1(length, 0ul, *m_e1);
+    mapped_buffer r0(length, 0ul, *m_e2), r1(length, 0ul, *m_e2);
+    void *buffers[]    = {s0.ptr(), s1.ptr()};
+    size_t lengths[]   = {length, length};
+    uct_mem_h memhs[]  = {s0.memh(), s1.memh()};
+    uint64_t raddrs[]  = {r0.addr(), r1.addr()};
+    uct_rkey_t rkeys[] = {r0.rkey(), r1.rkey()};
+
+    /* A single PUT SHORT consumes exactly one TXQP credit */
+    const int16_t initial = uct_rc_txqp_available(&rc_ep(m_e1)->txqp);
+    for (int16_t i = initial; i > (int16_t)(count - 1); --i) {
+        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
+                                       r0.rkey()));
+    }
+
+    ASSERT_EQ(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)(count - 1));
+    ASSERT_GT(rc_iface(m_e1)->tx.cq_available, (int16_t)(count - 1));
+
+    status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs, raddrs,
+                                  rkeys, NULL, NULL, count, NULL);
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_GT(rc_ep(m_e1)->txqp_reserve, 0);
+
+    if (add_pending) {
+        pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
+            return UCS_ERR_NO_RESOURCE;
+        };
+
+        ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    if (add_pending) {
+        /* The pending request never completes, so purge it to drop the
+         * reserve */
+        uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    }
+
+    /* Without pending requests, the reserve is dropped on TX completion */
+    flush();
+
+    EXPECT_EQ(0, rc_ep(m_e1)->txqp_reserve);
+    EXPECT_EQ(0, rc_ep(m_e1)->cq_reserve);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING  |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_reserve_released_on_completion,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(false);
+}
+
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
                      GetParam()->tl_name != "rc_mlx5",
                      "IB_PCI_RELAXED_ORDERING=yes")
@@ -175,6 +264,111 @@ UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
     }
 
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+}
+
+/* Synthesize an error receive completion by replacing the poll_cq() operation
+ * of the device context: receive work requests go to the shared receive queue,
+ * which verbs can not move to an error state. */
+static struct {
+    struct ibv_cq      *cq;
+    void               *desc;
+    int                inject;
+} failed_rx;
+
+static int failed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
+                             struct ibv_wc *wc)
+{
+    if ((cq != failed_rx.cq) || (num_entries < 1) || !failed_rx.inject) {
+        return 0;
+    }
+
+    failed_rx.inject = 0;
+    wc[0].status     = IBV_WC_REM_ABORT_ERR;
+    wc[0].wr_id      = (uintptr_t)failed_rx.desc;
+    return 1;
+}
+
+static bool is_desc_in_pool(ucs_mpool_t *mp, void *desc)
+{
+    ucs_mpool_elem_t *elem;
+
+    for (elem = mp->freelist; elem != NULL; elem = elem->next) {
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof(*elem));
+        if (UCS_PTR_BYTE_OFFSET(elem, sizeof(*elem)) == desc) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* The repost batch must stay above the single completion reported here, so
+ * that the released descriptor is not posted again. */
+UCS_TEST_SKIP_COND_P(test_rc, failed_rx_release_desc,
+                     GetParam()->tl_name != "rc_verbs", "IB_RX_MAX_BATCH=16")
+{
+    uct_rc_iface_t *rc = rc_iface(m_e2);
+
+    failed_rx.desc = ucs_mpool_get(&rc->rx.mp);
+    ASSERT_TRUE(failed_rx.desc != NULL);
+
+    failed_rx.cq     = rc->super.cq[UCT_IB_DIR_RX];
+    failed_rx.inject = 1;
+
+    ucs::mock mock;
+    mock.setup(&failed_rx.cq->context->ops.poll_cq, failed_rx_poll_cq);
+
+    progress();
+    ASSERT_FALSE(failed_rx.inject);
+
+    /* The completion was reported for a work request the queue never held */
+    rc->rx.srq.available--;
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, failed_rx.desc))
+            << "receive descriptor leaked";
+}
+
+/* A transport which fails to initialize an endpoint must remove it from
+ * iface->ep_list, or uct_rc_iface_flush() would touch freed memory. */
+UCS_TEST_SKIP_COND_P(test_rc, ep_init_failure_removed_from_ep_list,
+                     GetParam()->tl_name != "rc_verbs")
+{
+    /* rx.max_bufs bounds the receive pool below rx.queue_len, and pinning
+     * rx.bufs_grow keeps the pool valid regardless of rx.queue_len. */
+    if (uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS", "8") != UCS_OK) {
+        UCS_TEST_SKIP_R("cannot limit the receive buffer pool");
+    }
+
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_BUFS_GROW", "8"));
+
+    ucs::handle<uct_iface_h> new_iface;
+    UCS_TEST_CREATE_HANDLE(uct_iface_h, new_iface, uct_iface_close,
+                           uct_iface_open, m_e1->md(), m_e1->worker(),
+                           &m_e1->iface_params(), m_iface_config);
+
+    uct_rc_iface_t *rc = ucs_derived_of(new_iface.get(), uct_rc_iface_t);
+    if (rc->rx.srq.quota == 0) {
+        UCS_TEST_SKIP_R("SRQ is disabled");
+    }
+
+    /* Compare the entry rather than walk the list, to not read freed memory. */
+    ucs_list_link_t *first = rc->ep_list.next;
+
+    uct_ep_params_t ep_params;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = new_iface.get();
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    scoped_log_handler wrap_warn(wrap_warns_logger);
+    uct_ep_h ep          = NULL;
+    ucs_status_t status  = uct_ep_create(&ep_params, &ep);
+
+    if (ep != NULL) {
+        uct_ep_destroy(ep); /* an unexpected ep would add a cleanup warning */
+    }
+
+    ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+    EXPECT_EQ(first, rc->ep_list.next);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
@@ -310,6 +504,156 @@ UCS_TEST_SKIP_COND_P(test_rc_max_wr, send_limit,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
+
+#ifdef HAVE_MLX5_DV
+class test_rc_mlx5_bf_copy : public test_rc {
+public:
+    virtual void init()
+    {
+        test_rc::init();
+
+        if (!check_bf_caps()) {
+            cleanup();
+            UCS_TEST_SKIP_R("write-combining UAR is not supported");
+        }
+
+        m_rx_count  = 0;
+        m_rx_errors = 0;
+        uct_iface_set_am_handler(m_e2->iface(), AM_ID, am_handler, this, 0);
+    }
+
+    /* BlueFlame writes the full WQE to the MMIO register, which is only valid
+     * when the UAR is write-combining. */
+    bool check_bf_caps()
+    {
+        FOR_EACH_ENTITY(entity) {
+            uct_ib_mlx5_md_t *md = ucs_derived_of((*entity)->md(),
+                                                  uct_ib_mlx5_md_t);
+            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+protected:
+    enum {
+        AM_ID       = 0,
+        NUM_ITERS   = 512,
+        MAX_PAYLOAD = UCT_IB_MLX5_BF_REG_SIZE
+    };
+
+    /* Post AM shorts of varying size, so that single-BB and multi-BB BlueFlame
+     * copies and the send queue wrap-around are all exercised. */
+    void test_bf_copy()
+    {
+        uct_rc_mlx5_base_ep_t *ep;
+        uint8_t payload[MAX_PAYLOAD];
+        size_t max_len, len, i;
+        ucs_status_t status;
+        unsigned iter;
+
+        ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        ASSERT_TRUE(ep->tx.wq.reg != NULL);
+        ASSERT_EQ(UCT_IB_MLX5_MMIO_MODE_BF_POST, ep->tx.wq.reg->mode);
+
+        max_len = m_e1->iface_attr().cap.am.max_short - sizeof(uint64_t);
+        if (max_len > sizeof(payload)) {
+            max_len = sizeof(payload);
+        }
+
+        for (iter = 0; iter < NUM_ITERS; ++iter) {
+            len = iter % (max_len + 1);
+            for (i = 0; i < len; ++i) {
+                payload[i] = iter + i;
+            }
+
+            do {
+                status = uct_ep_am_short(m_e1->ep(0), AM_ID, iter, payload,
+                                         len);
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    progress_loop();
+                }
+            } while (status == UCS_ERR_NO_RESOURCE);
+
+            ASSERT_UCS_OK(status);
+        }
+
+        flush();
+        wait_for_value(&m_rx_count, (unsigned)NUM_ITERS, true);
+        EXPECT_EQ((unsigned)NUM_ITERS, m_rx_count);
+        EXPECT_EQ(0u, m_rx_errors);
+    }
+
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags)
+    {
+        test_rc_mlx5_bf_copy *self = reinterpret_cast<test_rc_mlx5_bf_copy*>(
+                arg);
+        const uint8_t *payload;
+        uint64_t hdr;
+        size_t i;
+
+        if (length < sizeof(hdr)) {
+            ++self->m_rx_errors;
+            return UCS_OK;
+        }
+
+        memcpy(&hdr, data, sizeof(hdr));
+        payload = reinterpret_cast<const uint8_t*>(data) + sizeof(hdr);
+
+        for (i = 0; i < (length - sizeof(hdr)); ++i) {
+            if (payload[i] != (uint8_t)(hdr + i)) {
+                ++self->m_rx_errors;
+                break;
+            }
+        }
+
+        ++self->m_rx_count;
+        return UCS_OK;
+    }
+
+    volatile unsigned m_rx_count;
+    volatile unsigned m_rx_errors;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_copy, generic,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=generic",
+                     "RC_FC_ENABLE?=n")
+{
+    test_bf_copy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_copy, rc_mlx5)
+
+#if UCT_IB_MLX5_HAVE_ST64B
+class test_rc_mlx5_bf_copy_st64b : public test_rc_mlx5_bf_copy {
+public:
+    virtual void init()
+    {
+        if (!ucs_cpu_has_flag(UCS_CPU_FLAG_LS64)) {
+            UCS_TEST_SKIP_R("CPU does not report LS64 support");
+        }
+
+        test_rc_mlx5_bf_copy::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_copy_st64b, st64b,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=st64b",
+                     "RC_FC_ENABLE?=n")
+{
+    test_bf_copy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_copy_st64b, rc_mlx5)
+#endif
+
+#endif
 
 
 class test_rc_iface_flush_remote : public uct_test {
@@ -757,6 +1101,71 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
     EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_sgl_no_comp,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    static const size_t num_iters = 64;
+    uct_iface_attr_v2_t attr_v2   = {};
+    std::vector<std::unique_ptr<mapped_buffer> > local, remote;
+    std::vector<void*> buffers;
+    std::vector<size_t> lengths;
+    std::vector<uct_mem_h> memhs;
+    std::vector<uint64_t> remote_addrs;
+    std::vector<uct_rkey_t> rkeys;
+    ucs_status_t status;
+    size_t count, length, i;
+
+    attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                         UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+    if ((uct_iface_query_v2(m_e1->iface(), &attr_v2) != UCS_OK) ||
+        !(attr_v2.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY) ||
+        (attr_v2.max_get_sgl_zcopy_count == 0)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    const uct_iface_attr &attr = m_e1->iface_attr();
+    count  = ucs_min(size_t(2), attr_v2.max_get_sgl_zcopy_count);
+    length = ucs_min(ucs_max(size_t(1024), attr.cap.get.min_zcopy),
+                     attr.cap.get.max_zcopy);
+
+    ASSERT_LE(count * length, m_num_get_bytes);
+
+    for (i = 0; i < count; ++i) {
+        local.emplace_back(new mapped_buffer(length, 0ul, *m_e1));
+        remote.emplace_back(new mapped_buffer(length, 0xABCul + i, *m_e2));
+        buffers.push_back(local[i]->ptr());
+        lengths.push_back(length);
+        memhs.push_back(local[i]->memh());
+        remote_addrs.push_back(remote[i]->addr());
+        rkeys.push_back(remote[i]->rkey());
+    }
+
+    ASSERT_GT(num_iters * count * length, 2 * m_num_get_bytes);
+
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(30 * ucs::test_time_multiplier());
+    for (size_t iter = 0; iter < num_iters; ++iter) {
+        do {
+            status = uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(),
+                                          lengths.data(), memhs.data(),
+                                          remote_addrs.data(), rkeys.data(),
+                                          NULL, NULL, count, NULL);
+            if (status == UCS_ERR_NO_RESOURCE) {
+                progress();
+            }
+        } while ((status == UCS_ERR_NO_RESOURCE) &&
+                 (ucs_get_time() < deadline));
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+    }
+
+    flush();
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+
+    for (i = 0; i < count; ++i) {
+        local[i]->pattern_check(0xABCul + i);
+    }
+}
+
 // Check that it is not possible to send while not all pendings are dispatched
 // yet. RDMA_READ resources are released in get function completion callbacks.
 // Since in RC transports completions are handled after pending dispatch
@@ -1025,12 +1434,10 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and send short put message to force
-     * pending queue dispatch. Can't send AM message for that, because it may
-     * trigger reordering assert due to disable/enable entity hack. */
+    /* Enable send capabilities of m_e2 and dispatch the pending queue directly,
+     * so it does not depend on a send to generate a TX completion. */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 0);
-    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
+    dispatch_pending(m_e2);
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);
@@ -1405,6 +1812,11 @@ public:
 
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
+    }
+
+    virtual void inject_error(unsigned idx = 0) override
+    {
+        kill_receiver(idx);
     }
 };
 

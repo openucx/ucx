@@ -190,9 +190,8 @@ $ make -C test/gtest test
 
 ## Licenses
 
-UCX is licensed as:
-
-* [BSD3](LICENSE)
+UCX is licensed under [BSD-3-Clause](LICENSE). See the
+[third-party notices](THIRD_PARTY_NOTICES) for bundled components.
 
 <hr>
 

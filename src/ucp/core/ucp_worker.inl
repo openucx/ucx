@@ -48,7 +48,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
 static UCS_F_ALWAYS_INLINE khint_t
 ucp_worker_mpool_hash_func(ucp_worker_mpool_key_t mpool_key)
 {
-    return (khint_t)mpool_key.mem_type ^ (mpool_key.sys_dev << 8);
+    return (khint_t)mpool_key.mem_type ^ (mpool_key.sys_dev << 8) ^
+           (mpool_key.pool << 16);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -56,10 +57,11 @@ ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
                               ucp_worker_mpool_key_t mpool_key2)
 {
     return (mpool_key1.sys_dev == mpool_key2.sys_dev) &&
-           (mpool_key1.mem_type == mpool_key2.mem_type);
+           (mpool_key1.mem_type == mpool_key2.mem_type) &&
+           (mpool_key1.pool == mpool_key2.pool);
 }
 
-KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t,
+KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*,
            1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
 
 static UCS_F_ALWAYS_INLINE khint_t
@@ -168,6 +170,15 @@ static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
 ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     return &ucp_worker_iface(worker, rsc_index)->attr;
+}
+
+/**
+ * @return worker's iface v2 attributes by resource index
+ */
+static UCS_F_ALWAYS_INLINE uct_iface_attr_v2_t*
+ucp_worker_iface_get_attr_v2(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
+{
+    return &ucp_worker_iface(worker, rsc_index)->attr_v2;
 }
 
 /**

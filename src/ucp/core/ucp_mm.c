@@ -892,7 +892,7 @@ ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
     ucp_md_index_t md_index;
 
     if ((memh->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (memh->mem_type != UCS_MEMORY_TYPE_CUDA)) {
+        !UCP_MEM_IS_GPU(memh->mem_type)) {
         return reg_md_map;
     }
 
@@ -1270,9 +1270,7 @@ out:
         if (!(memh_flags & UCP_MEMH_FLAG_IMPORTED)) {
             if (flags & UCP_MEM_MAP_ALLOCATE) {
                 /* The allocator reports the type of the memory it created. */
-                mem_info.type    = memh->mem_type;
-                mem_info.sys_dev = memh->sys_dev;
-                mem_info.flags   = memh->mem_flags;
+                mem_info = ucp_memory_info_from_memh(memh);
             }
 
             ucs_memtype_cache_register(ucp_memh_address(memh),

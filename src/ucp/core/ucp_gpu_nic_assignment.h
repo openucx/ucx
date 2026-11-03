@@ -21,13 +21,9 @@ BEGIN_C_DECLS
 #define UCP_GPU_NIC_BITMAP_INDEX_INVALID UCS_SYS_DEVICE_ID_COUNT
 
 
-typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT)
-        ucp_gpu_nic_sys_dev_bitmap_t;
-
-
 struct ucp_gpu_nic_assignment {
     /* NIC sys_dev bitmaps referenced by bitmap_idx_by_gpu_sys_dev. */
-    ucp_gpu_nic_sys_dev_bitmap_t *nic_sys_dev_bitmaps;
+    ucs_sys_device_bitmap_t      *nic_sys_dev_bitmaps;
 
     /* Number of entries in nic_sys_dev_bitmaps. */
     size_t                       num_bitmaps;
@@ -66,7 +62,7 @@ ucp_gpu_nic_assignment_build(const ucs_topo_groups_t *groups,
  *         has no assigned NICs. Returns NULL if @a gpu_sys_dev is unknown or
  *         is not represented in the assignment.
  */
-const ucp_gpu_nic_sys_dev_bitmap_t *
+const ucs_sys_device_bitmap_t *
 ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
                               ucs_sys_device_t gpu_sys_dev);
 
@@ -80,7 +76,7 @@ ucp_gpu_nic_assignment_lookup(const ucp_gpu_nic_assignment_t *assignment,
  * @return Nonzero if @a net_sys_dev is present in @a bitmap, or zero if the
  *         system device is unknown or the bit is not set.
  */
-int ucp_gpu_nic_bitmap_get(const ucp_gpu_nic_sys_dev_bitmap_t *bitmap,
+int ucp_gpu_nic_bitmap_get(const ucs_sys_device_bitmap_t *bitmap,
                            ucs_sys_device_t net_sys_dev);
 
 

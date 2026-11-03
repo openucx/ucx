@@ -121,7 +121,7 @@ uct_ze_copy_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
      * or selects a single device deterministically.
      */
     if (full_count > 1) {
-        ucs_warn("ze_copy: %u devices found, limiting to 1 "
+        ucs_diag("ze_copy: %u devices found, limiting to 1 "
                  "for memtype ep compatibility",
                  full_count);
         *num_tl_devices_p = 1;
@@ -259,16 +259,19 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     /* Use the device configured in the MD */
     device = ze_md->ze_device;
     if (device == NULL) {
+        ucs_error("ze_copy_iface: memory domain has no device");
         return UCS_ERR_NO_DEVICE;
     }
 
     ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc, &cmdq);
     if (ret != ZE_RESULT_SUCCESS) {
+        ucs_error("ze_copy_iface: zeCommandQueueCreate failed with 0x%x", ret);
         return UCS_ERR_NO_DEVICE;
     }
 
     ret = zeCommandListCreate(ze_md->ze_context, device, &cl_desc, &cmdl);
     if (ret != ZE_RESULT_SUCCESS) {
+        ucs_error("ze_copy_iface: zeCommandListCreate failed with 0x%x", ret);
         zeCommandQueueDestroy(cmdq);
         return UCS_ERR_NO_DEVICE;
     }
@@ -276,6 +279,9 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
     self->ze_cmdq = cmdq;
     self->ze_cmdl = cmdl;
     self->id      = ucs_generate_uuid((uintptr_t)self);
+
+    ucs_debug("ze_copy_iface: initialized iface on device %p cmdq %p cmdl %p",
+              device, cmdq, cmdl);
 
     return UCS_OK;
 }

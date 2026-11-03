@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
@@ -354,6 +354,26 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (params->api == UCX_PERF_API_UCP) {
+        if (params->ucp.recv_datatype == UCP_PERF_DATATYPE_SGL) {
+            ucs_error("SGL datatype is only supported on the sender side");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (params->ucp.send_datatype == UCP_PERF_DATATYPE_SGL) {
+            if (params->command != UCX_PERF_CMD_PUT) {
+                ucs_error("SGL datatype is only supported for the put command");
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            if (params->ucp.recv_datatype != UCP_PERF_DATATYPE_CONTIG) {
+                ucs_error("SGL send datatype requires contiguous receive "
+                          "datatype");
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+    }
+
     return UCS_OK;
 }
 
@@ -488,7 +508,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         max_iov  = attr.cap.am.max_iov;
         break;
     case UCX_PERF_CMD_PUT:
-        if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+        if (params->flags & UCX_PERF_TEST_FLAG_DEVICE) {
             min_size = 0;
             max_size = 0;
             max_iov  = 0;
@@ -955,7 +975,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         ucp_params->features |= UCP_FEATURE_AM;
     }
 
-    if (params->send_device.mem_type != UCS_MEMORY_TYPE_LAST) {
+    if (params->flags & UCX_PERF_TEST_FLAG_DEVICE) {
         ucp_params->features |= UCP_FEATURE_DEVICE;
     }
 
@@ -2055,6 +2075,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     ucs_status_t status;
     unsigned i, thread_count;
     size_t message_size;
+    size_t sgl_offset;
 
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
@@ -2114,6 +2135,15 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
                         UCS_PTR_BYTE_OFFSET(perf->send_buffer, i * message_size);
         perf->ucp.tctx[i].perf.recv_buffer =
                         UCS_PTR_BYTE_OFFSET(perf->recv_buffer, i * message_size);
+
+        if (perf->params.ucp.send_datatype == UCP_PERF_DATATYPE_SGL) {
+            sgl_offset = i * perf->params.msg_size_cnt;
+            perf->ucp.tctx[i].perf.ucp.sgl.buffers      += sgl_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.lengths      += sgl_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.memhs        += sgl_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.remote_addrs += sgl_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.rkeys        += sgl_offset;
+        }
 
         status = ucp_worker_create(perf->ucp.context, &worker_params,
                                    &perf->ucp.tctx[i].perf.ucp.worker);

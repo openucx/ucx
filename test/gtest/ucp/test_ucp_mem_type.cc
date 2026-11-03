@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2017. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -14,6 +14,9 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_ep.inl>
+#include <ucp/dt/dt.h>
 }
 
 
@@ -110,7 +113,9 @@ public:
     }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_test_variants_base);
+        add_variant_memtypes(variants, get_test_variants_base,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED));
     }
 
     virtual void init() {
@@ -135,12 +140,6 @@ public:
 protected:
     ucs_memory_type_t mem_type() const {
         return static_cast<ucs_memory_type_t>(get_variant_value());
-    }
-
-    void check_mem_type() const {
-        if (mem_type() == UCS_MEMORY_TYPE_HOST) {
-            UCS_TEST_SKIP_R("host memory is never cached");
-        }
     }
 
     ucs_status_t lookup(const void *address, size_t size,
@@ -169,7 +168,7 @@ protected:
     }
 
 private:
-    int          m_enable_events;
+    int                      m_enable_events;
     ucs_ternary_auto_value_t m_enable_memtype_cache;
 };
 
@@ -178,7 +177,6 @@ UCS_TEST_P(test_ucp_memtype_explicit, map_unmap) {
     ucs_memory_info_t info;
     ucp_mem_h memh;
 
-    check_mem_type();
     mem_buffer b(size, mem_type());
 
     /* Memory which was not mapped is not known to the cache */
@@ -197,7 +195,6 @@ UCS_TEST_P(test_ucp_memtype_explicit, repeated_map) {
     ucs_memory_info_t info;
     ucp_mem_h memh1, memh2;
 
-    check_mem_type();
     mem_buffer b(size, mem_type());
 
     ASSERT_UCS_OK(map(b.ptr(), size, &memh1));
@@ -213,13 +210,12 @@ UCS_TEST_P(test_ucp_memtype_explicit, repeated_map) {
 }
 
 UCS_TEST_P(test_ucp_memtype_explicit, map_with_hint) {
-    const size_t size                = 4096;
+    const size_t size                  = 4096;
     const ucs_memory_type_t wrong_hint = UCS_MEMORY_TYPE_HOST;
     ucs_memory_info_t info;
     ucp_mem_h memh;
     ucs_status_t status;
 
-    check_mem_type();
     mem_buffer b(size, mem_type());
 
     status = map(b.ptr(), size, &memh, &wrong_hint);
@@ -240,8 +236,6 @@ UCS_TEST_P(test_ucp_memtype_explicit, map_allocate) {
     ucp_mem_attr_t attr;
     ucs_memory_info_t info;
     ucp_mem_h memh;
-
-    check_mem_type();
 
     params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS     |
                          UCP_MEM_MAP_PARAM_FIELD_LENGTH      |
@@ -349,3 +343,104 @@ UCS_TEST_P(test_ucp_cuda, sparse_regions) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_cuda, all, "all")
+
+/*
+ * Stream-ordered CUDA memory is not GDR capable, so gdr_copy cannot
+ * register it. Pack/unpack through the CUDA memory type endpoint has to fall
+ * back from the preferred gdr_copy lane to cuda_copy.
+ */
+class test_ucp_mem_type_non_gdr_capable : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_AM);
+    }
+
+    virtual void init() override
+    {
+        /* Type the stream-ordered allocations as plain CUDA memory, so they
+         * reach the CUDA memory type endpoint where gdr_copy is selected */
+        modify_config("CUDA_COPY_ASYNC_MEM_TYPE", "cuda", SETENV_IF_NOT_EXIST);
+        ucp_test::init();
+    }
+
+protected:
+    static constexpr size_t BUF_SIZE = 65536;
+    static constexpr uint64_t SEED   = 0xdeadbeefcafebabeull;
+
+    /* The datatype iterator passes the resolved memory flags, while the
+     * protocols which do not carry them pass NULL */
+    void test_pack_unpack(int pass_mem_info)
+    {
+        std::vector<uint8_t> host_buf(BUF_SIZE);
+        ucp_memory_info_t mem_info;
+        ucp_ep_h mem_type_ep;
+
+        if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+            UCS_TEST_SKIP_R("CUDA async allocation is not supported");
+        }
+
+        mem_type_ep = sender().worker()->mem_type_ep[UCS_MEMORY_TYPE_CUDA];
+        if (mem_type_ep == NULL) {
+            UCS_TEST_SKIP_R("no CUDA mem type endpoint");
+        }
+
+        /* Without a preferred lane which demands memory flags, pack/unpack has
+         * nothing to fall back from */
+        ucp_lane_index_t lane = ucp_ep_config(mem_type_ep)->key.rma_lanes[0];
+        if ((lane == UCP_NULL_LANE) ||
+            (ucp_ep_md_attr(mem_type_ep, lane)->required_mem_flags == 0)) {
+            UCS_TEST_SKIP_R("first CUDA mem type lane requires no memory flags");
+        }
+
+        mem_buffer src(BUF_SIZE, UCS_MEMORY_TYPE_CUDA,
+                       mem_buffer::alloc_mode::ASYNC);
+        mem_buffer dst(BUF_SIZE, UCS_MEMORY_TYPE_CUDA,
+                       mem_buffer::alloc_mode::ASYNC);
+
+        ucp_memory_detect(sender().ucph(), src.ptr(), BUF_SIZE, &mem_info);
+        if (mem_info.flags & UCS_MEM_FLAG_GDR_CAPABLE) {
+            UCS_TEST_SKIP_R("CUDA async memory is GDR capable");
+        }
+
+        ASSERT_EQ(UCS_MEMORY_TYPE_CUDA, mem_info.type);
+
+        const ucp_memory_info_t *mem_info_arg = pass_mem_info ? &mem_info :
+                                                                NULL;
+
+        mem_buffer::pattern_fill(src.ptr(), BUF_SIZE, SEED,
+                                 UCS_MEMORY_TYPE_CUDA);
+        mem_buffer::pattern_fill(dst.ptr(), BUF_SIZE, 0, UCS_MEMORY_TYPE_CUDA);
+
+        ucp_mem_type_pack(sender().worker(), host_buf.data(), src.ptr(),
+                          BUF_SIZE, UCS_MEMORY_TYPE_CUDA, mem_info_arg);
+        mem_buffer::pattern_check(host_buf.data(), BUF_SIZE, SEED);
+
+        ucp_mem_type_unpack(sender().worker(), dst.ptr(), host_buf.data(),
+                            BUF_SIZE, UCS_MEMORY_TYPE_CUDA, mem_info_arg);
+        mem_buffer::pattern_check(dst.ptr(), BUF_SIZE, SEED,
+                                  UCS_MEMORY_TYPE_CUDA);
+    }
+};
+
+UCS_TEST_P(test_ucp_mem_type_non_gdr_capable, pack_unpack_resolved_flags)
+{
+    test_pack_unpack(1);
+}
+
+/* Without the flags from the caller, they are resolved from the buffer address
+ * on the first lane whose memory domain requires them */
+UCS_TEST_P(test_ucp_mem_type_non_gdr_capable, pack_unpack_unknown_flags)
+{
+    test_pack_unpack(0);
+}
+
+/* Resolving the flags hits the memtype cache first, make sure the slow path
+ * also reports them when the cache is disabled */
+UCS_TEST_P(test_ucp_mem_type_non_gdr_capable, pack_unpack_no_memtype_cache,
+           "MEMTYPE_CACHE=n")
+{
+    test_pack_unpack(0);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_non_gdr_capable, all, "all")
