@@ -153,8 +153,12 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * compatibility by itself.
  */
 typedef struct uct_rc_mlx5_ext_ops {
-    /** Requirements known before interface creation; see
-     *  @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP. */
+    /**
+     * Requirements known before interface creation; see
+     * @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP.
+     * Unmet requirements fail interface creation in required mode. In
+     * best-effort mode, normal RC continues without attaching the provider.
+     */
     uint64_t        requirements;
 
     /**
