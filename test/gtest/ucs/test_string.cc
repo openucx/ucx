@@ -225,6 +225,24 @@ UCS_TEST_F(test_string, to_memunits) {
         EXPECT_EQ(UCS_OK, ucs_str_to_memunits("auto", &value));
         EXPECT_EQ(UCS_MEMUNITS_AUTO, value);
     }
+
+    // Trailing whitespace
+    {
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("8 ", &value));
+        EXPECT_EQ(8, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("8k ", &value));
+        EXPECT_EQ(8 * UCS_KBYTE, value);
+
+        EXPECT_EQ(UCS_OK, ucs_str_to_memunits("8kb ", &value));
+        EXPECT_EQ(8 * UCS_KBYTE, value);
+    }
+    // Trailing characters
+    {
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("8kbjunk", &value));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("8k junk", &value));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("8 kb", &value));
+    }
 }
 
 class test_string_buffer : public ucs::test {

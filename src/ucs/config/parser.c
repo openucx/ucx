@@ -238,7 +238,7 @@ int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 {
     /* Special value: auto */
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
-        *(size_t*)dest = UCS_HEXUNITS_AUTO;
+        *(unsigned*)dest = UCS_HEXUNITS_AUTO;
         return 1;
     } else if (strncasecmp(buf, "0x", 2) == 0) {
         return UCS_CONFIG_SSCANF_NUMBER(buf + 2, "%x", (unsigned int*)dest);
@@ -494,6 +494,7 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
 {
     int ret = UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
+
     if (ret && (*(unsigned*)dest != 0)) {
         *(unsigned*)dest = UCS_BIT(*(unsigned*)dest) - 1;
     }
@@ -510,30 +511,34 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
 {
     char units[3];
     int num_fields;
+    int length = 0;
     double value;
     double per_sec;
-    char extra;
 
-    /* A character matched by "%c" after the units is trailing garbage */
+    /* Units are optional, and may be followed only by whitespace */
     memset(units, 0, sizeof(units));
-    num_fields = sscanf(buf, "%lf%c%c %c", &value, &units[0], &units[1],
-                        &extra);
+    num_fields = sscanf(buf, "%lf%n%2[a-zA-Z]%n", &value, &length, units,
+                        &length);
+    while (isspace(buf[length])) {
+        ++length;
+    }
+
+    if ((num_fields < 1) || (buf[length] != '\0')) {
+        return 0;
+    }
+
     if (num_fields == 1) {
         per_sec = 1;
-    } else if (num_fields == 2 || num_fields == 3) {
-        if (!strcmp(units, "m")) {
-            per_sec = 1.0 / 60.0;
-        } else if (!strcmp(units, "s")) {
-            per_sec = 1;
-        } else if (!strcmp(units, "ms")) {
-            per_sec = UCS_MSEC_PER_SEC;
-        } else if (!strcmp(units, "us")) {
-            per_sec = UCS_USEC_PER_SEC;
-        } else if (!strcmp(units, "ns")) {
-            per_sec = UCS_NSEC_PER_SEC;
-        } else {
-            return 0;
-        }
+    } else if (!strcmp(units, "m")) {
+        per_sec = 1.0 / 60.0;
+    } else if (!strcmp(units, "s")) {
+        per_sec = 1;
+    } else if (!strcmp(units, "ms")) {
+        per_sec = UCS_MSEC_PER_SEC;
+    } else if (!strcmp(units, "us")) {
+        per_sec = UCS_USEC_PER_SEC;
+    } else if (!strcmp(units, "ns")) {
+        per_sec = UCS_NSEC_PER_SEC;
     } else {
         return 0;
     }
@@ -591,6 +596,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     double *dst     = (double*)dest;
     char    str[16] = {0};
     int     offset  = 0;
+    int     length  = 0;
     size_t  divider;
     size_t  units;
     double  value;
@@ -601,8 +607,8 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
         return 1;
     }
 
-    num_fields = sscanf(buf, "%lf%15s", &value, str);
-    if (num_fields < 2) {
+    num_fields = sscanf(buf, "%lf%15s %n", &value, str, &length);
+    if ((num_fields < 2) || (buf[length] != '\0')) {
         return 0;
     }
 
