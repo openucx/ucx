@@ -1483,10 +1483,7 @@ ucs_status_t uct_ep_get_device_ep(uct_ep_h ep, uct_device_ep_h *device_ep_p);
  *
  * @param [in] ep           Destination endpoint handle.
  * @param [in] buffers      Array of local buffer pointers.
- * @param [in] lengths      Array of transfer lengths in bytes. Each length
- *                          must not be less than @a cap.put.min_zcopy in
- *                          @ref uct_iface_attr. If that value is 0, a length
- *                          can be 0, and such an element transfers no data.
+ * @param [in] lengths      Array of transfer lengths in bytes.
  * @param [in] memhs        Array of local memory handles, obtained from
  *                          @ref ::uct_md_mem_reg.
  * @param [in] remote_addrs Array of remote addresses.
@@ -1529,10 +1526,7 @@ uct_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
  *
  * @param [in] ep           Destination endpoint handle.
  * @param [in] buffers      Array of local buffer pointers.
- * @param [in] lengths      Array of transfer lengths in bytes. Each length
- *                          must not be less than @a cap.get.min_zcopy in
- *                          @ref uct_iface_attr. If that value is 0, a length
- *                          can be 0, and such an element transfers no data.
+ * @param [in] lengths      Array of transfer lengths in bytes.
  * @param [in] memhs        Array of local memory handles, obtained from
  *                          @ref ::uct_md_mem_reg.
  * @param [in] remote_addrs Array of remote addresses.
