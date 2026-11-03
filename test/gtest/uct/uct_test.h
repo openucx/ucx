@@ -206,6 +206,14 @@ protected:
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_data);
+        ucs_status_t
+        try_connect_to_sockaddr(unsigned index,
+                                const ucs::sock_addr_storage &remote_addr,
+                                const ucs::sock_addr_storage *local_addr,
+                                uct_cm_ep_resolve_callback_t resolve_cb,
+                                uct_cm_ep_client_connect_callback_t connect_cb,
+                                uct_ep_disconnect_cb_t disconnect_cb,
+                                void *user_data);
 
         ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
                             const uct_listener_params_t &params);

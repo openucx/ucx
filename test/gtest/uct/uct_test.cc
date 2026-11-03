@@ -1329,6 +1329,19 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
 {
+    ASSERT_UCS_OK(try_connect_to_sockaddr(index, remote_addr, local_addr,
+                                          resolve_cb, connect_cb, disconnect_cb,
+                                          user_data));
+}
+
+ucs_status_t
+uct_test::entity::try_connect_to_sockaddr(
+        unsigned index, const ucs::sock_addr_storage &remote_addr,
+        const ucs::sock_addr_storage *local_addr,
+        uct_cm_ep_resolve_callback_t resolve_cb,
+        uct_cm_ep_client_connect_callback_t connect_cb,
+        uct_ep_disconnect_cb_t disconnect_cb, void *user_data)
+{
     ucs_sock_addr_t ucs_remote_addr = remote_addr.to_ucs_sock_addr();
     ucs_sock_addr_t ucs_local_addr;
     uct_ep_params_t params;
@@ -1336,7 +1349,9 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     ucs_status_t status;
 
     reserve_ep(index);
-    ASSERT_FALSE(m_eps[index]) << "Already connected";
+    if (m_eps[index]) {
+        UCS_TEST_ABORT("Already connected");
+    }
 
     /* Connect to the server */
     params.field_mask = UCT_EP_PARAM_FIELD_USER_DATA                  |
@@ -1361,9 +1376,12 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     params.sockaddr_cb_client   = connect_cb;
     params.disconnect_cb        = disconnect_cb;
     status                      = uct_ep_create(&params, &ep);
-    ASSERT_UCS_OK(status);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     m_eps[index].reset(ep, uct_ep_destroy);
+    return UCS_OK;
 }
 
 void uct_test::entity::connect_to_ep(unsigned index, entity &other,
