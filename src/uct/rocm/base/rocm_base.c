@@ -286,8 +286,8 @@ static void uct_rocm_base_vmm_event_cb(ucm_event_type_t event_type,
         /* Grant GPU access once at map time to avoid disrupting in-flight copies. */
         status = uct_rocm_base_vmm_set_gpu_access(address, size);
         if (status != HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to grant GPU access to vmm mapping %p size 0x%zx: "
-                     "%d", address, size, status);
+            ucs_debug("failed to grant GPU access to vmm mapping %p size 0x%zx: "
+                      "%d", address, size, status);
         }
     } else if (event_type & UCM_EVENT_MEM_TYPE_FREE) {
         /* Remove by range; harmless if the range was never a VMM mapping. */
@@ -304,7 +304,7 @@ static void uct_rocm_base_vmm_registry_init(void)
 {
     ucs_status_t status;
 
-    if (ucs_spinlock_init(&uct_rocm_base_vmm_registry.lock, 0) != 0) {
+    if (ucs_spinlock_init(&uct_rocm_base_vmm_registry.lock, 0) != UCS_OK) {
         ucs_warn("failed to init rocm vmm registry lock");
         return;
     }
@@ -334,6 +334,31 @@ static void uct_rocm_base_vmm_registry_init(void)
     }
 
     uct_rocm_base_vmm_registry.initialized = 1;
+}
+
+/* Symmetric teardown for uct_rocm_base_vmm_registry_init: unhook the event
+ * handler before the module unloads, then free all regions and the pgtable. */
+static void uct_rocm_base_vmm_registry_cleanup(void)
+{
+    uct_rocm_base_vmm_region_t *region, *tmp;
+    UCS_LIST_HEAD(region_list);
+
+    if (!uct_rocm_base_vmm_registry.initialized) {
+        return;
+    }
+
+    ucm_unset_event_handler(UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE,
+                            uct_rocm_base_vmm_event_cb, NULL);
+
+    ucs_pgtable_purge(&uct_rocm_base_vmm_registry.pgtable,
+                      uct_rocm_base_vmm_region_collect, &region_list);
+    ucs_list_for_each_safe(region, tmp, &region_list, list) {
+        ucs_free(region);
+    }
+
+    ucs_pgtable_cleanup(&uct_rocm_base_vmm_registry.pgtable);
+    ucs_spinlock_destroy(&uct_rocm_base_vmm_registry.lock);
+    uct_rocm_base_vmm_registry.initialized = 0;
 }
 
 ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
@@ -990,3 +1015,9 @@ UCS_MODULE_INIT() {
     UCS_MODULE_FRAMEWORK_LOAD(uct_rocm, 0);
     return UCS_OK;
 }
+
+#ifdef HAVE_ROCM_VMM_TYPE
+UCS_STATIC_CLEANUP {
+    uct_rocm_base_vmm_registry_cleanup();
+}
+#endif
