@@ -1060,7 +1060,7 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 
 bool mem_buffer::is_async_supported(ucs_memory_type_t mem_type)
 {
-#if HAVE_MUSA
+#if HAVE_MUSA && HAVE_MUSA_MEM_POOL_ALLOC
     if (is_musa_supported() && (mem_type == UCS_MEMORY_TYPE_MUSA)) {
         return true;
     }

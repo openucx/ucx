@@ -139,6 +139,35 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                     [musa_happy=no])
             ])
             AS_IF([test "x$musa_happy" = "xyes"], [
+                # Optional non-async allocation family (driver _v2 alloc/free,
+                # pitch and managed allocations): the memory hooks resolve
+                # these symbols by name and skip the ones the runtime does not
+                # provide, so an older MUSA SDK must not disable MUSA support
+                # when they are missing. It is checked separately from the
+                # async/pool family below, so that an SDK which provides the
+                # plain driver _v2 APIs still gets the corresponding memory
+                # hooks.
+                AC_LINK_IFELSE(
+                    [AC_LANG_PROGRAM(
+                        [[#include <stddef.h>
+                          #include <musa.h>
+                          #include <musa_runtime_api.h>]],
+                        [[void *address = 0;
+                          size_t size = 0;
+                          size_t pitch = 0;
+                          MUdeviceptr base = 0;
+                          musaMallocPitch(&address, &pitch, size, 1);
+                          muMemAlloc_v2(&base, size);
+                          muMemAllocPitch_v2(&base, &pitch, size, 1, 1);
+                          muMemAllocManaged(&base, size, 0);
+                          muMemFree_v2(base);
+                          return 0;]])],
+                    [AC_DEFINE([HAVE_MUSA_MEM_ALLOC_V2], [1],
+                               [MUSA _v2/pitch/managed allocation APIs are available])],
+                    [AC_MSG_NOTICE([MUSA _v2/pitch/managed allocation APIs not found; \
+the corresponding memory hooks will be skipped])])
+            ])
+            AS_IF([test "x$musa_happy" = "xyes"], [
                 # Optional async/pool allocation family: the memory hooks
                 # resolve these symbols by name and skip the ones the runtime
                 # does not provide, and the async allocation paths of the test
@@ -152,26 +181,20 @@ AC_DEFUN([UCX_CHECK_MUSA],[
                           #include <musa_runtime_api.h>]],
                         [[void *address = 0;
                           size_t size = 0;
-                          size_t pitch = 0;
                           musaStream_t runtime_stream = 0;
                           musaMemPool_t runtime_pool = 0;
                           MUstream driver_stream = 0;
                           MUmemoryPool driver_pool = 0;
                           MUdeviceptr base = 0;
-                          musaMallocPitch(&address, &pitch, size, 1);
                           musaMallocAsync(&address, size, runtime_stream);
                           musaMallocFromPoolAsync(&address, size,
                                                   runtime_pool,
                                                   runtime_stream);
                           musaFreeAsync(address, runtime_stream);
-                          muMemAlloc_v2(&base, size);
-                          muMemAllocPitch_v2(&base, &pitch, size, 1, 1);
-                          muMemAllocManaged(&base, size, 0);
                           muMemAllocAsync(&base, size, driver_stream);
                           muMemAllocFromPoolAsync(&base, size, driver_pool,
                                                   driver_stream);
                           muMemFreeAsync(base, driver_stream);
-                          muMemFree_v2(base);
                           return 0;]])],
                     [AC_DEFINE([HAVE_MUSA_MEM_POOL_ALLOC], [1],
                                [MUSA async/pool allocation APIs are available])],
