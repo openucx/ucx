@@ -49,6 +49,10 @@ uct_rocm_base_is_gpu_hsa_mem_type(hsa_amd_pointer_type_t hsa_mem_type)
 }
 
 #ifdef HAVE_ROCM_VMM_TYPE
+/* Install/tear down the VMM mapping registry and its ucm mem-type hook. */
+void uct_rocm_base_vmm_registry_init(void);
+void uct_rocm_base_vmm_registry_cleanup(void);
+
 /* Resolve a VMM pointer to its exact map base/size and stable reg_id (may be NULL). */
 ucs_status_t uct_rocm_base_vmm_lookup_base(const void *ptr, void **base,
                                            size_t *size, uint64_t *reg_id);

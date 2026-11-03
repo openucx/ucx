@@ -28,8 +28,8 @@
 #define uct_rocm_memcpy_d2h(_d,_s,_l)  ucs_memcpy_nontemporal((_d),(_s),(_l))
 
 /* The rkey is_vmm flag is authoritative (packed from the in-mapping user
- * address in mkey_pack), so trust it; only UCT_INVALID_RKEY (rndv) has no rkey
- * and probes the registry on the transfer address. */
+ * address in mkey_pack), so trust it;
+ */
 static UCS_F_ALWAYS_INLINE int
 uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr)
 {
@@ -37,8 +37,7 @@ uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr)
     if (rkey != UCT_INVALID_RKEY) {
         return ((const uct_rocm_copy_key_t*)rkey)->is_vmm;
     }
-
-    return uct_rocm_base_vmm_range_overlaps((void*)remote_addr, 1);
+    return 0;
 #else
     return 0;
 #endif
