@@ -1220,13 +1220,10 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps,
     return false;
 }
 
-bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
+bool ucp_test_base::entity::is_rndv_zcopy_supported(
+        uint64_t iface_cap, ucs_memory_type_t mem_type) const
 {
     const auto config = ucp_ep_config(ep());
-    ucs_memory_type_t mem_type;
-
-    mem_type = (ucs_memory_type_t)ucs_ffs64(
-                                        ucph()->config.ext.rndv_frag_mem_types);
 
     for (auto i = 0; i < config->key.num_lanes; ++i) {
         const auto lane = config->key.rma_bw_lanes[i];
@@ -1237,13 +1234,21 @@ bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
             const auto iface_attr =
                 ucp_worker_iface_get_attr(worker(), ucp_ep_get_rsc_index(ep(),
                                           lane));
-            if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+            if (iface_attr->cap.flags & iface_cap) {
                 return true;
             }
         }
     }
 
     return false;
+}
+
+bool ucp_test_base::entity::is_rndv_put_ppln_supported() const
+{
+    const auto mem_type = (ucs_memory_type_t)ucs_ffs64(
+                                        ucph()->config.ext.rndv_frag_mem_types);
+
+    return is_rndv_zcopy_supported(UCT_IFACE_FLAG_PUT_ZCOPY, mem_type);
 }
 
 bool ucp_test_base::entity::is_rndv_supported() const
