@@ -717,6 +717,8 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
         ucs_diag("failed to set UCM memtype event handler: %s",
                  ucs_status_string(status));
         goto err_cleanup_pgtable;
+    } else {
+        ucs_debug("memtype cache: tracking only explicit registrations");
     }
 
     return UCS_OK;

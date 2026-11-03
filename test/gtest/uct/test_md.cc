@@ -22,6 +22,9 @@ extern "C" {
 #include <ucs/sys/string.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/config/global_opts.h>
+#include <ucs/memory/memtype_cache.h>
+#include <ucm/event/event.h>
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #endif
@@ -1371,6 +1374,82 @@ UCS_TEST_P(test_cuda, sparse_regions)
 }
 
 UCT_MD_INSTANTIATE_TEST_CASE(test_cuda)
+
+/* Memory allocated by the cuda_copy MD is added to the memory type cache when
+ * UCM events are disabled, and is removed when it is freed */
+class test_cuda_copy_memtype_cache : public test_md {
+public:
+    virtual void init()
+    {
+        m_enable_events        = ucm_global_opts.enable_events;
+        m_enable_memtype_cache = ucs_global_opts.enable_memtype_cache;
+
+        ucm_global_opts.enable_events        = 0;
+        ucs_global_opts.enable_memtype_cache = UCS_YES;
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+        test_md::init();
+    }
+
+    virtual void cleanup()
+    {
+        test_md::cleanup();
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+        ucm_global_opts.enable_events        = m_enable_events;
+        ucs_global_opts.enable_memtype_cache = m_enable_memtype_cache;
+    }
+
+private:
+    int                      m_enable_events;
+    ucs_ternary_auto_value_t m_enable_memtype_cache;
+};
+
+UCS_TEST_P(test_cuda_copy_memtype_cache, alloc_free)
+{
+    static const ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_CUDA,
+                                                  UCS_MEMORY_TYPE_CUDA_MANAGED};
+    const size_t size                          = 64 * UCS_KBYTE;
+    unsigned tested                            = 0;
+    uct_md_h md_ref                            = md();
+    uct_alloc_method_t method                  = UCT_ALLOC_METHOD_MD;
+    uct_mem_alloc_params_t params;
+    uct_allocated_memory_t mem;
+    ucs_memory_info_t info;
+
+    for (ucs_memory_type_t mem_type : mem_types) {
+        if (!check_alloc_mem_type(mem_type)) {
+            continue;
+        }
+
+        params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+        params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        params.name       = "test";
+        params.mem_type   = mem_type;
+        params.mds.mds    = &md_ref;
+        params.mds.count  = 1;
+        ASSERT_UCS_OK(uct_mem_alloc(size, &method, 1, &params, &mem));
+
+        /* The allocation is registered in the cache */
+        ASSERT_UCS_OK(ucs_memtype_cache_lookup(mem.address, size, &info));
+        EXPECT_EQ(mem_type, info.type);
+
+        /* Freeing the memory removes it from the cache */
+        uct_mem_free(&mem);
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+                  ucs_memtype_cache_lookup(mem.address, size, &info));
+        ++tested;
+    }
+
+    if (tested == 0) {
+        UCS_TEST_SKIP_R("MD cannot allocate CUDA memory");
+    }
+}
+
+UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_memtype_cache)
 
 #if HAVE_DECL_GDR_PIN_BUFFER_V2
 
