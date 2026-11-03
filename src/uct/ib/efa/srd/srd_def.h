@@ -80,6 +80,10 @@ struct uct_srd_send_op {
      * consume the posted WQE. Valid only while @ref ep is NULL, as otherwise
      * the sender EP holds the reference. */
     uct_ib_ah_entry_t      *ah_entry;
+    /* Identifier of the EP which sent this AH request, zero for any other
+     * operation. Valid only while @ref ep is NULL, as otherwise the operation
+     * is tracked by its sender EP. */
+    uint64_t               ctl_ep_uuid;
 } UCS_V_ALIGNED(UCT_SRD_SEND_OP_ALIGN);
 
 

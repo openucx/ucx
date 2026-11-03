@@ -146,8 +146,9 @@ uct_srd_iface_ctl_op_send(uct_srd_iface_t *iface, uct_srd_ctl_op_t *ctl_op)
         return UCS_ERR_NO_MEMORY;
     }
 
-    send_op->comp_cb = (uct_srd_send_op_comp_t)ucs_empty_function;
-    send_op->ep      = NULL;
+    send_op->comp_cb     = (uct_srd_send_op_comp_t)ucs_empty_function;
+    send_op->ep          = NULL;
+    send_op->ctl_ep_uuid = (hdr->id == UCT_SRD_CTL_ID_REQ) ? hdr->ep_uuid : 0;
     /* Take over the control operation's AH reference, so that the AH outlives
      * the WQE posted below */
     send_op->ah_entry = ctl_op->ah_entry;
@@ -207,6 +208,12 @@ static void uct_srd_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_srd_ep_t *ep           = send_op->ep;
     ucs_log_level_t log_lvl    = UCS_LOG_LEVEL_FATAL;
     ucs_status_t status;
+
+    /* A failed AH request means the peer is unreachable, and the requesting
+     * EP would wait for the AH response forever before sending RMA */
+    if ((ep == NULL) && (send_op->ctl_ep_uuid != 0)) {
+        ep = uct_srd_iface_get_ep(iface, send_op->ctl_ep_uuid);
+    }
 
     if (ep == NULL) {
         ucs_debug("iface=%p wc=%p wr_id=%p failure in tx cqe without ep",
@@ -443,8 +450,9 @@ uct_srd_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_srd_send_desc_t *desc = obj;
 
-    desc->lkey     = uct_ib_memh_get_lkey(memh);
-    desc->super.ep = NULL;
+    desc->lkey              = uct_ib_memh_get_lkey(memh);
+    desc->super.ep          = NULL;
+    desc->super.ctl_ep_uuid = 0;
 }
 
 #ifdef ENABLE_STATS
