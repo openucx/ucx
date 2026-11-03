@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -122,6 +122,13 @@ const test_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_SHORT_IOV, 0, 2, { 32, 32 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
+    0 },
+
+  { "am short iov stride latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV, 8192, 2, { 4, 4 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 2.5,
     0 },
 
   { "am bcopy latency", "usec",

@@ -12,8 +12,6 @@ am_bcopy_lat     -t am_lat -D bcopy
 am_zcopy_lat     -t am_lat -D zcopy
 am_short_bw      -t am_bw  -D short
 am_short_iov_bw  -t am_bw  -D shortiov
-am_short_iov_stride_lat -t am_lat -D shortiov -s 8,8,8,8 -i 64
-am_short_iov_stride_bw  -t am_bw  -D shortiov -s 8,8,8,8 -i 64
 am_bcopy_bw      -t am_bw  -D bcopy
 am_zcopy_bw      -t am_bw  -D zcopy
 # GET
