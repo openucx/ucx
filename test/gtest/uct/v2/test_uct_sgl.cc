@@ -130,10 +130,10 @@ protected:
         test_sgl(std::vector<size_t>(count, elem_size(UCS_KBYTE)), &comp);
     }
 
-    void test_sgl_zero_length_element()
+    void test_sgl_zero_length(const std::vector<size_t> &empty_indices)
     {
-        static const size_t count       = 3;
-        static const size_t empty_index = 1;
+        static const size_t count = 3;
+        sgl_completion comp       = {};
 
         connect_or_skip();
 
@@ -145,13 +145,17 @@ protected:
             UCS_TEST_SKIP_R("zero length is not supported");
         }
 
+        comp.uct.func   = completion_cb;
+        comp.uct.count  = 1;
+        comp.uct.status = UCS_OK;
+
         sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(), op(),
                        std::vector<size_t>(count, elem_size(UCS_KBYTE)));
-        sgl.lengths[empty_index] = 0;
+        for (size_t index : empty_indices) {
+            sgl.lengths[index] = 0;
+        }
 
-        ASSERT_UCS_OK_OR_INPROGRESS(sgl_op(sgl));
-        m_sender->flush();
-        check_sgl(sgl);
+        test_sgl(sgl, &comp);
     }
 
 private:
@@ -296,11 +300,8 @@ private:
         }
     }
 
-    void test_sgl(const std::vector<size_t> &sizes,
-                  sgl_completion *comp = NULL)
+    void test_sgl(const sgl_arrays &sgl, sgl_completion *comp = NULL)
     {
-        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(),
-                       op(), sizes);
         ucs_status_t status = sgl_op(sgl, (comp == NULL) ? NULL : &comp->uct);
 
         ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -312,7 +313,22 @@ private:
         }
 
         m_sender->flush();
+
+        if ((comp != NULL) && (status == UCS_OK)) {
+            /* Completion is not called for an operation completed in place */
+            EXPECT_EQ(0u, comp->done);
+        }
+
         check_sgl(sgl);
+    }
+
+    void test_sgl(const std::vector<size_t> &sizes,
+                  sgl_completion *comp = NULL)
+    {
+        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(),
+                       op(), sizes);
+
+        test_sgl(sgl, comp);
     }
 
     static void completion_cb(uct_completion_t *self)
@@ -355,7 +371,11 @@ UCS_TEST_P(test_uct_sgl, with_callback) {
 }
 
 UCS_TEST_P(test_uct_sgl, zero_length_element) {
-    test_sgl_zero_length_element();
+    test_sgl_zero_length({1});
+}
+
+UCS_TEST_P(test_uct_sgl, zero_length_all_elements) {
+    test_sgl_zero_length({0, 1, 2});
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_sgl)
