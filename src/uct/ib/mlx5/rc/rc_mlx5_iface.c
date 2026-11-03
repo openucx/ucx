@@ -1134,8 +1134,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     if ((self->super.ext_ops != NULL) &&
         (self->super.ext_ops->iface_init != NULL)) {
         status = self->super.ext_ops->iface_init(
-                &self->super.super.super.super.super, params,
-                &self->super.ext_ctx);
+                &self->super.super.super.super.super, &self->super.ext_ctx);
         if (status != UCS_OK) {
             self->super.ext_ops = NULL;
             return status;
@@ -1151,9 +1150,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     if (self->super.ext_ops != NULL) {
         if (self->super.ext_ops->iface_cleanup != NULL) {
-            self->super.ext_ops->iface_cleanup(
-                    &self->super.super.super.super.super,
-                    self->super.ext_ctx);
+            self->super.ext_ops->iface_cleanup(self->super.ext_ctx);
         }
 
         self->super.ext_ops = NULL;
@@ -1424,7 +1421,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
             .ep_get_sgl_zcopy       = uct_rc_mlx5_ep_get_sgl_zcopy,
-            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge,
+            .iface_set_ep_event_handler = uct_base_iface_set_ep_event_handler
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

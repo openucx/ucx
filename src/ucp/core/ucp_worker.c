@@ -994,8 +994,8 @@ ucp_worker_ep_refresh_path_bw(ucp_ep_h ep, ucp_lane_index_t trigger_lane)
     return UCS_OK;
 }
 
-static void ucp_worker_iface_async_ep_event_cb(void *arg, uct_ep_h uct_ep,
-                                               unsigned events)
+static void ucp_worker_iface_ep_event_cb(void *arg, uct_ep_h uct_ep,
+                                         unsigned events)
 {
     ucp_worker_iface_t *wiface = arg;
     ucp_worker_h worker        = wiface->worker;
@@ -1562,7 +1562,7 @@ ucp_worker_iface_query_attr_v2(ucp_worker_iface_t *wiface)
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    ucp_worker_iface_t **wiface_p)
 {
-    uct_iface_set_async_ep_event_params_t ep_event_params;
+    uct_iface_set_ep_event_params_t ep_event_params;
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
     uct_md_h md                      = context->tl_mds[resource->md_index].md;
@@ -1669,13 +1669,12 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     VALGRIND_MAKE_MEM_UNDEFINED(&wiface->attr, sizeof(wiface->attr));
 
     ep_event_params.field_mask =
-            UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB |
-            UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG;
-    ep_event_params.cb  = ucp_worker_iface_async_ep_event_cb;
+            UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB |
+            UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG;
+    ep_event_params.cb  = ucp_worker_iface_ep_event_cb;
     ep_event_params.arg = wiface;
-    status = uct_iface_set_async_ep_event_handler(wiface->iface,
-                                                 &ep_event_params);
-    if (status != UCS_OK) {
+    status = uct_iface_set_ep_event_handler(wiface->iface, &ep_event_params);
+    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
         goto err_close_iface;
     }
 

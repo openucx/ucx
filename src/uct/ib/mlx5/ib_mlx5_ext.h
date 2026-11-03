@@ -42,6 +42,17 @@ typedef size_t (*uct_ib_mlx5_ext_max_get_sgl_zcopy_count_func_t)(void);
 /* RC-specific provider hooks and timestamped SGL completions. */
 
 enum {
+    /**
+     * Require successful provider attachment at interface creation. Unmet
+     * requirements or iface_init failure abort interface creation. If unset,
+     * normal RC continues without the provider when attachment fails. This
+     * policy does not suppress ordinary RC errors or endpoint hook errors.
+     */
+    UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH = UCS_BIT(0)
+};
+
+
+enum {
     /** Request timestamps on the existing RC transmit completion queue. */
     UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP = UCS_BIT(0)
 };
@@ -51,9 +62,8 @@ enum {
  * @brief Final callback for a timestamped SGL write, in RC worker context.
  *
  * The timestamps are raw local NIC ticks at completion of the first and last
- * SGL elements. The first element is the timing anchor and is excluded from
- * the measured byte count. UCS_OK means both timestamps are valid, including
- * a raw value of zero. Both timestamps are zero on error or cancellation.
+ * SGL elements. UCS_OK means both timestamps are valid, including a raw value
+ * of zero. Both timestamps are zero on error or cancellation.
  *
  * @param [in] arg             Provider callback argument.
  * @param [in] status          Final operation status.
@@ -72,7 +82,6 @@ typedef void (*uct_rc_mlx5_sgl_completion_func_t)(
  * only to put_sgl_zcopy on the bound endpoint with the same SGL entry count.
  * Only non-strided entries are supported: counts and strides must be NULL.
  * UCT manages every field; ordinary completions retain their normal semantics.
- * Intermediate completion tracking is private to the transport.
  *
  * An accepted timestamped post returns UCS_INPROGRESS and invokes callback
  * exactly once, after every SGL element has completed or been canceled. A
@@ -98,12 +107,10 @@ typedef struct uct_rc_mlx5_sgl_completion {
 /**
  * @brief Prepare an idle adapter for an RC endpoint with completion timestamps.
  *
- * The SGL entry count must be at least two: an anchor followed by measured
- * data. UCT captures the first and last completion timestamps internally,
- * without exposing intermediate callbacks or calculating bandwidth.
+ * The SGL entry count must be at least two.
  *
  * @param [in]  ep         Existing RC endpoint to bind to the adapter.
- * @param [in]  sgl_count  Number of SGL entries, including the timing anchor.
+ * @param [in]  sgl_count  Number of SGL entries.
  * @param [in]  callback   Final completion callback.
  * @param [in]  arg        Argument passed to callback.
  * @param [out] completion Idle adapter to initialize, unchanged on failure.
@@ -126,15 +133,15 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * there is no separate RC registration. The provider owns its address payload
  * wire format and version.
  *
- * Hooks run under the existing RC worker serialization. The provider owns its
- * timers, scheduling, sampling, estimation and change detection, using existing
- * UCS/UCT primitives. UCT does not create a separate lane, QP, CQ or progress
- * engine for the provider.
+ * Hooks run under the existing RC worker serialization.
  *
- * Init hooks publish their context only on success and unwind their resources
- * on failure. Cleanup hooks run only after successful initialization. Endpoint
- * cleanup runs after timestamped operations have completed or been canceled.
- * Interface cleanup stops provider-owned timers and drains its queued work.
+ * Init hooks are optional. If absent, their context is NULL in subsequent
+ * hooks. Init hooks publish their context only on success and unwind resources
+ * on failure. A cleanup hook runs only if its corresponding init hook returned
+ * UCS_OK, even if that hook published a NULL context. Endpoint cleanup runs
+ * after timestamped operations have completed or been canceled.
+ * Canceled completion callbacks must not start new endpoint work. Cleanup must
+ * quiesce work referencing a provider context before releasing that context.
  *
  * A nonempty address payload requires both pack and connect hooks. With
  * uct_ep_connect_to_ep_v2 and a supplied remote endpoint-address length, UCT
@@ -150,32 +157,42 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * compatibility by itself.
  */
 typedef struct uct_rc_mlx5_ext_ops {
-    /** Requirements known before interface creation; see
-     *  @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP. */
+    /**
+     * Interface attachment policy flags; see
+     * @ref UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH.
+     */
+    uint64_t        flags;
+
+    /**
+     * Requirements known before interface creation; see
+     * @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP.
+     * Unmet requirements follow the interface attachment policy in flags.
+     */
     uint64_t        requirements;
 
-    /** Provider-private bytes appended to the existing endpoint address. */
+    /**
+     * Provider-private bytes appended to the existing endpoint address.
+     * The complete endpoint address, including the RC address, UCX extension
+     * framing and provider payload, must not exceed 255 bytes. Oversized
+     * providers must be rejected before their iface_init hook is called.
+     */
     size_t          ep_addr_len;
 
     /**
      * @brief Initialize provider state on an existing RC interface.
      *
      * @param [in]  iface       Existing RC interface.
-     * @param [in]  params      Interface creation parameters.
      * @param [out] iface_ctx_p Provider context, published only on success.
      * @return UCS_OK on success, or an error if initialization failed.
      */
-    ucs_status_t (*iface_init)(uct_iface_h iface,
-                               const uct_iface_params_t *params,
-                               void **iface_ctx_p);
+    ucs_status_t (*iface_init)(uct_iface_h iface, void **iface_ctx_p);
 
     /**
      * @brief Release provider interface state after endpoint cleanup.
      *
-     * @param [in] iface     Existing RC interface.
      * @param [in] iface_ctx Provider context from iface_init.
      */
-    void (*iface_cleanup)(uct_iface_h iface, void *iface_ctx);
+    void (*iface_cleanup)(void *iface_ctx);
 
     /**
      * @brief Initialize provider state on an existing RC endpoint.
@@ -188,37 +205,34 @@ typedef struct uct_rc_mlx5_ext_ops {
     ucs_status_t (*ep_init)(uct_ep_h ep, void *iface_ctx, void **ep_ctx_p);
 
     /**
-     * @brief Stop endpoint sampling and release provider endpoint state.
+     * @brief Release provider endpoint state.
      *
-     * @param [in] ep     Existing RC endpoint.
      * @param [in] ep_ctx Provider context from ep_init.
      */
-    void (*ep_cleanup)(uct_ep_h ep, void *ep_ctx);
+    void (*ep_cleanup)(void *ep_ctx);
 
     /**
      * @brief Pack an opaque payload; required when ep_addr_len is nonzero.
      *
-     * @param [in]  ep          Existing RC endpoint.
      * @param [in]  ep_ctx      Provider context from ep_init.
      * @param [out] payload     Address payload to fill.
      * @param [in]  payload_len Available payload bytes, equal to ep_addr_len.
      * @return UCS_OK on success, or an error if packing failed.
      */
-    ucs_status_t (*ep_pack_addr)(uct_ep_h ep, void *ep_ctx, void *payload,
-                                 size_t payload_len);
+    ucs_status_t (*ep_pack_addr)(void *ep_ctx, void *payload,
+                                size_t payload_len);
 
     /**
-     * @brief Validate remote payload, including the provider wire version.
+     * @brief Validate the remote provider payload.
      *
      * UCT validates the provider identity and payload bounds before this hook
      * when the remote address length is supplied. Otherwise, callers must
-     * satisfy the matching-peer precondition above. Reject unsupported payload
-     * versions without importing remote memory metadata.
+     * satisfy the matching-peer precondition above. Reject incompatible
+     * payloads, including unsupported wire versions.
      *
-     * Called before QP connection and setting UCT_RC_EP_FLAG_CONNECTED.
-     * Errors follow the required/best-effort provider policy. Failed calls
-     * must unwind partial imports. If QP connection subsequently fails,
-     * normal ep_cleanup releases the imported state.
+     * Called before RC endpoint connection. Errors are returned to the caller.
+     * Failed calls must unwind partial state. If RC connection subsequently
+     * fails, ep_cleanup releases the retained provider state.
      *
      * @param [in] ep          Existing RC endpoint.
      * @param [in] ep_ctx      Provider context from ep_init.
@@ -230,7 +244,7 @@ typedef struct uct_rc_mlx5_ext_ops {
                                const void *payload, size_t payload_len);
 
     /**
-     * @brief Fill requested attributes from completed samples only.
+     * @brief Return the latest available cached endpoint bandwidth.
      *
      * This optional hook requires the endpoint bandwidth-query attribute
      * extension. It may be omitted when that extension is unavailable.
@@ -238,8 +252,7 @@ typedef struct uct_rc_mlx5_ext_ops {
      * UCT handles standard attributes and calls this hook only when
      * UCT_EP_ATTR_FIELD_BANDWIDTH is requested. The provider fills only
      * bandwidth, leaving field_mask and all other attributes unchanged.
-     * Queries without bandwidth, including TX_TOKEN-only queries, never
-     * depend on provider availability or sample freshness.
+     * Queries without bandwidth do not depend on the provider.
      *
      * This hook never starts a measurement. Return UCS_ERR_UNSUPPORTED when
      * bandwidth measurement is unsupported, UCS_ERR_NO_ELEM before the first
@@ -247,13 +260,11 @@ typedef struct uct_rc_mlx5_ext_ops {
      * attributes unchanged on error; these errors apply only when bandwidth
      * was requested, including in a mixed-attribute query.
      *
-     * @param [in]     ep      Existing RC endpoint.
      * @param [in]     ep_ctx  Provider context from ep_init.
      * @param [in,out] ep_attr Requested attributes and provider-owned outputs.
      * @return UCS_OK if the requested bandwidth was filled.
      */
-    ucs_status_t (*ep_query)(uct_ep_h ep, void *ep_ctx,
-                             uct_ep_attr_t *ep_attr);
+    ucs_status_t (*ep_query)(void *ep_ctx, uct_ep_attr_t *ep_attr);
 } uct_rc_mlx5_ext_ops_t;
 
 
@@ -277,7 +288,7 @@ typedef struct uct_ib_mlx5_ext_ops {
      * and referenced data until unregistration or registry cleanup returns.
      * Use a unique provider name and register before opening RC interfaces.
      * Before unregistering or clearing the registry, destroy attached
-     * interfaces, stop provider timers and drain callbacks and queued work.
+     * interfaces and quiesce callbacks and queued work.
      * Serialize registry changes with interface creation and plugin dispatch.
      *
      * UCX and plugin consumers must be rebuilt together. This enlarged

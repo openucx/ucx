@@ -27,7 +27,7 @@ extern "C" {
 #ifdef HAVE_MLX5_DV
 class test_rc_extension : public ucs::test {
 protected:
-    static ucs_status_t query_cb(uct_ep_h, void *ctx, uct_ep_attr_t *attr)
+    static ucs_status_t query_cb(void *ctx, uct_ep_attr_t *attr)
     {
         attr->bandwidth.dedicated = *static_cast<double*>(ctx);
         attr->bandwidth.shared    = 0;
@@ -36,6 +36,11 @@ protected:
 
     static void final_cb(void*, ucs_status_t, uint64_t, uint64_t)
     {
+    }
+
+    static ucs_status_t query_error_cb(void *ctx, uct_ep_attr_t*)
+    {
+        return *static_cast<ucs_status_t*>(ctx);
     }
 };
 
@@ -82,6 +87,7 @@ UCS_TEST_F(test_rc_extension, completion_adapter_validation)
 
 UCS_TEST_F(test_rc_extension, endpoint_event_handler)
 {
+    uct_iface_internal_ops_t internal_ops = {};
     uct_base_iface_t iface = {};
     uct_ep_t ep = {};
     struct event_result {
@@ -89,10 +95,13 @@ UCS_TEST_F(test_rc_extension, endpoint_event_handler)
         uct_ep_h ep;
         unsigned events;
     } result = {};
-    uct_iface_set_async_ep_event_params_t params = {};
+    uct_iface_set_ep_event_params_t params = {};
 
-    params.field_mask = UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB |
-                        UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG;
+    internal_ops.iface_set_ep_event_handler =
+            uct_base_iface_set_ep_event_handler;
+    iface.internal_ops = &internal_ops;
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB |
+                        UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG;
     params.cb = [](void *arg, uct_ep_h ep, unsigned events) {
         auto result = static_cast<event_result*>(arg);
         ++result->count;
@@ -100,15 +109,39 @@ UCS_TEST_F(test_rc_extension, endpoint_event_handler)
         result->events = events;
     };
     params.arg = &result;
-    ASSERT_UCS_OK(uct_iface_set_async_ep_event_handler(&iface.super, &params));
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(&iface.super, &params));
     uct_iface_invoke_ep_event(&iface, &ep, UCT_EP_EVENT_PATH_SPEED_CHANGE);
     EXPECT_EQ(1u, result.count);
     EXPECT_EQ(&ep, result.ep);
     EXPECT_EQ(UCT_EP_EVENT_PATH_SPEED_CHANGE, result.events);
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB;
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(&iface.super, &params));
+    EXPECT_EQ(nullptr, iface.ep_event_arg);
     params.cb = NULL;
-    ASSERT_UCS_OK(uct_iface_set_async_ep_event_handler(&iface.super, &params));
+    ASSERT_UCS_OK(uct_iface_set_ep_event_handler(&iface.super, &params));
     uct_iface_invoke_ep_event(&iface, &ep, UCT_EP_EVENT_PATH_SPEED_CHANGE);
     EXPECT_EQ(1u, result.count);
+}
+
+UCS_TEST_F(test_rc_extension, endpoint_event_unsupported)
+{
+    uct_iface_internal_ops_t internal_ops = {};
+    uct_base_iface_t iface                = {};
+    uct_iface_set_ep_event_params_t params = {};
+    uct_ep_event_cb_t callback = [](void*, uct_ep_h, unsigned) {};
+
+    iface.internal_ops = &internal_ops;
+    iface.ep_event_cb  = callback;
+    iface.ep_event_arg = &params;
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_iface_set_ep_event_handler(&iface.super, NULL));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              uct_iface_set_ep_event_handler(&iface.super, &params));
+    params.field_mask = UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              uct_iface_set_ep_event_handler(&iface.super, &params));
+    EXPECT_EQ(callback, iface.ep_event_cb);
+    EXPECT_EQ(&params, iface.ep_event_arg);
 }
 
 UCS_TEST_F(test_rc_extension, bandwidth_query)
@@ -130,6 +163,42 @@ UCS_TEST_F(test_rc_extension, bandwidth_query)
     ops.ep_query = query_cb;
     ASSERT_UCS_OK(uct_rc_mlx5_base_ep_query(tl_ep, &attr));
     EXPECT_EQ(bandwidth, attr.bandwidth.dedicated);
+}
+
+UCS_TEST_F(test_rc_extension, bandwidth_query_errors_preserve_outputs)
+{
+    std::unique_ptr<uct_rc_mlx5_iface_common_t> iface(
+            new uct_rc_mlx5_iface_common_t());
+    std::unique_ptr<uct_ib_mlx5_md_t> md(new uct_ib_mlx5_md_t());
+    uct_rc_mlx5_base_ep_t ep  = {};
+    uct_rc_mlx5_ext_ops_t ops = {};
+    uct_ep_h tl_ep           = &ep.super.super.super;
+    uint32_t token           = 0xa5a5a5a5;
+    uct_ep_attr_t attr, saved;
+
+    tl_ep->iface = &iface->super.super.super.super;
+    ucs_derived_of(tl_ep->iface, uct_base_iface_t)->md = &md->super.super;
+    iface->ext_ops = &ops;
+    ops.ep_query   = query_error_cb;
+    memset(&attr, 0xa5, sizeof(attr));
+    attr.field_mask = UCT_EP_ATTR_FIELD_BANDWIDTH | UCT_EP_ATTR_FIELD_TX_TOKEN;
+    attr.tx_token   = &token;
+    memcpy(&saved, &attr, sizeof(attr));
+
+    for (auto status : {UCS_ERR_NO_ELEM, UCS_ERR_TIMED_OUT,
+                        UCS_ERR_UNSUPPORTED}) {
+        ep.ext_ctx = &status;
+        EXPECT_EQ(status, uct_rc_mlx5_base_ep_query(tl_ep, &attr));
+        EXPECT_EQ(0, memcmp(&saved, &attr, sizeof(attr)));
+        EXPECT_EQ(0xa5a5a5a5u, token);
+    }
+
+    ep.ext_ctx      = NULL;
+    attr.field_mask = 0;
+    ASSERT_UCS_OK(uct_rc_mlx5_base_ep_query(tl_ep, &attr));
+    attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, uct_rc_mlx5_base_ep_query(tl_ep, &attr));
+    EXPECT_EQ(0xa5a5a5a5u, token);
 }
 
 class test_rc_extension_transport : public uct_test {
