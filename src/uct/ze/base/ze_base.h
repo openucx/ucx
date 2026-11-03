@@ -71,6 +71,9 @@ ze_device_handle_t uct_ze_base_get_device(int ordinal);
 
 int uct_ze_base_get_num_devices(void);
 
+/* Number of sub-devices over all root devices, one memory domain each */
+int uct_ze_base_get_num_subdevices(void);
+
 
 ucs_status_t
 uct_ze_base_query_md_resources(uct_component_h component,
