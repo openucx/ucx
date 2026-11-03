@@ -191,21 +191,17 @@ typedef struct uct_rc_mlx5_ext_ops {
      * @brief Initialize provider state on an existing RC interface.
      *
      * @param [in]  iface       Existing RC interface.
-     * @param [in]  params      Interface creation parameters.
      * @param [out] iface_ctx_p Provider context, published only on success.
      * @return UCS_OK on success, or an error if initialization failed.
      */
-    ucs_status_t (*iface_init)(uct_iface_h iface,
-                               const uct_iface_params_t *params,
-                               void **iface_ctx_p);
+    ucs_status_t (*iface_init)(uct_iface_h iface, void **iface_ctx_p);
 
     /**
      * @brief Release provider interface state after endpoint cleanup.
      *
-     * @param [in] iface     Existing RC interface.
      * @param [in] iface_ctx Provider context from iface_init.
      */
-    void (*iface_cleanup)(uct_iface_h iface, void *iface_ctx);
+    void (*iface_cleanup)(void *iface_ctx);
 
     /**
      * @brief Initialize provider state on an existing RC endpoint.
@@ -220,22 +216,20 @@ typedef struct uct_rc_mlx5_ext_ops {
     /**
      * @brief Stop endpoint sampling and release provider endpoint state.
      *
-     * @param [in] ep     Existing RC endpoint.
      * @param [in] ep_ctx Provider context from ep_init.
      */
-    void (*ep_cleanup)(uct_ep_h ep, void *ep_ctx);
+    void (*ep_cleanup)(void *ep_ctx);
 
     /**
      * @brief Pack an opaque payload; required when ep_addr_len is nonzero.
      *
-     * @param [in]  ep          Existing RC endpoint.
      * @param [in]  ep_ctx      Provider context from ep_init.
      * @param [out] payload     Address payload to fill.
      * @param [in]  payload_len Available payload bytes, equal to ep_addr_len.
      * @return UCS_OK on success, or an error if packing failed.
      */
-    ucs_status_t (*ep_pack_addr)(uct_ep_h ep, void *ep_ctx, void *payload,
-                                 size_t payload_len);
+    ucs_status_t (*ep_pack_addr)(void *ep_ctx, void *payload,
+                                size_t payload_len);
 
     /**
      * @brief Validate remote payload, including the provider wire version.
@@ -277,13 +271,11 @@ typedef struct uct_rc_mlx5_ext_ops {
      * attributes unchanged on error; these errors apply only when bandwidth
      * was requested, including in a mixed-attribute query.
      *
-     * @param [in]     ep      Existing RC endpoint.
      * @param [in]     ep_ctx  Provider context from ep_init.
      * @param [in,out] ep_attr Requested attributes and provider-owned outputs.
      * @return UCS_OK if the requested bandwidth was filled.
      */
-    ucs_status_t (*ep_query)(uct_ep_h ep, void *ep_ctx,
-                             uct_ep_attr_t *ep_attr);
+    ucs_status_t (*ep_query)(void *ep_ctx, uct_ep_attr_t *ep_attr);
 } uct_rc_mlx5_ext_ops_t;
 
 
