@@ -131,9 +131,11 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  * UCS/UCT primitives. UCT does not create a separate lane, QP, CQ or progress
  * engine for the provider.
  *
- * Init hooks publish their context only on success and unwind their resources
- * on failure. Cleanup hooks run only after successful initialization. Endpoint
- * cleanup runs after timestamped operations have completed or been canceled.
+ * Init hooks are optional. If absent, their context is NULL in subsequent
+ * hooks. Init hooks publish their context only on success and unwind resources
+ * on failure. A cleanup hook runs only if its corresponding init hook returned
+ * UCS_OK, even if that hook published a NULL context. Endpoint cleanup runs
+ * after timestamped operations have completed or been canceled.
  * Canceled completion callbacks must not repost or rearm sampling. Providers
  * must remove or cancel queued work referencing an endpoint context before
  * releasing it.
