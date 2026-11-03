@@ -343,7 +343,7 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         elem_size += sizeof(*local_addrs) + sizeof(*copy_lengths);
     }
 
-    mapping = ucs_malloc(sizeof(*mapping) + (count * elem_size),
+    mapping = ucs_malloc(sizeof(*mapping) + (num_nonempty * elem_size),
                          "cuda_ipc_sgl_mapping");
     if (ucs_unlikely(mapping == NULL)) {
         ucs_error("Failed to allocate cuda_ipc sgl mapping");
@@ -353,12 +353,12 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
 
     mapping->count   = 0;
     mapping->entries = (uct_cuda_ipc_sgl_entry_t *)(mapping + 1);
-    mapped_addrs     = (CUdeviceptr *)(mapping->entries + count);
+    mapped_addrs     = (CUdeviceptr *)(mapping->entries + num_nonempty);
 
     if (ucs_unlikely(num_nonempty < count)) {
         /* Same elements and order as in the mapping loop below */
-        local_addrs  = mapped_addrs + count;
-        copy_lengths = (size_t *)(local_addrs + count);
+        local_addrs  = mapped_addrs + num_nonempty;
+        copy_lengths = (size_t *)(local_addrs + num_nonempty);
         for (i = 0, j = 0; i < count; i++) {
             if (lengths[i] != 0) {
                 local_addrs[j]  = (CUdeviceptr)buffers[i];
