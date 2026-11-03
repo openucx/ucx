@@ -404,6 +404,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_srd_ep_am_short_prepare(
     uct_srd_ep_hdr_set(ep, &am->srd_hdr, id);
     send_op->comp_cb        = (uct_srd_send_op_comp_t)ucs_empty_function;
     send_op->ep             = ep;
+    send_op->ctl_ep_uuid    = 0;
     iface->tx.sge[0].addr   = (uintptr_t)am;
     iface->tx.sge[0].length = am_length;
     iface->tx.wr_inl.wr_id  = (uintptr_t)send_op;
@@ -650,9 +651,10 @@ uct_srd_ep_rma_zcopy(uct_srd_ep_t *ep, uct_srd_iface_t *iface,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    send_op->user_comp = comp;
-    send_op->comp_cb   = uct_srd_ep_send_op_user_completion;
-    send_op->ep        = ep;
+    send_op->user_comp   = comp;
+    send_op->comp_cb     = uct_srd_ep_send_op_user_completion;
+    send_op->ep          = ep;
+    send_op->ctl_ep_uuid = 0;
 
     num_sge = uct_ib_verbs_sge_fill_iov(iface->tx.sge, iov, iovcnt);
     return uct_srd_ep_post_rma(iface, ep, is_read, send_op, iface->tx.sge,
@@ -834,9 +836,10 @@ uct_srd_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
         return UCS_ERR_NO_MEMORY;
     }
 
-    send_op->ep        = ep;
-    send_op->user_comp = comp;
-    send_op->comp_cb   = uct_srd_ep_send_op_flush_completion;
+    send_op->ep          = ep;
+    send_op->user_comp   = comp;
+    send_op->comp_cb     = uct_srd_ep_send_op_flush_completion;
+    send_op->ctl_ep_uuid = 0;
 
     uct_srd_ep_posted(iface, ep, send_op);
     ucs_trace_data("ep=%p added flush psn=%u send_op=%p with user_comp=%p", ep,

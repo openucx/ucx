@@ -652,7 +652,7 @@ UCS_TEST_P(test_srd, ctl_req_failure_unreachable_peer_multi_ep)
         sender->connect_to_iface(i, *receiver);
     }
     m_entities.remove(receiver);
-    wait_for_value(&m_ep_err_count, num_eps, true, 60.0);
+    wait_for_value(&m_ep_err_count, num_eps, true);
     EXPECT_EQ(num_eps, m_ep_err_count);
     EXPECT_EQ(size_t(num_eps), m_failed_eps.size());
     for (int i = 0; i < num_eps; ++i) {
