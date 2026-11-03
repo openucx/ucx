@@ -499,7 +499,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         }
 
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
-        ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
         return UCS_OK;
     }
 

@@ -1280,11 +1280,6 @@ ucp_wireup_derive_rx_tokens(ucp_ep_h ep, ucp_lane_map_t lane_map,
         status = ucp_ep_tf_derive_rx(ep, lane, tx_tokens[lane].token,
                                      tx_tokens[lane].len, require_open,
                                      &rx_token, &rx_len);
-        if (status == UCS_ERR_NO_ELEM) {
-            ucs_debug("ep %p: lane %d: peer qp is gone", ep, lane);
-            continue;
-        }
-
         if (status != UCS_OK) {
             ucs_debug("ep %p: lane %d: rx token was not derived: %s", ep, lane,
                       ucs_status_string(status));
@@ -1451,6 +1446,7 @@ static void ucp_wireup_tf_reply_schedule(ucp_ep_h ep)
     reply->scheduled = 1;
     ucs_callbackq_add_oneshot(&ep->worker->uct->progress_q, ep,
                               ucp_wireup_tf_reply_progress, ep);
+    ucp_worker_signal_internal(ep->worker);
 }
 
 static void ucp_wireup_tf_reply_finish(ucp_ep_h ep)
@@ -1671,7 +1667,7 @@ err:
     ucs_error("ep %p: failed to defer LANES_ADDR reply: %s", ep,
               ucs_status_string(status));
     ucp_wireup_tf_reply_discard(ep);
-    ucp_ep_set_lanes_failed(ep, 0, status);
+    ucp_ep_set_lanes_failed_schedule(ep, 0, status);
 out:
     ucp_wireup_free_lane_tokens(lanes_info->provided_lane_map, rx_tokens);
 }
