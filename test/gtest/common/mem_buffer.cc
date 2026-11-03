@@ -100,8 +100,16 @@ mem_buffer_cuda_get_default_managed_pool(cudaMemPool_t *pool_p)
 static bool mem_buffer_rocm_use_vmm()
 {
     const char *env           = getenv("GTEST_ROCM_VMM");
-    static const bool use_vmm = (env != NULL) && (atoi(env) != 0) &&
+    const bool requested      = (env != NULL) && (atoi(env) != 0);
+    static const bool use_vmm = requested &&
                                 mem_buffer::is_rocm_vmm_supported();
+
+    /* Fail rather than silently fall back to hipMalloc, so a VMM job cannot
+     * pass with zero VMM coverage. */
+    if (requested && !use_vmm) {
+        UCS_TEST_ABORT("GTEST_ROCM_VMM is set but ROCm VMM is not supported");
+    }
+
     return use_vmm;
 }
 
