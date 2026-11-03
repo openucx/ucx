@@ -734,6 +734,30 @@ UCS_TEST_F(test_config, set_uint_trailing_chars) {
     EXPECT_EQ(2, m_num_errors);
 }
 
+UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
+    unsigned long ulong_value;
+    double double_value;
+    unsigned bitmask;
+    int int_value;
+
+    EXPECT_TRUE(ucs_config_sscanf_int("-0x10 ", &int_value, NULL));
+    EXPECT_EQ(-16, int_value);
+    EXPECT_FALSE(ucs_config_sscanf_int("5abc", &int_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_ulong("200", &ulong_value, NULL));
+    EXPECT_EQ(200UL, ulong_value);
+    EXPECT_FALSE(ucs_config_sscanf_ulong("0x10", &ulong_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_ulong("6abc", &ulong_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_double("1.5", &double_value, NULL));
+    EXPECT_EQ(1.5, double_value);
+    EXPECT_FALSE(ucs_config_sscanf_double("1.5abc", &double_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_bitmask("4", &bitmask, NULL));
+    EXPECT_EQ(0xfU, bitmask);
+    EXPECT_FALSE(ucs_config_sscanf_bitmask("4abc", &bitmask, NULL));
+}
+
 UCS_TEST_F(test_config, set_blob)
 {
     static const char ucs_cars_prefix[] = UCS_DEFAULT_ENV_PREFIX"CARS_";

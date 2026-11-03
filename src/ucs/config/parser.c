@@ -32,6 +32,16 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
+/* Parse a single number with the sscanf format _fmt, and reject any trailing
+ * characters other than whitespace, which sscanf would otherwise silently
+ * drop, e.g. "0xa" would be parsed as 0 by "%u" */
+#define UCS_CONFIG_SSCANF_NUMBER(_buf, _fmt, _value) \
+    ({ \
+        int _length = 0; \
+        (sscanf(_buf, _fmt " %n", _value, &_length) == 1) && \
+                ((_buf)[_length] == '\0'); \
+    })
+
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -122,7 +132,7 @@ void ucs_config_release_string(void *ptr, const void *arg)
 
 int ucs_config_sscanf_int(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%i", (unsigned*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%i", (int*)dest);
 }
 
 ucs_status_t ucs_config_clone_int(const void *src, void *dest, const void *arg)
@@ -137,23 +147,13 @@ int ucs_config_sprintf_int(char *buf, size_t max,
     return snprintf(buf, max, "%i", *(unsigned*)src);
 }
 
-static int ucs_config_sscanf_uint_value(const char *buf, unsigned *value)
-{
-    int length;
-
-    /* Reject trailing characters, which would otherwise be silently dropped,
-     * e.g. "0xa" would be parsed as 0 */
-    return (sscanf(buf, "%u %n", value, &length) == 1) &&
-           (buf[length] == '\0');
-}
-
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
         *(unsigned*)dest = UINT_MAX;
         return 1;
     } else {
-        return ucs_config_sscanf_uint_value(buf, (unsigned*)dest);
+        return UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
     }
 }
 
@@ -177,7 +177,7 @@ int ucs_config_sprintf_uint(char *buf, size_t max,
 
 int ucs_config_sscanf_ulong(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%lu", (unsigned long*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%lu", (unsigned long*)dest);
 }
 
 int ucs_config_sprintf_ulong(char *buf, size_t max,
@@ -217,7 +217,7 @@ int ucs_config_sprintf_pos_double(char *buf, size_t max, const void *src,
 
 int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%lf", (double*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%lf", (double*)dest);
 }
 
 int ucs_config_sprintf_double(char *buf, size_t max,
@@ -384,7 +384,7 @@ int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
         return 1;
     }
 
-    return ucs_config_sscanf_uint_value(buf, (unsigned*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
 }
 
 int ucs_config_sprintf_uint_enum(char *buf, size_t max,
@@ -491,8 +491,8 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
 {
-    int ret = ucs_config_sscanf_uint_value(buf, (unsigned*)dest);
-    if (*(unsigned*)dest != 0) {
+    int ret = UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
+    if (ret && (*(unsigned*)dest != 0)) {
         *(unsigned*)dest = UCS_BIT(*(unsigned*)dest) - 1;
     }
     return ret;
