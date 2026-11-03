@@ -13,6 +13,8 @@
 #include <musa.h>
 #include <musa_runtime_api.h>
 
+BEGIN_C_DECLS
+
 typedef enum {
     UCT_MUSA_POINTER_HOST,
     UCT_MUSA_POINTER_DEVICE,
@@ -84,5 +86,7 @@ int uct_musa_base_has_dmabuf(void);
 
 ucs_status_t uct_musa_base_export_dmabuf(const void *address, size_t length,
                                          int *fd_p, size_t *offset_p);
+
+END_C_DECLS
 
 #endif
