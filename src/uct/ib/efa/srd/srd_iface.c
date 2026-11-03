@@ -450,9 +450,8 @@ uct_srd_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_srd_send_desc_t *desc = obj;
 
-    desc->lkey              = uct_ib_memh_get_lkey(memh);
-    desc->super.ep          = NULL;
-    desc->super.ctl_ep_uuid = 0;
+    desc->lkey     = uct_ib_memh_get_lkey(memh);
+    desc->super.ep = NULL;
 }
 
 #ifdef ENABLE_STATS
