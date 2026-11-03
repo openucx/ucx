@@ -139,7 +139,7 @@ uct_rc_verbs_iface_rx_complete_no_srq(uct_rc_verbs_iface_t *iface,
     uct_rc_ep_t *rc_ep    = uct_rc_iface_lookup_ep(&iface->super, qp_num);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
 
-    if (ep == NULL) {
+    if (ucs_unlikely(ep == NULL)) {
         uct_rc_verbs_iface_gc_drain_cqe(iface, qp_num);
         return;
     }
