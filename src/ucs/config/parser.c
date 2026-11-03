@@ -37,10 +37,11 @@
  * drop, e.g. "0xa" would be parsed as 0 by "%u" */
 #define UCS_CONFIG_SSCANF_NUMBER(_buf, _fmt, _value) \
     ({ \
-        int _length = 0; \
+        const char *_str = (_buf); \
+        int _length      = 0; \
         \
-        (sscanf((_buf), _fmt " %n", (_value), &_length) == 1) && \
-                ((_buf)[_length] == '\0'); \
+        (sscanf(_str, _fmt " %n", (_value), &_length) == 1) && \
+                (_str[_length] == '\0'); \
     })
 
 
@@ -511,9 +512,12 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
     int num_fields;
     double value;
     double per_sec;
+    char extra;
 
+    /* A character matched by "%c" after the units is trailing garbage */
     memset(units, 0, sizeof(units));
-    num_fields = sscanf(buf, "%lf%c%c", &value, &units[0], &units[1]);
+    num_fields = sscanf(buf, "%lf%c%c %c", &value, &units[0], &units[1],
+                        &extra);
     if (num_fields == 1) {
         per_sec = 1;
     } else if (num_fields == 2 || num_fields == 3) {

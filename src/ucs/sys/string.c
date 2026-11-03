@@ -172,6 +172,7 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
     int num_fields;
     size_t value;
     size_t bytes;
+    char extra;
 
     /* Special value: infinity */
     if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
@@ -185,8 +186,10 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
         return UCS_OK;
     }
 
+    /* A character matched by "%c" after the units is trailing garbage */
     memset(units, 0, sizeof(units));
-    num_fields = sscanf(buf, "%ld%c%c", &value, &units[0], &units[1]);
+    num_fields = sscanf(buf, "%ld%c%c %c", &value, &units[0], &units[1],
+                        &extra);
     if (num_fields == 1) {
         bytes = 1;
     } else if ((num_fields == 2) || (num_fields == 3)) {

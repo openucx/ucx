@@ -739,6 +739,7 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     unsigned long ulong_value;
     ucs_range_spec_t range;
     double double_value;
+    size_t size_value;
     unsigned uint_value;
     unsigned hex_value;
     unsigned bitmask;
@@ -779,6 +780,23 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     EXPECT_TRUE(ucs_config_sscanf_hex("0x8000", &hex_value, NULL));
     EXPECT_EQ(0x8000U, hex_value);
     EXPECT_FALSE(ucs_config_sscanf_hex("0x8000junk", &hex_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_time("10", &double_value, NULL));
+    EXPECT_EQ(10.0, double_value);
+    EXPECT_TRUE(ucs_config_sscanf_time("1s", &double_value, NULL));
+    EXPECT_EQ(1.0, double_value);
+    EXPECT_TRUE(ucs_config_sscanf_time("1ms ", &double_value, NULL));
+    EXPECT_DOUBLE_EQ(1e-3, double_value);
+    EXPECT_FALSE(ucs_config_sscanf_time("1msjunk", &double_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_time("1ms junk", &double_value, NULL));
+
+    EXPECT_TRUE(ucs_config_sscanf_memunits("8", &size_value, NULL));
+    EXPECT_EQ(8UL, size_value);
+    EXPECT_TRUE(ucs_config_sscanf_memunits("8k", &size_value, NULL));
+    EXPECT_EQ(8 * UCS_KBYTE, size_value);
+    EXPECT_TRUE(ucs_config_sscanf_memunits("8kb ", &size_value, NULL));
+    EXPECT_EQ(8 * UCS_KBYTE, size_value);
+    EXPECT_FALSE(ucs_config_sscanf_memunits("8kbjunk", &size_value, NULL));
 
     EXPECT_TRUE(ucs_config_sscanf_range_spec("100", &range, NULL));
     EXPECT_EQ(100U, range.first);
