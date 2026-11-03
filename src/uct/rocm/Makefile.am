@@ -27,6 +27,7 @@ noinst_HEADERS = \
 
 libuct_rocm_la_SOURCES = \
 	base/rocm_base.c \
+	base/rocm_base_vmm.c \
 	base/rocm_signal.c
 
 noinst_HEADERS += \
