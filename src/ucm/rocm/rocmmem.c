@@ -243,15 +243,14 @@ static ucs_status_t ucm_rocmmem_install(int events)
     if (installed_hooks & UCM_GPU_HOOK_MODES_MASK) {
         status = UCS_OK;
         if ((bistro_status != UCS_OK) || (reloc_status != UCS_OK)) {
-            ucm_warn("rocm hooks installed with one mechanism only (bistro: %s, "
-                     "reloc: %s)", ucs_status_string(bistro_status),
-                     ucs_status_string(reloc_status));
+            ucm_warn("rocm hooks installed with one mechanism only (bistro: %d, "
+                     "reloc: %d)", bistro_status, reloc_status);
         } else {
             ucm_info("rocm hooks are ready");
         }
     } else {
         status = (bistro_status != UCS_OK) ? bistro_status : reloc_status;
-        ucm_diag("failed to install rocm hooks: %s", ucs_status_string(status));
+        ucm_diag("failed to install rocm hooks: status %d", status);
     }
 
     pthread_mutex_unlock(&install_mutex);
