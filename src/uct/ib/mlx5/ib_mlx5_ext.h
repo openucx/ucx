@@ -42,6 +42,17 @@ typedef size_t (*uct_ib_mlx5_ext_max_get_sgl_zcopy_count_func_t)(void);
 /* RC-specific provider hooks and timestamped SGL completions. */
 
 enum {
+    /**
+     * Require successful provider attachment at interface creation. Unmet
+     * requirements or iface_init failure abort interface creation. If unset,
+     * normal RC continues without the provider when attachment fails. This
+     * policy does not suppress ordinary RC errors or endpoint hook errors.
+     */
+    UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH = UCS_BIT(0)
+};
+
+
+enum {
     /** Request timestamps on the existing RC transmit completion queue. */
     UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP = UCS_BIT(0)
 };
@@ -156,10 +167,15 @@ ucs_status_t uct_rc_mlx5_sgl_completion_init(
  */
 typedef struct uct_rc_mlx5_ext_ops {
     /**
+     * Interface attachment policy flags; see
+     * @ref UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH.
+     */
+    uint64_t        flags;
+
+    /**
      * Requirements known before interface creation; see
      * @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP.
-     * Unmet requirements fail interface creation in required mode. In
-     * best-effort mode, normal RC continues without attaching the provider.
+     * Unmet requirements follow the interface attachment policy in flags.
      */
     uint64_t        requirements;
 
@@ -230,9 +246,9 @@ typedef struct uct_rc_mlx5_ext_ops {
      * versions without importing remote memory metadata.
      *
      * Called before QP connection and setting UCT_RC_EP_FLAG_CONNECTED.
-     * Errors follow the required/best-effort provider policy. Failed calls
-     * must unwind partial imports. If QP connection subsequently fails,
-     * normal ep_cleanup releases the imported state.
+     * Errors are returned to the caller. Failed calls must unwind partial
+     * imports. If QP connection subsequently fails, normal ep_cleanup releases
+     * the imported state.
      *
      * @param [in] ep          Existing RC endpoint.
      * @param [in] ep_ctx      Provider context from ep_init.
