@@ -30,6 +30,7 @@ runs_on_dockers:
   - { name: "fedora44-inbox", url: "harbor.mellanox.com/hpcx/x86_64/fedora44/builder:inbox", arch: x86_64, build_mode: sanity }
   # Azure Linux 4.0 is in public preview; the image tracks the azurelinux-beta channel.
   - { name: "azurelinux40-inbox", url: "harbor.mellanox.com/hpcx/x86_64/azurelinux4.0/builder:inbox", arch: x86_64, build_mode: sanity }
+  - { name: "alpine324-inbox", url: "harbor.mellanox.com/hpcx/x86_64/alpine3.24/builder:inbox", arch: x86_64, build_mode: sanity }
   - { name: "rhel90-mofed5.6", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64, build_mode: short }
   - { name: "rhel90-mofed5.6-gcc15.2", url: "harbor.mellanox.com/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0", arch: x86_64, build_mode: sanity, GCC_MODULE: "dev/gcc-15.2.0" }
   - { name: "rhel100-mofed25.07", url: "harbor.mellanox.com/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0", arch: x86_64, build_mode: long }
@@ -50,6 +51,7 @@ runs_on_dockers:
   - { name: "ubuntu2610-inbox", url: "harbor.mellanox.com/hpcx/aarch64/ubuntu26.10/builder:inbox", arch: aarch64, build_mode: short }
   - { name: "fedora44-inbox", url: "harbor.mellanox.com/hpcx/aarch64/fedora44/builder:inbox", arch: aarch64, build_mode: short }
   - { name: "azurelinux40-inbox", url: "harbor.mellanox.com/hpcx/aarch64/azurelinux4.0/builder:inbox", arch: aarch64, build_mode: short }
+  - { name: "alpine324-inbox", url: "harbor.mellanox.com/hpcx/aarch64/alpine3.24/builder:inbox", arch: aarch64, build_mode: sanity }
   # DOCA publishes no aarch64 openEuler, so it takes the MOFED route.
   - { name: "openeuler2403sp3-mofed26.07", url: "harbor.mellanox.com/hpcx/aarch64/openeuler24.03sp3/builder:mofed-26.07-0.7.7.0", arch: aarch64, build_mode: short }
   - { name: "rocky89-mofed24.10", url: "harbor.mellanox.com/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0", arch: aarch64, build_mode: short }
