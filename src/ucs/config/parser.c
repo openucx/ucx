@@ -137,13 +137,23 @@ int ucs_config_sprintf_int(char *buf, size_t max,
     return snprintf(buf, max, "%i", *(unsigned*)src);
 }
 
+static int ucs_config_sscanf_uint_value(const char *buf, unsigned *value)
+{
+    int length;
+
+    /* Reject trailing characters, which would otherwise be silently dropped,
+     * e.g. "0xa" would be parsed as 0 */
+    return (sscanf(buf, "%u %n", value, &length) == 1) &&
+           (buf[length] == '\0');
+}
+
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
 {
     if (!strcasecmp(buf, UCS_NUMERIC_INF_STR)) {
         *(unsigned*)dest = UINT_MAX;
         return 1;
     } else {
-        return sscanf(buf, "%u", (unsigned*)dest);
+        return ucs_config_sscanf_uint_value(buf, (unsigned*)dest);
     }
 }
 
@@ -374,7 +384,7 @@ int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
         return 1;
     }
 
-    return sscanf(buf, "%u", (unsigned*)dest);
+    return ucs_config_sscanf_uint_value(buf, (unsigned*)dest);
 }
 
 int ucs_config_sprintf_uint_enum(char *buf, size_t max,
@@ -481,7 +491,7 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
 {
-    int ret = sscanf(buf, "%u", (unsigned*)dest);
+    int ret = ucs_config_sscanf_uint_value(buf, (unsigned*)dest);
     if (*(unsigned*)dest != 0) {
         *(unsigned*)dest = UCS_BIT(*(unsigned*)dest) - 1;
     }

@@ -715,6 +715,25 @@ UCS_TEST_F(test_config, set_get) {
     EXPECT_EQ(1, m_num_errors);
 }
 
+UCS_TEST_F(test_config, set_uint_trailing_chars) {
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+    EXPECT_EQ(UCS_OK, opts.set("PRICE", "11 "));
+    EXPECT_EQ(11U, opts->price);
+    EXPECT_EQ(UCS_OK, opts.set("PRICE", "10"));
+    EXPECT_EQ(10U, opts->price);
+
+    {
+        scoped_log_handler log_handler_vars(config_error_suppress);
+        EXPECT_NE(UCS_OK, opts.set("PRICE", "0xa"));
+        EXPECT_NE(UCS_OK, opts.set("PRICE", "10abc"));
+    }
+
+    EXPECT_EQ(10U, opts->price);
+    EXPECT_EQ(std::string("10"), std::string(opts.get("PRICE")));
+    EXPECT_EQ(2, m_num_errors);
+}
+
 UCS_TEST_F(test_config, set_blob)
 {
     static const char ucs_cars_prefix[] = UCS_DEFAULT_ENV_PREFIX"CARS_";
