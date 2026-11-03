@@ -655,6 +655,19 @@ UCS_TEST_P(test_mem_alloc_device, mem_pool_not_registrable_without_dmabuf,
     EXPECT_FALSE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
 }
 
+/* Plain device memory remains registrable, unless allocated under an MPS
+ * MLOPart device, where the driver allocates none as GDR capable */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size    = 4 * UCS_MBYTE;
+    const int is_gdr_capable = mem_buffer::cuda_mem_is_gdr_capable();
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, is_gdr_capable,
+                                  is_gdr_capable);
+}
+
 UCS_TEST_P(test_mem_alloc_device, vmm_mem_not_registrable_without_dmabuf,
            "CUDA_COPY_DMABUF=no")
 {
