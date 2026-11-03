@@ -1,7 +1,6 @@
 #!/bin/bash -eEl
 
 realdir=$(realpath $(dirname $0))
-source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
 COV_MODULE="tools/cov-2019.12"
@@ -48,10 +47,10 @@ modules_for_coverity() {
 	res=0
 	az_module_load $COV_MODULE
 	res=$(($res+$?))
-	az_module_load $CUDA_MODULE
-	res=$(($res+$?))
-	az_module_load $GDRCOPY_MODULE
-	res=$(($res+$?))
+	load_cuda_configure_flags
+	if [ -z "${cuda_configure_flags}" ] || [ -z "${gdrcopy_configure_flags}" ]; then
+		res=$(($res+1))
+	fi
 	az_module_load $JDK_MODULE
 	res=$(($res+$?))
 	az_module_load $MVN_MODULE
@@ -65,10 +64,7 @@ modules_for_coverity_unload() {
 	res=0
 	az_module_unload $COV_MODULE
 	res=$(($res+$?))
-	az_module_unload $CUDA_MODULE
-	res=$(($res+$?))
-	az_module_unload $GDRCOPY_MODULE
-	res=$(($res+$?))
+	unload_cuda_configure_flags
 	az_module_unload $JDK_MODULE
 	res=$(($res+$?))
 	az_module_unload $MVN_MODULE
@@ -85,7 +81,8 @@ configure_coverity() {
 	xpmem_root=$(module show $XPMEM_MODULE 2>&1 | awk '/CPATH/ {print $3}' | sed -e 's,/include,,')
 	with_xpmem="--with-xpmem=$xpmem_root"
 
-	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst $with_xpmem $*
+	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst $with_xpmem \
+		$cuda_configure_flags $gdrcopy_configure_flags --with-java $*
 
 	cov_build_id="cov_build_${ucx_build_type}"
 	cov_build="$ucx_build_dir/$cov_build_id"

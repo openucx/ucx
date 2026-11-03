@@ -95,10 +95,6 @@ make_clean() {
 	$MAKEP ${1:-clean}
 }
 
-has_gpunetio_devel() {
-    [ -d "/opt/mellanox/doca" ]
-}
-
 #
 # Configure and build
 #   $1 - mode (devel|release)
@@ -108,14 +104,9 @@ build() {
 	shift
 
 	config_args="--prefix=$ucx_inst --without-java"
-	if [ -n "$have_cuda" ] && [ "X$have_cuda" != "Xno" ]
+	if [ -n "$cuda_configure_flags" ]
 	then
-		config_args+=" --with-cuda=$have_cuda --with-iodemo-cuda"
-
-		if has_gpunetio_devel
-		then
-			config_args+=" --with-doca-gpunetio=/opt/mellanox/doca"
-		fi
+		config_args+=" $cuda_configure_flags --with-iodemo-cuda"
 	fi
 
 	../contrib/configure-${mode} ${config_args} "$@"

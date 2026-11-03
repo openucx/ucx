@@ -12,7 +12,6 @@
 #
 
 source $(dirname $0)/../buildlib/az-helpers.sh
-source $(dirname $0)/../buildlib/tools/common.sh
 
 ucx_inst=${WORKSPACE}/install
 
@@ -52,7 +51,7 @@ test_namespace() {
 
 	echo "==== Running perftest namespace positive tests ===="
 
-	if [ "X$have_cuda" != "Xno" ]
+	if [ -n "$cuda_configure_flags" ]
 	then
 		test_namespace_pid cuda_ipc,cuda_copy cuda ucp_put_bw "$base_perftest" cuda_ipc
 		# TODO: remove this once CUDA driver hang on GPU CI is fixed

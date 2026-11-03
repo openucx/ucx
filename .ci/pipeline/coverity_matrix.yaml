@@ -39,4 +39,4 @@ steps:
     parallel: false
     timeout: 30
     run: |
-      ./buildlib/tools/coverity.sh ${type} --clean --with-cuda --with-gdrcopy --with-java
+      ./buildlib/tools/coverity.sh ${type} --clean

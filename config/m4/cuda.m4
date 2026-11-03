@@ -14,7 +14,7 @@ AC_LANG_DEFINE([CUDA], [cuda], [NVCC], [NVCC], [C++], [
 AC_DEFUN([AC_LANG_COMPILER(CUDA)], [
     AC_ARG_VAR([NVCC], [nvcc compiler path])
     AC_ARG_VAR([NVCCFLAGS], [nvcc compiler flags])
-    BASE_NVCCFLAGS="$BASE_NVCCFLAGS -g $with_nvcc_gencode"
+    BASE_NVCCFLAGS="$BASE_NVCCFLAGS -g"
     AS_IF([test ! -z "$with_cuda" -a -d "$with_cuda/bin"],
           [CUDA_BIN_PATH="$with_cuda/bin"],
           [CUDA_BIN_PATH=""])
