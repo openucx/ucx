@@ -89,5 +89,6 @@ test_malloc_hook() {
 check_gpu 'gpu'
 prepare
 build
+check_ucm_no_ucs_symbols
 check_cuda_driver
 test_malloc_hook
