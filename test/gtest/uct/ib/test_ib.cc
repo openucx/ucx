@@ -373,11 +373,16 @@ protected:
 
     /* Packed device address length of an interface with the given fabric id */
     size_t fabric_id_addr_len(const std::string &fabric_id) {
+        std::vector<uint8_t> dev_addr;
         size_t addr_len;
 
         create_entities(fabric_id, fabric_id);
         addr_len = m_e1->iface_attr().device_addr_len;
         EXPECT_EQ(addr_len, m_e2->iface_attr().device_addr_len);
+
+        get_device_address(m_e1, dev_addr);
+        EXPECT_EQ(addr_len, uct_ib_address_packed_size(
+                                    (const uct_ib_address_t*)&dev_addr[0]));
         cleanup_entities();
 
         return addr_len;

@@ -378,7 +378,7 @@ struct uct_ib_iface {
         uint8_t                          qp_type;
         uint8_t                          force_global_addr;
         uint8_t                          flid_enabled;
-        /* Digest of the configured fabric id, 0 if unset */
+        /* Administrative fabric id, 0 for the default fabric */
         uint16_t                         fabric_id;
         enum ibv_mtu                     path_mtu;
         uint8_t                          counter_set_id;
@@ -513,7 +513,7 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params);
  *
  * @param [in]  ib_addr  Packed IB address.
  *
- * @return IB address size, in bytes.
+ * @return IB address size, in bytes, or 0 if the address is invalid.
  */
 size_t uct_ib_address_packed_size(const uct_ib_address_t *ib_addr);
 

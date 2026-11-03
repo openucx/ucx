@@ -804,7 +804,7 @@ static void uct_srd_iface_process_ctl(uct_srd_iface_t *iface,
 
     ucs_assertv(ctl->id == UCT_SRD_CTL_ID_REQ, "iface=%p got %s (id=%u)", iface,
                 uct_srd_ctl_id_to_string(ctl->id), ctl->id);
-    /* The remote address layout may differ from the local one, so its sizeis
+    /* The remote address layout may differ from the local one, so its size is
        derived from the address itself rather than from iface->addr_size */
     ucs_assertv((sizeof(*ctl) + uct_ib_address_packed_size(ib_addr)) == length,
                 "req size mismatch expected=%zu received=%u",

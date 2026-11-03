@@ -434,45 +434,6 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
     return size;
 }
 
-size_t uct_ib_address_packed_size(const uct_ib_address_t *ib_addr)
-{
-    size_t size = sizeof(*ib_addr);
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
-        size += sizeof(union ibv_gid);
-    } else {
-        size += sizeof(uint16_t); /* lid */
-
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
-            size += sizeof(uint64_t);
-        }
-
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
-            size += sizeof(uint16_t);
-        } else if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
-            size += sizeof(uint64_t);
-        }
-    }
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
-        size += sizeof(uint8_t);
-    }
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
-        size += sizeof(uint8_t);
-    }
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PKEY) {
-        size += sizeof(uint16_t);
-    }
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_FABRIC_ID) {
-        size += sizeof(uint16_t);
-    }
-
-    return size;
-}
-
 static int uct_ib_address_gid_is_site_local(const union ibv_gid *gid)
 {
     return (gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
@@ -613,8 +574,10 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     uct_ib_address_pack(&params, ib_addr);
 }
 
-ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
-                                   uct_ib_address_pack_params_t *params_p)
+static ucs_status_t
+uct_ib_address_unpack_size(const uct_ib_address_t *ib_addr,
+                           uct_ib_address_pack_params_t *params_p,
+                           size_t *size_p)
 {
     const void *ptr                     = ib_addr + 1;
     /* silence cppcheck warning */
@@ -689,7 +652,26 @@ ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     }
 
     *params_p = params;
+    *size_p   = UCS_PTR_BYTE_DIFF(ib_addr, ptr);
     return UCS_OK;
+}
+
+ucs_status_t uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                                   uct_ib_address_pack_params_t *params_p)
+{
+    size_t size;
+
+    return uct_ib_address_unpack_size(ib_addr, params_p, &size);
+}
+
+size_t uct_ib_address_packed_size(const uct_ib_address_t *ib_addr)
+{
+    uct_ib_address_pack_params_t params;
+    ucs_status_t status;
+    size_t size;
+
+    status = uct_ib_address_unpack_size(ib_addr, &params, &size);
+    return (status == UCS_OK) ? size : 0;
 }
 
 const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
@@ -1907,16 +1889,17 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.qp_type            = init_attr->qp_type;
     self->config.flid_enabled       = config->flid_enabled;
-    self->config.fabric_id          = config->fabric_id;
-    uct_ib_iface_set_path_mtu(self, config);
-
-    self->config.send_overhead = config->send_overhead;
 
     if (config->fabric_id > UINT16_MAX) {
         ucs_error("fabric id 0x%x is out of range, must be at most 0x%x",
                   config->fabric_id, UINT16_MAX);
         return UCS_ERR_INVALID_PARAM;
     }
+
+    self->config.fabric_id          = config->fabric_id;
+    uct_ib_iface_set_path_mtu(self, config);
+
+    self->config.send_overhead = config->send_overhead;
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");
