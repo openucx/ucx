@@ -518,9 +518,10 @@ enum {
 
 /* Per-lane token-failover state. The UCT ep is kept until an RX token purges
  * its outstanding operations, or until the endpoint is fully failed and the
- * lane is canceled. request_id is the local REQUEST that published tx_token.
- * peer_id is the remote REQUEST answered with that same token. An invalidated
- * lane may already hold those ids and an RX token. */
+ * lane is canceled. A later reply releases that ep and does not purge again.
+ * request_id is the local REQUEST that published tx_token. peer_id is the
+ * remote REQUEST answered with that same token. An invalidated lane may
+ * already hold those ids and an RX token. */
 typedef struct ucp_ep_lane_tf {
     uct_ep_h               uct_ep;
     void                   *tx_token;
@@ -531,6 +532,7 @@ typedef struct ucp_ep_lane_tf {
     uint8_t                tx_len;
     uint8_t                rx_len;
     uint8_t                state;
+    uint8_t                purged;
 } ucp_ep_lane_tf_t;
 
 
@@ -547,10 +549,15 @@ typedef struct ucp_ep_recovery_arg {
     /* number of retries left before giving up */
     unsigned                retries_left;
     uint8_t                 state;
-    /* Generation of the LANES_ADDR exchange, pre-incremented by every request
-     * and echoed by the peer. Copied into held lanes as request_id before the
-     * request is sent. */
-    uint32_t                request_id;
+    /* The next idle round republishes lanes already sent. A new failure
+     * clears this and publishes only lanes that have not been sent. */
+    uint8_t                 resend;
+    /* Highest peer LANES_ADDR request id accepted while this object is
+     * alive. 0 means none. Moved into the ext slot when the object is freed. */
+    uint16_t                seen_peer_id;
+    /* Lanes a request already published. A later failure leaves them out
+     * until recovery retries. */
+    ucp_lane_map_t          sent_lanes;
     ucp_ep_recovery_probe_t probe[UCP_MAX_LANES];
     ucp_ep_lane_tf_t        tf[UCP_MAX_LANES];
     /* Pending requests from held lanes, replayed after all of their
@@ -568,6 +575,12 @@ typedef struct ucp_ep_ext {
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_rsc_index_t               cm_idx;        /* CM index */
+    /* TODO: tf_request_id and lane_generation could be reused. */
+    /* LANES_ADDR request id this endpoint sends. Kept across recovery so the
+     * next failure does not restart at 1. */
+    uint16_t                      tf_request_id;
+    uint32_t                      lane_generation; /* Incremented whenever a lane
+                                                       is updated */
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -576,7 +589,9 @@ typedef struct ucp_ep_ext {
         ucp_ep_recovery_arg_t     *recovery_arg; /* Lanes recovery state object.
                                                     United with close request since:
                                                     1) recovery is not supported for connected to sockaddr EPs
-                                                    2) it does not make sense to recover lanes during close protocol */
+                                                    2) it does not make sense to recover lanes during close protocol
+                                                    The low bit set means there is no pointer: the remaining bits
+                                                    are the last accepted 16-bit peer request id. */
     };
     khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
                                                     used by 2-stage ppln rndv proto */
@@ -666,6 +681,12 @@ typedef struct ucp_ep {
 
     UCS_STATS_NODE_DECLARE(stats)
 } ucp_ep_t;
+
+
+ucp_ep_recovery_arg_t *ucp_ep_recovery_arg(ucp_ep_h ep);
+
+
+ucp_request_t *ucp_ep_close_req(ucp_ep_h ep);
 
 
 enum {
@@ -804,6 +825,29 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const char *debug_name,
                                        unsigned uct_flags);
 
+/**
+ * @brief Flush a subset of endpoint lanes specified by @a lane_mask.
+ *
+ * Same as @ref ucp_ep_flush_internal, but only lanes whose bit is set in
+ * @a lane_mask are initially flushed. If the endpoint topology changes while
+ * the flush is active, current live lanes are added conservatively.
+ *
+ * Device visibility state is shared by all lanes of the endpoint. A partial
+ * flush can clear this state while an excluded lane still has writes in
+ * flight, causing a later flush to skip the visibility work for those writes.
+ *
+ * Callers must include every lane with outstanding writes that require a
+ * device flush, and defer new such writes on excluded lanes until this
+ * flush completes.
+ */
+ucs_status_ptr_t
+ucp_ep_flush_lanes_internal(ucp_ep_h ep, unsigned req_flags,
+                            const ucp_request_param_t *param,
+                            ucp_request_t *worker_req,
+                            ucp_request_callback_t flushed_cb,
+                            const char *debug_name, unsigned uct_flags,
+                            ucp_lane_map_t lane_mask);
+
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
@@ -917,6 +961,8 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self);
 
 void ucp_ep_flush_completion(uct_completion_t *self);
+
+void ucp_ep_flush_mem_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 
@@ -1085,17 +1131,60 @@ ucp_ep_tf_hold(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
- * Invalidate lanes a peer token reported as failed.
+ * Purge a held lane whose RX token is already stored, after this callback
+ * returns. The transport records the outstanding range only then.
+ */
+void ucp_ep_tf_schedule_token_purge(ucp_ep_h ep, ucp_lane_index_t lane);
+
+
+/** Nonzero when @a request_id is newer than @a seen. 0 is unseen. */
+int ucp_ep_tf_peer_req_is_newer(uint16_t seen, uint16_t request_id);
+
+
+/** Nonzero when @a lanes is not empty and @a request_id is accepted. */
+int ucp_ep_tf_accept_peer_req(ucp_ep_h ep, ucp_lane_map_t lanes,
+                              uint32_t request_id);
+
+
+/** Drop invalidated lanes whose error completion will not arrive. */
+ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/**
+ * Mark lanes a remote token reported as failed.
  *
- * The transport endpoint stays on the lane in @ref UCP_EP_TF_LANE_INVALIDATED
- * until the error handler holds it. Non-zero @a request_id and @a peer_id are
- * recorded. Already held lanes only record @a peer_id.
+ * The transport endpoint stays on the lane in
+ * @ref UCP_EP_TF_LANE_INVALIDATED until @ref ucp_ep_tf_invalidate_uct_eps
+ * moves it to error and the error completion holds it. Non-zero
+ * @a request_id and @a peer_id are recorded. Already held lanes only
+ * record @a peer_id.
  *
  * @return Lanes left invalidated. Any other lane is not on the token path.
  */
 ucp_lane_map_t
 ucp_ep_tf_invalidate_lanes(ucp_ep_h ep, ucp_lane_map_t lanes,
                            uint32_t request_id, uint32_t peer_id);
+
+
+/** Invalidated lanes in @a lanes that still have a live transport endpoint. */
+ucp_lane_map_t ucp_ep_tf_lanes_to_invalidate(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/**
+ * Move invalidated lanes to error.
+ *
+ * The transport endpoint stays on the lane. The error completion holds it
+ * and records the outstanding range, so the caller must not purge here.
+ *
+ * @return Lanes moved to error. A lane left out still has its transport
+ *         endpoint.
+ */
+ucp_lane_map_t
+ucp_ep_tf_invalidate_uct_eps(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/** Nonzero when @a lane is held and still owns @a uct_ep. */
+int ucp_ep_tf_is_held(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep);
 
 
 /**
@@ -1108,12 +1197,16 @@ uint8_t ucp_ep_tf_tx_len(ucp_ep_h ep, ucp_lane_index_t lane,
 
 
 /**
- * Derive an RX token from a peer TX token while the local UCT ep still exists.
- * The returned buffer is allocated and owned by the caller.
+ * Derive an RX token from a peer TX token. The returned buffer is allocated
+ * and owned by the caller. @a require_open rejects a lane that is not held
+ * or invalidated. A reply passes 0 so the transport resolves a released
+ * lane from the TX token. A destroyed transport endpoint returns
+ * @ref UCS_ERR_NO_ELEM.
  */
 ucs_status_t ucp_ep_tf_derive_rx(ucp_ep_h ep, ucp_lane_index_t lane,
                                  const void *tx_token, uint8_t tx_len,
-                                 void **rx_token_p, uint8_t *rx_len_p);
+                                 int require_open, void **rx_token_p,
+                                 uint8_t *rx_len_p);
 
 
 /**
@@ -1130,11 +1223,14 @@ void ucp_ep_tf_save_rx(ucp_ep_h ep, ucp_lane_index_t lane, uint32_t request_id,
  * Purge held lanes in @a lanes whose stored RX token matches @a request_id.
  *
  * A reply matches the lane's own request_id. An ACK matches peer_id.
- * @a from_ack selects which one. After a successful purge the UCT endpoint
- * is destroyed and the lane hold is released.
+ * @a from_ack selects which one. A successful purge destroys the UCT
+ * endpoint and releases the hold only for lanes in @a release_lanes. Any
+ * other lane stays held, so a later reply can still read that transport
+ * endpoint while building the ACK token.
  */
 void ucp_ep_tf_lanes_purge_outstanding(ucp_ep_h ep, ucp_lane_map_t lanes,
-                                       uint32_t request_id, int from_ack);
+                                       uint32_t request_id, int from_ack,
+                                       ucp_lane_map_t release_lanes);
 
 
 /**

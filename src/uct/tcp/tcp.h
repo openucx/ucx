@@ -426,6 +426,12 @@ typedef struct uct_tcp_iface {
     } config;
 
     struct {
+        double                    latency;           /* Netdev latency */
+        double                    bandwidth;         /* Min of netdev and PCI BW */
+        int                       is_default;        /* Netdev has the default route */
+    } netif_caps;
+
+    struct {
         int                       nodelay;           /* TCP_NODELAY */
         size_t                    sndbuf;            /* SO_SNDBUF */
         size_t                    rcvbuf;            /* SO_RCVBUF */

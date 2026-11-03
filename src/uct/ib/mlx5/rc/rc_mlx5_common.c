@@ -767,7 +767,7 @@ static void uct_rc_mlx5_iface_common_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, 
 
     desc->lkey          = dm->mr->lkey;
     desc->super.buffer  = UCS_PTR_BYTE_OFFSET(dm->start_va, dm->seg_attached * dm->seg_len);
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+    desc->super.handler = uct_rc_ep_short_dm_desc_handler;
     dm->seg_attached++;
 }
 

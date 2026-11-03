@@ -17,7 +17,6 @@
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
-#include <ucp/rma/rma_bw.h>
 #include <ucp/wireup/address.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
@@ -89,18 +88,19 @@ static ucs_stats_class_t ucp_worker_stats_class = {
     .num_counters   = UCP_WORKER_STAT_LAST,
     .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
-        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "tag_rx_eager_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "tag_rx_sync_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "tag_rx_eager_chunk_exp",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "tag_rx_eager_chunk_unexp",
-        [UCP_WORKER_STAT_RNDV_RX_EXP]              = "rndv_rx_exp",
-        [UCP_WORKER_STAT_RNDV_RX_UNEXP]            = "rndv_rx_unexp",
-        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]           = "rndv_put_zcopy",
-        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]     = "rndv_put_mtype_zcopy",
-        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]           = "rndv_get_zcopy",
-        [UCP_WORKER_STAT_RNDV_RTR]                 = "rndv_rtr",
-        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]           = "rndv_rtr_mtype",
-        [UCP_WORKER_STAT_RNDV_RKEY_PTR]            = "rndv_rkey_ptr"
+        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]          = "tag_rx_eager_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]     = "tag_rx_sync_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]    = "tag_rx_eager_chunk_exp",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP]  = "tag_rx_eager_chunk_unexp",
+        [UCP_WORKER_STAT_RNDV_RX_EXP]               = "rndv_rx_exp",
+        [UCP_WORKER_STAT_RNDV_RX_UNEXP]             = "rndv_rx_unexp",
+        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]            = "rndv_put_zcopy",
+        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]      = "rndv_put_mtype_zcopy",
+        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]            = "rndv_get_zcopy",
+        [UCP_WORKER_STAT_RNDV_RTR]                  = "rndv_rtr",
+        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]            = "rndv_rtr_mtype",
+        [UCP_WORKER_STAT_RNDV_RKEY_PTR]             = "rndv_rkey_ptr",
+        [UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED]   = "rndv_mtype_fc_throttled"
     }
 };
 #endif
@@ -478,11 +478,20 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP. A token-capable lane is taken off the
-         * endpoint here; UCT keeps the TX ring only when this returns
+         * endpoint here; the transport keeps it only when this returns
          * UCS_INPROGRESS. */
-        if ((wireup_ep == NULL) &&
-            (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK)) {
-            return UCS_INPROGRESS;
+        if (wireup_ep == NULL) {
+            /* This endpoint is already held. Keep it until its completion. */
+            if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
+                return UCS_INPROGRESS;
+            }
+
+            if (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK) {
+                /* Purge after return, once the outstanding range is
+                 * recorded. */
+                ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
+                return UCS_INPROGRESS;
+            }
         }
 
         ucp_ep_set_lanes_failed(ucp_ep, UCS_BIT(lane), status);
@@ -1245,7 +1254,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     worker->num_ifaces = num_ifaces;
     iface_id           = 0;
 
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
         status = ucp_worker_iface_open(worker, tl_id,
                                        &worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1268,7 +1277,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     }
 
     UCS_STATIC_BITMAP_RESET_ALL(&worker->scalable_tl_bitmap);
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &context->tl_bitmap) {
         ucs_assert(ucp_worker_is_tl_p2p(worker, tl_id) ||
                    ucp_worker_is_tl_2iface(worker, tl_id) ||
                    ucp_worker_is_tl_2sockaddr(worker, tl_id));
@@ -1283,7 +1292,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
               UCS_STATIC_BITMAP_POPCOUNT(worker->scalable_tl_bitmap));
 
     iface_id = 0;
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
         status = ucp_worker_iface_init(worker, tl_id,
                                        worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1900,7 +1909,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucs_debug("worker %p: using device atomics", worker);
 
     /* Enable atomics on all resources using same device as the "best" resource */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, &context->tl_bitmap) {
         rsc = &context->tl_rscs[rsc_index];
         if (UCS_STATIC_BITMAP_GET(supp_tls, rsc_index) &&
             (rsc->md_index == best_rsc->md_index) &&
@@ -2209,7 +2218,8 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
         if (!kh_exist(&worker->mpool_hash, iter)) {
             continue;
         }
-        ucs_mpool_cleanup(&kh_val(&worker->mpool_hash, iter), 1);
+        ucs_mpool_cleanup(kh_val(&worker->mpool_hash, iter), 1);
+        ucs_free(kh_val(&worker->mpool_hash, iter));
     }
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
@@ -2704,6 +2714,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
+    unsigned q_index;
 
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
@@ -2730,11 +2741,15 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     kh_init_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
-    kh_init_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
     worker->counters.ep_failures          = 0;
+
+    /* Initialize RNDV mtype flow control pending queues */
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
+        ucs_queue_head_init(&worker->rndv_mtype_fc.pending_q[q_index]);
+    }
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
@@ -2892,16 +2907,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_tag_match_cleanup;
     }
 
-    if (context->config.ext.rma_bw_measure) {
-        worker->rma_bw_samples = ucs_calloc(UCP_RMA_BW_MAX_ACTIVE,
-                                            sizeof(*worker->rma_bw_samples),
-                                            "rma_bw_samples");
-        if (worker->rma_bw_samples == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err_am_cleanup;
-        }
-    }
-
     /* Select atomic resources */
     ucp_worker_init_atomic_tls(worker);
 
@@ -2928,7 +2933,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     return UCS_OK;
 
 err_am_cleanup:
-    ucs_free(worker->rma_bw_samples);
     ucp_am_cleanup(worker);
 err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
@@ -2961,7 +2965,6 @@ err_free:
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
-    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -3206,7 +3209,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
-    ucs_free(worker->rma_bw_samples);
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
@@ -3216,7 +3218,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_remote_flush, &worker->remote_flush_hash);
-    kh_destroy_inplace(ucp_worker_rma_bw, &worker->rma_bw_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
@@ -3246,7 +3247,7 @@ ucp_worker_address_pack(ucp_worker_h worker, uint32_t address_flags,
     }
 
     if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-        UCS_STATIC_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
+        UCP_TL_BITMAP_FOR_EACH_BIT(tl_id, &tl_bitmap) {
             iface_attr = ucp_worker_iface_get_attr(worker, tl_id);
             if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_INTER_NODE)) {
                 UCS_STATIC_BITMAP_RESET(&tl_bitmap, tl_id);

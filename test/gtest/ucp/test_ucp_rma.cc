@@ -8,15 +8,13 @@
 #include "test_ucp_gpu_nic_assignment.h"
 #include "test_ucp_memheap.h"
 
-#include <memory>
-
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h> /* for UCP_MEM_IS_ACCESSIBLE_FROM_CPU */
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_rkey.h>
+#include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
-#include <ucp/rma/rma_bw.inl>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -591,6 +589,155 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic, rcx_cuda,
                               "rc_x,cuda_copy")
 
 
+/* Without GPUDirect RDMA no NIC registers the responder's CUDA buffer, so the
+ * peer's rkey has no sys_dev, and the responder must detect the buffer's GPU
+ * locally to keep its host-staged rndv/put/mtype on the NICs assigned to it */
+class test_ucp_rma_rndv_gpu_nic_no_gdr : public test_ucp_rma_rndv_gpu_nic {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_rma_gpu_nic::get_test_variants,
+                           UCS_BIT(RNDV_SCHEME_PUT_PPLN), gpu_nic_rndv_schemes);
+    }
+
+    void init() override
+    {
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        test_ucp_rma_rndv_gpu_nic::init();
+    }
+
+    /* RTR_REQ carries this rkey's sys_dev, which must stay unknown so the
+     * responder has to detect its buffer's GPU locally */
+    void get_b_expect_empty_rkey(size_t size, void *expected_data,
+                                 ucp_mem_h memh, void *target_ptr,
+                                 ucp_rkey_h rkey, void *arg)
+    {
+        EXPECT_EQ(0, rkey->md_map);
+        EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN,
+                  ucp_rkey_config(sender().worker(), rkey)->key.sys_dev);
+        get_b(size, expected_data, memh, target_ptr, rkey, arg);
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_rndv_gpu_nic_no_gdr, get_blocking)
+{
+    if (has_cuda_net_md()) {
+        UCS_TEST_SKIP_R("a network memory domain can register CUDA memory");
+    }
+
+    if (!is_buffer_gpu_assigned(receiver().ucph())) {
+        UCS_TEST_SKIP_R("no nic is assigned to the test buffers' gpu");
+    }
+
+    /* The initiator's buffer is host memory, so the put can land */
+    test_message_sizes(
+            static_cast<send_func_t>(
+                    &test_ucp_rma_rndv_gpu_nic_no_gdr::get_b_expect_empty_rkey),
+            128, PPLN_FRAG_SIZE, UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA, 0);
+    expect_assigned_lanes(entities(), "rndv/put/mtype");
+}
+
+/* cuda_ipc is reachable intra-node and would resolve the sys_dev */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_rndv_gpu_nic_no_gdr, rcx_cuda,
+                              "rc_x,cuda_copy")
+
+
+/* Read by get/rndv from a remote buffer whose memory type is not supported by
+ * the reading context, like GPU memory of another vendor. The reader cannot
+ * estimate the protocols of the peer writing the data from that buffer. */
+class test_ucp_rma_foreign_mem_type : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_memtypes(variants, get_rma_variants,
+                             UCS_MASK(UCS_MEMORY_TYPE_LAST) &
+                             ~UCS_BIT(UCS_MEMORY_TYPE_HOST));
+    }
+
+    void init() override
+    {
+        /* Without GPUDirect RDMA the NIC cannot access the receiver's buffer,
+         * so only the rendezvous protocols can transfer it */
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        test_base::init();
+        create_entity();
+        if (!UCS_BIT_GET(receiver().ucph()->supported_mem_type_mask,
+                         mem_type())) {
+            UCS_TEST_SKIP_R(std::string("no transport detects ") +
+                            ucs_memory_type_names[mem_type()] + " memory");
+        }
+
+        ucp_test_param params = GetParam();
+        params.transports.erase(std::remove_if(params.transports.begin(),
+                                               params.transports.end(),
+                                               is_gpu_transport),
+                                params.transports.end());
+        create_entity(true, params);
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+    void get_b_foreign(size_t size, void *expected_data, ucp_mem_h memh,
+                       void *target_ptr, ucp_rkey_h rkey, void *arg)
+    {
+        EXPECT_EQ(mem_type(), rkey->mem_type);
+        get_b(size, expected_data, memh, target_ptr, rkey, arg);
+    }
+
+protected:
+    static void get_rma_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_RMA);
+    }
+
+    static bool is_gpu_transport(const std::string &tl_name)
+    {
+        static const std::string prefixes[] = {"cuda", "rocm", "ze", "gdr"};
+
+        for (const auto &prefix : prefixes) {
+            if (tl_name.compare(0, prefix.size(), prefix) == 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    ucs_memory_type_t mem_type() const
+    {
+        return static_cast<ucs_memory_type_t>(get_variant_value());
+    }
+
+    void test_sizes(send_func_t send_func)
+    {
+        static const size_t sizes[] = {1, 8, 64, 65, 4 * UCS_KBYTE, UCS_MBYTE};
+        ucs_memory_type_t mem_types[] = {UCS_MEMORY_TYPE_HOST, mem_type()};
+        const ucp_context_h context   = sender().ucph();
+
+        ASSERT_FALSE(UCS_BIT_GET(context->supported_mem_type_mask, mem_type()));
+        ASSERT_EQ(0, context->reg_md_map[mem_type()]);
+        ASSERT_EQ(nullptr, sender().worker()->mem_type_ep[mem_type()]);
+
+        for (size_t size : sizes) {
+            UCS_TEST_MESSAGE << "size " << size;
+            test_xfer(send_func, size, 1, 1, UCS_MEMORY_TYPE_HOST, mem_type(),
+                      0, false, false, mem_types);
+            if (HasFailure() || (num_errors() > 0)) {
+                break;
+            }
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_foreign_mem_type, get_blocking)
+{
+    test_sizes(static_cast<send_func_t>(
+            &test_ucp_rma_foreign_mem_type::get_b_foreign));
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_foreign_mem_type, rcx,
+                                        "rc_x")
+
+
 class test_ucp_rma_rndv : public test_ucp_rma {
 public:
     static constexpr size_t SIZE = 512 * UCS_KBYTE;
@@ -1161,37 +1308,45 @@ UCS_TEST_P(test_ucp_ep_based_fence, test_ep_based_fence_before_atomic) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_ep_based_fence, all, "all")
 
+#define UCP_SGL_EMULATION_PROTOS "PROTOS=put/sgl/am/*,reconfig"
+
 class test_ucp_rma_sgl : public test_ucp_rma {
 public:
     static void get_base_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_RMA);
+        /* Keep the base flags clear (flush worker, no user memh), so the
+         * memory types land at variant values 1 and 2 */
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
     }
 
+    /* Parameter validation tests do not depend on the memory type, so they
+     * run with a single memory type for both source and destination */
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_memtypes(variants, get_base_variants,
-                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                             UCS_BIT(UCS_MEMORY_TYPE_HOST));
+        add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
     virtual void init() override {
-        /* FIXME: sporadic failure on CUDA memory type. re-enable once fixed */
-        if (mem_type() == UCS_MEMORY_TYPE_CUDA) {
-            UCS_TEST_SKIP_R("sporadic failure on CUDA memory type");
-        }
-
         modify_config("MAX_RMA_RAILS", "2");
         test_ucp_rma::init();
     }
 
-    ucs_memory_type_t mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value());
+    ucs_memory_type_t src_mem_type() const {
+        return static_cast<ucs_memory_type_t>(get_variant_value(1));
+    }
+
+    virtual ucs_memory_type_t dst_mem_type() const {
+        return src_mem_type();
     }
 
 protected:
+    static constexpr uint64_t SGL_MEM_TYPES_MASK =
+            UCS_BIT(UCS_MEMORY_TYPE_HOST) | UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+
     enum sgl_op_t {
         SGL_OP_PUT,
         SGL_OP_GET
     };
+
+    bool m_require_zcopy_lane = true;
 
     struct sgl_ctx {
         std::vector<mapped_buffer>           src;
@@ -1209,8 +1364,7 @@ protected:
 
     void init_sgl_ctx(sgl_ctx &ctx, const std::vector<size_t> &elem_sizes,
                       sgl_op_t op = SGL_OP_PUT) {
-        ucs_memory_type_t mtype = mem_type();
-        size_t num              = elem_sizes.size();
+        size_t num = elem_sizes.size();
 
         ctx.rkey_handles.resize(num);
         ctx.buffers.resize(num);
@@ -1222,8 +1376,8 @@ protected:
         ctx.dst.reserve(num);
 
         for (size_t i = 0; i < num; i++) {
-            ctx.src.emplace_back(elem_sizes[i], sender(), 0, mtype);
-            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, mtype);
+            ctx.src.emplace_back(elem_sizes[i], sender(), 0, src_mem_type());
+            ctx.dst.emplace_back(elem_sizes[i], receiver(), 0, dst_mem_type());
         }
 
         for (size_t i = 0; i < num; i++) {
@@ -1354,7 +1508,7 @@ protected:
 
         uint64_t zcopy_cap = (op == SGL_OP_PUT) ? UCT_IFACE_FLAG_PUT_ZCOPY :
                                                   UCT_IFACE_FLAG_GET_ZCOPY;
-        if (!sender().has_lane_with_caps(zcopy_cap)) {
+        if (m_require_zcopy_lane && !sender().has_lane_with_caps(zcopy_cap)) {
             UCS_TEST_SKIP_R("zcopy is not supported");
         }
 
@@ -1382,7 +1536,8 @@ protected:
 
         if (use_callback) {
             param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                  UCP_OP_ATTR_FIELD_USER_DATA;
+                                  UCP_OP_ATTR_FIELD_USER_DATA |
+                                  UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
             param.cb.send = [](void *request, ucs_status_t status,
                                void *user_data) {
                 cb_state *s  = static_cast<cb_state*>(user_data);
@@ -1402,17 +1557,14 @@ protected:
             return;
         }
 
-        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
         auto verify_sgl_buffers = [&]() {
-            ucs_memory_type_t mtype = mem_type();
             for (size_t i = 0; i < num; i++) {
-                uint8_t expected = static_cast<uint8_t>(i + 1);
-                void *result     = (op == SGL_OP_PUT) ? ctx.dst[i].ptr() :
-                                                        ctx.src[i].ptr();
+                uint8_t expected            = static_cast<uint8_t>(i + 1);
+                const mapped_buffer &result = (op == SGL_OP_PUT) ? ctx.dst[i] :
+                                                                   ctx.src[i];
                 std::vector<uint8_t> host_buf(ctx.lengths[i]);
-                mem_buffer::copy_from(host_buf.data(), result, ctx.lengths[i],
-                                      mtype);
+                mem_buffer::copy_from(host_buf.data(), result.ptr(),
+                                      ctx.lengths[i], result.mem_type());
                 for (size_t j = 0; j < ctx.lengths[i]; j++) {
                     ASSERT_EQ(expected, host_buf[j])
                         << "Mismatch at element " << i << " byte " << j;
@@ -1420,22 +1572,39 @@ protected:
             }
         };
 
-        if (use_callback) {
-            while (!cb.completed) {
-                ucp_worker_progress(sender().worker());
-                ucp_worker_progress(receiver().worker());
-            }
-            EXPECT_UCS_OK(cb.status);
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(sptr));
         } else {
-            while (!ucp_request_is_completed(sptr)) {
-                ucp_worker_progress(sender().worker());
-                ucp_worker_progress(receiver().worker());
+            if (use_callback) {
+                while (!cb.completed) {
+                    ucp_worker_progress(sender().worker());
+                    ucp_worker_progress(receiver().worker());
+                }
+                EXPECT_UCS_OK(cb.status);
+            } else {
+                while (!ucp_request_is_completed(sptr)) {
+                    ucp_worker_progress(sender().worker());
+                    ucp_worker_progress(receiver().worker());
+                }
             }
+
+            ucp_request_release(sptr);
         }
 
-        ucp_request_release(sptr);
         flush_ep(sender());
         verify_sgl_buffers();
+    }
+
+    static bool offload_proto_selected(ucs_status_ptr_t sptr) {
+        if (!UCS_PTR_IS_PTR(sptr)) {
+            /* Only the emulation protocol can complete the put in-place, by
+               copying the data to a bounce buffer */
+            return false;
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        return strstr(req->send.proto_config->proto->name,
+                      "put/sgl/offload") != nullptr;
     }
 
     void test_put_sgl(const std::vector<size_t> &elem_sizes,
@@ -1453,6 +1622,52 @@ protected:
         test_put_sgl(std::vector<size_t>(num_elems, buf_size),
                      use_memhs, use_callback, set_remote_count,
                      expect_immediate_completion);
+    }
+
+    /* Post one SGL with the given element count and size, and expect the
+       selected protocol to split it between all its lanes */
+    void test_put_sgl_split(size_t num_elems, size_t buf_size) {
+        /* Complete the wireup, so that the operation below is posted rather
+           than added to a pending queue */
+        test_put_sgl(1, UCS_KBYTE);
+
+        sgl_ctx ctx;
+        init_sgl_ctx(ctx, num_elems, buf_size);
+
+        /* init_sgl_ctx() fills every element with one repeated byte, so it
+           cannot detect a fragment which is written to a wrong offset inside
+           its element. Use a pattern which depends on the position instead. */
+        std::vector<uint64_t> seeds(num_elems);
+        for (size_t i = 0; i < num_elems; ++i) {
+            seeds[i] = ucs::rand();
+            ctx.src[i].pattern_fill(seeds[i]);
+        }
+
+        ucp_dt_local_sgl_t local   = make_local_sgl(
+                ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
+        ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
+        ucp_request_param_t param  = make_sgl_param(&remote, num_elems);
+        ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, num_elems,
+                                                UCP_REMOTE_ADDR_INVALID,
+                                                UCP_RKEY_INVALID, &param);
+        if (!offload_proto_selected(sptr)) {
+            ASSERT_UCS_OK(request_wait(sptr));
+            flush_ep(sender());
+            UCS_TEST_SKIP_R("SGL offload protocol was not selected");
+        }
+
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        const ucp_proto_multi_priv_t *mpriv =
+                static_cast<const ucp_proto_multi_priv_t*>(
+                        req->send.proto_config->priv);
+        EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
+
+        request_wait(sptr);
+        flush_ep(sender());
+
+        for (size_t i = 0; i < num_elems; ++i) {
+            ctx.dst[i].pattern_check(seeds[i]);
+        }
     }
 
     static constexpr uint64_t LOCAL_MASK_DEFAULT =
@@ -1532,7 +1747,21 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_counts) {
+/* Tests which verify the transferred data run for every combination of source
+ * and destination memory types */
+class test_ucp_rma_sgl_data : public test_ucp_rma_sgl {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, test_ucp_rma_sgl::get_test_variants,
+                             SGL_MEM_TYPES_MASK);
+    }
+
+    virtual ucs_memory_type_t dst_mem_type() const override {
+        return static_cast<ucs_memory_type_t>(get_variant_value(2));
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_data, put_various_counts) {
     static const size_t counts[] = {1, 2, 4, 10, 1024};
     for (size_t count : counts) {
         test_put_sgl(count, 2 * UCS_KBYTE);
@@ -1549,7 +1778,7 @@ UCS_TEST_P(test_ucp_rma_sgl, put_various_counts) {
     }
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_various_sizes) {
     static const size_t buf_sizes[] = {1, 256, UCS_KBYTE, 4 * UCS_KBYTE};
     for (size_t buf_size : buf_sizes) {
         test_put_sgl(4, buf_size);
@@ -1559,53 +1788,71 @@ UCS_TEST_P(test_ucp_rma_sgl, put_various_sizes) {
     }
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_various_lengths) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_various_lengths) {
     test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_with_callback) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_with_callback) {
     test_put_sgl(10, UCS_KBYTE, true, true);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_no_memhs) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_no_memhs) {
     test_put_sgl(4, 2 * UCS_KBYTE, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_no_remote_count) {
+UCS_TEST_P(test_ucp_rma_sgl_data, put_no_remote_count) {
     test_put_sgl(4, 2 * UCS_KBYTE, true, false, false);
 }
 
-UCS_TEST_P(test_ucp_rma_sgl, put_split_between_lanes) {
-    static constexpr size_t NUM_ELEMS = 16;
-
-    /* Complete the wireup, so that the operation below is posted rather than
-       added to a pending queue */
-    test_put_sgl(1, UCS_KBYTE);
-
-    sgl_ctx ctx;
-    init_sgl_ctx(ctx, NUM_ELEMS, 64 * UCS_KBYTE);
-
-    ucp_dt_local_sgl_t local   = make_local_sgl(
-            ctx, LOCAL_MASK_DEFAULT | UCP_DT_LOCAL_SGL_FIELD_MEMHS);
-    ucp_dt_remote_sgl_t remote = make_remote_sgl(ctx, REMOTE_MASK_DEFAULT);
-    ucp_request_param_t param  = make_sgl_param(&remote, NUM_ELEMS);
-    ucs_status_ptr_t sptr      = sgl_op_nbx(SGL_OP_PUT, &local, NUM_ELEMS,
-                                            UCP_REMOTE_ADDR_INVALID,
-                                            UCP_RKEY_INVALID, &param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
-
-    /* All the elements fit into a single post, so at least one outstanding post
-       per lane of the selected protocol means they were split between them */
-    const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
-    const ucp_proto_multi_priv_t *mpriv =
-            static_cast<const ucp_proto_multi_priv_t*>(
-                    req->send.proto_config->priv);
-    EXPECT_GE(req->send.state.uct_comp.count, mpriv->num_lanes);
-
-    request_wait(sptr);
+UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation, UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
+UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_with_callback,
+           UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl(10, UCS_KBYTE, true, true);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_data, put_emulation_no_memhs,
+           UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl(4, 2 * UCS_KBYTE, false);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_emulation_fragmented,
+                     RUNNING_ON_VALGRIND, UCP_SGL_EMULATION_PROTOS) {
+    m_require_zcopy_lane = false;
+    test_put_sgl(4, 256 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_data, put_split_between_lanes) {
+    test_put_sgl_split(16, 64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_data, put_split_single_element) {
+    test_put_sgl_split(1, UCS_MBYTE);
+}
+
+/* An element count which is not a multiple of the lane count makes a lane
+   payload end in the middle of an element */
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_split_uneven_elements,
+                     RUNNING_ON_VALGRIND) {
+    static const char *rail_counts[] = {"2", "4"};
+    for (const char *rails : rail_counts) {
+        cleanup();
+        modify_config("MAX_RMA_RAILS", rails);
+        test_ucp_rma::init();
+        test_put_sgl_split(3, UCS_MBYTE);
+        test_put_sgl_split(5, UCS_MBYTE);
+        if (HasFailure() || (num_errors() > 0)) {
+            break;
+        }
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_multi_rail,
                      RUNNING_ON_VALGRIND) {
     static const char *rail_counts[] = {"1", "4", "6", "8"};
     for (const char *rails : rail_counts) {
@@ -1613,13 +1860,14 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_multi_rail,
         modify_config("MAX_RMA_RAILS", rails);
         test_ucp_rma::init();
         test_put_sgl(100, 2 * UCS_KBYTE);
+        test_put_sgl(1, UCS_MBYTE);
         if (HasFailure() || (num_errors() > 0)) {
             break;
         }
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_fragmented_elements,
+UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl_data, put_fragmented_elements,
                      RUNNING_ON_VALGRIND) {
     cleanup();
     modify_config("RMA_ZCOPY_MAX_SEG_SIZE", "256");
@@ -1858,168 +2106,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
 
-
-class test_ucp_rma_bw : public test_ucp_rma {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
-    }
-
-    test_ucp_rma_bw()
-    {
-        modify_config("RMA_BW_MEASURE", "y");
-        modify_config("ZCOPY_THRESH", "0");
-    }
-};
-
-UCS_TEST_P(test_ucp_rma_bw, put_get_enabled)
-{
-    constexpr size_t size = 512 * UCS_KBYTE;
-    mem_buffer sendbuf(size, UCS_MEMORY_TYPE_HOST);
-    mem_buffer recvbuf(size, UCS_MEMORY_TYPE_HOST);
-    mapped_buffer rbuf(size, receiver());
-    ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
-    ucp_request_param_t param    = {0};
-
-    mem_buffer::pattern_fill(sendbuf.ptr(), size, ucs::rand());
-    ASSERT_UCS_OK(request_wait(ucp_put_nbx(
-            sender().ep(), sendbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey,
-            &param)));
-    flush_ep(sender());
-    ASSERT_TRUE(mem_buffer::compare(sendbuf.ptr(), rbuf.ptr(), size,
-                                    UCS_MEMORY_TYPE_HOST));
-
-    ASSERT_UCS_OK(request_wait(ucp_get_nbx(
-            sender().ep(), recvbuf.ptr(), size, (uint64_t)rbuf.ptr(), rkey,
-            &param)));
-    ASSERT_TRUE(mem_buffer::compare(sendbuf.ptr(), recvbuf.ptr(), size,
-                                    UCS_MEMORY_TYPE_HOST));
-    for (unsigned i = 0; i < UCP_RMA_BW_MAX_ACTIVE; ++i) {
-        const auto &sample = sender().worker()->rma_bw_samples[i];
-        EXPECT_EQ(nullptr, sample.req);
-        EXPECT_EQ(0u, sample.pending);
-    }
-}
-
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_bw, all, "all")
-
-
-TEST(test_ucp_rma_bw_helpers, detach_pending)
-{
-    ucp_request_t req = {};
-    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
-    auto &sample = *sample_ptr;
-    ucp_rma_bw_frag_t *frag;
-    uct_completion_t *comps[3];
-
-    req.flags                     = UCP_REQUEST_FLAG_RMA_BW_SAMPLE;
-    req.send.rma.bw_sample        = &sample;
-    req.send.state.uct_comp.count = 4;
-    req.send.state.uct_comp.func  = ucp_rma_bw_sample_complete;
-    sample.req                    = &req;
-    sample.num_lanes              = 3;
-
-    for (unsigned lane = 0; lane < sample.num_lanes; ++lane) {
-        comps[lane] = ucp_rma_bw_frag_start(&req, lane, &frag);
-        ucp_rma_bw_frag_posted(frag, 4096, UCS_INPROGRESS);
-    }
-    EXPECT_TRUE(sample.concurrent);
-    ucp_proto_request_zcopy_abort(&req, UCS_ERR_CANCELED);
-    ucp_rma_bw_sample_detach(&req);
-
-    EXPECT_FALSE(req.flags & UCP_REQUEST_FLAG_RMA_BW_SAMPLE);
-    EXPECT_TRUE(req.send.state.uct_comp.func ==
-                ucp_proto_request_zcopy_completion);
-    EXPECT_EQ(nullptr, req.send.rma.bw_sample);
-    EXPECT_EQ(nullptr, sample.req);
-    EXPECT_EQ(UCS_ERR_CANCELED, req.send.state.uct_comp.status);
-    EXPECT_FALSE(ucp_rma_bw_sample_is_free(&sample));
-
-    for (uct_completion_t *comp : comps) {
-        comp->func(comp);
-    }
-    EXPECT_TRUE(ucp_rma_bw_sample_is_free(&sample));
-}
-
-
-TEST(test_ucp_rma_bw_helpers, estimator_three_lanes)
-{
-    constexpr unsigned count = 3;
-    std::vector<uint8_t> storage(
-            sizeof(ucp_rma_bw_estimator_t) +
-                    count * sizeof(ucp_rma_bw_lane_estimate_t),
-            0);
-    auto *estimator = reinterpret_cast<ucp_rma_bw_estimator_t*>(storage.data());
-    std::unique_ptr<ucp_rma_bw_sample_t> sample_ptr(new ucp_rma_bw_sample_t());
-    auto &sample            = *sample_ptr;
-    const ucs_time_t second = ucs_time_from_sec(1.0);
-
-    estimator->num_lanes  = count;
-    estimator->epoch      = 1;
-    estimator->generation = 2;
-    sample.num_lanes      = count;
-    sample.epoch          = 1;
-    sample.generation     = 2;
-    sample.dir            = UCP_RMA_BW_PUT;
-    sample.concurrent     = 1;
-    for (unsigned i = 0; i < count; ++i) {
-        estimator->lanes[i].nominal  = 10 * UCS_MBYTE;
-        estimator->lanes[i].smoothed = estimator->lanes[i].nominal;
-        estimator->lanes[i].lane_id  = i;
-        sample.lane_ids[i]           = i;
-        sample.lanes[i].bytes        = (i == 1 ? 8 : 4) * UCS_MBYTE;
-        sample.lanes[i].first_post   = second;
-        sample.lanes[i].last_comp    = 2 * second;
-        sample.lanes[i].num_async    = 1;
-        sample.lanes[i].posted_total = sample.lanes[i].bytes;
-    }
-
-    sample.lanes[2].num_async = 0;
-    EXPECT_EQ(UCP_RMA_BW_REJECT_UNSATURATED,
-              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
-    EXPECT_EQ(0u, estimator->lanes[0].marker_time);
-    sample.lanes[2].num_async = 1;
-    ++sample.generation;
-    EXPECT_EQ(UCP_RMA_BW_REJECT_GENERATION,
-              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
-    --sample.generation;
-    EXPECT_EQ(UCP_RMA_BW_REJECT_WARMUP,
-              ucp_rma_bw_estimator_update(estimator, &sample, 3 * second));
-
-    /* The second sampled request waits behind 16 others on lane 1. */
-    for (unsigned i = 0; i < count; ++i) {
-        sample.lanes[i].posted_total *= 17;
-        sample.lanes[i].last_comp     = 18 * second;
-        sample.lanes[i].first_post    = (i == 1 ? 2 : 17) * second;
-    }
-
-    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
-              ucp_rma_bw_estimator_update(estimator, &sample, 19 * second));
-    EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[0].smoothed, 1.0);
-    EXPECT_NEAR(9.4 * UCS_MBYTE, estimator->lanes[1].smoothed, 1.0);
-    EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[2].smoothed, 1.0);
-    EXPECT_EQ(UCP_RMA_BW_REJECT_RATE_LIMIT,
-              ucp_rma_bw_estimator_update(estimator, &sample, 19 * second));
-
-    for (unsigned i = 0; i < count; ++i) {
-        sample.lanes[i].bytes         = 256 * UCS_KBYTE;
-        sample.lanes[i].first_post    = 19 * second;
-        sample.lanes[i].last_comp     = 20 * second;
-        sample.lanes[i].posted_total += sample.lanes[i].bytes;
-    }
-    const double previous = estimator->lanes[1].smoothed;
-    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
-              ucp_rma_bw_estimator_update(estimator, &sample, 21 * second));
-    EXPECT_NEAR(0.73 * previous, estimator->lanes[1].smoothed, 1.0);
-
-    for (unsigned i = 0; i < count; ++i) {
-        sample.lanes[i].bytes         = 4 * UCS_MBYTE;
-        sample.lanes[i].first_post    = 51 * second;
-        sample.lanes[i].last_comp     = 52 * second;
-        sample.lanes[i].posted_total += sample.lanes[i].bytes;
-    }
-    EXPECT_EQ(UCP_RMA_BW_REJECT_NONE,
-              ucp_rma_bw_estimator_update(estimator, &sample, 53 * second));
-    EXPECT_NEAR(8.2 * UCS_MBYTE, estimator->lanes[1].smoothed, 1.0);
-}
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")

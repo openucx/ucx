@@ -259,6 +259,30 @@ UCS_TEST_P(test_uct_tcp, listener_flood_connect_and_close) {
     test_listener_flood(*m_ent, max_conn, 0);
 }
 
+UCS_TEST_P(test_uct_tcp, reject_oversized_am)
+{
+    constexpr uint64_t magic_number = UCT_TCP_MAGIC_NUMBER;
+    const uct_tcp_am_hdr_t hdr      = {
+        0, std::numeric_limits<uint32_t>::max()
+    };
+    std::vector<char> buf(sizeof(magic_number) + sizeof(hdr));
+    std::vector<int> fds;
+
+    memcpy(&buf[0], &magic_number, sizeof(magic_number));
+    memcpy(&buf[sizeof(magic_number)], &hdr, sizeof(hdr));
+
+    setup_conns_to_entity(*m_ent, 1, fds);
+    post_send(fds.front(), buf);
+
+    wait_for_cond([this]() {
+                      return ucs_list_is_empty(&m_tcp_iface->ep_list);
+                  },
+                  [this]() { progress(); }, 1.0);
+    EXPECT_TRUE(ucs_list_is_empty(&m_tcp_iface->ep_list));
+
+    close(fds.front());
+}
+
 UCS_TEST_P(test_uct_tcp, check_addr_len)
 {
     uct_iface_attr_t iface_attr;

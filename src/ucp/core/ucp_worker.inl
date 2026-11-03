@@ -48,7 +48,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
 static UCS_F_ALWAYS_INLINE khint_t
 ucp_worker_mpool_hash_func(ucp_worker_mpool_key_t mpool_key)
 {
-    return (khint_t)mpool_key.mem_type ^ (mpool_key.sys_dev << 8);
+    return (khint_t)mpool_key.mem_type ^ (mpool_key.sys_dev << 8) ^
+           (mpool_key.pool << 16);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -56,10 +57,11 @@ ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
                               ucp_worker_mpool_key_t mpool_key2)
 {
     return (mpool_key1.sys_dev == mpool_key2.sys_dev) &&
-           (mpool_key1.mem_type == mpool_key2.mem_type);
+           (mpool_key1.mem_type == mpool_key2.mem_type) &&
+           (mpool_key1.pool == mpool_key2.pool);
 }
 
-KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t,
+KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*,
            1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
 
 static UCS_F_ALWAYS_INLINE khint_t
@@ -78,29 +80,6 @@ ucp_worker_remote_flush_key_is_equal(ucp_worker_remote_flush_key_t key1,
 KHASH_IMPL(ucp_worker_remote_flush, ucp_worker_remote_flush_key_t,
            ucp_mem_area_t, 1, ucp_worker_remote_flush_hash_func,
            ucp_worker_remote_flush_key_is_equal);
-
-static UCS_F_ALWAYS_INLINE khint_t ucp_worker_rma_bw_hash_func(ucp_ep_h ep)
-{
-    return kh_int64_hash_func((uintptr_t)ep);
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_rma_bw_key_is_equal(ucp_ep_h ep1, ucp_ep_h ep2)
-{
-    return ep1 == ep2;
-}
-
-KHASH_IMPL(ucp_worker_rma_bw, ucp_ep_h, struct ucp_rma_bw_ep_state*, 1,
-           ucp_worker_rma_bw_hash_func, ucp_worker_rma_bw_key_is_equal);
-
-static UCS_F_ALWAYS_INLINE struct ucp_rma_bw_ep_state*
-ucp_worker_rma_bw_state_get(ucp_ep_h ep)
-{
-    kh_ucp_worker_rma_bw_t *hash = &ep->worker->rma_bw_hash;
-    khiter_t it                 = kh_get(ucp_worker_rma_bw, hash, ep);
-
-    return (it == kh_end(hash)) ? NULL : kh_value(hash, it);
-}
 
 
 static UCS_F_ALWAYS_INLINE void

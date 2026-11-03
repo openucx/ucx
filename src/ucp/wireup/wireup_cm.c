@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -147,7 +147,7 @@ static ucp_rsc_index_t
 ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
                              const ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_rsc_index_t rsc_index = UCS_STATIC_BITMAP_FFS(*tl_bitmap);
+    ucp_rsc_index_t rsc_index = ucp_tl_bitmap_ffs(tl_bitmap, 0);
     ucp_rsc_index_t dev_index;
 
     ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
@@ -156,7 +156,7 @@ ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
     dev_index = context->tl_rscs[rsc_index].dev_index;
 
     /* check that all TL resources in the TL bitmap have the same dev_index */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
         ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
     }
 
@@ -1272,8 +1272,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect to remote address on "
                  "device %s, tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
-                 ep, conn_request->dev_name, tl_bitmap.bits[0],
-                 tl_bitmap.bits[1], ucs_status_string(status));
+                 ep, conn_request->dev_name, UCT_TL_BITMAP_ARG(&tl_bitmap),
+                 ucs_status_string(status));
         uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
         goto err_destroy_ep;
     }

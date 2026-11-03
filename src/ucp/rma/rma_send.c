@@ -195,6 +195,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
 {
     ucp_worker_h worker               = ep->worker;
     size_t contig_length              = 0;
+    size_t sgl_length                 = 0;
     ucp_datatype_t datatype           = ucp_dt_make_contig(1);
     const ucp_dt_remote_sgl_t *remote = NULL;
     ucs_status_ptr_t ret;
@@ -227,8 +228,10 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         datatype = param->datatype;
         if (UCP_DT_IS_SGL(datatype)) {
             UCP_PUT_SGL_CHECK_PARAMS(buffer, count, remote_addr, rkey, param);
-            remote = param->remote;
-            rkey   = remote->rkeys[0];
+            remote     = param->remote;
+            rkey       = remote->rkeys[0];
+            sgl_length = ucp_dt_sgl_length(
+                    ((const ucp_dt_local_sgl_t*)buffer)->lengths, count);
         } else if (UCP_DT_IS_CONTIG(datatype)) {
             contig_length = ucp_contig_dt_length(datatype, count);
         }
@@ -244,6 +247,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
     if (remote != NULL) {
         req->send.rma.sgl.remote_addrs = remote->remote_addrs;
         req->send.rma.sgl.rkeys        = remote->rkeys;
+        req->send.rma.sgl.length       = sgl_length;
     }
 
     ret = ucp_proto_request_send_op_rma(

@@ -130,6 +130,10 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
+    /** Maximum memory for concurrent rndv fragments per worker (bytes) */
+    size_t                                 rndv_frag_worker_max_mem;
+    /** Fraction of rndv_frag_worker_max_mem which RTR fragments may use */
+    double                                 rndv_frag_rtr_ratio;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -230,8 +234,6 @@ typedef struct ucp_context_config {
     int                                    reg_nb_fallback;
     /** Prefer native RMA transports for RMA/AMO protocols */
     int                                    prefer_offload;
-    /** Sample completed multi-rail RMA zcopy operations */
-    int                                    rma_bw_measure;
     /** RMA zcopy segment size */
     size_t                                 rma_zcopy_max_seg_size;
     /** Enable global VA MR */
@@ -809,7 +811,6 @@ ucp_context_print_transport_tables_enabled(ucp_context_h context)
 
     return value == UCS_CONFIG_ON;
 }
-
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,

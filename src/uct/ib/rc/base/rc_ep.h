@@ -96,15 +96,14 @@ enum {
 #define UCT_RC_CHECK_CQE_RET(_iface, _ep, _ret) \
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
-        (signed)(_iface)->config.tx_moderation)) { \
+                     (signed)ucs_max((_iface)->config.tx_moderation, \
+                                     (_ep)->cq_reserve))) { \
         UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, 0); \
         (_ep)->txqp.unsignaled = RC_UNSIGNALED_INF; \
     }
 
 #define UCT_RC_CHECK_CQE_VALUE_RET(_iface, _ep, _ret, _value) \
-    if ((_iface)->tx.cq_available <= (signed)(_value)) { \
-        (_ep)->cq_reserve = ucs_max((_ep)->cq_reserve, \
-                                    (uint16_t)(_value)); \
+    if (uct_rc_ep_reserve_cqe(_iface, _ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -114,9 +113,7 @@ enum {
     UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, 0)
 
 #define UCT_RC_CHECK_TXQP_VALUE_RET(_iface, _ep, _ret, _value) \
-    if (uct_rc_txqp_available(&(_ep)->txqp) <= (_value)) { \
-        (_ep)->txqp_reserve = ucs_max((_ep)->txqp_reserve, \
-                                      (uint16_t)(_value)); \
+    if (uct_rc_ep_reserve_txqp(_ep, (uint16_t)(_value))) { \
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
@@ -245,6 +242,10 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
 void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
                                size_t iovcnt);
 
+void uct_rc_ep_send_op_set_sgl(uct_rc_iface_send_op_t *op,
+                               void *const *buffers, const size_t *lengths,
+                               size_t count);
+
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
@@ -259,6 +260,9 @@ void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp);
 
+void uct_rc_ep_am_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                           const void *resp);
+
 void uct_rc_ep_put_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp);
 
@@ -268,8 +272,14 @@ void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
 void uct_rc_ep_put_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                                 const void *resp);
 
+void uct_rc_ep_get_sgl_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                                const void *resp);
+
 void uct_rc_ep_check_completion_handler(uct_rc_iface_send_op_t *op,
                                         const void *resp);
+
+void uct_rc_ep_short_dm_desc_handler(uct_rc_iface_send_op_t *op,
+                                     const void *resp);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
@@ -362,6 +372,51 @@ static UCS_F_ALWAYS_INLINE void uct_rc_fc_restore_wnd(uct_rc_iface_t *iface,
     UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
 }
 
+static UCS_F_ALWAYS_INLINE void uct_rc_ep_reset_reserve(uct_rc_ep_t *ep)
+{
+    ep->txqp_reserve = 0;
+    ep->cq_reserve   = 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_schedule_pending(uct_rc_ep_t *ep)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+
+    if (ucs_arbiter_group_is_empty(&ep->arb_group)) {
+        uct_rc_ep_reset_reserve(ep);
+    } else {
+        ucs_arbiter_group_schedule_nonempty(&iface->tx.arbiter, &ep->arb_group);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_reserve_txqp(uct_rc_ep_t *ep, uint16_t value)
+{
+    uint16_t reserve = ucs_max(ep->txqp_reserve, value);
+
+    if (uct_rc_txqp_available(&ep->txqp) > reserve) {
+        return 0;
+    }
+
+    ep->txqp_reserve = reserve;
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_ep_reserve_cqe(const uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                      uint16_t value)
+{
+    uint16_t reserve = ucs_max(ep->cq_reserve, value);
+
+    if (iface->tx.cq_available > (signed)reserve) {
+        return 0;
+    }
+
+    ep->cq_reserve = reserve;
+    return 1;
+}
+
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
@@ -446,6 +501,29 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
     uct_rc_txqp_add_send_comp_always(iface, txqp, handler, comp, sn, flags, iov,
                                      iovcnt, length);
+}
+
+/* Same as uct_rc_txqp_add_send_comp_always(), but the operation buffers are
+ * given as an SGL (buffers/lengths arrays) rather than a uct_iov_t array. */
+static UCS_F_ALWAYS_INLINE void
+uct_rc_txqp_add_send_comp_sgl_always(uct_rc_iface_t *iface,
+                                     uct_rc_txqp_t *txqp,
+                                     uct_rc_send_handler_t handler,
+                                     uct_completion_t *comp, uint16_t sn,
+                                     uint16_t flags, void *const *buffers,
+                                     const size_t *lengths, size_t count,
+                                     size_t length)
+{
+    uct_rc_iface_send_op_t *op = uct_rc_iface_get_send_op(iface);
+
+    uct_rc_ep_init_send_op(op, flags | UCT_RC_IFACE_SEND_OP_FLAG_IFACE, comp,
+                           handler, length);
+
+    if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV) {
+        /* coverity[dead_error_line] */
+        uct_rc_ep_send_op_set_sgl(op, buffers, lengths, count);
+    }
+    uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -627,6 +705,24 @@ uct_rc_op_release_iov_get_zcopy(uct_rc_iface_send_op_t *op)
     }
 
     op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_get_bcopy(uct_rc_iface_send_op_t *op)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op,
+                                                    uct_rc_iface_send_desc_t);
+    uct_rc_iface_t *iface = ucs_container_of(ucs_mpool_obj_owner(desc),
+                                             uct_rc_iface_t, tx.mp);
+
+    iface->tx.reads_completed += op->length;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_reads_get_zcopy(uct_rc_iface_send_op_t *op)
+{
+    op->iface->tx.reads_completed += op->length;
+    uct_rc_op_release_iov_get_zcopy(op);
 }
 
 #endif
