@@ -746,7 +746,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - dc/dc_x : dc with accelerated verbs.\n"
    " - tcp     : sockets over TCP/IP.\n"
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
-   " - musa    : MUSA GPU memory support (musa_copy).\n"
+   " - musa    : MUSA (Moore Threads GPU) memory support.\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
    " - ze      : ZE (Intel GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"

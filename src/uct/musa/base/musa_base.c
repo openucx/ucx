@@ -190,21 +190,14 @@ uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
 ucs_status_t
 uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p)
 {
-    unsigned i;
-
     pthread_once(&uct_musa_base_sys_dev_once, uct_musa_base_init_sys_devs);
     if (uct_musa_base_sys_dev_status != UCS_OK) {
         return uct_musa_base_sys_dev_status;
     }
 
-    for (i = 0; i < uct_musa_base_num_devices; ++i) {
-        if (uct_musa_base_sys_devices[i] == sys_dev) {
-            *device_p = i;
-            return UCS_OK;
-        }
-    }
-
-    return UCS_ERR_NO_DEVICE;
+    return uct_musa_lookup_device_by_sys_dev(uct_musa_base_sys_devices,
+                                             uct_musa_base_num_devices,
+                                             sys_dev, device_p);
 }
 
 ucs_status_t
