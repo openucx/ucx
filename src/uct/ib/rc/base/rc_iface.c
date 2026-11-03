@@ -720,6 +720,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
          * Then FC window size is the same for all endpoints as well.
          * TODO: Make wnd size to be a property of the particular interface.
          * We could distribute it via rc address then.*/
+        ucs_assert(init_attr->fc_max_wnd_size > 0);
         self->config.fc_wnd_size    = ucs_min(config->fc.wnd_size,
                                               init_attr->fc_max_wnd_size);
         self->config.fc_hard_thresh = ucs_max((int)(self->config.fc_wnd_size *

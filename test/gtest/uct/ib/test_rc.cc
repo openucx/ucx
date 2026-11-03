@@ -623,6 +623,16 @@ protected:
                               uct_rc_verbs_ep_t)->rx_available;
     }
 
+    void check_rx_config(entity *e, unsigned expected_batch) {
+        unsigned batch = rc_iface(e)->super.config.rx_max_batch;
+
+        EXPECT_TRUE(rc_iface(e)->config.fc_enabled);
+        EXPECT_GT(batch, 0u);
+        EXPECT_EQ(expected_batch, batch);
+        EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
+        EXPECT_LE(rc_iface(e)->config.fc_wnd_size + batch, rx_max_wr(e));
+    }
+
     int max_qp_wr() {
         return IBV_DEV_ATTR(&ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev,
                             max_qp_wr);
@@ -936,16 +946,41 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_already_drained,
 UCS_TEST_P(test_rc_no_srq, rx_config, "IB_RX_MAX_BATCH=16",
            "RC_VERBS_RX_MAX_WR=32", "RC_FC_ENABLE=y")
 {
-    entity *peers[] = {m_e1, m_e2};
+    check_rx_config(m_e1, 8);
+    check_rx_config(m_e2, 8);
+}
 
-    for (auto e : peers) {
-        unsigned batch = rc_iface(e)->super.config.rx_max_batch;
+UCS_TEST_P(test_rc_no_srq, rx_batch_limits,
+           "RC_VERBS_RX_MAX_WR=128", "RC_FC_ENABLE=y")
+{
+    const struct {
+        const char *max_batch;
+        const char *queue_len;
+        unsigned expected_batch;
+    } configs[] = {{"0", NULL, 1}, {"16", "1", 16}, {"16", "32", 16}};
 
-        EXPECT_TRUE(rc_iface(e)->config.fc_enabled);
-        EXPECT_GT(batch, 0u);
-        EXPECT_EQ(static_cast<unsigned>(rx_max_wr(e)) / 4, batch);
-        EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
-        EXPECT_LE(rc_iface(e)->config.fc_wnd_size + batch, rx_max_wr(e));
+    for (const auto &config : configs) {
+        SCOPED_TRACE(::testing::Message() << "RX_MAX_BATCH=" << config.max_batch
+                     << " RX_QUEUE_LEN=" <<
+                     ((config.queue_len == NULL) ? "unchanged" :
+                                                   config.queue_len));
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_MAX_BATCH",
+                                        config.max_batch));
+        if (config.queue_len != NULL) {
+            ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_QUEUE_LEN",
+                                            config.queue_len));
+        }
+
+        entity *e = create_entity(0);
+        m_entities.push_back(e);
+        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            e->create_ep(ep_idx);
+            ASSERT_TRUE(e->ep(ep_idx) != NULL);
+        }
+
+        check_rx_config(e, config.expected_batch);
+        e->destroy_eps();
+        m_entities.remove(e);
     }
 }
 
@@ -1348,7 +1383,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
  * not exceed what the device allows or the 16 bits it is stored in. Note that
  * "inf" and a negative value both reach the validation as UINT_MAX, since the
  * numeric parser has no range check. */
-UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid)
+UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid, "MAX_NUM_EPS=1")
 {
     static const char *const invalid_values[] = {"0", "65536", "inf", "-1"};
     const int max_qp_wr_limit                 = max_qp_wr();
@@ -1367,9 +1402,7 @@ UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid)
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, try_rx_max_wr(str));
     }
 
-    /* The boundaries of the supported range must be accepted. Checking the
-     * upper one is safe, because the receive WRs are posted when progress is
-     * enabled, which is not done by opening an interface. */
+    /* The boundaries of the supported range must be accepted. */
     EXPECT_EQ(UCS_OK, try_rx_max_wr("1"));
 
     snprintf(str, sizeof(str), "%d",

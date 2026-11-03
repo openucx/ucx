@@ -344,8 +344,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         }
 
         rx_max_wr                 = config->rx_max_wr;
-        rx_batch_limit            = ucs_min(ib_config->rx.max_batch,
-                                            ucs_max(rx_max_wr / 4, 1));
+        rx_batch_limit            = ucs_max(ucs_min(ib_config->rx.max_batch,
+                                                    rx_max_wr / 4), 1);
         /* Room for the receive WRs of all endpoints; the 64-bit endpoint
          * count is capped by the largest CQ before multiplying. */
         num_eps   = ucs_min(ib_config->super.max_num_eps,
@@ -384,11 +384,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress                 = uct_rc_verbs_iface_progress;
     self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
+    self->rx_repost_needed               = 0;
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
-    self->rx_repost_needed = 0;
 
     /* A QP must be able to reach the repost threshold. */
     self->super.super.config.rx_max_batch =
+            (self->srq == NULL) ? rx_batch_limit :
             ucs_min(self->super.super.config.rx_max_batch, rx_batch_limit);
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
