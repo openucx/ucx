@@ -17,16 +17,16 @@
  * underlying fabric provides, and transports which do not support
  * prioritization ignore it.
  *
- * The levels are ordered from the highest priority to the lowest, so a
+ * The levels are ordered from the lowest priority to the highest, so a
  * transport which distinguishes fewer levels than are defined here maps the
  * levels it cannot represent to the lowest priority it supports.
  */
 typedef enum {
     /**
-     * Highest priority. Traffic of this endpoint is served before traffic of
+     * Lowest priority. Traffic of this endpoint yields to traffic of
      * endpoints at any other level.
      */
-    UCS_QOS_LEVEL_HIGH,
+    UCS_QOS_LEVEL_LOW,
 
     /**
      * Intermediate priority.
@@ -34,10 +34,12 @@ typedef enum {
     UCS_QOS_LEVEL_MEDIUM,
 
     /**
-     * Lowest priority. Traffic of this endpoint yields to traffic of
+     * Highest priority. Traffic of this endpoint is served before traffic of
      * endpoints at any other level.
      */
-    UCS_QOS_LEVEL_LOW
+    UCS_QOS_LEVEL_HIGH,
+
+    UCS_QOS_LEVEL_LAST
 } ucs_qos_level_t;
 
 
