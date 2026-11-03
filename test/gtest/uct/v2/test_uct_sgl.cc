@@ -141,7 +141,7 @@ protected:
             UCS_TEST_SKIP_R("not enough sgl elements");
         }
 
-        if (elem_size(0) > 0) {
+        if (min_zcopy() > 0) {
             UCS_TEST_SKIP_R("zero length is not supported");
         }
 
@@ -241,17 +241,21 @@ private:
                sgl_iface_attr().max_get_sgl_zcopy_count;
     }
 
+    size_t min_zcopy()
+    {
+        return (op() == SGL_OP_PUT) ?
+               m_sender->iface_attr().cap.put.min_zcopy :
+               m_sender->iface_attr().cap.get.min_zcopy;
+    }
+
     size_t elem_size(size_t size)
     {
         const uct_iface_attr &attr = m_sender->iface_attr();
-        size_t min_zcopy           = (op() == SGL_OP_PUT) ?
-                                     attr.cap.put.min_zcopy :
-                                     attr.cap.get.min_zcopy;
         size_t max_zcopy           = (op() == SGL_OP_PUT) ?
                                      attr.cap.put.max_zcopy :
                                      attr.cap.get.max_zcopy;
 
-        return ucs_min(ucs_max(size, min_zcopy), max_zcopy);
+        return ucs_min(ucs_max(size, min_zcopy()), max_zcopy);
     }
 
     ucs_memory_type_t first_supported_mem_type()
