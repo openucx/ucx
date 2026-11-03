@@ -14,13 +14,15 @@
  *
  * Client side:
  *
- *    ./ucp_client_server -a <server-ip>
+ *    ./ucp_client_server -a <server-ip> [-b <client-ip>]
  *
  * Notes:
  *
  *    - The server will listen to incoming connection requests on INADDR_ANY.
  *    - The client needs to pass the IP address of the server side to connect to
  *      as an argument to the test.
+ *    - The client may pass its IP address with the '-b' option. Otherwise, the
+ *      client address is selected automatically.
  *    - Currently, the passed IP needs to be an IPoIB or a RoCE address.
  *    - The port which the server side would listen on can be modified with the
  *      '-p' option and should be used on both sides. The default port to use is
@@ -198,14 +200,14 @@ static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 }
 
 /**
- * Set an address for the server to listen on - INADDR_ANY on a well known port.
+ * Set a socket address.
  */
-void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr)
+void set_sock_addr(const char *address_str, uint16_t port,
+                   struct sockaddr_storage *saddr)
 {
     struct sockaddr_in *sa_in;
     struct sockaddr_in6 *sa_in6;
 
-    /* The server will listen on INADDR_ANY */
     memset(saddr, 0, sizeof(*saddr));
 
     switch (ai_family) {
@@ -217,7 +219,7 @@ void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr)
             sa_in->sin_addr.s_addr = INADDR_ANY;
         }
         sa_in->sin_family = AF_INET;
-        sa_in->sin_port   = htons(server_port);
+        sa_in->sin_port   = htons(port);
         break;
     case AF_INET6:
         sa_in6 = (struct sockaddr_in6*)saddr;
@@ -227,7 +229,7 @@ void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr)
             sa_in6->sin6_addr = in6addr_any;
         }
         sa_in6->sin6_family = AF_INET6;
-        sa_in6->sin6_port   = htons(server_port);
+        sa_in6->sin6_port   = htons(port);
         break;
     default:
         fprintf(stderr, "Invalid address family");
@@ -240,19 +242,24 @@ void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr)
  * connected to the remote server (to the given IP).
  */
 static ucs_status_t start_client(ucp_worker_h ucp_worker,
-                                 const char *address_str, ucp_ep_h *client_ep)
+                                 const char *server_addr_str,
+                                 const char *client_addr_str,
+                                 ucp_ep_h *client_ep)
 {
     ucp_ep_params_t ep_params;
-    struct sockaddr_storage connect_addr;
+    struct sockaddr_storage server_addr;
+    struct sockaddr_storage client_addr;
     ucs_status_t status;
 
-    set_sock_addr(address_str, &connect_addr);
+    set_sock_addr(server_addr_str, server_port, &server_addr);
 
     /*
      * Endpoint field mask bits:
      * UCP_EP_PARAM_FIELD_FLAGS             - Use the value of the 'flags' field.
      * UCP_EP_PARAM_FIELD_SOCK_ADDR         - Use a remote sockaddr to connect
      *                                        to the remote peer.
+     * UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   - Use the specified client socket
+     *                                        address.
      * UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE - Error handling mode - this flag
      *                                        is temporarily required since the
      *                                        endpoint will be closed with
@@ -270,12 +277,19 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker,
     ep_params.err_handler.cb   = err_cb;
     ep_params.err_handler.arg  = NULL;
     ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-    ep_params.sockaddr.addr    = (struct sockaddr*)&connect_addr;
-    ep_params.sockaddr.addrlen = sizeof(connect_addr);
+    ep_params.sockaddr.addr    = (struct sockaddr*)&server_addr;
+    ep_params.sockaddr.addrlen = sizeof(server_addr);
+
+    if (client_addr_str != NULL) {
+        set_sock_addr(client_addr_str, 0, &client_addr);
+        ep_params.field_mask            |= UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
+        ep_params.local_sockaddr.addr    = (struct sockaddr*)&client_addr;
+        ep_params.local_sockaddr.addrlen = sizeof(client_addr);
+    }
 
     status = ucp_ep_create(ucp_worker, &ep_params, client_ep);
     if (status != UCS_OK) {
-        fprintf(stderr, "failed to connect to %s (%s)\n", address_str,
+        fprintf(stderr, "failed to connect to %s (%s)\n", server_addr_str,
                 ucs_status_string(status));
     }
 
@@ -587,6 +601,9 @@ static void usage()
     fprintf(stderr, "  -a Set IP address of the server "
                     "(required for client and should not be specified "
                     "for the server)\n");
+    fprintf(stderr, "  -b Set IP address of the client "
+                    "(If not specified, the client address is selected "
+                    "automatically; Irrelevant at server)\n");
     fprintf(stderr, "  -l Set IP address where server listens "
                     "(If not specified, server uses INADDR_ANY; "
                     "Irrelevant at client)\n");
@@ -613,16 +630,20 @@ static void usage()
  * Parse the command line arguments.
  */
 static parse_cmd_status_t parse_cmd(int argc, char *const argv[],
-                                    char **server_addr, char **listen_addr,
+                                    char **server_addr, char **client_addr,
+                                    char **listen_addr,
                                     send_recv_type_t *send_recv_type)
 {
     int c = 0;
     int port;
 
-    while ((c = getopt(argc, argv, "a:l:p:c:6i:s:v:m:h")) != -1) {
+    while ((c = getopt(argc, argv, "a:b:l:p:c:6i:s:v:m:h")) != -1) {
         switch (c) {
         case 'a':
             *server_addr = optarg;
+            break;
+        case 'b':
+            *client_addr = optarg;
             break;
         case 'c':
             if (!strcasecmp(optarg, "stream")) {
@@ -854,7 +875,7 @@ start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
     char ip_str[IP_STRING_LEN];
     char port_str[PORT_STRING_LEN];
 
-    set_sock_addr(address_str, &listen_addr);
+    set_sock_addr(address_str, server_port, &listen_addr);
 
     params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
                                 UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
@@ -1037,13 +1058,13 @@ err:
 }
 
 static int run_client(ucp_worker_h ucp_worker, char *server_addr,
-                      send_recv_type_t send_recv_type)
+                      char *client_addr, send_recv_type_t send_recv_type)
 {
     ucp_ep_h     client_ep;
     ucs_status_t status;
     int          ret;
 
-    status = start_client(ucp_worker, server_addr, &client_ep);
+    status = start_client(ucp_worker, server_addr, client_addr, &client_ep);
     if (status != UCS_OK) {
         fprintf(stderr, "failed to start client (%s)\n", ucs_status_string(status));
         ret = -1;
@@ -1109,6 +1130,7 @@ int main(int argc, char **argv)
 {
     send_recv_type_t send_recv_type = CLIENT_SERVER_SEND_RECV_DEFAULT;
     char *server_addr = NULL;
+    char *client_addr = NULL;
     char *listen_addr = NULL;
     parse_cmd_status_t parse_cmd_status;
     int ret;
@@ -1117,8 +1139,8 @@ int main(int argc, char **argv)
     ucp_context_h ucp_context;
     ucp_worker_h  ucp_worker;
 
-    parse_cmd_status = parse_cmd(argc, argv, &server_addr, &listen_addr,
-                                 &send_recv_type);
+    parse_cmd_status = parse_cmd(argc, argv, &server_addr, &client_addr,
+                                 &listen_addr, &send_recv_type);
     if (parse_cmd_status == PARSE_CMD_STATUS_PRINT_HELP) {
         ret = 0;
         goto err;
@@ -1139,7 +1161,7 @@ int main(int argc, char **argv)
         ret = run_server(ucp_context, ucp_worker, listen_addr, send_recv_type);
     } else {
         /* Client side */
-        ret = run_client(ucp_worker, server_addr, send_recv_type);
+        ret = run_client(ucp_worker, server_addr, client_addr, send_recv_type);
     }
 
     ucp_worker_destroy(ucp_worker);

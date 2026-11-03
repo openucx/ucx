@@ -35,6 +35,23 @@ BEGIN_C_DECLS
 #define UCS_SOCKET_INET6_ADDR(_addr) (((struct sockaddr_in6*)(_addr))->sin6_addr)
 #define UCS_SOCKET_INET6_PORT(_addr) (((struct sockaddr_in6*)(_addr))->sin6_port)
 
+/**
+ * Socket configuration options.
+ */
+typedef struct {
+    /**
+     * Whether or not to allow the socket to use an
+     * address that is already in use and was not
+     * released by another socket yet.
+     */
+    int         reuse_addr;
+
+    /**
+     * Name of the network interface to bind the socket
+     * to, or NULL if the socket should not be bound to a device.
+     */
+    const char *bind_device;
+} ucs_socket_options_t;
 
 /**
  * Close the given file descriptor.
@@ -244,6 +261,31 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
                                     int backlog, int silent_bind, int reuse_addr,
                                     int *listen_fd);
+
+
+/**
+ * Initialize a TCP server.
+ * Open a socket, bind a sockaddr to that socket and start listening on it for
+ * incoming connection requests.
+ *
+ * @param [in]  saddr             Sockaddr for the server to listen on.
+ *                                If the port number inside is set to zero -
+ *                                use a random port.
+ * @param [in]  socklen           Size of saddr.
+ * @param [in]  backlog           Length of the queue for pending connections -
+ *                                for the listen() call.
+ * @param [in]  silent_bind       Whether or not to print error message on bind
+ *                                failure with EADDRINUSE.
+ * @param [in]  socket_params     Options for server socket configuration.
+ * @param [out] listen_fd         The fd that belongs to the server.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t
+ucs_socket_server_init_v2(const struct sockaddr *saddr, socklen_t socklen,
+                          int backlog, int silent_bind,
+                          const ucs_socket_options_t *socket_params,
+                          int *listen_fd);
 
 
 /**
@@ -601,6 +643,19 @@ ucs_status_t ucs_sockaddr_set_inaddr_any(struct sockaddr *addr, sa_family_t af);
  */
 ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
                                const struct sockaddr *src_addr);
+
+
+/**
+ * Find the name of the first network interface that has the given IP address.
+ * IPv4 and IPv6 addresses are supported.
+ *
+ * @param [in]   addr        Address.
+ * @param [out]  ifname_str  A string filled with the interface name.
+ * @param [in]   max_strlen  Maximum length of the ifname_str.
+ */
+ucs_status_t ucs_sockaddr_get_ifname_by_addr(const struct sockaddr *addr,
+                                             char *ifname_str,
+                                             size_t max_strlen);
 
 
 /**

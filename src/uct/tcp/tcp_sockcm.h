@@ -6,6 +6,7 @@
 
 #include "tcp_base.h"
 #include <uct/base/uct_cm.h>
+#include <ucs/sys/netlink.h>
 
 
 typedef struct uct_tcp_sockcm_ep   uct_tcp_sockcm_ep_t;
@@ -48,3 +49,6 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_tcp_sockcm_t, uct_cm_t, uct_component_h,
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_tcp_sockcm_t, uct_cm_t);
 
 void uct_tcp_sa_data_handler(int fd, ucs_event_set_types_t events, void *arg);
+
+char *uct_tcp_sockaddr_get_bind_device(const struct sockaddr *saddr,
+                                       ucs_netlink_vrf_info_t *vrf_info_p);
