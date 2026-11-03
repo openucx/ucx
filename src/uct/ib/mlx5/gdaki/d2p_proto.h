@@ -21,14 +21,39 @@ enum {
 };
 
 
+enum {
+    UCT_IB_D2P_DESC_SEG_COUNT = 6,
+};
+
+
 typedef struct {
-    uint8_t  owner;
-    uint8_t  opcode;
-    uint16_t flags;
-    uint32_t length;
-    uint64_t ep_idx;
-    uint32_t lkey;
-    uint32_t rkey;
+    union {
+        uint64_t op_len_flags;
+        struct {
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+            uint16_t opcode;
+            uint16_t flags;
+            uint32_t length;
+#else
+            uint32_t length;
+            uint16_t flags;
+            uint16_t opcode;
+#endif
+        };
+    } UCS_S_PACKED;
+    uint64_t ep_id;
+    union {
+        uint64_t lkey_rkey;
+        struct {
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+            uint32_t rkey;
+            uint32_t lkey;
+#else
+            uint32_t lkey;
+            uint32_t rkey;
+#endif
+        };
+    } UCS_S_PACKED;
     uint64_t laddr;
     uint64_t raddr;
     uint64_t add;
