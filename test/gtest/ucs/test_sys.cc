@@ -337,10 +337,16 @@ protected:
 
 UCS_TEST_F(test_module_load_order, dependency_copy)
 {
+    const std::string empty_path = m_path + "/first/libtestorder_" +
+                                   m_extension;
     const int base_before      = ucs_test_module_base_loaded;
     const int dependent_before = ucs_test_module_dependent_loaded;
     const int extra_before     = ucs_test_module_extra_loaded;
     ucs_init_once_t init_once  = UCS_INIT_ONCE_INITIALIZER;
+
+    ASSERT_NO_FATAL_FAILURE(copy_module("dependent", "first", ""));
+    m_files.push_back(empty_path);
+    ASSERT_EQ(0, rename(module_path("first", "").c_str(), empty_path.c_str()));
 
     /* The dependent is in an earlier directory, while its RUNPATH points to
      * the original build-tree base. Load the copied base first, so DT_NEEDED
@@ -356,6 +362,7 @@ UCS_TEST_F(test_module_load_order, dependency_copy)
     EXPECT_EQ(1u, module_count(module_path("second", "base")));
     EXPECT_EQ(1u, module_count(module_path("first", "dependent")));
     EXPECT_EQ(1u, module_count(module_path("first", "extra")));
+    EXPECT_EQ(0u, module_count(empty_path));
     EXPECT_EQ(0u, module_count(module_path("first", "blocked")));
     EXPECT_EQ(0u, module_count(GTEST_MODULE_ORDER_LIB_DIR
                                "/libtestorder_base"));

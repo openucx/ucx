@@ -202,6 +202,6 @@ build_soname_suffix() {
 
 	UCX_MODULES= \
 	UCX_HANDLE_ERRORS=bt \
-	GTEST_FILTER=test_sys.module_file_suffix \
+	GTEST_FILTER='test_sys.module_file_suffix:test_module_load_order.*' \
 		$MAKE -C test/gtest test
 }

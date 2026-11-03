@@ -332,7 +332,7 @@ ucs_module_load_expected(const char *framework, const char *expected_modules,
 
     /* Load dependencies before their users, independently of readdir order. */
     ucs_string_buffer_for_each_token(module_name, &strb, ":") {
-        if (!ucs_module_is_enabled(module_name)) {
+        if ((module_name[0] == '\0') || !ucs_module_is_enabled(module_name)) {
             continue;
         }
 
