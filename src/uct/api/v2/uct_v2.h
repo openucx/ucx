@@ -56,7 +56,7 @@ typedef enum uct_ep_operation {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Endpoint-specific asynchronous event types.
+ * @brief Endpoint-specific event types.
  */
 enum uct_ep_event_types {
     /** Endpoint path speed changed. The updated bandwidth estimate is available
@@ -67,7 +67,7 @@ enum uct_ep_event_types {
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Endpoint-aware asynchronous event callback.
+ * @brief Endpoint-aware event callback.
  *
  * The transport invokes this callback in its serialized worker progress
  * context, not from an asynchronous thread. Endpoint destruction must be
@@ -75,25 +75,24 @@ enum uct_ep_event_types {
  * for @a ep and must not retain @a ep after it returns.
  *
  * @param [in]  arg      User argument registered with
- *                       @ref uct_iface_set_async_ep_event_handler.
+ *                       @ref uct_iface_set_ep_event_handler.
  * @param [in]  ep       Endpoint associated with the event. It is valid only
  *                       for the duration of the callback.
  * @param [in]  events   Event flags from @ref uct_ep_event_types.
  */
-typedef void (*uct_async_ep_event_cb_t)(void *arg, uct_ep_h ep,
-                                      unsigned events);
+typedef void (*uct_ep_event_cb_t)(void *arg, uct_ep_h ep, unsigned events);
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Field mask for @ref uct_iface_set_async_ep_event_params_t.
+ * @brief Field mask for @ref uct_iface_set_ep_event_params_t.
  */
-enum uct_iface_set_async_ep_event_params_field {
-    /** Enables @ref uct_iface_set_async_ep_event_params_t::cb */
-    UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_CB  = UCS_BIT(0),
+enum uct_iface_set_ep_event_params_field {
+    /** Enables @ref uct_iface_set_ep_event_params_t::cb */
+    UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB  = UCS_BIT(0),
 
-    /** Enables @ref uct_iface_set_async_ep_event_params_t::arg */
-    UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG = UCS_BIT(1)
+    /** Enables @ref uct_iface_set_ep_event_params_t::arg */
+    UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG = UCS_BIT(1)
 };
 
 
@@ -103,18 +102,19 @@ enum uct_iface_set_async_ep_event_params_field {
  */
 typedef struct {
     /** Mask of valid fields, using bits from
-     *  @ref uct_iface_set_async_ep_event_params_field. */
-    uint64_t               field_mask;
+     *  @ref uct_iface_set_ep_event_params_field. */
+    uint64_t          field_mask;
 
-    /** Callback invoked for endpoint-specific events. A NULL callback removes
-     *  the currently registered handler. */
-    uct_async_ep_event_cb_t cb;
+    /** Callback invoked for endpoint-specific events. This field must be
+     *  specified. A NULL callback removes the currently registered handler. */
+    uct_ep_event_cb_t cb;
 
     /** User argument passed to
-     *  @ref uct_iface_set_async_ep_event_params_t::cb. Defaults to NULL when
-     *  @ref UCT_IFACE_SET_ASYNC_EP_EVENT_PARAM_FIELD_ARG is not set. */
-    void                   *arg;
-} uct_iface_set_async_ep_event_params_t;
+     *  @ref uct_iface_set_ep_event_params_t::cb. Defaults to NULL when
+     *  @ref UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG is not set. The argument
+     *  must remain valid until any callback using it returns. */
+    void              *arg;
+} uct_iface_set_ep_event_params_t;
 
 
 /**
@@ -493,11 +493,20 @@ struct uct_ep_attr {
     void                    *tx_token;
 
     /**
-     * Latest completed endpoint bandwidth estimate, in bytes per second, using
-     * the model defined by @ref uct_ppn_bandwidth_t. An effective endpoint
-     * throughput measurement that already includes contention uses the
-     * dedicated component and sets the shared component to zero. Valid when
+     * Endpoint bandwidth estimate, in bytes per second, using the model defined
+     * by @ref uct_ppn_bandwidth_t. An estimate that already accounts for
+     * contention uses the dedicated component and sets the shared component
+     * to zero. Valid when
      * @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
+     *
+     * Querying this field returns the latest available cached estimate without
+     * blocking or requesting an update. @ref uct_ep_query returns
+     * UCS_ERR_UNSUPPORTED when bandwidth is unsupported, UCS_ERR_NO_ELEM when
+     * no estimate is available, or UCS_ERR_TIMED_OUT when the estimate is
+     * stale.
+     * These errors leave all requested outputs unchanged, including in a
+     * mixed-attribute query. Queries without this field are unaffected by
+     * bandwidth support or estimate availability.
      */
     uct_ppn_bandwidth_t      bandwidth;
 };
@@ -1416,48 +1425,39 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  *
  * This routine fetches information about the endpoint.
  *
- * When @ref UCT_EP_ATTR_FIELD_BANDWIDTH is requested, this routine reads the
- * latest completed cached sample without blocking or starting a measurement.
- * A bandwidth-specific error fails the entire query without modifying the
- * requested outputs, including when other fields are requested. Queries that
- * do not request bandwidth are unaffected by bandwidth support or sample
- * availability. The input @ref uct_ep_attr::field_mask is not modified.
+ * The input @ref uct_ep_attr::field_mask is not modified. See the requested
+ * attribute fields for their query behavior and error conditions.
  *
  * @param [in]    ep        Endpoint to query.
  * @param [inout] ep_attr   Requested fields and returned endpoint attributes.
  *
  * @return Error code returned by the transport.
- * @retval UCS_ERR_UNSUPPORTED Bandwidth was requested but is unsupported.
- * @retval UCS_ERR_NO_ELEM     Bandwidth was requested but no sample is
- *                            available yet.
- * @retval UCS_ERR_TIMED_OUT   Bandwidth was requested but the cached sample is
- *                            stale.
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Register a callback for endpoint-specific asynchronous events.
+ * @brief Register a callback for endpoint-specific events.
  *
  * This routine replaces only the endpoint-specific event handler on @a iface;
- * it does not affect @ref uct_iface_params_t::async_event_cb. Pass a NULL
- * callback to unregister it. The callback field must be present in @a params.
+ * it does not affect @ref uct_iface_params_t::async_event_cb.
  *
  * The caller must use the same worker serialization as progress and endpoint
  * destruction. After replacement or removal returns, no new invocation of the
- * previous handler will start. Its argument must remain valid until any
- * callback already in progress returns.
+ * previous handler will start. Callbacks run only in serialized worker
+ * progress context, as described by @ref uct_ep_event_cb_t.
  *
  * @param [in] iface    Interface on which to register the callback.
  * @param [in] params   Callback registration parameters.
  *
- * @return UCS_OK on success, or UCS_ERR_INVALID_PARAM if @a params does not
- *         contain a callback field.
+ * @return UCS_OK on success.
+ * @retval UCS_ERR_INVALID_PARAM A required parameter field is missing.
+ * @retval UCS_ERR_UNSUPPORTED   The interface does not support endpoint events.
  */
-ucs_status_t uct_iface_set_async_ep_event_handler(
+ucs_status_t uct_iface_set_ep_event_handler(
         uct_iface_h iface,
-        const uct_iface_set_async_ep_event_params_t *params);
+        const uct_iface_set_ep_event_params_t *params);
 
 
 /**
