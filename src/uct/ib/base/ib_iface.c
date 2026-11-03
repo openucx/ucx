@@ -240,16 +240,16 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey), UCS_CONFIG_TYPE_HEX},
 
-  {"FABRIC_ID", "0x0",
-   "Administrative identifier of the fabric this device is attached to.\n"
-   "The interface only considers peers whose device reports the same\n"
-   "identifier, so it must be configured consistently on every process in\n"
-   "the job. Value 0 selects the default fabric, which is enforced as\n"
-   "well: an interface on the default fabric and one on any other fabric\n"
-   "cannot reach each other. Values above 0xffff are rejected.\n"
+  {"FABRIC_ID", "0",
+   "Administrative identifier of the fabric this device is attached to, as a\n"
+   "decimal number. The interface only considers peers whose device reports\n"
+   "the same identifier, so it must be configured consistently on every\n"
+   "process in the job. Value 0 selects the default fabric, which is\n"
+   "enforced as well: an interface on the default fabric and one on any\n"
+   "other fabric cannot reach each other. Values above 65535 are rejected.\n"
    "Requires peers running a UCX version which supports this option, older\n"
    "peers report the default fabric and may still consider us reachable.",
-   ucs_offsetof(uct_ib_iface_config_t, fabric_id), UCS_CONFIG_TYPE_HEX},
+   ucs_offsetof(uct_ib_iface_config_t, fabric_id), UCS_CONFIG_TYPE_UINT},
 
   {"PATH_MTU", "default",
    "Path MTU. \"default\" will select the best MTU for the device.",
@@ -721,7 +721,7 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
     p += strlen(p);
 
     if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_FABRIC_ID) {
-        snprintf(p, endp - p, " fabric id 0x%x", params.fabric_id);
+        snprintf(p, endp - p, " fabric id %u", params.fabric_id);
     }
 
     return buf;
@@ -1012,7 +1012,7 @@ static int uct_ib_iface_dev_addr_is_reachable(
      * any interface which does report one */
     if (params.fabric_id != iface->config.fabric_id) {
         uct_iface_fill_info_str_buf(is_reachable_params,
-                                    "fabric id local 0x%x remote 0x%x",
+                                    "fabric id local %u remote %u",
                                     iface->config.fabric_id, params.fabric_id);
         return 0;
     }
@@ -1891,7 +1891,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.flid_enabled       = config->flid_enabled;
 
     if (config->fabric_id > UINT16_MAX) {
-        ucs_error("fabric id 0x%x is out of range, must be at most 0x%x",
+        ucs_error("fabric id %u is out of range, must be at most %u",
                   config->fabric_id, UINT16_MAX);
         return UCS_ERR_INVALID_PARAM;
     }

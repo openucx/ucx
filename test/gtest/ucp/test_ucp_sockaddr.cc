@@ -1051,7 +1051,7 @@ UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 }
 
-UCS_TEST_P(test_ucp_sockaddr, listen_fabric_id, "IB_FABRIC_ID?=0xa") {
+UCS_TEST_P(test_ucp_sockaddr, listen_fabric_id, "IB_FABRIC_ID?=10") {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 }
 

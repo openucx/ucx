@@ -317,7 +317,7 @@ public:
     }
 
 protected:
-    /* Identifier "0x0" puts the interface on the default fabric */
+    /* Identifier "0" puts the interface on the default fabric */
     void create_entities(const std::string &fabric_id1,
                          const std::string &fabric_id2) {
         modify_config("IB_FABRIC_ID", fabric_id1);
@@ -393,7 +393,7 @@ UCS_TEST_P(test_uct_ib_fabric_id, unset_keeps_address_format) {
     std::vector<uint8_t> dev_addr;
     std::string info;
 
-    create_entities("0x0", "0x0");
+    create_entities("0", "0");
 
     /* Nothing is appended to the address, and no address flag is consumed */
     get_device_address(m_e1, dev_addr);
@@ -407,8 +407,8 @@ UCS_TEST_P(test_uct_ib_fabric_id, unset_keeps_address_format) {
 }
 
 UCS_TEST_P(test_uct_ib_fabric_id, set_appends_fabric_id) {
-    size_t unset_len = fabric_id_addr_len("0x0");
-    size_t set_len   = fabric_id_addr_len("0xa");
+    size_t unset_len = fabric_id_addr_len("0");
+    size_t set_len   = fabric_id_addr_len("10");
 
     EXPECT_EQ(unset_len + sizeof(uint16_t), set_len);
 }
@@ -416,7 +416,7 @@ UCS_TEST_P(test_uct_ib_fabric_id, set_appends_fabric_id) {
 UCS_TEST_P(test_uct_ib_fabric_id, same_id_is_reachable) {
     std::string info;
 
-    create_entities("0xa", "0xa");
+    create_entities("10", "10");
 
     EXPECT_TRUE(check_is_reachable(m_e1, m_e2, info)) << info;
     EXPECT_TRUE(check_is_reachable(m_e2, m_e1, info)) << info;
@@ -428,10 +428,23 @@ UCS_TEST_P(test_uct_ib_fabric_id, same_id_is_reachable) {
     cleanup_entities();
 }
 
+UCS_TEST_P(test_uct_ib_fabric_id, full_id_range) {
+    std::string info;
+
+    create_entities("65534", "65535");
+
+    EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
+    EXPECT_NE(std::string::npos, info.find("fabric id local 65534"));
+    EXPECT_FALSE(check_is_reachable(m_e2, m_e1, info));
+    EXPECT_NE(std::string::npos, info.find("fabric id local 65535"));
+
+    cleanup_entities();
+}
+
 UCS_TEST_P(test_uct_ib_fabric_id, different_id_is_unreachable) {
     std::string info;
 
-    create_entities("0xa", "0xb");
+    create_entities("10", "11");
 
     EXPECT_FALSE(check_is_reachable(m_e1, m_e2, info));
     EXPECT_NE(std::string::npos, info.find("fabric id"));
@@ -444,7 +457,7 @@ UCS_TEST_P(test_uct_ib_fabric_id, different_id_is_unreachable) {
 UCS_TEST_P(test_uct_ib_fabric_id, missing_remote_id_is_unreachable) {
     std::string info;
 
-    create_entities("0xa", "0x0");
+    create_entities("10", "0");
 
     /* An unset identifier is the default fabric, not a wildcard, so both
      * directions are rejected */
