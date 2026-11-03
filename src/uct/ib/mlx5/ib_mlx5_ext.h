@@ -154,7 +154,12 @@ typedef struct uct_rc_mlx5_ext_ops {
      *  @ref UCT_RC_MLX5_EXT_REQ_TX_CQE_TIMESTAMP. */
     uint64_t        requirements;
 
-    /** Provider-private bytes appended to the existing endpoint address. */
+    /**
+     * Provider-private bytes appended to the existing endpoint address.
+     * The complete endpoint address, including the RC address, UCX extension
+     * framing and provider payload, must not exceed 255 bytes. Oversized
+     * providers must be rejected before their iface_init hook is called.
+     */
     size_t          ep_addr_len;
 
     /**
