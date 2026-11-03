@@ -403,161 +403,14 @@ ucp_proto_put_sgl_offload_post(ucp_request_t *req,
     return status;
 }
 
-/* Split the SGL by its total length, like a multi-lane contiguous message */
-static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_put_sgl_max_payload(const ucp_request_t *req,
-                              const ucp_proto_multi_lane_priv_t *lpriv)
-{
-    size_t length = req->send.rma.sgl.length;
-
-    return ucp_proto_multi_lane_payload(lpriv, length, length,
-                                        lpriv->max_frag);
-}
-
-static UCS_F_INLINE_OPTIMIZED ucs_status_t
-ucp_proto_put_sgl_offload_send_frags(ucp_request_t *req,
-                                     const ucp_proto_multi_lane_priv_t *lpriv,
-                                     size_t max_frag_count,
-                                     size_t max_payload,
-                                     ucp_datatype_iter_t *next_iter)
-{
-    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    ucp_rsc_index_t md_index     = lpriv->super.md_index;
-    ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
-    void *buffers[UCP_MAX_IOV];
-    size_t lengths[UCP_MAX_IOV];
-    uint64_t remote_addrs[UCP_MAX_IOV];
-    size_t elem_indices[UCP_MAX_IOV];
-    uct_mem_h uct_memhs[UCP_MAX_IOV];
-    uct_rkey_t uct_rkeys[UCP_MAX_IOV];
-    size_t frag_count, frag_index, elem_index;
-
-    ucs_assert(max_frag_count <= UCP_MAX_IOV);
-
-    frag_count = ucp_datatype_iter_next_sgl_frags(
-            dt_iter, req->send.rma.sgl.remote_addrs, max_frag_count,
-            max_payload, next_iter, buffers, lengths, remote_addrs,
-            elem_indices);
-    if (frag_count == 0) {
-        return UCS_OK;
-    }
-
-    for (frag_index = 0; frag_index < frag_count; frag_index++) {
-        elem_index            = elem_indices[frag_index];
-        uct_memhs[frag_index] = (sgl_memhs != NULL) ?
-                                ucp_datatype_iter_uct_memh(sgl_memhs[elem_index],
-                                                           md_index) :
-                                UCT_MEM_HANDLE_NULL;
-        uct_rkeys[frag_index] = ucp_rkey_get_tl_rkey(sgl_rkeys[elem_index],
-                                                     lpriv->super.rkey_index);
-    }
-
-    return ucp_proto_put_sgl_offload_post(req, lpriv, buffers, lengths,
-                                          uct_memhs, remote_addrs, uct_rkeys,
-                                          frag_count);
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_sgl_offload_send_func(ucp_request_t *req,
                                     const ucp_proto_multi_lane_priv_t *lpriv,
                                     ucp_datatype_iter_t *next_iter,
                                     ucp_lane_index_t *lane_shift)
 {
-    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    ucp_rsc_index_t md_index     = lpriv->super.md_index;
-    ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t max_payload           = ucp_proto_put_sgl_max_payload(req, lpriv);
-    size_t max_frag_count        = ucs_min(lpriv->max_sgl_zcopy_count,
-                                           UCP_MAX_IOV);
-    ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
-    void *const *buffers         = dt_iter->type.sgl.buffers;
-    const size_t *lengths        = dt_iter->type.sgl.lengths;
-    const uint64_t *remote_addrs = req->send.rma.sgl.remote_addrs;
-    size_t start_index           = dt_iter->offset;
-    size_t max_elem_count        = ucs_min(lpriv->max_sgl_zcopy_count,
-                                           dt_iter->length - start_index);
-    size_t uct_rkeys_size;
-    size_t uct_memhs_size;
-    uct_rkey_t *uct_rkeys;
-    uct_mem_h *uct_memhs;
-    ucs_status_t status;
-    size_t elem_count, idx, length, total_length;
-
-    ucs_assert(max_payload > 0);
-    ucs_assert(max_elem_count > 0);
-
-    /* Silence compiler warning, in case of an early return below */
-    next_iter->offset               = start_index;
-    next_iter->type.sgl.frag_offset = dt_iter->type.sgl.frag_offset;
-
-    /* The first element must be posted as a whole, otherwise it is fragmented */
-    if (ucs_unlikely((dt_iter->type.sgl.frag_offset != 0) ||
-                     (lengths[start_index] == 0) ||
-                     (lengths[start_index] > max_payload))) {
-        return ucp_proto_put_sgl_offload_send_frags(req, lpriv, max_frag_count,
-                                                    max_payload, next_iter);
-    }
-
-    /* Stop at the lane payload, so that each lane sends its share of the
-     * message */
-    for (elem_count = 0, total_length = 0; elem_count < max_elem_count;
-         elem_count++) {
-        length = lengths[start_index + elem_count];
-        if ((length == 0) || ((total_length + length) > max_payload)) {
-            break;
-        }
-
-        total_length += length;
-    }
-
-    /* A long batch is not redirected, to keep posting the user arrays without
-     * copying them */
-    if (ucs_unlikely((total_length < max_payload) &&
-                     (elem_count < max_frag_count) &&
-                     ((start_index + elem_count) < dt_iter->length))) {
-        return ucp_proto_put_sgl_offload_send_frags(req, lpriv, max_frag_count,
-                                                    max_payload, next_iter);
-    }
-
-    uct_rkeys_size = elem_count * sizeof(uct_rkey_t);
-    uct_memhs_size = elem_count * sizeof(uct_mem_h);
-
-    uct_rkeys = ucs_alloc_on_stack(uct_rkeys_size, "uct_sgl_rkeys");
-    if (uct_rkeys == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    uct_memhs = ucs_alloc_on_stack(uct_memhs_size, "uct_sgl_memhs");
-    if (uct_memhs == NULL) {
-        ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    for (idx = 0; idx < elem_count; idx++) {
-        uct_memhs[idx] = (sgl_memhs != NULL) ?
-                         ucp_datatype_iter_uct_memh(sgl_memhs[start_index + idx],
-                                                    md_index) :
-                         UCT_MEM_HANDLE_NULL;
-        uct_rkeys[idx] = ucp_rkey_get_tl_rkey(sgl_rkeys[start_index + idx],
-                                              rkey_index);
-    }
-
-    next_iter->offset               = start_index + elem_count;
-    next_iter->type.sgl.frag_offset = 0;
-
-    status = ucp_proto_put_sgl_offload_post(req, lpriv, &buffers[start_index],
-                                            &lengths[start_index], uct_memhs,
-                                            &remote_addrs[start_index],
-                                            uct_rkeys, elem_count);
-
-    /* coverity[incorrect_free] */
-    ucs_free_on_stack(uct_memhs, uct_memhs_size);
-    /* coverity[incorrect_free] */
-    ucs_free_on_stack(uct_rkeys, uct_rkeys_size);
-
-    return status;
+    return ucp_proto_rma_sgl_offload_send_func(
+            req, lpriv, next_iter, ucp_proto_put_sgl_offload_post);
 }
 
 static ucs_status_t
@@ -593,62 +446,45 @@ ucp_proto_put_sgl_offload_sw_probe(const ucp_proto_init_params_t *init_params)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_put_sgl_offload_sw_post(ucp_request_t *req,
+                                  const ucp_proto_multi_lane_priv_t *lpriv,
+                                  void *const *buffers, const size_t *lengths,
+                                  uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, size_t count)
+{
+    ucp_ep_t *ep    = req->send.ep;
+    uct_ep_h uct_ep = ucp_ep_get_lane(ep, lpriv->super.lane);
+    uct_iov_t iov   = {
+        .buffer = buffers[0],
+        .length = lengths[0],
+        .memh   = memhs[0],
+        .stride = 0,
+        .count  = 1
+    };
+    ucs_status_t status;
+
+    ucs_assertv(count == 1, "count=%zu", count);
+
+    status = uct_ep_put_zcopy(uct_ep, &iov, 1, remote_addrs[0], rkeys[0],
+                              &req->send.state.uct_comp);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
+                                                  rkeys[0], uct_ep,
+                                                  remote_addrs[0]);
+    }
+
+    return status;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_sgl_offload_sw_send_func(ucp_request_t *req,
                                        const ucp_proto_multi_lane_priv_t *lpriv,
                                        ucp_datatype_iter_t *next_iter,
                                        ucp_lane_index_t *lane_shift)
 {
-    ucp_ep_t *ep                 = req->send.ep;
-    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    ucp_lane_index_t lane        = lpriv->super.lane;
-    uct_ep_h uct_ep              = ucp_ep_get_lane(ep, lane);
-    ucp_rsc_index_t md_index     = lpriv->super.md_index;
-    ucp_rsc_index_t rkey_index   = lpriv->super.rkey_index;
-    size_t max_frag_length       = ucp_proto_put_sgl_max_payload(req, lpriv);
-    ucp_mem_h *sgl_memhs         = dt_iter->type.sgl.memhs;
-    ucp_rkey_h const *sgl_rkeys  = req->send.rma.sgl.rkeys;
-    void *buffer                 = NULL;
-    size_t length                = 0;
-    size_t elem_index            = 0;
-    uint64_t remote_addr         = 0;
-    size_t UCS_V_UNUSED desc_count;
-    uct_rkey_t tl_rkey;
-    uct_iov_t iov;
-    ucs_status_t status;
-
-    ucs_assert(max_frag_length > 0);
-
-    desc_count = ucp_datatype_iter_next_sgl_frags(
-            dt_iter, req->send.rma.sgl.remote_addrs, 1, max_frag_length,
-            next_iter, &buffer, &length, &remote_addr, &elem_index);
-    if (desc_count == 0) {
-        return UCS_OK;
-    }
-
-    ucs_assertv(desc_count == 1,
-                "dt_iter=%p offset=%zu length=%zu frag_offset=%zu "
-                "max_frag_length=%zu",
-                dt_iter, dt_iter->offset, dt_iter->length,
-                dt_iter->type.sgl.frag_offset, max_frag_length);
-
-    tl_rkey    = ucp_rkey_get_tl_rkey(sgl_rkeys[elem_index], rkey_index);
-    iov.buffer = buffer;
-    iov.length = length;
-    iov.memh   = (sgl_memhs != NULL) ?
-                         ucp_datatype_iter_uct_memh(sgl_memhs[elem_index],
-                                                    md_index) :
-                         UCT_MEM_HANDLE_NULL;
-    iov.stride = 0;
-    iov.count  = 1;
-
-    status = uct_ep_put_zcopy(uct_ep, &iov, 1, remote_addr, tl_rkey,
-                              &req->send.state.uct_comp);
-    if (!UCS_STATUS_IS_ERR(status)) {
-        ucp_proto_put_offload_update_remote_flush(ep, lpriv->flush_sys_dev_mask,
-                                                  tl_rkey, uct_ep, remote_addr);
-    }
-
-    return status;
+    return ucp_proto_rma_sgl_offload_send_frags(
+            req, lpriv, 1, next_iter, ucp_proto_put_sgl_offload_sw_post);
 }
 
 static ucs_status_t
