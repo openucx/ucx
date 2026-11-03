@@ -9,6 +9,7 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucs/memory/memory_type.h>
 #include <ucs/sys/topo/base/topo.h>
+#include <uct/musa/base/musa_base.h>
 #include <uct/musa/base/musa_utils.h>
 
 class test_musa_contract : public ucs::test {
@@ -58,4 +59,43 @@ UCS_TEST_F(test_musa_contract, reject_invalid_pci_bus_id)
 
     EXPECT_FALSE(uct_musa_parse_pci_bus_id("0000:3b:00", &bus_id));
     EXPECT_FALSE(uct_musa_parse_pci_bus_id("0000:3b:00.0.trailing", &bus_id));
+}
+
+UCS_TEST_F(test_musa_contract, get_device_by_sys_dev_rejects_unknown)
+{
+    int device = -1;
+
+    /* Devices whose bus id / topology lookup failed are stored as
+     * UCS_SYS_DEVICE_ID_UNKNOWN, so the lookup must reject UNKNOWN explicitly
+     * instead of returning an arbitrary such device. */
+    EXPECT_NE(UCS_OK,
+              uct_musa_base_get_device_by_sys_dev(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                  &device));
+}
+
+UCS_TEST_F(test_musa_contract, lookup_device_by_sys_dev_rejects_unknown)
+{
+    /* Device 0 could not be mapped to a system device, as can happen when
+     * its bus id / topology lookup fails. */
+    const ucs_sys_device_t sys_devices[] = {UCS_SYS_DEVICE_ID_UNKNOWN, 10};
+    int device = -1;
+
+    EXPECT_EQ(UCS_ERR_NO_DEVICE,
+              uct_musa_lookup_device_by_sys_dev(sys_devices, 2,
+                                                UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                &device));
+}
+
+UCS_TEST_F(test_musa_contract, lookup_device_by_sys_dev_finds_mapped)
+{
+    const ucs_sys_device_t sys_devices[] = {UCS_SYS_DEVICE_ID_UNKNOWN, 10};
+    int device = -1;
+
+    ASSERT_UCS_OK(uct_musa_lookup_device_by_sys_dev(sys_devices, 2, 10,
+                                                    &device));
+    EXPECT_EQ(1, device);
+
+    /* A sys_dev which does not belong to any device is not found. */
+    EXPECT_EQ(UCS_ERR_NO_DEVICE,
+              uct_musa_lookup_device_by_sys_dev(sys_devices, 2, 11, &device));
 }
