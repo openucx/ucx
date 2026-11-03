@@ -374,6 +374,10 @@ UCS_TEST_P(test_uct_sgl, zero_length_element) {
     test_sgl_zero_length({1});
 }
 
+UCS_TEST_P(test_uct_sgl, zero_length_first_last_elements) {
+    test_sgl_zero_length({0, 2});
+}
+
 UCS_TEST_P(test_uct_sgl, zero_length_all_elements) {
     test_sgl_zero_length({0, 1, 2});
 }
