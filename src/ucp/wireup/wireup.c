@@ -1010,10 +1010,10 @@ ucp_wireup_process_reply_common(ucp_worker_h worker, ucp_ep_h ep,
      * which means that remote EP was destroyed after sending the request
      * (e.g. force closed), and the peer created a new EP to reply us */
     if ((ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
-        (msg->src_ep_id != ep->ext->remote_ep_id)) {
+        (msg->src_ep_id != ucp_ep_remote_id(ep))) {
         ucs_diag("ep %p: got wireup reply from remote ep 0x%" PRIx64
-                 " while connected to remote ep 0x%" PRIx64, ep,
-                 msg->src_ep_id, ep->ext->remote_ep_id);
+                 " while connected to remote ep 0x%" PRIxPTR, ep,
+                 msg->src_ep_id, ucp_ep_remote_id(ep));
         ucp_ep_set_lanes_failed_schedule(ep, 0, UCS_ERR_CONNECTION_RESET);
         return;
     }
