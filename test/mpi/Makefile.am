@@ -8,6 +8,16 @@
 CC = $(MPICC)
 LD = $(MPICC)
 
+noinst_HEADERS = \
+	test_cuda_check_def.h \
+	test_cuda_common.h \
+	test_lib_check_def.h \
+	test_mpi_tags_def.h \
+	test_ucp.h \
+	test_ucx_check_def.h
+
+EXTRA_DIST = ompi.supp
+
 
 # Test application for memory hooks when running with MPI
 # (some MPIs have hooks of their own and we make sure ours still work)
