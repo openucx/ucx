@@ -9,6 +9,8 @@ extern "C" {
 #include <ucs/sys/netlink.h>
 }
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <net/if.h>
 #include <libgen.h>
 #include <limits.h>
@@ -58,4 +60,54 @@ UCS_TEST_F(test_netlink, get_vrf_master_index) {
 
     EXPECT_EQ(-1, ucs_netlink_get_vrf_master_index(if_nametoindex("lo")));
     UCS_TEST_MESSAGE << num_vrf_slaves << " VRF slave interfaces found";
+}
+
+UCS_TEST_F(test_netlink, is_local_addr) {
+    unsigned lo_index      = if_nametoindex("lo");
+    unsigned num_vrf_addrs = 0;
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+    int local_index;
+
+    ASSERT_NE(0u, lo_index);
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr == NULL) ||
+            ((ifa->ifa_addr->sa_family != AF_INET) &&
+             (ifa->ifa_addr->sa_family != AF_INET6))) {
+            continue;
+        }
+
+        /* Tentative addresses and addresses of down interfaces have no local
+         * route */
+        local_index = ucs_netlink_get_local_route_ndev_index(ifa->ifa_addr);
+        if (local_index < 0) {
+            continue;
+        }
+
+        /* An address is local in the routing domain of its local route */
+        EXPECT_EQ(1, ucs_netlink_is_local_addr(local_index, ifa->ifa_addr))
+                << ifa->ifa_name;
+        if (ucs_netlink_get_vrf_master_index(local_index) == -1) {
+            continue;
+        }
+
+        /* VRF addresses are not local outside of the VRF */
+        EXPECT_EQ(0, ucs_netlink_is_local_addr(lo_index, ifa->ifa_addr))
+                << ifa->ifa_name;
+        ++num_vrf_addrs;
+    }
+
+    freeifaddrs(ifaddrs);
+
+    sin.sin_family      = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    EXPECT_EQ(1, ucs_netlink_is_local_addr(lo_index, (struct sockaddr*)&sin));
+
+    /* TEST-NET-2 address is not assigned to any host */
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    EXPECT_EQ(0, ucs_netlink_is_local_addr(lo_index, (struct sockaddr*)&sin));
+
+    UCS_TEST_MESSAGE << num_vrf_addrs << " VRF addresses found";
 }

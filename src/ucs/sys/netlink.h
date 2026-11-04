@@ -77,6 +77,18 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
 int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
 
 /**
+ * Check whether a destination address is assigned to the local host in the
+ * routing domain of a network interface, i.e. an interface enslaved to the
+ * same VRF (or to no VRF) has a local route to it.
+ *
+ * @param [in]  if_index         Network interface index.
+ * @param [in]  sa_remote        Pointer to the destination address.
+ *
+ * @return 1 if the destination address is local, or 0 otherwise.
+ */
+int ucs_netlink_is_local_addr(int if_index, const struct sockaddr *sa_remote);
+
+/**
  * Check whether a route to a given destination address through a network
  * interface matches the requested policy.
  *

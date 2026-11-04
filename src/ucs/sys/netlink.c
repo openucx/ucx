@@ -398,6 +398,29 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote)
     return best_if_index;
 }
 
+int ucs_netlink_is_local_addr(int if_index, const struct sockaddr *sa_remote)
+{
+    int vrf_index = ucs_netlink_get_vrf_master_index(if_index);
+    ucs_netlink_rt_rules_t iface_rules;
+    khint32_t curr_if_index;
+
+    ucs_netlink_init_routing_table_cache();
+
+    kh_foreach(&ucs_netlink_routing_table_cache, curr_if_index, iface_rules, {
+        /* Local routes of other routing domains are not used */
+        if (ucs_netlink_get_vrf_master_index(curr_if_index) != vrf_index) {
+            continue;
+        }
+
+        if (ucs_netlink_lookup_in_iface_rules_by_type(sa_remote, &iface_rules,
+                                                      RTN_LOCAL) >= 0) {
+            return 1;
+        }
+    })
+
+    return 0;
+}
+
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check)
 {
