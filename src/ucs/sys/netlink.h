@@ -92,6 +92,31 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
 
+/**
+ * Callback function for iterating over the routes of a network interface.
+ *
+ * @param [in] dest        Destination network address of the route.
+ * @param [in] prefix_len  Destination prefix length in bits (0 for a default
+ *                         route).
+ * @param [in] route_type  Route type (RTN_xxx).
+ * @param [in] arg         User-provided argument passed through from the
+ *                         caller.
+ */
+typedef void (*ucs_netlink_route_cb_t)(const struct sockaddr *dest,
+                                       unsigned prefix_len, uint8_t route_type,
+                                       void *arg);
+
+/**
+ * Invoke a callback for each route of a network interface, as recorded in the
+ * routing table snapshot taken on the first netlink route query.
+ *
+ * @param [in]  if_index  Network interface index.
+ * @param [in]  cb        Callback to invoke for each route.
+ * @param [in]  arg       User-provided argument for the callback.
+ */
+void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
+                               void *arg);
+
 END_C_DECLS
 
 #endif /* UCS_NETLINK_H */
