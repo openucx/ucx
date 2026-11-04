@@ -266,6 +266,8 @@ check_release_build() {
         done
     fi
 
+    # Don't trace the ##vso line, the agent parses stderr too
+    { set +x; } 2>/dev/null
     echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }
 
