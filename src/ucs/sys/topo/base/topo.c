@@ -34,7 +34,7 @@
 /*
  * Structure needed to define a topology module implementation
  */
-typedef struct ucs_sys_topo_provider {
+struct ucs_sys_topo_provider {
     /* Name of the topology module */
     const char         *name;
 
@@ -42,7 +42,10 @@ typedef struct ucs_sys_topo_provider {
     ucs_sys_topo_ops_t ops;
 
     ucs_list_link_t    list;
-} ucs_sys_topo_provider_t;
+
+    int                free_name;
+    int                priority;
+};
 
 typedef struct {
     ucs_bus_id_bit_rep_t    bus_id_bit_rep;
@@ -98,14 +101,6 @@ static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 /* Global list of topology detectors */
 static UCS_LIST_HEAD(ucs_sys_topo_providers_list);
 
-/* Selected topo provider */
-static ucs_sys_topo_provider_t *ucs_sys_topo_provider = NULL;
-
-/* Stack of override providers. When non-empty, the head overrides the
- * provider selected by TOPO_PRIO. Pushed/popped by
- * `ucs_sys_topo_provider_push` / `ucs_sys_topo_provider_pop`. */
-static UCS_LIST_HEAD(ucs_sys_topo_provider_stack);
-
 /* According to NUMA distance definition distances are normalized to 10
  * and the relative distance correlates with the latency.
  * The following translation formula assumes that
@@ -115,65 +110,113 @@ static inline double ucs_topo_sysfs_numa_distance_to_latency(double distance)
     return distance * 10e-9;
 }
 
-void ucs_sys_topo_reset_provider()
-{
-    ucs_sys_topo_provider = NULL;
-}
-
-ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops)
+static ucs_sys_topo_provider_t *
+ucs_sys_topo_provider_find(const char *name)
 {
     ucs_sys_topo_provider_t *provider;
 
-    provider = ucs_malloc(sizeof(*provider), "topo_provider_override");
-    if (provider == NULL) {
-        ucs_error("failed to allocate topo provider override");
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    provider->name = "<override>";
-    provider->ops  = *ops;
-    ucs_list_add_head(&ucs_sys_topo_provider_stack, &provider->list);
-
-    return UCS_OK;
-}
-
-void ucs_sys_topo_provider_pop(void)
-{
-    ucs_sys_topo_provider_t *provider;
-
-    ucs_assert(!ucs_list_is_empty(&ucs_sys_topo_provider_stack));
-
-    provider = ucs_list_head(&ucs_sys_topo_provider_stack,
-                             ucs_sys_topo_provider_t, list);
-    ucs_list_del(&provider->list);
-    ucs_free(provider);
-}
-
-static ucs_sys_topo_provider_t *ucs_sys_topo_get_provider()
-{
-    ucs_sys_topo_provider_t *list_provider;
-    unsigned i;
-
-    if (!ucs_list_is_empty(&ucs_sys_topo_provider_stack)) {
-        return ucs_list_head(&ucs_sys_topo_provider_stack,
-                             ucs_sys_topo_provider_t, list);
-    }
-
-    if (ucs_sys_topo_provider != NULL) {
-        return ucs_sys_topo_provider;
-    }
-
-    for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
-        ucs_list_for_each(list_provider, &ucs_sys_topo_providers_list, list) {
-            if (!strcmp(ucs_global_opts.topo_prio.names[i],
-                        list_provider->name)) {
-                ucs_sys_topo_provider = list_provider;
-                return ucs_sys_topo_provider;
-            }
+    ucs_list_for_each(provider, &ucs_sys_topo_providers_list, list) {
+        if (!strcmp(provider->name, name)) {
+            return provider;
         }
     }
 
-    return ucs_sys_topo_provider;
+    return NULL;
+}
+
+static int ucs_sys_topo_provider_get_priority(const char *name)
+{
+    unsigned i;
+
+    for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
+        if (!strcmp(ucs_global_opts.topo_prio.names[i], name)) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static void
+ucs_sys_topo_provider_insert(ucs_sys_topo_provider_t *provider)
+{
+    ucs_sys_topo_provider_t *existing;
+
+    provider->priority = ucs_sys_topo_provider_get_priority(provider->name);
+    ucs_list_for_each(existing, &ucs_sys_topo_providers_list, list) {
+        if (provider->priority > existing->priority) {
+            ucs_list_insert_before(&existing->list, &provider->list);
+            return;
+        }
+    }
+
+    ucs_list_add_tail(&ucs_sys_topo_providers_list, &provider->list);
+}
+
+void ucs_sys_topo_reset_provider()
+{
+    UCS_LIST_HEAD(unordered);
+    ucs_sys_topo_provider_t *provider;
+
+    while (!ucs_list_is_empty(&ucs_sys_topo_providers_list)) {
+        provider = ucs_list_head(&ucs_sys_topo_providers_list,
+                                 ucs_sys_topo_provider_t, list);
+        ucs_list_del(&provider->list);
+        ucs_list_add_tail(&unordered, &provider->list);
+    }
+
+    while (!ucs_list_is_empty(&unordered)) {
+        provider = ucs_list_head(&unordered, ucs_sys_topo_provider_t, list);
+        ucs_list_del(&provider->list);
+        ucs_sys_topo_provider_insert(provider);
+    }
+}
+
+ucs_status_t
+ucs_sys_topo_provider_register(const char *name,
+                               const ucs_sys_topo_ops_t *ops,
+                               ucs_sys_topo_provider_t **provider_p)
+{
+    ucs_sys_topo_provider_t *provider;
+    char *name_copy;
+
+    if ((name == NULL) || (ops == NULL) || (provider_p == NULL) ||
+        ((ops->get_distance == NULL) && (ops->get_memory_distance == NULL) &&
+         (ops->get_memory_distance_for_cpuset == NULL))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (ucs_sys_topo_provider_find(name) != NULL) {
+        return UCS_ERR_ALREADY_EXISTS;
+    }
+
+    provider = ucs_malloc(sizeof(*provider), "topo_provider");
+    if (provider == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    name_copy = ucs_strdup(name, "topo_provider_name");
+    if (name_copy == NULL) {
+        ucs_free(provider);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    provider->name      = name_copy;
+    provider->ops       = *ops;
+    provider->free_name = 1;
+    ucs_sys_topo_provider_insert(provider);
+    *provider_p = provider;
+    return UCS_OK;
+}
+
+void ucs_sys_topo_provider_unregister(ucs_sys_topo_provider_t *provider)
+{
+    ucs_assert(provider != NULL);
+    ucs_assert(provider->free_name);
+
+    ucs_list_del(&provider->list);
+    ucs_free((void*)provider->name);
+    ucs_free(provider);
 }
 
 static ucs_status_t
@@ -215,26 +258,53 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                                    ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance)
 {
-    const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
+    const ucs_sys_topo_provider_t *provider;
+    ucs_status_t status;
 
-    return provider->ops.get_distance(device1, device2, distance);
+    *distance = ucs_topo_default_distance;
+    ucs_list_for_each(provider, &ucs_sys_topo_providers_list, list) {
+        if ((provider->priority < 0) ||
+            (provider->ops.get_distance == NULL)) {
+            continue;
+        }
+
+        status = provider->ops.get_distance(device1, device2, distance);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }
 
 void ucs_topo_get_memory_distance(ucs_sys_device_t device,
                                   ucs_sys_dev_distance_t *distance)
 {
-    const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
+    const ucs_sys_topo_provider_t *provider;
 
-    provider->ops.get_memory_distance(device, distance);
+    *distance = ucs_topo_default_distance;
+    ucs_list_for_each(provider, &ucs_sys_topo_providers_list, list) {
+        if ((provider->priority >= 0) &&
+            (provider->ops.get_memory_distance != NULL)) {
+            provider->ops.get_memory_distance(device, distance);
+        }
+    }
 }
 
 void ucs_topo_get_memory_distance_for_cpuset(ucs_sys_device_t device,
                                              const ucs_cpu_set_t *cpuset,
                                              ucs_sys_dev_distance_t *distance)
 {
-    const ucs_sys_topo_provider_t *provider = ucs_sys_topo_get_provider();
+    const ucs_sys_topo_provider_t *provider;
 
-    provider->ops.get_memory_distance_for_cpuset(device, cpuset, distance);
+    *distance = ucs_topo_default_distance;
+    ucs_list_for_each(provider, &ucs_sys_topo_providers_list, list) {
+        if ((provider->priority >= 0) &&
+            (provider->ops.get_memory_distance_for_cpuset != NULL)) {
+            provider->ops.get_memory_distance_for_cpuset(device, cpuset,
+                                                         distance);
+        }
+    }
 }
 
 int ucs_topo_pci_id_equal(const ucs_sys_pci_id_t *pci_id1,
@@ -1637,18 +1707,12 @@ void ucs_topo_init()
     ucs_topo_global_ctx.num_devices                  = 0;
     /* coverity[missing_lock] */
     ucs_topo_global_ctx.device_class_incomplete_mask = 0;
-    ucs_list_add_tail(&ucs_sys_topo_providers_list,
-                      &ucs_sys_topo_provider_default.list);
-    ucs_list_add_tail(&ucs_sys_topo_providers_list,
-                      &ucs_sys_topo_provider_sysfs.list);
+    ucs_sys_topo_provider_insert(&ucs_sys_topo_provider_default);
+    ucs_sys_topo_provider_insert(&ucs_sys_topo_provider_sysfs);
 }
 
 void ucs_topo_cleanup()
 {
-    while (!ucs_list_is_empty(&ucs_sys_topo_provider_stack)) {
-        ucs_sys_topo_provider_pop();
-    }
-
     ucs_list_del(&ucs_sys_topo_provider_sysfs.list);
     ucs_list_del(&ucs_sys_topo_provider_default.list);
 

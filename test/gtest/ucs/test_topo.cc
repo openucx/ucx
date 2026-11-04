@@ -16,6 +16,7 @@ extern "C" {
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
+#include <ucs/sys/topo/base/topo_int.h>
 }
 
 static std::string get_sysfs_device_path(const std::string &bdf)
@@ -37,25 +38,12 @@ static ucs_status_t topo_test_distance_a(ucs_sys_device_t, ucs_sys_device_t,
     return UCS_OK;
 }
 
-static ucs_status_t topo_test_distance_b(ucs_sys_device_t, ucs_sys_device_t,
-                                         ucs_sys_dev_distance_t *distance)
+static ucs_status_t topo_test_distance_refine(
+        ucs_sys_device_t, ucs_sys_device_t,
+        ucs_sys_dev_distance_t *distance)
 {
-    distance->latency   = 22e-9;
-    distance->bandwidth = ucs_topo_default_distance.bandwidth;
+    distance->latency += 22e-9;
     return UCS_OK;
-}
-
-static void
-topo_test_mem_dist(ucs_sys_device_t, ucs_sys_dev_distance_t *distance)
-{
-    *distance = ucs_topo_default_distance;
-}
-
-static void
-topo_test_mem_dist_cpuset(ucs_sys_device_t, const ucs_cpu_set_t *,
-                          ucs_sys_dev_distance_t *distance)
-{
-    *distance = ucs_topo_default_distance;
 }
 
 static int topo_test_sys_device_cmp(const void *elem1, const void *elem2,
@@ -187,6 +175,7 @@ public:
     {
         ucs_topo_restore_state(m_topo_state);
         ucs::test::cleanup();
+        ucs_sys_topo_reset_provider();
     }
 };
 
@@ -511,42 +500,38 @@ UCS_TEST_F(test_topo, get_distance) {
                      << ucs_topo_distance_str(&distance, buf, sizeof(buf));
 }
 
-UCS_TEST_F(test_topo, provider_push_pop) {
-    ucs_sys_dev_distance_t dist;
-    const ucs_sys_topo_ops_t ops_a = {
-        .get_distance                   = topo_test_distance_a,
-        .get_memory_distance            = topo_test_mem_dist,
-        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+UCS_TEST_F(test_topo, provider_registration) {
+    const ucs_sys_topo_ops_t low_ops = {
+        .get_distance = topo_test_distance_a,
     };
-    const ucs_sys_topo_ops_t ops_b = {
-        .get_distance                   = topo_test_distance_b,
-        .get_memory_distance            = topo_test_mem_dist,
-        .get_memory_distance_for_cpuset = topo_test_mem_dist_cpuset,
+    const ucs_sys_topo_ops_t high_ops = {
+        .get_distance = topo_test_distance_refine,
     };
+    const ucs_sys_topo_ops_t empty_ops = {};
+    ucs_sys_topo_provider_t *low_provider;
+    ucs_sys_topo_provider_t *high_provider;
+    ucs_sys_topo_provider_t *duplicate;
+    ucs_sys_dev_distance_t distance;
 
-    ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_a));
-    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
-                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
-    EXPECT_NEAR(dist.latency, 11e-9, 1e-12);
+    modify_config("TOPO_PRIO", "test_high,missing2,missing1,test_low");
+    ucs_sys_topo_reset_provider();
+    ASSERT_UCS_OK(ucs_sys_topo_provider_register("test_low", &low_ops,
+                                                  &low_provider));
+    ASSERT_UCS_OK(ucs_sys_topo_provider_register("test_high", &high_ops,
+                                                  &high_provider));
 
-    /* The most recently pushed provider takes precedence */
-    ASSERT_UCS_OK(ucs_sys_topo_provider_push(&ops_b));
     ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
-                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
-    EXPECT_NEAR(dist.latency, 22e-9, 1e-12);
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &distance));
+    EXPECT_NEAR(33e-9, distance.latency, 1e-12);
 
-    /* Popping restores the previously pushed provider */
-    ucs_sys_topo_provider_pop();
-    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
-                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
-    EXPECT_NEAR(dist.latency, 11e-9, 1e-12);
-
-    /* After the last pop the override is gone and the configured provider
-     * (default/sysfs) returns the default distance for unknown devices */
-    ucs_sys_topo_provider_pop();
-    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
-                                        UCS_SYS_DEVICE_ID_UNKNOWN, &dist));
-    EXPECT_NEAR(dist.latency, 0.0, 1e-12);
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
+              ucs_sys_topo_provider_register("test_low", &low_ops,
+                                             &duplicate));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucs_sys_topo_provider_register("test_empty", &empty_ops,
+                                             &duplicate));
+    ucs_sys_topo_provider_unregister(high_provider);
+    ucs_sys_topo_provider_unregister(low_provider);
 }
 
 UCS_TEST_F(test_topo, print_info) {
