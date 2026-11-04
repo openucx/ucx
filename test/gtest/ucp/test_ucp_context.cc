@@ -62,16 +62,6 @@ UCS_TEST_P(test_ucp_context, minimal_field_mask) {
     }
 }
 
-UCS_TEST_P(test_ucp_context, max_hca_per_gpu_config)
-{
-    modify_config("MAX_HCA_PER_GPU", "2");
-
-    entity *e = create_entity();
-    EXPECT_EQ(UCP_REG_DEVICES_LIMIT,
-              ucp_reg_devices_mode(e->ucph()->config.ext.max_hca_per_gpu));
-    EXPECT_EQ(2u, ucp_reg_devices_count(e->ucph()->config.ext.max_hca_per_gpu));
-}
-
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_context, all, "all")
 
 class test_ucp_context_gpu_nic_assignment : public test_ucp_context {

@@ -1350,6 +1350,12 @@ uct_gdaki_query_tl_devices(uct_md_h tl_md,
     uct_ib_mlx5_md_t *ib_mlx5_md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_md_t *ib_md           = &ib_mlx5_md->super;
 
+    if (!uct_ib_device_has_active_port(&ib_md->dev)) {
+        ucs_debug("%s: GDAKI is not supported, no active port",
+                  uct_ib_device_name(&ib_md->dev));
+        return UCS_ERR_NO_DEVICE;
+    }
+
     if (!(uct_gdaki_get_driver_features(ib_md) & UCT_GDAKI_SUPPORTED)) {
         ucs_debug("%s: GDAKI is not supported",
                   uct_ib_device_name(&ib_md->dev));

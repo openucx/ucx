@@ -877,12 +877,11 @@ ucp_memh_init_from_parent(ucp_mem_h memh, ucp_md_map_t parent_md_map)
     }
 }
 
-/* Apply UCX_MAX_HCA_PER_GPU policy.
- * The network MDs are ranked by distance (latency, then bandwidth) to the
- * buffer's sys_dev and the closest N selected. */
+/* Exclude network MDs that cannot access the buffer's system device or whose
+ * topology distance was set to the maximum by a provider. */
 static ucp_md_map_t
-ucp_memh_apply_reg_policy(ucp_context_h context, ucp_mem_h memh,
-                          ucp_md_map_t reg_md_map)
+ucp_memh_filter_reg_mds(ucp_context_h context, ucp_mem_h memh,
+                        ucp_md_map_t reg_md_map)
 {
     ucp_md_map_t net_md_map, policy_md_map, selected;
     ucp_md_index_t md_index;
@@ -931,7 +930,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
     }
 
     if (apply_reg_policy) {
-        reg_md_map = ucp_memh_apply_reg_policy(context, memh, reg_md_map);
+        reg_md_map = ucp_memh_filter_reg_mds(context, memh, reg_md_map);
     }
 
     reg_md_map  &= ~memh->md_map;

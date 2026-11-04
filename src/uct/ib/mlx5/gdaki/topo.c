@@ -10,6 +10,8 @@
 
 #include "topo.h"
 
+#include <uct/cuda/base/cuda_nvml.h>
+#include <uct/cuda/base/cuda_util.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/mlx5/ib_mlx5.h>
 
@@ -22,7 +24,6 @@
 
 #include <cuda.h>
 #include <infiniband/verbs.h>
-#include <nvml.h>
 
 
 #define UCT_GDAKI_TOPO_MAX_DEVICES 64u
@@ -66,6 +67,9 @@ static ucs_config_global_list_entry_t uct_gdaki_topo_config_entry = {
     .size   = sizeof(uct_gdaki_topo_config_t)
 };
 
+UCS_CONFIG_REGISTER_TABLE_ENTRY(&uct_gdaki_topo_config_entry,
+                                &ucs_config_global_list);
+
 static struct {
     ucs_sys_topo_provider_t *provider;
     uct_gdaki_topo_gpu_t    gpus[UCT_GDAKI_TOPO_MAX_DEVICES];
@@ -73,7 +77,6 @@ static struct {
     uint64_t                gpu_nic_map[UCT_GDAKI_TOPO_MAX_DEVICES];
     unsigned                num_gpus;
     unsigned                num_nics;
-    int                     nvml_initialized;
 } uct_gdaki_topo_ctx;
 
 static int uct_gdaki_topo_find_gpu(const ucs_sys_bus_id_t *bus_id);
@@ -86,44 +89,117 @@ uct_gdaki_topo_bus_id_equal(const ucs_sys_bus_id_t *bus_id1,
            ucs_topo_get_bus_id_bit_repr(bus_id2);
 }
 
-static ucs_status_t
-uct_gdaki_topo_nvml_status(nvmlReturn_t result, const char *operation)
+static const uct_gdaki_topo_gpu_t *
+uct_gdaki_topo_gpu_lookup(const uct_gdaki_topo_gpu_t *gpus, unsigned count,
+                          const ucs_sys_bus_id_t *bus_id)
 {
-    if (result == NVML_SUCCESS) {
-        return UCS_OK;
+    unsigned gpu_index;
+
+    for (gpu_index = 0; gpu_index < count; ++gpu_index) {
+        if (uct_gdaki_topo_bus_id_equal(&gpus[gpu_index].bus_id, bus_id)) {
+            return &gpus[gpu_index];
+        }
     }
 
-    ucs_debug("%s failed: %s", operation, nvmlErrorString(result));
-    return UCS_ERR_IO_ERROR;
+    return NULL;
+}
+
+static ucs_status_t
+uct_gdaki_topo_get_cuda_gpu(int cuda_index, uct_gdaki_topo_gpu_t *gpu)
+{
+    CUdevice cuda_device;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_device, cuda_index));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_cuda_get_sys_dev_and_bus_id(cuda_device, &gpu->sys_dev,
+                                           &gpu->bus_id);
+}
+
+static ucs_status_t
+uct_gdaki_topo_init_gpu(uct_gdaki_topo_gpu_t *gpu, unsigned index)
+{
+    ucs_status_t status;
+    char name[16];
+
+    status = ucs_topo_sys_device_set_class(gpu->sys_dev,
+                                           UCS_TOPO_DEVICE_CLASS_ACC);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_sys_device_enable_aux_path(gpu->sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_snprintf_safe(name, sizeof(name), "GPU%u", index);
+    return ucs_topo_sys_device_set_name(gpu->sys_dev, name,
+                                        UCT_GDAKI_TOPO_NAME_PRIO);
 }
 
 static ucs_status_t uct_gdaki_topo_enum_gpus(void)
 {
+    uct_gdaki_topo_gpu_t cuda_gpus[UCT_GDAKI_TOPO_MAX_DEVICES];
+    const uct_gdaki_topo_gpu_t *gpu;
     nvmlPciInfo_t pci_info;
     nvmlDevice_t device;
-    unsigned count, index, gpu_index;
+    unsigned count, index, gpu_index, num_cuda_gpus;
+    int cuda_count, cuda_index;
     ucs_status_t status;
-    char name[16];
 
-    status = uct_gdaki_topo_nvml_status(nvmlDeviceGetCount_v2(&count),
-                                        "nvmlDeviceGetCount_v2");
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cuda_count));
     if (status != UCS_OK) {
         return status;
+    }
+
+    ucs_assert_always(cuda_count <= UCT_GDAKI_TOPO_MAX_DEVICES);
+    num_cuda_gpus = 0;
+    for (cuda_index = 0; cuda_index < cuda_count; ++cuda_index) {
+        status = uct_gdaki_topo_get_cuda_gpu(
+                cuda_index, &cuda_gpus[num_cuda_gpus]);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        if (uct_gdaki_topo_gpu_lookup(
+                    cuda_gpus, num_cuda_gpus,
+                    &cuda_gpus[num_cuda_gpus].bus_id) != NULL) {
+            ucs_debug("skip cuda device %d with duplicate bdf "
+                      UCS_SYS_BUS_ID_FMT,
+                      cuda_index,
+                      UCS_SYS_BUS_ID_ARG(
+                              &cuda_gpus[num_cuda_gpus].bus_id));
+            /* Same BDF. TODO: support MLOPart. */
+            continue;
+        }
+
+        ++num_cuda_gpus;
+    }
+
+    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &count);
+    if (status != UCS_OK) {
+        ucs_diag("NVML unavailable: using legacy CUDA-only enumeration");
+        memcpy(uct_gdaki_topo_ctx.gpus, cuda_gpus,
+               num_cuda_gpus * sizeof(cuda_gpus[0]));
+        gpu_index = num_cuda_gpus;
+        goto init_gpus;
     }
 
     count     = ucs_min(count, UCT_GDAKI_TOPO_MAX_DEVICES);
     gpu_index = 0;
     for (index = 0; index < count; ++index) {
-        status = uct_gdaki_topo_nvml_status(
-                nvmlDeviceGetHandleByIndex(index, &device),
-                "nvmlDeviceGetHandleByIndex");
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, index,
+                                         &device);
         if (status != UCS_OK) {
             return status;
         }
 
-        status = uct_gdaki_topo_nvml_status(
-                nvmlDeviceGetPciInfo_v3(device, &pci_info),
-                "nvmlDeviceGetPciInfo_v3");
+        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetPciInfo_v3, device,
+                                         &pci_info);
         if (status != UCS_OK) {
             return status;
         }
@@ -132,8 +208,12 @@ static ucs_status_t uct_gdaki_topo_enum_gpus(void)
         uct_gdaki_topo_ctx.gpus[gpu_index].bus_id.bus    = pci_info.bus;
         uct_gdaki_topo_ctx.gpus[gpu_index].bus_id.slot   = pci_info.device;
         uct_gdaki_topo_ctx.gpus[gpu_index].bus_id.function = 0;
-        if (uct_gdaki_topo_find_gpu(
-                    &uct_gdaki_topo_ctx.gpus[gpu_index].bus_id) >= 0) {
+
+        gpu = uct_gdaki_topo_gpu_lookup(
+                cuda_gpus, num_cuda_gpus,
+                &uct_gdaki_topo_ctx.gpus[gpu_index].bus_id);
+        if (gpu != NULL) {
+            uct_gdaki_topo_ctx.gpus[gpu_index++] = *gpu;
             continue;
         }
 
@@ -144,31 +224,19 @@ static ucs_status_t uct_gdaki_topo_enum_gpus(void)
             return status;
         }
 
-        status = ucs_topo_sys_device_set_class(
-                uct_gdaki_topo_ctx.gpus[gpu_index].sys_dev,
-                UCS_TOPO_DEVICE_CLASS_ACC);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = ucs_topo_sys_device_enable_aux_path(
-                uct_gdaki_topo_ctx.gpus[gpu_index].sys_dev);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        ucs_snprintf_safe(name, sizeof(name), "GPU%u", index);
-        status = ucs_topo_sys_device_set_name(
-                uct_gdaki_topo_ctx.gpus[gpu_index].sys_dev, name,
-                UCT_GDAKI_TOPO_NAME_PRIO);
-        if (status != UCS_OK) {
-            return status;
-        }
-
         ++gpu_index;
-        uct_gdaki_topo_ctx.num_gpus = gpu_index;
     }
 
+init_gpus:
+    for (index = 0; index < gpu_index; ++index) {
+        status = uct_gdaki_topo_init_gpu(&uct_gdaki_topo_ctx.gpus[index],
+                                         index);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    uct_gdaki_topo_ctx.num_gpus = gpu_index;
     return (gpu_index == 0) ? UCS_ERR_NO_DEVICE : UCS_OK;
 }
 
@@ -237,13 +305,12 @@ static ucs_status_t uct_gdaki_topo_enum_nics(void)
 }
 
 static int
-uct_gdaki_topo_candidate_cmp(const void *pa, const void *pb, void *arg)
+uct_gdaki_topo_candidate_cmp(const void *pa, const void *pb,
+                             void *UCS_V_UNUSED arg)
 {
     const uct_gdaki_topo_candidate_t *a = pa;
     const uct_gdaki_topo_candidate_t *b = pb;
     int cmp;
-
-    (void)arg;
 
     if (a->reachable != b->reachable) {
         return b->reachable - a->reachable;
@@ -407,30 +474,19 @@ static ucs_status_t uct_gdaki_topo_do_init(void)
         return status;
     }
 
-    if (cuInit(0) != CUDA_SUCCESS) {
-        status = UCS_ERR_NO_DEVICE;
-        goto out_release_config;
-    }
-
-    status = uct_gdaki_topo_nvml_status(nvmlInit_v2(), "nvmlInit_v2");
-    if (status != UCS_OK) {
-        goto out_release_config;
-    }
-    uct_gdaki_topo_ctx.nvml_initialized = 1;
-
     status = uct_gdaki_topo_enum_gpus();
     if (status != UCS_OK) {
-        goto out_shutdown_nvml;
+        goto out_release_config;
     }
 
     status = uct_gdaki_topo_enum_nics();
     if (status != UCS_OK) {
-        goto out_shutdown_nvml;
+        goto out_release_config;
     }
 
     status = uct_gdaki_topo_build_assignment(config.max_nics_per_gpu);
     if (status != UCS_OK) {
-        goto out_shutdown_nvml;
+        goto out_release_config;
     }
 
     status = ucs_sys_topo_provider_register("cuda", &ops,
@@ -441,9 +497,6 @@ static ucs_status_t uct_gdaki_topo_do_init(void)
         return UCS_OK;
     }
 
-out_shutdown_nvml:
-    nvmlShutdown();
-    uct_gdaki_topo_ctx.nvml_initialized = 0;
 out_release_config:
     ucs_config_parser_release_opts(&config, uct_gdaki_topo_config_table);
     return status;
@@ -465,10 +518,5 @@ void uct_gdaki_topo_cleanup(void)
     if (uct_gdaki_topo_ctx.provider != NULL) {
         ucs_sys_topo_provider_unregister(uct_gdaki_topo_ctx.provider);
         uct_gdaki_topo_ctx.provider = NULL;
-    }
-
-    if (uct_gdaki_topo_ctx.nvml_initialized) {
-        nvmlShutdown();
-        uct_gdaki_topo_ctx.nvml_initialized = 0;
     }
 }

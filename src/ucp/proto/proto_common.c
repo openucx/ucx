@@ -489,6 +489,7 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
 {
     const ucp_proto_common_init_params_t *common_params =
                         ucs_derived_of(params, ucp_proto_common_init_params_t);
+    const ucp_rkey_config_t *rkey_config;
     ucs_memory_type_t reg_mem_type  = common_params->reg_mem_info.type;
     unsigned flags                  = common_params->flags;
     ucp_context_h context           = params->worker->context;
@@ -496,6 +497,7 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
     ucp_md_index_t md_index         = context->tl_rscs[rsc_index].md_index;
     const uct_md_attr_v2_t *md_attr = &context->tl_mds[md_index].attr;
     const uct_iface_attr_t *iface_attr;
+    ucs_sys_dev_distance_t distance;
     ucs_sys_device_t lane_sys_dev;
     size_t max_iov, tl_min_frag, tl_max_frag;
 
@@ -544,6 +546,27 @@ ucp_proto_common_filter_min_frag(const ucp_proto_init_params_t *params,
                       "reg_mem_sys_dev=%u",
                       lane_desc, lane_sys_dev,
                       common_params->reg_mem_info.sys_dev);
+            return 0;
+        }
+
+        ucp_proto_common_get_lane_distance(
+                params, lane, common_params->reg_mem_info.sys_dev, &distance);
+        if (ucs_topo_distance_cmp(&distance, &ucs_topo_max_distance) == 0) {
+            ucs_trace("%s: maximum distance between lane_sys_dev=%u and "
+                      "reg_mem_sys_dev=%u",
+                      lane_desc, lane_sys_dev,
+                      common_params->reg_mem_info.sys_dev);
+            return 0;
+        }
+    }
+
+    if (flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
+        rkey_config = ucp_worker_rkey_config(
+                params->worker, common_params->super.rkey_cfg_index);
+        distance    = rkey_config->lanes_distance[lane];
+        if (ucs_topo_distance_cmp(&distance, &ucs_topo_max_distance) == 0) {
+            ucs_trace("%s: maximum distance to remote sys_dev=%u", lane_desc,
+                      rkey_config->key.sys_dev);
             return 0;
         }
     }

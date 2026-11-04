@@ -53,36 +53,6 @@ enum {
     (ucs_ilog2(ucp_proto_select_op_attr_pack((_op_attr_flag), \
                                              UCP_OP_ATTR_INDEX_MASK)))
 
-typedef enum {
-    UCP_REG_DEVICES_ALL,
-    UCP_REG_DEVICES_CLOSEST,
-    UCP_REG_DEVICES_LIMIT
-} ucp_reg_devices_mode_t;
-
-
-static UCS_F_ALWAYS_INLINE ucp_reg_devices_mode_t
-ucp_reg_devices_mode(unsigned long max_hca_per_gpu)
-{
-    if (max_hca_per_gpu == UCS_ULUNITS_INF) {
-        return UCP_REG_DEVICES_ALL;
-    } else if (max_hca_per_gpu == UCS_ULUNITS_AUTO) {
-        return UCP_REG_DEVICES_CLOSEST;
-    }
-    return UCP_REG_DEVICES_LIMIT;
-}
-
-
-static UCS_F_ALWAYS_INLINE unsigned
-ucp_reg_devices_count(unsigned long max_hca_per_gpu)
-{
-    if (ucp_reg_devices_mode(max_hca_per_gpu) == UCP_REG_DEVICES_LIMIT) {
-        return (unsigned)ucs_min(max_hca_per_gpu, UCP_MAX_MDS);
-    }
-    return UCP_MAX_MDS;
-}
-
-
-
 typedef struct ucp_context_config {
     /** Threshold for switching UCP to buffered copy(bcopy) protocol */
     size_t                                 bcopy_thresh;
@@ -265,8 +235,6 @@ typedef struct ucp_context_config {
     ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
-    /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
-    unsigned long                          max_hca_per_gpu;
     /** Local identifier on a single node or UCS_ULUNITS_AUTO */
     unsigned long                          node_local_id;
     /** Print transport/device info and lane info tables during context

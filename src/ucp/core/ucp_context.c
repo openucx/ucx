@@ -672,8 +672,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"GPU_NIC_ASSIGNMENT_MODE", "auto",
    "Assign NICs to GPUs within each topology group, and restrict the lanes\n"
    "for a GPU's memory to the NICs assigned to that GPU.\n"
-   "Only protocol lanes are restricted, not the NICs the memory is\n"
-   "registered on, which UCX_MAX_HCA_PER_GPU controls independently.\n"
+   "Only protocol lanes are restricted.\n"
    "The first Active Message lane is not restricted.\n"
    "UCX_SINGLE_NET_DEVICE=y is not supported while an assignment is active.\n"
    "All ports of a NIC are assigned together, and all GPUs with the same PCI\n"
@@ -702,14 +701,6 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "the NODE_LOCAL_ID hint.",
    ucs_offsetof(ucp_context_config_t, proto_use_single_net_device),
    UCS_CONFIG_TYPE_BOOL},
-
-  {"MAX_HCA_PER_GPU", "inf",
-   "Maximum number of HCAs to register GPU memory on.\n"
-   " - inf  : register on all HCAs (default).\n"
-   " - auto : register only on HCAs closest to the GPU.\n"
-   " - <N>  : register on up to N closest HCAs.",
-   ucs_offsetof(ucp_context_config_t, max_hca_per_gpu),
-   UCS_CONFIG_TYPE_ULUNITS},
 
   {"NODE_LOCAL_ID", "auto",
    "An optimization hint for the local identifier on a single node.\n"
@@ -1999,46 +1990,17 @@ static ucp_md_map_t ucp_fill_fallback_reg_nonblock_mds(ucp_context_h context)
     return (md_map == 0) ? ~md_map : md_map;
 }
 
-typedef struct ucp_reg_select_md {
-    ucp_md_index_t         md_index;
-    const char             *name;
-    ucs_sys_dev_distance_t distance;
-} ucp_reg_select_md_t;
-
-static int
-ucp_reg_select_md_cmp(const void *pa, const void *pb, void *UCS_V_UNUSED arg)
-{
-    const ucp_reg_select_md_t *a = pa;
-    const ucp_reg_select_md_t *b = pb;
-    int cmp;
-
-    cmp = ucs_topo_distance_cmp(&a->distance, &b->distance);
-    if (cmp != 0) {
-        return cmp;
-    }
-
-    return strcmp(a->name, b->name);
-}
-
 ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
                                         ucp_md_map_t md_map,
                                         ucs_sys_device_t mem_sys_dev)
 {
-    const ucp_context_config_t *config = &context->config.ext;
-    ucp_md_map_t result                = 0;
-    unsigned count                     = 0;
-    ucp_reg_select_md_t select_mds[UCP_MAX_MDS];
-    ucs_sys_dev_distance_t distance, best;
+    ucp_md_map_t result = 0;
+    ucs_sys_dev_distance_t distance;
     ucp_sys_dev_map_t sys_dev_map;
     ucs_sys_device_t sys_dev;
-    unsigned select_count, i;
     ucp_md_index_t md_index;
     ucp_rsc_index_t tl_idx;
-    int reachable;
-
-    if (ucp_reg_devices_mode(config->max_hca_per_gpu) == UCP_REG_DEVICES_ALL) {
-        return md_map;
-    }
+    int selected;
 
     ucs_for_each_bit(md_index, md_map) {
         sys_dev_map = 0;
@@ -2051,68 +2013,34 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
             }
         }
 
-        best      = ucs_topo_max_distance;
-        reachable = 1;
-
+        selected = (sys_dev_map == 0);
         ucs_for_each_bit(sys_dev, sys_dev_map) {
             ucs_assert(sys_dev != mem_sys_dev);
             if (!ucs_topo_is_reachable(sys_dev, mem_sys_dev)) {
                 /* Consistent with ucp_memh_sys_dev_reachable: skip the
                  * entire MD if any of its ports is unreachable */
-                reachable = 0;
+                selected = 0;
                 break;
             }
-            if ((ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) ==
-                 UCS_OK) &&
-                (ucs_topo_distance_cmp(&distance, &best) < 0)) {
-                best = distance;
+
+            if (ucs_topo_get_distance(mem_sys_dev, sys_dev, &distance) !=
+                UCS_OK) {
+                selected = 1;
+                continue;
+            }
+
+            if (ucs_topo_distance_cmp(&distance,
+                                      &ucs_topo_max_distance) != 0) {
+                selected = 1;
             }
         }
 
-        if (!reachable) {
-            continue;
+        ucs_trace("reg_select: mem_sys_dev=%d md[%d]=%s selected=%d",
+                  mem_sys_dev, md_index,
+                  context->tl_mds[md_index].rsc.md_name, selected);
+        if (selected) {
+            result |= UCS_BIT(md_index);
         }
-
-        select_mds[count].md_index = md_index;
-        select_mds[count].name     = context->tl_mds[md_index].rsc.md_name;
-        select_mds[count].distance = best;
-        ucs_trace("reg_select: mem_sys_dev=%d md[%d]=%s lat=%.2e bw=%.2e",
-                  mem_sys_dev, md_index, select_mds[count].name,
-                  best.latency, best.bandwidth);
-        count++;
-    }
-
-    if (count == 0) {
-        return 0;
-    }
-
-    ucs_qsort_r(select_mds, count, sizeof(select_mds[0]),
-                ucp_reg_select_md_cmp, NULL);
-
-    switch (ucp_reg_devices_mode(config->max_hca_per_gpu)) {
-    case UCP_REG_DEVICES_CLOSEST:
-        select_count = count;
-        for (i = 1; i < count; i++) {
-            if (ucs_topo_distance_cmp(&select_mds[i].distance,
-                                      &select_mds[0].distance) != 0) {
-                select_count = i;
-                break;
-            }
-        }
-        break;
-    case UCP_REG_DEVICES_LIMIT:
-        select_count = ucs_min(ucp_reg_devices_count(config->max_hca_per_gpu),
-                               count);
-        break;
-    default:
-        ucs_assertv(0, "invalid reg_devices_mode=%d, max_hca_per_gpu=%lu",
-                    ucp_reg_devices_mode(config->max_hca_per_gpu),
-                    config->max_hca_per_gpu);
-        return 0;
-    }
-
-    for (i = 0; i < select_count; i++) {
-        result |= UCS_BIT(select_mds[i].md_index);
     }
 
     return result;

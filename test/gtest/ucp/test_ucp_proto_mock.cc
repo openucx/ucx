@@ -492,7 +492,8 @@ public:
     {
         mock_iface::cleanup();
         ucp_test::cleanup();
-        /* Reset topo provider to not affect subsequent tests */
+        /* Restore TOPO_PRIO before resetting provider priorities. */
+        pop_config();
         ucs_sys_topo_reset_provider();
     }
 

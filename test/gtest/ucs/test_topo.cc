@@ -175,6 +175,7 @@ public:
     {
         ucs_topo_restore_state(m_topo_state);
         ucs::test::cleanup();
+        pop_config();
         ucs_sys_topo_reset_provider();
     }
 };
@@ -510,6 +511,7 @@ UCS_TEST_F(test_topo, provider_registration) {
     const ucs_sys_topo_ops_t empty_ops = {};
     ucs_sys_topo_provider_t *low_provider;
     ucs_sys_topo_provider_t *high_provider;
+    ucs_sys_topo_provider_t *disabled_provider;
     ucs_sys_topo_provider_t *duplicate;
     ucs_sys_dev_distance_t distance;
 
@@ -519,10 +521,18 @@ UCS_TEST_F(test_topo, provider_registration) {
                                                   &low_provider));
     ASSERT_UCS_OK(ucs_sys_topo_provider_register("test_high", &high_ops,
                                                   &high_provider));
+    ASSERT_UCS_OK(ucs_sys_topo_provider_register("test_disabled", &low_ops,
+                                                  &disabled_provider));
 
     ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
                                         UCS_SYS_DEVICE_ID_UNKNOWN, &distance));
     EXPECT_NEAR(33e-9, distance.latency, 1e-12);
+
+    modify_config("TOPO_PRIO", "test_low,test_high");
+    ucs_sys_topo_reset_provider();
+    ASSERT_UCS_OK(ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                        UCS_SYS_DEVICE_ID_UNKNOWN, &distance));
+    EXPECT_NEAR(11e-9, distance.latency, 1e-12);
 
     EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
               ucs_sys_topo_provider_register("test_low", &low_ops,
@@ -530,6 +540,7 @@ UCS_TEST_F(test_topo, provider_registration) {
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucs_sys_topo_provider_register("test_empty", &empty_ops,
                                              &duplicate));
+    ucs_sys_topo_provider_unregister(disabled_provider);
     ucs_sys_topo_provider_unregister(high_provider);
     ucs_sys_topo_provider_unregister(low_provider);
 }

@@ -121,6 +121,11 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
+    {"GDA_MAX_HCA_PER_GPU", "",
+     "The configuration parameter is deprecated. "
+     "Use UCX_CUDA_TOPO_MAX_NICS_PER_GPU instead.",
+     UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
+
     {"GDA_DMABUF_ENABLE", "try",
      "Enable DMA-BUF in GDA.",
      ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},
