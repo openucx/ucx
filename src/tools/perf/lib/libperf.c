@@ -684,10 +684,16 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
-    uct_md_mkey_pack_params_t mkey_params = {
+    const size_t buffer_size                         = ADDR_BUF_SIZE;
+    uct_md_mkey_pack_params_t mkey_params            = {
         .field_mask = 0
     };
-    const size_t buffer_size = ADDR_BUF_SIZE;
+    uct_iface_is_reachable_params_t reachable_params = {
+        .field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                      UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH
+    };
     ucx_perf_ep_info_t info, *remote_info;
     unsigned group_size, i, group_index;
     uct_device_addr_t *dev_addr;
@@ -823,9 +829,12 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         ep_addr     = UCS_PTR_BYTE_OFFSET(iface_addr, remote_info->uct.iface_addr_len);
         perf->uct.peers[i].remote_addr = remote_info->recv_buffer;
 
-        if (!uct_iface_is_reachable(perf->uct.iface, dev_addr,
-                                    remote_info->uct.iface_addr_len ?
-                                    iface_addr : NULL)) {
+        reachable_params.device_addr        = dev_addr;
+        reachable_params.device_addr_length = remote_info->uct.dev_addr_len;
+        reachable_params.iface_addr         =
+                remote_info->uct.iface_addr_len ? iface_addr : NULL;
+        reachable_params.iface_addr_length  = remote_info->uct.iface_addr_len;
+        if (!uct_iface_is_reachable_v2(perf->uct.iface, &reachable_params)) {
             ucs_error("Destination is unreachable");
             status = UCS_ERR_UNREACHABLE;
             goto err_destroy_eps;
