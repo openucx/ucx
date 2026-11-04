@@ -333,10 +333,11 @@ FILE* uct_rocm_base_load_kernel_config_file()
     return fp;
 }
 
+/* NULL opt1/opt2 means the check is not required (treat as already found). */
 int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[], const char kernel_opt2[])
 {
-    int found_opt1 = 0;
-    int found_opt2 = 0;
+    int found_opt1 = (kernel_opt1 == NULL);
+    int found_opt2 = (kernel_opt2 == NULL);
     char buf[256];
 
     while (fgets(buf, sizeof(buf), fp) != NULL) {
@@ -369,14 +370,24 @@ static int uct_rocm_base_kernel_version_at_least(int major, int minor)
     return (kmajor > major) || ((kmajor == major) && (kminor >= minor));
 }
 
+/* CONFIG_DMABUF_MOVE_NOTIFY was removed in kernel 6.19 and is always
+ * implicitly enabled from that version onwards. */
+static int uct_rocm_base_dmabuf_move_notify_implicit(void)
+{
+    static int result = -1;
+
+    if (result == -1) {
+        result = (uct_rocm_base_kernel_version_at_least(6, 19) == 1);
+    }
+    return result;
+}
+
 int uct_rocm_base_kernel_config_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    /* CONFIG_DMABUF_MOVE_NOTIFY was removed in kernel 6.19 (always implicitly
-     * enabled). Pass "" so strstr() matches immediately, skipping that check. */
-    const char *kernel_opt1 = (uct_rocm_base_kernel_version_at_least(6, 19) == 1) ?
-                              "" : "CONFIG_DMABUF_MOVE_NOTIFY=y";
+    const char *kernel_opt1 = uct_rocm_base_dmabuf_move_notify_implicit() ?
+                              NULL : "CONFIG_DMABUF_MOVE_NOTIFY=y";
     const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
 
     fp = uct_rocm_base_load_kernel_config_file();
@@ -393,10 +404,8 @@ int uct_rocm_base_kernel_symbols_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    /* dma_buf_move_notify is always present from kernel 6.19 onwards.
-     * Pass "" so strstr() matches immediately, skipping that check. */
-    const char *kernel_sym1 = (uct_rocm_base_kernel_version_at_least(6, 19) == 1) ?
-                              "" : "dma_buf_move_notify";
+    const char *kernel_sym1 = uct_rocm_base_dmabuf_move_notify_implicit() ?
+                              NULL : "dma_buf_move_notify";
     const char kernel_sym2[] = "pci_p2pdma";
 
     fp = fopen("/proc/kallsyms", "r");
