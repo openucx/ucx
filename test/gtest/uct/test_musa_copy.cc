@@ -6,6 +6,8 @@
 
 #include "test_p2p_rma.h"
 
+#include <musa_runtime_api.h>
+
 class test_musa_copy : public uct_p2p_rma_test {
 public:
     struct flush_completion {
@@ -23,6 +25,34 @@ public:
         {
             flush_completion *self = ucs_container_of(
                     comp, flush_completion, uct);
+            ++self->calls;
+        }
+    };
+
+    /* Completion which records the MUSA device which is current when the
+     * callback runs. */
+    struct device_completion {
+        uct_completion_t uct;
+        unsigned         calls;
+        int              device_seen;
+
+        device_completion() : calls(0), device_seen(-1)
+        {
+            uct.func   = complete;
+            uct.count  = 1;
+            uct.status = UCS_OK;
+        }
+
+        static void complete(uct_completion_t *comp)
+        {
+            device_completion *self = ucs_container_of(comp, device_completion,
+                                                        uct);
+            int device = -1;
+
+            if (musaGetDevice(&device) != musaSuccess) {
+                device = -2;
+            }
+            self->device_seen = device;
             ++self->calls;
         }
     };
@@ -131,6 +161,47 @@ UCS_TEST_SKIP_COND_P(test_musa_copy, close_with_pending_flush,
     iface.reset();
     EXPECT_EQ(0u, completion.calls);
     EXPECT_EQ(1, completion.uct.count);
+    recvbuf.pattern_check(SEED1);
+}
+
+/* Completions must run with the application device restored: the copy is
+ * executed on device B while the application device is A, and the zcopy and
+ * flush completion callbacks must observe A when they run. */
+UCS_TEST_SKIP_COND_P(test_musa_copy, completions_run_on_application_device,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    int num_devices = 0;
+
+    ASSERT_EQ(musaSuccess, musaGetDeviceCount(&num_devices));
+    if (num_devices < 2) {
+        UCS_TEST_SKIP_R("requires at least 2 MUSA devices");
+    }
+
+    /* Allocate the device buffer while device B is current, so that the copy
+     * is executed on device B ... */
+    ASSERT_EQ(musaSuccess, musaSetDevice(1));
+    mapped_buffer sendbuf(4096, SEED1, sender(), 0, UCS_MEMORY_TYPE_HOST);
+    mapped_buffer recvbuf(4096, SEED2, receiver(), 0, UCS_MEMORY_TYPE_MUSA);
+    /* ... and restore the application device A. */
+    ASSERT_EQ(musaSuccess, musaSetDevice(0));
+
+    device_completion zcopy_completion;
+    device_completion flush_completion;
+    ucs::handle<entity*> flush_guard(&sender(), [](entity *e) { e->flush(); });
+    uct_iov_t iov = {sendbuf.ptr(), sendbuf.length(), sendbuf.memh(), 0, 1};
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_ep_put_zcopy(sender_ep(), &iov, 1, recvbuf.addr(),
+                               recvbuf.rkey(), &zcopy_completion.uct));
+
+    ASSERT_EQ(UCS_INPROGRESS,
+              uct_iface_flush(sender().iface(), 0, &flush_completion.uct));
+
+    flush();
+
+    EXPECT_EQ(1u, zcopy_completion.calls);
+    EXPECT_EQ(1u, flush_completion.calls);
+    EXPECT_EQ(0, zcopy_completion.device_seen);
+    EXPECT_EQ(0, flush_completion.device_seen);
     recvbuf.pattern_check(SEED1);
 }
 

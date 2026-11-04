@@ -1164,6 +1164,11 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     char *page = NULL;
     pid_t pid;
 
+    if (GetParam().md_name == "musa_cpy") {
+        UCS_TEST_SKIP_R("MUSA runtime exit handlers deadlock in a forked "
+                        "child");
+    }
+
     EXPECT_EQ(0, posix_memalign((void **)&page, ucs_get_page_size(), REG_SIZE));
     memset(page, 42, REG_SIZE);
 
