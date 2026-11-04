@@ -93,7 +93,7 @@ static ucs_status_t uct_ze_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ZE_HOST) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_DEVICE) |
                                 UCS_BIT(UCS_MEMORY_TYPE_ZE_MANAGED);
-    md_attr->dmabuf_mem_types = ze_md->enable_dmabuf ?
+    md_attr->dmabuf_mem_types = ze_md->dmabuf_supported ?
                                 UCT_ZE_COPY_MD_DMABUF_MEM_TYPES : 0;
     md_attr->max_alloc        = SIZE_MAX;
     return UCS_OK;
@@ -125,7 +125,7 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     size_t alignment                    = ucs_get_page_size();
     ucs_status_t status;
 
-    if (md->enable_dmabuf &&
+    if (md->dmabuf_supported &&
         (UCS_BIT(mem_type) & UCT_ZE_COPY_MD_DMABUF_MEM_TYPES)) {
         export_desc_p = &export_desc;
     }
@@ -261,9 +261,8 @@ static ucs_status_t uct_ze_copy_md_mem_query(uct_md_h md, const void *addr,
     ucs_status_t status;
 
     if ((mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) &&
-        ze_md->enable_dmabuf) {
-        mem_attr_p->dmabuf_fd = UCT_DMABUF_FD_INVALID;
-        dmabuf_fd_p           = &dmabuf_fd;
+        ze_md->dmabuf_supported) {
+        dmabuf_fd_p = &dmabuf_fd;
     }
 
     status = uct_ze_copy_md_query_attributes(md, addr, length, &mem_info,
@@ -390,6 +389,14 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
         goto err_free_md;
     }
 
+    dmabuf_supported = uct_ze_copy_md_is_dmabuf_supported(md->ze_device);
+    if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
+        ucs_error("%s: DMA-BUF is not supported by the Level Zero device",
+                  md_name);
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_md;
+    }
+
     ret = zeContextCreate(ze_driver, &context_desc, &md->ze_context);
     if (ret != ZE_RESULT_SUCCESS) {
         ucs_error("zeContextCreate failed with error %x", ret);
@@ -397,15 +404,8 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
         goto err_free_md;
     }
 
-    dmabuf_supported = uct_ze_copy_md_is_dmabuf_supported(md->ze_device);
-    if ((config->enable_dmabuf == UCS_YES) && !dmabuf_supported) {
-        ucs_error("%s: DMA-BUF is not supported by the Level Zero device",
-                  md_name);
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_destroy_context;
-    }
-
-    md->enable_dmabuf   = (config->enable_dmabuf != UCS_NO) && dmabuf_supported;
+    md->dmabuf_supported = (config->enable_dmabuf != UCS_NO) &&
+                           dmabuf_supported;
     md->super.ops       = &md_ops;
     md->super.component = &uct_ze_copy_component;
 
@@ -415,8 +415,6 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
     ucs_memtype_cache_global_create();
     return UCS_OK;
 
-err_destroy_context:
-    zeContextDestroy(md->ze_context);
 err_free_md:
     ucs_free(md);
     return status;
