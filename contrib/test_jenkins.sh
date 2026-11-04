@@ -192,6 +192,45 @@ expect_failure() {
 	fi
 }
 
+#
+# Wait up to 15 seconds until the process with the given pid listens on the
+# given TCP port, or exits
+#
+wait_for_listen_port() {
+	local pid=$1
+	local port=$2
+	local timeout_sec=15
+	local hex_port
+	local listen_regex
+	local i
+
+	set +x
+	# A line of /proc/net/tcp{,6} is "<sl>: <local ip>:<local port> <remote
+	# ip>:<remote port> <state> ...", ports are hexadecimal and 0A is LISTEN
+	printf -v hex_port "%04X" ${port}
+	listen_regex="^ *[0-9]+: [0-9A-F]+:${hex_port} [0-9A-F:]+ 0A "
+	for ((i = 0; i < timeout_sec * 10; ++i))
+	do
+		if grep -qE "${listen_regex}" /proc/net/tcp{,6} 2>/dev/null
+		then
+			set -x
+			return
+		fi
+
+		if ! kill -0 ${pid} 2>/dev/null
+		then
+			echo "Process ${pid} exited before listening"
+			set -x
+			return
+		fi
+
+		sleep 0.1
+	done
+
+	log_warning "No listener on port ${port} after ${timeout_sec} seconds"
+	set -x
+}
+
 run_client_server_app() {
 	test_exe=$1
 	test_args=$2
@@ -199,7 +238,8 @@ run_client_server_app() {
 	kill_server=$4
 	error_emulation=$5
 
-	server_port_arg="-p $server_port"
+	listen_port=$server_port
+	server_port_arg="-p $listen_port"
 	step_server_port
 
 	affinity_server=$(slice_affinity 0)
@@ -208,7 +248,7 @@ run_client_server_app() {
 	taskset -c $affinity_server ${test_exe} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
-	sleep 15
+	wait_for_listen_port ${server_pid} ${listen_port}
 
 	if [ $error_emulation -eq 1 ]
 	then
@@ -808,9 +848,12 @@ start_perftest_daemon() {
 
 	# Run the daemon
 	env $dmn_env $daemon_exe -p $dmn_port &
+	dmn_pid=$!
+
+	wait_for_listen_port ${dmn_pid} ${dmn_port}
 
 	# Return the daemon pid and port
-	eval "$2=$!"
+	eval "$2=${dmn_pid}"
 	eval "$3=$dmn_port"
 }
 
