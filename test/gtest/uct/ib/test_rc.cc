@@ -705,11 +705,18 @@ protected:
     }
 
     void check_rx_config(entity *e, unsigned expected_batch) {
-        unsigned batch = rc_iface(e)->super.config.rx_max_batch;
+        unsigned batch   = rc_iface(e)->super.config.rx_max_batch;
+        unsigned max_wr  = rx_max_wr(e);
+        unsigned prepost = (expected_batch == 1) ? max_wr :
+                ucs_min(2 * expected_batch, max_wr);
 
         EXPECT_TRUE(rc_iface(e)->config.fc_enabled);
         EXPECT_GT(batch, 0u);
         EXPECT_EQ(expected_batch, batch);
+        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            EXPECT_EQ(rx_max_wr(e) - prepost, rx_available(e, ep_idx));
+        }
+
         EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
         EXPECT_LE(rc_iface(e)->config.fc_wnd_size + batch, rx_max_wr(e));
     }
@@ -1114,6 +1121,34 @@ UCS_TEST_P(test_rc_no_srq, rx_batch_limits,
     }
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_prepost_grows,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "IB_RX_MAX_BATCH=16", "RC_VERBS_RX_MAX_WR=128",
+                     "IB_RX_MAX_BUFS=-1", "RC_FC_ENABLE=n")
+{
+    unsigned am_count = 0;
+
+    ASSERT_EQ(16u, rc_iface(m_e2)->super.config.rx_max_batch);
+    ASSERT_EQ(96, rx_available(m_e2, 0));
+    ASSERT_EQ(96, rx_available(m_e2, 1));
+
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                             am_count_handler, &am_count, 0);
+    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+    for (unsigned i = 0; i < 16; i++) {
+        ASSERT_UCS_OK(send_am_message(m_e1, RECOVERY_AM_ID, 0));
+        wait_for_value(&am_count, i + 1, true);
+        ASSERT_EQ(i + 1, am_count);
+        if (i == 0) {
+            EXPECT_EQ(81, rx_available(m_e2, 0));
+        }
+    }
+
+    EXPECT_EQ(0, rx_available(m_e2, 0));
+    EXPECT_EQ(96, rx_available(m_e2, 1));
+    flush();
+}
+
 /* Report a real receive completion as failed, to exercise the error path of a
  * QP which has its own receive queue: the completion carries a valid QP
  * number, which the accounting of such a QP looks up. */
@@ -1174,9 +1209,9 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, failed_rx_release_desc,
     EXPECT_EQ(1, rx_available(m_e2, 0));
 }
 
-/* Two 384-entry receive queues consume 768 descriptors. Limit the pool to
- * 1024 descriptors, so holding the remainder exhausts it and prevents receive
- * reposting from the completion path. */
+/* Two 384-entry receive queues can hold 768 descriptors. Limit the pool to
+ * 1024 descriptors, so holding received descriptors eventually exhausts it
+ * and prevents receive reposting from the completion path. */
 #define UCT_TEST_NO_RX_BUFS_CONFIG \
     "IB_RX_MAX_BUFS~=1024", "RC_VERBS_RX_MAX_WR~=384"
 
@@ -1327,7 +1362,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_all_eps_destroy,
 }
 
 /* Verify that receive posting recovers on every QP when many QPs share an
- * exhausted receive buffer pool. 16 receive queues of 32 WRs consume 512
+ * exhausted receive buffer pool. 16 receive queues of 32 WRs can hold 512
  * descriptors, so a pool of 576 leaves little room for reposting. */
 UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_many_eps,
                      (RUNNING_ON_VALGRIND ||
