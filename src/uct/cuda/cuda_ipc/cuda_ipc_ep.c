@@ -162,8 +162,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     uct_cuda_ipc_unpacked_rkey_t *key = (uct_cuda_ipc_unpacked_rkey_t *)rkey;
     CUdevice cuda_device;
     int is_ctx_pushed;
-    void *mapped_rem_addr;
     const void *mapped_addr;
+    void *local_addr;
     uct_cuda_ipc_event_desc_t *cuda_ipc_event;
     uct_cuda_queue_desc_t *q_desc;
     ucs_status_t status;
@@ -181,9 +181,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return status;
     }
 
-    status = uct_cuda_ipc_get_remote_address(&key->super, remote_addr,
-                                             cuda_device, &mapped_rem_addr,
-                                             &mapped_addr);
+    status = uct_cuda_ipc_map_remote_addr(&key->super, remote_addr, cuda_device,
+                                          &mapped_addr, &local_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         goto out;
     }
@@ -195,10 +194,10 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         goto out;
     }
 
-    dst = (CUdeviceptr)
-        ((direction == UCT_CUDA_IPC_PUT) ? mapped_rem_addr : iov[0].buffer);
-    src = (CUdeviceptr)
-        ((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer : mapped_rem_addr);
+    dst = (CUdeviceptr)((direction == UCT_CUDA_IPC_PUT) ? local_addr :
+                                                          iov[0].buffer);
+    src = (CUdeviceptr)((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer :
+                                                          local_addr);
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
                                                         *stream));
@@ -291,9 +290,9 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     uct_cuda_ipc_sgl_entry_t *entry;
     uct_cuda_queue_desc_t *q_desc;
     CUmemcpyAttributes attr;
-    void *mapped_addr;
-    const void *mapped_base_addr;
-    CUdeviceptr *mapped_addrs, *local_addrs;
+    void *local_addr;
+    const void *mapped_addr;
+    CUdeviceptr *local_addrs, *buffer_addrs;
     CUdeviceptr *dsts, *srcs;
     size_t *copy_lengths;
     size_t attrs_idx;
@@ -335,12 +334,12 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         return status;
     }
 
-    /* Only the elements with data go to the batch, so their local addresses
-     * and lengths are stored in the mapping next to the remote addresses */
+    /* Only the elements with data go to the batch, so the mapping also stores
+     * the buffer address and the length of each such element */
     mapping = ucs_malloc(sizeof(*mapping) +
                          num_nonempty * (sizeof(*mapping->entries) +
-                                         sizeof(*mapped_addrs) +
                                          sizeof(*local_addrs) +
+                                         sizeof(*buffer_addrs) +
                                          sizeof(*copy_lengths)),
                          "cuda_ipc_sgl_mapping");
     if (ucs_unlikely(mapping == NULL)) {
@@ -351,9 +350,9 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
 
     mapping->count   = 0;
     mapping->entries = (uct_cuda_ipc_sgl_entry_t *)(mapping + 1);
-    mapped_addrs     = (CUdeviceptr *)(mapping->entries + num_nonempty);
-    local_addrs      = mapped_addrs + num_nonempty;
-    copy_lengths     = (size_t *)(local_addrs + num_nonempty);
+    local_addrs      = (CUdeviceptr *)(mapping->entries + num_nonempty);
+    buffer_addrs     = local_addrs + num_nonempty;
+    copy_lengths     = (size_t *)(buffer_addrs + num_nonempty);
 
     memset(&attr, 0, sizeof(attr));
     attr.srcAccessOrder = CU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
@@ -367,9 +366,9 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
 
         key = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[i];
 
-        status = uct_cuda_ipc_get_remote_address(&key->super, remote_addrs[i],
-                                                 cuda_device, &mapped_addr,
-                                                 &mapped_base_addr);
+        status = uct_cuda_ipc_map_remote_addr(&key->super, remote_addrs[i],
+                                              cuda_device, &mapped_addr,
+                                              &local_addr);
         if (ucs_unlikely(status != UCS_OK)) {
             goto out_unmap;
         }
@@ -378,19 +377,19 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         entry->pid                   = key->super.super.pid;
         entry->pid_ns                = key->super.pid_ns;
         entry->d_bptr                = (uintptr_t)key->super.super.d_bptr;
-        entry->mapped_addr           = mapped_base_addr;
-        mapped_addrs[mapping->count] = (CUdeviceptr)mapped_addr;
-        local_addrs[mapping->count]  = (CUdeviceptr)buffers[i];
+        entry->mapped_addr           = mapped_addr;
+        local_addrs[mapping->count]  = (CUdeviceptr)local_addr;
+        buffer_addrs[mapping->count] = (CUdeviceptr)buffers[i];
         copy_lengths[mapping->count] = lengths[i];
         mapping->count++;
     }
 
     if (direction == UCT_CUDA_IPC_PUT) {
-        dsts = mapped_addrs;
-        srcs = local_addrs;
-    } else {
         dsts = local_addrs;
-        srcs = mapped_addrs;
+        srcs = buffer_addrs;
+    } else {
+        dsts = buffer_addrs;
+        srcs = local_addrs;
     }
 
     key    = (uct_cuda_ipc_unpacked_rkey_t *)rkeys[first];
