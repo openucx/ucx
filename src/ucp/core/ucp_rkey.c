@@ -24,6 +24,11 @@
 #include <inttypes.h>
 
 
+/* Minimal peer release version which always packs the system device of a
+ * non-empty remote key, and the lane distances if the device is known */
+#define UCP_RKEY_SYS_DEV_MIN_DST_VERSION 20
+
+
 typedef struct {
     uint8_t   sys_dev;
     ucs_fp8_t latency;
@@ -847,7 +852,8 @@ ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
                          ucp_rkey_config_key_t *rkey_config_key)
 {
     if ((*buffer_p < buffer_end) ||
-        ((ep_config->key.dst_version > 19) && (rkey->md_map != 0))) {
+        ((ep_config->key.dst_version >= UCP_RKEY_SYS_DEV_MIN_DST_VERSION) &&
+         (rkey->md_map != 0))) {
         rkey_config_key->sys_dev = *ucs_serialize_next(buffer_p, const uint8_t);
     } else {
         rkey_config_key->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -891,7 +897,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,
      * we can safely assume that lane distances are included. */
-    if ((ep_config->key.dst_version > 19) &&
+    if ((ep_config->key.dst_version >= UCP_RKEY_SYS_DEV_MIN_DST_VERSION) &&
         (rkey_config_key.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
         (buffer_end <= buffer)) {
         buffer_end = (void*)UINTPTR_MAX;
