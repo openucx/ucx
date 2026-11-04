@@ -45,7 +45,7 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
   `UCP_WIREUP_MSG_*` constants in `wireup.h` and the matching pack/unpack
   in `wireup.c`.
 - A payload section appended to an already released message must be gated
-  by a `*_MIN_DST_VERSION` constant checked against
+  by a `*_MIN_DST_VERSION` constant from `core/ucp_types.h` checked against
   `ucp_ep_config(ep)->key.dst_version`. Variable-length pieces go before
   the rest of the payload so an older peer, which never sees them, still
   finds the original contents. `LANES_ADDR` token trailers work this way,
