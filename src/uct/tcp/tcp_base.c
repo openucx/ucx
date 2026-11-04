@@ -61,6 +61,40 @@ ucs_status_t ucs_tcp_base_set_maxseg(int fd, size_t maxseg)
                              (const void*)&maxseg_int, sizeof(maxseg_int));
 }
 
+ucs_status_t ucs_tcp_base_server_init(const struct sockaddr *saddr,
+                                      socklen_t socklen, int backlog,
+                                      int silent_bind, int reuse_addr,
+                                      size_t maxseg, int *listen_fd_p)
+{
+    ucs_status_t status;
+    int fd;
+
+    status = ucs_socket_server_bind(saddr, socklen, silent_bind, reuse_addr,
+                                    &fd);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* The segment size is negotiated during the handshake, so accepted
+     * sockets get it only from the listening socket */
+    status = ucs_tcp_base_set_maxseg(fd, maxseg);
+    if (status != UCS_OK) {
+        goto err_close_fd;
+    }
+
+    status = ucs_socket_server_listen(fd, backlog);
+    if (status != UCS_OK) {
+        goto err_close_fd;
+    }
+
+    *listen_fd_p = fd;
+    return UCS_OK;
+
+err_close_fd:
+    ucs_close_fd(&fd);
+    return status;
+}
+
 ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout)
 {
 #ifdef TCP_USER_TIMEOUT

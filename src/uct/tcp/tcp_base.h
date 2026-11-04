@@ -66,6 +66,10 @@ typedef struct uct_tcp_send_recv_buf_config {
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt);
 ucs_status_t ucs_tcp_base_check_maxseg(size_t maxseg);
 ucs_status_t ucs_tcp_base_set_maxseg(int fd, size_t maxseg);
+ucs_status_t ucs_tcp_base_server_init(const struct sockaddr *saddr,
+                                      socklen_t socklen, int backlog,
+                                      int silent_bind, int reuse_addr,
+                                      size_t maxseg, int *listen_fd_p);
 ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout);
 
 #endif /* UCT_TCP_BASE_H */

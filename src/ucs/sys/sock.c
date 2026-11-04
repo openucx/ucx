@@ -523,26 +523,6 @@ ucs_status_t ucs_socket_server_listen(int fd, int backlog)
     return UCS_OK;
 }
 
-ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind,
-                                    int reuse_addr, int *listen_fd)
-{
-    ucs_status_t status;
-
-    status = ucs_socket_server_bind(saddr, socklen, silent_bind, reuse_addr,
-                                    listen_fd);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = ucs_socket_server_listen(*listen_fd, backlog);
-    if (status != UCS_OK) {
-        ucs_close_fd(listen_fd);
-    }
-
-    return status;
-}
-
 int ucs_socket_max_conn()
 {
     static long somaxconn_val = 0;

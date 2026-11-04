@@ -587,30 +587,12 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
             return status;
         }
 
-        status = ucs_socket_server_bind((struct sockaddr*)&bind_addr, addr_len,
-                                        retry, 0, &iface->listen_fd);
+        status = ucs_tcp_base_server_init((struct sockaddr*)&bind_addr,
+                                          addr_len, ucs_socket_max_conn(),
+                                          retry, 0, iface->sockopt.maxseg,
+                                          &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Accepted sockets inherit the segment size of the listener, which
-     * advertises it to connecting peers, so set it before listening */
-    status = ucs_tcp_base_set_maxseg(iface->listen_fd, iface->sockopt.maxseg);
-    if (status != UCS_OK) {
-        goto err_close_sock;
-    }
-
-    status = ucs_socket_server_listen(iface->listen_fd, ucs_socket_max_conn());
-    if (status != UCS_OK) {
-        goto err_close_sock;
-    }
-
-    return UCS_OK;
-
-err_close_sock:
-    ucs_close_fd(&iface->listen_fd);
     return status;
 }
 
