@@ -20,7 +20,6 @@
 #include <ucs/sys/sys.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
-#include <stdio.h>
 #include <string.h>
 
 
@@ -1161,22 +1160,6 @@ size_t uct_ib_mlx5_devx_sq_length(size_t tx_qp_length)
     return ucs_roundup_pow2_or0(tx_qp_length * UCT_IB_MLX5_MAX_BB);
 }
 
-int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
-                                        unsigned min_release,
-                                        unsigned min_build)
-{
-    unsigned release, build;
-
-    ucs_assert(fw_ver != NULL);
-
-    if (sscanf(fw_ver, "%*u.%u.%u", &release, &build) != 2) {
-        return 0;
-    }
-
-    return (release > min_release) ||
-           ((release == min_release) && (build >= min_build));
-}
-
 /* Keep the function as a separate to test SL selection */
 ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                                    ucs_ternary_auto_value_t ar_enable,
@@ -1213,7 +1196,7 @@ ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
         /* selects SL requested by a user */
         sl                    = ucs_ffs64(sl_allow_mask);
         if (have_sl_mask_cap) {
-            sl_ar_support_str = (sl & sls_with_ar) ? "yes" : "no";
+            sl_ar_support_str = UCS_BIT_GET(sls_with_ar, sl) ? "yes" : "no";
         } else {
             sl_ar_support_str = "unknown";
         }

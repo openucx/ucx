@@ -185,7 +185,7 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "MD whose distance is queried when evaluating transport selection score",
    ucs_offsetof(ucp_context_config_t, select_distance_md), UCS_CONFIG_TYPE_STRING},
 
-  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda,rocm",
    "Memory types which have whole allocations registered.\n"
    "Allowed memory types: cuda, rocm, rocm-managed, ze-host, ze-device, ze-managed",
    ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
@@ -417,6 +417,28 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "Allow using error handling protocol in the rendezvous pipeline protocol\n"
    "even if invalidation workflow isn't supported",
    ucs_offsetof(ucp_context_config_t, rndv_errh_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"RNDV_FRAG_WORKER_MAX_MEM", "auto",
+   "Maximum amount of memory a worker may use for rendezvous staging\n"
+   "fragments. Both \"auto\" and \"inf\" mean no limit. This setting has no\n"
+   "effect when PROTO_ENABLE=n. The same limit is applied independently to\n"
+   "each fragment memory type, and per device when available. It is\n"
+   "converted to a fragment count using RNDV_FRAG_SIZE. When the limit is\n"
+   "reached, further fragment requests are queued until fragments are\n"
+   "released. The limit is at least two fragments. See also\n"
+   "RNDV_FRAG_RTR_RATIO",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_worker_max_mem),
+   UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_FRAG_RTR_RATIO", "0.8",
+   "Fraction of RNDV_FRAG_WORKER_MAX_MEM which fragments posted to receive\n"
+   "data (RTR) may use at once, in the range (0, 1). The rest is kept for\n"
+   "the put/get operations which move the data, so that they can always\n"
+   "make progress: an RTR fragment is released only when the peer's data\n"
+   "arrives, and the peer needs a fragment of its own to send it, so\n"
+   "without a reserve both peers could wait for each other forever",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_rtr_ratio),
+   UCS_CONFIG_TYPE_POS_DOUBLE},
 
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
@@ -834,7 +856,7 @@ static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "dc_x",  { "dc_mlx5", UCP_TL_AUX("ud_mlx5"), NULL } },
   { "ugni",  { "ugni_smsg", UCP_TL_AUX("ugni_udt"), "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
-  { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
+  { "rocm",  { "rocm_copy", "rocm_ipc", NULL } },
   { "ze",    { "ze_copy", "ze_ipc", "ze_gdr", NULL } },
   { "gaudi", { "gaudi_gdr", NULL } },
   { "gga",   { "gga_mlx5", NULL } },
@@ -2781,6 +2803,14 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.recovery_retries == 0) {
         ucs_error("UCX_RECOVERY_RETRIES value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
+    if (UCS_CONFIG_DBL_IS_AUTO(context->config.ext.rndv_frag_rtr_ratio) ||
+        !(context->config.ext.rndv_frag_rtr_ratio < 1.0)) {
+        ucs_error("UCX_RNDV_FRAG_RTR_RATIO value %g is not in the range "
+                  "(0, 1)", context->config.ext.rndv_frag_rtr_ratio);
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }

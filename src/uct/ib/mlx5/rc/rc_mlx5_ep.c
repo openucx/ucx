@@ -268,112 +268,33 @@ uct_rc_mlx5_base_ep_put_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_txwq_t *txwq       = &ep->tx.wq;
-    size_t total                   = 0;
-    struct mlx5_wqe_ctrl_seg *ctrl = NULL;
-    uint32_t num_packets           = 0;
-    const size_t non_data_wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
-                                     sizeof(struct mlx5_wqe_raddr_seg);
-    const size_t data_wqe_size     = non_data_wqe_size +
-                                     sizeof(struct mlx5_wqe_data_seg);
-    struct mlx5_wqe_raddr_seg *raddr;
-    struct mlx5_wqe_data_seg *dptr;
-    size_t wqe_size, i;
-    uint8_t fm_ce_se, fence_flag;
-    uint16_t pi, res_count;
-    uint64_t addr;
-    uct_rkey_t rkey;
-    void *curr;
     size_t UCS_V_UNUSED max_count;
+    uint8_t fence_flag;
+    ucs_status_t status;
+    size_t UCS_V_UNUSED total;
     int fence;
 
-    max_count = uct_rc_mlx5_base_put_sgl_zcopy_max_count(iface);
+    UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "put_sgl_zcopy");
+
+    max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
     UCT_CHECK_PARAM(count <= max_count,
                     "put_sgl_zcopy count(%zu) should be limited by %zu", count,
                     max_count);
-    ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
-
-    /* TODO: add strided elements support */
-    if (ucs_unlikely((counts != NULL) || (strides != NULL))) {
-        ucs_error("put_sgl_zcopy does not support strided elements");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     UCT_SKIP_ZERO_LENGTH(count);
 
-    /* Validate all lengths before resource checks and fence state */
-    for (i = 0; i < count; i++) {
-        UCT_CHECK_LENGTH(lengths[i], 0, UCT_IB_MAX_MESSAGE_SIZE,
-                         "put_sgl_zcopy");
+    status = uct_rc_mlx5_base_ep_sgl_zcopy_check(iface, ep, lengths, count, 0,
+                                                 UCT_IB_MAX_MESSAGE_SIZE,
+                                                 "put_sgl_zcopy");
+    if (status != UCS_OK) {
+        return status;
     }
 
-    UCT_RC_CHECK_CQE_VALUE_RET(&iface->super, &ep->super,
-                               UCS_ERR_NO_RESOURCE, count - 1);
-
-    UCT_RC_CHECK_NUM_RDMA_READ_RET(&iface->super, UCS_ERR_NO_RESOURCE);
-    UCT_RC_CHECK_TXQP_VALUE_RET(&iface->super, &ep->super,
-                                UCS_ERR_NO_RESOURCE, count - 1);
-
-    ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
-    ucs_assert(ucs_div_round_up(data_wqe_size, MLX5_SEND_WQE_BB) == 1);
-
-    pi   = txwq->sw_pi;
-    curr = txwq->curr;
-
-    fence      = uct_rc_ep_fm(&iface->super, &txwq->fi, 1);
+    fence      = uct_rc_ep_fm(&iface->super, &ep->tx.wq.fi, 1);
     fence_flag = fence ? iface->config.put_fence_flag : 0;
-
-    for (i = 0; i < count; i++) {
-        fm_ce_se = ((i == 0) ? fence_flag : 0) |
-                   ((i == count - 1) ? MLX5_WQE_CTRL_CQ_UPDATE : 0);
-        ctrl     = curr;
-
-        addr = remote_addrs[i];
-        if (fence) {
-            rkey = uct_ib_resolve_atomic_rkey(
-                    rkeys[i], ep->super.atomic_mr_offset, &addr);
-        } else {
-            rkey = uct_ib_md_direct_rkey(rkeys[i]);
-        }
-
-        raddr = uct_ib_mlx5_txwq_wrap_none(txwq, ctrl + 1);
-        uct_ib_mlx5_ep_set_rdma_seg(raddr, addr, rkey);
-
-        if (ucs_unlikely(lengths[i] == 0)) {
-            wqe_size     = non_data_wqe_size;
-            num_packets += 1;
-        } else {
-            dptr         = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
-            uct_ib_mlx5_set_data_seg(dptr, buffers[i], lengths[i],
-                                     uct_ib_memh_get_lkey(memhs[i]));
-            wqe_size     = data_wqe_size;
-            num_packets += uct_rc_mlx5_num_packets(txwq, lengths[i]);
-        }
-
-        uct_ib_mlx5_set_ctrl_seg(ctrl, pi, MLX5_OPCODE_RDMA_WRITE, 0,
-                                 txwq->super.qp_num, fm_ce_se, 0, wqe_size);
-
-        curr = UCS_PTR_BYTE_OFFSET(ctrl, MLX5_SEND_WQE_BB);
-        curr = uct_ib_mlx5_txwq_wrap_exact(txwq, curr);
-        pi++;
-        total += lengths[i];
-    }
-
-    res_count         = pi - 1 - txwq->prev_sw_pi;
-    txwq->prev_sw_pi += res_count;
-    txwq->sw_pi       = pi;
-    txwq->curr        = curr;
-    txwq->sig_pi      = txwq->prev_sw_pi;
-
-    uct_rc_txqp_posted(&ep->super.txqp, &iface->super, res_count, 1);
-    uct_ib_mlx5_txwq_ring_doorbell(txwq, ctrl, txwq->sw_pi, 1);
-    uct_rc_mlx5_txwq_add_psn(txwq, IBV_QPT_RC, num_packets);
-
-    uct_rc_txqp_add_send_comp_always(&iface->super, &ep->super.txqp,
-                                     uct_rc_ep_put_sgl_zcopy_completion_handler,
-                                     comp, txwq->sig_pi,
-                                     UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, NULL, 0,
-                                     total);
+    total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(
+            ep, buffers, lengths, memhs, remote_addrs, rkeys, count,
+            MLX5_OPCODE_RDMA_WRITE, fence_flag, fence,
+            uct_rc_ep_put_sgl_zcopy_completion_handler, 0, comp);
 
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, ZCOPY, total);
     uct_rc_ep_enable_flush_remote(&ep->super);
@@ -436,6 +357,50 @@ ucs_status_t uct_rc_mlx5_base_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
         UCT_RC_RDMA_READ_POSTED(&iface->super, total_length);
     }
     return status;
+}
+
+ucs_status_t
+uct_rc_mlx5_base_ep_get_sgl_zcopy(uct_ep_h tl_ep, void * const *buffers,
+                                  const size_t *lengths, uct_mem_h const *memhs,
+                                  const uint64_t *remote_addrs,
+                                  uct_rkey_t const *rkeys, const size_t *counts,
+                                  const size_t *strides, size_t count,
+                                  uct_completion_t *comp)
+{
+    UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    size_t UCS_V_UNUSED max_count;
+    uint8_t fence_flag;
+    ucs_status_t status;
+    size_t total;
+
+    UCT_RC_MLX5_SGL_ZCOPY_CHECK_STRIDES(counts, strides, "get_sgl_zcopy");
+
+    max_count = uct_rc_mlx5_base_sgl_zcopy_max_count(iface);
+    UCT_CHECK_PARAM(count <= max_count,
+                    "get_sgl_zcopy count(%zu) should be limited by %zu", count,
+                    max_count);
+    UCT_SKIP_ZERO_LENGTH(count);
+
+    status = uct_rc_mlx5_base_ep_sgl_zcopy_check(
+            iface, ep, lengths, count,
+            iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
+            iface->super.config.max_get_zcopy, "get_sgl_zcopy");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    fence_flag = uct_rc_ep_fm(&iface->super, &ep->tx.wq.fi,
+                              iface->config.atomic_fence_flag);
+    total      = uct_rc_mlx5_base_ep_sgl_zcopy_post(
+            ep, buffers, lengths, memhs, remote_addrs, rkeys, count,
+            MLX5_OPCODE_RDMA_READ, fence_flag, 0,
+            uct_rc_ep_get_sgl_zcopy_completion_handler,
+            UCT_RC_IFACE_SEND_OP_FLAG_IOV, comp);
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, total);
+    UCT_RC_RDMA_READ_POSTED(&iface->super, total);
+
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_rc_mlx5_base_ep_am_short(uct_ep_h tl_ep, uint8_t id,
@@ -853,9 +818,24 @@ ucs_status_t uct_rc_mlx5_base_ep_invalidate(uct_ep_h tl_ep,
                                             const uct_ep_invalidate_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
+    ucs_status_t status;
 
-    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
-                                       IBV_QPS_ERR);
+    UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
+
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
+                                         IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
+                                 &ep->super.txqp, &ep->tx.wq,
+                                 MLX5_OPCODE_NOP, NULL, 0,
+                                 0, 0, 0,
+                                 0, 0,
+                                 0, 0,
+                                 0, INT_MAX);
+    return UCS_OK;
 }
 
 static ucs_status_t
@@ -1847,49 +1827,21 @@ uct_rc_mlx5_ep_outstanding_complete_send_ops(uct_rc_iface_t *iface,
     }
 }
 
-void uct_rc_mlx5_ep_save_ft_ci(uct_rc_mlx5_base_ep_t *ep)
-{
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-
-    /* Last completed WQE among credits already applied. */
-    txwq->ft_ci = txwq->prev_sw_pi - (txwq->bb_max -
-                                      uct_rc_txqp_available(&ep->super.txqp));
-    ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, txwq->ft_ci,
-              txwq->sw_pi);
-}
-
-static void uct_rc_mlx5_ep_purge_finish_tx(uct_rc_mlx5_base_ep_t *ep)
-{
-    uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-
-    /* The deferred error completion skipped this update. A live purge leaves
-     * credits for the completion poll, so an earlier success is applied
-     * before the error completion. */
-    if (ep->err_handler_inprogress) {
-        uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
-    }
-
-    txwq->ft_ci = txwq->prev_sw_pi;
-}
-
 ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
         uct_ep_h tl_ep, const uct_ep_outstanding_purge_params_t *params)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_txwq_t *txwq = &ep->tx.wq;
-    uint32_t first_failed_psn              = 0;
-    uint32_t receiver_next_psn             = 0;
-    int delivered                          = 0;
-    const uct_rc_mlx5_rx_token_t *rx_token = NULL;
+    const uct_rc_mlx5_rx_token_t *rx_token;
     const struct mlx5_wqe_ctrl_seg *ctrl;
     uct_rc_mlx5_op_callback_data_t callback_data;
     uct_ep_op_info_t info;
     uint16_t pi, end_pi, start_pi;
-    uint32_t wqe_first_psn;
-    uint32_t psn_diff;
+    uint32_t first_failed_psn, wqe_first_psn, receiver_next_psn, psn_diff;
     uint32_t num_outstanding_packets, num_packets;
     size_t wqe_size;
     void *callback_arg;
+    int delivered;
     ucs_status_t status;
 
     status = uct_rc_mlx5_ep_outstanding_purge_check_params(params);
@@ -1900,83 +1852,48 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     callback_arg = (params->field_mask & UCT_EP_OUTSTANDING_FIELD_ARG) ?
                    params->arg : NULL;
 
-    if (!ep->err_handler_inprogress) {
-        /* Flush cancel completes outstanding operations on the error
-         * completion. Walking those WQEs would report them again. */
-        if (ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL) {
-            return UCS_OK;
-        }
-
-        if (ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED) {
-            /* A previous purge closed the transmit range. */
-            if (txwq->ft_ci == txwq->prev_sw_pi) {
-                return UCS_OK;
-            }
-
-            /* The error handler already released these operations. */
-            ucs_error("ep %p: outstanding purge after a completed error "
-                      "handler", ep);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        /* Range for the token check. A rejected token leaves the endpoint
-         * usable. */
-        uct_rc_mlx5_ep_save_ft_ci(ep);
-    }
-
     end_pi   = txwq->sw_pi;
     ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, txwq->ft_ci);
     start_pi = uct_ib_mlx5_txwq_next_wqe_index(txwq->ft_ci,
                                                uct_ib_mlx5_wqe_size(ctrl));
 
-    if (start_pi != end_pi) {
-        num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
-                &iface->super.super, txwq, start_pi, end_pi);
-
-        first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
-                            num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
-        if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
-            rx_token = params->rx_token;
-            if (rx_token == NULL) {
-                ucs_error("rc mlx5: rx token is NULL");
-                return UCS_ERR_INVALID_PARAM;
-            }
-
-            receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
-            psn_diff          = (receiver_next_psn - first_failed_psn) &
-                                UCT_IB_MLX5_PSN_MASK;
-            if (psn_diff > num_outstanding_packets) {
-                return UCS_ERR_INVALID_PARAM;
-            }
-
-            delivered = 1;
-        }
-    }
-
-    if (!ep->err_handler_inprogress &&
-        !(ep->super.flags & UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED)) {
-        status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
-                                             &ep->tx.wq.super,
-                                             IBV_QPS_ERR);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        ucs_arbiter_group_purge(&iface->super.tx.arbiter,
-                                &ep->super.arb_group,
-                                uct_rc_ep_arbiter_purge_internal_cb, NULL);
-        uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
-        uct_rc_fc_restore_wnd(&iface->super, &ep->super.fc);
-
-        /* Suppress the error handler. The completion poll releases credits
-         * in completion order. */
-        ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
-    }
-
-    /* An idle queue has nothing to report. */
+    /* An empty range has no packets, so the RX-token check does not apply. */
     if (start_pi == end_pi) {
-        uct_rc_mlx5_ep_purge_finish_tx(ep);
-        return UCS_OK;
+        if (ucs_queue_is_empty(&ep->super.txqp.outstanding)) {
+            return UCS_OK;
+        }
+
+        ucs_error("ep %p qp 0x%x: send ops remain for an empty WQE range",
+                  ep, txwq->super.qp_num);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    num_outstanding_packets = uct_rc_mlx5_txwq_outstanding_num_packets(
+            &iface->super.super, txwq, start_pi, end_pi);
+
+    first_failed_psn = (uct_ib_mlx5_txwq_get_next_wqe_psn(txwq) -
+                        num_outstanding_packets) & UCT_IB_MLX5_PSN_MASK;
+    if (params->field_mask & UCT_EP_OUTSTANDING_FIELD_RX_TOKEN) {
+        rx_token = params->rx_token;
+        if (rx_token == NULL) {
+            ucs_error("rc mlx5: rx token is NULL");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        receiver_next_psn = ntohl(*rx_token) & UCT_IB_MLX5_PSN_MASK;
+        psn_diff          = (receiver_next_psn - first_failed_psn) &
+                            UCT_IB_MLX5_PSN_MASK;
+        if (psn_diff > num_outstanding_packets) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        delivered = 1;
+    } else {
+        /* No peer receive position: every outstanding operation is
+         * undelivered. */
+        rx_token          = NULL;
+        receiver_next_psn = 0;
+        delivered         = 0;
     }
 
 #if HAVE_IBV_DM
@@ -2045,7 +1962,8 @@ ucs_status_t uct_rc_mlx5_ep_outstanding_purge(
     ucs_assert(ucs_queue_is_empty(&ep->super.txqp.outstanding));
 
     ucs_free(callback_data.dm_data);
-    uct_rc_mlx5_ep_purge_finish_tx(ep);
+    uct_rc_mlx5_ep_update_tx_qp_res(ep, txwq->prev_sw_pi);
+    txwq->ft_ci = txwq->prev_sw_pi;
     return UCS_OK;
 }
 

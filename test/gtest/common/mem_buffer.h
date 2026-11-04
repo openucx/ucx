@@ -113,6 +113,10 @@ public:
     /* NVML NVLink-C2C link count > 0 for CUDA device */
     static bool cuda_gpu_has_c2c(unsigned gpu_index = 0);
 
+    /* Whether the driver allocates device memory as GPUDirect RDMA capable,
+     * which it does not under an MPS MLOPart device */
+    static bool cuda_mem_is_gdr_capable();
+
     /* Return free memory on the BAR1 / GPU. If GPU is not used
      * SIZE_MAX is returned */
     static size_t get_bar1_free_size()

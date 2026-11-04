@@ -22,6 +22,12 @@
 #  define UCM_DEFAULT_HOOK_MODE_STR UCM_MMAP_HOOK_RELOC_STR
 #endif
 
+/* Functional GPU (cuda/rocm) hook modes, i.e. excluding UCM_MMAP_HOOK_NONE,
+ * which occupies bit 0 and is therefore never equal to a zero hook-modes
+ * bitmap. */
+#define UCM_GPU_HOOK_MODES_MASK \
+    (UCS_BIT(UCM_MMAP_HOOK_BISTRO) | UCS_BIT(UCM_MMAP_HOOK_RELOC))
+
 ucs_status_t ucm_mmap_install(int events, int exclusive);
 
 void *ucm_override_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
