@@ -413,7 +413,7 @@ static size_t
 ucp_wireup_bw_max_lanes(const ucp_wireup_select_params_t *select_params)
 {
     return (select_params->address->dst_version <
-            UCP_WIREUP_MAX_LANES_MIN_DST_VERSION) ?
+            UCP_MIN_DST_VERSION_WIREUP_MAX_LANES) ?
                    UCP_MAX_LANES_LEGACY :
                    UCP_MAX_LANES;
 }
@@ -1105,7 +1105,7 @@ ucp_wireup_iface_score_bandwidth(const ucp_worker_iface_t *wiface,
 {
     double local_bw;
 
-    if (unpacked_addr->dst_version < UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION) {
+    if (unpacked_addr->dst_version < UCP_MIN_DST_VERSION_WIREUP_BW_DISTANCE) {
         local_bw = ucp_tl_iface_bandwidth(wiface->worker->context,
                                           &wiface->attr.bandwidth);
     } else {
@@ -1457,7 +1457,7 @@ ucp_wireup_is_connect_all_to_all(const ucp_worker_h worker,
     return worker->context->config.ext.connect_all_to_all &&
            !(worker->uuid == unpacked_addr->uuid) && /* Not on self */
            (unpacked_addr->dst_version >=
-            UCP_WIREUP_CONNECT_ALL_TO_ALL_MIN_DST_VERSION);
+            UCP_MIN_DST_VERSION_WIREUP_CONNECT_ALL_TO_ALL);
 }
 
 static double
@@ -1527,7 +1527,7 @@ ucp_wireup_mem_reg_cost(ucp_context_t *context,
         return md_attr->reg_cost;
     }
 
-    if (remote_addr->dst_version > UCP_RELEASE_LEGACY) {
+    if (remote_addr->dst_version > UCP_MIN_DST_VERSION_LEGACY) {
         return ucs_linear_func_make(UCP_RCACHE_OVERHEAD_DEFAULT, 0);
     }
 
@@ -1713,7 +1713,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, sinfo->rsc_index);
     double bw_local, bw_remote;
 
-    if (address->dst_version < UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION) {
+    if (address->dst_version < UCP_MIN_DST_VERSION_WIREUP_BW_DISTANCE) {
         bw_local = ucp_tl_iface_bandwidth(worker->context,
                                           &wiface->attr.bandwidth);
     } else {
@@ -2302,7 +2302,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.local_cmpt_flags = 0;
 
     if (context->config.ext.proto_enable &&
-        (select_params->address->dst_version > UCP_RELEASE_LEGACY)) {
+        (select_params->address->dst_version > UCP_MIN_DST_VERSION_LEGACY)) {
         bw_info.max_lanes = ucp_wireup_max_lanes(select_params,
                                                  bw_info.criteria.lane_type);
     } else {
@@ -2323,7 +2323,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * check.
      */
     if ((select_params->address->dst_version >=
-         UCP_WIREUP_SEPARATE_AM_LANE_MIN_DST_VERSION) &&
+         UCP_MIN_DST_VERSION_WIREUP_SEPARATE_AM_LANE) &&
         (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM))) {
         ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
                             select_ctx->num_lanes) {

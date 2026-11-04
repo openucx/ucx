@@ -356,27 +356,27 @@ typedef enum {
  */
 enum {
     /* The dst_version of a peer which does not pack its release version */
-    UCP_RELEASE_LEGACY = 0,
+    UCP_MIN_DST_VERSION_LEGACY = 0,
     /* The lane bandwidth includes the local distance */
-    UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION = 17,
+    UCP_MIN_DST_VERSION_WIREUP_BW_DISTANCE = 17,
     /* The AM lane is separated from the RMA BW lanes */
-    UCP_WIREUP_SEPARATE_AM_LANE_MIN_DST_VERSION = 17,
+    UCP_MIN_DST_VERSION_WIREUP_SEPARATE_AM_LANE = 17,
     /* Up to UCP_MAX_LANES lanes instead of UCP_MAX_LANES_LEGACY */
-    UCP_WIREUP_MAX_LANES_MIN_DST_VERSION = 18,
+    UCP_MIN_DST_VERSION_WIREUP_MAX_LANES = 18,
     /* No legacy bits in the MD index field of a v1 worker address */
-    UCP_ADDRESS_MD_INDEX_MIN_DST_VERSION = 19,
+    UCP_MIN_DST_VERSION_ADDRESS_MD_INDEX = 19,
     /* UCX_CONNECT_ALL_TO_ALL connects all local and remote device pairs */
-    UCP_WIREUP_CONNECT_ALL_TO_ALL_MIN_DST_VERSION = 19,
+    UCP_MIN_DST_VERSION_WIREUP_CONNECT_ALL_TO_ALL = 19,
     /* A non-empty remote key always packs the system device */
-    UCP_RKEY_SYS_DEV_MIN_DST_VERSION = 20,
+    UCP_MIN_DST_VERSION_RKEY_SYS_DEV = 20,
     /* The PSN protocol of multi-fragment AM */
-    UCP_AM_PSN_MIN_DST_VERSION = 21,
+    UCP_MIN_DST_VERSION_AM_PSN = 21,
     /* The endpoint recovery */
-    UCP_EP_RECOVERY_MIN_DST_VERSION = 22,
+    UCP_MIN_DST_VERSION_EP_RECOVERY = 22,
     /* The rendezvous protocols of RMA operations */
-    UCP_PROTO_RMA_RNDV_MIN_DST_VERSION = 22,
+    UCP_MIN_DST_VERSION_PROTO_RMA_RNDV = 22,
     /* The token trailer of the LANES_ADDR messages */
-    UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION = 24
+    UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN = 24
 };
 
 

@@ -1642,7 +1642,7 @@ ucp_address_adjust_unpacked_md_index(ucp_unpacked_address_t *unpacked_address)
 
     if ((unpacked_address->addr_version > UCP_OBJECT_VERSION_V1) ||
         (unpacked_address->dst_version >=
-         UCP_ADDRESS_MD_INDEX_MIN_DST_VERSION)) {
+         UCP_MIN_DST_VERSION_ADDRESS_MD_INDEX)) {
         return;
     }
 

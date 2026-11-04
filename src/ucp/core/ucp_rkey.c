@@ -847,7 +847,7 @@ ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
                          ucp_rkey_config_key_t *rkey_config_key)
 {
     if ((*buffer_p < buffer_end) ||
-        ((ep_config->key.dst_version >= UCP_RKEY_SYS_DEV_MIN_DST_VERSION) &&
+        ((ep_config->key.dst_version >= UCP_MIN_DST_VERSION_RKEY_SYS_DEV) &&
          (rkey->md_map != 0))) {
         rkey_config_key->sys_dev = *ucs_serialize_next(buffer_p, const uint8_t);
     } else {
@@ -892,7 +892,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,
      * we can safely assume that lane distances are included. */
-    if ((ep_config->key.dst_version >= UCP_RKEY_SYS_DEV_MIN_DST_VERSION) &&
+    if ((ep_config->key.dst_version >= UCP_MIN_DST_VERSION_RKEY_SYS_DEV) &&
         (rkey_config_key.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
         (buffer_end <= buffer)) {
         buffer_end = (void*)UINTPTR_MAX;

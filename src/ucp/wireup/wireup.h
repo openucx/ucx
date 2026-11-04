@@ -159,7 +159,7 @@ typedef struct ucp_wireup_msg_lanes_info_t {
      * present, these are also the TX-token lanes. */
     ucp_lane_map_t         provided_lane_map;
     /* @ref ucp_wireup_msg_tokens_info_t (only towards peers of release version
-     * UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION and above), then packed addresses
+     * UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN and above), then packed addresses
      * follow */
 } UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
 

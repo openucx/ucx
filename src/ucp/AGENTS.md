@@ -62,7 +62,7 @@ applications. Almost every meaningful UCX feature lives here.
   cross the wire at handshake time must round-trip through it.
 - Code that depends on what the peer release supports (wire formats, lane
   selection, protocols, endpoint features) must keep the old behavior
-  with peers of older releases: gate it by a `*_MIN_DST_VERSION` constant
+  with peers of older releases: gate it by a `UCP_MIN_DST_VERSION_*` constant
   checked against `dst_version` of the peer, never by a raw release
   number. Add the constant with a comment to the list of such constants
   in `core/ucp_types.h`.
