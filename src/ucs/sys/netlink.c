@@ -123,7 +123,7 @@ ucs_netlink_parse_msg(const void *msg, size_t msg_len,
         }
     }
 
-    return UCS_OK;
+    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
 }
 
 ucs_status_t
@@ -193,7 +193,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg,
                                        &msg_done);
         ucs_free(recv_msg);
-    } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
+    } while ((status == UCS_OK) && (nlmsg_flags & NLM_F_DUMP) && !msg_done);
 
 out:
     ucs_close_fd(&netlink_fd);
