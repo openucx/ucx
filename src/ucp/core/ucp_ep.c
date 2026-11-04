@@ -2419,7 +2419,7 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     if (ucp_ep_config(ep)->key.dst_version < UCP_EP_RECOVERY_MIN_DST_VERSION) {
         ucs_diag("ep: %p: recovery support requires UCX 1.%d or later, "
-                 "remote peer version %d is not supported",
+                 "remote peer version %u is not supported",
                  ep, UCP_EP_RECOVERY_MIN_DST_VERSION,
                  ucp_ep_config(ep)->key.dst_version);
         return UCS_OK;
