@@ -412,7 +412,6 @@ typedef struct uct_tcp_iface {
                                                       * before aborting the attempt to connect.
                                                       * It cannot exceed 255. */
         ucs_time_t                user_timeout;      /* TCP_USER_TIMEOUT */
-        size_t                    maxseg;            /* TCP_MAXSEG */
         double                    max_bw;            /* Upper bound to TCP iface bandwidth */
         struct {
             ucs_time_t            idle;              /* The time the connection needs to remain
@@ -436,6 +435,7 @@ typedef struct uct_tcp_iface {
         int                       nodelay;           /* TCP_NODELAY */
         size_t                    sndbuf;            /* SO_SNDBUF */
         size_t                    rcvbuf;            /* SO_RCVBUF */
+        size_t                    maxseg;            /* TCP_MAXSEG */
     } sockopt;
 } uct_tcp_iface_t;
 

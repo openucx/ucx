@@ -497,11 +497,11 @@ static ucs_status_t uct_tcp_iface_set_maxseg(uct_tcp_iface_t *iface, int fd)
 {
     int maxseg;
 
-    if (iface->config.maxseg == UCS_MEMUNITS_AUTO) {
+    if (iface->sockopt.maxseg == UCS_MEMUNITS_AUTO) {
         return UCS_OK;
     }
 
-    maxseg = iface->config.maxseg;
+    maxseg = iface->sockopt.maxseg;
     return ucs_socket_setopt(fd, IPPROTO_TCP, TCP_MAXSEG,
                              (const void*)&maxseg, sizeof(maxseg));
 }
@@ -812,10 +812,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_conn_retries  = config->max_conn_retries;
     self->config.syn_cnt           = config->syn_cnt;
     self->config.user_timeout      = config->user_timeout;
-    self->config.maxseg            = config->maxseg;
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+    self->sockopt.maxseg           = config->maxseg;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
     self->config.ep_bind_src_addr  = config->ep_bind_src_addr;
