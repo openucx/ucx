@@ -689,7 +689,7 @@ protected:
             std::string err_str = format_message(message, ap);
             if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
                 (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
-                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0")) ||
+                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=")) ||
                 (strstr(err_str.c_str(), "error event on client ep"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -1155,23 +1155,19 @@ public:
 
 UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
 {
-    struct sockaddr_in addr;
-    ucs_status_t status;
+    struct sockaddr_storage addr = {};
     size_t size;
 
     /* Listen */
     start_listen(test_uct_sockaddr::conn_request_cb);
 
-    /* 240.0.0.0/4 - This block, formerly known as the Class E address
-       space, is reserved for future use; see [RFC1112], Section 4.
-       therefore, this value can be used as a non-existing IP for this test */
-    memset(&addr, 0, sizeof(struct sockaddr_in));
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("240.0.0.0");
-    addr.sin_port        = m_listen_addr.get_port();
-
-    status = ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size);
-    ASSERT_UCS_OK(status);
+    /* Use a reserved address in the same family as the configured source. */
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(
+            m_connect_addr.get_sock_addr_ptr()->sa_family == AF_INET ?
+                    "240.0.0.0" : "2001:db8::1", &addr));
+    ASSERT_UCS_OK(ucs_sockaddr_set_port((struct sockaddr*)&addr,
+                                       m_listen_addr.get_port()));
+    ASSERT_UCS_OK(ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size));
 
     m_connect_addr.set_sock_addr(*(struct sockaddr*)&addr, size);
 
