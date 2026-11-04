@@ -247,6 +247,35 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
 
 
 /**
+ * Create a non-blocking socket and bind it to the given address. This is the
+ * first part of @ref ucs_socket_server_init, which allows setting socket
+ * options before the socket starts listening.
+ *
+ * @param [in]  saddr       The socket address to bind to.
+ * @param [in]  socklen     Size of saddr.
+ * @param [in]  silent_bind Whether to log EADDRINUSE as debug instead of error.
+ * @param [in]  reuse_addr  Whether to set SO_REUSEADDR.
+ * @param [out] fd          The created socket.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_socket_server_bind(const struct sockaddr *saddr,
+                                    socklen_t socklen, int silent_bind,
+                                    int reuse_addr, int *fd);
+
+
+/**
+ * Start listening on a socket created by @ref ucs_socket_server_bind.
+ *
+ * @param [in] fd      The bound socket.
+ * @param [in] backlog Length of the queue for pending connections.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_socket_server_listen(int fd, int backlog);
+
+
+/**
  * Returns the maximum possible value for the number of sockets that
  * are ready to be accepted. It maybe either value from the system path
  * or SOMAXCONN value.
