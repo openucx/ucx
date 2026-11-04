@@ -1,4 +1,10 @@
 #!/bin/bash -eExl
+#
+# Usage: test_malloc_hook.sh <build|test>
+#   build - build UCX with CUDA in ${WORKSPACE}/build-test
+#   test  - run the CUDA memory hooks tests with the tree that "build" created
+#           at the same ${WORKSPACE}, on a GPU host
+#
 realdir=$(realpath $(dirname $0))
 source ${realdir}/../../az-helpers.sh
 
@@ -29,7 +35,20 @@ check_cuda_driver() {
 build() {
 	../contrib/configure-devel --enable-gtest --without-valgrind --enable-examples --with-cuda=/usr/local/cuda --prefix=$ucx_inst
 
-	make -j$(nproc)
+	# Build agents are shared by many jobs, so limit the parallelism like
+	# buildlib/tools/common.sh does
+	make -j4
+}
+
+#
+# The build tree holds absolute paths, so it works only where it was built
+#
+check_build_path() {
+	build_path=$(sed -n 's/^abs_top_builddir = //p' Makefile)
+	if [ "${build_path}" != "${PWD}" ]; then
+		azure_log_error "UCX was built in '${build_path}', not in '${PWD}'"
+		exit 1
+	fi
 }
 
 test_malloc_hook_mode() {
@@ -86,8 +105,20 @@ test_malloc_hook() {
 	unset UCX_MEM_BISTRO_FORCE_FAR_JUMP
 }
 
-check_gpu 'gpu'
-prepare
-build
-check_cuda_driver
-test_malloc_hook
+case "$1" in
+build)
+	prepare
+	build
+	;;
+test)
+	check_gpu 'gpu'
+	prepare
+	check_build_path
+	check_cuda_driver
+	test_malloc_hook
+	;;
+*)
+	echo "Usage: $0 <build|test>"
+	exit 1
+	;;
+esac

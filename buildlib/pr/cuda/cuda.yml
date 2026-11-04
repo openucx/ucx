@@ -1,3 +1,41 @@
+parameters:
+  # Each image builds UCX on a build agent, then runs the memory hooks test with
+  # that build tree on a GPU agent
+  images:
+    centos7_cuda_11_0: nvidia/cuda:11.0.3-devel-centos7
+    centos7_cuda_11_1: nvidia/cuda:11.1.1-devel-centos7
+    centos7_cuda_11_2: nvidia/cuda:11.2.2-devel-centos7
+    centos7_cuda_11_3: nvidia/cuda:11.3.1-devel-centos7
+    centos7_cuda_11_4: nvidia/cuda:11.4.3-devel-centos7
+    ubi8_cuda_11_5: nvidia/cuda:11.5.2-devel-ubi8
+    ubi8_cuda_11_6: nvidia/cuda:11.6.2-devel-ubi8
+    ubuntu18_cuda_11_0: nvidia/cuda:11.0.3-devel-ubuntu18.04
+    ubuntu18_cuda_11_1: nvidia/cuda:11.1.1-devel-ubuntu18.04
+    ubuntu18_cuda_11_2: nvidia/cuda:11.2.2-devel-ubuntu18.04
+    ubuntu18_cuda_11_3: nvidia/cuda:11.3.1-devel-ubuntu18.04
+    ubuntu18_cuda_11_4: nvidia/cuda:11.4.3-devel-ubuntu18.04
+    ubuntu18_cuda_11_5: nvidia/cuda:11.5.2-devel-ubuntu18.04
+    ubuntu18_cuda_11_6: nvidia/cuda:11.6.2-devel-ubuntu18.04
+    ubuntu20_cuda_11_0: nvidia/cuda:11.0.3-devel-ubuntu20.04
+    ubuntu20_cuda_11_1: nvidia/cuda:11.1.1-devel-ubuntu20.04
+    ubuntu20_cuda_11_2: nvidia/cuda:11.2.2-devel-ubuntu20.04
+    ubuntu20_cuda_11_3: nvidia/cuda:11.3.1-devel-ubuntu20.04
+    ubuntu20_cuda_11_4: nvidia/cuda:11.4.3-devel-ubuntu20.04
+    ubuntu20_cuda_11_5: nvidia/cuda:11.5.2-devel-ubuntu20.04
+    ubuntu20_cuda_11_6: nvidia/cuda:11.6.2-devel-ubuntu20.04
+    centos7_cuda_12_0: nvidia/cuda:12.0.0-devel-centos7
+    centos7_cuda_12_1: nvidia/cuda:12.1.0-devel-centos7
+    ubuntu18_cuda_12_0: nvidia/cuda:12.0.0-devel-ubuntu18.04
+    ubuntu18_cuda_12_1: nvidia/cuda:12.1.0-devel-ubuntu18.04
+    ubuntu20_cuda_12_0: nvidia/cuda:12.0.0-devel-ubuntu20.04
+    ubuntu20_cuda_12_1: nvidia/cuda:12.1.0-devel-ubuntu20.04
+    ubuntu22_cuda_12_0: nvidia/cuda:12.0.0-devel-ubuntu22.04
+    ubuntu22_cuda_12_1: nvidia/cuda:12.1.0-devel-ubuntu22.04
+    ubuntu22_cuda_13_0: nvidia/cuda:13.0.0-devel-ubuntu22.04
+    ubuntu24_cuda_13_0: nvidia/cuda:13.0.0-devel-ubuntu24.04
+    rocky8_cuda_13_0: nvidia/cuda:13.0.0-devel-rockylinux8
+    rocky9_cuda_13_0: nvidia/cuda:13.0.0-devel-rockylinux9
+
 jobs:
   - job: source_tarball
     displayName: Create UCX source tarball
@@ -17,109 +55,80 @@ jobs:
       - bash: |
           set -eEx
           ./autogen.sh
+          tar -cf $(Build.ArtifactStagingDirectory)/ucx_src.tar --exclude=./.git .
         displayName: Autogen ucx
-      - task: PublishBuildArtifacts@1
+      - task: PublishPipelineArtifact@1
         inputs:
-          pathToPublish: '$(Build.Repository.LocalPath)'
-          artifactName: ucx_src_$(Build.BuildId)
+          targetPath: $(Build.ArtifactStagingDirectory)/ucx_src.tar
+          artifact: ucx_src_cuda
 
-  - job: test_on_cuda_docker
-    dependsOn: source_tarball
-    displayName: Test Cuda Docker
-    workspace:
-      clean: outputs
-    pool:
-      name: MLNX
-      demands:
-        - ucx_gpu_test -equals yes
-    strategy:
-      matrix:
-        centos7_cuda_11_0:
-          CONTAINER: centos7_cuda_11_0
-        centos7_cuda_11_1:
-          CONTAINER: centos7_cuda_11_1
-        centos7_cuda_11_2:
-          CONTAINER: centos7_cuda_11_2
-        centos7_cuda_11_3:
-          CONTAINER: centos7_cuda_11_3
-        centos7_cuda_11_4:
-          CONTAINER: centos7_cuda_11_4
-        ubi8_cuda_11_5:
-          CONTAINER: ubi8_cuda_11_5
-        ubi8_cuda_11_6:
-          CONTAINER: ubi8_cuda_11_6
-        ubuntu18_cuda_11_0:
-          CONTAINER: ubuntu18_cuda_11_0
-        ubuntu18_cuda_11_1:
-          CONTAINER: ubuntu18_cuda_11_1
-        ubuntu18_cuda_11_2:
-          CONTAINER: ubuntu18_cuda_11_2
-        ubuntu18_cuda_11_3:
-          CONTAINER: ubuntu18_cuda_11_3
-        ubuntu18_cuda_11_4:
-          CONTAINER: ubuntu18_cuda_11_4
-        ubuntu18_cuda_11_5:
-          CONTAINER: ubuntu18_cuda_11_5
-        ubuntu18_cuda_11_6:
-          CONTAINER: ubuntu18_cuda_11_6
-        ubuntu20_cuda_11_0:
-          CONTAINER: ubuntu20_cuda_11_0
-        ubuntu20_cuda_11_1:
-          CONTAINER: ubuntu20_cuda_11_1
-        ubuntu20_cuda_11_2:
-          CONTAINER: ubuntu20_cuda_11_2
-        ubuntu20_cuda_11_3:
-          CONTAINER: ubuntu20_cuda_11_3
-        ubuntu20_cuda_11_4:
-          CONTAINER: ubuntu20_cuda_11_4
-        ubuntu20_cuda_11_5:
-          CONTAINER: ubuntu20_cuda_11_5
-        ubuntu20_cuda_11_6:
-          CONTAINER: ubuntu20_cuda_11_6
-        centos7_cuda_12_0:
-          CONTAINER: centos7_cuda_12_0
-        centos7_cuda_12_1:
-          CONTAINER: centos7_cuda_12_1
-        ubuntu18_cuda_12_0:
-          CONTAINER: ubuntu18_cuda_12_0
-        ubuntu18_cuda_12_1:
-          CONTAINER: ubuntu18_cuda_12_1
-        ubuntu20_cuda_12_0:
-          CONTAINER: ubuntu20_cuda_12_0
-        ubuntu20_cuda_12_1:
-          CONTAINER: ubuntu20_cuda_12_1
-        ubuntu22_cuda_12_0:
-          CONTAINER: ubuntu22_cuda_12_0
-        ubuntu22_cuda_12_1:
-          CONTAINER: ubuntu22_cuda_12_1
-        ubuntu22_cuda_13_0:
-          CONTAINER: ubuntu22_cuda_13_0
-        ubuntu24_cuda_13_0:
-          CONTAINER: ubuntu24_cuda_13_0
-        rocky8_cuda_13_0:
-          CONTAINER: rocky8_cuda_13_0
-        rocky9_cuda_13_0:
-          CONTAINER: rocky9_cuda_13_0
+  # The build tree holds absolute paths, so the test uses it at the path where
+  # it was built. $(Agent.TempDirectory) is /__w/_temp in the container on every
+  # agent, unlike the pipeline workspace /__w/<N>.
+  - ${{ each image in parameters.images }}:
+    - job: build_${{ image.key }}
+      dependsOn: source_tarball
+      displayName: Build Cuda Docker ${{ image.key }}
+      workspace:
+        clean: all
+      pool:
+        name: MLNX
+        demands:
+          - ucx_docker -equals yes
+      container:
+        image: ${{ image.value }}
+        options: $(DOCKER_OPT_ARGS)
+      timeoutInMinutes: 60
+      variables:
+        workspace: $(Agent.TempDirectory)/ucx
+      steps:
+        - checkout: none
+        - task: DownloadPipelineArtifact@2
+          inputs:
+            artifact: ucx_src_cuda
+            path: $(Pipeline.Workspace)/ucx_src
+        - bash: |
+            set -xeE
+            rm -rf $(workspace)
+            mkdir -p $(workspace)
+            tar -xf $(Pipeline.Workspace)/ucx_src/ucx_src.tar -C $(workspace)
+            $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh build
+            tar -cf $(Build.ArtifactStagingDirectory)/ucx_build.tar -C $(workspace) .
+          displayName: Build
+          env:
+            WORKSPACE: $(workspace)
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: $(Build.ArtifactStagingDirectory)/ucx_build.tar
+            artifact: ucx_build_${{ image.key }}
 
-    container: $[ variables['CONTAINER'] ]
-    timeoutInMinutes: 60
-    variables:
-      workspace: $(System.DefaultWorkingDirectory)/ucx_src_$(Build.BuildId)
-    steps:
-      - checkout: none
-      - task: DownloadBuildArtifacts@0
-        displayName: 'Download Build Artifacts'
-        inputs:
-          artifactName: ucx_src_$(Build.BuildId)
-          downloadPath: $(System.DefaultWorkingDirectory)
-      - bash: chmod u+rwx $(workspace) -R
-      - bash: |
-          set -xeE
-          $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh
-        displayName: Memory hooks test
-        env:
-          WORKSPACE: $(workspace)
-      - bash: |
-          rm -rf $(workspace)
-        displayName: Remove artifacts
-        condition: succeeded()
+    - job: test_${{ image.key }}
+      dependsOn: build_${{ image.key }}
+      displayName: Test Cuda Docker ${{ image.key }}
+      workspace:
+        clean: all
+      pool:
+        name: MLNX
+        demands:
+          - ucx_gpu_test -equals yes
+      container:
+        image: ${{ image.value }}
+        options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_GPU)
+      timeoutInMinutes: 60
+      variables:
+        workspace: $(Agent.TempDirectory)/ucx
+      steps:
+        - checkout: none
+        - task: DownloadPipelineArtifact@2
+          inputs:
+            artifact: ucx_build_${{ image.key }}
+            path: $(Pipeline.Workspace)/ucx_build
+        - bash: |
+            set -xeE
+            rm -rf $(workspace)
+            mkdir -p $(workspace)
+            tar -xf $(Pipeline.Workspace)/ucx_build/ucx_build.tar -C $(workspace)
+            $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh test
+          displayName: Memory hooks test
+          env:
+            WORKSPACE: $(workspace)
