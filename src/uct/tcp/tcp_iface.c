@@ -81,11 +81,13 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
   {"MAXSEG", "auto",
-   "Maximal segment size of TCP connections (TCP_MAXSEG socket option). It\n"
-   "can be lowered to fit TCP segments into the path MTU, if the network\n"
-   "drops larger segments without reporting the path MTU: the path MTU minus\n"
-   "40 bytes for IPv4 or 60 bytes for IPv6. auto means to use the system\n"
-   "default.",
+   "Maximal segment size of TCP connections (TCP_MAXSEG socket option).\n"
+   "Lower it when the network drops larger segments without reporting the\n"
+   "path MTU. Set it to the path MTU minus the fixed IP and TCP headers:\n"
+   "40 bytes for IPv4 or 60 bytes for IPv6 (e.g. 9060 or 9040 for a path MTU\n"
+   "of 9100). TCP and IP options do not have to be subtracted, the kernel\n"
+   "accounts for them.\n"
+   "auto - use the system default.",
    ucs_offsetof(uct_tcp_iface_config_t, maxseg), UCS_CONFIG_TYPE_MEMUNITS},
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
