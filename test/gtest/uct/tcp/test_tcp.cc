@@ -368,7 +368,7 @@ UCS_TEST_P(test_uct_tcp, vrf_enable)
     query_devices("n", devices);
     query_devices("y", vrf_devices);
 
-    // VRF slaves are reported only when VRF_ENABLE is set
+    // Devices in a VRF are reported only when VRF_ENABLE is set
     for (const auto &dev_name : devices) {
         EXPECT_EQ(-1, vrf_master_index(dev_name)) << dev_name;
         EXPECT_EQ(1u, vrf_devices.count(dev_name)) << dev_name;

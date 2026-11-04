@@ -525,7 +525,7 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
 
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
-/* Index of the VRF device which the interface is enslaved to, or -1 */
+/* Index of the VRF (L3 master) device of the interface, or -1 */
 int uct_tcp_netif_vrf_index(const char *if_name);
 
 /* Whether sockets can be bound to the VRF device with the given index */

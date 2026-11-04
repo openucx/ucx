@@ -458,12 +458,19 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
     return (ucs_netlink_max_netmask_len(if_index, sa_remote) == netmask_len);
 }
 
+static int ucs_netlink_is_vrf_kind(const struct rtattr *rta)
+{
+    return (RTA_PAYLOAD(rta) == sizeof("vrf")) &&
+           !memcmp(RTA_DATA(rta), "vrf", sizeof("vrf"));
+}
+
 static ucs_status_t
 ucs_netlink_parse_vrf_master_cb(const struct nlmsghdr *nlh, void *arg)
 {
     const struct ifinfomsg *ifi_msg = NLMSG_DATA(nlh);
     int master_index                = -1;
     int is_vrf_slave                = 0;
+    int is_vrf                      = 0;
     const struct rtattr *rta, *info_rta;
     int len, info_len, khret;
     khiter_t iter;
@@ -480,16 +487,19 @@ ucs_netlink_parse_vrf_master_cb(const struct nlmsghdr *nlh, void *arg)
             info_len = RTA_PAYLOAD(rta);
             for (info_rta = RTA_DATA(rta); RTA_OK(info_rta, info_len);
                  info_rta = RTA_NEXT(info_rta, info_len)) {
-                if ((info_rta->rta_type == IFLA_INFO_SLAVE_KIND) &&
-                    (RTA_PAYLOAD(info_rta) == sizeof("vrf")) &&
-                    !memcmp(RTA_DATA(info_rta), "vrf", sizeof("vrf"))) {
-                    is_vrf_slave = 1;
+                if (info_rta->rta_type == IFLA_INFO_KIND) {
+                    is_vrf = ucs_netlink_is_vrf_kind(info_rta);
+                } else if (info_rta->rta_type == IFLA_INFO_SLAVE_KIND) {
+                    is_vrf_slave = ucs_netlink_is_vrf_kind(info_rta);
                 }
             }
         }
     }
 
-    if (!is_vrf_slave || (master_index == -1)) {
+    /* A VRF device is the master of its own routing domain */
+    if (is_vrf) {
+        master_index = ifi_msg->ifi_index;
+    } else if (!is_vrf_slave || (master_index == -1)) {
         return UCS_INPROGRESS;
     }
 

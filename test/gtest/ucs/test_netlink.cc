@@ -39,6 +39,7 @@ protected:
 UCS_TEST_F(test_netlink, get_vrf_master_index) {
     struct if_nameindex *ifs = if_nameindex();
     unsigned num_vrf_slaves  = 0;
+    unsigned num_vrfs        = 0;
     char master_name[IFNAMSIZ];
 
     ASSERT_NE(nullptr, ifs);
@@ -49,17 +50,27 @@ UCS_TEST_F(test_netlink, get_vrf_master_index) {
             continue;
         }
 
-        /* A VRF slave must be linked to its master in sysfs */
         ASSERT_NE(nullptr, if_indextoname(master_index, master_name))
                 << it->if_name;
+
+        /* A VRF device is the master of itself */
+        if (master_index == (int)it->if_index) {
+            ++num_vrfs;
+            continue;
+        }
+
+        /* A VRF slave must be linked to its master in sysfs */
         EXPECT_EQ(sysfs_master_name(it->if_name), master_name) << it->if_name;
+        EXPECT_EQ(master_index, ucs_netlink_get_vrf_master_index(master_index))
+                << it->if_name;
         ++num_vrf_slaves;
     }
 
     if_freenameindex(ifs);
 
     EXPECT_EQ(-1, ucs_netlink_get_vrf_master_index(if_nametoindex("lo")));
-    UCS_TEST_MESSAGE << num_vrf_slaves << " VRF slave interfaces found";
+    UCS_TEST_MESSAGE << num_vrfs << " VRF devices and " << num_vrf_slaves
+                     << " VRF slave interfaces found";
 }
 
 UCS_TEST_F(test_netlink, is_local_addr) {

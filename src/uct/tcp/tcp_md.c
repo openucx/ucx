@@ -25,8 +25,8 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
      ucs_offsetof(uct_tcp_md_config_t, bridge_enable), UCS_CONFIG_TYPE_BOOL},
 
     {"VRF_ENABLE", "n",
-     "Enable using network devices enslaved to a VRF. Sockets of such devices\n"
-     "are bound to the VRF device.",
+     "Enable using VRF devices and network devices enslaved to a VRF. Sockets\n"
+     "of such devices are bound to the VRF device.",
      ucs_offsetof(uct_tcp_md_config_t, vrf_enable), UCS_CONFIG_TYPE_BOOL},
 
     {NULL}

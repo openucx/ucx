@@ -639,8 +639,8 @@ static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
     iface->config.vrf_name[0]  = '\0';
     iface->config.vrf_loopback = 1;
 
-    /* Addresses of a VRF slave can be used only by sockets bound to the VRF,
-     * so bind all sockets of the interface to the VRF device */
+    /* Addresses in a VRF can be used only by sockets bound to the VRF, so
+     * bind all sockets of the interface to the VRF device */
     vrf_index = uct_tcp_netif_vrf_index(iface->if_name);
     if (vrf_index == -1) {
         return;
@@ -653,7 +653,7 @@ static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
         return;
     }
 
-    ucs_debug("tcp_iface %p: %s is enslaved to VRF %s", iface, iface->if_name,
+    ucs_debug("tcp_iface %p: %s belongs to VRF %s", iface, iface->if_name,
               iface->config.vrf_name);
 
     /* Same-host traffic in a VRF is looped back through the VRF device, which
@@ -1093,14 +1093,13 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         vrf_index = uct_tcp_netif_vrf_index((*entry)->d_name);
         if (vrf_index != -1) {
             if (!tcp_md->config.vrf_enable) {
-                ucs_debug("filtered out VRF slave device %s",
-                          (*entry)->d_name);
+                ucs_debug("filtered out device %s in a VRF", (*entry)->d_name);
                 continue;
             }
 
             if (!uct_tcp_netif_vrf_bind_allowed(vrf_index)) {
-                ucs_diag("filtered out VRF slave device %s: not permitted to "
-                         "bind sockets to its VRF", (*entry)->d_name);
+                ucs_diag("filtered out device %s in a VRF: not permitted to "
+                         "bind sockets to the VRF", (*entry)->d_name);
                 continue;
             }
         }

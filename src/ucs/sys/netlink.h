@@ -78,8 +78,8 @@ int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
 
 /**
  * Check whether a destination address is assigned to the local host in the
- * routing domain of a network interface, i.e. an interface enslaved to the
- * same VRF (or to no VRF) has a local route to it.
+ * routing domain of a network interface, i.e. an interface of the same VRF (or
+ * an interface out of any VRF) has a local route to it.
  *
  * @param [in]  if_index         Network interface index.
  * @param [in]  sa_remote        Pointer to the destination address.
@@ -105,14 +105,15 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
 
 /**
- * Get the VRF (L3 master) device which a network interface is enslaved to.
- * Addresses of such interface can be used only by sockets bound to the VRF.
+ * Get the VRF (L3 master) device of a network interface: the VRF device it is
+ * enslaved to, or the interface itself if it is a VRF device. Addresses of such
+ * interface can be used only by sockets bound to the VRF.
  * VRF membership of all interfaces is read once and cached at the first call.
  *
  * @param [in]  if_index         Network interface index.
  *
  * @return Network interface index of the VRF device, or -1 if the interface
- *         is not enslaved to a VRF device.
+ *         is neither a VRF device nor enslaved to one.
  */
 int ucs_netlink_get_vrf_master_index(int if_index);
 
