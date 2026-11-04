@@ -692,9 +692,12 @@ static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
+    unsigned batch   = iface->super.super.config.rx_max_batch;
+    unsigned prepost = (batch == 1) ? iface->config.rx_max_wr :
+            ucs_min(2 * batch, iface->config.rx_max_wr);
 
-    /* Post as many receive WRs as the shared buffer pool can supply. */
-    while ((ep->rx_available > 0) &&
+    /* CQEs grow the queue by batch - 1 WRs; batch 1 needs a full prepost. */
+    while ((ep->rx_available > (iface->config.rx_max_wr - prepost)) &&
            (uct_rc_verbs_iface_post_recv_common(iface, ep, 1) > 0)) {
     }
 
