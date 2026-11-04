@@ -313,16 +313,26 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 UCS_TEST_P(test_uct_tcp, maxseg_auto)
 {
+    // Room for the IPv6 and TCP headers with options
+    static const int hdrs_len = 120;
+    static const int limit    = 1000;
     std::vector<int> fds;
+    struct ifreq ifr;
 
-    // No TCP_MAXSEG is set by default, and the device MTU is larger than
-    // the limit checked here
+    ASSERT_UCS_OK(ucs_netif_ioctl(GetParam()->dev_name.c_str(), SIOCGIFMTU,
+                                  &ifr));
+    if (ifr.ifr_mtu - hdrs_len <= limit) {
+        UCS_TEST_SKIP_R("device MTU " + ucs::to_string(ifr.ifr_mtu) +
+                        " is too small");
+    }
+
+    // No TCP_MAXSEG is set by default, so the segment size follows the MTU
     setup_conns_to_entity(*m_ent, 1, fds);
     int maxseg    = 0;
     socklen_t len = sizeof(maxseg);
     ASSERT_EQ(0, getsockopt(fds.front(), IPPROTO_TCP, TCP_MAXSEG, &maxseg,
                             &len));
-    EXPECT_GT(maxseg, 1000);
+    EXPECT_GT(maxseg, limit);
     close(fds.front());
 }
 
@@ -373,15 +383,31 @@ UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
     close(fd);
     close(listen_fd);
 
-    // The listener advertises it to a peer, which does not limit the segment
-    // size itself
+    // The listener advertises the segment size to a peer, which does not
+    // limit it itself, and the accepted socket gets it from the listener
     std::vector<int> fds;
     setup_conns_to_entity(*m_ent, 1, fds);
     EXPECT_LE(get_maxseg(fds.front()), MAXSEG);
+    {
+        uct_tcp_ep_t *ep;
+
+        UCS_ASYNC_BLOCK(m_tcp_iface->super.worker->async);
+        EXPECT_FALSE(ucs_list_is_empty(&m_tcp_iface->ep_list));
+        ucs_list_for_each(ep, &m_tcp_iface->ep_list, list) {
+            EXPECT_LE(get_maxseg(ep->fd), MAXSEG);
+        }
+        UCS_ASYNC_UNBLOCK(m_tcp_iface->super.worker->async);
+    }
     close(fds.front());
 }
 
-UCS_TEST_P(test_uct_tcp_maxseg, check_value)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_maxseg, tcp)
+
+
+class test_uct_tcp_base : public ucs::test {
+};
+
+UCS_TEST_F(test_uct_tcp_base, check_maxseg)
 {
     EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(UCS_MEMUNITS_AUTO));
     EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(88));
@@ -393,5 +419,3 @@ UCS_TEST_P(test_uct_tcp_maxseg, check_value)
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucs_tcp_base_check_maxseg(UCS_MEMUNITS_INF));
 }
-
-_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_maxseg, tcp)
