@@ -708,17 +708,15 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                               sinfo.priority) : 1;
             is_reachable = 1;
 
-            if (criteria->min_lane_bw > 0) {
-                lane_bw = ucp_wireup_iface_score_bandwidth(wiface, address, ae);
-                if (lane_bw < criteria->min_lane_bw) {
-                    ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                              "->addr[%u] : %s bandwidth %.2f MB/s is lower"
-                              " than %.2f MB/s",
-                              UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
-                              criteria->title, lane_bw / UCS_MBYTE,
-                              criteria->min_lane_bw / UCS_MBYTE);
-                    continue;
-                }
+            lane_bw = ucp_wireup_iface_score_bandwidth(wiface, address, ae);
+            if (lane_bw < criteria->min_lane_bw) {
+                ucs_trace(UCT_TL_RESOURCE_DESC_FMT
+                          "->addr[%u] : %s bandwidth %.2f MB/s is lower than"
+                          " %.2f MB/s",
+                          UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
+                          criteria->title, lane_bw / UCS_MBYTE,
+                          criteria->min_lane_bw / UCS_MBYTE);
+                continue;
             }
 
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
