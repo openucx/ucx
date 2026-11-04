@@ -156,7 +156,7 @@ public:
         }
     }
 
-protected:
+private:
     void init_data(void *buf, size_t msg_size) {
         uct_tcp_am_hdr_t *tcp_am_hdr;
         ASSERT_TRUE(msg_size >= sizeof(*tcp_am_hdr));
@@ -311,6 +311,21 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 }
 
 
+UCS_TEST_P(test_uct_tcp, maxseg_auto)
+{
+    std::vector<int> fds;
+
+    // No TCP_MAXSEG is set by default, and the device MTU is larger than
+    // the limit checked here
+    setup_conns_to_entity(*m_ent, 1, fds);
+    int maxseg    = 0;
+    socklen_t len = sizeof(maxseg);
+    ASSERT_EQ(0, getsockopt(fds.front(), IPPROTO_TCP, TCP_MAXSEG, &maxseg,
+                            &len));
+    EXPECT_GT(maxseg, 1000);
+    close(fds.front());
+}
+
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
 
 
@@ -331,10 +346,10 @@ protected:
         return maxseg;
     }
 
-    static const int MAXSEG;
+    static constexpr int MAXSEG = 1000;
 };
 
-const int test_uct_tcp_maxseg::MAXSEG = 1000;
+constexpr int test_uct_tcp_maxseg::MAXSEG;
 
 UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
 {
@@ -360,9 +375,23 @@ UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
 
     // The listener advertises it to a peer, which does not limit the segment
     // size itself
-    fd = setup_conn_to_entity(*m_ent);
-    EXPECT_LE(get_maxseg(fd), MAXSEG);
-    close(fd);
+    std::vector<int> fds;
+    setup_conns_to_entity(*m_ent, 1, fds);
+    EXPECT_LE(get_maxseg(fds.front()), MAXSEG);
+    close(fds.front());
+}
+
+UCS_TEST_P(test_uct_tcp_maxseg, check_value)
+{
+    EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(UCS_MEMUNITS_AUTO));
+    EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(88));
+    EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(32767));
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_tcp_base_check_maxseg(87));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_tcp_base_check_maxseg(32768));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucs_tcp_base_check_maxseg(UCS_MEMUNITS_INF));
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_maxseg, tcp)
