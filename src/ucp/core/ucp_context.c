@@ -2041,23 +2041,18 @@ ucp_md_map_t ucp_context_select_reg_mds(ucp_context_h context,
     }
 
     ucs_for_each_bit(md_index, md_map) {
-        /* TODO: rc_gda has the gpu in the sys_dev_map so we need to skip it.
-         * This should be fixed in the tl. */
         sys_dev_map = 0;
         for (tl_idx = 0; tl_idx < context->num_tls; tl_idx++) {
             if ((context->tl_rscs[tl_idx].md_index == md_index) &&
                 (context->tl_rscs[tl_idx].tl_rsc.sys_device <
-                 UCP_MAX_SYS_DEVICES) &&
-                (strncmp(context->tl_rscs[tl_idx].tl_rsc.dev_name,
-                         "cuda", 4) != 0)) {
+                 UCP_MAX_SYS_DEVICES)) {
                 sys_dev_map |=
                     UCS_BIT(context->tl_rscs[tl_idx].tl_rsc.sys_device);
             }
         }
 
-        best.latency   = UCS_INFINITY;
-        best.bandwidth = 0;
-        reachable      = 1;
+        best      = ucs_topo_max_distance;
+        reachable = 1;
 
         ucs_for_each_bit(sys_dev, sys_dev_map) {
             ucs_assert(sys_dev != mem_sys_dev);

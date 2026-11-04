@@ -131,27 +131,24 @@ typedef struct ucs_sys_dev_distance {
     double bandwidth; /**< in bytes/second */
 } ucs_sys_dev_distance_t;
 
-
 extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
 extern const ucs_sys_dev_distance_t ucs_topo_max_distance;
 
 
 /*
- * Function pointer used to refer to specific implementations of
- * ucs_topo_get_distance function by topology modules
+ * Refine the distance produced by lower-priority topology providers.
+ * The distance is initialized before the callback and may be read or updated.
  */
 typedef ucs_status_t
 (*ucs_topo_get_distance_func_t)(ucs_sys_device_t device1,
                                 ucs_sys_device_t device2,
                                 ucs_sys_dev_distance_t *distance);
 
-
 /*
  * Function pointer used to refer to specific implementations of
  * ucs_topo_get_memory_distance function by topology modules. This function
  * estimates the distance between the device and the system memory used by the
- * current thread according to its CPU affinity. The function must have a
- * fallback behavior.
+ * current thread according to its CPU affinity.
  */
 typedef void (*ucs_topo_get_memory_distance_func_t)(
         ucs_sys_device_t device, ucs_sys_dev_distance_t *distance);
@@ -161,7 +158,7 @@ typedef void (*ucs_topo_get_memory_distance_func_t)(
  * Function pointer used to refer to specific implementations of
  * ucs_topo_get_memory_distance_for_cpuset function by topology modules. This
  * function estimates the distance between the device and the system memory
- * represented by a CPU set. The function must have a fallback behavior.
+ * represented by a CPU set.
  */
 typedef void (*ucs_topo_get_memory_distance_for_cpuset_func_t)(
         ucs_sys_device_t device, const ucs_cpu_set_t *cpuset,
@@ -169,52 +166,27 @@ typedef void (*ucs_topo_get_memory_distance_for_cpuset_func_t)(
 
 
 /*
- * Topology provider operations, implementing the topology API for a topology
- * module.
+ * Topology provider operations. All callbacks are optional. Providers are
+ * called in reverse TOPO_PRIO order, so every callback receives the result
+ * produced by lower-priority providers.
  */
 typedef struct ucs_sys_topo_ops {
-    /* Provider's ucs_topo_get_distance implementation */
+    /* Optional provider distance refinement */
     ucs_topo_get_distance_func_t        get_distance;
 
-    /* Provider's ucs_topo_get_memory_distance implementation */
+    /* Optional provider memory-distance refinement */
     ucs_topo_get_memory_distance_func_t get_memory_distance;
 
-    /* Provider's ucs_topo_get_memory_distance_for_cpuset implementation */
+    /* Optional provider cpuset memory-distance refinement */
     ucs_topo_get_memory_distance_for_cpuset_func_t
             get_memory_distance_for_cpuset;
 } ucs_sys_topo_ops_t;
 
 
 /**
- * Reset the internal singleton system topology provider.
+ * Reorder registered topology providers after changing TOPO_PRIO at runtime.
  */
 void ucs_sys_topo_reset_provider(void);
-
-
-/**
- * Push a topology provider that overrides the configuration-selected provider.
- *
- * The pushed provider takes precedence over the provider chosen by the
- * TOPO_PRIO configuration until it is removed with
- * @ref ucs_sys_topo_provider_pop. Pushes nest as a stack: the most recently
- * pushed provider is the active one. Intended primarily for tests that need
- * deterministic topology behavior.
- *
- * @param [in] ops  Topology operations. The contents are copied, so the
- *                  pointer does not need to remain valid after the call.
- *
- * @return UCS_OK on success, or UCS_ERR_NO_MEMORY on allocation failure.
- */
-ucs_status_t ucs_sys_topo_provider_push(const ucs_sys_topo_ops_t *ops);
-
-
-/**
- * Pop the topology provider most recently pushed with
- * @ref ucs_sys_topo_provider_push, restoring the previously active provider.
- *
- * Must be balanced with a prior @ref ucs_sys_topo_provider_push call.
- */
-void ucs_sys_topo_provider_pop(void);
 
 
 /**
@@ -316,7 +288,6 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                                    ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance);
 
-
 /**
  * Find the memory distance of the device according to process affinity.
  *
@@ -366,7 +337,6 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
  */
 int ucs_topo_distance_cmp(const ucs_sys_dev_distance_t *distance1,
                           const ucs_sys_dev_distance_t *distance2);
-
 
 /**
  * Gets a system device. If the device doesn't exist, it will be added.

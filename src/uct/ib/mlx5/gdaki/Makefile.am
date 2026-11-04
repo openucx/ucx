@@ -21,7 +21,8 @@ libuct_ib_mlx5_gda_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_ib_mlx5_gda_ladir       = $(includedir)/uct/ib/mlx5/gdaki
 
 libuct_ib_mlx5_gda_la_SOURCES = \
-	gdaki.c
+	gdaki.c \
+	topo.c
 
 nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gdaki.cuh \
@@ -37,7 +38,8 @@ nobase_dist_libuct_ib_mlx5_gda_la_HEADERS = \
 	gpunetio/device/doca_gpunetio_dev_verbs_cq.cuh
 
 noinst_HEADERS = \
-	gdaki.h
+	gdaki.h \
+	topo.h
 
 PKG_CONFIG_NAME=ib-mlx5-gda
 

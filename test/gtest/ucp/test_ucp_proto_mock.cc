@@ -21,6 +21,7 @@ extern "C" {
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
+#include <ucs/sys/topo/base/topo_int.h>
 #include <ucs/type/cpu_set.h>
 
 #if HAVE_IB
@@ -471,15 +472,13 @@ public:
             UCS_TEST_SKIP_R("Proto v2 is disabled");
         }
 
-        /* Reset topo provider to force reload from config */
-        ucs_sys_topo_reset_provider();
-
         /*
          * By default TOPO_PRIO="sysfs,default"
          * We keep only default config to always have the same topo distances
          * when test is being executed on different machines.
          */
         modify_config("TOPO_PRIO", topo_prio());
+        ucs_sys_topo_reset_provider();
 
         /* Avoid a host-dependent assignment (the default is 'auto') */
         modify_config("GPU_NIC_ASSIGNMENT_MODE", "off");
@@ -2547,12 +2546,15 @@ public:
             .get_memory_distance            = get_memory_distance,
             .get_memory_distance_for_cpuset = get_memory_distance_for_cpuset
         };
-        ASSERT_UCS_OK(ucs_sys_topo_provider_push(&topo_ops));
+        modify_config("TOPO_PRIO", "proto_mock");
+        ucs_sys_topo_reset_provider();
+        ASSERT_UCS_OK(ucs_sys_topo_provider_register(
+                "proto_mock", &topo_ops, &m_topo_provider));
     }
 
     virtual void cleanup() override
     {
-        ucs_sys_topo_provider_pop();
+        ucs_sys_topo_provider_unregister(m_topo_provider);
         s_low_adjacent_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         s_local_sys_dev         = UCS_SYS_DEVICE_ID_UNKNOWN;
         s_high_adjacent_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -2636,6 +2638,7 @@ protected:
     }
 
 private:
+    ucs_sys_topo_provider_t *m_topo_provider = nullptr;
     static ucs_sys_device_t s_low_adjacent_sys_dev;
     static ucs_sys_device_t s_local_sys_dev;
     static ucs_sys_device_t s_high_adjacent_sys_dev;

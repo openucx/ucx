@@ -13,6 +13,8 @@
 
 BEGIN_C_DECLS
 
+typedef struct ucs_sys_topo_provider ucs_sys_topo_provider_t;
+
 /* Possible role of a current device wrt its sibling */
 typedef enum {
     /* No sibling capability */
@@ -65,6 +67,20 @@ typedef struct {
 int ucs_topo_sys_device_info_cmp(const ucs_topo_sys_device_info_t *device1,
                                  const ucs_topo_sys_device_info_t *device2);
 
+/**
+ * Register a topology provider. The provider name and operations are copied.
+ * Registration and unregistration must be performed during initialization or
+ * cleanup, before concurrent topology queries are possible.
+ */
+ucs_status_t
+ucs_sys_topo_provider_register(const char *name,
+                               const ucs_sys_topo_ops_t *ops,
+                               ucs_sys_topo_provider_t **provider_p);
+
+/**
+ * Unregister a provider returned by @ref ucs_sys_topo_provider_register.
+ */
+void ucs_sys_topo_provider_unregister(ucs_sys_topo_provider_t *provider);
 
 /**
  * Convert a PCI bus id to its canonical sysfs path.

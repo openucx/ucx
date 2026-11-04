@@ -9,25 +9,23 @@
 #endif
 
 #include "gdaki.h"
+#include "topo.h"
 
+#include <ucs/sys/module.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/time/time.h>
 #include <ucs/datastruct/string_buffer.h>
-#include <ucs/algorithm/qsort_r.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/serialize.h>
 #include <uct/ib/base/ib_verbs.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
-#include <uct/cuda/base/cuda_nvml.h>
 
 #include <string.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
-
-#define UCT_GDAKI_MAX_CUDA_DEVICES 64
 
 #define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
 #define UCT_GDAKI_DEV_EP_SIZE          64
@@ -1275,400 +1273,50 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_gdaki_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_gdaki_iface_t, uct_iface_t);
 
-typedef struct {
-    unsigned               ibdev_index;
-    ucs_sys_dev_distance_t dist;
-    int                    usecount;
-    int                    reachable;
-} uct_gdaki_dev_score_t;
-
-typedef struct {
-    ucs_sys_device_t sys_dev;
-    uint64_t         cuda_map;
-    int              direct_nic;
-} uct_gdaki_dev_matrix_elem_t;
-
-typedef struct {
-    ucs_sys_device_t sys_dev;
-    ucs_sys_bus_id_t bus_id;
-    int              cuda_idx; /* CUDA driver index, -1 if not CUDA-visible */
-} uct_gdaki_gpu_info_t;
-
-static const uct_gdaki_gpu_info_t *
-uct_gdaki_gpu_bus_id_lookup(const uct_gdaki_gpu_info_t *gpus, unsigned count,
-                            const ucs_sys_bus_id_t *bus_id)
-{
-    ucs_bus_id_bit_rep_t bus_id_key = ucs_topo_get_bus_id_bit_repr(bus_id);
-    unsigned gpu_idx;
-
-    for (gpu_idx = 0; gpu_idx < count; gpu_idx++) {
-        if (bus_id_key ==
-            ucs_topo_get_bus_id_bit_repr(&gpus[gpu_idx].bus_id)) {
-            return &gpus[gpu_idx];
-        }
-    }
-
-    return NULL;
-}
-
-static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
-{
-    const uct_gdaki_dev_score_t *a = pa;
-    const uct_gdaki_dev_score_t *b = pb;
-
-    /* Sort reachable devices before unreachable ones */
-    if (a->reachable != b->reachable) {
-        return b->reachable - a->reachable;
-    }
-
-    /* Prefer lower latency device, and if same latency prefer the less utilized */
-    return (ucs_fp_compare(a->dist.latency, b->dist.latency) *
-            UCT_GDAKI_MAX_CUDA_DEVICES) +
-           ucs_signum(a->usecount - b->usecount);
-}
-
-static ucs_status_t
-uct_gdaki_get_cuda_sys_dev_and_bus_id(int cuda_idx, ucs_sys_device_t *sys_dev_p,
-                                      ucs_sys_bus_id_t *bus_id_p)
-{
-    ucs_status_t status;
-    CUdevice cuda_dev;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cuda_dev, cuda_idx));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    return uct_cuda_get_sys_dev_and_bus_id(cuda_dev, sys_dev_p, bus_id_p);
-}
-
-static ucs_status_t
-uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
-{
-    uct_gdaki_gpu_info_t cuda_gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
-    const uct_gdaki_gpu_info_t *gpu_info;
-    unsigned nvml_dev_count, nvml_idx, gpu_count, cuda_gpu_count;
-    int cuda_dev_count, cuda_idx;
-    ucs_sys_bus_id_t bus_id;
-    nvmlDevice_t nvml_dev;
-    nvmlPciInfo_t nvml_pci;
-    ucs_sys_device_t sys_dev;
-    ucs_status_t status;
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cuda_dev_count));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucs_assert_always(cuda_dev_count <= UCT_GDAKI_MAX_CUDA_DEVICES);
-
-    cuda_gpu_count = 0;
-    for (cuda_idx = 0; cuda_idx < cuda_dev_count; cuda_idx++) {
-        status = uct_gdaki_get_cuda_sys_dev_and_bus_id(cuda_idx, &sys_dev,
-                                                       &bus_id);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        if (uct_gdaki_gpu_bus_id_lookup(cuda_gpus, cuda_gpu_count,
-                                        &bus_id) != NULL) {
-            ucs_debug("skip cuda device %d with duplicate "
-                      "bdf " UCS_SYS_BUS_ID_FMT,
-                      cuda_idx, UCS_SYS_BUS_ID_ARG(&bus_id));
-            /* Same BDF. TODO: support MLOPart. */
-            continue;
-        }
-
-        cuda_gpus[cuda_gpu_count].sys_dev  = sys_dev;
-        cuda_gpus[cuda_gpu_count].bus_id   = bus_id;
-        cuda_gpus[cuda_gpu_count].cuda_idx = cuda_idx;
-        cuda_gpu_count++;
-    }
-
-    status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetCount_v2, &nvml_dev_count);
-    if (status != UCS_OK) {
-        ucs_diag("NVML unavailable: using legacy CUDA-only enumeration");
-        memcpy(gpus, cuda_gpus, cuda_gpu_count * sizeof(*gpus));
-        *count_p = cuda_gpu_count;
-        return UCS_OK;
-    }
-
-    ucs_assert_always(nvml_dev_count <= UCT_GDAKI_MAX_CUDA_DEVICES);
-
-    /* Add non-CUDA-visible devices from NVML. TODO: support MLOPart. */
-    gpu_count = 0;
-    for (nvml_idx = 0; nvml_idx < nvml_dev_count; nvml_idx++) {
-        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, nvml_idx,
-                                         &nvml_dev);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetPciInfo_v3, nvml_dev,
-                                         &nvml_pci);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        bus_id.domain   = nvml_pci.domain;
-        bus_id.bus      = nvml_pci.bus;
-        bus_id.slot     = nvml_pci.device;
-        bus_id.function = 0;
-
-        gpu_info = uct_gdaki_gpu_bus_id_lookup(cuda_gpus, cuda_gpu_count,
-                                               &bus_id);
-        if (gpu_info != NULL) {
-            gpus[gpu_count++] = *gpu_info;
-            /* Already added as CUDA-visible. */
-            continue;
-        }
-
-        status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        if (gpu_count == UCT_GDAKI_MAX_CUDA_DEVICES) {
-            ucs_error("exceeded maximal number of GDAKI CUDA devices (%u)",
-                      UCT_GDAKI_MAX_CUDA_DEVICES);
-            return UCS_ERR_EXCEEDS_LIMIT;
-        }
-
-        gpus[gpu_count].sys_dev  = sys_dev;
-        gpus[gpu_count].bus_id   = bus_id;
-        gpus[gpu_count].cuda_idx = -1;
-        gpu_count++;
-    }
-
-    *count_p = gpu_count;
-    return UCS_OK;
-}
-
-static uct_gdaki_dev_matrix_elem_t *
-uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
-{
-    unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
-    uct_gdaki_dev_matrix_elem_t *dmat = NULL;
-    int num_sys_active_ibdevs         = 0;
-    uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
-    ucs_status_t status;
-    int ibdev_index, ibdev_count, score_index;
-    unsigned long num_gpu_reachable_ibdevs, num_gpu_selected_ibdevs;
-    unsigned gpu_count, gpu_index;
-    struct ibv_device **device_list;
-    struct ibv_device *ibdev;
-    uct_gdaki_dev_score_t *scores;
-    uct_gdaki_dev_matrix_elem_t *ibdesc;
-    struct ibv_context *context;
-
-    /* Obtain the list of IB devices */
-    device_list = ibv_get_device_list(&ibdev_count);
-    if (device_list == NULL) {
-        return NULL;
-    }
-
-    ucs_assert(ibdev_count > 0);
-    /* Allocate memory for device matrix */
-    dmat = ucs_calloc(ibdev_count, sizeof(*dmat), "dev matrix");
-    if (dmat == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out_dev;
-    }
-
-    /* Allocate memory for device scores */
-    scores = ucs_calloc(ibdev_count, sizeof(*scores), "dev scores");
-    if (scores == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out_dmat;
-    }
-
-    /* Query each IB device so its sys_dev is resolved and its port state is
-     * known before direct-NIC sibling matching can be triggered. */
-    for (ibdev_index = 0; ibdev_index < ibdev_count; ibdev_index++) {
-        uct_ib_device_t tmp_dev = {0};
-
-        ibdesc  = &dmat[ibdev_index];
-        ibdev   = device_list[ibdev_index];
-        context = ibv_open_device(ibdev);
-        if (context == NULL) {
-            ucs_error("ibv_open_device(%s) failed: %m",
-                      ibv_get_device_name(ibdev));
-            status = UCS_ERR_IO_ERROR;
-            goto out;
-        }
-
-        tmp_dev.ibv_context = context;
-        status              = uct_ib_device_query(&tmp_dev, ibdev);
-        if (status != UCS_OK) {
-            ibv_close_device(context);
-            goto out;
-        }
-
-        ibdesc->sys_dev = tmp_dev.sys_dev;
-        if (uct_ib_device_port_attr(&tmp_dev, tmp_dev.first_port)->state !=
-            IBV_PORT_ACTIVE) {
-            ucs_debug("%s:%u: skipping GDA device, port is not active",
-                      uct_ib_device_name(&tmp_dev), tmp_dev.first_port);
-            ibv_close_device(context);
-            continue;
-        }
-
-        ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(&tmp_dev, 1) !=
-                             UCS_SYS_DEVICE_ID_UNKNOWN;
-        scores[num_sys_active_ibdevs++].ibdev_index = ibdev_index;
-        ibv_close_device(context);
-    }
-
-    if (num_sys_active_ibdevs == 0) {
-        ucs_debug("no active IB devices found for GDA");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-
-    /* Enumerate physical GPUs via NVML (or CUDA fallback). NVML is used here
-     * so that CUDA_VISIBLE_DEVICES does not hide GPUs from the topology
-     * calculation */
-    status = uct_gdaki_enum_gpus(gpus, &gpu_count);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    if (gpu_count == 0) {
-        ucs_debug("no GPU devices found for GDA");
-        status = UCS_ERR_NO_DEVICE;
-        goto out;
-    }
-
-    if (ib_per_cuda == UCS_ULUNITS_AUTO) {
-        ib_per_cuda = ucs_max(1ul,
-                              (unsigned long)num_sys_active_ibdevs / gpu_count);
-    }
-
-    /* Map each GPU to the best suited IB devices */
-    for (gpu_index = 0; gpu_index < gpu_count; gpu_index++) {
-        /* Update PCI distance in IB device scores */
-        num_gpu_reachable_ibdevs = 0;
-        for (score_index = 0; score_index < num_sys_active_ibdevs;
-             score_index++) {
-            ibdesc = &dmat[scores[score_index].ibdev_index];
-            scores[score_index].reachable = ucs_topo_is_reachable(
-                    ibdesc->sys_dev, gpus[gpu_index].sys_dev);
-            if (!scores[score_index].reachable) {
-                continue;
-            }
-
-            num_gpu_reachable_ibdevs++;
-            status = ucs_topo_get_distance(gpus[gpu_index].sys_dev,
-                                           ibdesc->sys_dev,
-                                           &scores[score_index].dist);
-            if (status != UCS_OK) {
-                goto out;
-            }
-        }
-
-        if (num_gpu_reachable_ibdevs == 0) {
-            ucs_debug("GPU " UCS_SYS_BUS_ID_FMT
-                      " has no reachable active IB devices for GDA",
-                      UCS_SYS_BUS_ID_ARG(&gpus[gpu_index].bus_id));
-            continue;
-        }
-
-        /* Sort and select the best suited IB devices for this GPU */
-        ucs_qsort_r(scores, num_sys_active_ibdevs, sizeof(*scores),
-                    uct_gdaki_dev_matrix_score, NULL);
-
-        num_gpu_selected_ibdevs = ucs_min(ib_per_cuda,
-                                          num_gpu_reachable_ibdevs);
-
-        /* Reachable devices are sorted first, so the loop selects only
-         * devices reachable from this GPU */
-        for (score_index = 0; score_index < num_gpu_selected_ibdevs;
-             score_index++) {
-            ucs_assert(scores[score_index].reachable);
-
-            ibdesc = &dmat[scores[score_index].ibdev_index];
-            if (gpus[gpu_index].cuda_idx >= 0) {
-                ibdesc->cuda_map |= UCS_BIT(gpus[gpu_index].cuda_idx);
-            }
-            scores[score_index].usecount++;
-
-            /* Direct NIC is closest and can be only one */
-            if (ibdesc->direct_nic) {
-                ucs_assert_always(score_index == 0);
-                break;
-            }
-        }
-    }
-
-    /* Output processed device matrix length */
-    *dmat_length_p = ibdev_count;
-
-out:
-    ucs_free(scores);
-out_dmat:
-    if (status != UCS_OK) {
-        ucs_free(dmat);
-        dmat = NULL;
-    }
-out_dev:
-    ibv_free_device_list(device_list);
-    return dmat;
-}
-
 ucs_status_t
 uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
                                uct_tl_device_resource_t **tl_devices_p,
                                unsigned *num_tl_devices_p)
 {
-    static ucs_init_once_t once = UCS_INIT_ONCE_INITIALIZER;
-    static uct_gdaki_dev_matrix_elem_t *dmat;
-    static size_t dmat_length;
-    const uct_gdaki_dev_matrix_elem_t *ibdesc;
+    ucs_sys_dev_distance_t distance;
     uct_tl_device_resource_t *tl_devices;
     unsigned num_tl_devices;
+    ucs_sys_device_t gpu_sys_dev;
     ucs_status_t status;
     CUdevice device;
-    int i;
+    int cuda_device_count, i;
 
-    UCS_INIT_ONCE(&once) {
-        dmat = uct_gdaki_dev_matrix_init(ib_md, &dmat_length);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&cuda_device_count));
+    if (status != UCS_OK) {
+        return status;
     }
 
-    if (dmat == NULL) {
-        ucs_debug("%s: device matrix initialization failed",
-                  uct_ib_device_name(&ib_md->dev));
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    for (ibdesc = dmat; ibdesc - dmat < dmat_length; ibdesc++) {
-        if (ibdesc->sys_dev == ib_md->dev.sys_dev) {
-            break;
-        }
-    }
-
-    if (ibdesc - dmat == dmat_length) {
-        ucs_debug("%s: IB device not found in device matrix",
-                  uct_ib_device_name(&ib_md->dev));
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    if (ibdesc->cuda_map == 0) {
-        ucs_debug("%s: no assigned GPU found", uct_ib_device_name(&ib_md->dev));
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    tl_devices = ucs_malloc(sizeof(*tl_devices) *
-                                    ucs_popcount(ibdesc->cuda_map),
+    tl_devices = ucs_malloc(sizeof(*tl_devices) * cuda_device_count,
                             "gdaki_tl_devices");
     if (tl_devices == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
     num_tl_devices = 0;
-    ucs_for_each_bit(i, ibdesc->cuda_map) {
+    for (i = 0; i < cuda_device_count; ++i) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&device, i));
         if (status != UCS_OK) {
             goto err;
+        }
+
+        gpu_sys_dev = uct_cuda_get_sys_dev(device);
+        if (gpu_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            continue;
+        }
+
+        status = ucs_topo_get_distance(gpu_sys_dev, ib_md->dev.sys_dev,
+                                       &distance);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        if (ucs_topo_distance_cmp(&distance, &ucs_topo_max_distance) == 0) {
+            continue;
         }
 
         snprintf(tl_devices[num_tl_devices].name,
@@ -1678,6 +1326,11 @@ uct_gdaki_fill_cuda_tl_devices(const uct_ib_md_t *ib_md,
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
         tl_devices[num_tl_devices].sys_device = ib_md->dev.sys_dev;
         num_tl_devices++;
+    }
+
+    if (num_tl_devices == 0) {
+        status = UCS_ERR_NO_DEVICE;
+        goto err;
     }
 
     *num_tl_devices_p = num_tl_devices;
@@ -1712,4 +1365,11 @@ UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_gda, uct_gdaki_query_tl_devices,
                     uct_rc_gdaki_iface_config_table,
                     uct_rc_gdaki_iface_config_t);
 
-UCT_TL_INIT(&uct_ib_component, rc_gda, ctor, , )
+UCS_MODULE_INIT()
+{
+    uct_gdaki_topo_init();
+    return UCS_OK;
+}
+
+UCT_TL_INIT(&uct_ib_component, rc_gda, ctor, ,
+            uct_gdaki_topo_cleanup())

@@ -209,9 +209,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "plugin modules",
   ucs_offsetof(ucs_global_opts_t, plugin_path), UCS_CONFIG_TYPE_PATH_ARRAY},
 
- {"TOPO_PRIO", "sysfs,default",
+ {"TOPO_PRIO", "cuda,sysfs,default",
   "Comma-separated list of providers for detecting system topology.\n"
-  "The list order decides the priority of the providers.",
+  "Providers are applied from right to left, allowing higher-priority "
+  "providers to refine results produced by lower-priority providers.",
   ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
  {"DISTANCE_LAT", "phb:300ns,node:300ns,sys:500ns",
