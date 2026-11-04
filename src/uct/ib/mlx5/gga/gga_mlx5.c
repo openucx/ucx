@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2024-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,6 +11,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/ib/base/ib_md.h>
 #include <uct/ib/mlx5/rc/rc_mlx5.h>
+#include <ucs/datastruct/array.h>
 
 #include <uct/ib/mlx5/rc/rc_mlx5.inl>
 
@@ -67,6 +68,28 @@ typedef struct {
 typedef struct {
     uint64_t be_sys_image_guid; /* ID of GVMI. */
 } UCS_S_PACKED uct_gga_mlx5_iface_addr_t;
+
+typedef struct {
+    char     name[IBV_SYSFS_NAME_MAX];
+    uint64_t guid;
+    int      is_supported;
+} uct_gga_mlx5_dev_cap_t;
+
+UCS_ARRAY_DECLARE_TYPE(uct_gga_mlx5_dev_cap_array_t, unsigned,
+                       uct_gga_mlx5_dev_cap_t);
+
+/*
+ * Device capabilities do not change while the process is running, so a device
+ * is opened to check them only once, instead of on every query of MD resources
+ * (e.g. twice per ucp_init()).
+ */
+static struct {
+    pthread_mutex_t              lock;
+    uct_gga_mlx5_dev_cap_array_t devices;
+} uct_gga_mlx5_dev_caps = {
+    .lock    = PTHREAD_MUTEX_INITIALIZER,
+    .devices = UCS_ARRAY_DYNAMIC_INITIALIZER
+};
 
 extern ucs_config_field_t uct_ib_md_config_table[];
 
@@ -191,9 +214,9 @@ static ucs_status_t uct_gga_mlx5_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
+static ucs_status_t
+uct_ib_mlx5_gga_query_device(struct ibv_device *device, int *is_supported_p)
 {
-    int result = 0;
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)];
     struct ibv_context *ctx;
     ucs_status_t status;
@@ -202,7 +225,7 @@ static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
 
     ctx = uct_ib_mlx5_devx_open_device(device);
     if (ctx == NULL) {
-        goto out;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     out_len = ucs_static_array_size(out);
@@ -216,6 +239,7 @@ static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
 
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dma_mmo_qp)) {
+        *is_supported_p = 0;
         goto out_close_ctx;
     }
 
@@ -228,12 +252,51 @@ static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
      * This check does not guarantee that XGVMI works with indirect mkeys.
      * We can filter out devices that do not support XGVMI at all.
      */
-    result = uct_ib_mlx5_devx_check_xgvmi(cap);
+    *is_supported_p = uct_ib_mlx5_devx_check_xgvmi(cap);
 
 out_close_ctx:
     uct_ib_md_device_context_close(ctx);
-out:
-    return result;
+    return status;
+}
+
+static int uct_ib_mlx5_gga_check_device(struct ibv_device *device)
+{
+    const char *name = ibv_get_device_name(device);
+    uint64_t guid    = ibv_get_device_guid(device);
+    uct_gga_mlx5_dev_cap_t *dev_cap;
+    ucs_status_t status;
+    int is_supported;
+
+    pthread_mutex_lock(&uct_gga_mlx5_dev_caps.lock);
+    ucs_array_for_each(dev_cap, &uct_gga_mlx5_dev_caps.devices) {
+        if ((dev_cap->guid == guid) && (strcmp(dev_cap->name, name) == 0)) {
+            is_supported = dev_cap->is_supported;
+            goto out_unlock;
+        }
+    }
+
+    status = uct_ib_mlx5_gga_query_device(device, &is_supported);
+    if (status != UCS_OK) {
+        /* Do not cache the failure, since it may be temporary */
+        is_supported = 0;
+        goto out_unlock;
+    }
+
+    ucs_debug("%s: GGA is %ssupported", name, is_supported ? "" : "not ");
+
+    dev_cap = ucs_array_append(&uct_gga_mlx5_dev_caps.devices, goto out_unlock);
+    ucs_strncpy_zero(dev_cap->name, name, sizeof(dev_cap->name));
+    dev_cap->guid         = guid;
+    dev_cap->is_supported = is_supported;
+
+out_unlock:
+    pthread_mutex_unlock(&uct_gga_mlx5_dev_caps.lock);
+    return is_supported;
+}
+
+UCS_STATIC_CLEANUP
+{
+    ucs_array_cleanup_dynamic(&uct_gga_mlx5_dev_caps.devices);
 }
 
 static ucs_status_t
