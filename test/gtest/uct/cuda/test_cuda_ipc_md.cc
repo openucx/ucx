@@ -180,6 +180,7 @@ protected:
                         uct_rkey_bundle_t *rkey_bundle)
     {
         uct_md_mem_reg_params_t reg_params     = {};
+        uct_md_mkey_pack_params_t pack_params  = {};
         uct_rkey_unpack_params_t unpack_params = {};
         uct_cuda_ipc_extended_rkey_t rkey;
 
@@ -187,8 +188,8 @@ protected:
         reg_params.mem_type   = UCS_MEMORY_TYPE_CUDA;
         ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), (void*)ptr, size, &reg_params,
                                         memh));
-        ASSERT_UCS_OK(md()->ops->mkey_pack(md(), *memh, (void*)ptr, size, NULL,
-                                           &rkey));
+        ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), *memh, (void*)ptr, size,
+                                          &pack_params, &rkey));
         ASSERT_UCS_OK(uct_rkey_unpack_v2(md()->component, &rkey,
                                          &unpack_params, rkey_bundle));
     }
