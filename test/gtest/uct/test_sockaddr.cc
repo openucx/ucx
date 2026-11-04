@@ -873,15 +873,30 @@ UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close_large_priv_data)
      * value to be able to send/recv the batches.
      * A transport for which these values are not configurable, like rdmacm,
      * these operations will fail and have no effect. */
+    static const char *config[][2] = {{"TCP_CM_PRIV_DATA_LEN", "900KB"},
+                                      {"TCP_CM_SNDBUF", "100KB"},
+                                      {"TCP_CM_RCVBUF", "100KB"}};
+    bool is_tcp = (GetParam()->component_name == "tcp");
+    ucs_status_t status;
+
     if (m_cm_config) {
-        /* coverity[check_return] */
-        uct_config_modify(m_cm_config, "PRIV_DATA_LEN", "900KB");
-        uct_config_modify(m_cm_config, "SNDBUF", "100KB");
-        uct_config_modify(m_cm_config, "RCVBUF", "100KB");
+        for (size_t i = 0; i < ucs_static_array_size(config); ++i) {
+            status = uct_config_modify(m_cm_config, config[i][0], config[i][1]);
+            if (is_tcp || (status != UCS_ERR_NO_ELEM)) {
+                ASSERT_UCS_OK(status, << " setting " << config[i][0]);
+            }
+        }
     }
 
     /* recreate m_server and m_client with the above env parameters changed */
     init();
+
+    if (is_tcp) {
+        /* make sure the large private data is really sent */
+        ASSERT_GE(m_client->max_conn_priv, m_long_priv_data_len);
+        ASSERT_GE(m_server->max_conn_priv, m_long_priv_data_len);
+    }
+
     basic_listen_connect_disconnect();
 }
 
