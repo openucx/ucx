@@ -111,3 +111,51 @@ UCS_TEST_F(test_netlink, is_local_addr) {
 
     UCS_TEST_MESSAGE << num_vrf_addrs << " VRF addresses found";
 }
+
+UCS_TEST_F(test_netlink, best_route_to_local_addr) {
+    struct if_nameindex *ifs = if_nameindex();
+    unsigned num_checks      = 0;
+    struct ifaddrs *ifaddrs, *ifa;
+    struct if_nameindex *it;
+    int local_index;
+
+    ASSERT_NE(nullptr, ifs);
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr == NULL) ||
+            ((ifa->ifa_addr->sa_family != AF_INET) &&
+             (ifa->ifa_addr->sa_family != AF_INET6))) {
+            continue;
+        }
+
+        local_index = ucs_netlink_get_local_route_ndev_index(ifa->ifa_addr);
+        if (local_index < 0) {
+            continue;
+        }
+
+        /* A local address is reached through the interface of its local
+         * route */
+        EXPECT_EQ(1, ucs_netlink_route_matches(local_index, ifa->ifa_addr,
+                                               UCS_NETLINK_ROUTE_CHECK_BEST))
+                << ifa->ifa_name;
+
+        /* Other routing domains route it out of the host */
+        for (it = ifs; it->if_index != 0; ++it) {
+            if (ucs_netlink_get_vrf_master_index(it->if_index) ==
+                ucs_netlink_get_vrf_master_index(local_index)) {
+                continue;
+            }
+
+            EXPECT_EQ(0, ucs_netlink_route_matches(
+                                 it->if_index, ifa->ifa_addr,
+                                 UCS_NETLINK_ROUTE_CHECK_BEST))
+                    << ifa->ifa_name << " from " << it->if_name;
+            ++num_checks;
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+    if_freenameindex(ifs);
+    UCS_TEST_MESSAGE << num_checks << " routes from other domains checked";
+}

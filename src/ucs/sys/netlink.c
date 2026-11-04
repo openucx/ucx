@@ -342,15 +342,16 @@ ucs_netlink_max_netmask_len(int if_index, const struct sockaddr *sa_remote)
     khint32_t curr_if_index;
 
     kh_foreach(&ucs_netlink_routing_table_cache, curr_if_index, iface_rules, {
+        uint8_t route_type;
         int curr_netmask_len;
 
-        /* Longest prefix match is done only within one routing domain */
-        if (ucs_netlink_get_vrf_master_index(curr_if_index) != vrf_index) {
-            continue;
-        }
-
-        curr_netmask_len = ucs_netlink_lookup_in_iface_rules(sa_remote,
-                                                             &iface_rules);
+        /* Longest prefix match is done only within one routing domain, but
+         * local addresses of other domains are matched too: other domains do
+         * not deliver them locally, but route them out of the host */
+        route_type       = (ucs_netlink_get_vrf_master_index(curr_if_index) ==
+                            vrf_index) ? RTN_UNSPEC : RTN_LOCAL;
+        curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
+                sa_remote, &iface_rules, route_type);
         if (curr_netmask_len > max_netmask_len) {
             max_netmask_len = curr_netmask_len;
         }
