@@ -352,7 +352,9 @@ typedef enum {
 /*
  * Peer release versions (dst_version), ordered by version. A feature below is
  * used with a peer only if dst_version of the peer is at least the given one,
- * so peers of older releases keep working.
+ * so peers of older releases keep working. The release version is packed in
+ * 4 bits, so dst_version of a peer more than 7 releases older can be wrong,
+ * see ucp_address_unpack_release_version().
  */
 enum {
     /* The dst_version of a peer which does not pack its release version */
