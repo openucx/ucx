@@ -450,3 +450,46 @@ UCS_TEST_P(test_uct_tcp, vrf_loopback)
 
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
+
+
+class test_uct_tcp_conn_nb : public test_uct_tcp {
+public:
+    void init() {
+        // Do not wait for a connection, which can be dropped in a VRF
+        modify_config("TCP_CONN_NB", "y");
+        test_uct_tcp::init();
+    }
+};
+
+UCS_TEST_P(test_uct_tcp_conn_nb, vrf_ep_bind_to_device)
+{
+    const char *vrf_name         = uct_tcp_iface_vrf_name(m_tcp_iface);
+    std::vector<char> dev_addr(m_ent->iface_attr().device_addr_len);
+    std::vector<char> iface_addr(m_ent->iface_attr().iface_addr_len);
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    uct_ep_params_t ep_params;
+    uct_ep_h ep;
+
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_ent->iface(), (uct_device_addr_t*)&dev_addr[0]));
+    ASSERT_UCS_OK(uct_iface_get_address(m_ent->iface(),
+                                        (uct_iface_addr_t*)&iface_addr[0]));
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                           UCT_EP_PARAM_FIELD_DEV_ADDR |
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
+    ep_params.iface      = m_ent->iface();
+    ep_params.dev_addr   = (uct_device_addr_t*)&dev_addr[0];
+    ep_params.iface_addr = (uct_iface_addr_t*)&iface_addr[0];
+    ASSERT_UCS_OK(uct_ep_create(&ep_params, &ep));
+
+    // The connecting socket must be bound to the VRF device, if any
+    EXPECT_EQ(0, getsockopt(ucs_derived_of(ep, uct_tcp_ep_t)->fd, SOL_SOCKET,
+                            SO_BINDTODEVICE, bound_if_name, &len));
+    EXPECT_STREQ((vrf_name != NULL) ? vrf_name : "", bound_if_name);
+
+    uct_ep_destroy(ep);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_conn_nb, tcp)
