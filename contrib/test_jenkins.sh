@@ -1425,7 +1425,8 @@ run_gtest_release() {
 	# - Important object sizes
 	# - Unexpected RNDV test, to cover rkey handling in tag offload flow
 	#   (see GH #3827 for details)
-	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
+	# - Non-temporal buffer transfer (x86_64 only, needs a build with AVX)
+	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match_rndv.rts_unexp\*:test_arch.\* \
 		$TIMEOUT make -C test/gtest test
 
 	unset OMP_NUM_THREADS
@@ -1456,21 +1457,20 @@ run_ucx_tl_check() {
 # Run release mode tests
 #
 run_release_mode_tests() {
-	build release --enable-gtest
+	# On x86_64, add CPU optimizations (AVX) to the release build: the
+	# test_arch non-temporal buffer transfer tests need them
+	local mode=release
+	if [[ $(uname -m) == "x86_64" ]]
+	then
+		mode=opt
+	fi
+
+	build ${mode} --enable-gtest
 	test_profiling
 	test_ucs_load
 	test_ucp_dlopen
 	run_gtest_release
 	test_ucm_hooks
-}
-
-#
-# Run nt_buffer_transfer tests
-#
-run_nt_buffer_transfer_tests() {
-    build release --enable-gtest --enable-optimizations
-    echo "==== Running test_arch tests with optimizations ===="
-    ./test/gtest/gtest --gtest_filter="test_arch.*"
 }
 
 set_ucx_common_test_env() {
@@ -1560,9 +1560,6 @@ run_tests() {
 
 	# release mode tests
 	do_distributed_task 0 4 run_release_mode_tests
-
-	# nt_buffer_transfer tests
-	do_distributed_task 0 4 run_nt_buffer_transfer_tests
 
 	# fault tolerance tests
 	do_distributed_task 1 4 run_ucx_perftest_fault_tolerance
