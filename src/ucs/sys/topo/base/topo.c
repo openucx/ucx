@@ -1372,29 +1372,26 @@ ucs_topo_is_pci_bridge(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2)
     return result;
 }
 
-static unsigned ucs_topo_get_pci_switch_depth(ucs_sys_device_t sys_dev1,
-                                              ucs_sys_device_t sys_dev2)
+static unsigned
+ucs_topo_get_common_pci_bridge_depth(ucs_sys_device_t sys_dev1,
+                                     ucs_sys_device_t sys_dev2)
 {
     char *path1, *path2, *common_path;
-    const char *p;
-    unsigned depth;
+    unsigned depth = 0;
+    int count      = -1;
 
     if (ucs_topo_get_common_path(sys_dev1, sys_dev2, &path1, &path2,
                                  &common_path) != UCS_OK) {
         return 0;
     }
 
-    depth = 0;
-    if (!ucs_topo_is_sys_root(common_path) &&
-        !ucs_topo_is_pci_root(common_path)) {
-        /* Count the path components below "/sys/devices/pciXXXX:XX" */
-        p = strchr(common_path + strlen(UCS_TOPO_SYSFS_DEVICES_ROOT) + 1, '/');
-        for (; p != NULL; p = strchr(p + 1, '/')) {
-            ++depth;
-        }
+    /* A common path outside of a PCI hierarchy shares no PCIe bridge */
+    sscanf(common_path, UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n", &count);
+    if ((count > 0) && (common_path[count] == '/')) {
+        depth = ucs_string_count_char(common_path + count, '/');
     }
 
-    ucs_trace("pci switch depth of %s and %s is %u (common path %s)",
+    ucs_trace("common pci bridge depth of %s and %s is %u (common path %s)",
               ucs_topo_global_ctx.devices[sys_dev1].name,
               ucs_topo_global_ctx.devices[sys_dev2].name, depth, common_path);
 
@@ -1550,7 +1547,7 @@ ucs_topo_build_groups(const ucs_sys_device_bitmap_t *net_device_filter,
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
                                          net_device_filter, group_by,
-                                         ucs_topo_get_pci_switch_depth,
+                                         ucs_topo_get_common_pci_bridge_depth,
                                          groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 

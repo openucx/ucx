@@ -80,16 +80,16 @@ typedef enum {
 
 
 /**
- * Get the depth of the deepest PCIe switch (bridge) shared by two system
- * devices, below the PCI root.
+ * Get the depth of the deepest PCIe bridge shared by two system devices, below
+ * the PCI root.
  *
  * @param [in] sys_dev1  First system device.
  * @param [in] sys_dev2  Second system device.
  *
  * @return Number of PCIe hierarchy levels shared below the PCI root, or 0 if
- *         the devices do not share a PCIe switch.
+ *         the devices do not share a PCIe bridge.
  */
-typedef unsigned (*ucs_topo_pci_switch_depth_func_t)(ucs_sys_device_t sys_dev1,
+typedef unsigned (*ucs_topo_pci_bridge_depth_func_t)(ucs_sys_device_t sys_dev1,
                                                      ucs_sys_device_t sys_dev2);
 
 
@@ -145,7 +145,7 @@ void ucs_topo_release_group(ucs_topo_group_t *group);
  * @param [in]  net_device_filter  Network devices to include in the groups,
  *                                 or NULL to include all network devices.
  * @param [in]  group_by           Grouping criterion.
- * @param [in]  pci_switch_depth   Get the depth of the PCIe switch shared by
+ * @param [in]  pci_bridge_depth   Get the depth of the PCIe bridge shared by
  *                                 two devices, used by
  *                                 @ref UCS_TOPO_GROUP_BY_PCI_SWITCH.
  * @param [out] groups_p           Initialized topology groups.
@@ -158,7 +158,7 @@ ucs_topo_build_groups_inner(const ucs_topo_sys_device_info_t *devices,
                             unsigned num_devices,
                             const ucs_sys_device_bitmap_t *net_device_filter,
                             ucs_topo_group_by_t group_by,
-                            ucs_topo_pci_switch_depth_func_t pci_switch_depth,
+                            ucs_topo_pci_bridge_depth_func_t pci_bridge_depth,
                             ucs_topo_groups_t *groups_p);
 
 END_C_DECLS

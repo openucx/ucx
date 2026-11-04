@@ -330,8 +330,13 @@ typedef enum {
 typedef enum {
     /** Use PCIe switch grouping on x86_64, otherwise NUMA grouping */
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_AUTO,
+
+    /** Group GPUs and NICs by NUMA node */
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA,
+
+    /** Group GPUs and NICs by the PCIe switch they share */
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH,
+
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_LAST
 } ucp_gpu_nic_assignment_group_by_t;
 

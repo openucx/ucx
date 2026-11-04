@@ -197,7 +197,7 @@ protected:
                                            static_cast<unsigned>(
                                                    m_devices.size()),
                                            net_device_filter, group_by,
-                                           pci_switch_depth, &m_groups);
+                                           pci_bridge_depth, &m_groups);
     }
 
     ucs_status_t build_by_pci_switch()
@@ -231,7 +231,7 @@ protected:
     }
 
     /* Devices without a PCIe path do not share a switch with any device */
-    static unsigned pci_switch_depth(ucs_sys_device_t sys_dev1,
+    static unsigned pci_bridge_depth(ucs_sys_device_t sys_dev1,
                                      ucs_sys_device_t sys_dev2)
     {
         auto it1 = s_pci_path.find(sys_dev1);
@@ -550,4 +550,16 @@ UCS_TEST_F(test_topo_groups, pci_switch_no_shared_switch) {
     }
 
     expect_group(ucs_array_elem(&m_groups, gpus.size()), {}, nics);
+}
+
+UCS_TEST_F(test_topo_groups, pci_switch_nic_only_group) {
+    std::vector<physical_device> nics = {
+        {add_switch_device("nic0", UCS_TOPO_DEVICE_CLASS_NET, 0)},
+        {add_switch_device("nic1", UCS_TOPO_DEVICE_CLASS_NET, 1)}};
+
+    sort_devices(nics);
+
+    ASSERT_UCS_OK(build_by_pci_switch());
+    ASSERT_EQ(1, ucs_array_length(&m_groups));
+    expect_group(ucs_array_elem(&m_groups, 0), {}, nics);
 }

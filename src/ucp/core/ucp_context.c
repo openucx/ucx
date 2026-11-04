@@ -3019,30 +3019,28 @@ ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
 }
 
 static ucs_topo_group_by_t
-ucp_context_gpu_nic_assignment_group_by(ucp_context_h context)
+ucp_context_gpu_nic_assignment_get_group_by(ucp_context_h context)
 {
-    ucs_topo_group_by_t group_by;
+    ucp_gpu_nic_assignment_group_by_t group_by =
+            context->config.ext.gpu_nic_assignment_group_by;
 
-    switch (context->config.ext.gpu_nic_assignment_group_by) {
-    case UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA:
-        group_by = UCS_TOPO_GROUP_BY_NUMA;
-        break;
-    case UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH:
-        group_by = UCS_TOPO_GROUP_BY_PCI_SWITCH;
-        break;
-    default:
+    if (group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_AUTO) {
 #if defined(__x86_64__)
-        group_by = UCS_TOPO_GROUP_BY_PCI_SWITCH;
+        group_by = UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH;
 #else
-        group_by = UCS_TOPO_GROUP_BY_NUMA;
+        group_by = UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA;
 #endif
-        break;
     }
 
+    ucs_assertv((group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA) ||
+                (group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH),
+                "group_by=%d", group_by);
     ucs_debug("gpu-nic assignment group by %s",
-              (group_by == UCS_TOPO_GROUP_BY_PCI_SWITCH) ? "pci_switch" :
-                                                           "numa");
-    return group_by;
+              ucp_gpu_nic_assignment_group_by_names[group_by]);
+
+    return (group_by == UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH) ?
+                   UCS_TOPO_GROUP_BY_PCI_SWITCH :
+                   UCS_TOPO_GROUP_BY_NUMA;
 }
 
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
@@ -3087,7 +3085,7 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     }
 
     status = ucs_topo_build_groups(&net_device_filter,
-                                   ucp_context_gpu_nic_assignment_group_by(
+                                   ucp_context_gpu_nic_assignment_get_group_by(
                                            context),
                                    &groups);
     if (status != UCS_OK) {
