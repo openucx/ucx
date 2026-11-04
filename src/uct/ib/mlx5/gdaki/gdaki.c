@@ -582,6 +582,26 @@ static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
 }
 
 static ucs_status_t
+uct_rc_gdaki_channel_uar_init(uct_rc_gdaki_iface_t *iface,
+                              uct_rc_gdaki_channel_t *channel)
+{
+    uct_ib_mlx5_devx_uar_t *uar = &channel->uar.dedicated.qp_uar;
+    uct_ib_mlx5_md_t *md =
+            ucs_derived_of(iface->super.super.super.super.md,
+                           uct_ib_mlx5_md_t);
+    ucs_status_t status;
+    status = uct_ib_mlx5_devx_alloc_uar(
+            md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC, &uar->uar);
+    if (status != UCS_OK) {
+        return status;
+    }
+    uar->super.addr.ptr = uar->uar->reg_addr;
+    uar->super.mode     = UCT_IB_MLX5_MMIO_MODE_DB;
+    uar->ctx            = md->super.dev.ibv_context;
+    return UCS_OK;
+}
+
+static ucs_status_t
 uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                                 uct_rc_gdaki_channel_block_mem_t *mem,
                                 size_t dev_ep_size, ucs_mpool_t *mp,
@@ -646,10 +666,13 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
             }
 
             if (dedicated_uar) {
+                status = uct_rc_gdaki_channel_uar_init(iface, channel);
+#if 0
                 status = uct_ib_mlx5_devx_uar_init(
                         &channel->uar.dedicated.qp_uar,
                         uct_ib_mlx5_iface_md(&iface->super.super.super),
                         qp_attr.mmio_mode);
+#endif
                 if (status != UCS_OK) {
                     goto err_destroy_cq;
                 }
