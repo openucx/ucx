@@ -28,10 +28,6 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
 
 void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface);
 
-void uct_rc_verbs_iface_rx_error(uct_rc_verbs_iface_t *iface,
-                                 const struct ibv_wc *wc,
-                                 uct_ib_iface_recv_desc_t *desc);
-
 unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
                                              uct_rc_verbs_ep_t *ep,
                                              unsigned max);
@@ -154,16 +150,10 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 {
     unsigned i, num_wcs = iface->super.super.config.rx_max_poll;
-    uint8_t srq_disabled = (iface->srq == NULL);
     uct_ib_iface_recv_desc_t *desc;
     struct ibv_wc wc[num_wcs];
     ucs_status_t status;
     uct_rc_hdr_t *hdr;
-
-    /* Give empty QPs returned buffers before CQ polling refills active QPs. */
-    if (srq_disabled && ucs_unlikely(iface->rx_repost_needed)) {
-        uct_rc_verbs_iface_repost_recv(iface);
-    }
 
     status = uct_ib_poll_cq(iface->super.super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
     if (status != UCS_OK) {
@@ -174,33 +164,46 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
     for (i = 0; i < num_wcs; i++) {
         desc = (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id;
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            uct_rc_verbs_iface_rx_error(iface, &wc[i], desc);
-        } else {
-            hdr = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(
-                    &iface->super.super, desc);
-            VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
+            if ((wc[i].status != IBV_WC_REM_ABORT_ERR) &&
+                (wc[i].status != IBV_WC_WR_FLUSH_ERR)) {
+                UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive",
+                                                    &iface->super.super, i, wc);
+            }
 
-            uct_ib_log_recv_completion(&iface->super.super, &wc[i], hdr,
-                                       wc[i].byte_len, uct_rc_ep_packet_dump);
-            uct_rc_verbs_iface_handle_am(&iface->super, hdr, wc[i].wr_id,
-                                         wc[i].qp_num, wc[i].byte_len,
-                                         wc[i].imm_data, wc[i].slid);
+            /* A failed receive never delivers an active message. */
+            ucs_mpool_put_inline(desc);
+            continue;
         }
 
-        if (srq_disabled) {
-            /* Do not repost flushed WRs */
-            uct_rc_verbs_iface_rx_complete_no_srq(iface, wc[i].qp_num,
-                                                  wc[i].status !=
-                                                  IBV_WC_WR_FLUSH_ERR);
-        }
+        hdr = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super,
+                                                        desc);
+        VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
+
+        uct_ib_log_recv_completion(&iface->super.super, &wc[i], hdr,
+                                   wc[i].byte_len, uct_rc_ep_packet_dump);
+        uct_rc_verbs_iface_handle_am(&iface->super, hdr, wc[i].wr_id,
+                                     wc[i].qp_num, wc[i].byte_len,
+                                     wc[i].imm_data, wc[i].slid);
     }
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
                              UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
-    if (!srq_disabled) {
+    if (iface->srq != NULL) {
         iface->super.rx.srq.available += num_wcs;
         uct_rc_verbs_iface_post_recv_common(iface, NULL, 0);
+    } else {
+        /* Give empty QPs returned buffers before refilling active QPs. */
+        if (ucs_unlikely(iface->rx_repost_needed)) {
+            uct_rc_verbs_iface_repost_recv(iface);
+        }
+
+        for (i = 0; i < num_wcs; i++) {
+            /* Do not repost flushed WRs */
+            uct_rc_verbs_iface_rx_complete_no_srq(iface, wc[i].qp_num,
+                                                  wc[i].status !=
+                                                  IBV_WC_WR_FLUSH_ERR);
+        }
     }
 
     return num_wcs;
