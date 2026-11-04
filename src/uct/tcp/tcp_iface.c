@@ -380,7 +380,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
     attr->priority            = (iface->config.prefer_default &&
-                                 !iface->netif_caps.is_default) ? 1 : 0;
+                                 iface->netif_caps.is_default) ? 1 : 0;
 
     return UCS_OK;
 }

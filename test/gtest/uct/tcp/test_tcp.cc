@@ -310,5 +310,21 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
     EXPECT_EQ(sizeof(uct_tcp_ep_addr_t), iface_attr.ep_addr_len);
 }
 
+UCS_TEST_P(test_uct_tcp, prefer_default)
+{
+    int is_default;
+
+    ASSERT_UCS_OK(uct_tcp_netif_is_default(m_tcp_iface->if_name, &is_default));
+    UCS_TEST_MESSAGE << m_tcp_iface->if_name << ": is_default " << is_default;
+
+    // UCP prefers the higher priority when transport scores are equal
+    EXPECT_EQ(is_default ? 1 : 0, m_ent->iface_attr().priority);
+}
+
+UCS_TEST_P(test_uct_tcp, prefer_default_disabled, "TCP_PREFER_DEFAULT=n")
+{
+    EXPECT_EQ(0, m_ent->iface_attr().priority);
+}
+
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
