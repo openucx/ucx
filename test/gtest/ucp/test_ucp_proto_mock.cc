@@ -1197,8 +1197,9 @@ protected:
         lane_devs_t result;
 
         for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
-            unsigned local_sys_dev  = ucp_ep_get_tl_rsc(ep, lane)->sys_device;
-            unsigned remote_sys_dev = key.lanes[lane].dst_sys_dev;
+            const unsigned local_sys_dev  =
+                    ucp_ep_get_tl_rsc(ep, lane)->sys_device;
+            const unsigned remote_sys_dev = key.lanes[lane].dst_sys_dev;
 
             if (swap) {
                 result.emplace(remote_sys_dev, local_sys_dev);
@@ -1260,12 +1261,12 @@ protected:
     lane_devs(const ucp_ep_config_key_t &key, ucp_lane_type_t lane_type)
     {
         ucp_context_h context = sender().ucph();
-        ucp_rsc_index_t rsc_index;
         lane_devs_t result;
 
         for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
             if (key.lanes[lane].lane_types & UCS_BIT(lane_type)) {
-                rsc_index = key.lanes[lane].rsc_index;
+                const ucp_rsc_index_t rsc_index = key.lanes[lane].rsc_index;
+
                 result.emplace(context->tl_rscs[rsc_index].tl_rsc.sys_device,
                                key.lanes[lane].dst_sys_dev);
             }
