@@ -336,11 +336,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
             return UCS_ERR_INVALID_PARAM;
         }
 
-        rx_max_wr                 = config->rx_max_wr;
-        rx_batch_limit            = ucs_max(ucs_min(ib_config->rx.max_batch,
-                                                    rx_max_wr / 4), 1);
-        rx_cq_len = ucs_min(config->rx_cq_len,
-                            (unsigned long)IBV_DEV_ATTR(&ib_md->dev, max_cqe));
+        rx_max_wr      = config->rx_max_wr;
+        rx_batch_limit = ucs_max(ucs_min(ib_config->rx.max_batch,
+                                        rx_max_wr / 4), 1);
+        rx_cq_len      = ucs_min(config->rx_cq_len,
+                                (unsigned long)IBV_DEV_ATTR(&ib_md->dev,
+                                                           max_cqe));
         if (rx_cq_len < rx_max_wr) {
             ucs_error(UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_CQ_LEN is limited to "
                       "%u entries, fewer than " UCS_DEFAULT_ENV_PREFIX
