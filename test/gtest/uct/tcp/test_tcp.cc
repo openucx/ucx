@@ -322,8 +322,8 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 UCS_TEST_P(test_uct_tcp, prefer_default)
 {
-    // UCP prefers the higher priority when transport scores are equal
-    EXPECT_EQ(netif_is_default(), m_ent->iface_attr().priority);
+    /* UCP prefers the higher priority when transport scores are equal */
+    EXPECT_EQ(netif_is_default() ? 1 : 0, m_ent->iface_attr().priority);
 }
 
 UCS_TEST_P(test_uct_tcp, prefer_default_disabled, "TCP_PREFER_DEFAULT=n")
