@@ -1638,12 +1638,11 @@ static ucp_rsc_index_t ucp_address_get_remote_device_index(
 static void
 ucp_address_adjust_unpacked_md_index(ucp_unpacked_address_t *unpacked_address)
 {
-    /* Last version that still packs legacy bits in MD index field */
-    const unsigned max_legacy_api_version = 18u;
     size_t i;
 
     if ((unpacked_address->addr_version > UCP_OBJECT_VERSION_V1) ||
-        (unpacked_address->dst_version > max_legacy_api_version)) {
+        (unpacked_address->dst_version >=
+         UCP_ADDRESS_MD_INDEX_MIN_DST_VERSION)) {
         return;
     }
 

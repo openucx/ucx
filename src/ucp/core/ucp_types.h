@@ -362,6 +362,8 @@ enum {
     UCP_WIREUP_SEPARATE_AM_LANE_MIN_DST_VERSION = 17,
     /* Up to UCP_MAX_LANES lanes instead of UCP_MAX_LANES_LEGACY */
     UCP_WIREUP_MAX_LANES_MIN_DST_VERSION = 18,
+    /* No legacy bits in the MD index field of a v1 worker address */
+    UCP_ADDRESS_MD_INDEX_MIN_DST_VERSION = 19,
     /* UCX_CONNECT_ALL_TO_ALL connects all local and remote device pairs */
     UCP_WIREUP_CONNECT_ALL_TO_ALL_MIN_DST_VERSION = 19,
     /* A non-empty remote key always packs the system device */
