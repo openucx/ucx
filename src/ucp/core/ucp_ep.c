@@ -42,6 +42,9 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
+/* Minimal peer release version which supports the endpoint recovery */
+#define UCP_EP_RECOVERY_MIN_DST_VERSION 22
+
 __KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
              ucp_ep_peer_mem_data_t, 1,
              kh_int64_hash_func, kh_int64_hash_equal);
@@ -2417,10 +2420,11 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
 
-    if (ucp_ep_config(ep)->key.dst_version < 22) {
-        ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
+    if (ucp_ep_config(ep)->key.dst_version < UCP_EP_RECOVERY_MIN_DST_VERSION) {
+        ucs_diag("ep: %p: recovery support requires UCX 1.%d or later, "
                  "remote peer version %d is not supported",
-                 ep, ucp_ep_config(ep)->key.dst_version);
+                 ep, UCP_EP_RECOVERY_MIN_DST_VERSION,
+                 ucp_ep_config(ep)->key.dst_version);
         return UCS_OK;
     }
 

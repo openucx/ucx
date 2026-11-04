@@ -16,6 +16,10 @@
 #include <ucp/wireup/wireup.h>
 
 
+/* Minimal peer release version which supports the PSN protocol */
+#define UCP_AM_PSN_MIN_DST_VERSION 21
+
+
 static void
 ucp_am_eager_multi_bcopy_proto_probe(const ucp_proto_init_params_t *init_params)
 {
@@ -363,7 +367,7 @@ static void ucp_am_eager_multi_zcopy_psn_proto_probe(
 {
     /* PSN protocol requires both sides to support it - disable if peer
      * version is too old */
-    if (init_params->ep_config_key->dst_version < 21) {
+    if (init_params->ep_config_key->dst_version < UCP_AM_PSN_MIN_DST_VERSION) {
         return;
     }
 
