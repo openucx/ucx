@@ -69,10 +69,8 @@ enum uct_ep_event_types {
  * @ingroup UCT_RESOURCE
  * @brief Endpoint-aware event callback.
  *
- * The transport invokes this callback in its serialized worker progress
- * context, not from an asynchronous thread. Endpoint destruction must be
- * serialized with callback delivery. The callback may call @ref uct_ep_query
- * for @a ep and must not retain @a ep after it returns.
+ * Transports should use this callback for events that identify a specific
+ * endpoint, such as @ref UCT_EP_EVENT_PATH_SPEED_CHANGE.
  *
  * @param [in]  arg      User argument registered with
  *                       @ref uct_iface_set_ep_event_handler.
@@ -493,20 +491,12 @@ struct uct_ep_attr {
     void                    *tx_token;
 
     /**
-     * Endpoint bandwidth estimate, in bytes per second, using the model defined
-     * by @ref uct_ppn_bandwidth_t. An estimate that already accounts for
-     * contention uses the dedicated component and sets the shared component
-     * to zero. Valid when
-     * @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
+     * Endpoint bandwidth estimate, in bytes per second.
+     * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
      *
-     * Querying this field returns the latest available cached estimate without
-     * blocking or requesting an update. @ref uct_ep_query returns
-     * UCS_ERR_UNSUPPORTED when bandwidth is unsupported, UCS_ERR_NO_ELEM when
-     * no estimate is available, or UCS_ERR_TIMED_OUT when the estimate is
-     * stale.
-     * These errors leave all requested outputs unchanged, including in a
-     * mixed-attribute query. Queries without this field are unaffected by
-     * bandwidth support or estimate availability.
+     * Querying this field returns the latest available bw estimate sample.
+     * Defaults to bw value provided by @ref uct_iface_estimate_perf when
+     * unsupported.
      */
     uct_ppn_bandwidth_t      bandwidth;
 };
@@ -1440,13 +1430,7 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @ingroup UCT_RESOURCE
  * @brief Register a callback for endpoint-specific events.
  *
- * This routine replaces only the endpoint-specific event handler on @a iface;
- * it does not affect @ref uct_iface_params_t::async_event_cb.
- *
- * The caller must use the same worker serialization as progress and endpoint
- * destruction. After replacement or removal returns, no new invocation of the
- * previous handler will start. Callbacks run only in serialized worker
- * progress context, as described by @ref uct_ep_event_cb_t.
+ * This routine sets the endpoint-specific event handler on @a iface.
  *
  * @param [in] iface    Interface on which to register the callback.
  * @param [in] params   Callback registration parameters.
