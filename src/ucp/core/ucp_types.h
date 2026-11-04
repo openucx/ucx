@@ -349,17 +349,14 @@ typedef enum {
 } ucp_object_version_t;
 
 
-/* The dst_version of a peer which does not pack its release version */
-#define UCP_RELEASE_LEGACY 0
-
-
 /*
- * Minimal peer release versions of the features below, ordered by version.
- * A feature is used with a peer only if the release version of the peer
- * (dst_version) is at least the given one, so peers of older releases keep
- * working. UCP_RELEASE_LEGACY is below all of these versions.
+ * Peer release versions (dst_version), ordered by version. A feature below is
+ * used with a peer only if dst_version of the peer is at least the given one,
+ * so peers of older releases keep working.
  */
 enum {
+    /* The dst_version of a peer which does not pack its release version */
+    UCP_RELEASE_LEGACY = 0,
     /* The lane bandwidth includes the local distance */
     UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION = 17,
     /* The AM lane is separated from the RMA BW lanes */
