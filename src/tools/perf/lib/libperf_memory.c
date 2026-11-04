@@ -187,11 +187,7 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     ucs_status_t status;
     size_t buffer_size;
 
-    if (params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
-    } else {
-        buffer_size = ucx_perf_get_message_size(params);
-    }
+    buffer_size = ucx_perf_get_thread_buffer_size(params);
 
     /* Allocate send buffer memory */
     status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count +
@@ -350,11 +346,7 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     unsigned flags;
     size_t buffer_size;
 
-    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) && params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
-    } else {
-        buffer_size = ucx_perf_get_message_size(params);
-    }
+    buffer_size = ucx_perf_get_thread_buffer_size(params);
 
     /* TODO use params->alignment  */
 
