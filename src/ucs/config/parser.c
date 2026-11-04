@@ -146,7 +146,7 @@ ucs_status_t ucs_config_clone_int(const void *src, void *dest, const void *arg)
 int ucs_config_sprintf_int(char *buf, size_t max,
                            const void *src, const void *arg)
 {
-    return snprintf(buf, max, "%i", *(unsigned*)src);
+    return snprintf(buf, max, "%i", *(int*)src);
 }
 
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
