@@ -9,6 +9,7 @@ import org.junit.Test;
 import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
 
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -44,7 +45,13 @@ public class UcpMemoryTest extends UcxTest {
         UcpMemory allocatedMemory = context.memoryMap(new UcpMemMapParams()
             .allocate().setProtection(UcpConstants.UCP_MEM_MAP_PROT_LOCAL_READ)
             .setLength(MEM_SIZE).nonBlocking());
-        assertEquals(allocatedMemory.getLength(), MEM_SIZE);
+        // UCP may round the allocation size up to a page-size multiple.
+        final Field unsafeField = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");
+        unsafeField.setAccessible(true);
+        final long pageSize = (Integer) unsafeField.getType().getMethod("pageSize")
+            .invoke(unsafeField.get(null));
+        assertEquals((MEM_SIZE + pageSize - 1) / pageSize * pageSize,
+                     allocatedMemory.getLength());
 
         allocatedMemory.deregister();
         mmapedMemory.deregister();
