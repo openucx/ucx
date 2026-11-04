@@ -61,11 +61,6 @@ exchanged out-of-band) and connection-manager wireup (sockaddr listener).
   both sides must pick the same lane assignment, otherwise the connection
   will mismatch. Many tests assert specific lane assignments, so use
   stable tie-breakers.
-- A change of the lanes picked by `select.c` must keep the old selection
-  with peers of older releases: gate it by a `*_MIN_DST_VERSION` constant
-  in `wireup.h` checked against `dst_version` of the remote address, like
-  `UCP_WIREUP_MAX_LANES_MIN_DST_VERSION`. Otherwise a new and an old peer
-  pick different lanes.
 - The proxy-ep path (`wireup_ep.c`) holds user requests in a queue; never
   short-circuit it for a fast path that might run before all lanes are
   active. Use `ucp_wireup_ep_progress_pending` on transition.
