@@ -303,6 +303,7 @@ uct_musa_base_query_pointer(const void *address, size_t length,
     size_t allocation_length;
     int current_device = -1;
     int have_current_device;
+    int switched_device;
     ucs_status_t status;
 
     if ((address == NULL) || (length == 0) ||
@@ -326,7 +327,11 @@ uct_musa_base_query_pointer(const void *address, size_t length,
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    if (info->device >= 0) {
+    switched_device = (info->device >= 0) &&
+                      uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       info->device);
+    if (switched_device) {
         status = uct_musa_base_set_device(info->device);
         if (status != UCS_OK) {
             return status;
@@ -344,7 +349,9 @@ uct_musa_base_query_pointer(const void *address, size_t length,
             muMemGetAddressRange(&allocation_base, &allocation_length,
                                  (MUdeviceptr)address),
             "muMemGetAddressRange");
-    uct_musa_base_restore_device(current_device, have_current_device);
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
     if (status != UCS_OK) {
         return status;
     }
@@ -397,6 +404,7 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
     uct_musa_pointer_info_t info;
     int current_device = -1;
     int have_current_device;
+    int switched_device;
     int fd;
     ucs_status_t status;
     MUresult result;
@@ -441,16 +449,23 @@ uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    status = uct_musa_base_set_device(info.device);
-    if (status != UCS_OK) {
-        return status;
+    switched_device = uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       info.device);
+    if (switched_device) {
+        status = uct_musa_base_set_device(info.device);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     fd = UCT_DMABUF_FD_INVALID;
     result = muMemGetHandleForAddressRange(
             &fd, (MUdeviceptr)aligned_start, aligned_end - aligned_start,
             UCT_MUSA_DMABUF_HANDLE_TYPE, 0);
-    uct_musa_base_restore_device(current_device, have_current_device);
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
     if (result != MUSA_SUCCESS) {
         ucs_debug("muMemGetHandleForAddressRange failed: 0x%x", result);
         return UCS_ERR_IO_ERROR;

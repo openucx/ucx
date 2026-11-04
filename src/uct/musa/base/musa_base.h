@@ -82,6 +82,15 @@ uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p);
 
 void uct_musa_base_restore_device(int device, int valid);
 
+/* Return whether device-scoped MUSA calls issued for @a device require
+ * switching away from the current device (and restoring it afterwards). */
+static UCS_F_ALWAYS_INLINE int
+uct_musa_base_need_device_switch(int have_current_device, int current_device,
+                                 int device)
+{
+    return !have_current_device || (current_device != device);
+}
+
 int uct_musa_base_has_dmabuf(void);
 
 ucs_status_t uct_musa_base_export_dmabuf(const void *address, size_t length,

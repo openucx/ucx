@@ -61,6 +61,7 @@ uct_musa_md_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
     musaError_t error;
     int current_device = -1;
     int have_current_device;
+    int switched_device;
     int device = -1;
 
     if (mem_type != UCS_MEMORY_TYPE_MUSA) {
@@ -81,18 +82,24 @@ uct_musa_md_mem_alloc(uct_md_h uct_md, size_t *length_p, void **address_p,
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    if (device >= 0) {
+    switched_device = (device >= 0) &&
+                      uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       device);
+    if (switched_device) {
         status = uct_musa_base_set_device(device);
         if (status != UCS_OK) {
             goto err_free_handle;
         }
-    } else if (have_current_device) {
+    } else if ((device < 0) && have_current_device) {
         device = current_device;
     }
 
     error = musaMalloc(address_p, *length_p);
     status = uct_musa_base_status(error, "musaMalloc");
-    uct_musa_base_restore_device(current_device, have_current_device);
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
     if (status != UCS_OK) {
         goto err_free_handle;
     }
@@ -115,10 +122,15 @@ uct_musa_md_mem_free(uct_md_h uct_md, uct_mem_h memh)
     musaError_t error;
     int current_device = -1;
     int have_current_device;
+    int switched_device;
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    if (alloc_handle->device >= 0) {
+    switched_device = (alloc_handle->device >= 0) &&
+                      uct_musa_base_need_device_switch(
+                              have_current_device, current_device,
+                              alloc_handle->device);
+    if (switched_device) {
         status = uct_musa_base_set_device(alloc_handle->device);
         if (status != UCS_OK) {
             ucs_free(alloc_handle);
@@ -128,7 +140,9 @@ uct_musa_md_mem_free(uct_md_h uct_md, uct_mem_h memh)
 
     error = musaFree(alloc_handle->address);
     status = uct_musa_base_status(error, "musaFree");
-    uct_musa_base_restore_device(current_device, have_current_device);
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
     ucs_free(alloc_handle);
     return status;
 }

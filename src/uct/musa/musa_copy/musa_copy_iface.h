@@ -21,6 +21,8 @@ typedef struct {
     musaEvent_t                event;
     uct_completion_t          *comp;
     uct_musa_copy_flush_desc_t *flush;
+    ucs_status_t               status; /* Set when polled, used when the
+                                          completion is dispatched */
 } uct_musa_copy_event_desc_t;
 
 /* Copy directions are indexed by the two memory kinds this TL produces

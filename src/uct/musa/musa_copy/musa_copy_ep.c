@@ -110,7 +110,9 @@ uct_musa_copy_ep_copy(uct_ep_h tl_ep, const void *src, void *dst,
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    switched_device = !have_current_device || (current_device != device);
+    switched_device = uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       device);
     if (switched_device) {
         status = uct_musa_base_set_device(device);
         if (status != UCS_OK) {
@@ -219,7 +221,9 @@ uct_musa_copy_ep_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
 
     have_current_device =
             (uct_musa_base_get_current_device(&current_device) == UCS_OK);
-    switched_device = !have_current_device || (current_device != device);
+    switched_device = uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       device);
     if (switched_device) {
         status = uct_musa_base_set_device(device);
         if (status != UCS_OK) {

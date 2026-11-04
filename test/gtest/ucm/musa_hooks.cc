@@ -4,6 +4,7 @@
  */
 
 #include <ucm/api/ucm.h>
+#include <ucs/sys/checker.h>
 #include <common/test.h>
 #include <musa.h>
 #include <musa_runtime_api.h>
@@ -39,6 +40,11 @@ protected:
     void init() override
     {
         int dev_count;
+
+        if (RUNNING_ON_VALGRIND) {
+            UCS_TEST_SKIP_R("Valgrind may execute stale translations of "
+                            "Bistro-patched MUSA driver functions");
+        }
 
         ucs::test::init();
         if ((musaGetDeviceCount(&dev_count) != musaSuccess) ||
