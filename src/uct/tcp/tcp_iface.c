@@ -80,6 +80,14 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
+  {"MAXSEG", "auto",
+   "Maximal segment size of TCP connections (TCP_MAXSEG socket option). It\n"
+   "can be lowered to fit TCP segments into the path MTU, if the network\n"
+   "drops larger segments without reporting the path MTU: the path MTU minus\n"
+   "40 bytes for IPv4 or 60 bytes for IPv6. auto means to use the system\n"
+   "default.",
+   ucs_offsetof(uct_tcp_iface_config_t, maxseg), UCS_CONFIG_TYPE_MEMUNITS},
+
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
 
@@ -485,6 +493,19 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
     }
 }
 
+static ucs_status_t uct_tcp_iface_set_maxseg(uct_tcp_iface_t *iface, int fd)
+{
+    int maxseg;
+
+    if (iface->config.maxseg == UCS_MEMUNITS_AUTO) {
+        return UCS_OK;
+    }
+
+    maxseg = iface->config.maxseg;
+    return ucs_socket_setopt(fd, IPPROTO_TCP, TCP_MAXSEG,
+                             (const void*)&maxseg, sizeof(maxseg));
+}
+
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
                                        int set_nb)
 {
@@ -511,6 +532,11 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
     }
 
     status = ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_tcp_iface_set_maxseg(iface, fd);
     if (status != UCS_OK) {
         return status;
     }
@@ -600,6 +626,13 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     status = uct_tcp_iface_server_init(iface);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    /* The listener advertises the segment size to connecting peers, and
+     * accepted sockets inherit it */
+    status = uct_tcp_iface_set_maxseg(iface, iface->listen_fd);
+    if (status != UCS_OK) {
+        goto err_close_sock;
     }
 
     /* Get the port which was selected for the socket */
@@ -779,6 +812,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_conn_retries  = config->max_conn_retries;
     self->config.syn_cnt           = config->syn_cnt;
     self->config.user_timeout      = config->user_timeout;
+    self->config.maxseg            = config->maxseg;
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;

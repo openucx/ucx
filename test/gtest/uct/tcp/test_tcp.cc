@@ -156,7 +156,7 @@ public:
         }
     }
 
-private:
+protected:
     void init_data(void *buf, size_t msg_size) {
         uct_tcp_am_hdr_t *tcp_am_hdr;
         ASSERT_TRUE(msg_size >= sizeof(*tcp_am_hdr));
@@ -312,3 +312,47 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
+
+
+class test_uct_tcp_maxseg : public test_uct_tcp {
+public:
+    void init() {
+        modify_config("TCP_MAXSEG", ucs::to_string(MAXSEG));
+        test_uct_tcp::init();
+    }
+
+protected:
+    static int get_maxseg(int fd) {
+        int maxseg    = 0;
+        socklen_t len = sizeof(maxseg);
+
+        EXPECT_EQ(0, getsockopt(fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg, &len))
+                << strerror(errno);
+        return maxseg;
+    }
+
+    static const int MAXSEG;
+};
+
+const int test_uct_tcp_maxseg::MAXSEG = 1000;
+
+UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
+{
+    int fd;
+
+    // The segment size is set before connecting a socket
+    ASSERT_UCS_OK(ucs_socket_create(m_tcp_iface->config.ifaddr.ss_family,
+                                    SOCK_STREAM, 0, &fd));
+    ASSERT_UCS_OK(uct_tcp_iface_set_sockopt(m_tcp_iface, fd, 0));
+    EXPECT_EQ(MAXSEG, get_maxseg(fd));
+    close(fd);
+
+    // The listener advertises it to a peer, which does not limit the segment
+    // size itself
+    EXPECT_EQ(MAXSEG, get_maxseg(m_tcp_iface->listen_fd));
+    fd = setup_conn_to_entity(*m_ent);
+    EXPECT_LE(get_maxseg(fd), MAXSEG);
+    close(fd);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_maxseg, tcp)
