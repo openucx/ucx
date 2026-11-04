@@ -239,8 +239,10 @@ UCS_TEST_F(test_string, to_memunits) {
     }
     // Trailing characters
     {
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("8kbjunk", &value));
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("8k junk", &value));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_str_to_memunits("8kbjunk", &value));
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+                  ucs_str_to_memunits("8k junk", &value));
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_str_to_memunits("8 kb", &value));
     }
 }

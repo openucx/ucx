@@ -741,6 +741,7 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     double double_value;
     unsigned uint_value;
     unsigned hex_value;
+    char hex_buf[16];
     unsigned bitmask;
     int int_value;
     struct {
@@ -770,11 +771,10 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     EXPECT_TRUE(ucs_config_sscanf_uint_enum("second", &uint_value,
                                             uint_enum_names));
     EXPECT_EQ(UCS_CONFIG_UINT_ENUM_INDEX(1), uint_value);
-    EXPECT_TRUE(ucs_config_sscanf_uint_enum("7", &uint_value,
-                                            uint_enum_names));
+    EXPECT_TRUE(ucs_config_sscanf_uint_enum("7", &uint_value, uint_enum_names));
     EXPECT_EQ(7U, uint_value);
-    EXPECT_FALSE(ucs_config_sscanf_uint_enum("7abc", &uint_value,
-                                             uint_enum_names));
+    EXPECT_FALSE(
+            ucs_config_sscanf_uint_enum("7abc", &uint_value, uint_enum_names));
 
     EXPECT_TRUE(ucs_config_sscanf_bitmask("4", &bitmask, NULL));
     EXPECT_EQ(0xfU, bitmask);
@@ -788,6 +788,8 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     EXPECT_TRUE(ucs_config_sscanf_hex("auto", &hex_fields.value, NULL));
     EXPECT_EQ(UCS_HEXUNITS_AUTO, hex_fields.value);
     EXPECT_EQ(1U, hex_fields.next);
+    ucs_config_sprintf_hex(hex_buf, sizeof(hex_buf), &hex_fields.value, NULL);
+    EXPECT_STREQ(UCS_VALUE_AUTO_STR, hex_buf);
 
     EXPECT_TRUE(ucs_config_sscanf_time("10", &double_value, NULL));
     EXPECT_EQ(10.0, double_value);

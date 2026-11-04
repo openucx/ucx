@@ -41,8 +41,7 @@
         int _length      = 0; \
         \
         (sscanf(_str, _fmt " %n", (_value), &_length) == 1) && \
-                ((size_t)_length <= strlen(_str)) && \
-                (_str[_length] == '\0'); \
+                ((size_t)_length <= strlen(_str)) && (_str[_length] == '\0'); \
     })
 
 
@@ -251,13 +250,13 @@ int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_hex(char *buf, size_t max,
                            const void *src, const void *arg)
 {
-    uint16_t val = *(uint16_t*)src;
+    unsigned val = *(unsigned*)src;
 
     if (val == UCS_HEXUNITS_AUTO) {
         return snprintf(buf, max, UCS_VALUE_AUTO_STR);
     }
 
-    return snprintf(buf, max, "0x%x", *(unsigned int*)src);
+    return snprintf(buf, max, "0x%x", val);
 }
 
 int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg)
@@ -601,7 +600,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     double *dst     = (double*)dest;
     char    str[16] = {0};
     int     offset  = 0;
-    int     length  = 0;
+    int length      = 0;
     size_t  divider;
     size_t  units;
     double  value;
