@@ -280,6 +280,18 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    if (!iface->config.vrf_loopback &&
+        ucs_netlink_is_local_addr(ndev_index,
+                                  (const struct sockaddr*)&remote_addr)) {
+        uct_iface_fill_info_str_buf(
+                    params, "%s is a local address of VRF %s with disabled "
+                    "IPv6",
+                    ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                     remote_addr_str, UCS_SOCKADDR_STRING_LEN),
+                    iface->config.vrf_name);
+        return 0;
+    }
+
     /* This interface has the best route */
     ucs_trace("tcp_iface %p (%s): this interface has the best route to %s",
               iface, iface->if_name,
@@ -621,9 +633,11 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 
 static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
 {
+    long disable_ipv6;
     int vrf_index;
 
-    iface->config.vrf_name[0] = '\0';
+    iface->config.vrf_name[0]  = '\0';
+    iface->config.vrf_loopback = 1;
 
     /* Addresses of a VRF slave can be used only by sockets bound to the VRF,
      * so bind all sockets of the interface to the VRF device */
@@ -641,6 +655,18 @@ static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
 
     ucs_debug("tcp_iface %p: %s is enslaved to VRF %s", iface, iface->if_name,
               iface->config.vrf_name);
+
+    /* Same-host traffic in a VRF is looped back through the VRF device, which
+     * drops IPv6 packets if IPv6 is disabled on it */
+    if ((iface->config.ifaddr.ss_family == AF_INET6) &&
+        (ucs_read_file_number(&disable_ipv6, 1,
+                              "/proc/sys/net/ipv6/conf/%s/disable_ipv6",
+                              iface->config.vrf_name) == UCS_OK) &&
+        disable_ipv6) {
+        ucs_debug("tcp_iface %p: IPv6 is disabled on VRF %s, local addresses "
+                  "of the VRF are unreachable", iface, iface->config.vrf_name);
+        iface->config.vrf_loopback = 0;
+    }
 }
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)

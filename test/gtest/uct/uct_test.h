@@ -215,6 +215,9 @@ protected:
 
         ucs_async_context_t &async() const;
 
+        /* Whether same-host traffic of the TCP iface is dropped by its VRF */
+        bool tcp_vrf_drops_loopback() const;
+
         size_t                   max_conn_priv;
 
     private:

@@ -12,6 +12,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <uct/tcp/tcp.h>
 #include <ucs/sys/netlink.h>
+#include <ucs/sys/sys.h>
 }
 
 class test_uct_tcp : public uct_test {
@@ -172,6 +173,10 @@ private:
         uct_device_addr_t *dev_addr;
         uct_iface_addr_t *iface_addr;
         ucs_status_t status;
+
+        if (to.tcp_vrf_drops_loopback()) {
+            UCS_TEST_SKIP_R("same-host traffic in VRF is dropped");
+        }
 
         dev_addr   = (uct_device_addr_t*)malloc(to.iface_attr().device_addr_len);
         iface_addr = (uct_iface_addr_t*)malloc(to.iface_attr().iface_addr_len);
@@ -394,6 +399,53 @@ UCS_TEST_P(test_uct_tcp, vrf_bind_to_device)
     ASSERT_EQ(0, getsockopt(m_tcp_iface->listen_fd, SOL_SOCKET,
                             SO_BINDTODEVICE, bound_if_name, &len));
     EXPECT_STREQ(vrf_name, bound_if_name);
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_loopback)
+{
+    const char *vrf_name = uct_tcp_iface_vrf_name(m_tcp_iface);
+    std::vector<char> dev_addr(m_ent->iface_attr().device_addr_len);
+    std::vector<char> iface_addr(m_ent->iface_attr().iface_addr_len);
+    uct_iface_is_reachable_params_t params;
+    long disable_ipv6 = 0;
+    char info_str[256];
+
+    // Same-host traffic in a VRF is looped back through the VRF device, which
+    // drops IPv6 packets if IPv6 is disabled on it
+    if ((vrf_name != NULL) &&
+        (m_tcp_iface->config.ifaddr.ss_family == AF_INET6)) {
+        ASSERT_UCS_OK(ucs_read_file_number(&disable_ipv6, 1,
+                                           "/proc/sys/net/ipv6/conf/%s/"
+                                           "disable_ipv6", vrf_name));
+    }
+    EXPECT_EQ(!disable_ipv6, !!m_tcp_iface->config.vrf_loopback);
+
+    ASSERT_UCS_OK(uct_iface_get_device_address(
+            m_ent->iface(), (uct_device_addr_t*)&dev_addr[0]));
+    ASSERT_UCS_OK(uct_iface_get_address(m_ent->iface(),
+                                        (uct_iface_addr_t*)&iface_addr[0]));
+
+    params.field_mask         = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
+                                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
+                                UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                                UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH |
+                                UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
+                                UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH;
+    params.device_addr        = (uct_device_addr_t*)&dev_addr[0];
+    params.device_addr_length = dev_addr.size();
+    params.iface_addr         = (uct_iface_addr_t*)&iface_addr[0];
+    params.iface_addr_length  = iface_addr.size();
+    params.info_string        = info_str;
+    params.info_string_length = sizeof(info_str);
+
+    // The own address is unreachable if same-host traffic in the VRF is dropped
+    EXPECT_EQ(m_tcp_iface->config.vrf_loopback,
+              uct_iface_is_reachable_v2(m_ent->iface(), &params));
+    if (!m_tcp_iface->config.vrf_loopback) {
+        EXPECT_NE(std::string::npos,
+                  std::string(info_str).find("is a local address of VRF"))
+                << info_str;
+    }
 }
 
 
