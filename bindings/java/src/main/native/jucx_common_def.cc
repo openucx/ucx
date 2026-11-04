@@ -50,6 +50,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
        return JNI_ERR;
     }
 
+    /* coverity[uninit_use_in_call] */
     jclass jucx_request_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRequest");
     jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
     jclass ucp_rkey_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
@@ -95,14 +96,17 @@ extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved) {
     }
 
     if (jucx_request_cls != NULL) {
+        /* coverity[uninit_use_in_call] */
         env->DeleteGlobalRef(jucx_request_cls);
     }
 
     if (jucx_endpoint_cls != NULL) {
+        /* coverity[uninit_use_in_call] */
         env->DeleteGlobalRef(jucx_endpoint_cls);
     }
 
     if (jucx_am_data_cls != NULL) {
+        /* coverity[uninit_use_in_call] */
         env->DeleteGlobalRef(jucx_am_data_cls);
     }
 }
@@ -229,6 +233,7 @@ JNIEnv* get_jni_env()
     void *env;
     jint rs = jvm_global->AttachCurrentThread(&env, NULL);
     ucs_assert_always(rs == JNI_OK);
+    /* coverity[uninit_use] */
     return (JNIEnv*)env;
 }
 
@@ -431,7 +436,9 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
     ucs_status_t status = ucp_conn_request_query(conn_request, &attr);
 
     if (status == UCS_OK) {
+        /* coverity[uninit_use_in_call] */
         client_address = c2jInetSockAddr(env, &attr.client_address);
+        /* coverity[uninit_use] */
         client_id = attr.client_id;
     }
 

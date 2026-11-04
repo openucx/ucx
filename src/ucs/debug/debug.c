@@ -208,6 +208,7 @@ static char *ucs_debug_strdup(const char *str)
     length = strlen(str) + 1;
     newstr = ucs_sys_realloc(NULL, 0, length);
     if (newstr != NULL) {
+        /* coverity[buffer_size] */
         strncpy(newstr, str, length);
     }
     return newstr;

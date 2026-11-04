@@ -117,6 +117,7 @@ ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
         goto out;
     }
 
+    /* coverity[uninit_use] */
     for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
         if ((if_name != NULL) && (0 != strcmp(if_name, ifa->ifa_name))) {
             continue;
@@ -1099,6 +1100,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
         return UCS_ERR_IO_ERROR;
     }
 
+    /* coverity[uninit_use] */
     for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
         sa = (struct sockaddr*) ifa->ifa_addr;
 
