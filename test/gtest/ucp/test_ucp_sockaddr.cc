@@ -1167,7 +1167,7 @@ UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
     /* get the actual port which was selected by listener */
     test_addr.set_port(m_test_addr.get_port());
     /* restore address */
-    m_test_addr = test_addr;
+    m_test_addr = std::move(test_addr);
     connect_and_send_recv(false, SEND_DIRECTION_C2S);
 }
 
