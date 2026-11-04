@@ -1022,6 +1022,55 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_already_drained,
     EXPECT_EQ(quota + rx_max_wr(m_e1), iface->rx_cq_available);
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_from_am_callback,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_VERBS_RX_MAX_WR=2", "IB_RX_MAX_BATCH=1",
+                     "RC_FC_ENABLE=n")
+{
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e2);
+    int quota                  = iface->rx_cq_available;
+    struct destroy_ctx {
+        entity *receiver;
+        uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+        unsigned rx_remaining;
+    } ctx = {m_e2, NULL, 0};
+
+    ASSERT_EQ(2u, iface->config.rx_max_wr);
+    ASSERT_EQ(0, rx_available(m_e2, 0));
+    ASSERT_TRUE(ucs_list_is_empty(&iface->super.qp_gc_list));
+
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+            [](void *arg, void *data, size_t length, unsigned flags) {
+                destroy_ctx *ctx = static_cast<destroy_ctx*>(arg);
+                uct_rc_verbs_iface_t *iface = ucs_derived_of(
+                        ctx->receiver->iface(), uct_rc_verbs_iface_t);
+
+                ctx->receiver->destroy_ep(0);
+                ctx->cleanup_ctx = ucs_list_head(&iface->super.qp_gc_list,
+                        uct_rc_verbs_iface_qp_cleanup_ctx_t, super.list);
+                ctx->rx_remaining = ctx->cleanup_ctx->rx_remaining;
+                return UCS_OK;
+            }, &ctx, 0);
+    ucs::handle<entity*> handler(m_e2, reset_am_count_handler);
+
+    ASSERT_UCS_OK(send_am_message(m_e1, RECOVERY_AM_ID, 0));
+    /* Progress only the iface, leaving the cleanup callback pending. */
+    wait_for_cond([&]() { return ctx.cleanup_ctx != NULL; },
+                  [this]() { uct_iface_progress(m_e2->iface()); }, 5.0);
+    ASSERT_TRUE(ctx.cleanup_ctx != NULL);
+    EXPECT_EQ(2u, ctx.rx_remaining);
+    EXPECT_LT(ctx.cleanup_ctx->rx_remaining, ctx.rx_remaining);
+
+    wait_for_cond([&]() { return ctx.cleanup_ctx->rx_remaining == 0; },
+                  [this]() { uct_iface_progress(m_e2->iface()); }, 5.0);
+    ASSERT_EQ(0u, ctx.cleanup_ctx->rx_remaining);
+    EXPECT_NE(UCS_CALLBACKQ_ID_NULL, ctx.cleanup_ctx->super.super.cb_id);
+    EXPECT_EQ(quota, iface->rx_cq_available);
+
+    wait_qp_gc_list_empty();
+    EXPECT_EQ(quota + 2, iface->rx_cq_available);
+}
+
 /* Limit the refill batch to a quarter of the per-QP queue and leave room
  * for that batch beyond the flow control window. */
 UCS_TEST_P(test_rc_no_srq, rx_config, "IB_RX_MAX_BATCH=16",

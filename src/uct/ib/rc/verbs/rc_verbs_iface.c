@@ -180,20 +180,6 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     return num_wcs;
 }
 
-void uct_rc_verbs_iface_rx_error(uct_rc_verbs_iface_t *iface,
-                                 const struct ibv_wc *wc,
-                                 uct_ib_iface_recv_desc_t *desc)
-{
-    if ((wc->status == IBV_WC_REM_ABORT_ERR) ||
-        (wc->status == IBV_WC_WR_FLUSH_ERR)) {
-        /* A failed receive never delivers an active message. */
-        ucs_mpool_put_inline(desc);
-    } else {
-        UCT_IB_IFACE_VERBS_COMPLETION_FATAL("receive", &iface->super.super,
-                                            0, wc);
-    }
-}
-
 static unsigned uct_rc_verbs_iface_progress(void *arg)
 {
     uct_rc_verbs_iface_t *iface = arg;
