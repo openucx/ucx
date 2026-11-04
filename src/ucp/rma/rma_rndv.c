@@ -22,7 +22,6 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
 
 

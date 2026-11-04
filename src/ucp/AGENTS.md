@@ -64,9 +64,8 @@ applications. Almost every meaningful UCX feature lives here.
   selection, protocols, endpoint features) must keep the old behavior
   with peers of older releases: gate it by a `*_MIN_DST_VERSION` constant
   checked against `dst_version` of the peer, never by a raw release
-  number. Define the constant with a comment in the module that checks
-  it, e.g. `UCP_WIREUP_MAX_LANES_MIN_DST_VERSION` in `wireup/wireup.h` or
-  `UCP_AM_PSN_MIN_DST_VERSION` in `am/eager_multi.c`.
+  number. Add the constant with a comment to the list of such constants
+  in `core/ucp_types.h`.
 - Iterate TL bitmaps with `UCP_TL_BITMAP_FOR_EACH_BIT`, not
   `UCS_STATIC_BITMAP_FOR_EACH_BIT`, and use `ucp_tl_bitmap_ffs` over
   `UCS_STATIC_BITMAP_FFS`.

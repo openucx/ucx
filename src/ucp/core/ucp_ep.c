@@ -42,9 +42,6 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
-/* Minimal peer release version which supports the endpoint recovery */
-#define UCP_EP_RECOVERY_MIN_DST_VERSION 22
-
 __KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
              ucp_ep_peer_mem_data_t, 1,
              kh_int64_hash_func, kh_int64_hash_equal);

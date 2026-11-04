@@ -349,6 +349,34 @@ typedef enum {
 } ucp_object_version_t;
 
 
+/*
+ * Minimal peer release versions of the features below, ordered by version.
+ * A feature is used with a peer only if the release version of the peer
+ * (dst_version) is at least the given one, so peers of older releases keep
+ * working.
+ */
+enum {
+    /* The lane bandwidth includes the local distance */
+    UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION = 17,
+    /* The AM lane is separated from the RMA BW lanes */
+    UCP_WIREUP_SEPARATE_AM_LANE_MIN_DST_VERSION = 17,
+    /* Up to UCP_MAX_LANES lanes instead of UCP_MAX_LANES_LEGACY */
+    UCP_WIREUP_MAX_LANES_MIN_DST_VERSION = 18,
+    /* UCX_CONNECT_ALL_TO_ALL connects all local and remote device pairs */
+    UCP_WIREUP_CONNECT_ALL_TO_ALL_MIN_DST_VERSION = 19,
+    /* A non-empty remote key always packs the system device */
+    UCP_RKEY_SYS_DEV_MIN_DST_VERSION = 20,
+    /* The PSN protocol of multi-fragment AM */
+    UCP_AM_PSN_MIN_DST_VERSION = 21,
+    /* The endpoint recovery */
+    UCP_EP_RECOVERY_MIN_DST_VERSION = 22,
+    /* The rendezvous protocols of RMA operations */
+    UCP_PROTO_RMA_RNDV_MIN_DST_VERSION = 22,
+    /* The token trailer of the LANES_ADDR messages */
+    UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION = 24
+};
+
+
 /**
  * Active message tracer.
  */

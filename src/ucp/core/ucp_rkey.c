@@ -24,11 +24,6 @@
 #include <inttypes.h>
 
 
-/* Minimal peer release version which always packs the system device of a
- * non-empty remote key, and the lane distances if the device is known */
-#define UCP_RKEY_SYS_DEV_MIN_DST_VERSION 20
-
-
 typedef struct {
     uint8_t   sys_dev;
     ucs_fp8_t latency;

@@ -59,41 +59,6 @@ enum {
 };
 
 
-/*
- * Minimal peer release version which includes the local distance in the lane
- * bandwidth. With older peers the interface bandwidth is used without it.
- */
-#define UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION 17
-
-
-/*
- * Minimal peer release version which separates the AM lane from the RMA BW
- * lanes. With older peers the AM lane can also be used as an RMA BW lane.
- */
-#define UCP_WIREUP_SEPARATE_AM_LANE_MIN_DST_VERSION 17
-
-
-/*
- * Minimal peer release version which supports UCP_MAX_LANES lanes. Older
- * peers support up to UCP_MAX_LANES_LEGACY lanes.
- */
-#define UCP_WIREUP_MAX_LANES_MIN_DST_VERSION 18
-
-
-/*
- * Minimal peer release version which connects all pairs of local and remote
- * devices with UCX_CONNECT_ALL_TO_ALL. With older peers it is ignored.
- */
-#define UCP_WIREUP_CONNECT_ALL_TO_ALL_MIN_DST_VERSION 19
-
-
-/*
- * Minimal peer release version which understands the token trailer of the
- * LANES_ADDR messages. Older peers get the messages without any token.
- */
-#define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
-
-
 /**
  * Calculates a score of a potential transport. Used both for the primary
  * selection score and for the tiebreak score.
