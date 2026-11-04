@@ -51,6 +51,19 @@ KHASH_INIT(ucs_netlink_vrf_cache, khint32_t, int, 1, kh_int_hash_func,
            kh_int_hash_equal);
 static khash_t(ucs_netlink_vrf_cache) ucs_netlink_vrf_master_cache;
 
+/* Look up an initialized VRF cache */
+static int ucs_netlink_vrf_master_lookup(int if_index)
+{
+    khiter_t iter = kh_get(ucs_netlink_vrf_cache, &ucs_netlink_vrf_master_cache,
+                           if_index);
+
+    if (iter == kh_end(&ucs_netlink_vrf_master_cache)) {
+        return -1;
+    }
+
+    return kh_val(&ucs_netlink_vrf_master_cache, iter);
+}
+
 static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
 {
     return (nlh->nlmsg_type == NLMSG_DONE);
@@ -348,7 +361,7 @@ ucs_netlink_max_netmask_len(int if_index, const struct sockaddr *sa_remote)
         /* Longest prefix match is done only within one routing domain, but
          * local addresses of other domains are matched too: other domains do
          * not deliver them locally, but route them out of the host */
-        route_type       = (ucs_netlink_get_vrf_master_index(curr_if_index) ==
+        route_type       = (ucs_netlink_vrf_master_lookup(curr_if_index) ==
                             vrf_index) ? RTN_UNSPEC : RTN_LOCAL;
         curr_netmask_len = ucs_netlink_lookup_in_iface_rules_by_type(
                 sa_remote, &iface_rules, route_type);
@@ -409,7 +422,7 @@ int ucs_netlink_is_local_addr(int if_index, const struct sockaddr *sa_remote)
 
     kh_foreach(&ucs_netlink_routing_table_cache, curr_if_index, iface_rules, {
         /* Local routes of other routing domains are not used */
-        if (ucs_netlink_get_vrf_master_index(curr_if_index) != vrf_index) {
+        if (ucs_netlink_vrf_master_lookup(curr_if_index) != vrf_index) {
             continue;
         }
 
@@ -506,15 +519,6 @@ static void ucs_netlink_init_vrf_master_cache(void)
 
 int ucs_netlink_get_vrf_master_index(int if_index)
 {
-    khiter_t iter;
-
     ucs_netlink_init_vrf_master_cache();
-
-    iter = kh_get(ucs_netlink_vrf_cache, &ucs_netlink_vrf_master_cache,
-                  if_index);
-    if (iter == kh_end(&ucs_netlink_vrf_master_cache)) {
-        return -1;
-    }
-
-    return kh_val(&ucs_netlink_vrf_master_cache, iter);
+    return ucs_netlink_vrf_master_lookup(if_index);
 }
