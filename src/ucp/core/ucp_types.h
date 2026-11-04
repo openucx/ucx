@@ -353,7 +353,8 @@ typedef enum {
  * Minimal peer release versions of the features below, ordered by version.
  * A feature is used with a peer only if the release version of the peer
  * (dst_version) is at least the given one, so peers of older releases keep
- * working.
+ * working. A peer which does not pack its release version has dst_version
+ * UCP_RELEASE_LEGACY, below all of these versions.
  */
 enum {
     /* The lane bandwidth includes the local distance */
