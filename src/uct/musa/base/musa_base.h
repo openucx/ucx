@@ -71,7 +71,9 @@ ucs_status_t
 uct_musa_base_query_copy_pointer(const void *address, size_t length,
                                  uct_musa_pointer_info_t *info);
 
-ucs_status_t uct_musa_base_status(musaError_t error, const char *operation);
+ucs_status_t uct_musa_base_status(musaError_t error,
+                                  ucs_log_level_t log_level,
+                                  const char *operation);
 
 ucs_status_t uct_musa_base_get_current_device(int *device_p);
 
@@ -82,10 +84,16 @@ uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p);
 
 void uct_musa_base_restore_device(int device, int valid);
 
-int uct_musa_base_has_dmabuf(void);
+/* Return whether device-scoped MUSA calls issued for @a device require
+ * switching away from the current device (and restoring it afterwards). */
+static UCS_F_ALWAYS_INLINE int
+uct_musa_base_need_device_switch(int have_current_device, int current_device,
+                                 int device)
+{
+    return !have_current_device || (current_device != device);
+}
 
-ucs_status_t uct_musa_base_export_dmabuf(const void *address, size_t length,
-                                         int *fd_p, size_t *offset_p);
+int uct_musa_base_has_dmabuf(void);
 
 END_C_DECLS
 

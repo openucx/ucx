@@ -20,8 +20,6 @@
 #include <ucs/sys/preprocessor.h>
 
 #include <pthread.h>
-#include <string.h>
-#include <sys/mman.h>
 
 static musaError_t ucm_musaMalloc(void **address, size_t size);
 static musaError_t ucm_musaFree(void *address);
@@ -113,24 +111,6 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemAllocPitch, MUresult, -1, MUdeviceptr *,
                                   size_t *, size_t, size_t, unsigned)
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(muMemFree, MUresult, -1, MUdeviceptr)
 
-static void
-ucm_dispatch_musa_mem_type_event(ucm_event_type_t event_type, void *address,
-                                 size_t length, ucs_memory_type_t mem_type)
-{
-    ucm_event_t event;
-
-    if (address == NULL) {
-        return;
-    }
-
-    event.mem_type.address   = address;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = mem_type;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-    ucm_event_dispatch(event_type, &event);
-}
-
 static size_t ucm_musa_mem_size(void *address)
 {
     MUdeviceptr base;
@@ -152,8 +132,8 @@ static musaError_t ucm_musaMalloc(void **address, size_t size)
     ucm_event_enter();
     status = ucm_orig_musaMalloc(address, size);
     if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
-                                         size, UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -166,8 +146,9 @@ static musaError_t ucm_musaFree(void *address)
 
     ucm_event_enter();
     length = ucm_musa_mem_size(address);
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, address, length,
-                                     UCS_MEMORY_TYPE_MUSA);
+    if (address != NULL) {
+        ucm_dispatch_mem_type_free(address, length, UCS_MEMORY_TYPE_MUSA);
+    }
     status = ucm_orig_musaFree(address);
     ucm_event_leave();
     return status;
@@ -181,8 +162,8 @@ ucm_musaMallocManaged(void **address, size_t size, unsigned flags)
     ucm_event_enter();
     status = ucm_orig_musaMallocManaged(address, size, flags);
     if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
-                                         size, UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -193,8 +174,9 @@ static musaError_t ucm_musaFreeHost(void *address)
     musaError_t status;
 
     ucm_event_enter();
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, address, 1,
-                                     UCS_MEMORY_TYPE_HOST);
+    if (address != NULL) {
+        ucm_dispatch_mem_type_free(address, 1, UCS_MEMORY_TYPE_HOST);
+    }
     status = ucm_orig_musaFreeHost(address);
     ucm_event_leave();
     return status;
@@ -209,9 +191,9 @@ ucm_musaMallocPitch(void **address, size_t *pitch, size_t width, size_t height)
     ucm_event_enter();
     status = ucm_orig_musaMallocPitch(address, pitch, width, height);
     if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
-                                         (*pitch) * height,
-                                         UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc(*address, (*pitch) * height,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -227,8 +209,8 @@ ucm_musaMallocAsync(void **address, size_t size, musaStream_t stream)
     ucm_event_enter();
     status = ucm_orig_musaMallocAsync(address, size, stream);
     if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
-                                         size, UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -243,8 +225,8 @@ ucm_musaMallocFromPoolAsync(void **address, size_t size, musaMemPool_t pool,
     ucm_event_enter();
     status = ucm_orig_musaMallocFromPoolAsync(address, size, pool, stream);
     if ((status == musaSuccess) && (address != NULL) && (*address != NULL)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC, *address,
-                                         size, UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc(*address, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -258,8 +240,9 @@ ucm_musaFreeAsync(void *address, musaStream_t stream)
 
     ucm_event_enter();
     length = ucm_musa_mem_size(address);
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE, address, length,
-                                     UCS_MEMORY_TYPE_MUSA);
+    if (address != NULL) {
+        ucm_dispatch_mem_type_free(address, length, UCS_MEMORY_TYPE_MUSA);
+    }
     status = ucm_orig_musaFreeAsync(address, stream);
     ucm_event_leave();
     return status;
@@ -273,9 +256,9 @@ static MUresult ucm_muMemAlloc(MUdeviceptr *address, size_t size)
     ucm_event_enter();
     status = ucm_orig_muMemAlloc(address, size);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC,
-                                         (void *)(uintptr_t)*address, size,
-                                         UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -291,9 +274,10 @@ ucm_muMemAllocPitch(MUdeviceptr *address, size_t *pitch, size_t width,
     status = ucm_orig_muMemAllocPitch(address, pitch, width, height,
                                       element_size);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(
-                UCM_EVENT_MEM_TYPE_ALLOC, (void *)(uintptr_t)*address,
-                (*pitch) * height, UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address,
+                                    (*pitch) * height,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -304,11 +288,12 @@ static MUresult ucm_muMemFree(MUdeviceptr address)
     MUresult status;
 
     ucm_event_enter();
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE,
-                                     (void *)(uintptr_t)address,
-                                     ucm_musa_mem_size(
-                                             (void *)(uintptr_t)address),
-                                     UCS_MEMORY_TYPE_MUSA);
+    if (address != 0) {
+        ucm_dispatch_mem_type_free(
+                (void *)(uintptr_t)address,
+                ucm_musa_mem_size((void *)(uintptr_t)address),
+                UCS_MEMORY_TYPE_MUSA);
+    }
     status = ucm_orig_muMemFree(address);
     ucm_event_leave();
     return status;
@@ -322,9 +307,9 @@ static MUresult ucm_muMemAlloc_v2(MUdeviceptr *address, size_t size)
     ucm_event_enter();
     status = ucm_orig_muMemAlloc_v2(address, size);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC,
-                                         (void *)(uintptr_t)*address, size,
-                                         UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -338,9 +323,9 @@ ucm_muMemAllocManaged(MUdeviceptr *address, size_t size, unsigned flags)
     ucm_event_enter();
     status = ucm_orig_muMemAllocManaged(address, size, flags);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC,
-                                         (void *)(uintptr_t)*address, size,
-                                         UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -356,9 +341,10 @@ ucm_muMemAllocPitch_v2(MUdeviceptr *address, size_t *pitch, size_t width,
     status = ucm_orig_muMemAllocPitch_v2(address, pitch, width, height,
                                          element_size);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(
-                UCM_EVENT_MEM_TYPE_ALLOC, (void *)(uintptr_t)*address,
-                (*pitch) * height, UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address,
+                                    (*pitch) * height,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -369,11 +355,12 @@ static MUresult ucm_muMemFree_v2(MUdeviceptr address)
     MUresult status;
 
     ucm_event_enter();
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE,
-                                     (void *)(uintptr_t)address,
-                                     ucm_musa_mem_size(
-                                             (void *)(uintptr_t)address),
-                                     UCS_MEMORY_TYPE_MUSA);
+    if (address != 0) {
+        ucm_dispatch_mem_type_free(
+                (void *)(uintptr_t)address,
+                ucm_musa_mem_size((void *)(uintptr_t)address),
+                UCS_MEMORY_TYPE_MUSA);
+    }
     status = ucm_orig_muMemFree_v2(address);
     ucm_event_leave();
     return status;
@@ -389,9 +376,9 @@ ucm_muMemAllocAsync(MUdeviceptr *address, size_t size, MUstream stream)
     ucm_event_enter();
     status = ucm_orig_muMemAllocAsync(address, size, stream);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC,
-                                         (void *)(uintptr_t)*address, size,
-                                         UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -406,9 +393,9 @@ ucm_muMemAllocFromPoolAsync(MUdeviceptr *address, size_t size,
     ucm_event_enter();
     status = ucm_orig_muMemAllocFromPoolAsync(address, size, pool, stream);
     if ((status == MUSA_SUCCESS) && (address != NULL) && (*address != 0)) {
-        ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_ALLOC,
-                                         (void *)(uintptr_t)*address, size,
-                                         UCS_MEMORY_TYPE_LAST);
+        ucm_dispatch_mem_type_alloc((void *)(uintptr_t)*address, size,
+                                    UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
     ucm_event_leave();
     return status;
@@ -419,11 +406,12 @@ static MUresult ucm_muMemFreeAsync(MUdeviceptr address, MUstream stream)
     MUresult status;
 
     ucm_event_enter();
-    ucm_dispatch_musa_mem_type_event(UCM_EVENT_MEM_TYPE_FREE,
-                                     (void *)(uintptr_t)address,
-                                     ucm_musa_mem_size(
-                                             (void *)(uintptr_t)address),
-                                     UCS_MEMORY_TYPE_MUSA);
+    if (address != 0) {
+        ucm_dispatch_mem_type_free(
+                (void *)(uintptr_t)address,
+                ucm_musa_mem_size((void *)(uintptr_t)address),
+                UCS_MEMORY_TYPE_MUSA);
+    }
     status = ucm_orig_muMemFreeAsync(address, stream);
     ucm_event_leave();
     return status;
@@ -586,55 +574,9 @@ static ucs_status_t ucm_musamem_install(int events)
     return status;
 }
 
-static int
-ucm_musamem_is_device_region(int prot, const char *path)
-{
-    static const char render_path[] =
-            "/dev/dri/renderD";
-    static const char mtgpu_path[]  = "/dev/mtgpu";
-
-    if (!(prot & (PROT_READ | PROT_WRITE | PROT_EXEC))) {
-        return 1;
-    }
-
-    return (path != NULL) &&
-           ((!strncmp(path, render_path, sizeof(render_path) - 1)) ||
-            (!strncmp(path, mtgpu_path, sizeof(mtgpu_path) - 1)));
-}
-
-static int
-ucm_musamem_scan_regions_cb(void *arg, void *addr, size_t length, int prot,
-                            const char *path)
-{
-    ucm_event_handler_t *handler = arg;
-    ucm_event_t event;
-
-    if (!ucm_musamem_is_device_region(prot, path)) {
-        return 0;
-    }
-
-    event.mem_type.address   = addr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-
-    ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
-    ucm_event_leave();
-    return 0;
-}
-
-static void ucm_musamem_get_existing_alloc(ucm_event_handler_t *handler)
-{
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_musamem_scan_regions_cb, handler);
-    }
-}
-
 static ucm_event_installer_t ucm_musa_initializer = {
-    .install            = ucm_musamem_install,
-    .get_existing_alloc = ucm_musamem_get_existing_alloc
+    .install      = ucm_musamem_install,
+    .path_pattern = "/dev/mtgpu"
 };
 
 UCS_STATIC_INIT
