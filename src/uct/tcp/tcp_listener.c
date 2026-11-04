@@ -114,11 +114,23 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
         goto err;
     }
 
-    status = ucs_socket_server_init(saddr, socklen, backlog, 0,
+    status = ucs_socket_server_bind(saddr, socklen, 0,
                                     self->sockcm->super.config.reuse_addr,
                                     &self->listen_fd);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    /* Accepted sockets inherit the segment size of the listener, which
+     * advertises it to connecting peers, so set it before listening */
+    status = ucs_tcp_base_set_maxseg(self->listen_fd, self->sockcm->maxseg);
+    if (status != UCS_OK) {
+        goto err_close_socket;
+    }
+
+    status = ucs_socket_server_listen(self->listen_fd, backlog);
+    if (status != UCS_OK) {
+        goto err_close_socket;
     }
 
     async_ctx = self->sockcm->super.iface.worker->async;

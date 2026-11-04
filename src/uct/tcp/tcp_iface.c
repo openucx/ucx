@@ -80,15 +80,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
-  {"MAXSEG", "auto",
-   "Maximal segment size of TCP connections (TCP_MAXSEG socket option).\n"
-   "Lower it when the network drops larger segments without reporting the\n"
-   "path MTU. Set it to the path MTU minus the fixed IP and TCP headers:\n"
-   "40 bytes for IPv4 or 60 bytes for IPv6 (e.g. 9060 or 9040 for a path MTU\n"
-   "of 9100). TCP and IP options do not have to be subtracted, the kernel\n"
-   "accounts for them.\n"
-   "auto - use the system default.",
-   ucs_offsetof(uct_tcp_iface_config_t, maxseg), UCS_CONFIG_TYPE_MEMUNITS},
+  UCT_TCP_MAXSEG(ucs_offsetof(uct_tcp_iface_config_t, maxseg)),
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
@@ -495,19 +487,6 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
     }
 }
 
-static ucs_status_t uct_tcp_iface_set_maxseg(uct_tcp_iface_t *iface, int fd)
-{
-    int maxseg;
-
-    if (iface->sockopt.maxseg == UCS_MEMUNITS_AUTO) {
-        return UCS_OK;
-    }
-
-    maxseg = iface->sockopt.maxseg;
-    return ucs_socket_setopt(fd, IPPROTO_TCP, TCP_MAXSEG,
-                             (const void*)&maxseg, sizeof(maxseg));
-}
-
 ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
                                        int set_nb)
 {
@@ -538,7 +517,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
         return status;
     }
 
-    status = uct_tcp_iface_set_maxseg(iface, fd);
+    status = ucs_tcp_base_set_maxseg(fd, iface->sockopt.maxseg);
     if (status != UCS_OK) {
         return status;
     }
@@ -608,11 +587,30 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
             return status;
         }
 
-        status = ucs_socket_server_init((struct sockaddr*)&bind_addr, addr_len,
-                                        ucs_socket_max_conn(), retry, 0,
-                                        &iface->listen_fd);
+        status = ucs_socket_server_bind((struct sockaddr*)&bind_addr, addr_len,
+                                        retry, 0, &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Accepted sockets inherit the segment size of the listener, which
+     * advertises it to connecting peers, so set it before listening */
+    status = ucs_tcp_base_set_maxseg(iface->listen_fd, iface->sockopt.maxseg);
+    if (status != UCS_OK) {
+        goto err_close_sock;
+    }
+
+    status = ucs_socket_server_listen(iface->listen_fd, ucs_socket_max_conn());
+    if (status != UCS_OK) {
+        goto err_close_sock;
+    }
+
+    return UCS_OK;
+
+err_close_sock:
+    ucs_close_fd(&iface->listen_fd);
     return status;
 }
 
@@ -628,13 +626,6 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     status = uct_tcp_iface_server_init(iface);
     if (status != UCS_OK) {
         goto err;
-    }
-
-    /* The listener advertises the segment size to connecting peers, and
-     * accepted sockets inherit it */
-    status = uct_tcp_iface_set_maxseg(iface, iface->listen_fd);
-    if (status != UCS_OK) {
-        goto err_close_sock;
     }
 
     /* Get the port which was selected for the socket */
@@ -803,6 +794,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                   "connection retries, expected lower than %u",
                   config->max_conn_retries, UINT8_MAX);
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_tcp_base_check_maxseg(config->maxseg);
+    if (status != UCS_OK) {
+        return status;
     }
 
     self->config.zcopy.max_hdr     = self->config.tx_seg_size -
