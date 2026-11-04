@@ -1139,7 +1139,7 @@ static void *ucp_address_unpack_header(const void *ptr,
     if (*addr_version == UCP_OBJECT_VERSION_V1) {
         *addr_flags  = *addr_header >> UCP_ADDRESS_HEADER_SHIFT;
         /* With address v1 it is packed after devices */
-        *dst_version = 0;
+        *dst_version = UCP_MIN_DST_VERSION_LEGACY;
         return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
     }
 
