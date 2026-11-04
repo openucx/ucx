@@ -266,9 +266,8 @@ check_release_build() {
         done
     fi
 
-    # Don't trace the ##vso line, the agent parses stderr too
-    { set +x; } 2>/dev/null
-    echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
+    # Split ##vso so the set -x trace is not parsed by the agent
+    printf '##%s[task.setvariable variable=Launch;isOutput=true]%s\n' vso "${launch}"
 }
 
 check_main_pipeline_status() {
