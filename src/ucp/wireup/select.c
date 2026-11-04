@@ -1950,15 +1950,10 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
             if (skip_slow_lanes) {
-                /* Skip lanes much slower than the fastest selected one instead
-                 * of dropping them after the selection: every selected lane
-                 * takes a path of its devices, and the peer may repeat the
-                 * selection with our wireup address, which has only the devices
-                 * of the added lanes. For the same reason, the candidates which
-                 * were not selected do not affect the threshold, and a selected
-                 * lane is kept even if a faster lane is selected after it. This
-                 * is rare, since normally the first selected lane is the
-                 * fastest one. */
+                /* Skip lanes much slower than the fastest lane selected so far,
+                 * and never drop a selected lane: the peer may select the lanes
+                 * again from our wireup address, which has only the devices of
+                 * the added lanes, and it must get the same lanes. */
                 bw_info->criteria.min_lane_bw = max_bw * max_ratio;
             }
 
