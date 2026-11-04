@@ -25,6 +25,15 @@ public:
         m_tcp_iface = (uct_tcp_iface*)m_ent->iface();
     }
 
+    static int get_maxseg(int fd) {
+        int maxseg    = 0;
+        socklen_t len = sizeof(maxseg);
+
+        EXPECT_EQ(0, getsockopt(fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg, &len))
+                << strerror(errno);
+        return maxseg;
+    }
+
     size_t get_accepted_conn_num(entity& ent) {
         size_t num = 0;
         uct_tcp_ep_t *ep;
@@ -328,11 +337,7 @@ UCS_TEST_P(test_uct_tcp, maxseg_auto)
 
     // No TCP_MAXSEG is set by default, so the segment size follows the MTU
     setup_conns_to_entity(*m_ent, 1, fds);
-    int maxseg    = 0;
-    socklen_t len = sizeof(maxseg);
-    EXPECT_EQ(0, getsockopt(fds.front(), IPPROTO_TCP, TCP_MAXSEG, &maxseg,
-                            &len));
-    EXPECT_GT(maxseg, limit);
+    EXPECT_GT(get_maxseg(fds.front()), limit);
     close(fds.front());
 }
 
@@ -347,15 +352,6 @@ public:
     }
 
 protected:
-    static int get_maxseg(int fd) {
-        int maxseg    = 0;
-        socklen_t len = sizeof(maxseg);
-
-        EXPECT_EQ(0, getsockopt(fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg, &len))
-                << strerror(errno);
-        return maxseg;
-    }
-
     class scoped_fd {
     public:
         scoped_fd() : m_fd(-1) {}

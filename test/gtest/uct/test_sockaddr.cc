@@ -886,39 +886,6 @@ UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close_large_priv_data)
     basic_listen_connect_disconnect();
 }
 
-UCS_TEST_P(test_uct_sockaddr, tcp_cm_maxseg)
-{
-    static const int MAXSEG = 1000;
-
-    if (GetParam()->component_name != "tcp") {
-        UCS_TEST_SKIP_R("not a TCP CM");
-    }
-
-    m_entities.clear();
-    ASSERT_UCS_OK(uct_config_modify(m_cm_config, "TCP_CM_MAXSEG",
-                                    ucs::to_string(MAXSEG).c_str()));
-    init();
-
-    listen_and_connect();
-    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
-                            TEST_STATE_CLIENT_CONNECTED);
-    ASSERT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
-                                             TEST_STATE_CLIENT_CONNECTED)));
-
-    /* Both the connecting and the accepted socket limit the segment size */
-    for (entity *e : {m_client, m_server}) {
-        uct_tcp_sockcm_ep_t *ep = ucs_derived_of(e->ep(0), uct_tcp_sockcm_ep_t);
-        int maxseg              = 0;
-        socklen_t len           = sizeof(maxseg);
-
-        ASSERT_EQ(0, getsockopt(ep->fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg,
-                                &len)) << strerror(errno);
-        EXPECT_LE(maxseg, MAXSEG);
-    }
-
-    cm_disconnect(m_client);
-}
-
 UCS_TEST_P(test_uct_sockaddr, cm_open_listen_kill_server)
 {
     listen_and_connect();
@@ -1167,6 +1134,44 @@ UCS_TEST_P(test_uct_sockaddr, concurrent_handle_conn_req_and_close_listener)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr)
+
+
+class test_uct_sockaddr_tcp_maxseg : public test_uct_sockaddr {
+public:
+    void init() {
+        modify_config("TCP_CM_MAXSEG", ucs::to_string(MAXSEG));
+        test_uct_sockaddr::init();
+    }
+
+protected:
+    static constexpr int MAXSEG = 1000;
+};
+
+constexpr int test_uct_sockaddr_tcp_maxseg::MAXSEG;
+
+UCS_TEST_P(test_uct_sockaddr_tcp_maxseg, set_sockopt)
+{
+    listen_and_connect();
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    ASSERT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
+                                             TEST_STATE_CLIENT_CONNECTED)));
+
+    /* Both the connecting and the accepted socket limit the segment size */
+    for (entity *e : {m_client, m_server}) {
+        uct_tcp_sockcm_ep_t *ep = ucs_derived_of(e->ep(0), uct_tcp_sockcm_ep_t);
+        int maxseg              = 0;
+        socklen_t len           = sizeof(maxseg);
+
+        EXPECT_EQ(0, getsockopt(ep->fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg,
+                                &len)) << strerror(errno);
+        EXPECT_LE(maxseg, MAXSEG);
+    }
+
+    cm_disconnect(m_client);
+}
+
+_UCT_INSTANTIATE_CM_TEST_CASE(test_uct_sockaddr_tcp_maxseg, tcp)
 
 
 class test_uct_sockaddr_err_handle_non_exist_ip : public test_uct_sockaddr {

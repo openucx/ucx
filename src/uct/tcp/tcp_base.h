@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <netinet/tcp.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/preprocessor.h>
 #include <ucs/sys/sock.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
@@ -51,6 +52,12 @@ typedef struct uct_tcp_send_recv_buf_config {
      (_offset), UCS_CONFIG_TYPE_TIME_UNITS}
 
 
+/* The range of TCP_MAXSEG values accepted by Linux: TCP_MIN_MSS and
+ * MAX_TCP_WINDOW */
+#define UCT_TCP_MAXSEG_MIN 88
+#define UCT_TCP_MAXSEG_MAX 32767
+
+
 #define UCT_TCP_MAXSEG(_offset) \
     {"MAXSEG", "auto", \
      "Maximal segment size of TCP connections (TCP_MAXSEG socket option).\n" \
@@ -58,7 +65,9 @@ typedef struct uct_tcp_send_recv_buf_config {
      "path MTU. Set it to the path MTU minus the fixed IP and TCP headers:\n" \
      "40 bytes for IPv4 or 60 bytes for IPv6 (e.g. 9060 or 9040 for a path\n" \
      "MTU of 9100). TCP and IP options do not have to be subtracted, the\n" \
-     "kernel accounts for them. The value must be between 88 and 32767.\n" \
+     "kernel accounts for them. The value must be between " \
+     UCS_PP_MAKE_STRING(UCT_TCP_MAXSEG_MIN) " and " \
+     UCS_PP_MAKE_STRING(UCT_TCP_MAXSEG_MAX) ".\n" \
      "auto - use the system default.", \
      (_offset), UCS_CONFIG_TYPE_MEMUNITS}
 

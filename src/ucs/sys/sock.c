@@ -515,8 +515,13 @@ err:
 
 ucs_status_t ucs_socket_server_listen(int fd, int backlog)
 {
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
     if (listen(fd, backlog) < 0) {
-        ucs_error("listen(fd=%d backlog=%d) failed: %m", fd, backlog);
+        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m", fd,
+                  ucs_socket_getname_str(fd, ip_port_str,
+                                         sizeof(ip_port_str)),
+                  backlog);
         return UCS_ERR_IO_ERROR;
     }
 

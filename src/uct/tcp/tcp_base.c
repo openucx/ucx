@@ -15,12 +15,6 @@
 #include <limits.h>
 
 
-/* The range of TCP_MAXSEG values accepted by Linux: TCP_MIN_MSS and
- * MAX_TCP_WINDOW */
-#define UCT_TCP_MAXSEG_MIN 88
-#define UCT_TCP_MAXSEG_MAX 32767
-
-
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt)
 {
     if (tcp_syn_cnt != UCS_ULUNITS_AUTO) {
