@@ -338,18 +338,28 @@ const int test_uct_tcp_maxseg::MAXSEG = 1000;
 
 UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
 {
-    int fd;
+    struct sockaddr_in sin = {};
+    socklen_t addr_len     = sizeof(sin);
+    int listen_fd, fd;
 
-    // The segment size is set before connecting a socket
-    ASSERT_UCS_OK(ucs_socket_create(m_tcp_iface->config.ifaddr.ss_family,
-                                    SOCK_STREAM, 0, &fd));
+    // Older kernels report the segment size only for a connected socket
+    sin.sin_family      = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0, &listen_fd));
+    ASSERT_EQ(0, bind(listen_fd, (struct sockaddr*)&sin, sizeof(sin)));
+    ASSERT_EQ(0, listen(listen_fd, 1));
+    ASSERT_EQ(0, getsockname(listen_fd, (struct sockaddr*)&sin, &addr_len));
+
+    // A connecting socket limits the segment size of its connection
+    ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd));
     ASSERT_UCS_OK(uct_tcp_iface_set_sockopt(m_tcp_iface, fd, 0));
-    EXPECT_EQ(MAXSEG, get_maxseg(fd));
+    ASSERT_UCS_OK(ucs_socket_connect(fd, (struct sockaddr*)&sin));
+    EXPECT_LE(get_maxseg(fd), MAXSEG);
     close(fd);
+    close(listen_fd);
 
     // The listener advertises it to a peer, which does not limit the segment
     // size itself
-    EXPECT_EQ(MAXSEG, get_maxseg(m_tcp_iface->listen_fd));
     fd = setup_conn_to_entity(*m_ent);
     EXPECT_LE(get_maxseg(fd), MAXSEG);
     close(fd);
