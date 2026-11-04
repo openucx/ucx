@@ -41,6 +41,7 @@
         int _length      = 0; \
         \
         (sscanf(_str, _fmt " %n", (_value), &_length) == 1) && \
+                ((size_t)_length <= strlen(_str)) && \
                 (_str[_length] == '\0'); \
     })
 
@@ -519,11 +520,15 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
     memset(units, 0, sizeof(units));
     num_fields = sscanf(buf, "%lf%n%2[a-zA-Z]%n", &value, &length, units,
                         &length);
+    if ((num_fields < 1) || ((size_t)length > strlen(buf))) {
+        return 0;
+    }
+
     while (isspace(buf[length])) {
         ++length;
     }
 
-    if ((num_fields < 1) || (buf[length] != '\0')) {
+    if (buf[length] != '\0') {
         return 0;
     }
 
@@ -608,7 +613,8 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     }
 
     num_fields = sscanf(buf, "%lf%15s %n", &value, str, &length);
-    if ((num_fields < 2) || (buf[length] != '\0')) {
+    if ((num_fields < 2) || ((size_t)length > strlen(buf)) ||
+        (buf[length] != '\0')) {
         return 0;
     }
 

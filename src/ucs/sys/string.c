@@ -190,11 +190,15 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
     memset(units, 0, sizeof(units));
     num_fields = sscanf(buf, "%ld%n%2[a-zA-Z]%n", &value, &length, units,
                         &length);
+    if ((num_fields < 1) || ((size_t)length > strlen(buf))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     while (isspace(buf[length])) {
         ++length;
     }
 
-    if ((num_fields < 1) || (buf[length] != '\0')) {
+    if (buf[length] != '\0') {
         return UCS_ERR_INVALID_PARAM;
     }
 
