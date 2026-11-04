@@ -412,8 +412,10 @@ static void ucp_wireup_select_transport_tiebreak(
 static size_t
 ucp_wireup_bw_max_lanes(const ucp_wireup_select_params_t *select_params)
 {
-    return (select_params->address->dst_version < 18) ? UCP_MAX_LANES_LEGACY :
-                                                        UCP_MAX_LANES;
+    return (select_params->address->dst_version <
+            UCP_WIREUP_MAX_LANES_MIN_DST_VERSION) ?
+                   UCP_MAX_LANES_LEGACY :
+                   UCP_MAX_LANES;
 }
 
 static size_t
@@ -1103,7 +1105,7 @@ ucp_wireup_iface_score_bandwidth(const ucp_worker_iface_t *wiface,
 {
     double local_bw;
 
-    if (unpacked_addr->dst_version < 17) {
+    if (unpacked_addr->dst_version < UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION) {
         local_bw = ucp_tl_iface_bandwidth(wiface->worker->context,
                                           &wiface->attr.bandwidth);
     } else {
@@ -1454,7 +1456,8 @@ ucp_wireup_is_connect_all_to_all(const ucp_worker_h worker,
 {
     return worker->context->config.ext.connect_all_to_all &&
            !(worker->uuid == unpacked_addr->uuid) && /* Not on self */
-           (unpacked_addr->dst_version >= 19);
+           (unpacked_addr->dst_version >=
+            UCP_WIREUP_CONNECT_ALL_TO_ALL_MIN_DST_VERSION);
 }
 
 static double
@@ -1710,7 +1713,7 @@ static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, sinfo->rsc_index);
     double bw_local, bw_remote;
 
-    if (address->dst_version < 17) {
+    if (address->dst_version < UCP_WIREUP_BW_DISTANCE_MIN_DST_VERSION) {
         bw_local = ucp_tl_iface_bandwidth(worker->context,
                                           &wiface->attr.bandwidth);
     } else {
@@ -2319,7 +2322,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * use of fence operations usually don't request the TAG feature, hence the
      * check.
      */
-    if ((select_params->address->dst_version >= 17) &&
+    if ((select_params->address->dst_version >=
+         UCP_WIREUP_SEPARATE_AM_LANE_MIN_DST_VERSION) &&
         (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM))) {
         ucs_carray_for_each(lane_desc, select_ctx->lane_descs,
                             select_ctx->num_lanes) {
