@@ -720,7 +720,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         ucs_assert(iface->srq == NULL);
         ucs_error("iface %p: cannot create endpoint without an SRQ, "
                   "RX CQ of %d entries has no room for %u more receive WRs, "
-                  "increase " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_MAX_NUM_EPS "
+                  "increase " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_CQ_LEN "
                   "or decrease " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_MAX_WR",
                   iface, iface->super.super.cq[UCT_IB_DIR_RX]->cqe,
                   iface->config.rx_max_wr);

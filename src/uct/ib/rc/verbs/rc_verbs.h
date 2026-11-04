@@ -83,6 +83,7 @@ typedef struct uct_rc_verbs_iface_config {
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
     unsigned                           rx_max_wr; /* WRs per QP without SRQ */
+    unsigned long                      rx_cq_len;
     unsigned                           flush_mode;
     ucs_ternary_auto_value_t           srq_enable;
 } uct_rc_verbs_iface_config_t;

@@ -51,10 +51,17 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
    ucs_offsetof(uct_rc_verbs_iface_config_t, tx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {"RX_MAX_WR", "128",
-   "Number of receive WRs posted to each QP when SRQ_ENABLE=n or the device\n"
-   "does not support SRQ. The RX CQ is then sized for MAX_NUM_EPS endpoints,\n"
-   "and MAX_NUM_EPS=inf uses the largest RX CQ the device supports.",
+   "Maximum number of receive WRs per QP when SRQ_ENABLE=n or the device\n"
+   "does not support SRQ.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, rx_max_wr), UCS_CONFIG_TYPE_UINT},
+
+  {"RX_CQ_LEN", "32768",
+   "Length of the receive completion queue when SRQ_ENABLE=n or the device\n"
+   "does not support SRQ. Limits endpoints to RX_CQ_LEN / RX_MAX_WR, capped\n"
+   "by the maximum CQ length reported by the device. Must be >= RX_MAX_WR.\n"
+   "\"inf\" uses the maximum CQ length reported by the device.",
+   ucs_offsetof(uct_rc_verbs_iface_config_t, rx_cq_len),
+   UCS_CONFIG_TYPE_ULUNITS},
 
   {"SRQ_ENABLE", "try",
    "Use a shared receive queue (SRQ) for rc_verbs QPs:\n"
@@ -295,7 +302,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_ib_md_t *ib_md                  = ucs_derived_of(tl_md, uct_ib_md_t);
     uct_ib_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
-    unsigned rx_wr_limit, rx_batch_limit, num_eps;
+    unsigned rx_wr_limit, rx_batch_limit;
     unsigned rx_max_wr, rx_cq_len;
     const char *dev_name;
     ucs_status_t status;
@@ -332,11 +339,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         rx_max_wr                 = config->rx_max_wr;
         rx_batch_limit            = ucs_max(ucs_min(ib_config->rx.max_batch,
                                                     rx_max_wr / 4), 1);
-        /* Room for the receive WRs of all endpoints; the 64-bit endpoint
-         * count is capped by the largest CQ before multiplying. */
-        num_eps   = ucs_min(ib_config->super.max_num_eps,
-                            IBV_DEV_ATTR(&ib_md->dev, max_cqe) / rx_max_wr);
-        rx_cq_len = ucs_max(num_eps * rx_max_wr, ib_config->rx.queue_len);
+        rx_cq_len = ucs_min(config->rx_cq_len,
+                            (unsigned long)IBV_DEV_ATTR(&ib_md->dev, max_cqe));
+        if (rx_cq_len < rx_max_wr) {
+            ucs_error(UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_CQ_LEN is limited to "
+                      "%u entries, fewer than " UCS_DEFAULT_ENV_PREFIX
+                      "RC_VERBS_RX_MAX_WR=%u without an SRQ",
+                      rx_cq_len, rx_max_wr);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
         ucs_debug("%s: RX CQ length %u for %u receive WRs per endpoint "
                   "without an SRQ, batch size %u, endpoint limit %u",
                   uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr,

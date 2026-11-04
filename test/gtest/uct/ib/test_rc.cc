@@ -645,6 +645,11 @@ protected:
                             max_qp_wr);
     }
 
+    ucs_status_t open_iface(uct_iface_h *iface_p) {
+        return uct_iface_open(m_e1->md(), m_e1->worker(),
+                              &m_e1->iface_params(), m_iface_config, iface_p);
+    }
+
     /* Open an interface with the given count of receive WRs per QP, to check
      * if the interface accepts it. */
     ucs_status_t try_rx_max_wr(const char *wr_count) {
@@ -653,8 +658,7 @@ protected:
 
         ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_MAX_WR",
                                         wr_count));
-        status = uct_iface_open(m_e1->md(), m_e1->worker(),
-                                &m_e1->iface_params(), m_iface_config, &iface);
+        status = open_iface(&iface);
         if (status == UCS_OK) {
             uct_iface_close(iface);
         }
@@ -1382,10 +1386,9 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_ep_create,
     wait_qp_gc_list_empty();
 }
 
-/* The RX CQ is sized for MAX_NUM_EPS endpoints with RX_MAX_WR receive WRs
- * each, so that every endpoint can post its own receive queue. */
-UCS_TEST_P(test_rc_no_srq, rx_cq_num_eps, "MAX_NUM_EPS=4",
-           "RC_VERBS_RX_MAX_WR=32", "IB_RX_QUEUE_LEN=128")
+/* Each endpoint reserves its full receive queue in the RX CQ. */
+UCS_TEST_P(test_rc_no_srq, rx_cq_num_eps,
+           "RC_VERBS_RX_CQ_LEN=128", "RC_VERBS_RX_MAX_WR=32")
 {
     const int num_eps           = 4;
     const int wr                = 32;
@@ -1422,6 +1425,51 @@ UCS_TEST_P(test_rc_no_srq, rx_cq_num_eps, "MAX_NUM_EPS=4",
     wait_for_value(&iface->rx_cq_available, wr, true);
     ASSERT_EQ(wr, iface->rx_cq_available);
     m_e2->create_ep(num_eps - 1);
+}
+
+UCS_TEST_P(test_rc_no_srq, rx_cq_len_invalid,
+           "RC_VERBS_RX_MAX_WR=32", "RC_VERBS_RX_CQ_LEN=128")
+{
+    scoped_log_handler slh(wrap_errors_logger);
+
+    for (const char *value : {"0", "31"}) {
+        uct_iface_h iface = NULL;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN",
+                                        value));
+        status = open_iface(&iface);
+        if (status == UCS_OK) {
+            uct_iface_close(iface);
+        }
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status) << " value: " << value;
+    }
+}
+
+UCS_TEST_P(test_rc_no_srq, rx_cq_len_device_limit,
+           "RC_VERBS_RX_MAX_WR=32", "RC_VERBS_RX_CQ_LEN=128")
+{
+    uct_ib_device_t *dev = &ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev;
+    int max_cqe         = IBV_DEV_ATTR(dev, max_cqe);
+    int limit           = ucs_min(max_cqe, 128);
+
+    /* Bound the simulated device limit to avoid allocating its largest CQ. */
+    for (const char *value : {"inf", "256"}) {
+        uct_iface_h iface = NULL;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN",
+                                        value));
+        IBV_DEV_ATTR(dev, max_cqe) = limit;
+        status                   = open_iface(&iface);
+        IBV_DEV_ATTR(dev, max_cqe) = max_cqe;
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(limit,
+                  ucs_derived_of(iface, uct_rc_verbs_iface_t)->rx_cq_available);
+        uct_iface_close(iface);
+    }
 }
 
 /* Without flow control, the peer can send more messages than one receive
@@ -1467,10 +1515,13 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
  * not exceed what the device allows or the 16 bits it is stored in. Note that
  * "inf" and a negative value both reach the validation as UINT_MAX, since the
  * numeric parser has no range check. */
-UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid, "MAX_NUM_EPS=1")
+UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid, "RC_VERBS_RX_CQ_LEN=256",
+           "RC_VERBS_RX_MAX_WR=128")
 {
     static const char *const invalid_values[] = {"0", "65536", "inf", "-1"};
     const int max_qp_wr_limit                 = max_qp_wr();
+    const int max_cqe                         = IBV_DEV_ATTR(
+            &ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev, max_cqe);
     char str[32];
 
     {
@@ -1490,7 +1541,8 @@ UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid, "MAX_NUM_EPS=1")
     EXPECT_EQ(UCS_OK, try_rx_max_wr("1"));
 
     snprintf(str, sizeof(str), "%d",
-             ucs_min(max_qp_wr_limit, (int)UINT16_MAX));
+             ucs_min(ucs_min(max_qp_wr_limit, (int)UINT16_MAX), max_cqe));
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN", str));
     EXPECT_EQ(UCS_OK, try_rx_max_wr(str));
 }
 
@@ -1561,6 +1613,8 @@ UCS_TEST_P(test_rc_srq_select, uses_srq, "RC_VERBS_SRQ_ENABLE=try")
     check_srq_used(m_e1->iface());
     ASSERT_UCS_OK(
             uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
+    ASSERT_UCS_OK(
+            uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN", "0"));
 
     ASSERT_UCS_OK(open_iface(&iface));
 
