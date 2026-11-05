@@ -881,7 +881,7 @@ protected:
         while (ucs_get_time() < deadline) {
             short_progress_loop();
 
-            arg = ep->ext->recovery_arg;
+            arg = ucp_ep_recovery_arg(ep);
             if (arg == NULL) {
                 continue;
             }
@@ -925,12 +925,11 @@ uct_completion_t *test_ucp_fault_tolerance::m_held_probe_comp = NULL;
 ucs::mock *test_ucp_fault_tolerance::m_probe_mock             = NULL;
 unsigned test_ucp_fault_tolerance::m_probe_count              = 0;
 
-/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token.
- * Disabled until token failover is complete. Enable with
- * --gtest_also_run_disabled_tests. */
-class DISABLED_test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
+/* Same cases as test_ucp_fault_tolerance with UCX_FAILOVER_MODE=token, but
+ * only on transports that support token based retransmits. */
+class test_ucp_fault_tolerance_tf : public test_ucp_fault_tolerance {
 public:
-    DISABLED_test_ucp_fault_tolerance_tf() {
+    test_ucp_fault_tolerance_tf() {
         modify_config("FAILOVER_MODE", "token");
         /* IB MD key; set UCX_IB_INDIRECT_ATOMIC so token mode stays selected. */
         modify_config("IB_INDIRECT_ATOMIC", "n", SETENV_IF_NOT_EXIST);
@@ -1265,13 +1264,10 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
         UCS_TEST_SKIP_R("no RC p2p lane was marked failed");
     }
 
-    ASSERT_NE(nullptr, ep->ext->recovery_arg);
-    wait_for_cond([ep]() {
-        return ep->ext->recovery_arg == NULL;
-    }, [this]() {
-        short_progress_loop();
-    });
-    ASSERT_EQ(nullptr, ep->ext->recovery_arg)
+    ASSERT_NE(nullptr, ucp_ep_recovery_arg(ep));
+    wait_for_cond([ep]() { return ucp_ep_recovery_arg(ep) == NULL; },
+                  [this]() { short_progress_loop(); });
+    ASSERT_EQ(nullptr, ucp_ep_recovery_arg(ep))
             << "recovery retries were not exhausted";
 
     EXPECT_EQ(0, total_err_count())
@@ -1305,10 +1301,10 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
                 "KEEPALIVE_INTERVAL=0.1s")
 
 UCP_FT_TESTS(test_ucp_fault_tolerance)
-UCP_FT_TESTS(DISABLED_test_ucp_fault_tolerance_tf)
+UCP_FT_TESTS(test_ucp_fault_tolerance_tf)
 
 #undef UCP_FT_TEST
 #undef UCP_FT_TESTS
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_fault_tolerance)
-UCP_INSTANTIATE_TEST_CASE(DISABLED_test_ucp_fault_tolerance_tf)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_fault_tolerance_tf, rcx, "rc_x")

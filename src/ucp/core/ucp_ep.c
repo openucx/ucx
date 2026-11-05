@@ -2130,6 +2130,7 @@ static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
 
     seen_peer_id = arg->seen_peer_id;
     ucp_ep_refcount_assert(ep, probe, ==, 0);
+    ucp_wireup_tf_reply_discard(ep);
     ucp_ep_tf_cleanup(ep);
     ucs_free(arg);
     ep->ext->recovery_arg = NULL;
@@ -2508,8 +2509,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* Recovery completed between rounds, the ep operates normally. */
-        ucs_assert(ucp_ep_recovery_arg(ep) == NULL);
+        /* A peer request moves the transport endpoint to error and waits
+         * for that completion before this lane is failed. Recovery stays
+         * idle until the completion holds it. */
+        arg = ucp_ep_recovery_arg(ep);
+        ucs_assert((arg == NULL) || (arg->tf_reply != NULL));
         goto done;
     }
 
@@ -3043,26 +3047,6 @@ static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
     }
 }
 
-ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes)
-{
-    ucp_lane_map_t dropped = 0;
-    ucp_lane_index_t lane;
-    ucp_ep_lane_tf_t *tf;
-
-    ucs_for_each_bit(lane, lanes) {
-        tf = ucp_ep_tf_get(ep, lane);
-        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
-            (tf->uct_ep != NULL)) {
-            continue;
-        }
-
-        ucp_ep_tf_lane_release(ep, tf);
-        dropped |= UCS_BIT(lane);
-    }
-
-    return dropped;
-}
-
 static void
 ucp_ep_tf_abort_pending(ucs_queue_head_t *pending_q, ucs_status_t status)
 {
@@ -3416,11 +3400,15 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         cm_lane == UCP_NULL_LANE) {
         reconfig_status = ucp_ep_failover_reconfig(ucp_ep, lanes, status);
         if (reconfig_status == UCS_OK) {
+            /* These lanes produce no error completion, so the parked
+             * reply must not keep waiting for one. */
+            ucp_wireup_tf_reply_lanes_failed(ucp_ep, lanes);
             return;
         }
     }
 
-    /* else: unrecoverable error, mark the endpoint as failed. */
+    /* Unrecoverable. A failed endpoint cannot send the parked reply. */
+    ucp_wireup_tf_reply_discard(ucp_ep);
     ucp_ep_set_failed(ucp_ep,
                       ((cm_lane != UCP_NULL_LANE) &&
                        (lanes == UCS_BIT(cm_lane)) ?
