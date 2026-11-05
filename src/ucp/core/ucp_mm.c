@@ -1530,9 +1530,17 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     ucs_memory_type_t mem_type   = mpriv->mem_type;
     ucs_sys_device_t sys_dev     = mpriv->sys_dev;
     size_t frag_size             = context->config.ext.rndv_frag_size[mem_type];
+    unsigned uct_flags           = UCT_MD_MEM_ACCESS_RMA;
     ucp_rndv_frag_mp_chunk_hdr_t *chunk_hdr;
     ucs_status_t status;
     unsigned num_elems;
+
+    /* Managed memory cannot be pinned, it is registered on demand (e.g. by
+     * ODP) according to UCX_REG_NONBLOCK_MEM_TYPES. Request blocking
+     * registration for any other memory type. */
+    if (!UCP_MEM_IS_CUDA_MANAGED(mem_type)) {
+        uct_flags |= UCT_MD_MEM_FLAG_LOCK;
+    }
 
     /* metadata */
     chunk_hdr = ucs_malloc(sizeof(*chunk_hdr) + *size_p, "chunk_hdr");
@@ -1545,8 +1553,7 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 
     /* payload; need to get default flags from ucp_mem_map_params2uct_flags() */
     status = ucp_memh_alloc(context, NULL, frag_size * num_elems, mem_type,
-                            sys_dev, UCP_MEMH_FLAG_NO_RCACHE,
-                            UCT_MD_MEM_ACCESS_RMA | UCT_MD_MEM_FLAG_LOCK, 0,
+                            sys_dev, UCP_MEMH_FLAG_NO_RCACHE, uct_flags, 0,
                             ucs_mpool_name(mp), &chunk_hdr->memh);
     if (status != UCS_OK) {
         return status;
