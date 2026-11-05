@@ -876,7 +876,9 @@ UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close_large_priv_data)
     if (m_cm_config) {
         /* coverity[check_return] */
         uct_config_modify(m_cm_config, "PRIV_DATA_LEN", "900KB");
+        /* coverity[check_return] */
         uct_config_modify(m_cm_config, "SNDBUF", "100KB");
+        /* coverity[check_return] */
         uct_config_modify(m_cm_config, "RCVBUF", "100KB");
     }
 
