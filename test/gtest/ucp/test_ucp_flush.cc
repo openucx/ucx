@@ -116,9 +116,46 @@ test_flush_pending_add(uct_ep_h, uct_pending_req_t *, unsigned)
     return UCS_OK;
 }
 
+static uct_ep_h test_flush_lane_eps[3];
+static ucs_status_t test_flush_lane_status[3];
+static unsigned test_flush_lane_calls[3];
+
+static ucs_status_t
+test_flush_by_lane(uct_ep_h ep, unsigned, uct_completion_t *)
+{
+    unsigned lane;
+
+    for (lane = 0; lane < ucs_static_array_size(test_flush_lane_eps);
+         ++lane) {
+        if (ep == test_flush_lane_eps[lane]) {
+            ++test_flush_lane_calls[lane];
+            return test_flush_lane_status[lane];
+        }
+    }
+
+    return UCS_OK;
+}
+
 static void test_flush_completion(ucp_request_t *req)
 {
     ucp_request_complete_send(req, req->status);
+}
+
+/* Complete the outstanding lane flushes of the request and release it */
+static ucs_status_t test_flush_complete(ucp_request_t *req)
+{
+    ucs_status_ptr_t request = req + 1;
+    ucs_status_t status;
+    unsigned i;
+
+    for (i = 0; (i < 10) && (req->send.state.uct_comp.count > 0); ++i) {
+        uct_invoke_completion(&req->send.state.uct_comp, UCS_OK);
+    }
+    ucp_ep_flush_remote_completed(req);
+
+    status = ucp_request_check_status(request);
+    ucp_request_release(request);
+    return status;
 }
 
 class test_flush_worker_cs_guard {
@@ -167,6 +204,54 @@ public:
     {
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
+    }
+
+protected:
+    /* Flush lanes 0..num_lanes-1. The flush of pending_lane returns
+       UCS_ERR_NO_RESOURCE, so the request is added to its pending queue, and
+       the flushes of the other lanes return other_status. */
+    ucp_request_t *
+    flush_with_pending_lane(ucs::mock &mock, ucp_lane_index_t num_lanes,
+                            ucp_lane_index_t pending_lane,
+                            ucs_status_t other_status)
+    {
+        ucp_request_param_t param = {};
+        ucp_ep_h ep               = sender().ep();
+        ucs_status_ptr_t request;
+        ucp_lane_index_t lane;
+        uct_ep_h uct_ep;
+
+        if (ucp_ep_num_lanes(ep) < num_lanes) {
+            UCS_TEST_SKIP_R("not enough endpoint lanes");
+        }
+
+        for (lane = 0; lane < ucs_static_array_size(test_flush_lane_eps);
+             ++lane) {
+            uct_ep                       = (lane < num_lanes) ?
+                                           ucp_ep_get_lane(ep, lane) : NULL;
+            test_flush_lane_eps[lane]    = uct_ep;
+            test_flush_lane_status[lane] = (lane == pending_lane) ?
+                                           UCS_ERR_NO_RESOURCE : other_status;
+            test_flush_lane_calls[lane]  = 0;
+            if (uct_ep != NULL) {
+                mock.setup(&uct_ep->iface->ops.ep_pending_add,
+                           test_flush_pending_add);
+            }
+        }
+
+        mock_ep_flush(ep, mock, test_flush_by_lane);
+
+        request = ucp_ep_flush_lanes_internal(ep, 0, &param, NULL,
+                                              test_flush_completion,
+                                              "flush_with_pending_lane",
+                                              UCT_FLUSH_FLAG_LOCAL,
+                                              UCS_MASK(num_lanes));
+        EXPECT_TRUE(UCS_PTR_IS_PTR(request));
+        if (!UCS_PTR_IS_PTR(request)) {
+            return NULL;
+        }
+
+        return static_cast<ucp_request_t*>(request) - 1;
     }
 };
 
@@ -483,124 +568,100 @@ UCS_TEST_P(test_ucp_flush, pending_error_lane_replacement,
 UCS_TEST_P(test_ucp_flush, pending_lane_defers_other_lanes,
            "MAX_EAGER_LANES=2")
 {
-    ucp_request_param_t param = {};
-    ucp_request_t *req        = NULL;
-    ucp_ep_h ep;
-    uct_ep_h lane0_ep;
-    ucs_status_ptr_t request  = NULL;
-    unsigned i;
+    ucs::mock mock;
+    test_flush_worker_cs_guard cs_guard(sender().ep()->worker);
+    ucp_request_t *req = flush_with_pending_lane(mock, 2, 0, UCS_INPROGRESS);
 
-    ep = sender().ep();
-    if (ucp_ep_num_lanes(ep) < 2) {
-        UCS_TEST_SKIP_R("requires two endpoint lanes");
-    }
+    ASSERT_TRUE(req != NULL);
+    ASSERT_EQ(0, req->send.lane);
 
-    lane0_ep                  = ucp_ep_get_lane(ep, 0);
-    test_flush_call_count     = 0;
-    test_flush_comp           = NULL;
-    test_flush_no_resource_ep = lane0_ep;
-    {
-        ucs::mock mock;
-        mock_ep_flush(ep, mock, test_flush_inprogress_except_ep);
-        mock.setup(&lane0_ep->iface->ops.ep_pending_add,
-                   test_flush_pending_add);
+    /* The requests queued on lane 0 before the flush may still send on
+       lane 1, e.g. a put split between the lanes, so lane 1 must not be
+       flushed before them */
+    EXPECT_EQ(1u, test_flush_lane_calls[0]);
+    EXPECT_EQ(0u, test_flush_lane_calls[1]);
+    EXPECT_EQ(0, req->send.flush.started_lanes);
 
-        test_flush_worker_cs_guard cs_guard(ep->worker);
+    /* The pending callback flushes lane 0 and then lane 1 */
+    test_flush_lane_status[0] = UCS_INPROGRESS;
+    ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+    EXPECT_EQ(2u, test_flush_lane_calls[0]);
+    EXPECT_EQ(1u, test_flush_lane_calls[1]);
+    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1), req->send.flush.started_lanes);
 
-        request = ucp_ep_flush_lanes_internal(
-                ep, 0, &param, NULL, test_flush_completion,
-                "pending_lane_defers_other_lanes", UCT_FLUSH_FLAG_LOCAL,
-                UCS_BIT(0) | UCS_BIT(1));
-        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
-        req = static_cast<ucp_request_t*>(request) - 1;
-        ASSERT_EQ(0, req->send.lane);
-
-        /* The requests queued on lane 0 before the flush may still send on
-           lane 1, e.g. a put split between the lanes, so lane 1 must not be
-           flushed before them */
-        EXPECT_EQ(1u, test_flush_call_count);
-        EXPECT_EQ(0, req->send.flush.started_lanes);
-
-        /* The pending callback flushes lane 0 and then lane 1 */
-        test_flush_no_resource_ep = NULL;
-        ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
-        EXPECT_EQ(3u, test_flush_call_count);
-        EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1), req->send.flush.started_lanes);
-
-        ASSERT_TRUE(test_flush_comp != NULL);
-        for (i = 0; (i < 2) && (req->send.state.uct_comp.count > 0); ++i) {
-            uct_invoke_completion(test_flush_comp, UCS_OK);
-        }
-        ucp_ep_flush_remote_completed(req);
-    }
-
-    EXPECT_UCS_OK(ucp_request_check_status(request));
-    ucp_request_release(request);
+    EXPECT_UCS_OK(test_flush_complete(req));
 }
 
-UCS_TEST_P(test_ucp_flush, pending_lane_reflushes_started_lanes,
+UCS_TEST_P(test_ucp_flush, pending_lane_flushes_lanes_once,
            "MAX_EAGER_LANES=2")
 {
-    ucp_request_param_t param = {};
-    ucp_request_t *req        = NULL;
-    ucp_ep_h ep;
-    uct_ep_h lane0_ep, lane1_ep;
-    ucs_status_ptr_t request  = NULL;
-    unsigned i;
+    ucs::mock mock;
+    test_flush_worker_cs_guard cs_guard(sender().ep()->worker);
+    ucp_request_t *req = flush_with_pending_lane(mock, 2, 1, UCS_INPROGRESS);
 
-    ep = sender().ep();
-    if (ucp_ep_num_lanes(ep) < 2) {
-        UCS_TEST_SKIP_R("requires two endpoint lanes");
-    }
+    ASSERT_TRUE(req != NULL);
+    ASSERT_EQ(1, req->send.lane);
+    EXPECT_EQ(1u, test_flush_lane_calls[0]);
+    EXPECT_EQ(UCS_BIT(0), req->send.flush.started_lanes);
 
-    lane0_ep                  = ucp_ep_get_lane(ep, 0);
-    lane1_ep                  = ucp_ep_get_lane(ep, 1);
-    test_flush_call_count     = 0;
-    test_flush_comp           = NULL;
-    test_flush_eps[3]         = NULL;
-    test_flush_no_resource_ep = lane1_ep;
-    {
-        ucs::mock mock;
-        mock_ep_flush(ep, mock, test_flush_inprogress_except_ep);
-        mock.setup(&lane1_ep->iface->ops.ep_pending_add,
-                   test_flush_pending_add);
+    /* Lane 0 has no resources again, e.g. because of the requests posted
+       after the flush. If the pending callback of lane 1 flushed lane 0
+       again, the flush would wait for these requests too, and with traffic
+       on both lanes it could move between their pending queues without end.
+       So the pending callback flushes only lane 1. */
+    test_flush_lane_status[0] = UCS_ERR_NO_RESOURCE;
+    test_flush_lane_status[1] = UCS_INPROGRESS;
+    ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+    EXPECT_EQ(1u, test_flush_lane_calls[0]);
+    EXPECT_EQ(2u, test_flush_lane_calls[1]);
+    EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1), req->send.flush.started_lanes);
 
-        test_flush_worker_cs_guard cs_guard(ep->worker);
-
-        request = ucp_ep_flush_lanes_internal(
-                ep, 0, &param, NULL, test_flush_completion,
-                "pending_lane_reflushes_started_lanes", UCT_FLUSH_FLAG_LOCAL,
-                UCS_BIT(0) | UCS_BIT(1));
-        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
-        req = static_cast<ucp_request_t*>(request) - 1;
-        ASSERT_EQ(1, req->send.lane);
-        EXPECT_EQ(2u, test_flush_call_count);
-        EXPECT_EQ(UCS_BIT(0), req->send.flush.started_lanes);
-
-        /* The flush of lane 0 completes, the flush still waits for lane 1 */
-        ASSERT_TRUE(test_flush_comp != NULL);
-        uct_invoke_completion(test_flush_comp, UCS_OK);
-        EXPECT_EQ(2u, test_flush_call_count);
-        EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(request));
-
-        /* The requests queued on lane 1 before the flush may send on lane 0
-           again, e.g. a put with more fragments than lanes, so the pending
-           callback flushes lane 0 again after lane 1 */
-        test_flush_no_resource_ep = NULL;
-        ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
-        EXPECT_EQ(4u, test_flush_call_count);
-        EXPECT_EQ(lane0_ep, test_flush_eps[3]);
-
-        for (i = 0; (i < 2) && (req->send.state.uct_comp.count > 0); ++i) {
-            uct_invoke_completion(test_flush_comp, UCS_OK);
-        }
-        ucp_ep_flush_remote_completed(req);
-    }
-
-    EXPECT_UCS_OK(ucp_request_check_status(request));
-    ucp_request_release(request);
+    EXPECT_UCS_OK(test_flush_complete(req));
 }
 
+UCS_TEST_P(test_ucp_flush, pending_lane_resume_skips_next_lanes,
+           "MAX_EAGER_LANES=3")
+{
+    scoped_log_handler slh(hide_errors_logger);
+    ucs::mock mock;
+    ucp_request_t *req;
+
+    {
+        test_flush_worker_cs_guard cs_guard(sender().ep()->worker);
+
+        req = flush_with_pending_lane(mock, 3, 0, UCS_ERR_NO_RESOURCE);
+        ASSERT_TRUE(req != NULL);
+        ASSERT_EQ(0, req->send.lane);
+
+        /* The flush of lane 0 fails, so its pending callback adds the request
+           to the pending queue of lane 1, which has no resources */
+        test_flush_lane_status[0] = UCS_ERR_IO_ERROR;
+        ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+        ASSERT_EQ(1, req->send.lane);
+        EXPECT_EQ(1u, test_flush_lane_calls[1]);
+    }
+
+    /* The requests queued on lane 1 before the flush may still send on
+       lane 2, so the resume callback must not flush lane 2 */
+    test_flush_lane_status[2] = UCS_INPROGRESS;
+    sender().progress();
+    EXPECT_EQ(0u, test_flush_lane_calls[2]);
+
+    {
+        test_flush_worker_cs_guard cs_guard(sender().ep()->worker);
+
+        /* The pending callback of lane 1 flushes lane 1 and then lane 2 */
+        test_flush_lane_status[0] = UCS_INPROGRESS;
+        test_flush_lane_status[1] = UCS_INPROGRESS;
+        ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+        EXPECT_EQ(2u, test_flush_lane_calls[1]);
+        EXPECT_EQ(1u, test_flush_lane_calls[2]);
+
+        /* The flush error on lane 0 is not reported, since the completion
+           of the other lanes overwrites the request status */
+        EXPECT_NE(UCS_INPROGRESS, test_flush_complete(req));
+    }
+}
 
 UCS_TEST_P(test_ucp_flush, pending_add_busy_reschedules)
 {
