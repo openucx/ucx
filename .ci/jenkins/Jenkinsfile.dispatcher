@@ -22,7 +22,9 @@ if (currentPrNumber) {
       it.isBuilding() && it.number < currentBuild.number
     }.each { b ->
       def gd = b.getAction(hudson.model.ParametersAction)?.getParameters()?.find { it.name == 'VARIABLE_FROM_POST' }?.value
-      def otherPr = gd ? slurper.parseText(gd)?.issue?.number?.toString() : null
+      def payload = gd ? slurper.parseText(gd) : null
+      // issue.number: /build comment payload; number: PR push payload
+      def otherPr = (payload?.issue?.number ?: payload?.number)?.toString()
       if (otherPr == currentPrNumber) {
         echo "Aborting dispatcher #${b.number} for same PR #${currentPrNumber}"
         b.doStop()
