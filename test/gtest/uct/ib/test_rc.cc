@@ -1329,7 +1329,9 @@ class test_rc_ece_supported : public test_rc_ece {
 public:
     void init() override
     {
-        if (!ucs_derived_of(open_md().get(), uct_ib_md_t)->ece_enable) {
+        auto md = open_md();
+
+        if (!ucs_derived_of(md.get(), uct_ib_md_t)->ece_enable) {
             UCS_TEST_SKIP_R("device does not support ECE");
         }
 
