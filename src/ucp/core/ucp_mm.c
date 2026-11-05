@@ -1535,10 +1535,12 @@ ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
     ucs_status_t status;
     unsigned num_elems;
 
-    /* Managed memory cannot be pinned, it is registered on demand (e.g. by
-     * ODP) according to UCX_REG_NONBLOCK_MEM_TYPES. Request blocking
-     * registration for any other memory type. */
-    if (!UCP_MEM_IS_CUDA_MANAGED(mem_type)) {
+    /* CUDA managed memory cannot be pinned, it can only be registered on demand
+     * (e.g. by ODP), regardless of UCX_REG_NONBLOCK_MEM_TYPES. Request
+     * blocking registration for any other memory type. */
+    if (UCP_MEM_IS_CUDA_MANAGED(mem_type)) {
+        uct_flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+    } else {
         uct_flags |= UCT_MD_MEM_FLAG_LOCK;
     }
 
