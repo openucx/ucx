@@ -133,12 +133,14 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     switch (mem_type) {
     case UCS_MEMORY_TYPE_ZE_HOST:
         host_desc.pNext = export_desc_p;
+
         status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocHost(md->ze_context, &host_desc,
                                                     *length_p, alignment,
                                                     address_p));
         break;
     case UCS_MEMORY_TYPE_ZE_DEVICE:
         dev_desc.pNext = export_desc_p;
+
         status = UCT_ZE_FUNC_LOG_ERR(zeMemAllocDevice(md->ze_context, &dev_desc,
                                                       *length_p, alignment,
                                                       md->ze_device,
@@ -406,8 +408,8 @@ uct_ze_copy_md_open(uct_component_h component, const char *md_name,
 
     md->dmabuf_supported = (config->enable_dmabuf != UCS_NO) &&
                            dmabuf_supported;
-    md->super.ops       = &md_ops;
-    md->super.component = &uct_ze_copy_component;
+    md->super.ops        = &md_ops;
+    md->super.component  = &uct_ze_copy_component;
 
     *md_p = (uct_md_h)md;
 

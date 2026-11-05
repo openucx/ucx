@@ -227,7 +227,6 @@ UCS_TEST_P(uct_p2p_mix_test_indirect_atomic, mix1000_indirect_atomic,
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_indirect_atomic)
 
 
-
 /*
  * Moves memory allocated by a DMA-BUF provider, such as a GPU copy memory
  * domain, which the IB memory domain registers through the DMA-BUF. Nothing
@@ -305,6 +304,7 @@ void uct_p2p_rma_test_dmabuf::test_dmabuf_xfer(uct_md_h provider_md,
     reg_params.flags         = UCT_MD_MEM_ACCESS_ALL;
     reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
     reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+
     status = uct_md_mem_reg_v2(mem_entity.md(), mem.address, LENGTH,
                                &reg_params, &uct_memh);
     close(mem_attr.dmabuf_fd);
