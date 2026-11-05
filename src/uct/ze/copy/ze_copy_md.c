@@ -38,9 +38,9 @@ static ucs_config_field_t uct_ze_copy_md_config_table[] = {
 
     {"DMABUF", "try",
      "Enable using cross-device dmabuf file descriptor.\n"
-     "Level Zero device memory may have to be allocated with external\n"
-     "DMA-BUF export enabled. Without it, registration can succeed but an\n"
-     "RDMA device may read incorrect data, and no error is reported. Set to\n"
+     "Level Zero memory may have to be allocated with external DMA-BUF\n"
+     "export enabled. Without it, registration can succeed but an RDMA\n"
+     "device may access incorrect data, and no error is reported. Set to\n"
      "'n' if the application allocates Level Zero memory without\n"
      "requesting external export; device memory is then staged through\n"
      "host memory for RDMA.",

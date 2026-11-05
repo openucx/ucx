@@ -119,8 +119,8 @@ public:
      * which it does not under an MPS MLOPart device */
     static bool cuda_mem_is_gdr_capable();
 
-    /* Query 'md' for a DMA-BUF of a page of 'mem_type' memory, and set
-     * 'exported_p' to whether it returned one */
+    /* Query 'md' for a DMA-BUF of a page of 'mem_type' memory allocated by
+     * mem_buffer, and set 'exported_p' to whether it returned one */
     static ucs_status_t query_dmabuf_export(uct_md_h md,
                                             ucs_memory_type_t mem_type,
                                             bool *exported_p);

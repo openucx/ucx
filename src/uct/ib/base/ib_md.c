@@ -1472,7 +1472,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Limit the number of SGEs dumped by the packet tracer, so that it does not
      * dereference non-host memory from the CPU. DMA-BUF registration makes such
-     * memory reachable without it being listed in 'reg_mem_types'. */
+     * memory registrable without it being listed in 'reg_mem_types', so the
+     * limit also applies to host-only runs on a DMA-BUF capable device. */
     md->dev.max_zcopy_log_sge = INT_MAX;
     if ((md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) ||
         (md->cap_flags & UCT_MD_FLAG_REG_DMABUF)) {

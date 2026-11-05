@@ -181,8 +181,8 @@ void test_ucp_mem_type_dmabuf::test_xfer(bool app_owned, bool exp_dmabuf)
         if (exp_dmabuf || dmabuf_only) {
             EXPECT_EQ(exp_dmabuf,
                       (memh->md_map & context->dmabuf_reg_md_map) != 0)
-                    << mem_type_name << " memory handle registration through "
-                    << "a DMA-BUF";
+                    << mem_type_name << " memory handle registration on a "
+                    << "DMA-BUF capable memory domain";
         }
 
         send_buf           = ucp_memh_address(memh);
