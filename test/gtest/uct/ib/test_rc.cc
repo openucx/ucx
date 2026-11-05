@@ -717,7 +717,9 @@ protected:
         }
 
         EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
-        EXPECT_LE(rc_iface(e)->config.fc_wnd_size + batch, rx_max_wr(e));
+        EXPECT_LE(rc_iface(e)->config.fc_wnd_size +
+                  rc_iface(e)->config.fc_soft_thresh - 1,
+                  max_wr - batch + 1);
     }
 
     void check_rx_prepost_grows(unsigned expected_batch) {
@@ -1105,8 +1107,8 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_from_am_callback,
     EXPECT_EQ(quota + 2, iface->rx_cq_available);
 }
 
-/* Limit the refill batch to a quarter of the per-QP queue and leave room
- * for that batch beyond the flow control window. */
+/* Limit the refill batch to a quarter of the per-QP queue and reserve
+ * receive WRs for messages sent before a flow control grant. */
 UCS_TEST_P(test_rc_no_srq, rx_config, "IB_RX_MAX_BATCH=16",
            "RC_VERBS_RX_MAX_WR=32", "RC_FC_ENABLE=y")
 {
@@ -1145,6 +1147,58 @@ UCS_TEST_P(test_rc_no_srq, rx_batch_limits,
         check_rx_config(e, config.expected_batch);
         e->destroy_eps();
         m_entities.remove(e);
+    }
+}
+
+UCS_TEST_P(test_rc_no_srq, fc_window,
+           "IB_RX_MAX_BATCH=16", "RC_VERBS_RX_MAX_WR=128",
+           "RC_FC_ENABLE=y", "RC_FC_WND_SIZE=512",
+           "RC_FC_SOFT_THRESH=0.5", "RC_FC_HARD_THRESH=0.25")
+{
+    const struct {
+        const char *max_wr;
+        const char *soft_thresh;
+        unsigned expected_window;
+    } configs[] = {{"128", "0.5", 75}, {"128", "0.75", 64},
+                   {"48", "0.5", 24}, {"48", "0.75", 21},
+                   {"1", "0.5", 1}};
+
+    for (const auto &config : configs) {
+        SCOPED_TRACE(::testing::Message() << "RX_MAX_WR=" << config.max_wr
+                     << " FC_SOFT_THRESH=" << config.soft_thresh);
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_MAX_WR",
+                                        config.max_wr));
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_FC_SOFT_THRESH",
+                                        config.soft_thresh));
+
+        uct_iface_h iface   = NULL;
+        ucs_status_t status = open_iface(&iface);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(config.expected_window,
+                  ucs_derived_of(iface, uct_rc_verbs_iface_t)->
+                          super.config.fc_wnd_size);
+        uct_iface_close(iface);
+    }
+}
+
+UCS_TEST_P(test_rc_no_srq, fc_soft_thresh_invalid,
+           "RC_FC_ENABLE=y", "RC_FC_SOFT_THRESH=0.5",
+           "RC_FC_HARD_THRESH=0.25")
+{
+    scoped_log_handler slh(wrap_errors_logger);
+
+    for (const char *value : {"-1", "0", "0.25", "1", "inf", "nan"}) {
+        SCOPED_TRACE(::testing::Message() << "FC_SOFT_THRESH=" << value);
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_FC_SOFT_THRESH",
+                                        value));
+
+        uct_iface_h iface   = NULL;
+        ucs_status_t status = open_iface(&iface);
+        if (status == UCS_OK) {
+            uct_iface_close(iface);
+        }
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
     }
 }
 

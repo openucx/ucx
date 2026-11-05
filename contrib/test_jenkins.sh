@@ -1308,8 +1308,8 @@ run_rc_verbs_nosrq_gtest() {
 	echo "==== Running rc_verbs gtest with SRQ disabled ===="
 	$TIMEOUT env \
 		UCX_RC_VERBS_SRQ_ENABLE=n \
-		UCX_RC_VERBS_RX_CQ_LEN=196608 \
-		UCX_RC_VERBS_RX_MAX_WR=48 \
+		UCX_RC_VERBS_RX_CQ_LEN=262144 \
+		UCX_RC_VERBS_RX_MAX_WR=64 \
 		GTEST_FILTER="$gtest_filter" \
 		make -C test/gtest test
 }

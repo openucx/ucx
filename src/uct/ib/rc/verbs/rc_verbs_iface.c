@@ -296,7 +296,8 @@ uct_rc_verbs_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
  * lookup table. A QP created without an SRQ is kept until every posted receive
  * WR has generated a completion. */
 void
-uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface, uint32_t qp_num)
+uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(uct_rc_verbs_iface_t *iface,
+                                          uint32_t qp_num)
 {
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
 
@@ -304,7 +305,7 @@ uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface, uint32_t qp_num)
         if (cleanup_ctx->super.qp_num == qp_num) {
             ucs_assertv(cleanup_ctx->rx_remaining > 0, "qp_num=0x%x", qp_num);
             if (--cleanup_ctx->rx_remaining == 0) {
-                uct_rc_verbs_iface_qp_cleanup_notify(iface, qp_num);
+                uct_rc_iface_qp_cleanup_ready(&iface->super, qp_num);
             }
 
             return;
@@ -374,8 +375,17 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                   uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr,
                   rx_batch_limit, rx_cq_len / rx_max_wr);
 
-        /* Leave a batch of receive WRs unreposted, to avoid RNR. */
-        init_attr.fc_max_wnd_size = ucs_max(rx_max_wr - rx_batch_limit, 1);
+        status = uct_rc_iface_config_check_fc_thresh(&config->super);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* A grant resets the peer window while earlier sends may be in flight.
+         * Reserve space for them between reposts; a fresh QP's smaller prepost
+         * may still cause RNR on its first burst. */
+        init_attr.fc_max_wnd_size = ucs_max(
+                (unsigned)((rx_max_wr - rx_batch_limit + 1) /
+                           (1.0 + config->super.soft_thresh)), 1u);
     }
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
@@ -496,8 +506,10 @@ err:
 }
 
 ucs_status_t
-uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface)
+uct_rc_verbs_iface_srq_prepost_recvs(uct_rc_verbs_iface_t *iface)
 {
+    unsigned count;
+
     if (iface->super.rx.srq.quota == 0) {
         return UCS_OK;
     }
@@ -505,7 +517,9 @@ uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface)
     iface->super.rx.srq.available = iface->super.rx.srq.quota;
     iface->super.rx.srq.quota     = 0;
     while (iface->super.rx.srq.available > 0) {
-        if (uct_rc_verbs_iface_post_recv_common(iface, NULL, 1) == 0) {
+        count = ucs_min(iface->super.rx.srq.available,
+                        iface->super.super.config.rx_max_batch);
+        if (uct_rc_verbs_post_recv_always(iface, NULL, count) == 0) {
             ucs_error("failed to post receives");
             return UCS_ERR_NO_MEMORY;
         }
@@ -523,7 +537,7 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
          * to handle here, and some receives were already pre-posted during iface
          * creation anyway.
          */
-        uct_rc_verbs_iface_common_prepost_recvs(iface);
+        uct_rc_verbs_iface_srq_prepost_recvs(iface);
     }
 
     uct_base_iface_progress_enable_cb(&iface->super.super.super,
@@ -531,9 +545,8 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
                                       flags);
 }
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
-                                             uct_rc_verbs_ep_t *ep,
-                                             unsigned max)
+unsigned uct_rc_verbs_post_recv_always(uct_rc_verbs_iface_t *iface,
+                                       uct_rc_verbs_ep_t *ep, unsigned max)
 {
     struct ibv_recv_wr *bad_wr;
     uct_ib_recv_wr_t *wrs;
@@ -566,7 +579,7 @@ unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
     return count;
 }
 
-void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface)
+void uct_rc_verbs_iface_repost_empty_qps(uct_rc_verbs_iface_t *iface)
 {
     ucs_list_link_t *head = &iface->super.ep_list;
     uct_rc_ep_t *rc_ep;
@@ -580,7 +593,7 @@ void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface)
             continue;
         }
 
-        if (uct_rc_verbs_iface_post_recv_common(iface, ep, 0) == 0) {
+        if (uct_rc_verbs_post_recv_common(iface, ep) == 0) {
             /* Resume at this QP without skipping the preceding list entries
              * on subsequent scans. Stop iterating after moving the sentinel. */
             ucs_list_del(head);

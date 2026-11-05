@@ -332,16 +332,30 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
     desc->super.flags = 0;
 }
 
+ucs_status_t
+uct_rc_iface_config_check_fc_thresh(const uct_rc_iface_config_t *config)
+{
+    /* Negated comparisons also reject NaN thresholds. */
+    if (!(config->soft_thresh > 0) ||
+        !(config->soft_thresh > config->super.fc.hard_thresh) ||
+        !(config->soft_thresh < 1)) {
+        ucs_error("soft FC threshold must be > 0, > FC_HARD_THRESH and < 1 "
+                  "(s=%f, h=%f)", config->soft_thresh,
+                  config->super.fc.hard_thresh);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_rc_init_fc_thresh(uct_rc_iface_config_t *config,
                                    uct_rc_iface_t *iface)
 {
-    /* Check FC parameters correctness */
-    if ((config->soft_thresh <= config->super.fc.hard_thresh) ||
-        (config->soft_thresh >= 1)) {
-        ucs_error("The factor for soft FC threshold should be bigger"
-                  " than FC_HARD_THRESH value and less than 1 (s=%f, h=%f)",
-                  config->soft_thresh, config->super.fc.hard_thresh);
-        return UCS_ERR_INVALID_PARAM;
+    ucs_status_t status;
+
+    status = uct_rc_iface_config_check_fc_thresh(config);
+    if (status != UCS_OK) {
+        return status;
     }
 
     if (config->super.fc.enable) {
