@@ -142,6 +142,10 @@ void test_ucp_mem_type_dmabuf::test_xfer(bool app_owned, bool exp_dmabuf)
     static constexpr size_t length = 4 * UCS_MBYTE;
     ucp_context_h context          = sender().ucph();
     const char *mem_type_name      = ucs_memory_type_names[mem_type()];
+    /* The network memory domains register Level Zero memory only through a
+     * DMA-BUF, and CUDA or ROCm memory also through peer memory */
+    bool dmabuf_only               = (mem_type() == UCS_MEMORY_TYPE_ZE_HOST) ||
+                                     (mem_type() == UCS_MEMORY_TYPE_ZE_DEVICE);
     mem_buffer recv_buf(length, UCS_MEMORY_TYPE_HOST);
     ucs::handle<ucp_mem_h, ucp_context_h> memh_handle;
     ucs::auto_ptr<mem_buffer> app_buf;
@@ -149,10 +153,6 @@ void test_ucp_mem_type_dmabuf::test_xfer(bool app_owned, bool exp_dmabuf)
     ucp_mem_map_params_t params;
     void *send_buf, *sreq, *rreq;
     ucp_mem_h memh;
-    /* The network memory domains register Level Zero memory only through a
-     * DMA-BUF, and CUDA or ROCm memory also through peer memory */
-    bool dmabuf_only = (mem_type() == UCS_MEMORY_TYPE_ZE_HOST) ||
-                       (mem_type() == UCS_MEMORY_TYPE_ZE_DEVICE);
 
     EXPECT_EQ(exp_dmabuf, context->dmabuf_mds[mem_type()] != UCP_NULL_RESOURCE)
             << mem_type_name << " memory DMA-BUF provider";
@@ -207,9 +207,23 @@ void test_ucp_mem_type_dmabuf::test_xfer(bool app_owned, bool exp_dmabuf)
 
 UCS_TEST_P(test_ucp_mem_type_dmabuf, alloc, "RNDV_THRESH=0")
 {
-    if ((sender().ucph()->dmabuf_mds[mem_type()] == UCP_NULL_RESOURCE) ||
-        (sender().ucph()->dmabuf_reg_md_map == 0)) {
+    ucp_context_h context   = sender().ucph();
+    ucp_md_index_t md_index = context->dmabuf_mds[mem_type()];
+    bool exported;
+
+    if ((md_index == UCP_NULL_RESOURCE) || (context->dmabuf_reg_md_map == 0)) {
         UCS_TEST_SKIP_R("DMA-BUF registration is not supported");
+    }
+
+    /* Only an MPS MLOPart device may refuse an export the memory domain
+     * advertises, and the network cannot register the memory then */
+    if ((mem_type() == UCS_MEMORY_TYPE_CUDA) &&
+        !mem_buffer::cuda_mem_is_gdr_capable()) {
+        ASSERT_UCS_OK(mem_buffer::query_dmabuf_export(
+                context->tl_mds[md_index].md, mem_type(), &exported));
+        if (!exported) {
+            UCS_TEST_SKIP_R("the device refuses DMA-BUF export");
+        }
     }
 
     test_xfer(false, true);

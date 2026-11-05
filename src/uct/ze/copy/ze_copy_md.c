@@ -105,24 +105,22 @@ uct_ze_copy_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
                       unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_ze_copy_md_t *md = ucs_derived_of(tl_md, uct_ze_copy_md_t);
-    /* Request DMA-BUF exportability for the memory types advertised in
-     * 'dmabuf_mem_types', and only for those, so that allocating a type without
-     * a DMA-BUF path cannot fail because of the descriptor. Level Zero may
-     * return a DMA-BUF for an allocation which was not created for external
-     * export, but such a handle does not necessarily describe the requested
-     * range, and an RDMA device may read incorrect data through it. */
+    /* Request export only for 'dmabuf_mem_types', so that other types cannot
+     * fail because of it. A DMA-BUF of memory not allocated for export may not
+     * describe the requested range, and an RDMA device may read incorrect data
+     * through it. */
     ze_external_memory_export_desc_t export_desc = {
         .stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_DESC,
         .flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF
     };
-    void *export_desc_p                 = NULL;
-    ze_host_mem_alloc_desc_t host_desc  = {
+    void *export_desc_p                          = NULL;
+    ze_host_mem_alloc_desc_t host_desc           = {
         .stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC
     };
-    ze_device_mem_alloc_desc_t dev_desc = {
+    ze_device_mem_alloc_desc_t dev_desc          = {
         .stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC
     };
-    size_t alignment                    = ucs_get_page_size();
+    size_t alignment                             = ucs_get_page_size();
     ucs_status_t status;
 
     if (md->dmabuf_supported &&
