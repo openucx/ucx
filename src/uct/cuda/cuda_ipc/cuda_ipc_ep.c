@@ -308,10 +308,14 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    /* The context and the stream are taken from the first non-empty element,
+     * so also count the empty elements before it */
     total_length = 0;
     num_nonempty = 0;
+    first        = 0;
     for (i = 0; i < count; i++) {
         total_length += lengths[i];
+        first        += (num_nonempty == 0) & (lengths[i] == 0);
         num_nonempty += (lengths[i] != 0);
     }
 
@@ -319,13 +323,6 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
         ucs_trace_data("Zero length sgl_zcopy: skip it");
         *total_length_p = 0;
         return UCS_OK;
-    }
-
-    /* The context and the stream are taken from the first non-empty element,
-     * which exists because total_length != 0 */
-    first = 0;
-    while (lengths[first] == 0) {
-        first++;
     }
 
     status = uct_cuda_ipc_check_and_push_ctx((CUdeviceptr)buffers[first],
