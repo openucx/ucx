@@ -1463,8 +1463,8 @@ UCS_TEST_P(test_rc_no_srq, rx_cq_len_device_limit,
            "RC_VERBS_RX_MAX_WR=32", "RC_VERBS_RX_CQ_LEN=128")
 {
     uct_ib_device_t *dev = &ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev;
-    int max_cqe         = IBV_DEV_ATTR(dev, max_cqe);
-    int limit           = ucs_min(max_cqe, 128);
+    int max_cqe          = IBV_DEV_ATTR(dev, max_cqe);
+    int limit            = ucs_min(max_cqe, 128);
 
     /* Bound the simulated device limit to avoid allocating its largest CQ. */
     for (const char *value : {"inf", "256"}) {
