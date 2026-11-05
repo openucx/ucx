@@ -883,6 +883,14 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->super.component  = &uct_cuda_ipc_component.super;
     md->fabric_supported = uct_cuda_ipc_md_check_fabric_support();
     uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
+#if HAVE_DECL_SYS_PIDFD_GETFD
+    /* Peers import POSIX FD handles with pidfd_getfd(), which requires them to
+     * pass the ptrace access check against this process. Export the handles
+     * even if peers are not allowed: the same process, its descendants and
+     * peers with CAP_SYS_PTRACE still pass the check, and other peers fall
+     * back when the import fails. */
+    ucs_sys_ptrace_enable_peers();
+#endif
 
     uct_cuda_ipc_cache_set_global_limits(ipc_config->cache_max_regions,
                                          ipc_config->cache_max_size);
