@@ -57,7 +57,7 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 
   {"RX_CQ_LEN", "32768",
    "Length of the receive completion queue when SRQ_ENABLE=n or the device\n"
-   "does not support SRQ. Limits endpoints to RX_CQ_LEN / RX_MAX_WR, capped\n"
+   "does not support SRQ. Limits QPs to RX_CQ_LEN / RX_MAX_WR, capped\n"
    "by the maximum CQ length reported by the device. Must be >= RX_MAX_WR.\n"
    "\"inf\" uses the maximum CQ length reported by the device.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, rx_cq_len),
@@ -292,6 +292,26 @@ uct_rc_verbs_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
     iface->rx_cq_available += iface->config.rx_max_wr;
 }
 
+/* Account for a receive WR flush completion after its QP was removed from the
+ * lookup table. A QP created without an SRQ is kept until every posted receive
+ * WR has generated a completion. */
+void
+uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface, uint32_t qp_num)
+{
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+
+    ucs_list_for_each(cleanup_ctx, &iface->super.qp_gc_list, super.list) {
+        if (cleanup_ctx->super.qp_num == qp_num) {
+            ucs_assertv(cleanup_ctx->rx_remaining > 0, "qp_num=0x%x", qp_num);
+            if (--cleanup_ctx->rx_remaining == 0) {
+                uct_rc_verbs_iface_qp_cleanup_notify(iface, qp_num);
+            }
+
+            return;
+        }
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                            uct_worker_h worker, const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -324,7 +344,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
     if (srq_enabled) {
         rx_max_wr                 = 0;
-        rx_batch_limit            = ib_config->rx.max_batch;
         rx_cq_len                 = ib_config->rx.queue_len;
         init_attr.fc_max_wnd_size = ib_config->rx.queue_len;
     } else {
@@ -338,10 +357,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 
         rx_max_wr      = config->rx_max_wr;
         rx_batch_limit = ucs_max(ucs_min(ib_config->rx.max_batch,
-                                        rx_max_wr / 4), 1);
+                                         rx_max_wr / 4), 1);
         rx_cq_len      = ucs_min(config->rx_cq_len,
-                                (unsigned long)IBV_DEV_ATTR(&ib_md->dev,
-                                                           max_cqe));
+                                 (unsigned long)IBV_DEV_ATTR(&ib_md->dev,
+                                                             max_cqe));
         if (rx_cq_len < rx_max_wr) {
             ucs_error(UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_CQ_LEN is limited to "
                       "%u entries, fewer than " UCS_DEFAULT_ENV_PREFIX
@@ -350,8 +369,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
             return UCS_ERR_INVALID_PARAM;
         }
 
-        ucs_debug("%s: RX CQ length %u for %u receive WRs per endpoint "
-                  "without an SRQ, batch size %u, endpoint limit %u",
+        ucs_debug("%s: RX CQ length %u, %u receive WRs per QP without an SRQ, "
+                  "batch size %u, at most %u QPs",
                   uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr,
                   rx_batch_limit, rx_cq_len / rx_max_wr);
 
@@ -387,9 +406,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
 
     /* A QP must be able to reach the repost threshold. */
-    self->super.super.config.rx_max_batch =
-            (self->srq == NULL) ? rx_batch_limit :
-            ucs_min(self->super.super.config.rx_max_batch, rx_batch_limit);
+    if (!srq_enabled) {
+        self->super.super.config.rx_max_batch = rx_batch_limit;
+    }
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {

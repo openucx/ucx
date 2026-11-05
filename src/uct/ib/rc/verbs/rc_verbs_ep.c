@@ -693,15 +693,9 @@ static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     unsigned batch   = iface->super.super.config.rx_max_batch;
-    unsigned prepost = (batch == 1) ? iface->config.rx_max_wr :
-            ucs_min(2 * batch, iface->config.rx_max_wr);
+    unsigned prepost = ucs_min(2 * batch, iface->config.rx_max_wr);
 
-    /* CQEs grow the queue by batch - 1 WRs; batch 1 needs a full prepost. */
-    while ((ep->rx_available > (iface->config.rx_max_wr - prepost)) &&
-           (uct_rc_verbs_iface_post_recv_common(iface, ep, 1) > 0)) {
-    }
-
-    if (ep->rx_available == iface->config.rx_max_wr) {
+    if (uct_rc_verbs_ep_post_recv_batches(iface, ep, prepost) == 0) {
         ucs_error("failed to post receives on QP 0x%x", ep->qp->qp_num);
         return UCS_ERR_NO_MEMORY;
     }
@@ -717,13 +711,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     ucs_status_t status;
 
     if (ucs_unlikely(iface->rx_cq_available < (int)iface->config.rx_max_wr)) {
-        ucs_assert(iface->srq == NULL);
         ucs_error("iface %p: cannot create endpoint without an SRQ, "
-                  "RX CQ of %d entries has no room for %u more receive WRs, "
+                  "RX CQ has room for %d receive WRs, fewer than %u, "
                   "increase " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_CQ_LEN "
                   "or decrease " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_MAX_WR",
-                  iface, iface->super.super.cq[UCT_IB_DIR_RX]->cqe,
-                  iface->config.rx_max_wr);
+                  iface, iface->rx_cq_available, iface->config.rx_max_wr);
+        ucs_assert(iface->srq == NULL);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
@@ -733,6 +726,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     if (status != UCS_OK) {
         goto err;
     }
+
+    self->rx_available = iface->config.rx_max_wr;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->qp->qp_num,
                               params);
@@ -754,7 +749,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
-    self->rx_available = iface->config.rx_max_wr;
     if (iface->srq != NULL) {
         status = uct_rc_verbs_iface_common_prepost_recvs(iface);
     } else {

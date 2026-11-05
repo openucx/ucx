@@ -28,6 +28,9 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
 
 void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface);
 
+void uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface,
+                                     uint32_t qp_num);
+
 unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
                                              uct_rc_verbs_ep_t *ep,
                                              unsigned max);
@@ -57,6 +60,21 @@ uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
     if ((ep != NULL) && (ep->rx_available == iface->config.rx_max_wr)) {
         iface->rx_repost_needed = 1;
     }
+
+    return posted;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_verbs_ep_post_recv_batches(uct_rc_verbs_iface_t *iface,
+                                  uct_rc_verbs_ep_t *ep, unsigned max)
+{
+    unsigned posted = 0;
+    unsigned count;
+
+    do {
+        count   = uct_rc_verbs_iface_post_recv_common(iface, ep, 0);
+        posted += count;
+    } while ((count > 0) && (posted < max));
 
     return posted;
 }
@@ -99,26 +117,6 @@ uct_rc_verbs_iface_qp_cleanup_notify(uct_rc_verbs_iface_t *iface,
     uct_rc_iface_qp_cleanup_ready(&iface->super, qp_num);
 }
 
-/* Account for a receive WR flush completion after its QP was removed from the
- * lookup table. A QP created without an SRQ is kept until every posted receive
- * WR has generated a completion. */
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface, uint32_t qp_num)
-{
-    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
-
-    ucs_list_for_each(cleanup_ctx, &iface->super.qp_gc_list, super.list) {
-        if (cleanup_ctx->super.qp_num == qp_num) {
-            ucs_assertv(cleanup_ctx->rx_remaining > 0, "qp_num=0x%x", qp_num);
-            if (--cleanup_ctx->rx_remaining == 0) {
-                uct_rc_verbs_iface_qp_cleanup_notify(iface, qp_num);
-            }
-
-            return;
-        }
-    }
-}
-
 /* An endpoint which was cancelled or failed must not receive any more */
 static UCS_F_ALWAYS_INLINE int
 uct_rc_verbs_ep_can_post_recv(const uct_rc_verbs_ep_t *ep)
@@ -142,7 +140,7 @@ uct_rc_verbs_iface_rx_complete_no_srq(uct_rc_verbs_iface_t *iface,
 
     ep->rx_available++;
     if (repost && uct_rc_verbs_ep_can_post_recv(ep)) {
-        uct_rc_verbs_iface_post_recv_common(iface, ep, 0);
+        uct_rc_verbs_ep_post_recv_batches(iface, ep, iface->config.rx_max_wr);
     }
 }
 
