@@ -410,6 +410,7 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_lane_index_t lane = req->send.lane;
     ucp_ep_h ep           = req->send.ep;
+    ucp_lane_map_t reflush_lanes;
     ucs_status_t status;
     int completed;
 
@@ -426,6 +427,15 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     ucs_assertv(lane != UCP_NULL_LANE, "ep=%p flush_req=%p lane=%d",
                 ep, req, lane);
+
+    /* The requests queued on this lane before the flush are sent now, and they
+     * may send on the lanes which were already flushed too, e.g. a put with
+     * more fragments than lanes. Flush these lanes again; their previous flush
+     * still completes, so each of them needs one more completion. */
+    reflush_lanes = req->send.flush.started_lanes & ucp_ep_get_live_lanes(ep) &
+                    ~UCS_BIT(lane);
+    req->send.flush.started_lanes &= ~reflush_lanes;
+    ucp_ep_flush_request_update_uct_comp(req, ucs_popcount(reflush_lanes), 0);
 
     status = uct_ep_flush(ucp_ep_get_lane(ep, lane), req->send.flush.uct_flags,
                           &req->send.state.uct_comp);
