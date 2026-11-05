@@ -450,12 +450,15 @@ UCS_TEST_P(test_ucp_flush, pending_error_lane_replacement,
             ASSERT_TRUE(UCS_PTR_IS_PTR(request));
             req = static_cast<ucp_request_t*>(request) - 1;
             ASSERT_EQ(0, req->send.lane);
-            ASSERT_TRUE(test_flush_comp != NULL);
 
             test_flush_pending_error_ep = lane0_ep;
             mock_ep_flush(ep, mock, test_flush_pending_error);
             ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
             ASSERT_TRUE(test_flush_pending_error_seen);
+            /* The pending callback flushed lane 1 after the error on lane 0;
+               count only the flushes which the lane replacement restarts */
+            ASSERT_TRUE(test_flush_comp != NULL);
+            test_flush_pending_error_inprogress_count = 0;
 
             ucp_ep_set_lane(ep, 0, &replacement_lane);
             uct_invoke_completion(test_flush_comp, UCS_OK);

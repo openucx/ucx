@@ -199,7 +199,12 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             ucp_trace_req(req, "adding pending flush on ep %p lane[%d]: %s",
                           ep, lane, ucs_status_string(status));
             if (status == UCS_OK) {
+                /* The requests queued on this lane before the flush may send
+                 * on the other lanes too, e.g. a put split between the lanes.
+                 * Flush the other lanes from the pending callback, after
+                 * these requests are sent. */
                 req->send.lane = lane;
+                break;
             } else if (status == UCS_ERR_BUSY) {
                 ucp_ep_flush_request_resched(ep, req);
                 return;
