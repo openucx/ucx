@@ -4,7 +4,7 @@ realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 
-COV_MODULE="tools/cov-2019.12"
+COV_MODULE="tools/cov-2026.3.0"
 
 usage() {
 	echo "Usage: $0 <release|devel> [--clean] [<configure opts>]"
@@ -98,20 +98,29 @@ run_coverity() {
 
 	cov_build_id="cov_build_${ucx_build_type}"
 	cov_build="$ucx_build_dir/$cov_build_id"
-	cov-build --dir $cov_build $MAKEP all
+	# Generate a compiler configuration instead of relying on a
+	# pre-generated one in the Coverity installation directory
+	cov_config="$ucx_build_dir/cov_config_${ucx_build_type}/coverity_config.xml"
+	cov-configure --config $cov_config --gcc
+	cov-build --config $cov_config --dir $cov_build $MAKEP all
 	if [ "${ucx_build_type}" == "devel" ]; then
 		cov-manage-emit --dir $cov_build --tu-pattern "file('.*/test/gtest/common/googletest/*')" delete || :
 		# Needed to suppress false positives in std::function
 		COV_OPT="$COV_OPT --checker-option UNINIT_CTOR:ctor_func:swap"
 	fi
+	# Exclude bundled GoogleTest header findings that cannot be removed by the
+	# translation-unit filter above.
+	cov_format_opts=(--dir "$cov_build" --emacs-style
+	                 --exclude-files '/test/gtest/common/googletest/internal/gtest-param-util\.h$')
 	cov-analyze --jobs $parallel_jobs $COV_OPT --disable PARSE_ERROR --security --concurrency --dir $cov_build
-	nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
+	nerrors=$(cov-format-errors "${cov_format_opts[@]}" |
+	          awk '/^(Detected|Processing) [0-9]+/ { print $2; exit }')
 	# Fail on empty output (e.g. license expiration)
 	[ -n "$nerrors" ] || { echo "ERROR: cov-format-errors failed"; exit 1; }
 
 	if [ $nerrors -gt 0 ]; then
 		error_log_file="$WORKSPACE/cov_error_log.txt"
-		cov-format-errors --dir $cov_build --emacs-style > "$error_log_file"
+		cov-format-errors "${cov_format_opts[@]}" > "$error_log_file"
 		if [ -d "$WORKSPACE/$cov_build_id" ]; then
 			rm -rf $WORKSPACE/$cov_build_id
 		fi
@@ -129,6 +138,9 @@ set -x
 
 az_init_modules
 modules_for_coverity
+
+# Record the analyzer version in the build log
+cov-analyze --ident
 
 if [ "$clean" = yes -o ! -d "${ucx_build_dir}" ]; then
 	prepare_build

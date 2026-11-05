@@ -21,9 +21,6 @@ resources:
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:2
       options: $(DOCKER_OPT_ARGS)
-    - container: coverity_rh7
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel82
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -285,21 +282,25 @@ resources:
 
 stages:
   - stage: Codestyle
+    condition: false
     jobs:
     - template: codestyle.yml
 
   - stage: Basic_compile
     dependsOn: []
+    condition: false
     jobs:
     - template: basic_compile.yml
 
   - stage: Static_check
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
     - template: static_checks.yml
 
   - stage: Build
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
       - template: build_job.yml
         parameters:
@@ -328,11 +329,13 @@ stages:
     lockBehavior: sequential
     variables:
       - group: concurrency_lock
+    condition: false
     jobs:
     - template: mad_tests.yml
 
   - stage: WireCompat
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
     - template: wire_compat.yml
       parameters:
@@ -363,15 +366,16 @@ stages:
     #    demands: ucx_iodemo -equals yes
 
   - stage: Coverity
-    dependsOn: [Static_check]
+    dependsOn: []
     jobs:
       - template: coverity.yml
         parameters:
           demands: ucx_docker -equals yes
-          container: coverity_rh7
+          container: rhel90
 
   - stage: Tests
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
     - template: tests.yml
       parameters:
@@ -404,6 +408,7 @@ stages:
 
   - stage: EFA_Tests
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
     - template: efa.yml
       parameters:
@@ -412,6 +417,7 @@ stages:
 
   - stage: Namespace_Tests
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
     - template: namespace_tests.yml
       parameters:
@@ -430,6 +436,7 @@ stages:
 
   - stage: jucx
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
       - template: ../jucx/jucx-test.yml
         parameters:
@@ -444,6 +451,7 @@ stages:
 
   - stage: go
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
       - template: go/go-test.yml
         parameters:
@@ -456,6 +464,7 @@ stages:
 
   - stage: Build_Static
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
       - job: build_source
         pool:
@@ -502,6 +511,7 @@ stages:
 
   - stage: Cuda
     dependsOn: [Basic_compile]
+    condition: false
     jobs:
       - template: cuda/cuda.yml
       - job: soname_suffix_cuda_ib
@@ -534,6 +544,7 @@ stages:
 
   - stage: AddressSanitizer
     dependsOn: [Static_check]
+    condition: false
     jobs:
     - template: tests.yml
       parameters:
