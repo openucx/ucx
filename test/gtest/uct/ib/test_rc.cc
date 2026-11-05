@@ -7,6 +7,7 @@
 
 #include "test_rc.h"
 #include <uct/ib/rc/verbs/rc_verbs.h>
+#include <uct/test_p2p_rma.h>
 #include <uct/test_peer_failure.h>
 
 #include <memory>
@@ -778,6 +779,115 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
 }
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
+
+
+/*
+ * Atomic operations, and a put after a fence, use the atomic key of the remote
+ * memory, at the atomic MR offset which the peer passes in its address. Check
+ * that they update the requested remote address and nothing else.
+ */
+class test_rc_atomic_key : public uct_p2p_rma_test {
+public:
+    ucs_status_t fetch_add64(uct_ep_h ep, const mapped_buffer &sendbuf,
+                             const mapped_buffer &recvbuf)
+    {
+        return uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, VALUE,
+                                     static_cast<uint64_t*>(sendbuf.ptr()),
+                                     recvbuf.addr(), recvbuf.rkey(), comp());
+    }
+
+protected:
+    static constexpr uint64_t VALUE = 0x5a5a5a5a5a5a5a5aul;
+
+    /* Covers the largest atomic MR offset, 255 words */
+    static constexpr size_t NUM_WORDS = 512;
+
+    void check_recvbuf(const mapped_buffer &recvbuf)
+    {
+        auto words = static_cast<const uint64_t*>(recvbuf.ptr());
+
+        /* Also report where a misplaced update went */
+        for (size_t i = 0; i < NUM_WORDS; ++i) {
+            EXPECT_EQ((i == 0) ? VALUE : 0, words[i]) << "word " << i;
+        }
+    }
+
+    void test_fetch_add64()
+    {
+        mapped_buffer resultbuf(sizeof(uint64_t), sender());
+        mapped_buffer recvbuf(NUM_WORDS * sizeof(uint64_t), receiver());
+
+        recvbuf.memset(0);
+        blocking_send(static_cast<send_func_t>(
+                              &test_rc_atomic_key::fetch_add64),
+                      sender_ep(), resultbuf, recvbuf, true);
+        wait_for_remote();
+
+        EXPECT_EQ(0ul, *static_cast<uint64_t*>(resultbuf.ptr()));
+        check_recvbuf(recvbuf);
+    }
+
+    void test_fence_put(send_func_t send)
+    {
+        mapped_buffer sendbuf(sizeof(uint64_t), sender());
+        mapped_buffer recvbuf(NUM_WORDS * sizeof(uint64_t), receiver());
+
+        *static_cast<uint64_t*>(sendbuf.ptr()) = VALUE;
+        recvbuf.memset(0);
+
+        /* The first put after a fence uses the atomic key */
+        ASSERT_UCS_OK(uct_iface_fence(sender().iface(), 0));
+        blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+        wait_for_remote();
+
+        check_recvbuf(recvbuf);
+    }
+
+    void test_fence_puts()
+    {
+        if (check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+            test_fence_put(
+                    static_cast<send_func_t>(&uct_p2p_rma_test::put_short));
+        }
+
+        if (check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+            test_fence_put(
+                    static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy));
+        }
+
+        if (check_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+            test_fence_put(
+                    static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy));
+        }
+    }
+};
+
+constexpr uint64_t test_rc_atomic_key::VALUE;
+constexpr size_t test_rc_atomic_key::NUM_WORDS;
+
+UCS_TEST_SKIP_COND_P(test_rc_atomic_key, fetch_add64,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64)) {
+    test_fetch_add64();
+}
+
+/* The mlx5 memory domain without DevX has no indirect atomic keys */
+UCS_TEST_SKIP_COND_P(test_rc_atomic_key, fetch_add64_no_devx,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64),
+                     "IB_MLX5_DEVX=n") {
+    test_fetch_add64();
+}
+
+/* Weak fence mode makes a fence take effect on any device */
+UCS_TEST_P(test_rc_atomic_key, fence_put, "RC_FENCE=weak") {
+    test_fence_puts();
+}
+
+UCS_TEST_P(test_rc_atomic_key, fence_put_no_devx, "RC_FENCE=weak",
+           "IB_MLX5_DEVX=n") {
+    test_fence_puts();
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_atomic_key)
 
 
 class test_rc_get_limit : public test_rc {

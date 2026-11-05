@@ -1145,6 +1145,87 @@ UCS_TEST_P(test_ucp_rma_order, put_ordering) {
 // on both peers. Add other tls, when fence implementation revised
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_order, shm_rc_dc, "self,shm,rc,dc")
 
+
+/*
+ * A put after a transport fence uses the atomic key of the remote memory, at
+ * the atomic MR offset which the peer passes in its address. A weak fence
+ * orders the operations of a single lane, and puts of the same size use the
+ * same lane.
+ */
+class test_ucp_rma_weak_fence : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, NO_DEVX, "no_devx");
+    }
+
+    void init() override
+    {
+        modify_config("FENCE_MODE", "weak");
+        modify_config("MAX_RMA_LANES", "1");
+        /* Make the transport fence take effect on any device */
+        modify_config("RC_FENCE", "weak", SETENV_IF_NOT_EXIST);
+        if (get_variant_value() & NO_DEVX) {
+            /* The mlx5 memory domain without DevX has no indirect atomic
+             * keys */
+            modify_config("IB_MLX5_DEVX", "n", SETENV_IF_NOT_EXIST);
+        }
+
+        test_ucp_rma::init();
+    }
+
+protected:
+    void put(const mem_buffer &sbuf, const mapped_buffer &rbuf, ucp_rkey_h rkey)
+    {
+        ucp_request_param_t param = {};
+
+        request_release(ucp_put_nbx(sender().ep(), sbuf.ptr(), sbuf.size(),
+                                    (uintptr_t)rbuf.ptr(), rkey, &param));
+    }
+
+    void test_fence_put(size_t size)
+    {
+        /* Covers the largest atomic MR offset */
+        static const size_t guard_size = 2 * UCS_KBYTE;
+        mem_buffer sbuf1(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer sbuf2(size, UCS_MEMORY_TYPE_HOST);
+        mem_buffer expected(size + guard_size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(size + guard_size, receiver());
+        ucs::handle<ucp_rkey_h> rkey;
+
+        sbuf1.memset(1);
+        sbuf2.memset(2);
+        expected.memset(0);
+        memset(expected.ptr(), 2, size);
+        rbuf.memset(0);
+        rbuf.rkey(sender(), rkey);
+
+        put(sbuf1, rbuf, rkey);
+        sender().fence();
+        put(sbuf2, rbuf, rkey);
+        flush_workers();
+
+        EXPECT_TRUE(mem_buffer::compare(expected.ptr(), rbuf.ptr(), rbuf.size(),
+                                        UCS_MEMORY_TYPE_HOST))
+                << "size is " << size;
+    }
+
+private:
+    enum {
+        NO_DEVX = UCS_BIT(0)
+    };
+};
+
+UCS_TEST_P(test_ucp_rma_weak_fence, put) {
+    for (size_t size = 1000000; size >= 1; size /= 10) {
+        test_fence_put(size);
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_weak_fence, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_weak_fence, dcx, "dc_x")
+
 class test_ucp_ep_based_fence : public test_ucp_rma {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
