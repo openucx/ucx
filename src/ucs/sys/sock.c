@@ -868,6 +868,7 @@ ucs_status_t ucs_sock_ipportstr_to_sockaddr(const char *ip_port_str,
     if (is_ipv6_str(ip_port_str)) {
         if (*ip_port_str == '[') {
             /* Parse [IPv6]:port (max IPv6 size is 39), skipping brackets */
+            /* coverity[check_return] */
             sscanf(ip_port_str, "%*[[]%39[^]]]:%6s", ip_str, port_str);
         } else {
             /* No brackets means no port specified for IPv6 address */
@@ -875,6 +876,7 @@ ucs_status_t ucs_sock_ipportstr_to_sockaddr(const char *ip_port_str,
         }
     } else {
         /* Parse IPv4 address (max size is 15) with optional port */
+        /* coverity[check_return] */
         sscanf(ip_port_str, "%15[^:]:%6s", ip_str, port_str);
     }
 

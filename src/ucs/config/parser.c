@@ -32,6 +32,18 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
+/* Parse a single number with the sscanf format _fmt, and reject any trailing
+ * characters other than whitespace, which sscanf would otherwise silently
+ * drop, e.g. "0xa" would be parsed as 0 by "%u" */
+#define UCS_CONFIG_SSCANF_NUMBER(_buf, _fmt, _value) \
+    ({ \
+        const char *_str = (_buf); \
+        int _length      = 0; \
+        \
+        (sscanf(_str, _fmt " %n", (_value), &_length) == 1) && \
+                ((size_t)_length <= strlen(_str)) && (_str[_length] == '\0'); \
+    })
+
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -122,7 +134,7 @@ void ucs_config_release_string(void *ptr, const void *arg)
 
 int ucs_config_sscanf_int(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%i", (unsigned*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%i", (int*)dest);
 }
 
 ucs_status_t ucs_config_clone_int(const void *src, void *dest, const void *arg)
@@ -134,7 +146,7 @@ ucs_status_t ucs_config_clone_int(const void *src, void *dest, const void *arg)
 int ucs_config_sprintf_int(char *buf, size_t max,
                            const void *src, const void *arg)
 {
-    return snprintf(buf, max, "%i", *(unsigned*)src);
+    return snprintf(buf, max, "%i", *(int*)src);
 }
 
 int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
@@ -143,7 +155,7 @@ int ucs_config_sscanf_uint(const char *buf, void *dest, const void *arg)
         *(unsigned*)dest = UINT_MAX;
         return 1;
     } else {
-        return sscanf(buf, "%u", (unsigned*)dest);
+        return UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
     }
 }
 
@@ -167,7 +179,7 @@ int ucs_config_sprintf_uint(char *buf, size_t max,
 
 int ucs_config_sscanf_ulong(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%lu", (unsigned long*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%lu", (unsigned long*)dest);
 }
 
 int ucs_config_sprintf_ulong(char *buf, size_t max,
@@ -207,7 +219,7 @@ int ucs_config_sprintf_pos_double(char *buf, size_t max, const void *src,
 
 int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg)
 {
-    return sscanf(buf, "%lf", (double*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%lf", (double*)dest);
 }
 
 int ucs_config_sprintf_double(char *buf, size_t max,
@@ -226,10 +238,10 @@ int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 {
     /* Special value: auto */
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
-        *(size_t*)dest = UCS_HEXUNITS_AUTO;
+        *(unsigned*)dest = UCS_HEXUNITS_AUTO;
         return 1;
     } else if (strncasecmp(buf, "0x", 2) == 0) {
-        return (sscanf(buf + 2, "%x", (unsigned int*)dest));
+        return UCS_CONFIG_SSCANF_NUMBER(buf + 2, "%x", (unsigned int*)dest);
     } else {
         return 0;
     }
@@ -238,13 +250,13 @@ int ucs_config_sscanf_hex(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_hex(char *buf, size_t max,
                            const void *src, const void *arg)
 {
-    uint16_t val = *(uint16_t*)src;
+    unsigned val = *(unsigned*)src;
 
     if (val == UCS_HEXUNITS_AUTO) {
         return snprintf(buf, max, UCS_VALUE_AUTO_STR);
     }
 
-    return snprintf(buf, max, "0x%x", *(unsigned int*)src);
+    return snprintf(buf, max, "0x%x", val);
 }
 
 int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg)
@@ -374,7 +386,7 @@ int ucs_config_sscanf_uint_enum(const char *buf, void *dest, const void *arg)
         return 1;
     }
 
-    return sscanf(buf, "%u", (unsigned*)dest);
+    return UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
 }
 
 int ucs_config_sprintf_uint_enum(char *buf, size_t max,
@@ -481,8 +493,9 @@ void ucs_config_help_bitmap(char *buf, size_t max, const void *arg)
 
 int ucs_config_sscanf_bitmask(const char *buf, void *dest, const void *arg)
 {
-    int ret = sscanf(buf, "%u", (unsigned*)dest);
-    if (*(unsigned*)dest != 0) {
+    int ret = UCS_CONFIG_SSCANF_NUMBER(buf, "%u", (unsigned*)dest);
+
+    if (ret && (*(unsigned*)dest != 0)) {
         *(unsigned*)dest = UCS_BIT(*(unsigned*)dest) - 1;
     }
     return ret;
@@ -498,27 +511,38 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
 {
     char units[3];
     int num_fields;
+    int length = 0;
     double value;
     double per_sec;
 
+    /* Units are optional, and may be followed only by whitespace */
     memset(units, 0, sizeof(units));
-    num_fields = sscanf(buf, "%lf%c%c", &value, &units[0], &units[1]);
+    num_fields = sscanf(buf, "%lf%n%2[a-zA-Z]%n", &value, &length, units,
+                        &length);
+    if ((num_fields < 1) || ((size_t)length > strlen(buf))) {
+        return 0;
+    }
+
+    while (isspace(buf[length])) {
+        ++length;
+    }
+
+    if (buf[length] != '\0') {
+        return 0;
+    }
+
     if (num_fields == 1) {
         per_sec = 1;
-    } else if (num_fields == 2 || num_fields == 3) {
-        if (!strcmp(units, "m")) {
-            per_sec = 1.0 / 60.0;
-        } else if (!strcmp(units, "s")) {
-            per_sec = 1;
-        } else if (!strcmp(units, "ms")) {
-            per_sec = UCS_MSEC_PER_SEC;
-        } else if (!strcmp(units, "us")) {
-            per_sec = UCS_USEC_PER_SEC;
-        } else if (!strcmp(units, "ns")) {
-            per_sec = UCS_NSEC_PER_SEC;
-        } else {
-            return 0;
-        }
+    } else if (!strcmp(units, "m")) {
+        per_sec = 1.0 / 60.0;
+    } else if (!strcmp(units, "s")) {
+        per_sec = 1;
+    } else if (!strcmp(units, "ms")) {
+        per_sec = UCS_MSEC_PER_SEC;
+    } else if (!strcmp(units, "us")) {
+        per_sec = UCS_USEC_PER_SEC;
+    } else if (!strcmp(units, "ns")) {
+        per_sec = UCS_NSEC_PER_SEC;
     } else {
         return 0;
     }
@@ -576,6 +600,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     double *dst     = (double*)dest;
     char    str[16] = {0};
     int     offset  = 0;
+    int length      = 0;
     size_t  divider;
     size_t  units;
     double  value;
@@ -586,8 +611,9 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
         return 1;
     }
 
-    num_fields = sscanf(buf, "%lf%15s", &value, str);
-    if (num_fields < 2) {
+    num_fields = sscanf(buf, "%lf%15s %n", &value, str, &length);
+    if ((num_fields < 2) || ((size_t)length > strlen(buf)) ||
+        (buf[length] != '\0')) {
         return 0;
     }
 
@@ -777,7 +803,7 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
     p = strchr(str, '-');
     if (p == NULL) {
         /* got only one value (not a range) */
-        if (1 != sscanf(buf, "%u", &first)) {
+        if (!UCS_CONFIG_SSCANF_NUMBER(buf, "%u", &first)) {
             ret = 0;
             goto out;
         }
@@ -786,8 +812,8 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
         /* got a range of numbers */
         *p = 0;      /* split str */
 
-        if ((1 != sscanf(str, "%u", &first))
-            || (1 != sscanf(p + 1, "%u", &last))) {
+        if (!UCS_CONFIG_SSCANF_NUMBER(str, "%u", &first) ||
+            !UCS_CONFIG_SSCANF_NUMBER(p + 1, "%u", &last)) {
             ret = 0;
             goto out;
         }
