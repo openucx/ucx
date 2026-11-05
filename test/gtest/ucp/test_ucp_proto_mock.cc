@@ -1245,6 +1245,8 @@ protected:
                 ucp_worker_default_address_pack_flags(worker),
                 &remote_address);
         if (status == UCS_OK) {
+            ucs::scoped_async_lock lock(sender().worker()->async);
+
             remote_address.dst_version = dst_version;
             status = ucp_wireup_select_lanes(sender().ep(), 0,
                                              ucp_tl_bitmap_max, &remote_address,
