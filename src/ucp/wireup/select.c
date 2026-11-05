@@ -1885,10 +1885,11 @@ static int ucp_wireup_add_fast_lanes_pairwise(
 
         if (lane_bw < min_lane_bw) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
-                      " : bandwidth %.2f lower than %.2f, dropping lane",
+                      " : bandwidth %.2f MB/s lower than %.2f MB/s,"
+                      " dropping lane",
                       UCT_TL_RESOURCE_DESC_ARG(
                               &context->tl_rscs[sinfo->rsc_index].tl_rsc),
-                      lane_bw, min_lane_bw);
+                      lane_bw / UCS_MBYTE, min_lane_bw / UCS_MBYTE);
             continue;
         }
 
