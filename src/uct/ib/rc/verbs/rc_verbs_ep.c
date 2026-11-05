@@ -692,10 +692,15 @@ static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    unsigned batch   = iface->super.super.config.rx_max_batch;
-    unsigned prepost = ucs_min(2 * batch, iface->config.rx_max_wr);
+    unsigned prepost;
 
-    if (uct_rc_verbs_ep_post_recv_batches(iface, ep, prepost) == 0) {
+    if (iface->srq != NULL) {
+        return uct_rc_verbs_iface_srq_prepost_recvs(iface);
+    }
+
+    prepost = ucs_min(2 * iface->super.super.config.rx_max_batch,
+                      iface->config.rx_max_wr);
+    if (uct_rc_verbs_ep_post_recv_batches_no_srq(iface, ep, prepost) == 0) {
         ucs_error("failed to post receives on QP 0x%x", ep->qp->qp_num);
         return UCS_ERR_NO_MEMORY;
     }
@@ -749,11 +754,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
-    if (iface->srq != NULL) {
-        status = uct_rc_verbs_iface_common_prepost_recvs(iface);
-    } else {
-        status = uct_rc_verbs_ep_prepost_recvs(self);
-    }
+    status = uct_rc_verbs_ep_prepost_recvs(self);
     if (status != UCS_OK) {
         goto err_remove_qp;
     }
@@ -805,7 +806,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
                          self->txcnt.pi - self->txcnt.ci);
 
     if ((iface->srq == NULL) && (cleanup_ctx->rx_remaining == 0)) {
-        uct_rc_verbs_iface_qp_cleanup_notify(iface, self->qp->qp_num);
+        uct_rc_iface_qp_cleanup_ready(&iface->super, self->qp->qp_num);
     }
 }
 

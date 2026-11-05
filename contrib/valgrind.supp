@@ -212,30 +212,30 @@
    fun:ibv_post_srq_recv
 }
 {
-   uct_rc_verbs_iface_common_prepost_recvs
+   uct_rc_verbs_iface_srq_prepost_recvs
    Memcheck:Cond
-   fun:uct_rc_verbs_iface_common_prepost_recvs
+   fun:uct_rc_verbs_iface_srq_prepost_recvs
 }
 {
-   uct_rc_verbs_iface_post_recv_always_val
+   uct_rc_verbs_post_recv_always_val
    Memcheck:Value8
-   fun:uct_rc_verbs_iface_post_recv_always
+   fun:uct_rc_verbs_post_recv_always
 }
 {
-   uct_rc_verbs_iface_post_recv_always_cond
+   uct_rc_verbs_post_recv_always_cond
    Memcheck:Cond
-   fun:uct_rc_verbs_iface_post_recv_always
+   fun:uct_rc_verbs_post_recv_always
 }
 {
-   uct_rc_verbs_iface_post_recv_common_val
+   uct_rc_verbs_post_recv_common_val
    Memcheck:Value8
    ...
-   fun:uct_rc_verbs_iface_post_recv_common
+   fun:uct_rc_verbs_post_recv_common
 }
 {
-   uct_rc_verbs_iface_post_recv_common_cond
+   uct_rc_verbs_post_recv_common_cond
    Memcheck:Cond
-   fun:uct_rc_verbs_iface_post_recv_common
+   fun:uct_rc_verbs_post_recv_common
 }
 {
    gdrcopy_ioctl

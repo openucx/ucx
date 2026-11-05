@@ -22,39 +22,32 @@ uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
 }
 
 ucs_status_t
-uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface);
+uct_rc_verbs_iface_srq_prepost_recvs(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-void uct_rc_verbs_iface_repost_recv(uct_rc_verbs_iface_t *iface);
+void uct_rc_verbs_iface_repost_empty_qps(uct_rc_verbs_iface_t *iface);
 
-void uct_rc_verbs_iface_gc_drain_cqe(uct_rc_verbs_iface_t *iface,
-                                     uint32_t qp_num);
+void uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(uct_rc_verbs_iface_t *iface,
+                                               uint32_t qp_num);
 
-unsigned uct_rc_verbs_iface_post_recv_always(uct_rc_verbs_iface_t *iface,
-                                             uct_rc_verbs_ep_t *ep,
-                                             unsigned max);
+unsigned uct_rc_verbs_post_recv_always(uct_rc_verbs_iface_t *iface,
+                                       uct_rc_verbs_ep_t *ep, unsigned max);
 
 static inline unsigned
-uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
-                                    uct_rc_verbs_ep_t *ep, int fill)
+uct_rc_verbs_post_recv_common(uct_rc_verbs_iface_t *iface,
+                              uct_rc_verbs_ep_t *ep)
 {
     unsigned available = (ep == NULL) ? iface->super.rx.srq.available :
                                         ep->rx_available;
     unsigned batch     = iface->super.super.config.rx_max_batch;
-    unsigned count, posted;
+    unsigned posted;
 
     if (available < batch) {
-        if (ucs_likely(fill == 0)) {
-            return 0;
-        } else {
-            count = available;
-        }
-    } else {
-        count = batch;
+        return 0;
     }
 
-    posted = uct_rc_verbs_iface_post_recv_always(iface, ep, count);
+    posted = uct_rc_verbs_post_recv_always(iface, ep, batch);
 
     /* An empty QP cannot generate a completion to retry receive posting. */
     if ((ep != NULL) && (ep->rx_available == iface->config.rx_max_wr)) {
@@ -65,14 +58,16 @@ uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_rc_verbs_ep_post_recv_batches(uct_rc_verbs_iface_t *iface,
-                                  uct_rc_verbs_ep_t *ep, unsigned max)
+uct_rc_verbs_ep_post_recv_batches_no_srq(uct_rc_verbs_iface_t *iface,
+                                         uct_rc_verbs_ep_t *ep, unsigned max)
 {
     unsigned posted = 0;
     unsigned count;
 
+    ucs_assert(iface->srq == NULL);
+
     do {
-        count   = uct_rc_verbs_iface_post_recv_common(iface, ep, 0);
+        count   = uct_rc_verbs_post_recv_common(iface, ep);
         posted += count;
     } while ((count > 0) && (posted < max));
 
@@ -107,16 +102,6 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
     }
 }
 
-/* Fire LAST_WQE in software for a QP without an SRQ. */
-static UCS_F_ALWAYS_INLINE void
-uct_rc_verbs_iface_qp_cleanup_notify(uct_rc_verbs_iface_t *iface,
-                                     uint32_t qp_num)
-{
-    ucs_assertv(iface->srq == NULL,
-                "software LAST_WQE is not allowed for SRQ QP 0x%x", qp_num);
-    uct_rc_iface_qp_cleanup_ready(&iface->super, qp_num);
-}
-
 /* An endpoint which was cancelled or failed must not receive any more */
 static UCS_F_ALWAYS_INLINE int
 uct_rc_verbs_ep_can_post_recv(const uct_rc_verbs_ep_t *ep)
@@ -134,13 +119,14 @@ uct_rc_verbs_iface_rx_complete_no_srq(uct_rc_verbs_iface_t *iface,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
 
     if (ucs_unlikely(ep == NULL)) {
-        uct_rc_verbs_iface_gc_drain_cqe(iface, qp_num);
+        uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(iface, qp_num);
         return;
     }
 
     ep->rx_available++;
     if (repost && uct_rc_verbs_ep_can_post_recv(ep)) {
-        uct_rc_verbs_ep_post_recv_batches(iface, ep, iface->config.rx_max_wr);
+        uct_rc_verbs_ep_post_recv_batches_no_srq(iface, ep,
+                                                 iface->config.rx_max_wr);
     }
 }
 
@@ -189,11 +175,11 @@ uct_rc_verbs_iface_poll_rx(uct_rc_verbs_iface_t *iface)
 out:
     if (iface->srq != NULL) {
         iface->super.rx.srq.available += num_wcs;
-        uct_rc_verbs_iface_post_recv_common(iface, NULL, 0);
+        uct_rc_verbs_post_recv_common(iface, NULL);
     } else {
         /* Give empty QPs returned buffers before refilling active QPs. */
         if (ucs_unlikely(iface->rx_repost_needed)) {
-            uct_rc_verbs_iface_repost_recv(iface);
+            uct_rc_verbs_iface_repost_empty_qps(iface);
         }
 
         for (i = 0; i < num_wcs; i++) {
