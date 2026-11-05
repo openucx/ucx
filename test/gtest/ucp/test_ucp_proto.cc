@@ -895,6 +895,67 @@ UCS_TEST_P(test_ucp_proto, path_bw_coalescing_and_isolation)
     EXPECT_EQ(sibling_cfg, sibling->cfg_index);
 }
 
+UCS_TEST_P(test_ucp_proto, path_bw_measured_aggregate, "NUM_PPN=4")
+{
+    flush_ep(sender());
+    auto key = ucp_ep_config(sender().ep())->key;
+    ucp_proto_init_params_t init_params = {};
+    ucp_proto_common_tl_perf_t perf;
+
+    ASSERT_GT(key.num_lanes, 0);
+    init_params.worker        = worker();
+    init_params.ep_config_key = &key;
+    auto params               = ucp_proto_common_init_params(&init_params);
+    params.reg_mem_info.type  = UCS_MEMORY_TYPE_UNKNOWN;
+    ASSERT_UCS_OK(ucp_proto_common_get_lane_perf(&params, 0, &perf));
+    const auto nominal_bandwidth  = perf.bandwidth;
+    const auto nominal_path_ratio = perf.path_ratio;
+    ucp_proto_perf_node_deref(&perf.node);
+
+    auto check_perf = [&](ucp_lane_index_t lane, double bandwidth,
+                          double path_ratio) {
+        ASSERT_UCS_OK(ucp_proto_common_get_lane_perf(&params, lane, &perf));
+        EXPECT_DOUBLE_EQ(bandwidth, perf.bandwidth);
+        EXPECT_DOUBLE_EQ(path_ratio, perf.path_ratio);
+        ucp_proto_perf_node_deref(&perf.node);
+    };
+
+    /* These are local model inputs, not additional transport endpoints. */
+    key.num_lanes = 5;
+    for (ucp_lane_index_t lane = 1; lane < key.num_lanes; ++lane) {
+        key.lanes[lane]            = key.lanes[0];
+        key.lanes[lane].path_index = lane;
+    }
+
+    key.lanes[0].path_bandwidth = {20e6, 0};
+    key.lanes[1].path_bandwidth = {30e6, 0};
+    key.lanes[2].path_bandwidth = {};
+    key.lanes[3].path_bandwidth = {100e6, 0};
+    key.lanes[3].lane_types   |= UCS_BIT(UCP_LANE_TYPE_FAILED);
+    key.lanes[4].path_bandwidth = {100e6, 0};
+    key.lanes[4].rsc_index      = UCP_NULL_RESOURCE;
+    check_perf(0, 20e6, 0.4);
+    check_perf(1, 30e6, 0.6);
+
+    /* Replace a sample rather than accumulating successive observations. */
+    key.lanes[1].path_bandwidth = {10e6, 0};
+    check_perf(0, 20e6, 2.0 / 3.0);
+    check_perf(1, 10e6, 1.0 / 3.0);
+
+    /* An unmeasured lane must not add its nominal interface bandwidth. */
+    key.lanes[1].path_bandwidth = {};
+    check_perf(0, 20e6, 1.0);
+
+    /* Apply the PPN model once, including mixed dedicated/shared samples. */
+    key.lanes[0].path_bandwidth = {10e6, 40e6};
+    key.lanes[1].path_bandwidth = {20e6, 40e6};
+    check_perf(0, 20e6, 0.4);
+    check_perf(1, 30e6, 0.6);
+
+    key = ucp_ep_config(sender().ep())->key;
+    check_perf(0, nominal_bandwidth, nominal_path_ratio);
+}
+
 UCS_TEST_P(test_ucp_proto, path_bw_rejects_stale_lane_generation)
 {
     flush_ep(sender());

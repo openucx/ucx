@@ -107,6 +107,12 @@ ucp_proto_multi_get_avail_bw(const ucp_proto_init_params_t *params,
     uint8_t path_index            = selection->dev_count[dev_index];
     double ratio;
 
+    /* A measured path rate already includes sharing with other paths. */
+    if ((params->ep_config_key->lanes[lane].path_bandwidth.dedicated +
+         params->ep_config_key->lanes[lane].path_bandwidth.shared) > 0) {
+        return lane_perf->bandwidth;
+    }
+
     if (UCS_CONFIG_DBL_IS_AUTO(multi_path_ratio)) {
         ratio = ucs_min(1.0 - (lane_perf->path_ratio * path_index),
                         lane_perf->path_ratio);

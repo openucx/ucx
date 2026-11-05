@@ -348,18 +348,21 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
                                ucp_proto_common_tl_perf_t *tl_perf)
 {
-    ucp_worker_h worker        = params->super.worker;
-    ucp_context_h context      = worker->context;
-    ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super,
-                                                                lane);
-    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+    ucp_worker_h worker            = params->super.worker;
+    ucp_context_h context          = worker->context;
+    ucp_rsc_index_t rsc_index      =
+            ucp_proto_common_get_rsc_index(&params->super, lane);
+    ucp_worker_iface_t *wiface     = ucp_worker_iface(worker, rsc_index);
+    const ucp_ep_config_key_t *key = params->super.ep_config_key;
     ucp_proto_perf_node_t *lane_perf_node;
     const ucp_rkey_config_t *rkey_config;
     ucs_sys_dev_distance_t distance;
     size_t tl_min_frag, tl_max_frag;
     uct_perf_attr_t perf_attr;
     uct_ppn_bandwidth_t measured_bandwidth;
-    double path_ratio;
+    double bandwidth;
+    ucp_lane_index_t i;
+    int has_measurement;
     ucs_sys_device_t sys_dev;
     ucs_status_t status;
     char bdf_name[32];
@@ -398,25 +401,40 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
         goto err_deref_perf_node;
     }
 
-    measured_bandwidth = params->super.ep_config_key->lanes[lane].path_bandwidth;
-    if ((measured_bandwidth.dedicated + measured_bandwidth.shared) > 0) {
-        path_ratio = ucp_proto_common_iface_bandwidth(
-                context, &perf_attr.path_bandwidth) /
-                ucp_proto_common_iface_bandwidth(context, &perf_attr.bandwidth);
-        perf_attr.bandwidth = measured_bandwidth;
-        perf_attr.path_bandwidth.dedicated =
-                measured_bandwidth.dedicated * path_ratio;
-        perf_attr.path_bandwidth.shared = measured_bandwidth.shared * path_ratio;
+    measured_bandwidth = key->lanes[lane].path_bandwidth;
+    has_measurement    = (measured_bandwidth.dedicated +
+                          measured_bandwidth.shared) > 0;
+    if (has_measurement) {
+        perf_attr.path_bandwidth      = measured_bandwidth;
+        perf_attr.bandwidth.dedicated = 0;
+        perf_attr.bandwidth.shared    = 0;
+
+        /* Reconstruct this endpoint's interface aggregate from measured lanes.
+         * Unmeasured paths must not contribute nominal interface capacity. */
+        for (i = 0; i < key->num_lanes; ++i) {
+            if ((key->lanes[i].rsc_index != rsc_index) ||
+                (key->lanes[i].lane_types & UCS_BIT(UCP_LANE_TYPE_FAILED))) {
+                continue;
+            }
+
+            perf_attr.bandwidth.dedicated +=
+                    key->lanes[i].path_bandwidth.dedicated;
+            perf_attr.bandwidth.shared += key->lanes[i].path_bandwidth.shared;
+        }
     }
 
+    bandwidth                  = ucp_proto_common_iface_bandwidth(
+                                      context, &perf_attr.bandwidth);
     tl_perf->send_pre_overhead  = perf_attr.send_pre_overhead + params->overhead;
     tl_perf->send_post_overhead = perf_attr.send_post_overhead;
     tl_perf->recv_overhead      = perf_attr.recv_overhead + params->overhead;
     tl_perf->bandwidth          = ucp_proto_common_iface_bandwidth(
-                                      context, &perf_attr.bandwidth);
+                                      context, has_measurement ?
+                                      &perf_attr.path_bandwidth :
+                                      &perf_attr.bandwidth);
     tl_perf->path_ratio         = ucp_proto_common_iface_bandwidth(
                                       context, &perf_attr.path_bandwidth) /
-                                  tl_perf->bandwidth;
+                                  bandwidth;
     tl_perf->latency            = ucp_tl_iface_latency(context,
                                                        &perf_attr.latency) +
                                   params->latency;
