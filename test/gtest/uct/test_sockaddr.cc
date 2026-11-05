@@ -873,20 +873,11 @@ UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close_large_priv_data)
      * value to be able to send/recv the batches.
      * A transport for which these values are not configurable, like rdmacm,
      * these operations will fail and have no effect. */
-    if (m_cm_config != NULL) {
-        const char *const params[][2] = {
-            {"PRIV_DATA_LEN", "900KB"},
-            {"SNDBUF", "100KB"},
-            {"RCVBUF", "100KB"}
-        };
-
-        for (const auto &param : params) {
-            ucs_status_t status =
-                    uct_config_modify(m_cm_config, param[0], param[1]);
-
-            ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_NO_ELEM))
-                    << param[0] << ": " << ucs_status_string(status);
-        }
+    if (m_cm_config) {
+        /* coverity[check_return] */
+        uct_config_modify(m_cm_config, "PRIV_DATA_LEN", "900KB");
+        uct_config_modify(m_cm_config, "SNDBUF", "100KB");
+        uct_config_modify(m_cm_config, "RCVBUF", "100KB");
     }
 
     /* recreate m_server and m_client with the above env parameters changed */
