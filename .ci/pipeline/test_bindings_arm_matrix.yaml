@@ -9,7 +9,7 @@ job: ucx-test-bindings-arm
 
 failFast: false
 # Covers the allocation wait plus the step timeouts.
-timeout_minutes: 270
+timeout_minutes: 450
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -38,7 +38,7 @@ env:
   SLURM_HEAD_USER: svcnbu-swx-hpcx
   # Image sync, checkout and the five JUCX step timeouts plus slack.
   SLURM_JOB_TIMEOUT: '03:30:00'
-  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SLURM_IMMEDIATE_TIMEOUT: 14400
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   CONTAINER_NAME: "ucx-ci-jucx-${BUILD_NUMBER}"

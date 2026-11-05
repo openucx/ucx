@@ -9,7 +9,7 @@ job: ucx-test-dl-gpu
 
 failFast: false
 # Covers the allocation wait plus the image sync, checkout and test step timeouts.
-timeout_minutes: 300
+timeout_minutes: 480
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -49,7 +49,7 @@ env:
   SLURM_HEAD_USER: svcnbu-swx-hpcx
   # Image sync, checkout and test step timeouts plus slack.
   SLURM_JOB_TIMEOUT: '03:50:00'
-  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SLURM_IMMEDIATE_TIMEOUT: 14400
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   CHECKOUT_TIMEOUT: 10
