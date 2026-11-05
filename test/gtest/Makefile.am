@@ -365,6 +365,7 @@ gtest_LDADD += \
 endif
 
 noinst_HEADERS = \
+	common/cuda.h \
 	common/mem_buffer.h \
 	common/test.h \
 	common/test_helpers.h \
@@ -382,7 +383,13 @@ noinst_HEADERS = \
 	uct/uct_test.h \
 	uct/test_md.h \
 	uct/test_peer_failure.h \
+	uct/cuda/cuda_vmm_mem_buffer.h \
+	uct/cuda/test_kernels.h \
+	uct/cuda/test_kernels_uct.h \
+	uct/rocm/test_kernels_uct.h \
 	\
+	ucp/cuda/test_kernels.h \
+	ucp/rndv_frag_mpools.h \
 	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
