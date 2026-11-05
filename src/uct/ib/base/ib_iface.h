@@ -105,7 +105,8 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
     UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
     UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4),
-    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
+    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5),
+    UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS = UCS_BIT(6)
 };
 
 
@@ -147,6 +148,9 @@ typedef struct uct_ib_address_pack_params {
     /* PKEY value,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PKEY is set. */
     uint16_t                          pkey;
+    /* Traffic class value,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_TRAFFIC_CLASS is set. */
+    uint8_t                           traffic_class;
 } uct_ib_address_pack_params_t;
 
 
