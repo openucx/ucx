@@ -1327,7 +1327,7 @@ size_t test_rc_ece::m_recv_count = 0;
  * check the MD capability before opening the interface. */
 class test_rc_ece_supported : public test_rc_ece {
 public:
-    void init()
+    void init() override
     {
         if (!ucs_derived_of(open_md().get(), uct_ib_md_t)->ece_enable) {
             UCS_TEST_SKIP_R("device does not support ECE");
