@@ -1570,34 +1570,59 @@ public:
     virtual void init()
     {
         modify_config("MEMTYPE_CACHE", get_variant_value(1) ? "y" : "n");
-        /* Turn on merging of adjacent rcache regions */
-        modify_config("RCACHE_MERGE_ADJACENT", "y");
-        /* Turn off CUDA registering full allocations. Allow exercising merge */
-        /* path for CUDA buffers */
+        /* Keep CUDA allocations split into adjacent regions */
         modify_config("MEMTYPE_REG_WHOLE_ALLOC_TYPES", "");
         /* Force zcopy */
         modify_config("ZCOPY_THRESH", "0");
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
     }
+
+protected:
+    void test_adjacent_registration(bool expect_merge);
+
+    void send_and_verify(ucp_mem_h memh, void *ptr, size_t size,
+                         ucs_memory_type_t mem_type);
 };
 
-UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration) {
+void test_ucp_rcache_merge::send_and_verify(ucp_mem_h memh, void *ptr,
+                                            size_t size,
+                                            ucs_memory_type_t mem_type)
+{
+    mapped_buffer target           = mapped_buffer(size, receiver(), 0,
+                                                   UCS_MEMORY_TYPE_HOST);
+    ucs::handle<ucp_rkey_h> rkey   = target.rkey(sender());
+    ucp_request_param_t put_params = {};
+    ucs_status_ptr_t request;
+
+    mem_buffer::pattern_fill(ptr, size, ucs::rand(), mem_type);
+    put_params.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
+    put_params.memh         = memh;
+
+    request = ucp_put_nbx(sender().ep(), ptr, size, (uintptr_t)target.ptr(),
+                          rkey, &put_params);
+    ASSERT_UCS_OK(request_wait(request));
+
+    flush_worker(sender());
+    EXPECT_TRUE(mem_buffer::compare(ptr, target.ptr(), size, mem_type,
+                                    UCS_MEMORY_TYPE_HOST));
+}
+
+void test_ucp_rcache_merge::test_adjacent_registration(bool expect_merge)
+{
     ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(
             get_variant_value());
     if (!mem_buffer::is_mem_type_supported(mem_type)) {
         UCS_TEST_SKIP_R("memory type is not supported");
     }
 
-    const size_t size     = ucs_get_page_size();
-    void *ptr1            = mem_buffer::allocate(size * 2, mem_type);
-    void *ptr2            = (char*)ptr1 + size;
-    ucp_context_h context = sender().ucph();
-    ucs_rcache_t *rcache  = context->rcache;
-    ucp_mem_map_params_t params;
+    const size_t size           = ucs_get_page_size();
+    void *ptr1                  = mem_buffer::allocate(size * 2, mem_type);
+    void *ptr2                  = (char*)ptr1 + size;
+    ucp_context_h context       = sender().ucph();
+    ucs_rcache_t *rcache        = context->rcache;
+    ucp_mem_map_params_t params = {};
     ucp_mem_h memh1, memh2;
-    ucp_request_param_t put_params;
-    ucs_status_ptr_t request;
 
     /* Register first half of buffer */
     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
@@ -1609,45 +1634,49 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_registration) {
     EXPECT_EQ(size, ucp_memh_length(memh1->parent));
     EXPECT_EQ(1, rcache->num_regions);
 
-    /* Register second half of buffer, two halves merged */
+    /* Register second half of buffer */
     params.address = ptr2;
     ASSERT_UCS_OK(ucp_mem_map(context, &params, &memh2));
-    EXPECT_EQ(ptr1, ucp_memh_address(memh2->parent));
-    EXPECT_EQ(size * 2, ucp_memh_length(memh2->parent));
+    EXPECT_EQ(expect_merge ? ptr1 : ptr2, ucp_memh_address(memh2->parent));
+    EXPECT_EQ(expect_merge ? size * 2 : size, ucp_memh_length(memh2->parent));
     EXPECT_EQ(2, rcache->num_regions);
 
-    /* Verify merged registration is healthy by performing zcopy put */
-    mapped_buffer target         = mapped_buffer(size, receiver(), 0,
-                                                 UCS_MEMORY_TYPE_HOST);
-    ucs::handle<ucp_rkey_h> rkey = target.rkey(sender());
-    mem_buffer::pattern_fill(ptr2, size, ucs::rand(), mem_type);
-    put_params.op_attr_mask = UCP_OP_ATTR_FIELD_MEMH;
-    put_params.memh         = memh2;
-    request = ucp_put_nbx(sender().ep(), ptr2, size, (uintptr_t)target.ptr(),
-                          rkey, &put_params);
-    ASSERT_UCS_OK(request_wait(request));
-    flush_worker(sender());
-    EXPECT_TRUE(mem_buffer::compare(ptr2, target.ptr(), size, mem_type,
-                                    UCS_MEMORY_TYPE_HOST));
+    /* Verify registrations by performing zcopy put */
+    send_and_verify(memh1, ptr1, size, mem_type);
+    send_and_verify(memh2, ptr2, size, mem_type);
 
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh2));
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh1));
     mem_buffer::release(ptr1, mem_type);
 }
 
-UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered) {
+UCS_TEST_P(test_ucp_rcache_merge, merge_adjacent_enabled,
+           "RCACHE_MERGE_ADJACENT=y")
+{
+    test_adjacent_registration(true);
+}
+
+UCS_TEST_P(test_ucp_rcache_merge, merge_adjacent_disabled,
+           "RCACHE_MERGE_ADJACENT=n")
+{
+    test_adjacent_registration(false);
+}
+
+UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered,
+           "RCACHE_MERGE_ADJACENT=y")
+{
     ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(
             get_variant_value());
     if (!mem_buffer::is_mem_type_supported(mem_type)) {
         UCS_TEST_SKIP_R("memory type is not supported");
     }
 
-    const size_t size     = ucs_get_page_size();
-    void *ptr1            = mem_buffer::allocate(size * 2, mem_type);
-    void *ptr2            = (char*)ptr1 + size;
-    ucp_context_h context = sender().ucph();
-    ucs_rcache_t *rcache  = context->rcache;
-    ucp_mem_map_params_t params;
+    const size_t size           = ucs_get_page_size();
+    void *ptr1                  = mem_buffer::allocate(size * 2, mem_type);
+    void *ptr2                  = (char*)ptr1 + size;
+    ucp_context_h context       = sender().ucph();
+    ucs_rcache_t *rcache        = context->rcache;
+    ucp_mem_map_params_t params = {};
     ucp_mem_h memh1, memh2;
 
     /* Register first half of buffer */
@@ -1674,6 +1703,10 @@ UCS_TEST_P(test_ucp_rcache_merge, adjacent_region_unregistered) {
     /* size as buffer pointed to by ptr2 */
     EXPECT_EQ(size, ucp_memh_length(memh2->parent));
     EXPECT_EQ(2, rcache->num_regions);
+
+    /* Verify registrations by performing zcopy put */
+    send_and_verify(memh1, ptr1, size, mem_type);
+    send_and_verify(memh2, ptr2, size, mem_type);
 
     memh1->parent->super.flags |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     EXPECT_UCS_OK(ucp_mem_unmap(context, memh2));
