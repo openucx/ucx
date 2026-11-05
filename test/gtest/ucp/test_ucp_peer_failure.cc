@@ -16,10 +16,14 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>  /* for testing memory consumption */
 #include <ucp/proto/proto_common.h>
 #include <ucp/rndv/proto_rndv.h>
+#include <ucp/wireup/wireup_ep.h>
+#include <uct/base/uct_iface.h>
 #include <ucs/datastruct/mpool.inl>
 }
 
 #include <unordered_map>
+#include <map>
+#include <set>
 #include <array>
 
 class test_ucp_peer_failure : public ucp_test {
@@ -1213,3 +1217,318 @@ UCS_TEST_P(test_ucp_peer_failure_rndv_put_ppln_abort, put_mtype_alloc_failure,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_peer_failure_rndv_put_ppln_abort);
+
+/* The target of a software-emulated RMA/AMO operation answers it with a reply
+ * message. The transport may fail that send synchronously (TCP does so once
+ * the peer has closed its connection); the target must then fail the lane
+ * instead of aborting the process, and with UCP_ERR_HANDLING_MODE_FAILOVER
+ * re-send the reply on the lane the endpoint falls over to. */
+class test_ucp_peer_failure_sw_rma_reply : public test_ucp_peer_failure {
+public:
+    enum {
+        OP_PUT = UCS_BIT(10),
+        OP_GET = UCS_BIT(11),
+        OP_AMO = UCS_BIT(12)
+    };
+
+    /* The software put/get protocols are selected with peer error handling
+     * but not with failover, the software AMO protocol the other way around */
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, OP_PUT, "put");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, OP_GET, "get");
+    }
+
+    virtual ucp_ep_params_t get_ep_params()
+    {
+        return test_ucp_peer_failure::get_ep_params();
+    }
+
+    /* Whether the mocked transport reports the failed send through the error
+     * handler before it returns the error, as UCT/TCP does. Otherwise the
+     * reply sender has to report it. */
+    virtual bool transport_reports() const
+    {
+        return false;
+    }
+
+    void init()
+    {
+        test_ucp_peer_failure::init();
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+        m_failed_sends      = 0;
+        m_transport_reports = transport_reports();
+        m_failed_eps.clear();
+        m_orig_am_bcopy.clear();
+    }
+
+    void cleanup()
+    {
+        m_mock.cleanup();
+        test_ucp_peer_failure::cleanup();
+    }
+
+protected:
+    /* Fails the software RMA/AMO replies sent on the mocked endpoints; any
+     * other message (wireup, keepalive) and any other endpoint of the
+     * interface go through, so only the reply exercises the failure. */
+    static ssize_t am_bcopy_fail_replies(uct_ep_h ep, uint8_t id,
+                                         uct_pack_callback_t pack_cb,
+                                         void *arg, unsigned flags)
+    {
+        if (((id == UCP_AM_ID_CMPL) || (id == UCP_AM_ID_GET_REP) ||
+             (id == UCP_AM_ID_ATOMIC_REP)) &&
+            (m_failed_eps.count(ep) > 0)) {
+            ++m_failed_sends;
+            if (m_transport_reports) {
+                uct_iface_handle_ep_err(ep->iface, ep,
+                                        UCS_ERR_ENDPOINT_TIMEOUT);
+            }
+
+            return UCS_ERR_ENDPOINT_TIMEOUT;
+        }
+
+        return m_orig_am_bcopy.at(ep->iface)(ep, id, pack_cb, arg, flags);
+    }
+
+    void mock_lane(ucp_ep_h ep, ucp_lane_index_t lane)
+    {
+        uct_ep_h uct_ep   = ucp_ep_get_lane(ep, lane);
+        uct_iface_h iface = uct_ep->iface;
+
+        m_failed_eps.insert(uct_ep);
+        if (m_orig_am_bcopy.count(iface) == 0) {
+            m_orig_am_bcopy[iface] = iface->ops.ep_am_bcopy;
+            m_mock.setup(&iface->ops.ep_am_bcopy, am_bcopy_fail_replies);
+        }
+    }
+
+    /* All the lanes the receiver could answer on */
+    virtual void mock_lanes(ucp_ep_h ep)
+    {
+        for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            if ((lane != ucp_ep_get_cm_lane(ep)) &&
+                !ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane))) {
+                mock_lane(ep, lane);
+            }
+        }
+    }
+
+    void *issue(const mapped_buffer &rbuf, ucp_rkey_h rkey)
+    {
+        ucp_request_param_t param;
+        const size_t size = m_sbuf->size();
+
+        param.op_attr_mask = 0;
+        switch (get_variant_value()) {
+        case OP_PUT:
+            return ucp_put_nbx(sender().ep(), m_sbuf->ptr(), size,
+                               (uintptr_t)rbuf.ptr(), rkey, &param);
+        case OP_GET:
+            return ucp_get_nbx(sender().ep(), m_rbuf->ptr(), size,
+                               (uintptr_t)rbuf.ptr(), rkey, &param);
+        default:
+            param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                                 UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+            param.datatype     = ucp_dt_make_contig(sizeof(m_amo_value));
+            param.reply_buffer = &m_amo_result;
+            return ucp_atomic_op_nbx(sender().ep(), UCP_ATOMIC_OP_ADD,
+                                     &m_amo_value, 1, (uintptr_t)rbuf.ptr(),
+                                     rkey, &param);
+        }
+    }
+
+    ucs_status_t wait_request(void *req, ucs_time_t deadline)
+    {
+        while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
+            progress();
+        }
+
+        return is_request_completed(req) ? request_wait(req) : UCS_INPROGRESS;
+    }
+
+    void force_close(void *req)
+    {
+        m_mock.cleanup();
+        sender().close_all_eps(*this, 0, UCP_EP_CLOSE_FLAG_FORCE);
+        request_wait(req);
+    }
+
+    /* The receiver fails its endpoint, and the sender's fails with it once
+     * the receiver's connection is closed: the error callback runs instead of
+     * an abort */
+    void check_ep_failed(void *req, ucs_time_t deadline)
+    {
+        while ((m_err_count == 0) && (ucs_get_time() < deadline)) {
+            progress();
+        }
+
+        EXPECT_GE(m_err_count, 1u);
+        EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, m_err_status);
+
+        /* A put completed when its message was sent; a get or AMO waits for
+         * the reply which never comes, and the force-close fails it. The
+         * completion the sender expects for a flush never arrives either, so
+         * close without one. */
+        force_close(req);
+    }
+
+    /* The receiver falls over to another lane and re-sends the reply on it:
+     * the operation completes with the reply's data, the sender's flush
+     * completes and no failure is reported */
+    void check_reply_resent(void *req, ucs_time_t deadline)
+    {
+        ucs_status_t status = wait_request(req, deadline);
+
+        if (status == UCS_INPROGRESS) {
+            force_close(req);
+            FAIL() << "the re-sent reply did not arrive";
+        }
+
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(1u, m_amo_result) << "the fetch-add did not return the "
+                                       "value added by the first one";
+        flush_worker(sender());
+        EXPECT_EQ(0u, m_err_count);
+        m_mock.cleanup();
+        UCS_TEST_MESSAGE << "the reply was re-sent after failover";
+    }
+
+    virtual void check(void *req, ucs_time_t deadline)
+    {
+        check_ep_failed(req, deadline);
+    }
+
+    void run()
+    {
+        const size_t size = 4 * UCS_KBYTE;
+        ucs_time_t deadline;
+        void *req;
+
+        init_buffers(size);
+        mapped_buffer rbuf(size, receiver());
+        ucs::handle<ucp_rkey_h> rkey = rbuf.rkey(sender());
+        rbuf.memset(0);
+
+        /* Connect the pair with an operation which completes normally */
+        req = issue(rbuf, rkey);
+        ASSERT_UCS_OK(request_wait(req));
+        flush_worker(sender());
+        flush_worker(receiver());
+
+        /* From now on the receiver's replies fail */
+        mock_lanes(receiver().ep());
+
+        deadline = ucs::get_deadline();
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            req = issue(rbuf, rkey);
+            while ((m_failed_sends == 0) && (ucs_get_time() < deadline)) {
+                progress();
+            }
+
+            if (m_failed_sends == 0) {
+                m_mock.cleanup();
+                request_wait(req);
+                UCS_TEST_SKIP_R("the operation was not answered with a "
+                                "software reply");
+            }
+
+            check(req, deadline);
+        }
+    }
+
+    static size_t m_failed_sends;
+    static bool m_transport_reports;
+    static std::set<uct_ep_h> m_failed_eps;
+    static std::map<uct_iface_h, uct_ep_am_bcopy_func_t> m_orig_am_bcopy;
+    ucs::mock m_mock;
+    uint64_t  m_amo_value  = 1;
+    uint64_t  m_amo_result = 0;
+};
+
+size_t test_ucp_peer_failure_sw_rma_reply::m_failed_sends = 0;
+bool test_ucp_peer_failure_sw_rma_reply::m_transport_reports = false;
+std::set<uct_ep_h> test_ucp_peer_failure_sw_rma_reply::m_failed_eps;
+std::map<uct_iface_h, uct_ep_am_bcopy_func_t>
+        test_ucp_peer_failure_sw_rma_reply::m_orig_am_bcopy;
+
+UCS_TEST_P(test_ucp_peer_failure_sw_rma_reply, reply_send_fails)
+{
+    run();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_sw_rma_reply, tcp, "tcp")
+
+/* With failover the receiver's endpoint survives the failed lane: the reply
+ * goes out on the lane it falls over to. The transport reports the failure
+ * from the send, as UCT/TCP does. MAX_EAGER_LANES gives the endpoint a second
+ * AM-capable lane when the host has a second device; otherwise there is
+ * nothing to fall over to and the endpoint fails like the one above. */
+class test_ucp_peer_failure_sw_rma_reply_failover :
+        public test_ucp_peer_failure_sw_rma_reply {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants,
+                               UCP_FEATURE_RMA | UCP_FEATURE_AMO64 |
+                               UCP_FEATURE_AM,
+                               OP_AMO, "amo");
+    }
+
+    ucp_ep_params_t get_ep_params() override
+    {
+        ucp_ep_params_t params = test_ucp_peer_failure::get_ep_params();
+        params.err_mode        = UCP_ERR_HANDLING_MODE_FAILOVER;
+        return params;
+    }
+
+    bool transport_reports() const override
+    {
+        return true;
+    }
+
+protected:
+    static unsigned am_lanes(ucp_ep_h ep)
+    {
+        const ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+        unsigned count                 = 0;
+
+        for (ucp_lane_index_t lane = 0; lane < key->num_lanes; ++lane) {
+            count += !!(key->lanes[lane].lane_types &
+                        UCS_BIT(UCP_LANE_TYPE_AM));
+        }
+
+        return count;
+    }
+
+    /* Only the AM lane fails */
+    void mock_lanes(ucp_ep_h ep) override
+    {
+        m_am_lanes = am_lanes(ep);
+        mock_lane(ep, ucp_ep_get_am_lane(ep));
+    }
+
+    void check(void *req, ucs_time_t deadline) override
+    {
+        if (m_am_lanes < 2) {
+            UCS_TEST_MESSAGE << "no second AM lane, the endpoint fails";
+            check_ep_failed(req, deadline);
+        } else {
+            check_reply_resent(req, deadline);
+        }
+    }
+
+    unsigned m_am_lanes = 0;
+};
+
+UCS_TEST_P(test_ucp_peer_failure_sw_rma_reply_failover, reply_send_fails,
+           "MAX_EAGER_LANES=8")
+{
+    run();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure_sw_rma_reply_failover, tcp,
+                              "tcp")
