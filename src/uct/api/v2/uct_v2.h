@@ -10,6 +10,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/type/qos_level.h>
 #include <uct/api/uct.h>
 #include <ucs/sys/topo/base/topo.h>
 
@@ -373,7 +374,10 @@ typedef enum {
     UCT_EP_CONNECT_TO_EP_PARAM_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(0),
 
     /** Endpoint address length */
-    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1)
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_EP_ADDR_LENGTH     = UCS_BIT(1),
+
+    /** QoS level */
+    UCT_EP_CONNECT_TO_EP_PARAM_FIELD_QOS_LEVEL          = UCS_BIT(2)
 } uct_ep_connect_to_ep_param_field_t;
 
 
@@ -728,6 +732,17 @@ typedef struct uct_ep_connect_to_ep_params {
      * default minimal length according to the address buffer contents.
      */
     size_t                        ep_addr_length;
+
+    /**
+     * Quality of service level of this endpoint, as defined by
+     * @ref ucs_qos_level_t.
+     *
+     * This setting is optional. To enable it, the corresponding @ref
+     * UCT_EP_CONNECT_TO_EP_PARAM_FIELD_QOS_LEVEL bit in the field mask must
+     * be set. When it is not set, the endpoint keeps the transport's default
+     * priority, which is not necessarily any of those levels.
+     */
+    ucs_qos_level_t               qos_level;
 } uct_ep_connect_to_ep_params_t;
 
 
