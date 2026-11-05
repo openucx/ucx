@@ -1527,7 +1527,7 @@ ucp_wireup_mem_reg_cost(ucp_context_t *context,
         return md_attr->reg_cost;
     }
 
-    if (remote_addr->dst_version > UCP_MIN_DST_VERSION_LEGACY) {
+    if (remote_addr->dst_version > UCP_VERSION_LEGACY) {
         return ucs_linear_func_make(UCP_RCACHE_OVERHEAD_DEFAULT, 0);
     }
 
@@ -2302,7 +2302,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.local_cmpt_flags = 0;
 
     if (context->config.ext.proto_enable &&
-        (select_params->address->dst_version > UCP_MIN_DST_VERSION_LEGACY)) {
+        (select_params->address->dst_version > UCP_VERSION_LEGACY)) {
         bw_info.max_lanes = ucp_wireup_max_lanes(select_params,
                                                  bw_info.criteria.lane_type);
     } else {
