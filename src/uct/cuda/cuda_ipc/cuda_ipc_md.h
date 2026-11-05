@@ -55,6 +55,8 @@ typedef struct uct_cuda_ipc_md {
      *  different nodes can reach each other over multi-node NVLINK only if
      *  both are equal. */
     uint64_t                 nvlink_domain;
+    /** Identifies this host to cuda_ipc peers */
+    uint64_t                 system_uuid;
 } uct_cuda_ipc_md_t;
 
 
@@ -117,6 +119,8 @@ extern uct_cuda_ipc_component_t uct_cuda_ipc_component;
 typedef struct uct_cuda_ipc_md_config {
     uct_md_config_t          super;
     ucs_ternary_auto_value_t enable_mnnvl;
+    /** Emulated NVLink domain and host, "<domain>[:<host>]" or "auto" */
+    char                     *nvlink_domain;
     unsigned long            cache_max_regions; /**< Max cached IPC regions per peer */
     size_t                   cache_max_size;    /**< Max total cached IPC mapping size */
     /** Enable remote IPC memory handle mapping cache */
