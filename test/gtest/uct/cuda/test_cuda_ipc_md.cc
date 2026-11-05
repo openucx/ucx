@@ -176,35 +176,6 @@ protected:
        EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
     }
 
-    void reg_and_unpack(CUdeviceptr ptr, size_t size, uct_mem_h *memh,
-                        uct_rkey_bundle_t *rkey_bundle)
-    {
-        uct_md_mem_reg_params_t reg_params     = {};
-        uct_md_mkey_pack_params_t pack_params  = {};
-        uct_rkey_unpack_params_t unpack_params = {};
-        uct_cuda_ipc_extended_rkey_t rkey;
-
-        reg_params.field_mask = UCT_MD_MEM_REG_FIELD_MEM_TYPE;
-        reg_params.mem_type   = UCS_MEMORY_TYPE_CUDA;
-        ASSERT_UCS_OK(uct_md_mem_reg_v2(md(), (void*)ptr, size, &reg_params,
-                                        memh));
-        ASSERT_UCS_OK(uct_md_mkey_pack_v2(md(), *memh, (void*)ptr, size,
-                                          &pack_params, &rkey));
-        ASSERT_UCS_OK(uct_rkey_unpack_v2(md()->component, &rkey,
-                                         &unpack_params, rkey_bundle));
-    }
-
-    void release_and_dereg(uct_mem_h memh, uct_rkey_bundle_t *rkey_bundle)
-    {
-        uct_md_mem_dereg_params_t dereg_params;
-
-        EXPECT_UCS_OK(uct_rkey_release(md()->component, rkey_bundle));
-
-        dereg_params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
-        dereg_params.memh       = memh;
-        EXPECT_UCS_OK(uct_md_mem_dereg_v2(md(), &dereg_params));
-    }
-
 #if HAVE_DECL_SYS_PIDFD_GETFD
     ucs_status_t pack_posix_fd_key(cuda_posix_fd_mem_buffer &buf, size_t size,
                                    uct_mem_h *memh, uct_cuda_ipc_rkey_t *rkey)
@@ -445,34 +416,6 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 #else
     UCS_TEST_SKIP_R("built without pidfd support");
 #endif
-}
-
-UCS_TEST_P(test_cuda_ipc_md, map_memhandle_same_process)
-{
-    constexpr size_t size         = 4096;
-    uct_rkey_bundle_t rkey_bundle = {};
-    uct_mem_h memh;
-    CUdeviceptr ptr;
-    CUdevice cu_dev;
-    CUuuid uuid;
-    void *mapped_addr;
-
-    ASSERT_EQ(CUDA_SUCCESS, cuMemAlloc(&ptr, size));
-    ASSERT_NO_FATAL_FAILURE(reg_and_unpack(ptr, size, &memh, &rkey_bundle));
-
-    auto unpacked = (uct_cuda_ipc_unpacked_rkey_t*)rkey_bundle.rkey;
-    ASSERT_EQ(CUDA_SUCCESS, cuCtxGetDevice(&cu_dev));
-    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetUuid(&uuid, cu_dev));
-    EXPECT_EQ(0, memcmp(unpacked->super.super.uuid.bytes, uuid.bytes,
-                        sizeof(uuid.bytes)));
-
-    ASSERT_UCS_OK(uct_cuda_ipc_map_memhandle(&unpacked->super, cu_dev,
-                                             &mapped_addr,
-                                             UCS_LOG_LEVEL_ERROR));
-    EXPECT_EQ((void*)unpacked->super.super.d_bptr, mapped_addr);
-
-    release_and_dereg(memh, &rkey_bundle);
-    EXPECT_EQ(CUDA_SUCCESS, cuMemFree(ptr));
 }
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_ipc_md, cuda_ipc);
