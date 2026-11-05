@@ -477,6 +477,64 @@ UCS_TEST_P(test_ucp_flush, pending_error_lane_replacement,
     ucp_request_release(request);
 }
 
+UCS_TEST_P(test_ucp_flush, pending_lane_defers_other_lanes,
+           "MAX_EAGER_LANES=2")
+{
+    ucp_request_param_t param = {};
+    ucp_request_t *req        = NULL;
+    ucp_ep_h ep;
+    uct_ep_h lane0_ep;
+    ucs_status_ptr_t request  = NULL;
+    unsigned i;
+
+    ep = sender().ep();
+    if (ucp_ep_num_lanes(ep) < 2) {
+        UCS_TEST_SKIP_R("requires two endpoint lanes");
+    }
+
+    lane0_ep                  = ucp_ep_get_lane(ep, 0);
+    test_flush_call_count     = 0;
+    test_flush_comp           = NULL;
+    test_flush_no_resource_ep = lane0_ep;
+    {
+        ucs::mock mock;
+        mock_ep_flush(ep, mock, test_flush_inprogress_except_ep);
+        mock.setup(&lane0_ep->iface->ops.ep_pending_add,
+                   test_flush_pending_add);
+
+        test_flush_worker_cs_guard cs_guard(ep->worker);
+
+        request = ucp_ep_flush_lanes_internal(
+                ep, 0, &param, NULL, test_flush_completion,
+                "pending_lane_defers_other_lanes", UCT_FLUSH_FLAG_LOCAL,
+                UCS_BIT(0) | UCS_BIT(1));
+        ASSERT_TRUE(UCS_PTR_IS_PTR(request));
+        req = static_cast<ucp_request_t*>(request) - 1;
+        ASSERT_EQ(0, req->send.lane);
+
+        /* The requests queued on lane 0 before the flush may still send on
+           lane 1, e.g. a put split between the lanes, so lane 1 must not be
+           flushed before them */
+        EXPECT_EQ(1u, test_flush_call_count);
+        EXPECT_EQ(0, req->send.flush.started_lanes);
+
+        /* The pending callback flushes lane 0 and then lane 1 */
+        test_flush_no_resource_ep = NULL;
+        ASSERT_UCS_OK(ucp_ep_flush_progress_pending(&req->send.uct));
+        EXPECT_EQ(3u, test_flush_call_count);
+        EXPECT_EQ(UCS_BIT(0) | UCS_BIT(1), req->send.flush.started_lanes);
+
+        ASSERT_TRUE(test_flush_comp != NULL);
+        for (i = 0; (i < 2) && (req->send.state.uct_comp.count > 0); ++i) {
+            uct_invoke_completion(test_flush_comp, UCS_OK);
+        }
+        ucp_ep_flush_remote_completed(req);
+    }
+
+    EXPECT_UCS_OK(ucp_request_check_status(request));
+    ucp_request_release(request);
+}
+
 
 UCS_TEST_P(test_ucp_flush, pending_add_busy_reschedules)
 {
