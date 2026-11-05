@@ -6,7 +6,7 @@ job: ucx-test-wirecompat-gpu
 
 failFast: false
 # Covers the allocation wait plus the step timeouts.
-timeout_minutes: 210
+timeout_minutes: 390
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -31,7 +31,7 @@ env:
   SLURM_HEAD_NODE: scctl
   # Step timeouts plus slack.
   SLURM_JOB_TIMEOUT: '02:30:00'
-  SLURM_IMMEDIATE_TIMEOUT: 3600
+  SLURM_IMMEDIATE_TIMEOUT: 14400
   SCCTL_CREDENTIALS_ID: 'svcnbu-swx-hpcx-scctl'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
   CI_IMAGE_TAG: "20260223-1"
