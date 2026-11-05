@@ -1329,12 +1329,7 @@ class test_rc_ece_supported : public test_rc_ece {
 public:
     void init()
     {
-        ucs::handle<uct_md_h> md;
-
-        UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
-                               GetParam()->component,
-                               GetParam()->md_name.c_str(), m_md_config);
-        if (!ucs_derived_of(md, uct_ib_md_t)->ece_enable) {
+        if (!ucs_derived_of(open_md().get(), uct_ib_md_t)->ece_enable) {
             UCS_TEST_SKIP_R("device does not support ECE");
         }
 

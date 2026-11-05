@@ -241,6 +241,16 @@ uct_test::~uct_test() {
     }
 }
 
+ucs::handle<uct_md_h> uct_test::open_md() const
+{
+    ucs::handle<uct_md_h> md;
+
+    UCS_TEST_CREATE_HANDLE(uct_md_h, md, uct_md_close, uct_md_open,
+                           GetParam()->component, GetParam()->md_name.c_str(),
+                           m_md_config);
+    return md;
+}
+
 void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                  struct sockaddr *connect_addr, size_t size,
                                  bool init_src)
