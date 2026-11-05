@@ -707,8 +707,7 @@ protected:
     void check_rx_config(entity *e, unsigned expected_batch) {
         unsigned batch   = rc_iface(e)->super.config.rx_max_batch;
         unsigned max_wr  = rx_max_wr(e);
-        unsigned prepost = (expected_batch == 1) ? max_wr :
-                ucs_min(2 * expected_batch, max_wr);
+        unsigned prepost = ucs_min(2 * expected_batch, max_wr);
 
         EXPECT_TRUE(rc_iface(e)->config.fc_enabled);
         EXPECT_GT(batch, 0u);
@@ -719,6 +718,30 @@ protected:
 
         EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
         EXPECT_LE(rc_iface(e)->config.fc_wnd_size + batch, rx_max_wr(e));
+    }
+
+    void check_rx_prepost_grows(unsigned expected_batch) {
+        unsigned am_count  = 0;
+        unsigned max_wr    = rx_max_wr(m_e2);
+        unsigned available = max_wr - ucs_min(2 * expected_batch, max_wr);
+
+        ASSERT_EQ(expected_batch, rc_iface(m_e2)->super.config.rx_max_batch);
+        ASSERT_EQ(available, rx_available(m_e2, 0));
+        ASSERT_EQ(available, rx_available(m_e2, 1));
+
+        uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                                 am_count_handler, &am_count, 0);
+        ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+        for (unsigned i = 0; i < expected_batch; i++) {
+            ASSERT_UCS_OK(send_am_message(m_e1, RECOVERY_AM_ID, 0));
+            wait_for_value(&am_count, i + 1, true);
+            ASSERT_EQ(i + 1, am_count);
+            EXPECT_EQ((available + i + 1) % expected_batch,
+                      rx_available(m_e2, 0));
+        }
+
+        EXPECT_EQ(available, rx_available(m_e2, 1));
+        flush();
     }
 
     int max_qp_wr() {
@@ -1130,27 +1153,15 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_prepost_grows,
                      "IB_RX_MAX_BATCH=16", "RC_VERBS_RX_MAX_WR=128",
                      "IB_RX_MAX_BUFS=-1", "RC_FC_ENABLE=n")
 {
-    unsigned am_count = 0;
+    check_rx_prepost_grows(16);
+}
 
-    ASSERT_EQ(16u, rc_iface(m_e2)->super.config.rx_max_batch);
-    ASSERT_EQ(96, rx_available(m_e2, 0));
-    ASSERT_EQ(96, rx_available(m_e2, 1));
-
-    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
-                             am_count_handler, &am_count, 0);
-    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
-    for (unsigned i = 0; i < 16; i++) {
-        ASSERT_UCS_OK(send_am_message(m_e1, RECOVERY_AM_ID, 0));
-        wait_for_value(&am_count, i + 1, true);
-        ASSERT_EQ(i + 1, am_count);
-        if (i == 0) {
-            EXPECT_EQ(81, rx_available(m_e2, 0));
-        }
-    }
-
-    EXPECT_EQ(0, rx_available(m_e2, 0));
-    EXPECT_EQ(96, rx_available(m_e2, 1));
-    flush();
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_prepost_grows_batch_one,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "IB_RX_MAX_BATCH=1", "RC_VERBS_RX_MAX_WR=128",
+                     "IB_RX_MAX_BUFS=-1", "RC_FC_ENABLE=n")
+{
+    check_rx_prepost_grows(1);
 }
 
 /* Report a real receive completion as failed, to exercise the error path of a
@@ -1187,10 +1198,11 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, failed_rx_release_desc,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
                      "IB_RX_MAX_BATCH=1")
 {
-    uct_rc_iface_t *rc = rc_iface(m_e2);
+    uct_rc_iface_t *rc      = rc_iface(m_e2);
+    uint16_t prev_available = rx_available(m_e2, 0);
 
     ASSERT_EQ(1u, rc->super.config.rx_max_batch);
-    ASSERT_EQ(0, rx_available(m_e2, 0));
+    ASSERT_EQ(rx_max_wr(m_e2) - ucs_min(2u, rx_max_wr(m_e2)), prev_available);
 
     flushed_rx.cq       = rc->super.cq[UCT_IB_DIR_RX];
     flushed_rx.poll_cq  = flushed_rx.cq->context->ops.poll_cq;
@@ -1210,7 +1222,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, failed_rx_release_desc,
 
     EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, flushed_rx.desc))
             << "receive descriptor leaked";
-    EXPECT_EQ(1, rx_available(m_e2, 0));
+    EXPECT_EQ(prev_available + 1, rx_available(m_e2, 0));
 }
 
 /* Two 384-entry receive queues can hold 768 descriptors. Limit the pool to
@@ -1311,7 +1323,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_order,
     ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
     send_am_message_wait(m_e1, first_ep, RECOVERY_AM_ID);
     wait_for_value(&am_count, 1u, true);
-    EXPECT_EQ(prev_available[first_ep] - batch, rx_available(m_e2, first_ep));
+    EXPECT_EQ(rx_max_wr(m_e2) % batch, rx_available(m_e2, first_ep));
     flush(ucs::get_deadline(5.0));
 }
 
