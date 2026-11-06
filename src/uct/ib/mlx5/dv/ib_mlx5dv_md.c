@@ -14,8 +14,10 @@
 
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/ptr_arith.h>
 #include <ucs/time/time.h>
+#include <ucs/type/init_once.h>
 #include <ucs/type/serialize.h>
 
 /* max log value to store in uint8_t */
@@ -32,6 +34,12 @@
      UCS_BIT(UCT_IB_DEVX_OBJ_DCI) | UCS_BIT(UCT_IB_DEVX_OBJ_CQ))
 
 
+#if HAVE_DECL_MLX5DV_REG_DMABUF_MR
+/* Optional: libmlx5 exports it only since MLX5_1.25 */
+static ucs_typeof(mlx5dv_reg_dmabuf_mr) *uct_ib_mlx5dv_reg_dmabuf_mr_func;
+#endif
+
+
 static uint32_t uct_ib_mlx5_flush_rkey_make()
 {
     return ((getpid() & 0xff) << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
@@ -41,6 +49,9 @@ ucs_sys_device_t
 uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 {
 #if HAVE_DECL_MLX5DV_GET_DATA_DIRECT_SYSFS_PATH
+    /* Optional: libmlx5 exports it only since MLX5_1.25 */
+    static ucs_typeof(mlx5dv_get_data_direct_sysfs_path) *get_sysfs_path_func;
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     struct ibv_context *ctx     = dev->ibv_context;
     ucs_sys_device_t sys_dev_ib = dev->sys_dev;
     char sys_path[PATH_MAX];
@@ -61,7 +72,25 @@ uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
         goto out;
     }
 
-    ret = mlx5dv_get_data_direct_sysfs_path(ctx, sys_path, sizeof(sys_path));
+    UCS_INIT_ONCE(&init_once) {
+        get_sysfs_path_func = UCS_SYS_LIB_OPTIONAL_FUNC(
+                mlx5dv_query_device, mlx5dv_get_data_direct_sysfs_path,
+                "MLX5_1.25");
+#if HAVE_DECL_MLX5DV_REG_DMABUF_MR
+        uct_ib_mlx5dv_reg_dmabuf_mr_func = UCS_SYS_LIB_OPTIONAL_FUNC(
+                mlx5dv_query_device, mlx5dv_reg_dmabuf_mr, "MLX5_1.25");
+        if (uct_ib_mlx5dv_reg_dmabuf_mr_func == NULL) {
+            /* Direct NIC registration needs both functions */
+            get_sysfs_path_func = NULL;
+        }
+#endif
+    }
+
+    if (get_sysfs_path_func == NULL) {
+        goto out_not_supported;
+    }
+
+    ret = get_sysfs_path_func(ctx, sys_path, sizeof(sys_path));
     if (ret != 0) {
         ucs_debug("%s: mlx5dv_get_data_direct_sysfs_path() failed: ret=%d",
                   uct_ib_device_name(dev), ret);
@@ -793,7 +822,8 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
     struct ibv_mr *mr;
     ucs_time_t UCS_V_UNUSED start_time;
 
-    if (md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+    if ((md->direct_nic_sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+        (uct_ib_mlx5dv_reg_dmabuf_mr_func == NULL)) {
         return NULL;
     }
 
@@ -808,11 +838,12 @@ uct_ib_mlx5_direct_nic_reg_mr(uct_ib_mlx5_md_t *md, void *address,
     access_flags  = uct_ib_md_access_flags(&md->super, access_flags);
     start_time    = ucs_get_time();
 
-    mr = UCS_PROFILE_CALL_ALWAYS(mlx5dv_reg_dmabuf_mr, md->super.pd, 0,
-                                 length + dmabuf_offset,
-                                 (uintptr_t)address - dmabuf_offset, dmabuf_fd,
-                                 access_flags,
-                                 MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
+    mr = UCS_PROFILE_NAMED_CALL_ALWAYS("mlx5dv_reg_dmabuf_mr",
+                                       uct_ib_mlx5dv_reg_dmabuf_mr_func,
+                                       md->super.pd, 0, length + dmabuf_offset,
+                                       (uintptr_t)address - dmabuf_offset,
+                                       dmabuf_fd, access_flags,
+                                       MLX5DV_REG_DMABUF_ACCESS_DATA_DIRECT);
     if (mr == NULL) {
         ucs_debug("mlx5dv_reg_dmabuf_mr() failed: %m");
         return NULL;
