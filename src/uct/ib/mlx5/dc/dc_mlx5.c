@@ -397,14 +397,26 @@ static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_iface_progress(void *arg, int flags)
 {
     uct_dc_mlx5_iface_t *iface = arg;
-    unsigned count;
+    unsigned rx_count = 0, tx_count = 0;
+    unsigned n;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, flags);
-    if (!uct_rc_iface_poll_tx(&iface->super.super, count)) {
-        return count;
+    do {
+        n         = uct_rc_mlx5_iface_common_poll_rx(&iface->super, flags);
+        rx_count += n;
+    } while ((n > 0) &&
+             (rx_count < iface->super.super.super.config.rx_max_poll));
+
+    if (!uct_rc_iface_poll_tx(&iface->super.super, rx_count)) {
+        return rx_count;
     }
 
-    return count + uct_dc_mlx5_poll_tx(iface, flags);
+    do {
+        n         = uct_dc_mlx5_poll_tx(iface, flags);
+        tx_count += n;
+    } while ((n > 0) &&
+             (tx_count < iface->super.super.super.config.tx_max_poll));
+
+    return rx_count + tx_count;
 }
 
 static unsigned uct_dc_mlx5_iface_progress_cyclic(void *arg)
