@@ -1213,7 +1213,7 @@ protected:
 
 private:
     enum {
-        NO_DEVX = UCS_BIT(0)
+        NO_DEVX = UCS_BIT(2)
     };
 };
 
