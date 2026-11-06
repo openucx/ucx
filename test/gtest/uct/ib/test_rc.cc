@@ -842,7 +842,11 @@ UCS_TEST_SKIP_COND_P(test_rc_verbs_invalid_flush_rkey, atomic_add,
     static const size_t   target    = 256;
     mapped_buffer recvbuf(num_words * sizeof(uint64_t), 0ul, *m_receiver);
 
-    if (uct_ib_md_atomic_rkey(recvbuf.rkey()) == UCT_IB_INVALID_MKEY) {
+    /* Only an indirect atomic key is created at the atomic MR offset; without
+     * DevX, the atomic key is the memory key itself */
+    uint32_t atomic_rkey = uct_ib_md_atomic_rkey(recvbuf.rkey());
+    if ((atomic_rkey == UCT_IB_INVALID_MKEY) ||
+        (atomic_rkey == uct_ib_md_direct_rkey(recvbuf.rkey()))) {
         UCS_TEST_SKIP_R("no indirect atomic key");
     }
 
