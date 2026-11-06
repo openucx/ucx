@@ -137,6 +137,7 @@ noinst_HEADERS = \
 	sys/module.h \
 	sys/module_int.h \
 	sys/sys.h \
+	sys/fd_exchange.h \
 	sys/topo/base/topo_int.h \
 	sys/topo/base/topo_groups.h \
 	sys/iovec.h \
@@ -217,6 +218,7 @@ libucs_la_SOURCES = \
 	sys/module.c \
 	sys/string.c \
 	sys/sys.c \
+	sys/fd_exchange.c \
 	sys/iovec.c \
 	sys/lib.c \
 	sys/sock.c \
