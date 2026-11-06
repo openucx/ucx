@@ -4,11 +4,11 @@
 #   docker build -t ze-builder:local \
 #       -f buildlib/dockers/ze-builder.Dockerfile buildlib/dockers
 #
-# CI publish: this image is pulled by the ubuntu2404_ze container in
-# buildlib/pr/main.yml. Push it to the internal registry (not Docker Hub, whose
-# pull rate limits break CI) under a unique, content-reflecting tag, e.g.
-#   rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04/builder:ze-oneapi-2026.0.0-l0-1.27.0
-# and keep main.yml's image ref in sync with the published tag.
+# CI publish: this image is pulled by the ubuntu2404-ze row in
+# .ci/pipeline/build_matrix.yaml. Push it to the internal registry (not Docker
+# Hub, whose pull rate limits break CI) under a unique, content-reflecting tag, e.g.
+#   harbor.mellanox.com/ucx/x86_64/ubuntu24.04/builder:ze-oneapi-2026.0.0-l0-1.27.0
+# and keep the matrix row's image ref in sync with the published tag.
 #
 # The Intel oneAPI toolkit base already ships the Level Zero loader, headers and
 # pkg-config, which is what UCX needs to configure --with-ze.
