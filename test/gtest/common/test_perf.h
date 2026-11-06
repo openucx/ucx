@@ -49,8 +49,15 @@ protected:
 
     static std::vector<int> get_affinity();
 
-    double run_test(const test_spec& test, unsigned flags, bool check_perf, const
-                    std::string &tl_name, const std::string &dev_name);
+    double run_test(const test_spec &test, unsigned flags, bool check_perf,
+                    const std::string &tl_name, const std::string &dev_name,
+                    ucs_status_t expected_status = UCS_OK);
+
+    /* Adjust the parameters of each peer of a two-peer test */
+    virtual void
+    adjust_peer_params(unsigned peer, ucx_perf_params_t &params) const
+    {
+    }
 
 private:
     class rte_comm {

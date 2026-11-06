@@ -284,6 +284,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
         args[i].params           = params;
         args[i].cpu              = cpus[i];
         args[i].params.rte_group = rtes[i];
+        adjust_peer_params(i, args[i].params);
 
         ucs_status_t status = ucs_pthread_create(&threads[i], test_func,
                                                  &args[i], "perf%d", i);
@@ -327,8 +328,10 @@ test_perf::run_single_threaded(const test_spec &test, unsigned flags,
     return result;
 }
 
-double test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
-                           const std::string &tl_name, const std::string &dev_name)
+double test_perf::run_test(const test_spec &test, unsigned flags,
+                           bool check_perf, const std::string &tl_name,
+                           const std::string &dev_name,
+                           ucs_status_t expected_status)
 {
     std::vector<int> cpus;
 
@@ -360,7 +363,12 @@ double test_perf::run_test(const test_spec& test, unsigned flags, bool check_per
             return 0.0; /* Skipped */
         }
 
-        ASSERT_UCS_OK(result.status);
+        ASSERT_UCS_STATUS_EQ(expected_status, result.status,
+                             << " (expected "
+                             << ucs_status_string(expected_status) << ")");
+        if (expected_status != UCS_OK) {
+            return 0.0;
+        }
 
         double value = *(double*)( ((char*)&result.result) + test.field_offset) *
                         test.norm;
