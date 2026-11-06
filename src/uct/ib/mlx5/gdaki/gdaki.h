@@ -32,7 +32,6 @@ typedef struct {
 
 typedef struct {
     uintptr_t              gpu_ptr;
-    CUdeviceptr            sq_db; /* CUDA-mapped UAR doorbell address */
     uct_rc_gdaki_channel_t channels[0];
 } uct_rc_gdaki_channel_block_t;
 

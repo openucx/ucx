@@ -569,9 +569,9 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     qp_attr.super.max_inl_cqe[UCT_IB_DIR_TX] = 0;
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
-    ep_qp_offset  = UCT_GDAKI_DEV_EP_SIZE;
-    ep_wq_offset  = ep_qp_offset + iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
-    dbrec.mem_id  = mem->umem->umem_id;
+    ep_qp_offset = UCT_GDAKI_DEV_EP_SIZE;
+    ep_wq_offset = ep_qp_offset + iface->num_channels * UCT_GDAKI_DEV_QP_SIZE;
+    dbrec.mem_id = mem->umem->umem_id;
 
     for (channel_index = 0; channel_index < iface->num_channels;
          ++channel_index) {
@@ -612,13 +612,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
                 uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
                 goto err_cleanup;
             }
-
         }
-    }
-
-    for (ep_index = 0; ep_index < num_elems; ++ep_index) {
-        uct_rc_gdaki_channel_block(iface, mp, elems, ep_index)->sq_db =
-                iface->uar_wrap->device_ptr;
     }
 
     return UCS_OK;
@@ -1138,10 +1132,11 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                           iface->num_channels *
                                                   UCT_GDAKI_DEV_QP_SIZE);
 
-        sq_db = ep->channel_block->sq_db;
+        sq_db = iface->uar_wrap->device_ptr;
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
+            ucs_assert(channel->qp.reg == &iface->uar_wrap->uar->super);
+            dev_ep->qps[i].sq_db  = (uint64_t*)sq_db;
             dev_ep->qps[i].sq_num = channel->qp.super.qp_num;
             dev_ep->qps[i].qpn_ds = htonl(channel->qp.super.qp_num <<
                                           DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT);
