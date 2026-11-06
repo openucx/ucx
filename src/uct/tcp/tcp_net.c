@@ -153,23 +153,35 @@ int uct_tcp_netif_vrf_index(const char *if_name)
     return ucs_netlink_get_vrf_master_index(if_index);
 }
 
-int uct_tcp_netif_vrf_bind_allowed(int vrf_index)
+ucs_status_t uct_tcp_netif_vrf_bind_check(const char *if_name, int vrf_index,
+                                          ucs_log_level_t err_log_level)
 {
     char vrf_name[IFNAMSIZ];
-    int fd, ret;
+    ucs_status_t status;
+    int fd;
 
     if (if_indextoname(vrf_index, vrf_name) == NULL) {
-        return 0;
+        ucs_log(err_log_level,
+                "cannot use device %s: failed to get name of VRF device "
+                "index %d: %m",
+                if_name, vrf_index);
+        return UCS_ERR_NO_DEVICE;
     }
 
-    fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
-        return 0;
+    status = ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd);
+    if (status != UCS_OK) {
+        return status;
     }
 
     /* Binding to a VRF requires CAP_NET_RAW on kernels older than 5.7 */
-    ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, vrf_name,
-                     strlen(vrf_name) + 1);
+    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, vrf_name,
+                   strlen(vrf_name) + 1) < 0) {
+        ucs_log(err_log_level,
+                "cannot use device %s: failed to bind a socket to VRF %s: %m",
+                if_name, vrf_name);
+        status = UCS_ERR_IO_ERROR;
+    }
+
     ucs_close_fd(&fd);
-    return (ret == 0);
+    return status;
 }

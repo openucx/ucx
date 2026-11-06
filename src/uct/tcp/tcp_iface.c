@@ -1040,6 +1040,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     struct dirent **entries, **entry;
     unsigned num_devices;
     int is_active, vrf_index, i, n;
+    ucs_log_level_t log_level;
     ucs_status_t status;
     const char *sysfs_path;
     char *path_buffer;
@@ -1092,14 +1093,24 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
 
         vrf_index = uct_tcp_netif_vrf_index((*entry)->d_name);
         if (vrf_index != -1) {
-            if (!tcp_md->config.vrf_enable) {
+            if (tcp_md->config.vrf_enable == UCS_NO) {
                 ucs_debug("filtered out device %s in a VRF", (*entry)->d_name);
                 continue;
             }
 
-            if (!uct_tcp_netif_vrf_bind_allowed(vrf_index)) {
-                ucs_diag("filtered out device %s in a VRF: not permitted to "
-                         "bind sockets to the VRF", (*entry)->d_name);
+            /* A device whose sockets cannot be bound to its VRF is an error
+             * with "y" and is skipped with "try" */
+            log_level = (tcp_md->config.vrf_enable == UCS_YES) ?
+                                UCS_LOG_LEVEL_ERROR :
+                                UCS_LOG_LEVEL_DIAG;
+            status = uct_tcp_netif_vrf_bind_check((*entry)->d_name, vrf_index,
+                                                  log_level);
+            if (status != UCS_OK) {
+                if (tcp_md->config.vrf_enable == UCS_YES) {
+                    ucs_free(devices);
+                    goto out_release;
+                }
+
                 continue;
             }
         }

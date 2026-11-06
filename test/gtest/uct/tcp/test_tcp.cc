@@ -363,12 +363,24 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 UCS_TEST_P(test_uct_tcp, vrf_enable)
 {
-    std::set<std::string> devices, vrf_devices;
+    std::set<std::string> devices, vrf_devices, yes_devices;
 
     query_devices("n", devices);
-    query_devices("y", vrf_devices);
+    query_devices("try", vrf_devices);
 
-    // Devices in a VRF are reported only when VRF_ENABLE is set
+    // With "y", a device whose sockets cannot be bound to its VRF fails the
+    // whole device query instead of being skipped
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        query_devices("y", yes_devices);
+    }
+    if (m_errors.empty()) {
+        EXPECT_EQ(vrf_devices, yes_devices);
+    } else {
+        EXPECT_TRUE(yes_devices.empty());
+    }
+
+    // Devices in a VRF are not reported when VRF_ENABLE is "n"
     for (const auto &dev_name : devices) {
         EXPECT_EQ(-1, vrf_master_index(dev_name)) << dev_name;
         EXPECT_EQ(1u, vrf_devices.count(dev_name)) << dev_name;

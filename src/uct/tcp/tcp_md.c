@@ -24,10 +24,17 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
     {"BRIDGE_ENABLE", "n", "Enable using bridge devices",
      ucs_offsetof(uct_tcp_md_config_t, bridge_enable), UCS_CONFIG_TYPE_BOOL},
 
+    /* TODO: Change the default to "try" when the MTU issue of VRF networks is
+     * resolved */
     {"VRF_ENABLE", "n",
      "Enable using VRF devices and network devices enslaved to a VRF. Sockets\n"
-     "of such devices are bound to the VRF device.",
-     ucs_offsetof(uct_tcp_md_config_t, vrf_enable), UCS_CONFIG_TYPE_BOOL},
+     "of such devices are bound to the VRF device. Possible values are:\n"
+     " y   - Use devices in a VRF, fail if their sockets cannot be bound to\n"
+     "       the VRF.\n"
+     " n   - Do not use devices in a VRF.\n"
+     " try - Use devices in a VRF, skip the devices whose sockets cannot be\n"
+     "       bound to the VRF.",
+     ucs_offsetof(uct_tcp_md_config_t, vrf_enable), UCS_CONFIG_TYPE_TERNARY},
 
     {NULL}
 };

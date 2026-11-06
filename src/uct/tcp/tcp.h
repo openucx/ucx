@@ -471,12 +471,12 @@ typedef struct uct_tcp_iface_config {
  * TCP memory domain
  */
 typedef struct uct_tcp_md {
-    uct_md_t        super;
+    uct_md_t                     super;
     struct {
-        int         af_prio_count;
-        sa_family_t af_prio_list[2];
-        uint8_t     bridge_enable;
-        uint8_t     vrf_enable;
+        int                      af_prio_count;
+        sa_family_t              af_prio_list[2];
+        uint8_t                  bridge_enable;
+        ucs_ternary_auto_value_t vrf_enable;
     } config;
 } uct_tcp_md_t;
 
@@ -488,7 +488,7 @@ typedef struct uct_tcp_md_config {
     uct_md_config_t                   super;
     UCS_CONFIG_STRING_ARRAY_FIELD(af) af_prio;
     int                               bridge_enable;
-    int                               vrf_enable;
+    ucs_ternary_auto_value_t          vrf_enable;
 } uct_tcp_md_config_t;
 
 
@@ -528,8 +528,10 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 /* Index of the VRF (L3 master) device of the interface, or -1 */
 int uct_tcp_netif_vrf_index(const char *if_name);
 
-/* Whether sockets can be bound to the VRF device with the given index */
-int uct_tcp_netif_vrf_bind_allowed(int vrf_index);
+/* Check that sockets of the interface can be bound to its VRF device with the
+ * given index, log a failure with the given log level */
+ucs_status_t uct_tcp_netif_vrf_bind_check(const char *if_name, int vrf_index,
+                                          ucs_log_level_t err_log_level);
 
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);
