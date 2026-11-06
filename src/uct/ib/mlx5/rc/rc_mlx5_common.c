@@ -289,6 +289,7 @@ ucs_status_t uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     attr.super.srq_num          = iface->rx.srq.srq_num;
     attr.super.port             = dev->first_port;
     attr.mmio_mode              = iface->tx.mmio_mode;
+    attr.bf_copy_mode           = iface->tx.bf_copy_mode;
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->cq[UCT_IB_DIR_RX],
                                         &iface->cq[UCT_IB_DIR_RX],
@@ -414,6 +415,7 @@ uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     iface->tm.cmd_wq.super.super.qp_num = qp->qp_num;
     return uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                  iface->tx.mmio_mode,
+                                 iface->tx.bf_copy_mode,
                                  &iface->tm.cmd_wq.super, qp);
 }
 #endif
@@ -534,12 +536,13 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
     case UCT_IB_MLX5_OBJ_TYPE_NULL:
         uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, NULL);
-        qp_attr->mmio_mode = iface->tx.mmio_mode;
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
 
+    qp_attr->bf_copy_mode  = iface->tx.bf_copy_mode;
+    qp_attr->mmio_mode     = iface->tx.mmio_mode;
     qp_attr->super.srq_num = srq->srq_num;
 }
 
@@ -764,7 +767,7 @@ static void uct_rc_mlx5_iface_common_dm_mp_obj_init(ucs_mpool_t *mp, void *obj, 
 
     desc->lkey          = dm->mr->lkey;
     desc->super.buffer  = UCS_PTR_BYTE_OFFSET(dm->start_va, dm->seg_attached * dm->seg_len);
-    desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
+    desc->super.handler = uct_rc_ep_short_dm_desc_handler;
     dm->seg_attached++;
 }
 

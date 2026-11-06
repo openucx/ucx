@@ -200,7 +200,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                    packed_len, packed_len);
             if (handle_user_hdr) {
                 status = ucp_am_handle_user_header_send_status_or_release(
-                        req, packed_len);
+                        req, ucp_proto_bcopy_send_func_status(packed_len));
                 if (ucs_unlikely(status == UCS_ERR_NO_MEMORY)) {
                     return status;
                 }

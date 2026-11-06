@@ -59,17 +59,6 @@ typedef struct ucs_conn_match_ctx ucs_conn_match_ctx_t;
 
 
 /**
- * Function to get the address of the connection between the peers.
- *
- * @param [in]  elem          Pointer to the connection matching element.
- *
- * @return Pointer to the address of the connection between the peers.
- */
-typedef const void*
-(*ucs_conn_match_get_address_t)(const ucs_conn_match_elem_t *elem);
-
-
-/**
  * Function to get the sequence number of the connection between the peers.
  *
  * @param [in] elem  Pointer to the connection matching element.
@@ -109,7 +98,6 @@ typedef void
  * Connection matching operations
  */
 typedef struct ucs_conn_match_ops {
-    ucs_conn_match_get_address_t get_address;
     ucs_conn_match_get_conn_sn_t get_conn_sn;
     ucs_conn_match_address_str_t address_str;
     ucs_conn_match_purge_cb_t    purge_cb;
@@ -224,6 +212,7 @@ ucs_conn_match_get_elem(ucs_conn_match_ctx_t *conn_match_ctx,
  * Remove the connection matching entry from the context.
  *
  * @param [in] conn_match_ctx    Pointer to the connection matching context.
+ * @param [in] address           Address passed to @ref ucs_conn_match_insert.
  * @param [in] elem              Pointer to the connection matching element.
  * @param [in] conn_queue_type   Connection queue which should be used to remove
  *                               the connection matching element from.
@@ -232,7 +221,7 @@ ucs_conn_match_get_elem(ucs_conn_match_ctx_t *conn_match_ctx,
  *       pointed by @conn_queue_type.
  */
 void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
-                                ucs_conn_match_elem_t *elem,
+                                const void *address, ucs_conn_match_elem_t *elem,
                                 ucs_conn_match_queue_type_t conn_queue_type);
 
 

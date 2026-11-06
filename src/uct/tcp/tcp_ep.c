@@ -1280,6 +1280,16 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
     }
 }
 
+static UCS_F_NOINLINE void
+uct_tcp_ep_handle_invalid_am_length(uct_tcp_ep_t *ep, uint32_t length,
+                                    size_t max_length)
+{
+    ucs_diag("tcp_ep %p (state %s): received AM length %u exceeds maximum %zu",
+             ep, uct_tcp_ep_cm_state[ep->conn_state].name, length, max_length);
+    uct_tcp_ep_ctx_reset(&ep->rx);
+    uct_tcp_ep_handle_disconnected(ep, UCS_ERR_CONNECTION_RESET);
+}
+
 static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 {
     uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
@@ -1435,6 +1445,8 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
+    size_t max_am_length   = iface->config.rx_seg_size -
+                             sizeof(uct_tcp_am_hdr_t);
     unsigned handled       = 0;
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
@@ -1485,10 +1497,11 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
         }
 
         hdr = UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset);
-        ucs_assertv(hdr->length <= (iface->config.rx_seg_size - sizeof(*hdr)),
-                    "tcp_ep %p (conn state - %s): %u vs %zu",
-                    ep, uct_tcp_ep_cm_state[ep->conn_state].name, hdr->length,
-                    (iface->config.rx_seg_size - sizeof(*hdr)));
+        if (ucs_unlikely(hdr->length > max_am_length)) {
+            uct_tcp_ep_handle_invalid_am_length(ep, hdr->length,
+                                                max_am_length);
+            goto out;
+        }
 
         if (remaining < (sizeof(*hdr) + hdr->length)) {
             handled++;

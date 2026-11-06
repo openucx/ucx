@@ -545,7 +545,8 @@ init_qp:
 
     if (dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
-                                       iface->super.tx.mmio_mode, &dci->txwq,
+                                       iface->super.tx.mmio_mode,
+                                       iface->super.tx.bf_copy_mode, &dci->txwq,
                                        dci->txwq.super.verbs.qp);
         if (status != UCS_OK) {
             goto err;
@@ -1303,7 +1304,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
     }
 
     uct_rc_ep_init_send_op(send_op, 0, NULL,
-                           uct_dc_mlx5_ep_fc_pure_grant_send_completion);
+                           uct_dc_mlx5_ep_fc_pure_grant_send_completion, 0);
     uct_rc_iface_send_op_set_name(send_op, "dc_mlx5_iface_fc_grant");
 
     send_op->buffer = fc_req;

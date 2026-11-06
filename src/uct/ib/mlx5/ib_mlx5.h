@@ -93,6 +93,13 @@
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC (1U << 31)
 #endif
 
+/* BlueFlame copy by AArch64 ST64B is compiled in */
+#if defined(__aarch64__) && HAVE_AARCH64_ST64B_ASM
+#  define UCT_IB_MLX5_HAVE_ST64B 1
+#else
+#  define UCT_IB_MLX5_HAVE_ST64B 0
+#endif
+
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
 
@@ -471,6 +478,14 @@ typedef enum {
 } uct_ib_mlx5_mmio_mode_t;
 
 
+typedef enum {
+    UCT_IB_MLX5_BF_COPY_MODE_AUTO,
+    UCT_IB_MLX5_BF_COPY_MODE_GENERIC,
+    UCT_IB_MLX5_BF_COPY_MODE_ST64B,
+    UCT_IB_MLX5_BF_COPY_MODE_LAST
+} uct_ib_mlx5_bf_copy_mode_t;
+
+
 typedef struct uct_ib_mlx5_iface_config {
 #if HAVE_IBV_DM
     struct {
@@ -478,9 +493,10 @@ typedef struct uct_ib_mlx5_iface_config {
         unsigned             count;
     } dm;
 #endif
-    uct_ib_mlx5_mmio_mode_t  mmio_mode;
-    ucs_ternary_auto_value_t ar_enable;
-    int                      cqe_zip_enable[UCT_IB_DIR_LAST];
+    uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uct_ib_mlx5_bf_copy_mode_t  bf_copy_mode;
+    ucs_ternary_auto_value_t    ar_enable;
+    int                         cqe_zip_enable[UCT_IB_DIR_LAST];
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -646,6 +662,7 @@ typedef struct uct_ib_mlx5_res_domain {
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uct_ib_mlx5_bf_copy_mode_t  bf_copy_mode;
     uint32_t                    uidx;
     int                         full_handshake;
     int                         rdma_wr_disabled;
@@ -702,6 +719,9 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    ft_ci;      /* First BB index of last ft completed WQE */
     uint16_t                    path_mtu_mask;  /* Path MTU in bytes - 1 */
     uint8_t                     path_mtu_shift; /* log2(path MTU in bytes) */
+#if UCT_IB_MLX5_HAVE_ST64B
+    uint8_t                     bf_copy_mode;
+#endif
 #if UCS_ENABLE_ASSERT
     uint8_t                     flags; /* Debug flags */
 #endif
@@ -915,7 +935,13 @@ uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
  */
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
-                                   uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
+                                   uct_ib_mlx5_bf_copy_mode_t bf_copy_mode,
+                                   uct_ib_mlx5_txwq_t *txwq,
+                                   struct ibv_qp *verbs_qp);
+
+ucs_status_t
+uct_ib_mlx5_txwq_init_bf_copy(uct_ib_mlx5_txwq_t *txwq,
+                              uct_ib_mlx5_bf_copy_mode_t bf_copy_mode);
 
 /* Get pointer to a WQE by producer index */
 void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
@@ -925,6 +951,14 @@ size_t uct_ib_mlx5_wqe_size(const struct mlx5_wqe_ctrl_seg *ctrl);
 
 /* Get the index of the WQE that follows a WQE of the given size */
 uint16_t uct_ib_mlx5_txwq_next_wqe_index(uint16_t index, size_t wqe_size);
+
+/* Get the opcode of a WQE */
+uint8_t uct_ib_mlx5_wqe_opcode(const struct mlx5_wqe_ctrl_seg *ctrl);
+
+/* Copy 'length' bytes from the send WQ starting at 'src' into 'dst',
+   wrapping around 'qend' if needed */
+void uct_ib_mlx5_txwq_copy_segs(const uct_ib_mlx5_txwq_t *txwq, void *dst,
+                                const void *src, size_t length);
 
 /* Count how many WQEs are currently posted */
 uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
@@ -1310,17 +1344,6 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char* name, size_t size,
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);
 #endif
-
-/**
- * Compare firmware AA.BB.CCCC against a minimum BB.CCCC, ignoring the
- * device-family prefix AA.
- *
- * @return 1 if @a fw_ver parses and is at least
- *         @a min_release.@a min_build, otherwise 0.
- */
-int uct_ib_mlx5_fw_ver_release_at_least(const char *fw_ver,
-                                        unsigned min_release,
-                                        unsigned min_build);
 
 ucs_status_t uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
                                    ucs_ternary_auto_value_t ar_enable,

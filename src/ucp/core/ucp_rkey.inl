@@ -37,11 +37,21 @@ ucp_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
             rkey_config_key2.unreachable_md_map);
 }
 
+/**
+ * @return remote key configuration by configuration index
+ */
+static inline ucp_rkey_config_t *
+ucp_worker_rkey_config(ucp_worker_h worker,
+                       ucp_worker_cfg_index_t cfg_index)
+{
+    ucs_assert(cfg_index != UCP_WORKER_CFG_INDEX_NULL);
+    return ucs_array_elem(&worker->rkey_config, cfg_index);
+}
+
 static UCS_F_ALWAYS_INLINE ucp_rkey_config_t *
 ucp_rkey_config(ucp_worker_h worker, ucp_rkey_h rkey)
 {
-    ucs_assert(rkey->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
-    return &ucs_array_elem(&worker->rkey_config, rkey->cfg_index);
+    return ucp_worker_rkey_config(worker, rkey->cfg_index);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rkey_t
@@ -57,13 +67,14 @@ ucp_rkey_get_tl_rkey(ucp_rkey_h rkey, ucp_md_index_t rkey_index)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_rkey_unpack_reachable(ucp_ep_h ep, const void *buffer, size_t length,
-                             ucp_rkey_h *rkey_p)
+                             uint64_t uct_flags, ucp_rkey_h *rkey_p)
 {
     ucp_ep_config_t *config = &ucs_array_elem(&ep->worker->ep_config,
                                               ep->cfg_index);
     return ucp_ep_rkey_unpack_internal(ep, buffer, length,
                                        config->key.reachable_md_map, 0,
-                                       UCS_SYS_DEVICE_ID_UNKNOWN, rkey_p);
+                                       UCS_SYS_DEVICE_ID_UNKNOWN, uct_flags,
+                                       rkey_p);
 }
 
 static UCS_F_ALWAYS_INLINE int

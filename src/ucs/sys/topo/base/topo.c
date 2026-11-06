@@ -11,7 +11,6 @@
 #include "topo_int.h"
 #include "topo_groups.h"
 
-#include <ucs/arch/cpu.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
@@ -73,11 +72,13 @@ typedef struct ucs_topo_global_ctx {
     khash_t(bus_to_sys_dev)    bus_to_sys_dev_hash;
     ucs_topo_sys_device_info_t devices[UCS_SYS_DEVICE_ID_COUNT];
     unsigned                   num_devices;
+    unsigned                   device_class_incomplete_mask;
 } ucs_topo_global_ctx_t;
 
 
 struct ucs_global_state {
     unsigned                   num_devices;
+    unsigned                   device_class_incomplete_mask;
     ucs_topo_sys_device_info_t devices[];
 };
 
@@ -268,21 +269,12 @@ ucs_topo_bus_value_key_make(const ucs_sys_bus_id_t *bus_id,
     return key;
 }
 
-int ucs_topo_sys_device_cmp_nolock(ucs_sys_device_t sys_dev1,
-                                   ucs_sys_device_t sys_dev2)
+int ucs_topo_sys_device_info_cmp(const ucs_topo_sys_device_info_t *device1,
+                                 const ucs_topo_sys_device_info_t *device2)
 {
-    const ucs_topo_sys_device_info_t *device1, *device2;
     ucs_bus_id_bit_rep_t bus_id1, bus_id2;
 
-    ucs_assertv(sys_dev1 < ucs_topo_global_ctx.num_devices,
-                "invalid sys_dev1: %u", sys_dev1);
-    ucs_assertv(sys_dev2 < ucs_topo_global_ctx.num_devices,
-                "invalid sys_dev2: %u", sys_dev2);
-
-    device1 = &ucs_topo_global_ctx.devices[sys_dev1];
-    device2 = &ucs_topo_global_ctx.devices[sys_dev2];
-
-    /* Compare by bus id.*/
+    /* Compare by bus id. */
     bus_id1 = ucs_topo_get_bus_id_bit_repr(&device1->bus_id);
     bus_id2 = ucs_topo_get_bus_id_bit_repr(&device2->bus_id);
 
@@ -301,7 +293,16 @@ int ucs_topo_sys_device_cmp(ucs_sys_device_t sys_dev1,
     int result;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    result = ucs_topo_sys_device_cmp_nolock(sys_dev1, sys_dev2);
+
+    ucs_assertv(sys_dev1 < ucs_topo_global_ctx.num_devices,
+                "invalid sys_dev1: %u", sys_dev1);
+    ucs_assertv(sys_dev2 < ucs_topo_global_ctx.num_devices,
+                "invalid sys_dev2: %u", sys_dev2);
+
+    result = ucs_topo_sys_device_info_cmp(
+            &ucs_topo_global_ctx.devices[sys_dev1],
+            &ucs_topo_global_ctx.devices[sys_dev2]);
+
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -509,17 +510,18 @@ ucs_topo_find_device_by_bus_id_value(const ucs_sys_bus_id_t *bus_id,
         *sys_dev_p = ucs_topo_global_ctx.num_devices++;
         device     = &ucs_topo_global_ctx.devices[*sys_dev_p];
 
-        device->bus_id          = *bus_id;
-        device->name            = name;
-        device->name_priority   = 0;
-        device->numa_node       = numa_node;
-        device->pci_id          = pci_id;
-        device->user_value      = user_value;
-        device->device_class    = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
-        device->class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
-        device->sibling_role    = UCS_TOPO_SIBLING_ROLE_NONE;
-        device->sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        device->sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
+        device->bus_id        = *bus_id;
+        device->name          = name;
+        device->name_priority = 0;
+        device->numa_node     = numa_node;
+        device->pci_id        = pci_id;
+        device->user_value    = user_value;
+        device->device_class  = UCS_TOPO_DEVICE_CLASS_UNKNOWN;
+        device->flags         = 0;
+        device->class_ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
+        device->sibling_role  = UCS_TOPO_SIBLING_ROLE_NONE;
+        device->sys_dev_aux   = UCS_SYS_DEVICE_ID_UNKNOWN;
+        UCS_STATIC_BITMAP_RESET_ALL(&device->siblings);
 
         if (user_value == UCS_SYS_DEVICE_USER_VALUE_EMPTY) {
             ucs_debug(
@@ -801,22 +803,23 @@ ucs_topo_is_reachable(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
     result =
             (sys_dev >= ucs_topo_global_ctx.num_devices) ||
             (sys_dev_mem >= ucs_topo_global_ctx.num_devices) ||
-            /*
-             * Memory device was never matched with a sibling, it does not
-             * mandate an auxiliary path.
-             */
-            (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-             UCS_SYS_DEVICE_ID_UNKNOWN) ||
             /* The device itself never uses auxiliary path */
             (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
              UCS_TOPO_SIBLING_ROLE_DEV) ||
             /*
-             * MPS MLOParts create multiple MEM aliases for one DEV. Each MEM
-             * alias records its matched DEV; the DEV stores only one
-             * representative MEM sibling.
+             * MPS MLOParts create multiple MEM aliases for one DEV, and
+             * multiplane NICs create multiple DEVs for one MEM. Each MEM
+             * records all of its matched DEVs.
              */
-            (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-             sys_dev);
+            UCS_STATIC_BITMAP_GET(
+                    ucs_topo_global_ctx.devices[sys_dev_mem].siblings,
+                    sys_dev) ||
+            /*
+             * Memory device was never matched with a sibling, it does not
+             * mandate an auxiliary path.
+             */
+            UCS_STATIC_BITMAP_IS_ZERO(
+                    ucs_topo_global_ctx.devices[sys_dev_mem].siblings);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -833,12 +836,15 @@ int ucs_topo_is_sibling(ucs_sys_device_t sys_dev, ucs_sys_device_t sys_dev_mem)
                  (sys_dev < ucs_topo_global_ctx.num_devices) &&
                  (sys_dev_mem != UCS_SYS_DEVICE_ID_UNKNOWN) &&
                  (sys_dev_mem < ucs_topo_global_ctx.num_devices) &&
+                 (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+                  UCS_TOPO_SIBLING_ROLE_DEV) &&
                  /*
-                  * MLOPart allows multiple MEM devices to point at one DEV, so
-                  * the MEM-side sibling is the canonical relationship.
+                  * The MEM side holds every matched DEV, including all planes
+                  * of a multiplane NIC.
                   */
-                 (ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev ==
-                  sys_dev);
+                 UCS_STATIC_BITMAP_GET(
+                         ucs_topo_global_ctx.devices[sys_dev_mem].siblings,
+                         sys_dev);
 
     if (is_sibling) {
         role_dev     = ucs_topo_global_ctx.devices[sys_dev].sibling_role;
@@ -1091,6 +1097,11 @@ ucs_status_t ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    if (device_class >= UCS_TOPO_DEVICE_CLASS_LAST) {
+        ucs_error("invalid device class %u", device_class);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
     if (sys_dev >= ucs_topo_global_ctx.num_devices) {
@@ -1113,6 +1124,89 @@ out_unlock:
     return status;
 }
 
+ucs_status_t
+ucs_topo_sys_device_add_flags(ucs_sys_device_t sys_dev, unsigned flags)
+{
+    ucs_status_t status = UCS_OK;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_error("system device %d is unknown", sys_dev);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+
+    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
+        ucs_error("system device %d is invalid (max: %u)", sys_dev,
+                  ucs_topo_global_ctx.num_devices);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_unlock;
+    }
+
+    ucs_topo_global_ctx.devices[sys_dev].flags |= flags;
+
+out_unlock:
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return status;
+}
+
+unsigned ucs_topo_sys_device_get_flags(ucs_sys_device_t sys_dev)
+{
+    unsigned flags;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return 0;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    if (sys_dev < ucs_topo_global_ctx.num_devices) {
+        flags = ucs_topo_global_ctx.devices[sys_dev].flags;
+    } else {
+        flags = 0;
+    }
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return flags;
+}
+
+ucs_status_t
+ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class)
+{
+    if ((device_class <= UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
+        (device_class >= UCS_TOPO_DEVICE_CLASS_LAST)) {
+        ucs_error("invalid device class %u", device_class);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    ucs_topo_global_ctx.device_class_incomplete_mask |= UCS_BIT(device_class);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return UCS_OK;
+}
+
+static int
+ucs_topo_device_class_is_incomplete_nolock(ucs_topo_device_class_t device_class)
+{
+    return UCS_BIT_GET(ucs_topo_global_ctx.device_class_incomplete_mask,
+                       device_class);
+}
+
+int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class)
+{
+    int is_incomplete;
+
+    ucs_assertv((device_class > UCS_TOPO_DEVICE_CLASS_UNKNOWN) &&
+                (device_class < UCS_TOPO_DEVICE_CLASS_LAST),
+                "invalid device class %u", device_class);
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    is_incomplete = ucs_topo_device_class_is_incomplete_nolock(device_class);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return is_incomplete;
+}
+
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
     ucs_topo_device_class_t device_class;
@@ -1131,7 +1225,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
     }
 
     device_class = ucs_topo_global_ctx.devices[sys_dev].device_class;
-    if (device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) {
+    if ((device_class == UCS_TOPO_DEVICE_CLASS_UNKNOWN) ||
+        ucs_topo_device_class_is_incomplete_nolock(device_class)) {
         ordinal = UCS_SYS_DEVICE_ORDINAL_INVALID;
         goto out_unlock;
     }
@@ -1281,8 +1376,8 @@ ucs_topo_is_pci_bridge(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2)
     return result;
 }
 
-static int ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
-                                             ucs_sys_device_t sys_dev_mem)
+static void ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
+                                              ucs_sys_device_t sys_dev_mem)
 {
     ucs_sys_device_t sys_dev_aux;
 
@@ -1290,19 +1385,36 @@ static int ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
          UCS_TOPO_SIBLING_ROLE_MEM) ||
         (ucs_topo_global_ctx.devices[sys_dev].sibling_role !=
          UCS_TOPO_SIBLING_ROLE_DEV)) {
-        return 0;
+        return;
     }
 
     sys_dev_aux = ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux;
     if (ucs_topo_is_pci_bridge(sys_dev_mem, sys_dev_aux)) {
-        ucs_topo_global_ctx.devices[sys_dev_mem].sibling_sys_dev = sys_dev;
-        ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev     = sys_dev_mem;
+        UCS_STATIC_BITMAP_SET(
+                &ucs_topo_global_ctx.devices[sys_dev_mem].siblings, sys_dev);
+        UCS_STATIC_BITMAP_SET(&ucs_topo_global_ctx.devices[sys_dev].siblings,
+                              sys_dev_mem);
         ucs_trace("sys_dev=%u with sys_dev_aux=%u matched with sys_dev_mem=%u",
                   sys_dev, sys_dev_aux, sys_dev_mem);
-        return 1;
+    }
+}
+
+static void ucs_topo_sys_device_clear_siblings(ucs_sys_device_t sys_dev)
+{
+    ucs_topo_sys_device_info_t *device = &ucs_topo_global_ctx.devices[sys_dev];
+    unsigned peer;
+
+    UCS_STATIC_BITMAP_FOR_EACH_BIT(peer, &device->siblings) {
+        if ((peer >= UCS_SYS_DEVICE_ID_COUNT) ||
+            (peer >= ucs_topo_global_ctx.num_devices)) {
+            break;
+        }
+
+        UCS_STATIC_BITMAP_RESET(&ucs_topo_global_ctx.devices[peer].siblings,
+                                sys_dev);
     }
 
-    return 0;
+    UCS_STATIC_BITMAP_RESET_ALL(&device->siblings);
 }
 
 /* Memory device supports auxiliary path if a sibling is found */
@@ -1319,13 +1431,20 @@ ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
         goto out;
     }
 
+    /* Already a memory device: keep the existing matches and skip the rescan */
+    if (ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+        UCS_TOPO_SIBLING_ROLE_MEM) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    ucs_topo_sys_device_clear_siblings(sys_dev);
     ucs_topo_global_ctx.devices[sys_dev].sibling_role =
             UCS_TOPO_SIBLING_ROLE_MEM;
 
+    /* All devices sharing the auxiliary device match the memory device */
     for (dev = 0; dev < ucs_topo_global_ctx.num_devices; dev++) {
-        if (ucs_topo_sys_device_sibling_match(dev, sys_dev)) {
-            break;
-        }
+        ucs_topo_sys_device_sibling_match(dev, sys_dev);
     }
 
     status = UCS_OK;
@@ -1349,6 +1468,15 @@ ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
         goto out;
     }
 
+    /* Same auxiliary device as before: skip the rescan */
+    if ((ucs_topo_global_ctx.devices[sys_dev].sibling_role ==
+         UCS_TOPO_SIBLING_ROLE_DEV) &&
+        (ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux == sys_dev_aux)) {
+        status = UCS_OK;
+        goto out;
+    }
+
+    ucs_topo_sys_device_clear_siblings(sys_dev);
     ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux = sys_dev_aux;
     ucs_topo_global_ctx.devices[sys_dev].sibling_role =
             UCS_TOPO_SIBLING_ROLE_DEV;
@@ -1371,8 +1499,8 @@ int ucs_topo_device_has_sibling(ucs_sys_device_t sys_dev)
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     result = (sys_dev < ucs_topo_global_ctx.num_devices) &&
-             (ucs_topo_global_ctx.devices[sys_dev].sibling_sys_dev !=
-              UCS_SYS_DEVICE_ID_UNKNOWN);
+             !UCS_STATIC_BITMAP_IS_ZERO(
+                     ucs_topo_global_ctx.devices[sys_dev].siblings);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return result;
@@ -1416,20 +1544,16 @@ static void ucs_topo_release_devices()
     }
 }
 
-ucs_status_t ucs_topo_build_groups(ucs_topo_groups_t *groups_p)
+ucs_status_t
+ucs_topo_build_groups(const ucs_sys_device_bitmap_t *net_device_filter,
+                      ucs_topo_groups_t *groups_p)
 {
     ucs_status_t status;
-
-    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-        /* Currently only Vera Rubin architecture supports topology groups. */
-        ucs_debug("topology groups are not supported on this architecture");
-        return UCS_ERR_UNSUPPORTED;
-    }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     status = ucs_topo_build_groups_inner(ucs_topo_global_ctx.devices,
                                          ucs_topo_global_ctx.num_devices,
-                                         groups_p);
+                                         net_device_filter, groups_p);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
 
     return status;
@@ -1452,8 +1576,11 @@ ucs_global_state_t *ucs_topo_extract_state(void)
 
     memcpy(state->devices, ucs_topo_global_ctx.devices, devices_size);
     state->num_devices = ucs_topo_global_ctx.num_devices;
+    state->device_class_incomplete_mask =
+            ucs_topo_global_ctx.device_class_incomplete_mask;
 
-    ucs_topo_global_ctx.num_devices = 0;
+    ucs_topo_global_ctx.num_devices                  = 0;
+    ucs_topo_global_ctx.device_class_incomplete_mask = 0;
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -1474,6 +1601,8 @@ void ucs_topo_restore_state(ucs_global_state_t *state)
     memcpy(ucs_topo_global_ctx.devices, state->devices,
            sizeof(ucs_topo_sys_device_info_t) * state->num_devices);
     ucs_topo_global_ctx.num_devices = state->num_devices;
+    ucs_topo_global_ctx.device_class_incomplete_mask =
+            state->device_class_incomplete_mask;
 
     /* Create the hash table */
     kh_clear(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
@@ -1505,7 +1634,9 @@ void ucs_topo_init()
 {
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
-    ucs_topo_global_ctx.num_devices = 0;
+    ucs_topo_global_ctx.num_devices                  = 0;
+    /* coverity[missing_lock] */
+    ucs_topo_global_ctx.device_class_incomplete_mask = 0;
     ucs_list_add_tail(&ucs_sys_topo_providers_list,
                       &ucs_sys_topo_provider_default.list);
     ucs_list_add_tail(&ucs_sys_topo_providers_list,

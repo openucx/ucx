@@ -59,7 +59,8 @@ public:
     CUresult alloc(size_t size, unsigned handle_type,
                    CUmemLocationType location_type  = CU_MEM_LOCATION_TYPE_DEVICE,
                    size_t num_chunks                = 1,
-                   unsigned char locality_domain_id = 0)
+                   unsigned char locality_domain_id = 0,
+                   bool gdr_capable                 = false)
     {
         size_t granularity             = 0;
         CUmemAllocationProp prop       = {};
@@ -73,8 +74,9 @@ public:
                            "context");
         }
 
-        prop.type          = CU_MEM_ALLOCATION_TYPE_PINNED;
-        prop.location.type = location_type;
+        prop.type                            = CU_MEM_ALLOCATION_TYPE_PINNED;
+        prop.location.type                   = location_type;
+        prop.allocFlags.gpuDirectRDMACapable = gdr_capable;
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
         if (location_type == CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN) {
             prop.location.localized.deviceId         = (unsigned char)device;
@@ -200,6 +202,16 @@ public:
     }
 };
 
+/* Device memory allocated as GPUDirect RDMA capable */
+class cuda_gdr_vmm_mem_buffer : public cuda_vmm_mem_buffer {
+public:
+    cuda_gdr_vmm_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    {
+        skip_unless_ok(
+                alloc(size, 0, CU_MEM_LOCATION_TYPE_DEVICE, 1, 0, true));
+    }
+};
+
 #if CUDA_VERSION >= 12020
 class cuda_host_vmm_mem_buffer : public cuda_vmm_mem_buffer {
 public:
@@ -207,6 +219,73 @@ public:
     {
         skip_unless_ok(alloc(size, 0, CU_MEM_LOCATION_TYPE_HOST_NUMA));
     }
+};
+#endif
+
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+/* Memory localized to a single GPU locality domain, which the driver cannot
+ * allocate as GPUDirect RDMA capable */
+class cuda_localized_mem_buffer : public cuda_vmm_mem_buffer {
+public:
+    cuda_localized_mem_buffer(size_t size, ucs_memory_type_t mem_type)
+    {
+        skip_unless_ok(
+                alloc(size, 0, CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN));
+    }
+};
+#endif
+
+#if CUDA_VERSION >= 11020
+/* Device memory from an exportable stream-ordered pool. Exportability makes the
+ * allocation dmabuf-exportable, and therefore registrable, which plain
+ * stream-ordered memory from 'mem_buffer' is not guaranteed to be. */
+class cuda_exportable_mem_pool_buffer {
+public:
+    cuda_exportable_mem_pool_buffer(size_t size) : m_size(size)
+    {
+        CUmemPoolProps props = {};
+        CUdevice device;
+
+        if (cuCtxGetDevice(&device) != CUDA_SUCCESS) {
+            UCS_TEST_SKIP_R("no CUDA device in the current context");
+        }
+
+        props.allocType     = CU_MEM_ALLOCATION_TYPE_PINNED;
+        props.handleTypes   = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR;
+        props.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+        props.location.id   = device;
+
+        if (cuMemPoolCreate(&m_pool, &props) != CUDA_SUCCESS) {
+            UCS_TEST_SKIP_R("failed to create an exportable CUDA memory pool");
+        }
+
+        if ((cuMemAllocFromPoolAsync(&m_ptr, m_size, m_pool, 0) !=
+             CUDA_SUCCESS) ||
+            (cuStreamSynchronize(0) != CUDA_SUCCESS)) {
+            cuMemPoolDestroy(m_pool);
+            UCS_TEST_SKIP_R("failed to allocate from a CUDA memory pool");
+        }
+    }
+
+    ~cuda_exportable_mem_pool_buffer()
+    {
+        if (m_ptr != 0) {
+            cuMemFreeAsync(m_ptr, 0);
+            cuStreamSynchronize(0);
+        }
+
+        cuMemPoolDestroy(m_pool);
+    }
+
+    void *ptr() const
+    {
+        return (void*)m_ptr;
+    }
+
+private:
+    size_t m_size       = 0;
+    CUmemoryPool m_pool = 0;
+    CUdeviceptr m_ptr   = 0;
 };
 #endif
 

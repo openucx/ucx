@@ -8,6 +8,7 @@
 
 #define __STDC_LIMIT_MACROS
 #include <ucp/api/ucp.h>
+#include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <common/mem_buffer.h>
 
@@ -27,6 +28,10 @@
 
 namespace ucp {
 extern const uint32_t MAGIC;
+}
+
+namespace ucs {
+class mock;
 }
 
 
@@ -157,6 +162,11 @@ public:
         bool has_lane_with_caps(uint64_t caps,
                                 uint64_t v2_caps = 0) const;
 
+        /* Whether a rma_bw lane which can register the memory type has
+         * the given UCT_IFACE_FLAG_*_ZCOPY capability */
+        bool is_rndv_zcopy_supported(uint64_t iface_cap,
+                                     ucs_memory_type_t mem_type) const;
+
         bool is_rndv_put_ppln_supported() const;
 
         bool is_rndv_supported() const;
@@ -281,6 +291,9 @@ protected:
     int max_connections();
     void configure_peer_failure_settings();
     bool is_proto_enabled() const;
+
+    static void mock_ep_flush(ucp_ep_h ep, ucs::mock &mock,
+                              uct_ep_flush_func_t flush_func);
 
     static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 

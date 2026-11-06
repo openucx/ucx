@@ -130,8 +130,10 @@ typedef struct ucp_context_config {
     int                                    rndv_shm_cuda_staging_force;
     /** Enable error handling for rndv pipeline protocol */
     int                                    rndv_errh_ppln_enable;
-    /** Force-enable the RMA rendezvous put/get protocols */
-    int                                    rma_ppln_enable;
+    /** Maximum memory for concurrent rndv fragments per worker (bytes) */
+    size_t                                 rndv_frag_worker_max_mem;
+    /** Fraction of rndv_frag_worker_max_mem which RTR fragments may use */
+    double                                 rndv_frag_rtr_ratio;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -191,6 +193,8 @@ typedef struct ucp_context_config {
     /** Maximal number of recovery rounds before the endpoint is declared
      *  fully failed. Must be non-zero. */
     unsigned                               recovery_retries;
+    /** Failover method for UCP_ERR_HANDLING_MODE_FAILOVER endpoints */
+    ucp_failover_mode_t                    failover_mode;
     /** Time period between dynamic transport switching rounds */
     ucs_time_t                             dynamic_tl_switch_interval;
     /** Number of usage tracker rounds performed for each progress operation */
@@ -257,6 +261,8 @@ typedef struct ucp_context_config {
     /** Extend endpoint lanes connections of each local device to all remote
      *  devices */
     int                                    connect_all_to_all;
+    /** GPU-to-NIC assignment mode */
+    ucp_gpu_nic_assignment_mode_t          gpu_nic_assignment_mode;
     /** Restrict lanes to one network device per protocol */
     int                                    proto_use_single_net_device;
     /** Max HCAs for GPU memory registration: auto=closest, N=limit, inf=all */
@@ -449,6 +455,9 @@ typedef struct ucp_context {
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
+
+    /* GPU-to-NIC assignment, set to NULL when not in use */
+    ucp_gpu_nic_assignment_t      *gpu_nic_assignment;
 
     /* Mem handle registration cache */
     ucs_rcache_t                  *rcache;
@@ -802,7 +811,6 @@ ucp_context_print_transport_tables_enabled(ucp_context_h context)
 
     return value == UCS_CONFIG_ON;
 }
-
 void ucp_context_memaccess_tl_bitmap(ucp_context_h context,
                                      uint64_t mem_type_bitmap,
                                      uint64_t md_reg_flags,
