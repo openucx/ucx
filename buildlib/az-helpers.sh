@@ -182,6 +182,11 @@ try_load_cuda_env() {
     have_cuda=no
     have_gdrcopy=no
 
+    # Azure hosts serve CPU and GPU jobs, load CUDA only for GPU jobs
+    if [ "x$RUNNING_IN_AZURE" = "xyes" ] && [ "x$UCX_CI_GPU_JOB" != "xyes" ]; then
+        return 0
+    fi
+
     # List relevant modules
     lsmod | grep -P "^(nvidia|nv.*_peer.*mem|gdrdrv)\W" || true
 
@@ -220,7 +225,7 @@ try_load_cuda_env() {
 load_cuda_env() {
     try_load_cuda_env
     if [ "${have_cuda}" == "no" ] ; then
-        if [ "${ucx_gpu}" = "yes" ] ; then
+        if [ "${UCX_CI_GPU_JOB}" = "yes" ] ; then
             azure_log_error "CUDA load failed on GPU node $(hostname -s)"
             exit 1
         fi
