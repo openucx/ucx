@@ -156,8 +156,16 @@ typedef struct ucp_context_config {
     int                                    adaptive_progress;
     /** Eager-am multi-lane support */
     unsigned                               max_eager_lanes;
+    /** Configured rendezvous multi-lane limit: a number or auto */
+    unsigned long                          max_rndv_lanes_config;
+    /** Rendezvous multi-lane limit when max_rndv_lanes_config is auto */
+    unsigned                               max_rndv_lanes_fallback;
     /** Rendezvous-get multi-lane support */
     unsigned                               max_rndv_lanes;
+    /** Configured RMA multi-lane limit: a number or auto */
+    unsigned long                          max_rma_lanes_config;
+    /** RMA multi-lane limit when max_rma_lanes_config is auto */
+    unsigned                               max_rma_lanes_fallback;
     /** RMA multi-lane support */
     unsigned                               max_rma_lanes;
     /** Minimum allowed chunk size when splitting rndv message over multiple
