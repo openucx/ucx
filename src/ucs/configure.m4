@@ -179,7 +179,7 @@ AM_CONDITIONAL([HAVE_TUNING],[test "x$HAVE_TUNING" = "xyes"])
 
 
 #
-# Disable logging levels below INFO
+# Select the most verbose log level which is compiled in
 #
 AC_ARG_ENABLE([logging],
 	AS_HELP_STRING([--enable-logging],
