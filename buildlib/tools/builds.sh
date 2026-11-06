@@ -10,7 +10,6 @@ requested_gcc_module=${GCC_MODULE:-}
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
 build_mode=${build_mode:-long}
-require_ze=${require_ze:-}
 # Default no-GPU CI uses the ZE null driver; manual Intel GPU runs set yes.
 require_real_ze=${require_real_ze:-}
 
@@ -270,7 +269,8 @@ build_ugni() {
 # Build CUDA
 #
 build_cuda() {
-	if [[ ${CONTAINER} == *rocm* ]]; then
+	# ROCm images are covered by build_rocm.
+	if [ -f /opt/rocm/bin/rocminfo ]; then
 		echo "==== Not building with cuda flags ===="
 		return
 	fi
@@ -372,11 +372,6 @@ check_ze_devices() {
 # and no-GPU in the public Intel oneAPI CI container.
 #
 build_ze() {
-	if [ "${require_ze}" != "yes" ]; then
-		echo "==== Not building with ZE (require_ze!=yes) ===="
-		return
-	fi
-
 	echo "==== Build with enable ZE ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst \
 		"${compile_only_config_args[@]}" --with-ze
