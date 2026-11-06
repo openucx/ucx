@@ -879,7 +879,7 @@ UCS_TEST_F(test_memtype_explicit, events_preferred_when_available) {
     if (ucs_memtype_cache_global_instance == NULL) {
         UCS_TEST_SKIP_R("UCM memory event handler could not be installed");
     }
-    ASSERT_TRUE(ucs_memtype_cache_global_instance->has_events);
+    ASSERT_FALSE(ucs_memtype_cache_global_instance->is_explicit);
 
     unsigned num_regions =
         ucs_memtype_cache_global_instance->pgtable.num_regions;
