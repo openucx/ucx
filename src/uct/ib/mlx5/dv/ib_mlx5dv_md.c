@@ -3435,8 +3435,6 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
     md->direct_nic_sys_dev =
             uct_ib_mlx5dv_check_direct_nic(dev, md_config->ext.direct_nic);
 
-    /* No flush memory key, and atomic keys are the memory keys themselves, so
-     * the atomic MR id passed to peers must be 0 */
     md->super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
 
     /* cppcheck-suppress autoVariables */

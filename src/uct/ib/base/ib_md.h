@@ -177,9 +177,7 @@ typedef struct uct_ib_md {
      * when UMR regions can be created. Bits 0-7 must be zero always (assuming
      * that lowest byte is mkey tag which is not used). Non-zero bits 0-7
      * means that flush_rkey is invalid and flush_remote operation could not
-     * be initiated. An invalid flush_rkey must be UCT_IB_MD_INVALID_FLUSH_RKEY,
-     * so that atomic_mr_id is 0: rc_verbs does not pass atomic_mr_id to the
-     * peer without a valid flush_rkey. */
+     * be initiated.  */
     uint32_t                 flush_rkey;
     uint16_t                 vhca_id;
     uint64_t                 uuid;
@@ -429,7 +427,8 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 {
-    return md->flush_rkey >> 8;
+    return uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
+           (md->flush_rkey >> 8) : 0;
 }
 
 /**
