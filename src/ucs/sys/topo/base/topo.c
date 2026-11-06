@@ -319,7 +319,6 @@ unsigned ucs_topo_num_devices()
     return num_devices;
 }
 
-/* Must be called with the topology lock held */
 static ucs_topo_sys_device_info_t *
 ucs_topo_get_sys_device_nolock(ucs_sys_device_t sys_dev)
 {
@@ -335,7 +334,6 @@ ucs_topo_get_sys_device_nolock(ucs_sys_device_t sys_dev)
     return &ucs_topo_global_ctx.devices[sys_dev];
 }
 
-/* Must be called with the topology lock held */
 static ucs_status_t
 ucs_topo_get_sys_device_checked_nolock(ucs_sys_device_t sys_dev,
                                        ucs_topo_sys_device_info_t **device_p)
