@@ -176,3 +176,11 @@
     jjb_description: "UCX GTest on DL cluster (GB200/aarch64). Do NOT edit via Web GUI!"
     jobs:
       - "{jjb_proj}"
+
+- project:
+    name: ucx-test-efa
+    jjb_proj: "ucx-test-efa-oss"
+    jjb_conf_file: ".ci/pipeline/test_efa_matrix.yaml"
+    jjb_description: "UCX EFA tests with mock EFA devices (GitHub Blossom). Do NOT edit via Web GUI!"
+    jobs:
+      - "{jjb_proj}"
