@@ -66,6 +66,14 @@ enum {
 #define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
+/*
+ * Minimal peer release version which skips the slow BW lanes during the
+ * pairwise selection. Older peers select them and drop them after the
+ * selection, so the same is done with such peers.
+ */
+#define UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION 24
+
+
 /**
  * Calculates a score of a potential transport. Used both for the primary
  * selection score and for the tiebreak score.
@@ -135,6 +143,10 @@ typedef struct {
      * Zero allows only scores equal according to ucs_fp_compare(). */
     double                       score_tolerance;
 
+    /* Minimal lane bandwidth: candidates whose local or remote interface
+     * bandwidth is lower are not selected. Zero disables the check. */
+    double                       min_lane_bw;
+
     /* Flags that describe TL specifics */
     uint8_t                      tl_rsc_flags;
 
@@ -194,6 +206,7 @@ typedef struct ucp_wireup_msg_tokens_info_t {
 typedef struct {
     double          score;
     double          tiebreak;
+    double          bandwidth;
     unsigned        addr_index;
     unsigned        path_index;
     ucp_rsc_index_t rsc_index;
