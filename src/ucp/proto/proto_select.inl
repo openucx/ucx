@@ -177,7 +177,7 @@ ucp_proto_select_is_short(ucp_ep_h ep,
 {
     return ucs_likely(length <= proto_short->max_length_unknown_mem) ||
            ((length <= proto_short->max_length_host_mem) &&
-            ucs_memtype_cache_is_empty());
+            !ucs_memtype_cache_needs_detect());
 }
 
 #endif

@@ -654,7 +654,7 @@ ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
             ((length <= max_eager_short->memtype_on) &&
-             (ucs_memtype_cache_is_empty() ||
+             (!ucs_memtype_cache_needs_detect() ||
               ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) &&
                (param->memory_type == UCS_MEMORY_TYPE_HOST)))));
 }

@@ -42,7 +42,8 @@ typedef struct ucs_memory_info {
 struct ucs_memtype_cache {
     ucs_spinlock_t lock;       /**< Protects cache state */
     ucs_pgtable_t  pgtable;    /**< Cached regions */
-    int            has_events; /**< UCM events active */
+    int            is_explicit; /**< Only explicit registrations, no UCM
+                                     events */
 };
 
 
@@ -154,16 +155,16 @@ void ucs_memtype_cache_unregister(const void *address, size_t size);
 
 
 /**
- * Find if an event-tracked memtype cache is empty. An explicit-only cache
+ * Find if memory type detection is needed. An explicit-only cache 
  * cannot prove that an unregistered address is host memory.
  *
- * @return 1 if empty 0 if otherwise.
+ * @return 1 if detection is needed, 0 otherwise.
  */
-static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty(void)
+static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_needs_detect(void)
 {
-    return (ucs_memtype_cache_global_instance != NULL) &&
-           ucs_memtype_cache_global_instance->has_events &&
-           (ucs_memtype_cache_global_instance->pgtable.num_regions == 0);
+    return (ucs_memtype_cache_global_instance == NULL) ||
+           ucs_memtype_cache_global_instance->is_explicit ||
+           (ucs_memtype_cache_global_instance->pgtable.num_regions != 0);
 }
 
 

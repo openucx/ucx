@@ -296,7 +296,7 @@ int ucs_memtype_cache_is_explicit(void)
     }
 
     memtype_cache = ucs_memtype_cache_get_global();
-    return (memtype_cache != NULL) && !memtype_cache->has_events;
+    return (memtype_cache != NULL) && memtype_cache->is_explicit;
 }
 
 void ucs_memtype_cache_register(const void *address, size_t size,
@@ -316,7 +316,7 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     }
 
     memtype_cache = ucs_memtype_cache_get_global();
-    if ((memtype_cache == NULL) || memtype_cache->has_events) {
+    if ((memtype_cache == NULL) || !memtype_cache->is_explicit) {
         return;
     }
 
@@ -380,7 +380,7 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
     UCS_LIST_HEAD(region_list);
     ucs_status_t status, status_remove;
 
-    if ((memtype_cache == NULL) || memtype_cache->has_events || (size == 0) ||
+    if ((memtype_cache == NULL) || !memtype_cache->is_explicit || (size == 0) ||
         (size > UINTPTR_MAX - addr - (UCS_PGT_ADDR_ALIGN - 1))) {
         return;
     }
@@ -530,7 +530,7 @@ void ucs_memtype_cache_update(const void *address, size_t size,
 {
     /* A detected allocation cannot be cached without its free event. */
     if ((ucs_memtype_cache_global_instance == NULL) ||
-        !ucs_memtype_cache_global_instance->has_events) {
+        ucs_memtype_cache_global_instance->is_explicit) {
         return;
     }
 
@@ -543,7 +543,7 @@ void ucs_memtype_cache_update(const void *address, size_t size,
 void ucs_memtype_cache_remove(const void *address, size_t size)
 {
     if ((ucs_memtype_cache_global_instance == NULL) ||
-        !ucs_memtype_cache_global_instance->has_events) {
+        ucs_memtype_cache_global_instance->is_explicit) {
         return;
     }
 
@@ -641,7 +641,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     /* Without UCM events the cache holds only explicit registrations, so skip
      * the lock when there are none. A racing registration is not visible yet,
      * which is the same as a miss. */
-    if (!memtype_cache->has_events &&
+    if (memtype_cache->is_explicit &&
         (memtype_cache->pgtable.num_regions == 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -652,19 +652,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
                                   start);
     if (pgt_region == NULL) {
         ucs_trace("address 0x%lx not found", start);
-        status = memtype_cache->has_events ? UCS_ERR_NO_ELEM :
-                                             UCS_ERR_UNSUPPORTED;
+        status = memtype_cache->is_explicit ? UCS_ERR_UNSUPPORTED :
+                                              UCS_ERR_NO_ELEM;
         goto out_unlock;
     }
 
     region = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
     end    = pgt_region->end;
-    if (ucs_unlikely((start + size) > end) && !memtype_cache->has_events) {
+    if (ucs_unlikely((start + size) > end) && memtype_cache->is_explicit) {
         end = ucs_memtype_cache_extend_end(memtype_cache, region, start + size);
     }
 
     if (ucs_likely((start + size) <= end)) {
-        if (memtype_cache->has_events) {
+        if (!memtype_cache->is_explicit) {
             mem_info->base_address = (void*)region->super.start;
             mem_info->alloc_length = end - region->super.start;
         } else {
@@ -688,7 +688,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     status = UCS_OK;
 
     /* Only explicit registrations can cache HOST memory type */
-    ucs_assertv(!memtype_cache->has_events ||
+    ucs_assertv(memtype_cache->is_explicit ||
                 (mem_info->type != UCS_MEMORY_TYPE_HOST), "%s (%d)",
                 ucs_memory_type_names[mem_info->type], mem_info->type);
 
@@ -715,14 +715,14 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
         goto err_destroy_rwlock;
     }
 
-    self->has_events = 0;
+    self->is_explicit = 1;
     status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC |
                                    UCM_EVENT_MEM_TYPE_FREE  |
                                    UCM_EVENT_FLAG_EXISTING_ALLOC,
                                    1000, ucs_memtype_cache_event_callback,
                                    self);
     if (status == UCS_OK) {
-        self->has_events = 1;
+        self->is_explicit = 0;
     } else if ((ucs_global_opts.enable_memtype_cache != UCS_YES) ||
                ucm_global_opts.enable_events) {
         /* Explicit registration is used only if memory events were disabled */
@@ -745,7 +745,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
 {
-    if (self->has_events) {
+    if (!self->is_explicit) {
         ucm_unset_event_handler((UCM_EVENT_MEM_TYPE_ALLOC |
                                  UCM_EVENT_MEM_TYPE_FREE),
                                 ucs_memtype_cache_event_callback, self);
