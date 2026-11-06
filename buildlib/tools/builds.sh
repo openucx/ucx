@@ -230,6 +230,7 @@ build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
 	$MAKEP
+	check_ib_symbol_versions
 
 	# Show UCX info
 	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
@@ -608,6 +609,29 @@ check_no_gga() {
 		azure_log_error "build --without-gga created GGA object"
 		exit 1
 	fi
+}
+
+#
+# Oldest host rdma-core the IB modules must load on (Ubuntu 24.04 inbox);
+# newer functions are resolved with UCS_SYS_LIB_OPTIONAL_FUNC()
+#
+check_ib_symbol_versions() {
+	local lib versions failed=no
+
+	for lib in $(find ${ucx_build_dir}/src/uct/ib -path '*/.libs/libuct_*.so')
+	do
+		if ! versions=$(readelf -V "$lib")
+		then
+			azure_log_error "readelf -V $lib failed"
+			failed=yes
+		elif echo "$versions" | \
+		     grep -E 'Name: (MLX5_1\.(2[5-9]|[3-9][0-9]|[1-9][0-9]{2,})|IBVERBS_1\.(1[5-9]|[2-9][0-9]|[1-9][0-9]{2,}))'
+		then
+			azure_log_error "$lib requires rdma-core newer than 50"
+			failed=yes
+		fi
+	done
+	[ "$failed" = "no" ] || exit 1
 }
 
 source ${realdir}/soname-build.sh
