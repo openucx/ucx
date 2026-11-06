@@ -52,8 +52,8 @@ uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
     /* Optional: libmlx5 exports it only since MLX5_1.25 */
     static ucs_typeof(mlx5dv_get_data_direct_sysfs_path) *get_sysfs_path_func;
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
-    struct ibv_context *ctx     = dev->ibv_context;
-    ucs_sys_device_t sys_dev_ib = dev->sys_dev;
+    struct ibv_context *ctx          = dev->ibv_context;
+    ucs_sys_device_t sys_dev_ib      = dev->sys_dev;
     char sys_path[PATH_MAX];
     char dev_name[64];
     int ret;
@@ -79,10 +79,6 @@ uct_ib_mlx5dv_check_direct_nic(uct_ib_device_t *dev, int enabled)
 #if HAVE_DECL_MLX5DV_REG_DMABUF_MR
         uct_ib_mlx5dv_reg_dmabuf_mr_func = UCS_SYS_LIB_OPTIONAL_FUNC(
                 mlx5dv_query_device, mlx5dv_reg_dmabuf_mr, "MLX5_1.25");
-        if (uct_ib_mlx5dv_reg_dmabuf_mr_func == NULL) {
-            /* Direct NIC registration needs both functions */
-            get_sysfs_path_func = NULL;
-        }
 #endif
     }
 
