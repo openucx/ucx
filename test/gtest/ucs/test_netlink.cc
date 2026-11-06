@@ -38,23 +38,16 @@ protected:
     }
 
     static void append_nlmsg(std::vector<uint8_t> &stream, unsigned short type,
-                             const void *hdr = NULL, size_t hdr_size = 0,
-                             const std::vector<uint8_t> &attrs = {})
+                             const void *hdr, size_t hdr_size)
     {
-        size_t msg_len = NLMSG_LENGTH(NLMSG_ALIGN(hdr_size) + attrs.size());
-        size_t offset  = stream.size();
+        size_t msg_len      = NLMSG_LENGTH(hdr_size);
+        size_t offset       = stream.size();
         struct nlmsghdr nlh = {static_cast<uint32_t>(msg_len), type,
                                NLM_F_MULTI, 0, 0};
 
         stream.resize(offset + NLMSG_ALIGN(msg_len), 0);
         memcpy(&stream[offset], &nlh, sizeof(nlh));
-        if (hdr != NULL) {
-            memcpy(&stream[offset + NLMSG_HDRLEN], hdr, hdr_size);
-        }
-        if (!attrs.empty()) {
-            memcpy(&stream[offset + NLMSG_HDRLEN + NLMSG_ALIGN(hdr_size)],
-                   &attrs[0], attrs.size());
-        }
+        memcpy(&stream[offset + NLMSG_HDRLEN], hdr, hdr_size);
     }
 
     static ucs_status_t count_msg_cb(const struct nlmsghdr*, void *arg)
