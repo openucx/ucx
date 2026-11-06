@@ -866,17 +866,6 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     return uct_ib_device_is_supported(device);
 }
 
-static void uct_ib_log_mellanox_visible_devices()
-{
-    const char *value = getenv("MELLANOX_VISIBLE_DEVICES");
-
-    if (value == NULL) {
-        ucs_debug("MELLANOX_VISIBLE_DEVICES is not set");
-    } else {
-        ucs_debug("MELLANOX_VISIBLE_DEVICES is '%s'", value);
-    }
-}
-
 ucs_status_t
 uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
                                unsigned *num_resources_p,
@@ -887,8 +876,6 @@ uct_ib_base_query_md_resources(uct_md_resource_desc_t **resources_p,
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
-
-    uct_ib_log_mellanox_visible_devices();
 
     /* Get device list from driver */
     device_list = ibv_get_device_list(&num_devices);
@@ -1747,6 +1734,17 @@ uct_component_t uct_ib_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
+static void uct_ib_log_mellanox_visible_devices()
+{
+    const char *value = getenv("MELLANOX_VISIBLE_DEVICES");
+
+    if (value == NULL) {
+        ucs_debug("MELLANOX_VISIBLE_DEVICES is not set");
+    } else {
+        ucs_debug("MELLANOX_VISIBLE_DEVICES is '%s'", value);
+    }
+}
+
 void UCS_F_CTOR uct_ib_init()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
@@ -1758,6 +1756,8 @@ void UCS_F_CTOR uct_ib_init()
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
     }
+
+    uct_ib_log_mellanox_visible_devices();
 
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 }
