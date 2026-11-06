@@ -670,10 +670,10 @@ static ucs_status_t uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
     }
 
     if (if_indextoname(vrf_index, iface->config.vrf_name) == NULL) {
-        ucs_diag("tcp_iface %p: failed to get name of VRF device index %d: %m",
-                 iface, vrf_index);
-        iface->config.vrf_name[0] = '\0';
-        return UCS_OK;
+        ucs_error("tcp_iface %p: cannot use device %s: failed to get name of "
+                  "VRF device index %d: %m",
+                  iface, iface->if_name, vrf_index);
+        return UCS_ERR_NO_DEVICE;
     }
 
     ucs_debug("tcp_iface %p: %s belongs to VRF %s", iface, iface->if_name,
