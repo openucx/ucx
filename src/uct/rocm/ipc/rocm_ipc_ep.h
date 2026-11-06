@@ -13,6 +13,13 @@
 
 #include "rocm_ipc_cache.h"
 
+#include <uct/rocm/base/rocm_signal.h>
+
+typedef struct uct_rocm_ipc_signal_desc {
+    uct_rocm_base_signal_desc_t super;
+    uct_rocm_ipc_cache_region_t *region; /* Pinned until the copy completes */
+} uct_rocm_ipc_signal_desc_t;
+
 typedef struct uct_rocm_ipc_ep {
     uct_base_ep_t   super;
     pid_t           remote_pid;

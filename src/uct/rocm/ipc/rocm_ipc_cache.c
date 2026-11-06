@@ -346,7 +346,7 @@ uct_rocm_ipc_cache_region_drop_locked(uct_rocm_ipc_cache_region_t *region,
 
     /* A pinned mapping is detached by the last unpin. */
     mapped_addr = NULL;
-    if (region->pin_count == 0) {
+    if (ucs_atomic_cswap32(&region->pin_count, 0, 0) == 0) {
         mapped_addr         = region->mapped_addr;
         region->mapped_addr = NULL;
     }
@@ -842,7 +842,7 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
             ucs_atomic_add32(&watch_region->refcount, 1);
         }
         if (region_p != NULL) {
-            ++region->pin_count;
+            ucs_atomic_add32(&region->pin_count, 1);
             ucs_atomic_add32(&region->refcount, 1);
             pinned = region;
         }
@@ -869,17 +869,31 @@ uct_rocm_ipc_cache_map_memhandle(uct_rocm_ipc_key_t *key, void **mapped_addr,
 
 void uct_rocm_ipc_cache_unpin(uct_rocm_ipc_cache_region_t *region)
 {
-    ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
-    ucs_assert(region->pin_count > 0);
-    if ((--region->pin_count == 0) &&
+    uint32_t pin_count;
+
+    pin_count = ucs_atomic_fsub32(&region->pin_count, 1);
+    ucs_assert(pin_count > 0);
+
+    /* A drop sets deactivate before it reads pin_count, and both atomics are
+     * full barriers. So if deactivate is still 0 here, any later drop sees the
+     * decremented pin_count and detaches the mapping itself, and a drop that
+     * saw a re-pin leaves the detach to that pin's last unpin. The lock is
+     * needed only for an already deactivated region. */
+    if ((pin_count == 1) &&
         (ucs_atomic_cswap32(&region->deactivate, 0, 0) != 0)) {
-        if (hsa_amd_ipc_memory_detach(region->mapped_addr) !=
-            HSA_STATUS_SUCCESS) {
-            ucs_warn("failed to unmap addr:%p", region->mapped_addr);
+        /* Before the lock is taken, another thread may have pinned the region
+         * again, or a drop that saw no pins may have detached the mapping. */
+        ucs_rw_spinlock_write_lock(&uct_rocm_ipc_remote_cache.lock);
+        if ((ucs_atomic_cswap32(&region->pin_count, 0, 0) == 0) &&
+            (region->mapped_addr != NULL)) {
+            if (hsa_amd_ipc_memory_detach(region->mapped_addr) !=
+                HSA_STATUS_SUCCESS) {
+                ucs_warn("failed to unmap addr:%p", region->mapped_addr);
+            }
+            region->mapped_addr = NULL;
         }
-        region->mapped_addr = NULL;
+        ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
     }
-    ucs_rw_spinlock_write_unlock(&uct_rocm_ipc_remote_cache.lock);
 
     uct_rocm_ipc_cache_region_unref(region);
 }

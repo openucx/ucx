@@ -43,6 +43,13 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_ipc_ep_t, uct_ep_t);
     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                    (_rkey))
 
+static void uct_rocm_ipc_ep_detach(void *mapped_addr)
+{
+    if (hsa_amd_ipc_memory_detach(mapped_addr) != HSA_STATUS_SUCCESS) {
+        ucs_warn("failed to detach ipc memory region %p", mapped_addr);
+    }
+}
+
 ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
                                    uint64_t remote_addr,
                                    const uct_iov_t *iov,
@@ -59,12 +66,13 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rocm_ipc_iface_t);
     void *remote_base_addr, *remote_copy_addr;
     void *dst_addr, *src_addr;
-    uct_rocm_base_signal_desc_t *rocm_ipc_signal;
+    uct_rocm_ipc_signal_desc_t *rocm_ipc_signal;
     void *tmp_base_ptr;
     size_t tmp_base_size;
     hsa_agent_t *gpu_agents;
     hsa_amd_pointer_type_t mem_type;
     int num_gpu;
+    uct_rocm_ipc_cache_region_t *region = NULL;
 
     /* no data to deliver */
     if (!size)
@@ -86,7 +94,9 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (iface->config.enable_ipc_handle_cache) {
-        ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr, NULL);
+        /* The pin keeps the mapping until the async copy completes */
+        ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr,
+                                               &region);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
                       ret);
@@ -113,7 +123,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
         (mem_type == HSA_EXT_POINTER_TYPE_UNKNOWN)) {
         ucs_error("remote addr %p %lu is not ROCM memory status=%d mem_type %d",
                   remote_copy_addr, size, status, mem_type);
-        return UCS_ERR_INVALID_ADDR;
+        ret = UCS_ERR_INVALID_ADDR;
+        goto err_release;
     }
 
     if (remote_agent.handle == 0) {
@@ -128,7 +139,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
             ucs_error("failed to enable direct access for mem addr %p agent "
                       "%lu\n",
                       (void*)remote_addr, remote_agent.handle);
-            return UCS_ERR_INVALID_ADDR;
+            ret = UCS_ERR_INVALID_ADDR;
+            goto err_release;
         }
     }
     if (is_put) {
@@ -147,33 +159,45 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     if (rocm_ipc_signal == NULL) {
         ucs_error("increase the maximum number of signal pool elements with "
                   "UCX_ROCM_IPC_SIGPOOL_MAX_ELEMS");
-        return UCS_ERR_IO_ERROR;
+        ret = UCS_ERR_IO_ERROR;
+        goto err_release;
     }
 
-    hsa_signal_store_screlease(rocm_ipc_signal->signal, 1);
+    hsa_signal_store_screlease(rocm_ipc_signal->super.signal, 1);
 
     status = UCS_PROFILE_CALL_ALWAYS(hsa_amd_memory_async_copy, dst_addr,
                                      dst_agent, src_addr, src_agent, size, 0,
-                                     NULL, rocm_ipc_signal->signal);
+                                     NULL, rocm_ipc_signal->super.signal);
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("copy error");
         ucs_mpool_put(rocm_ipc_signal);
-        return UCS_ERR_IO_ERROR;
+        ret = UCS_ERR_IO_ERROR;
+        goto err_release;
     }
 
-    rocm_ipc_signal->comp = comp;
-    if (iface->config.enable_ipc_handle_cache) {
-        rocm_ipc_signal->mapped_addr = NULL;
+    rocm_ipc_signal->super.comp = comp;
+    if (region != NULL) {
+        rocm_ipc_signal->super.mapped_addr = NULL;
+        rocm_ipc_signal->region            = region;
     } else {
-        rocm_ipc_signal->mapped_addr = remote_base_addr;
+        rocm_ipc_signal->super.mapped_addr = remote_base_addr;
+        rocm_ipc_signal->region            = NULL;
     }
-    ucs_queue_push(&iface->signal_queue, &rocm_ipc_signal->queue);
+    ucs_queue_push(&iface->signal_queue, &rocm_ipc_signal->super.queue);
 
     ucs_trace("rocm async copy issued :%p remote:%p, local:%p  len:%ld",
               rocm_ipc_signal, (void *)remote_addr, local_addr, size);
 
     return UCS_INPROGRESS;
+
+err_release:
+    if (region != NULL) {
+        uct_rocm_ipc_cache_unpin(region);
+    } else {
+        uct_rocm_ipc_ep_detach(remote_base_addr);
+    }
+    return ret;
 }
 
 ucs_status_t uct_rocm_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,

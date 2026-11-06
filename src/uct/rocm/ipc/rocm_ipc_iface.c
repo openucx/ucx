@@ -168,21 +168,121 @@ uct_rocm_ipc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_INPROGRESS;
 }
 
+/* The signal pool holds uct_rocm_ipc_signal_desc_t. Base flush fills only the
+ * common prefix, so this path sets region before the descriptor is queued. */
 static ucs_status_t
 uct_rocm_ipc_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                  uct_rocm_ipc_iface_t);
-    return uct_rocm_base_ep_flush(tl_ep, &iface->signal_pool,
-                                  &iface->signal_queue, comp);
+    uct_rocm_ipc_signal_desc_t *flush_signal;
+
+    if (ucs_queue_is_empty(&iface->signal_queue)) {
+        UCT_TL_EP_STAT_FLUSH(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_OK;
+    }
+
+    if (comp == NULL) {
+        UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+        return UCS_INPROGRESS;
+    }
+
+    flush_signal = ucs_mpool_get(&iface->signal_pool);
+    if (flush_signal == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    hsa_signal_store_screlease(flush_signal->super.signal, 0);
+    flush_signal->super.comp        = comp;
+    flush_signal->super.mapped_addr = NULL;
+    flush_signal->region            = NULL;
+    ucs_queue_push(&iface->signal_queue, &flush_signal->super.queue);
+
+    UCT_TL_EP_STAT_FLUSH_WAIT(ucs_derived_of(tl_ep, uct_base_ep_t));
+    return UCS_INPROGRESS;
 }
 
 static unsigned uct_rocm_ipc_iface_progress(uct_iface_h tl_iface)
 {
     uct_rocm_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
+    static const unsigned max_signals = 16;
+    unsigned count                    = 0;
+    uct_rocm_ipc_signal_desc_t *rocm_signal;
+    hsa_signal_value_t signal_value;
+    hsa_status_t status;
+    ucs_status_t completion_status;
 
-    return uct_rocm_base_progress(&iface->signal_queue);
+    ucs_queue_for_each_extract(rocm_signal, &iface->signal_queue, super.queue,
+                               ((signal_value = hsa_signal_load_scacquire(
+                                         rocm_signal->super.signal)) <= 0) &&
+                                       (count < max_signals)) {
+        if (signal_value < 0) {
+            ucs_error("rocm async copy failed with signal value %ld",
+                      (long)signal_value);
+            completion_status = UCS_ERR_IO_ERROR;
+        } else {
+            completion_status = UCS_OK;
+        }
+
+        if (rocm_signal->super.comp != NULL) {
+            uct_invoke_completion(rocm_signal->super.comp, completion_status);
+        }
+
+        /* The pin keeps a cached mapping alive until this copy finishes.
+         * An uncached attach is released through super.mapped_addr. */
+        if (rocm_signal->region != NULL) {
+            uct_rocm_ipc_cache_unpin(rocm_signal->region);
+            rocm_signal->region = NULL;
+        }
+
+        if (rocm_signal->super.mapped_addr != NULL) {
+            status = hsa_amd_ipc_memory_detach(rocm_signal->super.mapped_addr);
+            if (status != HSA_STATUS_SUCCESS) {
+                ucs_warn("failed to detach ipc memory region");
+            }
+            rocm_signal->super.mapped_addr = NULL;
+        }
+
+        ucs_trace_poll("rocm signal done :%p status:%s", rocm_signal,
+                       ucs_status_string(completion_status));
+        ucs_mpool_put(rocm_signal);
+        count++;
+    }
+
+    return count;
 }
+
+static void
+uct_rocm_ipc_signal_desc_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    uct_rocm_ipc_signal_desc_t *desc = obj;
+    hsa_status_t status;
+
+    memset(desc, 0, sizeof(*desc));
+    status = hsa_signal_create(1, 0, NULL, &desc->super.signal);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_fatal("fail to create signal");
+    }
+}
+
+static void uct_rocm_ipc_signal_desc_cleanup(ucs_mpool_t *mp, void *obj)
+{
+    uct_rocm_ipc_signal_desc_t *desc = obj;
+    hsa_status_t status;
+
+    status = hsa_signal_destroy(desc->super.signal);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_warn("fail to destroy signal");
+    }
+}
+
+static ucs_mpool_ops_t uct_rocm_ipc_signal_desc_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = uct_rocm_ipc_signal_desc_init,
+    .obj_cleanup   = uct_rocm_ipc_signal_desc_cleanup,
+    .obj_str       = NULL
+};
 
 static uct_iface_internal_ops_t uct_rocm_ipc_iface_internal_ops = {
     .iface_query_v2         = uct_iface_base_query_v2,
@@ -239,10 +339,10 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->config = config->params;
 
     ucs_mpool_params_reset(&mp_params);
-    mp_params.elem_size       = sizeof(uct_rocm_base_signal_desc_t);
+    mp_params.elem_size       = sizeof(uct_rocm_ipc_signal_desc_t);
     mp_params.elems_per_chunk = 128;
     mp_params.max_elems       = config->params.sigpool_max_elems;
-    mp_params.ops             = &uct_rocm_base_signal_desc_mpool_ops;
+    mp_params.ops             = &uct_rocm_ipc_signal_desc_mpool_ops;
     mp_params.name            = "ROCM_IPC signal objects";
     status = ucs_mpool_init(&mp_params, &self->signal_pool);
     if (status != UCS_OK) {
