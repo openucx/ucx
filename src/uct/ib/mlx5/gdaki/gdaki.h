@@ -40,7 +40,6 @@ typedef struct {
     void                         *gpu_mem;
     uct_cuda_copy_alloc_handle_t gpu_raw;
     struct mlx5dv_devx_umem      *umem;
-    uct_rc_gdaki_devx_uar_t      *uar_wrap;
 } uct_rc_gdaki_channel_block_mem_t;
 
 typedef struct uct_rc_gdaki_iface {
@@ -51,6 +50,7 @@ typedef struct uct_rc_gdaki_iface {
     unsigned                   ep_alloc_mode;
     pthread_mutex_t            ep_init_lock;
     ucs_mpool_t                channel_pool;
+    uct_rc_gdaki_devx_uar_t    *uar_wrap;
     struct {
         CUdevice  dev;
         CUcontext ctx;
