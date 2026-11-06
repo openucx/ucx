@@ -551,6 +551,8 @@ UCS_TEST_F(test_topo, get_distance_no_sysfs_entry) {
 
     const ucs::scoped_log_level enable_debug(UCS_LOG_LEVEL_DEBUG);
     ASSERT_UCS_OK(ucs_topo_get_distance(sys_dev1, sys_dev2, &distance));
+    EXPECT_EQ(ucs_topo_default_distance.latency, distance.latency);
+    EXPECT_EQ(ucs_topo_default_distance.bandwidth, distance.bandwidth);
 }
 
 UCS_TEST_F(test_topo, provider_push_pop) {

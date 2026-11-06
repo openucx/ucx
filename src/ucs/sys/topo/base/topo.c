@@ -855,6 +855,7 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
     return UCS_OK;
 
 out_default:
+    /* If a device is unknown or not registered, assume near topology */
     return ucs_topo_get_distance_default(sys_dev1, sys_dev2, distance);
 }
 
@@ -1433,6 +1434,7 @@ ucs_status_t ucs_topo_sys_device_enable_aux_path(ucs_sys_device_t sys_dev)
 
     /* Already a memory device: keep the existing matches and skip the rescan */
     if (device->sibling_role == UCS_TOPO_SIBLING_ROLE_MEM) {
+        status = UCS_OK;
         goto out_unlock;
     }
 
@@ -1465,6 +1467,7 @@ ucs_status_t ucs_topo_sys_device_set_sys_dev_aux(ucs_sys_device_t sys_dev,
     /* Same auxiliary device as before: skip the rescan */
     if ((device->sibling_role == UCS_TOPO_SIBLING_ROLE_DEV) &&
         (device->sys_dev_aux == sys_dev_aux)) {
+        status = UCS_OK;
         goto out_unlock;
     }
 
