@@ -379,8 +379,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->bandwidth.dedicated = 0;
     attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
-    attr->priority            = (iface->config.prefer_default &&
-                                 !iface->netif_caps.is_default) ? 1 : 0;
+    attr->priority            = iface->netif_caps.priority;
 
     return UCS_OK;
 }
@@ -672,6 +671,7 @@ static ucs_status_t uct_tcp_iface_netif_caps_init(uct_tcp_iface_t *iface)
     const char *sysfs_path;
     char *path_buffer;
     ucs_status_t status;
+    int is_default;
 
     status = uct_tcp_netif_caps(iface->if_name, &iface->netif_caps.latency,
                                 &network_bw);
@@ -691,12 +691,17 @@ static ucs_status_t uct_tcp_iface_netif_caps_init(uct_tcp_iface_t *iface)
     iface->netif_caps.bandwidth = ucs_min(pci_bw, network_bw);
 
     if (!iface->config.prefer_default) {
-        iface->netif_caps.is_default = 0;
+        iface->netif_caps.priority = 0;
         return UCS_OK;
     }
 
-    return uct_tcp_netif_is_default(iface->if_name,
-                                    &iface->netif_caps.is_default);
+    status = uct_tcp_netif_is_default(iface->if_name, &is_default);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->netif_caps.priority = is_default ? 1 : 0;
+    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,

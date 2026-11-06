@@ -428,7 +428,7 @@ typedef struct uct_tcp_iface {
     struct {
         double                    latency;           /* Netdev latency */
         double                    bandwidth;         /* Min of netdev and PCI BW */
-        int                       is_default;        /* Netdev has the default route */
+        uint8_t                   priority;          /* Iface priority */
     } netif_caps;
 
     struct {
