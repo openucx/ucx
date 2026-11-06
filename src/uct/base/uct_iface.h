@@ -420,6 +420,7 @@ typedef struct uct_tl_device_resource {
                                               (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
     ucs_sys_device_t         sys_device; /**< The identifier associated with the device
                                               bus_id as captured in ucs_sys_bus_id_t struct */
+    ucs_sys_device_t         ctl_device; /**< Device controlling transport */
 } uct_tl_device_resource_t;
 
 

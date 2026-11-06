@@ -285,6 +285,7 @@ uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
         }
         devices[i].type       = UCT_DEVICE_TYPE_SELF;
         devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        devices[i].ctl_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
     *tl_devices_p     = devices;
