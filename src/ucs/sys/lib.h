@@ -47,6 +47,8 @@ unsigned long ucs_sys_get_lib_base_addr();
  * @param [in] sym_name     Name of the optional symbol.
  * @param [in] sym_version  Symbol version node, or NULL for the default
  *                          version. Ignored if dlvsym() is not available.
+ *                          A warning is printed if the library defines the
+ *                          symbol only in other versions.
  *
  * @return Symbol address, or NULL if the library does not define it.
  */

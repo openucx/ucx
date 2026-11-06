@@ -52,11 +52,18 @@ unsigned long ucs_sys_get_lib_base_addr()
     return (uintptr_t)dl_info.dli_fbase;
 }
 
+static int ucs_sys_is_lib_sym(const void *sym, const Dl_info *lib_info)
+{
+    Dl_info sym_info;
+
+    return (sym != NULL) && (dladdr(sym, &sym_info) != 0) &&
+           (sym_info.dli_fbase == lib_info->dli_fbase);
+}
+
 void *ucs_sys_get_lib_sym(const void *lib_addr, const char *sym_name,
                           const char *sym_version)
 {
     Dl_info lib_info;
-    Dl_info sym_info;
     const char *error;
     void *dl;
     void *sym;
@@ -79,6 +86,12 @@ void *ucs_sys_get_lib_sym(const void *lib_addr, const char *sym_name,
     /* The version a direct call would bind to when linked */
     sym = (sym_version != NULL) ? dlvsym(dl, sym_name, sym_version) :
                                   dlsym(dl, sym_name);
+    if ((sym == NULL) && (sym_version != NULL) &&
+        ucs_sys_is_lib_sym(dlsym(dl, sym_name), &lib_info)) {
+        /* Most likely a wrong version node in the caller */
+        ucs_warn("%s defines %s, but not in version %s", lib_info.dli_fname,
+                 sym_name, sym_version);
+    }
 #else
     sym_version = NULL;
     sym         = dlsym(dl, sym_name);
@@ -87,8 +100,7 @@ void *ucs_sys_get_lib_sym(const void *lib_addr, const char *sym_name,
         ucs_debug("%s@%s is not provided by %s", sym_name,
                   (sym_version != NULL) ? sym_version : "default",
                   lib_info.dli_fname);
-    } else if ((dladdr(sym, &sym_info) == 0) ||
-               (sym_info.dli_fbase != lib_info.dli_fbase)) {
+    } else if (!ucs_sys_is_lib_sym(sym, &lib_info)) {
         /* Found in a dependency, not in the requested library */
         ucs_debug("ignoring %s which is not defined in %s", sym_name,
                   lib_info.dli_fname);

@@ -231,7 +231,10 @@ UCS_TEST_F(test_sys, get_lib_sym_version) {
     ASSERT_NE(nullptr, sym);
 
     EXPECT_EQ(sym, ucs_sys_get_lib_sym(sym, sym_name, "GLIBCXX_3.4"));
+
+    scoped_log_handler wrap_warn(wrap_warns_logger);
     EXPECT_EQ(nullptr, ucs_sys_get_lib_sym(sym, sym_name, "GLIBCXX_NO_SUCH"));
+    EXPECT_EQ(1u, m_warnings.size());
 #else
     UCS_TEST_SKIP_R("dlvsym() is not available");
 #endif
