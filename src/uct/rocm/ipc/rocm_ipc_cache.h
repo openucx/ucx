@@ -30,7 +30,8 @@ typedef struct {
     uint32_t                deactivate;   /**< 1 after unmap is claimed */
     uint32_t                handler_done; /**< Async handler entered once */
     int                     handler_armed; /**< Async handler owns signal */
-    unsigned                pin_count;    /**< Consumers holding mapped_addr */
+    uint32_t                pin_count;    /**< Consumers holding mapped_addr,
+                                               incremented under the lock */
     int                     in_pgtable;   /**< Region is linked in @a cache */
 } uct_rocm_ipc_cache_region_t;
 
