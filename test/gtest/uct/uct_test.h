@@ -209,6 +209,9 @@ protected:
 
         ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
                             const uct_listener_params_t &params);
+
+        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
+
         void disconnect(uct_ep_h ep);
 
         void flush() const;
@@ -227,9 +230,6 @@ protected:
         private:
             async_wrapper(const async_wrapper &);
         };
-
-
-        void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
