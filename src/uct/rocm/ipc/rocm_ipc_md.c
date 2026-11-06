@@ -72,8 +72,10 @@ uct_rocm_ipc_mkey_pack(uct_md_h uct_md, uct_mem_h memh, void *address,
     return UCS_OK;
 }
 
+#ifdef HAVE_ROCM_VMM_TYPE
 /* Unique per-registration id; survives fd reuse for cache matching. */
 static volatile uint64_t uct_rocm_ipc_vmm_reg_id_gen = 0;
+#endif
 
 static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
@@ -160,8 +162,14 @@ static ucs_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
         key->is_vmm     = 1;
         key->pid        = getpid();
         key->pid_ns     = ucs_sys_get_ns(UCS_SYS_NS_TYPE_PID);
-        /* VMM manages its own lifecycle via reg_id/registry; it does not use
-         * the free-invalidation signal. Leave ipc_signal zeroed. */
+        /* Export a free-invalidation signal so the owner's vmem_unmap tells
+         * importers to detach, releasing the allocation their mapping pins. */
+        memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+        status = uct_rocm_ipc_export_add(key->address, key->length,
+                                         &key->ipc_signal);
+        if (status != UCS_OK) {
+            memset(&key->ipc_signal, 0, sizeof(key->ipc_signal));
+        }
         return UCS_OK;
     }
 #endif
