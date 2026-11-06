@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2021. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term "Broadcom"
 * refers to Broadcom Inc. and/or its subsidiaries.
 * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
@@ -20,9 +20,11 @@
 #include <ucs/profile/profile.h>
 #include <ucs/type/class.h>
 #include <ucs/type/cpu_set.h>
+#include <ucs/type/init_once.h>
 #include <ucs/type/serialize.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
 #include <net/if.h>
@@ -1431,6 +1433,25 @@ static unsigned uct_ib_iface_roce_lag_level(uct_ib_iface_t *iface)
                                             iface->gid_info.gid_index);
 }
 
+#if HAVE_DECL_IBV_QUERY_PORT_SPEED
+/* Optional: libibverbs exports it only since IBVERBS_1.16 */
+static ucs_typeof(ibv_query_port_speed) *uct_ib_iface_query_port_speed_func;
+
+static void uct_ib_iface_query_port_speed_init()
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+
+    UCS_INIT_ONCE(&init_once) {
+        uct_ib_iface_query_port_speed_func = UCS_SYS_LIB_OPTIONAL_FUNC(
+                ibv_open_device, ibv_query_port_speed, "IBVERBS_1.16");
+    }
+}
+#else
+static void uct_ib_iface_query_port_speed_init()
+{
+}
+#endif
+
 static double
 uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
 {
@@ -1440,8 +1461,13 @@ uct_ib_iface_query_port_speed_gbps(uct_ib_iface_t *iface)
     uint64_t port_speed;
     int ret;
 
-    ret = ibv_query_port_speed(dev->ibv_context, iface->config.port_num,
-                               &port_speed);
+    if (uct_ib_iface_query_port_speed_func == NULL) {
+        return 0.0;
+    }
+
+    ret = uct_ib_iface_query_port_speed_func(dev->ibv_context,
+                                             iface->config.port_num,
+                                             &port_speed);
     if (ret != 0) {
         log_level = ((errno == EOPNOTSUPP) ||
                      (errno == EPROTONOSUPPORT) ||
@@ -1791,6 +1817,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (status != UCS_OK) {
         goto err;
     }
+
+    uct_ib_iface_query_port_speed_init();
 
     self->ops                       = ops;
 
