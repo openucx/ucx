@@ -100,41 +100,45 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
                                    ucs_log_level_t err_log_level,
                                    int *msg_done_p)
 {
-    ucs_status_t status        = UCS_INPROGRESS;
-    int dump_intr              = 0;
-    const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
+    int dump_intr = 0;
+    const struct nlmsghdr *nlh;
+    ucs_status_t status;
     int err;
 
     *msg_done_p = 0;
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len)) {
-        if (nlh->nlmsg_flags & NLM_F_DUMP_INTR) {
+
+    for (nlh = msg; NLMSG_OK(nlh, msg_len); nlh = NLMSG_NEXT(nlh, msg_len)) {
+        if (!dump_intr && (nlh->nlmsg_flags & NLM_F_DUMP_INTR)) {
             ucs_debug("netlink dump was interrupted");
             dump_intr = 1;
         }
 
-        err = (nlh->nlmsg_len >= NLMSG_LENGTH(sizeof(err))) ?
-                      *(const int*)NLMSG_DATA(nlh) :
-                      0;
-        if (ucs_netlink_is_msg_done(nlh)) {
-            *msg_done_p = 1;
-            if (err >= 0) {
-                break;
-            }
-        }
-
         if (ucs_netlink_is_msg_done(nlh) || (nlh->nlmsg_type == NLMSG_ERROR)) {
-            ucs_log(err_log_level,
-                    "received error response from netlink err %d: %s", err,
-                    strerror(-err));
-            return UCS_ERR_IO_ERROR;
+            err = (nlh->nlmsg_len >= NLMSG_LENGTH(sizeof(int))) ?
+                          *(const int*)NLMSG_DATA(nlh) :
+                          0;
+            if (ucs_netlink_is_msg_done(nlh)) {
+                *msg_done_p = 1;
+                if (err >= 0) {
+                    break;
+                }
+            }
+
+            goto err;
         }
 
         status = parse_cb(nlh, arg);
-        nlh    = NLMSG_NEXT(nlh, msg_len);
+        if (status != UCS_INPROGRESS) {
+            return status;
+        }
     }
 
-    return (status != UCS_INPROGRESS) ? status :
-                                        (dump_intr ? UCS_ERR_BUSY : UCS_OK);
+    return dump_intr ? UCS_ERR_BUSY : UCS_OK;
+
+err:
+    ucs_log(err_log_level, "received error response from netlink err %d: %s",
+            err, strerror(-err));
+    return UCS_ERR_IO_ERROR;
 }
 
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
