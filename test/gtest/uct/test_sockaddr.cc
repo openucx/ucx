@@ -866,22 +866,25 @@ UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close_large_priv_data)
 {
     m_entities.clear();
 
-    /* Set the values for max send/recv socket buffers (for tcp_sockcm) to
-     * small enough values to have the send/recv of a large data buffer in
-     * batches, and not all data at once.
-     * Set the value of the transport's private data length to a large enough
-     * value to be able to send/recv the batches.
-     * A transport for which these values are not configurable, like rdmacm,
-     * these operations will fail and have no effect. */
-    if (m_cm_config) {
-        /* coverity[check_return] */
-        uct_config_modify(m_cm_config, "PRIV_DATA_LEN", "900KB");
-        uct_config_modify(m_cm_config, "SNDBUF", "100KB");
-        uct_config_modify(m_cm_config, "RCVBUF", "100KB");
+    /* Set the max send/recv socket buffers of tcp_sockcm small enough to
+     * send/recv a large private data in batches rather than all at once, and
+     * its private data length large enough to hold that data.
+     * Other CMs, like rdmacm, have no such settings and cannot send the large
+     * private data, so the test is skipped for them. */
+    if (GetParam()->component_name == "tcp") {
+        modify_config("TCP_CM_PRIV_DATA_LEN", "900KB");
+        modify_config("TCP_CM_SNDBUF", "100KB");
+        modify_config("TCP_CM_RCVBUF", "100KB");
     }
 
     /* recreate m_server and m_client with the above env parameters changed */
     init();
+
+    if ((m_client->max_conn_priv < m_long_priv_data_len) ||
+        (m_server->max_conn_priv < m_long_priv_data_len)) {
+        UCS_TEST_SKIP_R("CM does not support large private data");
+    }
+
     basic_listen_connect_disconnect();
 }
 
