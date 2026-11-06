@@ -538,6 +538,7 @@ protected:
         ss << GetParam().transports;
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
+        ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
         scoped_log_handler wrap_err(wrap_errors_logger);
 
         /* run_test() checks peer 1, which fails with its own error or with
@@ -558,16 +559,17 @@ private:
     ucx_perf_counter_t m_warmup_iter = 0;
 };
 
-UCS_TEST_P(test_ucp_perf_validate, fail_in_warmup)
+UCS_TEST_SKIP_COND_P(test_ucp_perf_validate, fail_in_warmup,
+                     has_transport("self"))
 {
     /* The first warmup round sends only sequence number 0, which the data of
      * the peer may match */
     test_validation_failure(2);
 }
 
-UCS_TEST_P(test_ucp_perf_validate, fail_in_run)
+UCS_TEST_SKIP_COND_P(test_ucp_perf_validate, fail_in_run, has_transport("self"))
 {
     test_validation_failure(0);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_perf_validate, shm, "shm")
+UCP_INSTANTIATE_TEST_CASE(test_ucp_perf_validate)
