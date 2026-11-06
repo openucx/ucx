@@ -56,6 +56,67 @@ typedef enum uct_ep_operation {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Endpoint-specific event types.
+ */
+enum uct_ep_event_types {
+    /** Endpoint path speed changed. The updated bandwidth estimate is available
+     *  through @ref uct_ep_query. */
+    UCT_EP_EVENT_PATH_SPEED_CHANGE = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Endpoint-aware event callback.
+ *
+ * Transports should use this callback for events that identify a specific
+ * endpoint, such as @ref UCT_EP_EVENT_PATH_SPEED_CHANGE.
+ *
+ * @param [in]  arg      User argument registered with
+ *                       @ref uct_iface_set_ep_event_handler.
+ * @param [in]  ep       Endpoint associated with the event. It is valid only
+ *                       for the duration of the callback.
+ * @param [in]  events   Event flags from @ref uct_ep_event_types.
+ */
+typedef void (*uct_ep_event_cb_t)(void *arg, uct_ep_h ep, unsigned events);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Field mask for @ref uct_iface_set_ep_event_params_t.
+ */
+enum uct_iface_set_ep_event_params_field {
+    /** Enables @ref uct_iface_set_ep_event_params_t::cb */
+    UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_CB  = UCS_BIT(0),
+
+    /** Enables @ref uct_iface_set_ep_event_params_t::arg */
+    UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for registering an endpoint-aware event callback.
+ */
+typedef struct {
+    /** Mask of valid fields, using bits from
+     *  @ref uct_iface_set_ep_event_params_field. */
+    uint64_t          field_mask;
+
+    /** Callback invoked for endpoint-specific events. This field must be
+     *  specified. A NULL callback removes the currently registered handler. */
+    uct_ep_event_cb_t cb;
+
+    /** User argument passed to
+     *  @ref uct_iface_set_ep_event_params_t::cb. Defaults to NULL when
+     *  @ref UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG is not set. The argument
+     *  must remain valid until any callback using it returns. */
+    void              *arg;
+} uct_iface_set_ep_event_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT interface query by @ref uct_iface_estimate_perf parameters field mask.
  *
  * The enumeration allows specifying which fields in @ref uct_perf_attr_t are
@@ -276,7 +337,10 @@ enum uct_ep_attr_field {
     /** Enables @ref uct_ep_attr::remote_address */
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
-    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2)
+    UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
+
+    /** Enables @ref uct_ep_attr::bandwidth */
+    UCT_EP_ATTR_FIELD_BANDWIDTH       = UCS_BIT(3)
 };
 
 
@@ -425,6 +489,16 @@ struct uct_ep_attr {
      * bytes and sets this pointer; callee fills the buffer with the token.
      */
     void                    *tx_token;
+
+    /**
+     * Endpoint bandwidth estimate, in bytes per second.
+     * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
+     *
+     * Querying this field returns the latest available bw estimate sample.
+     * Defaults to bw value provided by @ref uct_iface_estimate_perf when
+     * unsupported.
+     */
+    uct_ppn_bandwidth_t      bandwidth;
 };
 
 
@@ -1362,12 +1436,33 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
  *
  * This routine fetches information about the endpoint.
  *
- * @param [in]  ep         Endpoint to query.
- * @param [out] ep_attr    Filled with endpoint attributes.
+ * The input @ref uct_ep_attr::field_mask is not modified. See the requested
+ * attribute fields for their query behavior and error conditions.
  *
- * @return Error code.
+ * @param [in]    ep        Endpoint to query.
+ * @param [inout] ep_attr   Requested fields and returned endpoint attributes.
+ *
+ * @return Error code returned by the transport.
  */
 ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Register a callback for endpoint-specific events.
+ *
+ * This routine sets the endpoint-specific event handler on @a iface.
+ *
+ * @param [in] iface    Interface on which to register the callback.
+ * @param [in] params   Callback registration parameters.
+ *
+ * @return UCS_OK on success.
+ * @retval UCS_ERR_INVALID_PARAM A required parameter field is missing.
+ * @retval UCS_ERR_UNSUPPORTED   The interface does not support endpoint events.
+ */
+ucs_status_t uct_iface_set_ep_event_handler(
+        uct_iface_h iface,
+        const uct_iface_set_ep_event_params_t *params);
 
 
 /**
