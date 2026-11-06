@@ -1309,9 +1309,10 @@ ucp_wireup_free_lane_tokens(ucp_lane_map_t lane_map,
     }
 }
 
-/* Reply saved until every lane in waiting has an error completion. The
- * address bytes are a copy of the request payload. The unpacked form points
- * into the message and does not outlive that handler. */
+/* Reply saved until every lane in waiting has an error completion. A later
+ * request updates this same reply: the sender matches only the new id.
+ * The address bytes are a copy of the request payload. The unpacked form
+ * points into the message and does not outlive that handler. */
 typedef struct {
     uint32_t                request_id;
     ucp_lane_map_t          requested_lane_map;
@@ -1532,7 +1533,8 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
 
         arg->tf_reply = reply;
     } else {
-        ucp_wireup_free_lane_tokens(reply->provided_lane_map, reply->rx_tokens);
+        ucp_wireup_free_lane_tokens(reply->provided_lane_map,
+                                    reply->rx_tokens);
         ucs_free(reply->address);
     }
 
@@ -1540,7 +1542,10 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
     reply->requested_lane_map = info->requested_lane_map;
     reply->provided_lane_map  = info->provided_lane_map;
     reply->skip_lanes         = skip_lanes;
-    reply->waiting           |= waiting;
+    /* The sender matches the new id only. A lane this request does not
+     * name is no longer answered here. */
+    reply->waiting            = (reply->waiting & info->provided_lane_map) |
+                                waiting;
     reply->address            = copy;
     memcpy(reply->rx_tokens, rx_tokens, sizeof(reply->rx_tokens));
     memset(rx_tokens, 0, sizeof(reply->rx_tokens));
@@ -1616,8 +1621,8 @@ static UCS_F_NOINLINE void ucp_wireup_process_lanes_addr_request(
                                                  0, request_id);
         ucp_wireup_derive_rx_tokens(ep, lanes_info->provided_lane_map,
                                     tx_tokens, rx_tokens, 1);
-        /* A newer request can name another lane while that lane's error
-         * completion is still queued. Leave its waiting bit set. */
+        /* This request replaces the parked reply. A lane already waiting
+         * keeps that bit and is not invalidated again. */
         already = 0;
         if (ucp_wireup_tf_reply_get(ep) != NULL) {
             already = ucp_wireup_tf_reply_get(ep)->waiting;
