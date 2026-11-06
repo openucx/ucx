@@ -32,6 +32,8 @@ public:
     static const psn_t INITIAL_SN   = 0;
     static const psn_t LAST_ITER_SN = 1;
     static const psn_t UNKNOWN_SN   = std::numeric_limits<psn_t>::max();
+    /* How long to wait for the rest of a put message */
+    static const unsigned RECV_DATA_TIMEOUT_MSEC = 1000;
 
     ucp_perf_test_runner(ucx_perf_context_t &perf) :
         ucp_perf_test_runner_base<uint8_t>(perf),
@@ -319,10 +321,14 @@ public:
         }
     }
 
+    inline bool is_one_sided() const
+    {
+        return (FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) ||
+               (m_perf.params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED);
+    }
+
     void UCS_F_ALWAYS_INLINE progress_responder() {
-        if (!(FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) &&
-            !(m_perf.params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED))
-        {
+        if (!is_one_sided()) {
             progress();
         }
     }
@@ -966,6 +972,8 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate) {
+                    wait_recv_data(recv_buffer, recv_length, sn,
+                                   validate_buffer);
                     status = validate_recv_buffer(recv_buffer, recv_length, sn,
                                                   validate_buffer);
                     if (status != UCS_OK) {
@@ -982,6 +990,8 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate) {
+                    wait_recv_data(recv_buffer, recv_length, sn,
+                                   validate_buffer);
                     status = validate_recv_buffer(recv_buffer, recv_length, sn,
                                                   validate_buffer);
                     if (status != UCS_OK) {
@@ -1173,6 +1183,46 @@ private:
         }
     }
 
+    ucs_status_t validate_recv_data(void *recv_buffer, size_t length, psn_t sn,
+                                    void *host_buffer,
+                                    ucs_log_level_t log_level)
+    {
+        if (m_sgl_put) {
+            return validate_sgl_sn(recv_buffer, m_perf.params.recv_mem_type,
+                                   m_perf.recv_allocator, sn, host_buffer,
+                                   log_level);
+        }
+
+        return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
+                           m_perf.params.recv_mem_type, m_perf.recv_allocator,
+                           length, sn, host_buffer, log_level);
+    }
+
+    /* The sequence number in the last byte does not mean that the rest of a
+     * put message is there: a put does not define the order in which its data
+     * is placed, e.g. RC out-of-order data placement or a CPU copy by a shared
+     * memory transport. Wait until the whole message has the expected data,
+     * for a limited time. */
+    void wait_recv_data(void *recv_buffer, size_t length, psn_t sn,
+                        void *host_buffer)
+    {
+        ucs_time_t deadline;
+
+        if (CMD != UCX_PERF_CMD_PUT) {
+            return;
+        }
+
+        deadline = ucs_get_time() + ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC);
+        while ((validate_recv_data(recv_buffer, length, sn, host_buffer,
+                                   UCS_LOG_LEVEL_TRACE_POLL) != UCS_OK) &&
+               (ucs_get_time() < deadline)) {
+            /* Do not sleep: on a data mismatch no event wakes the worker up */
+            if (!is_one_sided()) {
+                ucp_worker_progress(m_perf.ucp.worker);
+            }
+        }
+    }
+
     ucs_status_t validate_recv_buffer(void *recv_buffer, size_t length,
                                       psn_t sn, void *host_buffer)
     {
@@ -1180,14 +1230,8 @@ private:
             fence();
         }
 
-        if (m_sgl_put) {
-            return validate_sgl_sn(recv_buffer, m_perf.params.recv_mem_type,
-                                   m_perf.recv_allocator, sn, host_buffer);
-        }
-
-        return validate_sn(recv_buffer, m_perf.params.ucp.recv_datatype,
-                            m_perf.params.recv_mem_type, m_perf.recv_allocator,
-                            length, sn, host_buffer);
+        return validate_recv_data(recv_buffer, length, sn, host_buffer,
+                                  UCS_LOG_LEVEL_ERROR);
     }
 
     void *alloc_validate_common(size_t buffer_length)
