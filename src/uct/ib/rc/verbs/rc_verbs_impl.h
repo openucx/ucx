@@ -22,11 +22,11 @@ uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
 }
 
 ucs_status_t
-uct_rc_verbs_iface_srq_prepost_recvs(uct_rc_verbs_iface_t *iface);
+uct_rc_verbs_iface_prepost_recvs_srq(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
-void uct_rc_verbs_iface_repost_empty_qps(uct_rc_verbs_iface_t *iface);
+void uct_rc_verbs_iface_repost_empty_qps_no_srq(uct_rc_verbs_iface_t *iface);
 
 void uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(uct_rc_verbs_iface_t *iface,
                                                uint32_t qp_num);
@@ -118,12 +118,17 @@ uct_rc_verbs_iface_rx_complete_no_srq(uct_rc_verbs_iface_t *iface,
     uct_rc_ep_t *rc_ep    = uct_rc_iface_lookup_ep(&iface->super, qp_num);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
 
+    ucs_assert(iface->srq == NULL);
+
     if (ucs_unlikely(ep == NULL)) {
         uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(iface, qp_num);
         return;
     }
 
     ep->rx_available++;
+    /* The receive queue is per QP, so it is much smaller than an SRQ. Refill
+     * it completely, not just one batch, to allow a bigger FC window (see
+     * fc_max_wnd_size) without hitting RNR. */
     if (repost && uct_rc_verbs_ep_can_post_recv(ep)) {
         uct_rc_verbs_ep_post_recv_batches_no_srq(iface, ep,
                                                  iface->config.rx_max_wr);
@@ -179,7 +184,7 @@ out:
     } else {
         /* Give empty QPs returned buffers before refilling active QPs. */
         if (ucs_unlikely(iface->rx_repost_needed)) {
-            uct_rc_verbs_iface_repost_empty_qps(iface);
+            uct_rc_verbs_iface_repost_empty_qps_no_srq(iface);
         }
 
         for (i = 0; i < num_wcs; i++) {

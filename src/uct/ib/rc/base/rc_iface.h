@@ -429,9 +429,6 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
                                      uint32_t imm_data, uint16_t lid, unsigned flags);
 
-ucs_status_t
-uct_rc_iface_config_check_fc_thresh(const uct_rc_iface_config_t *config);
-
 ucs_status_t uct_rc_init_fc_thresh(uct_rc_iface_config_t *rc_cfg,
                                    uct_rc_iface_t *iface);
 

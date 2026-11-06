@@ -695,9 +695,11 @@ static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
     unsigned prepost;
 
     if (iface->srq != NULL) {
-        return uct_rc_verbs_iface_srq_prepost_recvs(iface);
+        return uct_rc_verbs_iface_prepost_recvs_srq(iface);
     }
 
+    /* Prepost only two batches to save memory on idle QPs. Receive completions
+     * refill the queue up to rx_max_wr. */
     prepost = ucs_min(2 * iface->super.super.config.rx_max_batch,
                       iface->config.rx_max_wr);
     if (uct_rc_verbs_ep_post_recv_batches_no_srq(iface, ep, prepost) == 0) {

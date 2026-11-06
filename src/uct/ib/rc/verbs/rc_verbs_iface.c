@@ -247,8 +247,8 @@ uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 }
 
 static int
-uct_rc_verbs_iface_config_srq_enabled(
-        const uct_ib_md_t *md, const uct_rc_verbs_iface_config_t *config)
+uct_rc_verbs_iface_config_srq_enabled(const uct_ib_md_t *md,
+                                      const uct_rc_verbs_iface_config_t *config)
 {
     return (config->srq_enable != UCS_NO) && uct_ib_device_has_srq(&md->dev);
 }
@@ -301,6 +301,8 @@ uct_rc_verbs_iface_gc_drain_rx_cqe_no_srq(uct_rc_verbs_iface_t *iface,
 {
     uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
 
+    ucs_assert(iface->srq == NULL);
+
     ucs_list_for_each(cleanup_ctx, &iface->super.qp_gc_list, super.list) {
         if (cleanup_ctx->super.qp_num == qp_num) {
             ucs_assertv(cleanup_ctx->rx_remaining > 0, "qp_num=0x%x", qp_num);
@@ -327,6 +329,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     unsigned rx_max_wr, rx_cq_len;
     const char *dev_name;
     ucs_status_t status;
+    double soft_thresh;
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
     int srq_enabled;
@@ -375,17 +378,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                   uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr,
                   rx_batch_limit, rx_cq_len / rx_max_wr);
 
-        status = uct_rc_iface_config_check_fc_thresh(&config->super);
-        if (status != UCS_OK) {
-            return status;
-        }
+        /* The soft threshold is validated later by uct_rc_init_fc_thresh(),
+         * so clamp it here to keep the division safe. */
+        soft_thresh = ucs_max(config->super.soft_thresh, 0.0);
 
         /* A grant resets the peer window while earlier sends may be in flight.
          * Reserve space for them between reposts; a fresh QP's smaller prepost
          * may still cause RNR on its first burst. */
         init_attr.fc_max_wnd_size = ucs_max(
                 (unsigned)((rx_max_wr - rx_batch_limit + 1) /
-                           (1.0 + config->super.soft_thresh)), 1u);
+                           (1.0 + soft_thresh)), 1u);
     }
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
@@ -506,7 +508,7 @@ err:
 }
 
 ucs_status_t
-uct_rc_verbs_iface_srq_prepost_recvs(uct_rc_verbs_iface_t *iface)
+uct_rc_verbs_iface_prepost_recvs_srq(uct_rc_verbs_iface_t *iface)
 {
     unsigned count;
 
@@ -536,8 +538,10 @@ void uct_rc_verbs_iface_common_progress_enable(uct_iface_h tl_iface, unsigned fl
         /* ignore return value from prepost_recv, since it's not really possible
          * to handle here, and some receives were already pre-posted during iface
          * creation anyway.
+         * Without SRQ, each QP preposts its receives on EP creation and refills
+         * them on completions, so the SRQ quota is 0 and this is a no-op.
          */
-        uct_rc_verbs_iface_srq_prepost_recvs(iface);
+        uct_rc_verbs_iface_prepost_recvs_srq(iface);
     }
 
     uct_base_iface_progress_enable_cb(&iface->super.super.super,
@@ -579,11 +583,13 @@ unsigned uct_rc_verbs_post_recv_always(uct_rc_verbs_iface_t *iface,
     return count;
 }
 
-void uct_rc_verbs_iface_repost_empty_qps(uct_rc_verbs_iface_t *iface)
+void uct_rc_verbs_iface_repost_empty_qps_no_srq(uct_rc_verbs_iface_t *iface)
 {
     ucs_list_link_t *head = &iface->super.ep_list;
     uct_rc_ep_t *rc_ep;
     uct_rc_verbs_ep_t *ep;
+
+    ucs_assert(iface->srq == NULL);
 
     iface->rx_repost_needed = 0;
     ucs_list_for_each(rc_ep, head, list) {

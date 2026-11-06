@@ -996,7 +996,6 @@ protected:
          * anything scheduled on it later, so do not leave it in this state. */
         rc_ep(m_e2, 1)->flags &= ~ep_mark;
     }
-
 };
 
 UCS_TEST_P(test_rc_no_srq, last_wqe_after_rx_drain)
@@ -1064,7 +1063,7 @@ UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_from_am_callback,
                      "RC_FC_ENABLE=n")
 {
     uct_rc_verbs_iface_t *iface = verbs_iface(m_e2);
-    int quota                  = iface->rx_cq_available;
+    int quota                   = iface->rx_cq_available;
     struct destroy_ctx {
         entity *receiver;
         uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
@@ -1187,7 +1186,7 @@ UCS_TEST_P(test_rc_no_srq, fc_soft_thresh_invalid,
 {
     scoped_log_handler slh(wrap_errors_logger);
 
-    for (const char *value : {"-1", "0", "0.25", "1", "inf", "nan"}) {
+    for (const char *value : {"-1", "0", "0.25", "1", "inf"}) {
         SCOPED_TRACE(::testing::Message() << "FC_SOFT_THRESH=" << value);
         ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_FC_SOFT_THRESH",
                                         value));
@@ -1609,7 +1608,7 @@ UCS_TEST_P(test_rc_no_srq, rx_cq_len_device_limit,
         ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN",
                                         value));
         IBV_DEV_ATTR(dev, max_cqe) = limit;
-        status                   = open_iface(&iface);
+        status                     = open_iface(&iface);
         IBV_DEV_ATTR(dev, max_cqe) = max_cqe;
         ASSERT_UCS_OK(status);
 

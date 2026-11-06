@@ -212,9 +212,9 @@
    fun:ibv_post_srq_recv
 }
 {
-   uct_rc_verbs_iface_srq_prepost_recvs
+   uct_rc_verbs_iface_prepost_recvs_srq
    Memcheck:Cond
-   fun:uct_rc_verbs_iface_srq_prepost_recvs
+   fun:uct_rc_verbs_iface_prepost_recvs_srq
 }
 {
    uct_rc_verbs_post_recv_always_val
