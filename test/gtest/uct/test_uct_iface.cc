@@ -27,7 +27,7 @@ protected:
 
     /* cuda_ipc cannot open memory handles exported by the same process, so it
      * reports such peers as unreachable unless same process communication is
-     * explicitly enabled. TCP reports same-host addresses of a VRF with
+     * explicitly enabled. TCP reports same-host IPv6 addresses of a VRF with
      * disabled IPv6 as unreachable. */
     virtual bool expected_reachability() const
     {

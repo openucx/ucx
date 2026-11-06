@@ -458,24 +458,26 @@ UCS_TEST_P(test_uct_tcp, vrf_bind_to_device)
     EXPECT_STREQ(vrf_name, bound_if_name);
 }
 
-UCS_TEST_P(test_uct_tcp, vrf_loopback)
+UCS_TEST_P(test_uct_tcp, vrf_ipv6_local_reachable)
 {
     const char *vrf_name = uct_tcp_iface_vrf_name(m_tcp_iface);
     std::vector<char> dev_addr(m_ent->iface_attr().device_addr_len);
     std::vector<char> iface_addr(m_ent->iface_attr().iface_addr_len);
     uct_iface_is_reachable_params_t params;
-    long disable_ipv6 = 0;
+    long vrf_ipv6_disabled = 0;
+    bool local_reachable;
     char info_str[256];
 
     // Same-host traffic in a VRF is looped back through the VRF device, which
-    // drops IPv6 packets if IPv6 is disabled on it
-    if ((vrf_name != NULL) &&
-        (m_tcp_iface->config.ifaddr.ss_family == AF_INET6)) {
-        ASSERT_UCS_OK(ucs_read_file_number(&disable_ipv6, 1,
-                                           "/proc/sys/net/ipv6/conf/%s/"
-                                           "disable_ipv6", vrf_name));
+    // drops IPv6 packets if IPv6 is disabled on it. The sysctl file is missing
+    // if IPv6 is disabled in the kernel.
+    if (vrf_name != NULL) {
+        (void)ucs_read_file_number(&vrf_ipv6_disabled, 1,
+                                   "/proc/sys/net/ipv6/conf/%s/disable_ipv6",
+                                   vrf_name);
     }
-    EXPECT_EQ(!disable_ipv6, !!m_tcp_iface->config.vrf_loopback);
+    EXPECT_EQ(!vrf_ipv6_disabled,
+              !!m_tcp_iface->config.vrf_ipv6_local_reachable);
 
     ASSERT_UCS_OK(uct_iface_get_device_address(
             m_ent->iface(), (uct_device_addr_t*)&dev_addr[0]));
@@ -495,10 +497,12 @@ UCS_TEST_P(test_uct_tcp, vrf_loopback)
     params.info_string        = info_str;
     params.info_string_length = sizeof(info_str);
 
-    // The own address is unreachable if same-host traffic in the VRF is dropped
-    EXPECT_EQ(m_tcp_iface->config.vrf_loopback,
-              uct_iface_is_reachable_v2(m_ent->iface(), &params));
-    if (!m_tcp_iface->config.vrf_loopback) {
+    // The own IPv6 address is unreachable if same-host IPv6 traffic in the VRF
+    // is dropped
+    local_reachable = !m_ent->tcp_vrf_drops_loopback();
+    EXPECT_EQ(local_reachable,
+              !!uct_iface_is_reachable_v2(m_ent->iface(), &params));
+    if (!local_reachable) {
         EXPECT_NE(std::string::npos,
                   std::string(info_str).find("is a local address of VRF"))
                 << info_str;

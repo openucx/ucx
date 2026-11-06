@@ -280,7 +280,11 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!iface->config.vrf_loopback &&
+    /* Same-host IPv6 traffic in a VRF is dropped if IPv6 is disabled on the
+     * VRF device (sysctl net.ipv6.conf.<vrf>.disable_ipv6). Local routes of
+     * other VRFs are handled by the route check above. */
+    if ((remote_addr.ss_family == AF_INET6) &&
+        !iface->config.vrf_ipv6_local_reachable &&
         ucs_netlink_is_local_addr(ndev_index,
                                   (const struct sockaddr*)&remote_addr)) {
         uct_iface_fill_info_str_buf(
@@ -634,11 +638,11 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 static ucs_status_t uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
 {
     uct_tcp_md_t *tcp_md = ucs_derived_of(iface->super.md, uct_tcp_md_t);
-    long disable_ipv6;
+    long vrf_ipv6_disabled;
     int vrf_index;
 
-    iface->config.vrf_name[0]  = '\0';
-    iface->config.vrf_loopback = 1;
+    iface->config.vrf_name[0]              = '\0';
+    iface->config.vrf_ipv6_local_reachable = 1;
 
     /* Addresses in a VRF can be used only by sockets bound to the VRF, so
      * bind all sockets of the interface to the VRF device */
@@ -668,14 +672,14 @@ static ucs_status_t uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
 
     /* Same-host traffic in a VRF is looped back through the VRF device, which
      * drops IPv6 packets if IPv6 is disabled on it */
-    if ((iface->config.ifaddr.ss_family == AF_INET6) &&
-        (ucs_read_file_number(&disable_ipv6, 1,
+    if ((ucs_read_file_number(&vrf_ipv6_disabled, 1,
                               "/proc/sys/net/ipv6/conf/%s/disable_ipv6",
                               iface->config.vrf_name) == UCS_OK) &&
-        disable_ipv6) {
-        ucs_debug("tcp_iface %p: IPv6 is disabled on VRF %s, local addresses "
-                  "of the VRF are unreachable", iface, iface->config.vrf_name);
-        iface->config.vrf_loopback = 0;
+        vrf_ipv6_disabled) {
+        ucs_debug("tcp_iface %p: IPv6 is disabled on VRF %s, local IPv6 "
+                  "addresses of the VRF are unreachable",
+                  iface, iface->config.vrf_name);
+        iface->config.vrf_ipv6_local_reachable = 0;
     }
 
     return UCS_OK;

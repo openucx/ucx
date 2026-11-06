@@ -1659,9 +1659,12 @@ ucs_async_context_t &uct_test::entity::async() const {
 
 bool uct_test::entity::tcp_vrf_drops_loopback() const
 {
-    /* Same-host addresses of a VRF with disabled IPv6 are unreachable */
+    const uct_tcp_iface_t *tcp_iface = ucs_derived_of(iface(), uct_tcp_iface_t);
+
+    /* Same-host IPv6 addresses of a VRF with disabled IPv6 are unreachable */
     return (m_resource.tl_name == "tcp") &&
-           !ucs_derived_of(iface(), uct_tcp_iface_t)->config.vrf_loopback;
+           (tcp_iface->config.ifaddr.ss_family == AF_INET6) &&
+           !tcp_iface->config.vrf_ipv6_local_reachable;
 }
 
 ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)

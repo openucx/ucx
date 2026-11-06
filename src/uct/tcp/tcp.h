@@ -402,8 +402,8 @@ typedef struct uct_tcp_iface {
         size_t                    sockaddr_len;      /* Network address length */
         ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
         char                      vrf_name[IFNAMSIZ]; /* VRF device name, or empty */
-        int                       vrf_loopback;      /* Same-host traffic in the VRF is
-                                                      * delivered */
+        /* Local IPv6 addresses of the VRF are reachable */
+        int                       vrf_ipv6_local_reachable;
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
