@@ -287,6 +287,18 @@ static void ucs_memtype_cache_merge(ucs_memtype_cache_t *memtype_cache,
     }
 }
 
+int ucs_memtype_cache_is_explicit(void)
+{
+    ucs_memtype_cache_t *memtype_cache;
+
+    if (ucs_global_opts.enable_memtype_cache != UCS_YES) {
+        return 0;
+    }
+
+    memtype_cache = ucs_memtype_cache_get_global();
+    return (memtype_cache != NULL) && !memtype_cache->has_events;
+}
+
 void ucs_memtype_cache_register(const void *address, size_t size,
                                 ucs_memory_type_t mem_type,
                                 ucs_sys_device_t sys_dev, uint8_t mem_flags)

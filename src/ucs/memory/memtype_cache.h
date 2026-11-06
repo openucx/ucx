@@ -75,10 +75,6 @@ void ucs_memtype_cache_cleanup(void);
  * @return UCS_ERR_UNSUPPORTED - the cache is disabled, or it has no UCM events
  *                               and the address is not in a registered region.
  *                               The memory type cannot be assumed to be host.
- *
- * Without UCM events, a range which spans adjacent registered regions with the
- * same attributes is a hit. The boundaries of the registered allocations are
- * not tracked, so base_address and alloc_length are set to the looked up range.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);
@@ -114,6 +110,14 @@ void ucs_memtype_cache_update(const void *address, size_t size,
  * @param [in]  size            Size of the memory to remove.
  */
 void ucs_memtype_cache_remove(const void *address, size_t size);
+
+
+/**
+ * Check if the memtype cache holds only explicitly registered memory.
+ *
+ * @return 1 if memory must be registered explicitly, 0 otherwise.
+ */
+int ucs_memtype_cache_is_explicit(void);
 
 
 /**
