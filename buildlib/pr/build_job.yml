@@ -24,9 +24,6 @@ jobs:
           debian113:
             CONTAINER: debian113
             build_mode: sanity
-          debian125:
-            CONTAINER: debian125
-            build_mode: short
           debian130:
             CONTAINER: debian130
             build_mode: short
@@ -36,22 +33,16 @@ jobs:
           sles16sp0:
             CONTAINER: sles16sp0
             build_mode: short
-          rhel82:
-            CONTAINER: rhel82
-            build_mode: short
-          rhel82_gcc_15_2_0:
-            CONTAINER: rhel82
-            build_mode: sanity
-            GCC_MODULE: dev/gcc-15.2.0
           rhel90:
             CONTAINER: rhel90
             build_mode: short
+          rhel90_gcc_15_2_0:
+            CONTAINER: rhel90
+            build_mode: sanity
+            GCC_MODULE: dev/gcc-15.2.0
           rhel100:
             CONTAINER: rhel100
             build_mode: long
-          rocky89:
-            CONTAINER: rocky89
-            build_mode: sanity
           rocky96:
             CONTAINER: rocky96
             build_mode: sanity
@@ -82,14 +73,8 @@ jobs:
           azurelinux40:
             CONTAINER: azurelinux40
             build_mode: sanity
-          openeuler2203sp4:
-            CONTAINER: openeuler2203sp4
-            build_mode: short
           openeuler2403sp3:
             CONTAINER: openeuler2403sp3
-            build_mode: short
-          uos201060a:
-            CONTAINER: uos201060a
             build_mode: short
           ubuntu2404_ze:
             CONTAINER: ubuntu2404_ze
@@ -112,9 +97,6 @@ jobs:
             build_mode: short
           sles15sp7_aarch64:
             CONTAINER: sles15sp7_aarch64
-            build_mode: short
-          rocky89_aarch64:
-            CONTAINER: rocky89_aarch64
             build_mode: short
           rocky96_aarch64:
             CONTAINER: rocky96_aarch64
@@ -140,14 +122,8 @@ jobs:
           azurelinux40_aarch64:
             CONTAINER: azurelinux40_aarch64
             build_mode: short
-          openeuler2203sp4_aarch64:
-            CONTAINER: openeuler2203sp4_aarch64
-            build_mode: short
           openeuler2403sp3_aarch64:
             CONTAINER: openeuler2403sp3_aarch64
-            build_mode: short
-          uos201060a_aarch64:
-            CONTAINER: uos201060a_aarch64
             build_mode: short
     timeoutInMinutes: 340
 
