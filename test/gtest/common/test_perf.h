@@ -53,7 +53,7 @@ protected:
                     const std::string &tl_name, const std::string &dev_name,
                     ucs_status_t expected_status = UCS_OK);
 
-    /* Adjust the parameters of each peer of a two-peer test */
+    /* Adjust the parameters of peers 0 and 1, or only 0 in a loopback test */
     virtual void
     adjust_peer_params(unsigned peer, ucx_perf_params_t &params) const
     {

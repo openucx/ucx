@@ -322,6 +322,7 @@ test_perf::run_single_threaded(const test_spec &test, unsigned flags,
 
     rte rte0(0, 1, 0, c0to0, c0to0);
     params.rte_group = &rte0;
+    adjust_peer_params(0, params);
 
     test_result result;
     result.status = ucx_perf_run(&params, &result.result);
