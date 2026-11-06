@@ -247,25 +247,37 @@ private:
     }
 
 protected:
-    void query_devices(const char *vrf_enable, std::set<std::string> &devices)
+    ucs_status_t open_md(const char *vrf_enable, uct_md_h *md_p)
     {
         uct_md_config_t *md_config;
+        ucs_status_t status;
+
+        status = uct_md_config_read(GetParam()->component, NULL, NULL,
+                                    &md_config);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_config_modify(md_config, "TCP_VRF_ENABLE", vrf_enable);
+        if (status == UCS_OK) {
+            status = uct_md_open(GetParam()->component,
+                                 GetParam()->md_name.c_str(), md_config, md_p);
+        }
+
+        uct_config_release(md_config);
+        return status;
+    }
+
+    void query_devices(const char *vrf_enable, std::set<std::string> &devices)
+    {
         uct_tl_resource_desc_t *resources;
         unsigned num_resources;
         uct_md_h md;
 
-        ASSERT_UCS_OK(uct_md_config_read(GetParam()->component, NULL, NULL,
-                                         &md_config));
-        ucs_status_t status = uct_config_modify(md_config, "TCP_VRF_ENABLE",
-                                                vrf_enable);
-        if (status == UCS_OK) {
-            status = uct_md_open(GetParam()->component,
-                                 GetParam()->md_name.c_str(), md_config, &md);
-        }
-        uct_config_release(md_config);
-        ASSERT_UCS_OK(status);
+        ASSERT_UCS_OK(open_md(vrf_enable, &md));
 
-        status = uct_md_query_tl_resources(md, &resources, &num_resources);
+        ucs_status_t status = uct_md_query_tl_resources(md, &resources,
+                                                        &num_resources);
         if (status == UCS_OK) {
             for (unsigned i = 0; i < num_resources; ++i) {
                 devices.insert(resources[i].dev_name);
@@ -392,6 +404,39 @@ UCS_TEST_P(test_uct_tcp, vrf_enable)
             UCS_TEST_MESSAGE << dev_name << " is reported only with VRF_ENABLE";
         }
     }
+}
+
+UCS_TEST_P(test_uct_tcp, vrf_disabled_iface_open)
+{
+    uct_iface_params_t params = {};
+    ucs_status_t status;
+    uct_iface_h iface;
+    uct_md_h md;
+
+    if (uct_tcp_iface_vrf_name(m_tcp_iface) == NULL) {
+        UCS_TEST_SKIP_R("the device is not in a VRF");
+    }
+
+    ASSERT_UCS_OK(open_md("n", &md));
+
+    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE |
+                                  UCT_IFACE_PARAM_FIELD_DEVICE;
+    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    params.mode.device.tl_name  = GetParam()->tl_name.c_str();
+    params.mode.device.dev_name = GetParam()->dev_name.c_str();
+
+    // A device in a VRF cannot be opened when VRF_ENABLE is "n"
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        status = uct_iface_open(md, m_ent->worker(), &params, m_iface_config,
+                                &iface);
+    }
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+
+    if (status == UCS_OK) {
+        uct_iface_close(iface);
+    }
+    uct_md_close(md);
 }
 
 UCS_TEST_P(test_uct_tcp, vrf_bind_to_device)

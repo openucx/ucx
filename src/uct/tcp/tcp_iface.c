@@ -631,8 +631,9 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
     return status;
 }
 
-static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
+static ucs_status_t uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
 {
+    uct_tcp_md_t *tcp_md = ucs_derived_of(iface->super.md, uct_tcp_md_t);
     long disable_ipv6;
     int vrf_index;
 
@@ -643,14 +644,23 @@ static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
      * bind all sockets of the interface to the VRF device */
     vrf_index = uct_tcp_netif_vrf_index(iface->if_name);
     if (vrf_index == -1) {
-        return;
+        return UCS_OK;
+    }
+
+    /* Devices in a VRF are not reported by uct_tcp_query_devices() in this
+     * case, so do not open them either */
+    if (tcp_md->config.vrf_enable == UCS_NO) {
+        ucs_error("tcp_iface %p: cannot use device %s in a VRF, using VRF "
+                  "devices is disabled by UCX_TCP_VRF_ENABLE",
+                  iface, iface->if_name);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (if_indextoname(vrf_index, iface->config.vrf_name) == NULL) {
         ucs_diag("tcp_iface %p: failed to get name of VRF device index %d: %m",
                  iface, vrf_index);
         iface->config.vrf_name[0] = '\0';
-        return;
+        return UCS_OK;
     }
 
     ucs_debug("tcp_iface %p: %s belongs to VRF %s", iface, iface->if_name,
@@ -667,6 +677,8 @@ static void uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
                   "of the VRF are unreachable", iface, iface->config.vrf_name);
         iface->config.vrf_loopback = 0;
     }
+
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
@@ -903,7 +915,10 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-    uct_tcp_iface_vrf_init(self);
+    status = uct_tcp_iface_vrf_init(self);
+    if (status != UCS_OK) {
+        goto err_cleanup_rx_mpool;
+    }
 
     ucs_list_head_init(&self->ep_list);
     ucs_conn_match_init(&self->conn_match_ctx, self->config.sockaddr_len,
