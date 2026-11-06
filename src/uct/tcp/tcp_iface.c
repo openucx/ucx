@@ -207,6 +207,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     int is_local_loopback, is_remote_loopback;
     struct sockaddr_storage remote_addr;
     char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
+    char vrf_info[IFNAMSIZ + sizeof(" in VRF ")];
     unsigned ndev_index;
     ucs_status_t status;
 
@@ -266,6 +267,12 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
+    vrf_info[0] = '\0';
+    if (uct_tcp_iface_vrf_name(iface) != NULL) {
+        ucs_snprintf_zero(vrf_info, sizeof(vrf_info), " in VRF %s",
+                          iface->config.vrf_name);
+    }
+
     /* TODO: Check using relaxed route (might need bind to device socket
      * option). We currently assume here that with or without src address bind,
      * kernel is going to anyway use the best route. So we make UCX refuse other
@@ -274,9 +281,10 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    (const struct sockaddr*)&remote_addr,
                                    UCS_NETLINK_ROUTE_CHECK_BEST)) {
         uct_iface_fill_info_str_buf(
-                    params, "no route to %s",
-                    ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
-                                     remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+                params, "no route to %s%s",
+                ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                 remote_addr_str, UCS_SOCKADDR_STRING_LEN),
+                vrf_info);
         return 0;
     }
 
@@ -297,10 +305,11 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     }
 
     /* This interface has the best route */
-    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s",
+    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s%s",
               iface, iface->if_name,
               ucs_sockaddr_str((const struct sockaddr*)&remote_addr,
-                               remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+                               remote_addr_str, UCS_SOCKADDR_STRING_LEN),
+              vrf_info);
     return 1;
 }
 
