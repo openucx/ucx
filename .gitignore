@@ -39,6 +39,7 @@ depcomp
 *.o
 contrib/rpmdef.sh
 contrib/ucx
+contrib/__pycache__/
 bindings/java/pom.xml
 bindings/java/src/main/native/tmp-settings.xml
 src/ucs/ucs_stats_parser
