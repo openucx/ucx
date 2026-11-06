@@ -318,6 +318,11 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    status = ucp_worker_add_resource_cms(worker);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     listener = ucs_calloc(1, sizeof(*listener), "ucp_listener");
     if (listener == NULL) {
         ucs_error("cannot allocate memory for UCP listener");
