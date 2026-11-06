@@ -311,7 +311,6 @@ void ucs_memtype_cache_register(const void *address, size_t size,
 
     if ((ucs_global_opts.enable_memtype_cache != UCS_YES) || (size == 0) ||
         (size > UINTPTR_MAX - addr - (UCS_PGT_ADDR_ALIGN - 1)) ||
-        (mem_type == UCS_MEMORY_TYPE_HOST) ||
         (mem_type >= UCS_MEMORY_TYPE_LAST)) {
         return;
     }
@@ -688,8 +687,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     }
     status = UCS_OK;
 
-    /* The memory type cache is not expected to return HOST memory type */
-    ucs_assertv(mem_info->type != UCS_MEMORY_TYPE_HOST, "%s (%d)",
+    /* Only explicit registrations can cache HOST memory type */
+    ucs_assertv(!memtype_cache->has_events ||
+                (mem_info->type != UCS_MEMORY_TYPE_HOST), "%s (%d)",
                 ucs_memory_type_names[mem_info->type], mem_info->type);
 
 out_unlock:
