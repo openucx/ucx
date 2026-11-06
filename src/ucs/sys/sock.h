@@ -120,6 +120,19 @@ ucs_status_t ucs_socket_create(int domain, int type, int protocol, int *fd_p);
 
 
 /**
+ * Bind a socket to a network interface, so that the socket can use only
+ * addresses and routes of that interface. Binding to a VRF device allows the
+ * socket to use addresses of the VRF slave interfaces.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [in]   if_name     Network interface name.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure.
+ */
+ucs_status_t ucs_socket_bind_to_device(int fd, const char *if_name);
+
+
+/**
  * Set options on socket.
  *
  * @param [in]   fd          Socket fd.
@@ -237,13 +250,15 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
  * @param [in]  reuse_addr        Whether or not to allow the socket to use an
  *                                address that is already in use and was not
  *                                released by another socket yet.
+ * @param [in]  bind_if_name      Network interface to bind the socket to
+ *                                before binding it to @a saddr, or NULL.
  * @param [out] listen_fd         The fd that belongs to the server.
  *
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
                                     int backlog, int silent_bind, int reuse_addr,
-                                    int *listen_fd);
+                                    const char *bind_if_name, int *listen_fd);
 
 
 /**

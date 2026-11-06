@@ -401,6 +401,9 @@ typedef struct uct_tcp_iface {
         struct sockaddr_storage   netmask;           /* Network address mask */
         size_t                    sockaddr_len;      /* Network address length */
         ucs_ternary_auto_value_t  ep_bind_src_addr;  /* Bind EP's FD to ifaddr */
+        char                      vrf_name[IFNAMSIZ]; /* VRF device name, or empty */
+        /* Local IPv6 addresses of the VRF are reachable */
+        int                       vrf_ipv6_local_reachable;
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
@@ -474,11 +477,12 @@ typedef struct uct_tcp_iface_config {
  * TCP memory domain
  */
 typedef struct uct_tcp_md {
-    uct_md_t        super;
+    uct_md_t                     super;
     struct {
-        int         af_prio_count;
-        sa_family_t af_prio_list[2];
-        uint8_t     bridge_enable;
+        int                      af_prio_count;
+        sa_family_t              af_prio_list[2];
+        uint8_t                  bridge_enable;
+        ucs_ternary_auto_value_t vrf_enable;
     } config;
 } uct_tcp_md_t;
 
@@ -490,6 +494,7 @@ typedef struct uct_tcp_md_config {
     uct_md_config_t                   super;
     UCS_CONFIG_STRING_ARRAY_FIELD(af) af_prio;
     int                               bridge_enable;
+    ucs_ternary_auto_value_t          vrf_enable;
 } uct_tcp_md_config_t;
 
 
@@ -525,6 +530,14 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
 
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
+
+/* Index of the VRF (L3 master) device of the interface, or -1 */
+int uct_tcp_netif_vrf_index(const char *if_name);
+
+/* Check that sockets of the interface can be bound to its VRF device with the
+ * given index, log a failure with the given log level */
+ucs_status_t uct_tcp_netif_vrf_bind_check(const char *if_name, int vrf_index,
+                                          ucs_log_level_t err_log_level);
 
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);
@@ -684,6 +697,13 @@ static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
 {
     ucs_assert(iface->outstanding > 0);
     iface->outstanding--;
+}
+
+/* VRF device which sockets of the interface must be bound to, or NULL */
+static inline const char *uct_tcp_iface_vrf_name(const uct_tcp_iface_t *iface)
+{
+    return ucs_string_is_empty(iface->config.vrf_name) ? NULL :
+                                                         iface->config.vrf_name;
 }
 
 /**
