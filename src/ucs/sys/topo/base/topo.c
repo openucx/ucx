@@ -340,7 +340,7 @@ static ucs_status_t
 ucs_topo_get_sys_device_checked_nolock(ucs_sys_device_t sys_dev,
                                        ucs_topo_sys_device_info_t **device_p)
 {
-    ucs_topo_sys_device_info_t *device = NULL;
+    ucs_topo_sys_device_info_t *device;
 
     if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
         ucs_error("system device is unknown");
@@ -349,7 +349,7 @@ ucs_topo_get_sys_device_checked_nolock(ucs_sys_device_t sys_dev,
 
     device = ucs_topo_get_sys_device_nolock(sys_dev);
     if (device == NULL) {
-        ucs_error("system device %u is invalid (num_devices=%u)", sys_dev,
+        ucs_error("system device %u is invalid (num devices %u)", sys_dev,
                   ucs_topo_global_ctx.num_devices);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -651,9 +651,10 @@ ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
 }
 
 static ucs_status_t
-ucs_topo_sys_dev_to_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
+ucs_topo_sys_dev_to_sysfs_path_nolock(ucs_sys_device_t sys_dev, char *path,
+                                      size_t max)
 {
-    ucs_topo_sys_device_info_t *device = NULL;
+    ucs_topo_sys_device_info_t *device;
     ucs_status_t status;
 
     status = ucs_topo_get_sys_device_checked_nolock(sys_dev, &device);
@@ -726,9 +727,10 @@ ucs_topo_is_same_numa_node(ucs_sys_device_t device1,
  *
  * @return UCS_OK on success, or error status on failure
  */
-static ucs_status_t
-ucs_topo_get_common_path(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2,
-                         char **path1, char **path2, char **common_path)
+static ucs_status_t ucs_topo_get_common_path_nolock(ucs_sys_device_t sys_dev1,
+                                                    ucs_sys_device_t sys_dev2,
+                                                    char **path1, char **path2,
+                                                    char **common_path)
 {
     ucs_status_t status;
 
@@ -737,7 +739,7 @@ ucs_topo_get_common_path(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2,
         return status;
     }
 
-    status = ucs_topo_sys_dev_to_sysfs_path(sys_dev1, *path1, PATH_MAX);
+    status = ucs_topo_sys_dev_to_sysfs_path_nolock(sys_dev1, *path1, PATH_MAX);
     if (status != UCS_OK) {
         goto err_free_path1;
     }
@@ -747,7 +749,7 @@ ucs_topo_get_common_path(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2,
         goto err_free_path1;
     }
 
-    status = ucs_topo_sys_dev_to_sysfs_path(sys_dev2, *path2, PATH_MAX);
+    status = ucs_topo_sys_dev_to_sysfs_path_nolock(sys_dev2, *path2, PATH_MAX);
     if (status != UCS_OK) {
         goto err_free_path2;
     }
@@ -780,8 +782,8 @@ static void ucs_topo_update_distance_sysfs(ucs_sys_device_t sys_dev1,
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    status = ucs_topo_get_common_path(sys_dev1, sys_dev2, &path1, &path2,
-                                      &common_path);
+    status = ucs_topo_get_common_path_nolock(sys_dev1, sys_dev2, &path1, &path2,
+                                             &common_path);
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     if (status != UCS_OK) {
         goto out;
@@ -815,26 +817,21 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
                             ucs_sys_device_t sys_dev2,
                             ucs_sys_dev_distance_t *distance)
 {
-    ucs_topo_sys_device_info_t *device1, *device2;
+    const ucs_topo_sys_device_info_t *device1, *device2;
     ucs_sys_device_t sys_dev_aux1, sys_dev_aux2;
     ucs_topo_sibling_role_t role1, role2;
-    ucs_status_t status;
 
-    /* If one of the devices is unknown, we assume near topology */
     if ((sys_dev1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (sys_dev2 == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-        return ucs_topo_get_distance_default(sys_dev1, sys_dev2, distance);
+        goto out_default;
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-    status = ucs_topo_get_sys_device_checked_nolock(sys_dev1, &device1);
-    if (status != UCS_OK) {
-        goto out_unlock;
-    }
-
-    status = ucs_topo_get_sys_device_checked_nolock(sys_dev2, &device2);
-    if (status != UCS_OK) {
-        goto out_unlock;
+    device1 = ucs_topo_get_sys_device_nolock(sys_dev1);
+    device2 = ucs_topo_get_sys_device_nolock(sys_dev2);
+    if ((device1 == NULL) || (device2 == NULL)) {
+        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+        goto out_default;
     }
 
     sys_dev_aux1 = device1->sys_dev_aux;
@@ -857,9 +854,8 @@ ucs_topo_get_distance_sysfs(ucs_sys_device_t sys_dev1,
 
     return UCS_OK;
 
-out_unlock:
-    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-    return status;
+out_default:
+    return ucs_topo_get_distance_default(sys_dev1, sys_dev2, distance);
 }
 
 /* Non-transitive memory and reachablity checks */
@@ -1351,8 +1347,8 @@ out_unlock:
  * @return 1 if the devices share a PCI bridge, 0 otherwise. Returns 0 the
  *         devices are the same.
  */
-static int
-ucs_topo_is_pci_bridge(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2)
+static int ucs_topo_is_pci_bridge_nolock(ucs_sys_device_t sys_dev1,
+                                         ucs_sys_device_t sys_dev2)
 {
     ucs_status_t status;
     char *path1, *path2, *common_path;
@@ -1365,8 +1361,8 @@ ucs_topo_is_pci_bridge(ucs_sys_device_t sys_dev1, ucs_sys_device_t sys_dev2)
         return 0;
     }
 
-    status = ucs_topo_get_common_path(sys_dev1, sys_dev2, &path1, &path2,
-                                      &common_path);
+    status = ucs_topo_get_common_path_nolock(sys_dev1, sys_dev2, &path1, &path2,
+                                             &common_path);
 
     if (status != UCS_OK) {
         return 0;
@@ -1394,7 +1390,7 @@ static void ucs_topo_sys_device_sibling_match(ucs_sys_device_t sys_dev,
     }
 
     sys_dev_aux = ucs_topo_global_ctx.devices[sys_dev].sys_dev_aux;
-    if (ucs_topo_is_pci_bridge(sys_dev_mem, sys_dev_aux)) {
+    if (ucs_topo_is_pci_bridge_nolock(sys_dev_mem, sys_dev_aux)) {
         UCS_STATIC_BITMAP_SET(
                 &ucs_topo_global_ctx.devices[sys_dev_mem].siblings, sys_dev);
         UCS_STATIC_BITMAP_SET(&ucs_topo_global_ctx.devices[sys_dev].siblings,
