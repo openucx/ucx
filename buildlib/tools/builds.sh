@@ -616,10 +616,11 @@ check_no_gga() {
 # newer functions are resolved with UCS_SYS_LIB_OPTIONAL_FUNC()
 #
 check_ib_symbol_versions() {
-	local lib versions failed=no
+	local lib versions failed=no num_libs=0
 
 	for lib in $(find ${ucx_build_dir}/src/uct/ib -path '*/.libs/libuct_*.so')
 	do
+		num_libs=$((num_libs + 1))
 		if ! versions=$(readelf -V "$lib")
 		then
 			azure_log_error "readelf -V $lib failed"
@@ -631,6 +632,12 @@ check_ib_symbol_versions() {
 			failed=yes
 		fi
 	done
+
+	if [ $num_libs -eq 0 ] && grep -q '^#define HAVE_IB 1' ${ucx_build_dir}/config.h
+	then
+		azure_log_error "no IB module found to check"
+		failed=yes
+	fi
 	[ "$failed" = "no" ] || exit 1
 }
 
