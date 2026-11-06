@@ -803,6 +803,10 @@ public:
         m_receiver = uct_test::create_entity(0);
         m_entities.push_back(m_receiver);
 
+        /* The skip condition needs the entities, and must be checked before
+         * the flush rkey changes: a skip from init() does not call cleanup() */
+        check_skip_test();
+
         /* Before connecting, so that the receiver passes no atomic MR id */
         m_md             = ucs_derived_of(m_receiver->md(), uct_ib_md_t);
         m_flush_rkey     = m_md->flush_rkey;
@@ -832,10 +836,10 @@ protected:
 UCS_TEST_SKIP_COND_P(test_rc_verbs_invalid_flush_rkey, atomic_add,
                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64))
 {
-    static const uint64_t value = 0x5a5a5a5a5a5a5a5aul;
-    static const size_t num_words = 512;
+    static const uint64_t value     = 0x5a5a5a5a5a5a5a5aul;
+    static const size_t   num_words = 512;
     /* A misplaced update lands before the target word */
-    static const size_t target = 256;
+    static const size_t   target    = 256;
     mapped_buffer recvbuf(num_words * sizeof(uint64_t), 0ul, *m_receiver);
 
     if (uct_ib_md_atomic_rkey(recvbuf.rkey()) == UCT_IB_INVALID_MKEY) {
