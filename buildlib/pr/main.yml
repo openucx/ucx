@@ -298,30 +298,6 @@ stages:
     jobs:
     - template: static_checks.yml
 
-  - stage: Build
-    dependsOn: [Basic_compile]
-    jobs:
-      - template: build_job.yml
-        parameters:
-          name: build_x86_64
-          demands:
-            - ucx_docker
-          displayName: Build on x86_64
-
-      - template: build_job.yml
-        parameters:
-          name: build_icc_pgi
-          demands:
-            - ucx_docker
-          displayName: Build with ICC and PGI on CentOS7 x86_64
-
-      - template: build_job.yml
-        parameters:
-          name: build_aarch64
-          demands:
-            - ucx_arm64
-          displayName: Build on aarch64
-
   - stage: ucx_perftest_mad_rte
     dependsOn: [Basic_compile]
     displayName: ucx_perftest over MAD RTE
