@@ -91,8 +91,7 @@ protected:
 
         uint8_t sg_count;
         /* Pass empty param argument to disable memh initialization */
-        ucp_request_param_t param;
-        param.op_attr_mask = 0;
+        ucp_request_param_t param = {};
 
         ucs_status_t status = ucp_datatype_iter_init(
                 m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),

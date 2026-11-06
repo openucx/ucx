@@ -207,7 +207,7 @@ test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
 {
     int worker_index = get_worker_index(buf_index);
     request *req;
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
 
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
     param.datatype     = datatype;

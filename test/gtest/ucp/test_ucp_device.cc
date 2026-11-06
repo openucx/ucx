@@ -331,7 +331,7 @@ UCS_TEST_P(test_ucp_device, create_local_fail)
     scoped_log_handler wrap_err(wrap_errors_logger);
 
     // Empty params
-    ucp_device_mem_list_params_t empty_params;
+    ucp_device_mem_list_params_t empty_params = {};
     empty_params.field_mask = UCP_DEVICE_MEM_LIST_PARAMS_FIELD_ELEMENTS;
     EXPECT_EQ(UCS_ERR_INVALID_PARAM,
               ucp_device_local_mem_list_create(&empty_params, &handle));
@@ -615,13 +615,13 @@ protected:
     test_ucp_device_kernel_params_t init_params()
     {
         // TODO: Test different sizes and alignment
-        test_ucp_device_kernel_params_t params;
-        params.num_threads = get_num_threads();
-        params.num_blocks  = 1;
-        params.level       = get_device_level();
-        params.num_iters   = get_num_iters();
-        params.num_channels = 1;
-        params.use_flush    = false;
+        test_ucp_device_kernel_params_t params = {};
+        params.num_threads                     = get_num_threads();
+        params.num_blocks                      = 1;
+        params.level                           = get_device_level();
+        params.num_iters                       = get_num_iters();
+        params.num_channels                    = 1;
+        params.use_flush                       = false;
         switch (get_send_mode()) {
         case MULTI_CHANNEL:
             params.num_channels = 32;

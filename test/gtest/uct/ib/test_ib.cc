@@ -609,7 +609,7 @@ public:
         union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
-        ucs_config_allow_list_t dummy_subnet_list;
+        ucs_config_allow_list_t dummy_subnet_list = {};
         ucs::handle<uct_md_h> uct_md;
         uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;

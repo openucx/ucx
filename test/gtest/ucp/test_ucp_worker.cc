@@ -764,7 +764,7 @@ private:
 
 UCS_TEST_P(test_ucp_worker_request_leak, tag_send_recv)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {};
     param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
     void *sreq         = ucp_tag_send_nbx(sender().ep(), NULL, 0, 0, &param);
     ASSERT_TRUE(UCS_PTR_IS_PTR(sreq));
