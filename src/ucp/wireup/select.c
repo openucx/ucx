@@ -358,8 +358,9 @@ ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
 }
 
 static void
-ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
-                            ucp_rsc_index_t rsc_index, uint8_t priority,
+ucp_wireup_init_select_info(double score, double tiebreak, double bandwidth,
+                            unsigned addr_index, ucp_rsc_index_t rsc_index,
+                            uint8_t priority,
                             ucp_wireup_select_info_t *select_info)
 {
     /* score == 0.0 could be specified only when initializing a selection info
@@ -368,6 +369,7 @@ ucp_wireup_init_select_info(double score, double tiebreak, unsigned addr_index,
 
     select_info->score      = score;
     select_info->tiebreak   = tiebreak;
+    select_info->bandwidth  = bandwidth;
     select_info->addr_index = addr_index;
     select_info->path_index = UCP_WIREUP_PATH_INDEX_UNDEFINED;
     select_info->rsc_index  = rsc_index;
@@ -724,8 +726,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                       UCT_TL_RESOURCE_DESC_ARG(resource), addr_index,
                       criteria->title, score, tiebreak, priority);
 
-            ucp_wireup_init_select_info(score, tiebreak, addr_index, rsc_index,
-                                        priority, &candidate_info);
+            ucp_wireup_init_select_info(score, tiebreak, lane_bw, addr_index,
+                                        rsc_index, priority, &candidate_info);
             if (has_tiebreak) {
                 /* Save every reachable candidate so the tiebreak pass can
                  * compare them after the best primary score is known. */
@@ -1273,7 +1275,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_init_select_info(0., 0., UINT_MAX, UCP_NULL_RESOURCE, 0,
+    ucp_wireup_init_select_info(0., 0., 0., UINT_MAX, UCP_NULL_RESOURCE, 0,
                                 &select_info);
 
     /* server is not a proxy because it can create all lanes connected */
@@ -1717,15 +1719,6 @@ ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
     return size / t * 1e-5;
 }
 
-static double ucp_wireup_get_lane_bw(ucp_worker_h worker,
-                                     const ucp_wireup_select_info_t *sinfo,
-                                     const ucp_unpacked_address_t *address)
-{
-    return ucp_wireup_iface_score_bandwidth(
-            ucp_worker_iface(worker, sinfo->rsc_index), address,
-            &address->address_list[sinfo->addr_index]);
-}
-
 static int
 ucp_proto_select_info_score_compare(const void *e1, const void *e2,
                                     void *is_local)
@@ -1792,15 +1785,14 @@ ucp_wireup_add_fast_lanes_a2a(const ucp_wireup_select_params_t *select_params,
                 ucp_proto_select_info_score_compare, &is_local);
 
     /* The fastest lane by score must have (close to) maximal BW */
-    max_bw = ucp_wireup_get_lane_bw(worker, ucs_array_begin(sinfo_array),
-                                    select_params->address);
+    max_bw = ucs_array_begin(sinfo_array)->bandwidth;
 
     ucs_array_set_length(sinfo_array,
                          ucs_min(max_lanes, ucs_array_length(sinfo_array)));
 
     /* Compare each element to max BW and filter only fast lanes */
     ucs_array_for_each(sinfo, sinfo_array) {
-        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
+        lane_bw = sinfo->bandwidth;
         if (lane_bw < (max_bw * max_ratio)) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
                       " : bandwidth %.2f lower than %.2f x %.2f, dropping lane",
@@ -1878,7 +1870,7 @@ static int ucp_wireup_add_fast_lanes_pairwise(
 
     /* Compare each element to min_lane_bw and filter only fast lanes */
     ucs_array_for_each(sinfo, sinfo_array) {
-        lane_bw = ucp_wireup_get_lane_bw(worker, sinfo, select_params->address);
+        lane_bw = sinfo->bandwidth;
 
         if (lane_bw < min_lane_bw) {
             ucs_trace(UCT_TL_RESOURCE_DESC_FMT
@@ -1925,7 +1917,7 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     ucp_wireup_select_info_t *sinfo;
     int found_lane;
     unsigned local_num_paths, remote_num_paths;
-    double max_ratio, lane_bw, min_lane_bw;
+    double max_ratio, min_lane_bw;
     int skip_slow_lanes;
 
     local_dev_bitmap      = bw_info->local_dev_bitmap;
@@ -1969,9 +1961,7 @@ static int ucp_wireup_add_bw_lanes_pairwise(
             addr_index        = sinfo->addr_index;
             dev_index         = context->tl_rscs[rsc_index].dev_index;
             sinfo->path_index = dev_count.local[dev_index];
-            lane_bw           = ucp_wireup_get_lane_bw(ep->worker, sinfo,
-                                                       select_params->address);
-            max_bw            = ucs_max(max_bw, lane_bw);
+            max_bw            = ucs_max(max_bw, sinfo->bandwidth);
         } else {
             /* disqualify/count lane_desc_idx */
             addr_index      = select_ctx->lane_descs[excl_lane].addr_index;
