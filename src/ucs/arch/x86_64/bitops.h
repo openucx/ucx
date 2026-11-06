@@ -13,38 +13,34 @@
 
 static UCS_F_ALWAYS_INLINE unsigned ucs_ffs32(uint32_t n)
 {
-    uint32_t result;
     asm("bsfl %1,%0"
-        : "=r" (result)
+        : "=r" (n)
         : "r" (n));
-    return result;
+    return n;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned ucs_ffs64(uint64_t n)
 {
-    uint64_t result;
     asm("bsfq %1,%0"
-        : "=r" (result)
+        : "=r" (n)
         : "r" (n));
-    return result;
+    return n;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned __ucs_ilog2_u32(uint32_t n)
 {
-    uint32_t result;
     asm("bsrl %1,%0"
-        : "=r" (result)
+        : "=r" (n)
         : "r" (n));
-    return result;
+    return n;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned __ucs_ilog2_u64(uint64_t n)
 {
-    uint64_t result;
     asm("bsrq %1,%0"
-        : "=r" (result)
+        : "=r" (n)
         : "r" (n));
-    return result;
+    return n;
 }
 
 #endif
