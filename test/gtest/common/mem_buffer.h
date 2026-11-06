@@ -104,6 +104,9 @@ public:
     /* returns whether ROCM device supports managed memory */
     static bool is_rocm_managed_supported();
 
+    /* returns whether ROCM device supports virtual memory management (VMM) */
+    static bool is_rocm_vmm_supported();
+
     /* returns whether ROCM device supports hipMallocPitch */
     static bool is_rocm_malloc_pitch_supported();
 
