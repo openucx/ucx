@@ -27,17 +27,16 @@
 #define uct_rocm_memcpy_h2d(_d,_s,_l)  memcpy((_d),(_s),(_l))
 #define uct_rocm_memcpy_d2h(_d,_s,_l)  ucs_memcpy_nontemporal((_d),(_s),(_l))
 
-/* The rkey is_vmm flag is authoritative (packed from the in-mapping user
- * address in mkey_pack), so trust it;
- */
+/* Trust the rkey is_vmm flag when present; otherwise (rndv memtype-ep staging
+ * passes UCT_INVALID_RKEY) consult the VMM registry for the user buffer. */
 static UCS_F_ALWAYS_INLINE int
-uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr)
+uct_rocm_copy_is_vmm(uct_rkey_t rkey, uint64_t remote_addr, size_t length)
 {
 #ifdef HAVE_ROCM_VMM_TYPE
     if (rkey != UCT_INVALID_RKEY) {
         return ((const uct_rocm_copy_key_t*)rkey)->is_vmm;
     }
-    return 0;
+    return uct_rocm_base_vmm_range_overlaps((void*)remote_addr, length);
 #else
     return 0;
 #endif
@@ -255,7 +254,7 @@ ucs_status_t uct_rocm_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     ucs_status_t status;
 
     if ((size < iface->config.d2h_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr, size)) {
         uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
         status = UCS_OK;
     } else {
@@ -279,7 +278,7 @@ ucs_status_t uct_rocm_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     ucs_status_t status;
 
     if ((size < iface->config.h2d_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr, size)) {
         uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
         status = UCS_OK;
     } else {
@@ -304,7 +303,7 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     uct_iov_t *iov;
 
     if ((length <= iface->config.h2d_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr, length)) {
         uct_rocm_memcpy_h2d((void*)remote_addr, buffer, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
@@ -341,7 +340,7 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
     uct_iov_t *iov;
 
     if ((length <= iface->config.d2h_thresh) &&
-        !uct_rocm_copy_is_vmm(rkey, remote_addr)) {
+        !uct_rocm_copy_is_vmm(rkey, remote_addr, length)) {
         uct_rocm_memcpy_d2h(buffer, (void*)remote_addr, length);
     } else {
         iov = ucs_malloc(sizeof(uct_iov_t), "uct_iov_t");
