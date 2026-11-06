@@ -354,40 +354,11 @@ int uct_rocm_base_file_contains_dmabuf_support(FILE* fp, const char kernel_opt1[
     return 0;
 }
 
-/* Returns 1 if the running kernel version is >= major.minor, 0 otherwise.
- * Returns -1 if the version cannot be determined. */
-static int uct_rocm_base_kernel_version_at_least(int major, int minor)
-{
-    struct utsname utsname;
-    int kmajor, kminor;
-
-    if (uname(&utsname) == -1) {
-        return -1;
-    }
-    if (sscanf(utsname.release, "%d.%d", &kmajor, &kminor) != 2) {
-        return -1;
-    }
-    return (kmajor > major) || ((kmajor == major) && (kminor >= minor));
-}
-
-/* CONFIG_DMABUF_MOVE_NOTIFY was removed in kernel 6.19 and is always
- * implicitly enabled from that version onwards. */
-static int uct_rocm_base_dmabuf_move_notify_implicit(void)
-{
-    static int result = -1;
-
-    if (result == -1) {
-        result = (uct_rocm_base_kernel_version_at_least(6, 19) == 1);
-    }
-    return result;
-}
-
 int uct_rocm_base_kernel_config_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    const char *kernel_opt1 = uct_rocm_base_dmabuf_move_notify_implicit() ?
-                              NULL : "CONFIG_DMABUF_MOVE_NOTIFY=y";
+    const char *kernel_opt1 = "CONFIG_DMABUF_MOVE_NOTIFY=y";
     const char kernel_opt2[] = "CONFIG_PCI_P2PDMA=y";
 
     fp = uct_rocm_base_load_kernel_config_file();
@@ -404,16 +375,35 @@ int uct_rocm_base_kernel_symbols_supports_dmabuf()
 {
     int dmabuf_supported = 0;
     FILE* fp = NULL;
-    const char *kernel_sym1 = uct_rocm_base_dmabuf_move_notify_implicit() ?
-                              NULL : "dma_buf_move_notify";
-    const char kernel_sym2[] = "pci_p2pdma";
+    const char *syms[] = { "dma_buf_move_notify", "dma_buf_invalidate_mappings" };
+    const char *required_sym = "pci_p2pdma";
+    int found_move_or_inv = 0;
+    int found_p2p = 0;
+    char buf[256];
 
     fp = fopen("/proc/kallsyms", "r");
     if (fp == NULL) {
         ucs_trace("no /proc/kallsyms file found");
         return dmabuf_supported;
     }
-    dmabuf_supported = uct_rocm_base_file_contains_dmabuf_support(fp, kernel_sym1, kernel_sym2);
+
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+        if (!found_p2p && (strstr(buf, required_sym) != NULL)) {
+            found_p2p = 1;
+        }
+        if (!found_move_or_inv) {
+            for (int i = 0; i < 2; i++) {
+                if (strstr(buf, syms[i]) != NULL) {
+                    found_move_or_inv = 1;
+                    break;
+                }
+            }
+        }
+        if (found_p2p && found_move_or_inv) {
+            dmabuf_supported = 1;
+            break;
+        }
+    }
     fclose(fp);
     return dmabuf_supported;
 }
