@@ -1,5 +1,6 @@
 /**
 * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -225,3 +226,193 @@ UCS_TEST_P(uct_p2p_mix_test_indirect_atomic, mix1000_indirect_atomic,
 
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_mix_test_indirect_atomic)
 
+
+/* Moves memory of a DMA-BUF provider, which the IB memory domain registers
+ * through the DMA-BUF. UCT has no fallback, so a correct payload shows that
+ * the NIC accessed the memory through the DMA-BUF. */
+class uct_p2p_rma_test_dmabuf : public uct_p2p_rma_test {
+protected:
+    /* Small enough for a driver to sub-allocate from a memory pool */
+    static constexpr size_t LENGTH = 64 * UCS_KBYTE;
+
+    struct provider_mem : uct_allocated_memory_t {
+        provider_mem(uct_md_h md, ucs_memory_type_t mem_type)
+        {
+            uct_alloc_method_t method     = UCT_ALLOC_METHOD_MD;
+            uct_mem_alloc_params_t params = {};
+
+            params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                                UCT_MEM_ALLOC_PARAM_FIELD_MDS |
+                                UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+            params.flags      = UCT_MD_MEM_ACCESS_ALL;
+            params.mem_type   = mem_type;
+            params.mds.mds    = &md;
+            params.mds.count  = 1;
+            params.name       = "dmabuf_test";
+            ASSERT_UCS_OK(uct_mem_alloc(LENGTH, &method, 1, &params, this));
+        }
+
+        ~provider_mem()
+        {
+            uct_mem_free(this);
+        }
+    };
+
+    /* Return false if the device refuses to export the memory */
+    bool test_dmabuf_xfer(uct_md_h provider_md, ucs_memory_type_t mem_type,
+                          bool is_get);
+
+    void test_dmabuf_xfer(bool is_get);
+};
+
+bool uct_p2p_rma_test_dmabuf::test_dmabuf_xfer(uct_md_h provider_md,
+                                               ucs_memory_type_t mem_type,
+                                               bool is_get)
+{
+    /* The NIC accesses the sender's memory for PUT, the receiver's for GET */
+    entity &mem_entity                 = is_get ? receiver() : sender();
+    uct_md_mem_attr_v2_t mem_attr      = {};
+    uct_md_mem_reg_params_t reg_params = {};
+    uct_rkey_bundle_t rkey             = {};
+    uct_allocated_memory_t reg_mem;
+    uct_mem_h uct_memh;
+    ucs_status_t status;
+
+    UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << " memory";
+
+    /* Keep another buffer of the same size allocated, so that a driver which
+     * sub-allocates both from one memory pool places the transferred buffer at
+     * a nonzero offset in the pool */
+    provider_mem pad(provider_md, mem_type);
+    provider_mem mem(provider_md, mem_type);
+    mapped_buffer host_buf(LENGTH, 0, is_get ? sender() : receiver());
+    /* Declared after the memory, so it is deregistered before being freed */
+    ucs::handle<uct_mem_h, uct_md_h> memh;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD |
+                          UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET;
+    ASSERT_UCS_OK(uct_md_mem_query_v2(provider_md, mem.address, LENGTH,
+                                      &mem_attr));
+    if (mem_attr.dmabuf_fd == UCT_DMABUF_FD_INVALID) {
+        /* Only an MPS MLOPart device may refuse an export the memory domain
+         * advertises; anywhere else a refusal is a failure */
+        if ((mem_type == UCS_MEMORY_TYPE_CUDA) &&
+            !mem_buffer::cuda_mem_is_gdr_capable()) {
+            UCS_TEST_MESSAGE << "skipping cuda (device refuses DMA-BUF export)";
+            return false;
+        }
+
+        UCS_TEST_ABORT(ucs_memory_type_names[mem_type]
+                       << " memory is not exported as a DMA-BUF");
+    }
+
+    reg_params.field_mask    = UCT_MD_MEM_REG_FIELD_FLAGS |
+                               UCT_MD_MEM_REG_FIELD_DMABUF_FD |
+                               UCT_MD_MEM_REG_FIELD_DMABUF_OFFSET |
+                               UCT_MD_MEM_REG_FIELD_MEM_TYPE;
+    reg_params.flags         = UCT_MD_MEM_ACCESS_ALL;
+    reg_params.dmabuf_fd     = mem_attr.dmabuf_fd;
+    reg_params.dmabuf_offset = mem_attr.dmabuf_offset;
+    reg_params.mem_type      = mem_type;
+
+    status = uct_md_mem_reg_v2(mem_entity.md(), mem.address, LENGTH,
+                               &reg_params, &uct_memh);
+    close(mem_attr.dmabuf_fd);
+    ASSERT_UCS_OK(status);
+    memh.reset(uct_memh, [](uct_mem_h handle, uct_md_h md) {
+        EXPECT_UCS_OK(uct_md_mem_dereg(md, handle));
+    }, mem_entity.md());
+
+    mem_buffer::pattern_fill(mem.address, LENGTH, SEED1, mem_type);
+
+    uct_iov_t iov = {mem.address, LENGTH, memh, 0, 1};
+    if (is_get) {
+        reg_mem      = mem;
+        reg_mem.memh = memh;
+        mem_entity.rkey_unpack(&reg_mem, &rkey);
+    }
+
+    do {
+        status = is_get ?
+                 uct_ep_get_zcopy(sender_ep(), host_buf.iov(), 1,
+                                  (uintptr_t)mem.address, rkey.rkey, NULL) :
+                 uct_ep_put_zcopy(sender_ep(), &iov, 1, host_buf.addr(),
+                                  host_buf.rkey(), NULL);
+        progress();
+    } while (status == UCS_ERR_NO_RESOURCE);
+    ASSERT_UCS_OK_OR_INPROGRESS(status);
+    flush();
+
+    if (is_get) {
+        mem_entity.rkey_release(&rkey);
+    }
+
+    host_buf.pattern_check(SEED1);
+    return true;
+}
+
+void uct_p2p_rma_test_dmabuf::test_dmabuf_xfer(bool is_get)
+{
+    unsigned num_mem_types = 0;
+    uct_md_attr_v2_t md_attr;
+    unsigned mem_type;
+
+    if (!(sender().md_attr().flags & UCT_MD_FLAG_REG_DMABUF)) {
+        UCS_TEST_SKIP_R("the memory domain cannot register a DMA-BUF");
+    }
+
+    for (const md_resource &rsc : enum_md_resources()) {
+        ucs::handle<uct_md_config_t*> md_config;
+        ucs::handle<uct_md_h> md;
+        ucs_status_t status;
+        uct_md_h uct_md;
+
+        UCS_TEST_CREATE_HANDLE(uct_md_config_t*, md_config,
+                               (void (*)(uct_md_config_t*))uct_config_release,
+                               uct_md_config_read, rsc.cmpt, NULL, NULL);
+
+        /* A listed memory domain may fail to open, as in enum_resources() */
+        {
+            scoped_log_handler slh(hide_errors_logger);
+            status = uct_md_open(rsc.cmpt, rsc.rsc_desc.md_name, md_config,
+                                 &uct_md);
+        }
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        md.reset(uct_md, uct_md_close);
+
+        md_attr.field_mask = UCT_MD_ATTR_FIELD_ALLOC_MEM_TYPES |
+                             UCT_MD_ATTR_FIELD_DMABUF_MEM_TYPES;
+        ASSERT_UCS_OK(uct_md_query_v2(md, &md_attr));
+        ucs_for_each_bit(mem_type, md_attr.alloc_mem_types &
+                                   md_attr.dmabuf_mem_types) {
+            if (mem_buffer::is_mem_type_supported(
+                        (ucs_memory_type_t)mem_type) &&
+                test_dmabuf_xfer(md, (ucs_memory_type_t)mem_type, is_get)) {
+                ++num_mem_types;
+            }
+        }
+    }
+
+    if (num_mem_types == 0) {
+        UCS_TEST_SKIP_R("no memory domain exports allocated memory as a "
+                        "DMA-BUF");
+    }
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_dmabuf, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    test_dmabuf_xfer(false);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_dmabuf, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    test_dmabuf_xfer(true);
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(uct_p2p_rma_test_dmabuf)
