@@ -792,10 +792,24 @@ UCS_TEST_F(test_memtype_explicit, ignored_registrations) {
 
     ucs_memtype_cache_global_create();
     ASSERT_TRUE(ucs_memtype_cache_global_instance != NULL);
-    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_HOST, 1);
     EXPLICIT_REG(base, 0, 0, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_LAST, 1);
     EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
+}
+
+UCS_TEST_F(test_memtype_explicit, host_registration) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x3d000);
+
+    ucs_memtype_cache_global_create();
+    ASSERT_TRUE(ucs_memtype_cache_global_instance != NULL);
+    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_HOST, 1);
+    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x1000, &info));
+    EXPECT_EQ(UCS_MEMORY_TYPE_HOST, info.type);
+
+    EXPLICIT_UNREG(base, 0, 0x1000);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
+              ucs_memtype_cache_lookup(base, 0x1000, &info));
 }
 
 /* Without free events, a detection result cannot be cached safely */

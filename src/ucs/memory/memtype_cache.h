@@ -133,8 +133,7 @@ int ucs_memtype_cache_is_explicit(void);
  *
  * @param [in]  address         Start address of the memory.
  * @param [in]  size            Size of the memory.
- * @param [in]  mem_type        Memory type of the range. Host memory is not
- *                              registered.
+ * @param [in]  mem_type        Memory type of the range.
  * @param [in]  sys_dev         System device of the range.
  * @param [in]  mem_flags       UCS memory flags of the range.
  */
