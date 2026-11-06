@@ -974,10 +974,8 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate && (status == UCS_OK)) {
-                    wait_recv_data(recv_buffer, recv_length, sn,
-                                   validate_buffer);
-                    status = validate_recv_buffer(recv_buffer, recv_length, sn,
-                                                  validate_buffer);
+                    status = check_recv_data(recv_buffer, recv_length, sn,
+                                             validate_buffer);
                 }
 
                 ucx_perf_update(&m_perf, 1, 1, length);
@@ -990,10 +988,8 @@ public:
 
                 if (validate) {
                     if (status == UCS_OK) {
-                        wait_recv_data(recv_buffer, recv_length, sn,
-                                       validate_buffer);
-                        status = validate_recv_buffer(recv_buffer, recv_length,
-                                                      sn, validate_buffer);
+                        status = check_recv_data(recv_buffer, recv_length, sn,
+                                                 validate_buffer);
                     }
                     fill_sn(send_buffer, m_perf.params.ucp.send_datatype,
                             m_perf.send_allocator, send_length, sn);
@@ -1195,24 +1191,27 @@ private:
                            length, sn, host_buffer, log_level);
     }
 
-    /* The sequence number in the last byte does not mean that the rest of a
-     * put message is there: a put does not define the order in which its data
-     * is placed, e.g. RC out-of-order data placement or a CPU copy by a shared
-     * memory transport. Wait until the whole message has the expected data,
-     * for a limited time. */
-    void wait_recv_data(void *recv_buffer, size_t length, psn_t sn,
-                        void *host_buffer)
+    /* Check the received data and return the status of the last check. The
+     * sequence number in the last byte does not mean that the rest of a put
+     * message is there: a put does not define the order in which its data is
+     * placed, e.g. RC out-of-order data placement or a CPU copy by a shared
+     * memory transport. So for a put, wait until the whole message has the
+     * expected data, for a limited time. */
+    ucs_status_t wait_recv_data(void *recv_buffer, size_t length, psn_t sn,
+                                void *host_buffer)
     {
-        ucs_time_t deadline;
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC);
+        ucs_status_t status;
 
-        if (CMD != UCX_PERF_CMD_PUT) {
-            return;
-        }
+        for (;;) {
+            status = validate_recv_data(recv_buffer, length, sn, host_buffer,
+                                        UCS_LOG_LEVEL_TRACE_POLL);
+            if ((status == UCS_OK) || (CMD != UCX_PERF_CMD_PUT) ||
+                (ucs_get_time() >= deadline)) {
+                return status;
+            }
 
-        deadline = ucs_get_time() + ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC);
-        while ((validate_recv_data(recv_buffer, length, sn, host_buffer,
-                                   UCS_LOG_LEVEL_TRACE_POLL) != UCS_OK) &&
-               (ucs_get_time() < deadline)) {
             /* Do not sleep: on a data mismatch no event wakes the worker up */
             if (!is_one_sided()) {
                 ucp_worker_progress(m_perf.ucp.worker);
@@ -1229,6 +1228,24 @@ private:
 
         return validate_recv_data(recv_buffer, length, sn, host_buffer,
                                   UCS_LOG_LEVEL_ERROR);
+    }
+
+    /* Wait for the received data, and report a mismatch. On a match, still
+     * fence a put like validate_recv_buffer() does: in a one-sided test this
+     * fence is the only worker progress of the iteration, which returns the
+     * send credits of RC and DC. */
+    ucs_status_t check_recv_data(void *recv_buffer, size_t length, psn_t sn,
+                                 void *host_buffer)
+    {
+        if (wait_recv_data(recv_buffer, length, sn, host_buffer) != UCS_OK) {
+            return validate_recv_buffer(recv_buffer, length, sn, host_buffer);
+        }
+
+        if (CMD == UCX_PERF_CMD_PUT) {
+            fence();
+        }
+
+        return UCS_OK;
     }
 
     void *alloc_validate_common(size_t buffer_length)
