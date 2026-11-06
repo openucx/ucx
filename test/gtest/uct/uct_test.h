@@ -120,6 +120,8 @@ public:
 
     virtual bool has_transport(const std::string& tl_name) const;
 
+    ucs::handle<uct_md_h> open_md() const;
+
     enum atomic_mode {
         OP32,
         OP64,
