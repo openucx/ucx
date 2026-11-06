@@ -9,24 +9,10 @@ realdir=$(realpath $(dirname $0))
 requested_gcc_module=${GCC_MODULE:-}
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
-build_mode=${build_mode:-}
-
-# Azure passes the literal template variable when a matrix row does not define
-# build_mode. Treat it as unset so the local default below still applies.
-[ "${build_mode}" = "\$(build_mode)" ] && build_mode=
-
 build_mode=${build_mode:-long}
-
 require_ze=${require_ze:-}
-# Azure passes the literal template variable when a matrix row does not define
-# require_ze. Treat it as unset.
-[ "${require_ze}" = "\$(require_ze)" ] && require_ze=
-
+# Default no-GPU CI uses the ZE null driver; manual Intel GPU runs set yes.
 require_real_ze=${require_real_ze:-}
-# Azure passes the literal template variable when a matrix row does not define
-# require_real_ze. Treat it as unset so default no-GPU CI can use the ZE null
-# driver, while manual Intel GPU runs can set require_real_ze=yes.
-[ "${require_real_ze}" = "\$(require_real_ze)" ] && require_real_ze=
 
 case "${build_mode}" in
 long|short|sanity|compilers|soname_suffix|ze)

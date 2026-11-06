@@ -2,9 +2,6 @@ variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_IB: --ulimit memlock=-1:-1 --device=/dev/infiniband/ --net=host
   DOCKER_OPT_GPU: --gpus all --device=/dev/gdrdrv --ipc=host $(DOCKER_OPT_IB)
-  # Set to e.g. "--device=/dev/dri --group-add render --group-add video"
-  # when running the ZE lane on Intel GPU hosts.
-  DOCKER_OPT_ZE_GPU: ""
   DOCKER_OPT_ARGS: --cap-add=SYS_PTRACE
 
 resources:
@@ -24,33 +21,9 @@ resources:
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel82
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel90
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel90_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
-    - container: rhel100
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel10.0/builder:mofed-25.07-0.9.7.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rhel100_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rhel10.0/builder:mofed-25.07-0.9.7.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rocky89
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rocky8.9/builder:mofed-24.10-3.2.5.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rocky96
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rocky9.6/builder:mofed-24.10-3.2.5.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rocky89_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rocky8.9/builder:mofed-24.10-3.2.5.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: rocky96_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/rocky9.6/builder:mofed-24.10-3.2.5.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2204
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
@@ -60,90 +33,9 @@ resources:
     - container: ubuntu2404
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ubuntu2404_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu24.04/builder:doca-2.9.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2404_doca31_gpunetio
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
-    # No-GPU Level Zero builder (ZE loader + null driver), built from
-    # buildlib/dockers/ze-builder.Dockerfile.
-    - container: ubuntu2404_ze
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04/builder:ze-oneapi-2026.0.0-l0-1.27.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_ZE_GPU)
-    - container: ubuntu2604
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu26.04/builder:mofed-26.04-0.7.6.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ubuntu2604_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu26.04/builder:mofed-26.04-0.7.6.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: tencentos44
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/tencentos4.4/builder:mofed-26.04-0.7.6.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: tencentos44_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/tencentos4.4/builder:mofed-26.04-0.7.6.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: fedora44
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/fedora44/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: fedora44_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/fedora44/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ubuntu2610
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ubuntu26.10/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ubuntu2610_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ubuntu26.10/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    # Azure Linux 4.0 is in public preview; the image tracks the azurelinux-beta channel.
-    - container: azurelinux40
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/azurelinux4.0/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: azurelinux40_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/azurelinux4.0/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    # DOCA publishes no aarch64 openEuler, so aarch64 takes the MOFED route.
-    - container: openeuler2203sp4
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/openeuler22.03sp4/builder:doca-3.5.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: openeuler2203sp4_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/openeuler22.03sp4/builder:mofed-26.07-0.7.7.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: openeuler2403sp3
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/openeuler24.03sp3/builder:doca-3.5.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: openeuler2403sp3_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/openeuler24.03sp3/builder:mofed-26.07-0.7.7.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    # 20.1060a is the newest UOS rootfs on urm; DOCA publishes it for x86_64 only, so
-    # aarch64 is inbox (rdma-core 37).
-    - container: uos201060a
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/uos20.1060a/builder:doca-3.4.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: uos201060a_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/uos20.1060a/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: debian113
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian11.3/builder:mofed-5.8-3.0.7.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: debian125
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian12.5/builder:doca-2.9.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: debian130
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/debian13.0/builder:doca-3.2.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles15sp7
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles15sp7/builder:mofed-26.01-0.8.8.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles15sp7_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/sles15sp7/builder:mofed-26.01-0.8.8.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles16sp0
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/sles16sp0/builder:mofed-26.01-0.8.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: sles16sp0_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/sles16sp0/builder:mofed-26.01-0.8.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
     - container: rhel90_doca31
       image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/rhel9.0/builder:doca-3.1.0
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
@@ -270,18 +162,6 @@ resources:
     - container: ubuntu24_cuda13
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu24.04-mofed24.10-cuda13:1
       options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
-    - container: ubuntu2204_rocm_6_0_0
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/x86_64/ubuntu2204:rocm-6.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ctyunos2507
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/ctyunos25.07/builder:mofed-26.01-0.8.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: ctyunos2507_aarch64
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/aarch64/ctyunos25.07/builder:mofed-26.01-0.8.0.0
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
-    - container: centos10stream
-      image: rdmz-harbor.rdmz.labs.mlnx/hpcx/x86_64/centos10stream/builder:inbox
-      options: $(DOCKER_OPT_ARGS) $(DOCKER_OPT_VOLUMES)
 
 stages:
   - stage: Codestyle
