@@ -14,7 +14,9 @@ extern "C" {
 #include <net/if.h>
 #include <libgen.h>
 #include <limits.h>
+#include <linux/rtnetlink.h>
 #include <unistd.h>
+#include <vector>
 
 
 class test_netlink : public ucs::test {
@@ -33,6 +35,32 @@ protected:
 
         target[len] = '\0';
         return basename(target);
+    }
+
+    static void append_nlmsg(std::vector<uint8_t> &stream, unsigned short type,
+                             const void *hdr = NULL, size_t hdr_size = 0,
+                             const std::vector<uint8_t> &attrs = {})
+    {
+        size_t msg_len = NLMSG_LENGTH(NLMSG_ALIGN(hdr_size) + attrs.size());
+        size_t offset  = stream.size();
+        struct nlmsghdr nlh = {static_cast<uint32_t>(msg_len), type,
+                               NLM_F_MULTI, 0, 0};
+
+        stream.resize(offset + NLMSG_ALIGN(msg_len), 0);
+        memcpy(&stream[offset], &nlh, sizeof(nlh));
+        if (hdr != NULL) {
+            memcpy(&stream[offset + NLMSG_HDRLEN], hdr, hdr_size);
+        }
+        if (!attrs.empty()) {
+            memcpy(&stream[offset + NLMSG_HDRLEN + NLMSG_ALIGN(hdr_size)],
+                   &attrs[0], attrs.size());
+        }
+    }
+
+    static ucs_status_t count_msg_cb(const struct nlmsghdr*, void *arg)
+    {
+        ++(*static_cast<int*>(arg));
+        return UCS_INPROGRESS;
     }
 };
 
@@ -169,4 +197,105 @@ UCS_TEST_F(test_netlink, best_route_to_local_addr) {
     freeifaddrs(ifaddrs);
     if_freenameindex(ifs);
     UCS_TEST_MESSAGE << num_checks << " routes from other domains checked";
+}
+
+UCS_TEST_F(test_netlink, parse_msg) {
+    auto fail_cb = [](const struct nlmsghdr*, void *arg) -> ucs_status_t {
+        ++(*static_cast<int*>(arg));
+        return UCS_ERR_NO_MEMORY;
+    };
+    const int done_ok     = 0;
+    const int done_error  = -EINVAL;
+    struct ifinfomsg ifi  = {};
+    struct nlmsgerr nlerr = {-ENODEV};
+    std::vector<uint8_t> dump, reply;
+    int count, msg_done;
+    size_t done_offset;
+    struct nlmsghdr *nlh;
+
+    /* A datagram in the middle of a dump */
+    append_nlmsg(dump, RTM_NEWLINK, &ifi, sizeof(ifi));
+    append_nlmsg(dump, RTM_NEWLINK, &ifi, sizeof(ifi));
+    count = 0;
+    ASSERT_UCS_OK(ucs_netlink_parse_msg(dump.data(), dump.size(), count_msg_cb,
+                                        &count, UCS_LOG_LEVEL_ERROR,
+                                        &msg_done));
+    EXPECT_EQ(2, count);
+    EXPECT_EQ(0, msg_done);
+
+    /* NLMSG_DONE may follow the last messages of a dump in the same datagram */
+    done_offset = dump.size();
+    append_nlmsg(dump, NLMSG_DONE, &done_ok, sizeof(done_ok));
+    count = 0;
+    ASSERT_UCS_OK(ucs_netlink_parse_msg(dump.data(), dump.size(), count_msg_cb,
+                                        &count, UCS_LOG_LEVEL_ERROR,
+                                        &msg_done));
+    EXPECT_EQ(2, count);
+    EXPECT_EQ(1, msg_done);
+
+    /* A parser error stops the parsing */
+    count = 0;
+    EXPECT_EQ(UCS_ERR_NO_MEMORY,
+              ucs_netlink_parse_msg(dump.data(), dump.size(), fail_cb, &count,
+                                    UCS_LOG_LEVEL_ERROR, &msg_done));
+    EXPECT_EQ(1, count);
+
+    /* The kernel marks the messages of an inconsistent dump, including
+     * NLMSG_DONE, with NLM_F_DUMP_INTR */
+    for (size_t offset : {size_t(0), done_offset}) {
+        nlh = reinterpret_cast<struct nlmsghdr*>(&dump[offset]);
+        nlh->nlmsg_flags |= NLM_F_DUMP_INTR;
+        count = 0;
+        EXPECT_EQ(UCS_ERR_BUSY,
+                  ucs_netlink_parse_msg(dump.data(), dump.size(), count_msg_cb,
+                                        &count, UCS_LOG_LEVEL_ERROR,
+                                        &msg_done));
+        nlh->nlmsg_flags &= ~NLM_F_DUMP_INTR;
+        EXPECT_EQ(2, count);
+        EXPECT_EQ(1, msg_done);
+    }
+
+    scoped_log_handler slh(hide_errors_logger);
+
+    /* An error reply to a request is logged with the requested log level */
+    append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
+    count = 0;
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
+                                    &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
+    EXPECT_EQ(0, count);
+    EXPECT_EQ(0, msg_done);
+    EXPECT_TRUE(m_errors.empty());
+
+    /* A dump which failed in the kernel ends with an error in NLMSG_DONE */
+    dump.resize(done_offset);
+    append_nlmsg(dump, NLMSG_DONE, &done_error, sizeof(done_error));
+    count = 0;
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              ucs_netlink_parse_msg(dump.data(), dump.size(), count_msg_cb,
+                                    &count, UCS_LOG_LEVEL_ERROR, &msg_done));
+    EXPECT_EQ(2, count);
+    EXPECT_EQ(1, msg_done);
+    EXPECT_EQ(1u, m_errors.size());
+}
+
+UCS_TEST_F(test_netlink, send_request) {
+    struct ifinfomsg ifi = {};
+    int count            = 0;
+
+    /* Every network namespace has a loopback device */
+    ASSERT_UCS_OK_OR_BUSY(
+            ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, NLM_F_DUMP,
+                                     &ifi, sizeof(ifi), count_msg_cb, &count,
+                                     UCS_LOG_LEVEL_ERROR));
+    EXPECT_GE(count, 1);
+
+    /* The kernel replies with ENODEV to a query of a missing device */
+    ifi.ifi_index = INT_MAX;
+    count         = 0;
+    EXPECT_EQ(UCS_ERR_IO_ERROR,
+              ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, 0, &ifi,
+                                       sizeof(ifi), count_msg_cb, &count,
+                                       UCS_LOG_LEVEL_DEBUG));
+    EXPECT_EQ(0, count);
 }

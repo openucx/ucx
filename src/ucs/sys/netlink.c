@@ -95,45 +95,58 @@ err:
     return status;
 }
 
-static ucs_status_t
-ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg, int *done_p)
+ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                                   ucs_netlink_parse_cb_t parse_cb, void *arg,
+                                   ucs_log_level_t err_log_level,
+                                   int *msg_done_p)
 {
     ucs_status_t status        = UCS_INPROGRESS;
+    int dump_intr              = 0;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
+    int err;
 
-    *done_p = 0;
-
-    /* NLMSG_DONE may follow other messages of a dump in the same datagram */
-    for (; NLMSG_OK(nlh, msg_len); nlh = NLMSG_NEXT(nlh, msg_len)) {
-        if (ucs_netlink_is_msg_done(nlh)) {
-            *done_p = 1;
-            break;
+    *msg_done_p = 0;
+    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len)) {
+        if (nlh->nlmsg_flags & NLM_F_DUMP_INTR) {
+            ucs_debug("netlink dump was interrupted");
+            dump_intr = 1;
         }
 
-        if (nlh->nlmsg_type == NLMSG_ERROR) {
-            struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
-            ucs_error("received error response from netlink err=%d: %s\n",
-                      err->error, strerror(-err->error));
+        err = (nlh->nlmsg_len >= NLMSG_LENGTH(sizeof(err))) ?
+                      *(const int*)NLMSG_DATA(nlh) :
+                      0;
+        if (ucs_netlink_is_msg_done(nlh)) {
+            *msg_done_p = 1;
+            if (err >= 0) {
+                break;
+            }
+        }
+
+        if (ucs_netlink_is_msg_done(nlh) || (nlh->nlmsg_type == NLMSG_ERROR)) {
+            ucs_log(err_log_level,
+                    "received error response from netlink err %d: %s", err,
+                    strerror(-err));
             return UCS_ERR_IO_ERROR;
         }
 
-        if (status == UCS_INPROGRESS) {
-            status = parse_cb(nlh, arg);
-        }
+        status = parse_cb(nlh, arg);
+        nlh    = NLMSG_NEXT(nlh, msg_len);
     }
 
-    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
+    return (status != UCS_INPROGRESS) ? status :
+                                        (dump_intr ? UCS_ERR_BUSY : UCS_OK);
 }
 
-ucs_status_t
-ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
-                         unsigned short nlmsg_flags,
-                         const void *protocol_header, size_t header_length,
-                         ucs_netlink_parse_cb_t parse_cb, void *arg)
+ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                                      unsigned short nlmsg_flags,
+                                      const void *protocol_header,
+                                      size_t header_length,
+                                      ucs_netlink_parse_cb_t parse_cb,
+                                      void *arg, ucs_log_level_t err_log_level)
 {
     struct nlmsghdr nlh = {0};
     int netlink_fd      = -1;
+    int dump_intr       = 0;
     size_t recv_msg_len;
     char *recv_msg;
     int msg_done;
@@ -179,6 +192,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         if (recv_msg == NULL) {
             ucs_error("failed to allocate a buffer for netlink receive message"
                       " of size %zu", recv_msg_len);
+            status = UCS_ERR_NO_MEMORY;
             goto out;
         }
 
@@ -191,9 +205,15 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         }
 
         status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg,
-                                       &msg_done);
+                                       err_log_level, &msg_done);
         ucs_free(recv_msg);
-    } while ((status == UCS_OK) && (nlmsg_flags & NLM_F_DUMP) && !msg_done);
+        if (status == UCS_ERR_BUSY) {
+            dump_intr = 1;
+            status    = UCS_OK;
+        }
+    } while ((nlmsg_flags & NLM_F_DUMP) && (status == UCS_OK) && !msg_done);
+
+    status = ((status == UCS_OK) && dump_intr) ? UCS_ERR_BUSY : status;
 
 out:
     ucs_close_fd(&netlink_fd);
@@ -319,12 +339,12 @@ static void ucs_netlink_init_routing_table_cache(void)
         rtm.rtm_family = AF_INET;
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
                                  sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
-                                 NULL);
+                                 NULL, UCS_LOG_LEVEL_ERROR);
 
         rtm.rtm_family = AF_INET6;
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
                                  sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
-                                 NULL);
+                                 NULL, UCS_LOG_LEVEL_ERROR);
     }
 }
 
@@ -523,7 +543,8 @@ static void ucs_netlink_init_vrf_master_cache(void)
     UCS_INIT_ONCE(&init_once) {
         ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETLINK, NLM_F_DUMP,
                                  &ifi_msg, sizeof(ifi_msg),
-                                 ucs_netlink_parse_vrf_master_cb, NULL);
+                                 ucs_netlink_parse_vrf_master_cb, NULL,
+                                 UCS_LOG_LEVEL_ERROR);
     }
 }
 

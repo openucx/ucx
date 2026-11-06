@@ -7,6 +7,7 @@
 #ifndef UCS_NETLINK_H
 #define UCS_NETLINK_H
 
+#include <ucs/config/types.h>
 #include <ucs/type/status.h>
 
 #include <linux/netlink.h>
@@ -31,23 +32,46 @@ typedef enum {
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                void *arg);
 
-/*
+/**
+ * Parse a received netlink datagram buffer containing one or more messages.
+ *
+ * @param [in]  msg            Pointer to the received netlink message buffer.
+ * @param [in]  msg_len        Length of the message buffer in bytes.
+ * @param [in]  parse_cb       Callback function to parse each message.
+ * @param [in]  arg            User-provided argument for the parse callback.
+ * @param [in]  err_log_level  Log level used when an NLMSG_ERROR is received.
+ * @param [out] msg_done_p     Set to 1 if NLMSG_DONE was reached, 0 otherwise.
+ *
+ * @return UCS_OK if the buffer was parsed, UCS_ERR_BUSY if a dump was
+ *         interrupted (NLM_F_DUMP_INTR), or error code otherwise.
+ */
+ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                                   ucs_netlink_parse_cb_t parse_cb, void *arg,
+                                   ucs_log_level_t err_log_level,
+                                   int *msg_done_p);
+
+/**
  * Send a netlink request and parse the response.
  *
  * @param [in]  protocol         Netlink protocol (e.g. NETLINK_ROUTE).
- * @param [in]  nlmsg_type       Protocol message type (e.g. NETLINK_GETROUTE).
- * @param [in]  nlmsg_flags      Flags for message header (e.g. NLM_F_ROOT).
+ * @param [in]  nlmsg_type       Protocol message type (e.g. RTM_GETROUTE).
+ * @param [in]  nlmsg_flags      Flags for message header (e.g. NLM_F_DUMP).
  * @param [in]  protocol_header  Netlink protocol header.
  * @param [in]  header_length    Netlink protocol header length.
  * @param [in]  parse_cb         Callback function to parse the response.
  * @param [in]  arg              User-provided argument for the parse callback.
+ * @param [in]  err_log_level    Log level used when an NLMSG_ERROR is received.
+ *
+ * @return UCS_OK if the request succeeded, UCS_ERR_BUSY if a dump was
+ *         interrupted (NLM_F_DUMP_INTR) and should be retried, or error code
+ *         otherwise.
  */
-ucs_status_t
-ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
-                         unsigned short nlmsg_flags,
-                         const void *protocol_header, size_t header_length,
-                         ucs_netlink_parse_cb_t parse_cb, void *arg);
-
+ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                                      unsigned short nlmsg_flags,
+                                      const void *protocol_header,
+                                      size_t header_length,
+                                      ucs_netlink_parse_cb_t parse_cb,
+                                      void *arg, ucs_log_level_t err_log_level);
 
 /**
  * Check whether a route exists for a given network interface and

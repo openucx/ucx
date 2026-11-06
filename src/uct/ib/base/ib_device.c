@@ -1777,7 +1777,8 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     is_smi = 0;
     status = ucs_netlink_send_request(
             NETLINK_RDMA, RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
-            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi);
+            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi,
+            UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return 0;
     }

@@ -203,7 +203,6 @@ gtest_SOURCES = \
 	ucs/test_mpmc.cc \
 	ucs/test_mpool.cc \
 	ucs/test_mpool_set.cc \
-	ucs/test_netlink.cc \
 	ucs/test_pgtable.cc \
 	ucs/test_profile.cc \
 	ucs/test_rcache.cc \
@@ -216,6 +215,7 @@ gtest_SOURCES = \
 	ucs/test_topo.cc \
 	ucs/test_topo_groups.cc \
 	ucs/test_sock.cc \
+	ucs/test_netlink.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_usage_tracker.cc \
