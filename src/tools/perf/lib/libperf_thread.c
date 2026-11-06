@@ -128,7 +128,11 @@ ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
         }
     }
 
-    ucx_perf_thread_report_aggregated_results(perf);
+    /* Fail the test on all peers if it failed on any of them */
+    status = ucx_perf_test_exchange_status(perf, status);
+    if (status == UCS_OK) {
+        ucx_perf_thread_report_aggregated_results(perf);
+    }
 
     free(statuses);
 out:

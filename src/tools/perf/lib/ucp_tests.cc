@@ -947,7 +947,7 @@ public:
                 validate_buffer = alloc_validate_buffer(recv_length);
             }
             if (validate_buffer == NULL) {
-                return UCS_ERR_NO_MEMORY;
+                status = UCS_ERR_NO_MEMORY;
             }
         }
 
@@ -959,6 +959,8 @@ public:
 
         ucx_perf_omp_barrier(&m_perf);
 
+        /* After an error keep the ping-pong going without validation, because
+         * the peer waits for every message of the test */
         if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
 
@@ -971,14 +973,11 @@ public:
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 wait_recv_window(m_max_outstanding);
 
-                if (validate) {
+                if (validate && (status == UCS_OK)) {
                     wait_recv_data(recv_buffer, recv_length, sn,
                                    validate_buffer);
                     status = validate_recv_buffer(recv_buffer, recv_length, sn,
                                                   validate_buffer);
-                    if (status != UCS_OK) {
-                        goto out;
-                    }
                 }
 
                 ucx_perf_update(&m_perf, 1, 1, length);
@@ -990,12 +989,11 @@ public:
                 wait_recv_window(m_max_outstanding);
 
                 if (validate) {
-                    wait_recv_data(recv_buffer, recv_length, sn,
-                                   validate_buffer);
-                    status = validate_recv_buffer(recv_buffer, recv_length, sn,
-                                                  validate_buffer);
-                    if (status != UCS_OK) {
-                        goto out;
+                    if (status == UCS_OK) {
+                        wait_recv_data(recv_buffer, recv_length, sn,
+                                       validate_buffer);
+                        status = validate_recv_buffer(recv_buffer, recv_length,
+                                                      sn, validate_buffer);
                     }
                     fill_sn(send_buffer, m_perf.params.ucp.send_datatype,
                             m_perf.send_allocator, send_length, sn);
@@ -1017,7 +1015,6 @@ public:
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
 
-out:
         free(validate_buffer);
         return status;
     }
