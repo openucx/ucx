@@ -367,7 +367,7 @@ protected:
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {
         ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
         while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
-            short_progress_loop();
+            progress();
         }
     }
 
@@ -376,7 +376,7 @@ protected:
                         double timeout = DEFAULT_TIMEOUT_SEC) const
     {
         test_base::wait_for_value(
-                var, value, [this]() { short_progress_loop(); }, timeout);
+                var, value, [this]() { progress(); }, timeout);
     }
 
     static const ucp_datatype_t DATATYPE;
