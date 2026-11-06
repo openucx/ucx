@@ -19,6 +19,7 @@
 #include <ucs/type/init_once.h>
 
 #include <errno.h>
+#include <linux/fib_rules.h>
 #include <linux/rtnetlink.h>
 #include <pthread.h>
 #include <sys/socket.h>
@@ -43,7 +44,9 @@ UCS_ARRAY_DECLARE_TYPE(ucs_netlink_rt_rules_t, unsigned,
 
 KHASH_INIT(ucs_netlink_rt_cache, khint32_t, ucs_netlink_rt_rules_t, 1,
            kh_int_hash_func, kh_int_hash_equal);
+
 static khash_t(ucs_netlink_rt_cache) ucs_netlink_routing_table_cache;
+static ucs_init_once_t ucs_netlink_rt_cache_once = UCS_INIT_ONCE_INITIALIZER;
 
 static inline int ucs_netlink_is_msg_done(const struct nlmsghdr *nlh)
 {
@@ -76,37 +79,61 @@ err:
     return status;
 }
 
-static ucs_status_t
-ucs_netlink_parse_msg(const void *msg, size_t msg_len,
-                      ucs_netlink_parse_cb_t parse_cb, void *arg)
+ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                                   ucs_netlink_parse_cb_t parse_cb, void *arg,
+                                   ucs_log_level_t err_log_level,
+                                   int *msg_done_p)
 {
     ucs_status_t status        = UCS_INPROGRESS;
+    int dump_intr              = 0;
     const struct nlmsghdr *nlh = (const struct nlmsghdr *)msg;
+    int err;
 
-    while ((status == UCS_INPROGRESS) && NLMSG_OK(nlh, msg_len) &&
-           !ucs_netlink_is_msg_done(nlh)) {
-        if (nlh->nlmsg_type == NLMSG_ERROR) {
-            struct nlmsgerr *err = (struct nlmsgerr *)NLMSG_DATA(nlh);
-            ucs_error("received error response from netlink err=%d: %s\n",
-                      err->error, strerror(-err->error));
+    *msg_done_p = 0;
+    while (NLMSG_OK(nlh, msg_len)) {
+        if (nlh->nlmsg_flags & NLM_F_DUMP_INTR) {
+            ucs_debug("netlink dump was interrupted");
+            dump_intr = 1;
+        }
+
+        if (ucs_netlink_is_msg_done(nlh) || (nlh->nlmsg_type == NLMSG_ERROR)) {
+            *msg_done_p = ucs_netlink_is_msg_done(nlh);
+            err         = (nlh->nlmsg_len >= NLMSG_LENGTH(sizeof(err))) ?
+                                  *(const int*)NLMSG_DATA(nlh) :
+                                  0;
+            if (*msg_done_p && (err >= 0)) {
+                break;
+            }
+
+            ucs_log(err_log_level,
+                    "received error response from netlink err %d: %s", err,
+                    strerror(-err));
             return UCS_ERR_IO_ERROR;
         }
 
-        status = parse_cb(nlh, arg);
-        nlh    = NLMSG_NEXT(nlh, msg_len);
+        if (status == UCS_INPROGRESS) {
+            status = parse_cb(nlh, arg);
+        } else if (status != UCS_OK) {
+            break;
+        }
+
+        nlh = NLMSG_NEXT(nlh, msg_len);
     }
 
-    return UCS_OK;
+    return (status != UCS_INPROGRESS) ? status :
+                                        (dump_intr ? UCS_ERR_BUSY : UCS_OK);
 }
 
-ucs_status_t
-ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
-                         unsigned short nlmsg_flags,
-                         const void *protocol_header, size_t header_length,
-                         ucs_netlink_parse_cb_t parse_cb, void *arg)
+ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                                      unsigned short nlmsg_flags,
+                                      const void *protocol_header,
+                                      size_t header_length,
+                                      ucs_netlink_parse_cb_t parse_cb,
+                                      void *arg, ucs_log_level_t err_log_level)
 {
     struct nlmsghdr nlh = {0};
     int netlink_fd      = -1;
+    int dump_intr       = 0;
     size_t recv_msg_len;
     char *recv_msg;
     int msg_done;
@@ -152,6 +179,7 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
         if (recv_msg == NULL) {
             ucs_error("failed to allocate a buffer for netlink receive message"
                       " of size %zu", recv_msg_len);
+            status = UCS_ERR_NO_MEMORY;
             goto out;
         }
 
@@ -163,55 +191,134 @@ ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
             goto out;
         }
 
-        status   = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg);
-        msg_done = ucs_netlink_is_msg_done((const struct nlmsghdr *)recv_msg);
+        status = ucs_netlink_parse_msg(recv_msg, recv_msg_len, parse_cb, arg,
+                                       err_log_level, &msg_done);
         ucs_free(recv_msg);
-    } while ((nlmsg_flags & NLM_F_DUMP) && !msg_done);
+        if (status == UCS_ERR_BUSY) {
+            dump_intr = 1;
+            status    = UCS_OK;
+        }
+    } while ((nlmsg_flags & NLM_F_DUMP) && (status == UCS_OK) && !msg_done);
+
+    status = ((status == UCS_OK) && dump_intr) ? UCS_ERR_BUSY : status;
 
 out:
     ucs_close_fd(&netlink_fd);
     return status;
 }
 
-static ucs_status_t
-ucs_netlink_get_route_info(const struct rtattr *rta, int len, int *if_index_p,
-                           const void **dst_in_addr, size_t rtm_dst_len)
+ucs_status_t
+ucs_netlink_parse_rule_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
+    ucs_netlink_rt_parse_ctx_t *ctx = arg;
+    const struct fib_rule_hdr *frh;
+    const struct rtattr *rta;
+    uint32_t table_id, fwmark, fwmask;
+    int matches_unmarked, len, khret;
+    khiter_t iter;
+
+    frh = NLMSG_DATA(nlh);
+    if ((nlh->nlmsg_len < NLMSG_LENGTH(sizeof(*frh))) ||
+        (frh->action != FR_ACT_TO_TBL)) {
+        return UCS_INPROGRESS;
+    }
+
+    table_id = frh->table;
+    fwmark   = 0;
+    fwmask   = UINT32_MAX;
+    rta      = UCS_PTR_BYTE_OFFSET(frh, NLMSG_ALIGN(sizeof(*frh)));
+    len      = NLMSG_PAYLOAD(nlh, sizeof(*frh));
+
+    for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        if ((rta->rta_type == FRA_TABLE) &&
+            (RTA_PAYLOAD(rta) >= sizeof(table_id))) {
+            table_id = *((const uint32_t*)RTA_DATA(rta));
+        } else if ((rta->rta_type == FRA_FWMARK) &&
+                   (RTA_PAYLOAD(rta) >= sizeof(fwmark))) {
+            fwmark = *((const uint32_t*)RTA_DATA(rta));
+        } else if ((rta->rta_type == FRA_FWMASK) &&
+                   (RTA_PAYLOAD(rta) >= sizeof(fwmask))) {
+            fwmask = *((const uint32_t*)RTA_DATA(rta));
+        }
+    }
+
+    if (table_id == RT_TABLE_UNSPEC) {
+        return UCS_INPROGRESS;
+    }
+
+    /* Kernel RDMA/RoCE and unmarked TCP socket route lookups use flowi_mark ==
+     * 0 (matching when (fwmark & fwmask) == 0); treat inverted rules
+     * conservatively as reachable by unmarked traffic. */
+    matches_unmarked = ((frh->flags & FIB_RULE_INVERT) != 0) ||
+                       ((fwmark & fwmask) == 0);
+
+    iter = kh_put(ucs_netlink_table_flags, ctx, (khint32_t)table_id, &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to insert routing table %u into rule map", table_id);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        kh_val(ctx, iter) = 0;
+    }
+
+    kh_val(ctx, iter) |= matches_unmarked;
+    return UCS_INPROGRESS;
+}
+
+static ucs_status_t
+ucs_netlink_get_route_info(const struct rtmsg *rt_msg, int len, int *if_index_p,
+                           const void **dst_in_addr, uint32_t *table_id_p)
+{
+    const struct rtattr *rta = RTM_RTA(rt_msg);
+
     *if_index_p  = -1;
     *dst_in_addr = NULL;
+    *table_id_p  = rt_msg->rtm_table;
 
     for (; RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
             *if_index_p = *((const int *)RTA_DATA(rta));
         } else if (rta->rta_type == RTA_DST) {
             *dst_in_addr = RTA_DATA(rta);
+        } else if ((rta->rta_type == RTA_TABLE) &&
+                   (RTA_PAYLOAD(rta) >= sizeof(*table_id_p))) {
+            *table_id_p = *((const uint32_t*)RTA_DATA(rta));
         }
     }
 
     if (/* Network interface index is not valid */
         (*if_index_p == -1) ||
         /* dst_in_addr required but not present */
-        ((rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
+        ((rt_msg->rtm_dst_len != 0) && (*dst_in_addr == NULL))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_netlink_parse_rt_entry_cb(const struct nlmsghdr *nlh, void *arg)
 {
-    const struct rtmsg *rt_msg = NLMSG_DATA(nlh);
+    const ucs_netlink_rt_parse_ctx_t *ctx = arg;
+    const struct rtmsg *rt_msg            = NLMSG_DATA(nlh);
     const void *dst_in_addr;
     ucs_netlink_route_entry_t *new_rule;
     ucs_netlink_rt_rules_t *iface_rules;
-    int iface_index;
+    uint32_t table_id;
+    int iface_index, khret;
     khiter_t iter;
-    int khret;
 
-    if (ucs_netlink_get_route_info(RTM_RTA(rt_msg), RTM_PAYLOAD(nlh),
-                                   &iface_index, &dst_in_addr,
-                                   rt_msg->rtm_dst_len) != UCS_OK) {
+    if ((nlh->nlmsg_len < NLMSG_LENGTH(sizeof(*rt_msg))) ||
+        (ucs_netlink_get_route_info(rt_msg, RTM_PAYLOAD(nlh), &iface_index,
+                                    &dst_in_addr, &table_id) != UCS_OK)) {
+        return UCS_INPROGRESS;
+    }
+
+    iter = kh_get(ucs_netlink_table_flags, ctx, (khint32_t)table_id);
+    if ((iter != kh_end(ctx)) && !kh_val(ctx, iter)) {
+        ucs_trace("ignoring fwmark-only route: table %u iface %d dst_len %u",
+                  table_id, iface_index, rt_msg->rtm_dst_len);
         return UCS_INPROGRESS;
     }
 
@@ -282,22 +389,73 @@ ucs_netlink_lookup_in_iface_rules(const struct sockaddr *sa_remote,
                                                      RTN_UNSPEC);
 }
 
+static void ucs_netlink_clear_routing_table_cache(void)
+{
+    khash_t(ucs_netlink_rt_cache) *cache = &ucs_netlink_routing_table_cache;
+    khiter_t iter;
+
+    for (iter = kh_begin(cache); iter != kh_end(cache); ++iter) {
+        if (kh_exist(cache, iter)) {
+            ucs_array_cleanup_dynamic(&kh_val(cache, iter));
+        }
+    }
+
+    kh_clear(ucs_netlink_rt_cache, cache);
+}
+
+void ucs_netlink_reset_routing_table_cache(void)
+{
+    UCS_CLEANUP_ONCE(&ucs_netlink_rt_cache_once) {
+        ucs_netlink_clear_routing_table_cache();
+    }
+}
+
+static ucs_status_t ucs_netlink_init_family_routes(sa_family_t family)
+{
+    struct fib_rule_hdr frh = {0};
+    struct rtmsg rtm        = {0};
+    ucs_netlink_rt_parse_ctx_t ctx;
+    ucs_status_t rule_status, status;
+
+    frh.family = family;
+    kh_init_inplace(ucs_netlink_table_flags, &ctx);
+
+    rule_status = ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETRULE,
+                                           NLM_F_DUMP, &frh, sizeof(frh),
+                                           ucs_netlink_parse_rule_entry_cb,
+                                           &ctx, UCS_LOG_LEVEL_DEBUG);
+    if ((rule_status != UCS_OK) && (rule_status != UCS_ERR_BUSY)) {
+        kh_clear(ucs_netlink_table_flags, &ctx);
+    }
+
+    rtm.rtm_table  = RT_TABLE_UNSPEC; /* fetch all the tables */
+    rtm.rtm_family = family;
+    status = ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP,
+                                      &rtm, sizeof(rtm),
+                                      ucs_netlink_parse_rt_entry_cb, &ctx,
+                                      UCS_LOG_LEVEL_ERROR);
+    kh_destroy_inplace(ucs_netlink_table_flags, &ctx);
+    return ((status == UCS_OK) && (rule_status == UCS_ERR_BUSY)) ?
+                   UCS_ERR_BUSY :
+                   status;
+}
+
 static void ucs_netlink_init_routing_table_cache(void)
 {
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
-    struct rtmsg rtm                 = {0};
+    int retries = 3;
+    ucs_status_t status_v4, status_v6;
 
-    UCS_INIT_ONCE(&init_once) {
-        rtm.rtm_table  = RT_TABLE_UNSPEC; /* fetch all the tables */
-        rtm.rtm_family = AF_INET;
-        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
-                                 sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
-                                 NULL);
+    UCS_INIT_ONCE(&ucs_netlink_rt_cache_once) {
+        for (;;) {
+            status_v4 = ucs_netlink_init_family_routes(AF_INET);
+            status_v6 = ucs_netlink_init_family_routes(AF_INET6);
+            if (((status_v4 != UCS_ERR_BUSY) && (status_v6 != UCS_ERR_BUSY)) ||
+                (--retries == 0)) {
+                break;
+            }
 
-        rtm.rtm_family = AF_INET6;
-        ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, NLM_F_DUMP, &rtm,
-                                 sizeof(rtm), ucs_netlink_parse_rt_entry_cb,
-                                 NULL);
+            ucs_netlink_clear_routing_table_cache();
+        }
     }
 }
 
