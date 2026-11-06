@@ -860,6 +860,8 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     */
     if ((stat(device_path, &st) != 0) || !S_ISCHR(st.st_mode) ||
         (access(device_path, R_OK | W_OK) != 0)) {
+        ucs_debug("%s: %s is not accessible", ibv_get_device_name(device),
+                  device_path);
         return 0;
     }
 
