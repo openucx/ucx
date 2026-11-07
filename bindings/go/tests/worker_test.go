@@ -16,21 +16,32 @@ import (
 
 const wakeupTimeout = 10 * time.Second
 
+// closeWorker destroys the worker and its context, unless leak is set because a
+// goroutine of the test may still use the worker: destroying the worker under
+// that goroutine could crash the test binary.
+func closeWorker(ucpContext *UcpContext, ucpWorker *UcpWorker, leak *bool) {
+	if !*leak {
+		ucpWorker.Close()
+		ucpContext.Close()
+	}
+}
+
 func TestUcpWorkerEfd(t *testing.T) {
 	ucpContext, _ := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
-	defer ucpContext.Close()
 	ucpWorkerParams := &UcpWorkerParams{}
 	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 	ucpWorkerParams.WakeupEdge()
 
 	ucpWorker, err := ucpContext.NewWorker(ucpWorkerParams)
-	defer ucpWorker.Close()
-
 	if err != nil {
+		ucpContext.Close()
 		t.Fatalf("Failed to create a worker %v", err)
 	}
 
-	eventsChan := make(chan int)
+	leakWorker := false
+	defer closeWorker(ucpContext, ucpWorker, &leakWorker)
+
+	eventsChan := make(chan int, 1)
 	started := make(chan bool)
 	// t.Fatalf must be called only from the test goroutine
 	threadErr := make(chan error, 1)
@@ -86,6 +97,8 @@ func TestUcpWorkerEfd(t *testing.T) {
 	case err := <-threadErr:
 		t.Fatal(err)
 	case <-time.After(500 * time.Millisecond):
+		// The goroutine may still use the worker
+		leakWorker = true
 		t.Fatalf("Didn't start after 500 ms")
 	}
 	ucpWorker.Signal()
@@ -104,18 +117,19 @@ func TestUcpWorkerEfd(t *testing.T) {
 
 func TestUcpWorkerWakeup(t *testing.T) {
 	ucpContext, _ := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
-	defer ucpContext.Close()
 	ucpWorkerParams := &UcpWorkerParams{}
 	var cpuMask big.Int
 	cpuMask.SetBit(&cpuMask, 0, 1)
 	ucpWorkerParams.SetCpuMask(&cpuMask).WakeupTX().WakeupRX()
 	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_MULTI)
 	ucpWorker, err := ucpContext.NewWorker(ucpWorkerParams)
-	defer ucpWorker.Close()
-
 	if err != nil {
+		ucpContext.Close()
 		t.Fatalf("Failed to create a worker %v", err)
 	}
+
+	leakWorker := false
+	defer closeWorker(ucpContext, ucpWorker, &leakWorker)
 
 	quit := make(chan error, 1)
 	started := make(chan bool)
@@ -134,6 +148,8 @@ func TestUcpWorkerWakeup(t *testing.T) {
 			t.Fatalf("Failed to wait %v", err)
 		}
 	case <-time.After(wakeupTimeout):
+		// The goroutine is still in ucpWorker.Wait()
+		leakWorker = true
 		t.Fatalf("Didn't exit from wait after %v", wakeupTimeout)
 	}
 }
