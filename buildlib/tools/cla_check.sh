@@ -57,7 +57,7 @@ check_list() {
 
 emails=$(read_list "${CLA_INDIVIDUALS:-}")
 domains=$(read_list "${CLA_ENTITIES:-}")
-check_list CLA_INDIVIDUALS "$emails" '^[^@]+@[a-z0-9.-]+$'
+check_list CLA_INDIVIDUALS "$emails" '^[^@]+@[a-z0-9-]+(\.[a-z0-9-]+)+$'
 check_list CLA_ENTITIES "$domains" '^[a-z0-9-]+(\.[a-z0-9-]+)+$'
 
 work=$(mktemp -d)
