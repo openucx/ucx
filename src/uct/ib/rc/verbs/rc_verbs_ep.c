@@ -688,6 +688,26 @@ uct_rc_verbs_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     return UCS_OK;
 }
 
+static ucs_status_t uct_rc_verbs_ep_prepost_recvs(uct_rc_verbs_ep_t *ep)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    unsigned prepost;
+
+    if (iface->srq != NULL) {
+        return uct_rc_verbs_iface_srq_prepost_recvs(iface);
+    }
+
+    prepost = ucs_min(2 * iface->super.super.config.rx_max_batch,
+                      iface->config.rx_max_wr);
+    if (uct_rc_verbs_ep_post_recv_batches_no_srq(iface, ep, prepost) == 0) {
+        ucs_error("failed to post receives on QP 0x%x", ep->qp->qp_num);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(params->iface, uct_rc_verbs_iface_t);
@@ -695,11 +715,24 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     uct_ib_qp_attr_t attr = {};
     ucs_status_t status;
 
+    if (ucs_unlikely(iface->rx_cq_available < (int)iface->config.rx_max_wr)) {
+        ucs_error("iface %p: cannot create endpoint without an SRQ, "
+                  "RX CQ has room for %d receive WRs, fewer than %u, "
+                  "increase " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_CQ_LEN "
+                  "or decrease " UCS_DEFAULT_ENV_PREFIX "RC_VERBS_RX_MAX_WR",
+                  iface, iface->rx_cq_available, iface->config.rx_max_wr);
+        ucs_assert(iface->srq == NULL);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
     status = uct_rc_iface_qp_create(&iface->super, &self->qp, &attr,
-                                    iface->super.config.tx_qp_len, iface->srq);
+                                    iface->super.config.tx_qp_len,
+                                    iface->config.rx_max_wr, iface->srq);
     if (status != UCS_OK) {
         goto err;
     }
+
+    self->rx_available = iface->config.rx_max_wr;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super, self->qp->qp_num,
                               params);
@@ -721,10 +754,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_event_unreg;
     }
 
-    status = uct_rc_verbs_iface_common_prepost_recvs(iface);
+    status = uct_rc_verbs_ep_prepost_recvs(self);
     if (status != UCS_OK) {
         goto err_remove_qp;
     }
+
+    iface->rx_cq_available -= iface->config.rx_max_wr;
 
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
@@ -760,9 +795,19 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "verbs_qp_cleanup_ctx");
     ucs_assert_always(cleanup_ctx != NULL);
     cleanup_ctx->qp = self->qp;
+    ucs_assertv(self->rx_available <= iface->config.rx_max_wr,
+                "rx_available=%u rx_max_wr=%u", self->rx_available,
+                iface->config.rx_max_wr);
+    /* Without an SRQ, defer QP destruction until every posted receive WR has
+     * generated a completion and its descriptor has been returned. */
+    cleanup_ctx->rx_remaining = iface->config.rx_max_wr - self->rx_available;
     ucs_assert(UCS_CIRCULAR_COMPARE16(self->txcnt.pi, >=, self->txcnt.ci));
     uct_rc_ep_cleanup_qp(&self->super, &cleanup_ctx->super, self->qp->qp_num,
                          self->txcnt.pi - self->txcnt.ci);
+
+    if ((iface->srq == NULL) && (cleanup_ctx->rx_remaining == 0)) {
+        uct_rc_iface_qp_cleanup_ready(&iface->super, self->qp->qp_num);
+    }
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);
