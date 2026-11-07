@@ -154,7 +154,7 @@ void ucs_memtype_cache_unregister(const void *address, size_t size);
 
 
 /**
- * Find if memory type detection is needed. An explicit-only cache 
+ * Find if memory type detection is needed. An explicit-only cache
  * cannot prove that an unregistered address is host memory.
  *
  * @return 1 if detection is needed, 0 otherwise.

@@ -106,12 +106,8 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
 
 /* Memory type cache without UCM events: only ranges mapped by ucp_mem_map() are
  * cached, and they are removed by ucp_mem_unmap() */
-class test_ucp_memtype_explicit : public ucp_test {
+class test_ucp_memtype_explicit : public test_ucp_mem_type {
 public:
-    static void get_test_variants_base(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_memtypes(variants, get_test_variants_base,
                              UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -119,11 +115,10 @@ public:
     }
 
     virtual void init() {
-        m_enable_events        = ucm_global_opts.enable_events;
-        m_enable_memtype_cache = ucs_global_opts.enable_memtype_cache;
+        m_enable_events = ucm_global_opts.enable_events;
 
-        ucm_global_opts.enable_events        = 0;
-        ucs_global_opts.enable_memtype_cache = UCS_YES;
+        ucm_global_opts.enable_events = 0;
+        modify_config("MEMTYPE_CACHE", "y");
         ucs_memtype_cache_cleanup();
         ucs_memtype_cache_global_init();
         ucp_test::init();
@@ -133,15 +128,10 @@ public:
         ucp_test::cleanup();
         ucs_memtype_cache_cleanup();
         ucs_memtype_cache_global_init();
-        ucm_global_opts.enable_events        = m_enable_events;
-        ucs_global_opts.enable_memtype_cache = m_enable_memtype_cache;
+        ucm_global_opts.enable_events = m_enable_events;
     }
 
 protected:
-    ucs_memory_type_t mem_type() const {
-        return static_cast<ucs_memory_type_t>(get_variant_value());
-    }
-
     ucs_status_t lookup(const void *address, size_t size,
                         ucs_memory_info_t *info) const {
         return ucs_memtype_cache_lookup(address, size, info);
@@ -168,8 +158,7 @@ protected:
     }
 
 private:
-    int                      m_enable_events;
-    ucs_ternary_auto_value_t m_enable_memtype_cache;
+    int m_enable_events;
 };
 
 UCS_TEST_P(test_ucp_memtype_explicit, map_unmap) {
