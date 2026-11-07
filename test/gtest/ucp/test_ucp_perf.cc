@@ -492,3 +492,84 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wait_mem, shm, "shm")
+
+
+class test_ucp_perf_validate : public test_ucp_perf {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        /* The peer that validates the data: the one that sends first, or the
+         * one that replies */
+        add_variant_with_value(variants, 0, 0, "initiator");
+        add_variant_with_value(variants, 0, 1, "responder");
+    }
+
+protected:
+    void
+    adjust_peer_params(unsigned peer, ucx_perf_params_t &params) const override
+    {
+        /* Fixed iteration counts, also for slow runs, e.g. under valgrind,
+         * and a warmup time limit that is not reached before the failure */
+        params.warmup_iter = m_warmup_iter;
+        params.warmup_time = 60.0;
+        params.max_iter    = 10;
+
+        /* Without validation the other peer does not fill the data it sends */
+        if (peer != static_cast<unsigned>(get_variant_value())) {
+            params.flags &= ~UCX_PERF_TEST_FLAG_VALIDATE;
+        }
+    }
+
+    void test_validation_failure(ucx_perf_counter_t warmup_iter)
+    {
+        const test_spec test = {"put latency validation", "usec",
+                                UCX_PERF_API_UCP, UCX_PERF_CMD_PUT,
+                                UCX_PERF_TEST_TYPE_PINGPONG,
+                                UCX_PERF_WAIT_MODE_POLL,
+                                UCP_PERF_DATATYPE_CONTIG, 0, 1, {8}, 1, 10lu,
+                                ucs_offsetof(ucx_perf_result_t,
+                                             latency.total_average),
+                                1e6, 0.0, std::numeric_limits<double>::max(),
+                                UCX_PERF_TEST_FLAG_VALIDATE,
+                                UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST};
+        std::stringstream ss;
+        size_t num_errors;
+
+        ss << GetParam().transports;
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
+        ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
+        scoped_log_handler wrap_err(wrap_errors_logger);
+
+        /* run_test() checks peer 1, which fails with its own error or with
+         * the error of peer 0 */
+        m_warmup_iter = warmup_iter;
+        num_errors    = m_errors.size();
+        run_test(test, 0, false, "", "", UCS_ERR_IO_ERROR);
+
+        /* A single validation error: the warmup stops on it, and the run does
+         * not validate after it */
+        ASSERT_EQ(num_errors + 1, m_errors.size());
+        EXPECT_NE(std::string::npos,
+                  m_errors.back().find("data validation failed"))
+                << m_errors.back();
+    }
+
+private:
+    ucx_perf_counter_t m_warmup_iter = 0;
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_perf_validate, fail_in_warmup,
+                     has_transport("self"))
+{
+    /* The first warmup round sends only sequence number 0, which the data of
+     * the peer may match */
+    test_validation_failure(2);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_perf_validate, fail_in_run, has_transport("self"))
+{
+    test_validation_failure(0);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_perf_validate)
