@@ -1219,33 +1219,26 @@ private:
         }
     }
 
-    ucs_status_t validate_recv_buffer(void *recv_buffer, size_t length,
-                                      psn_t sn, void *host_buffer)
-    {
-        if (CMD == UCX_PERF_CMD_PUT) {
-            fence();
-        }
-
-        return validate_recv_data(recv_buffer, length, sn, host_buffer,
-                                  UCS_LOG_LEVEL_ERROR);
-    }
-
-    /* Wait for the received data, and report a mismatch. On a match, still
-     * fence a put like validate_recv_buffer() does: in a one-sided test this
-     * fence is the only worker progress of the iteration, which returns the
-     * send credits of RC and DC. */
+    /* Wait for the received data, and report a mismatch. Fence a put: in a
+     * one-sided test the fence is the only worker progress of the iteration,
+     * which returns the send credits of RC and DC. */
     ucs_status_t check_recv_data(void *recv_buffer, size_t length, psn_t sn,
                                  void *host_buffer)
     {
-        if (wait_recv_data(recv_buffer, length, sn, host_buffer) != UCS_OK) {
-            return validate_recv_buffer(recv_buffer, length, sn, host_buffer);
-        }
+        ucs_status_t status;
 
+        status = wait_recv_data(recv_buffer, length, sn, host_buffer);
         if (CMD == UCX_PERF_CMD_PUT) {
             fence();
         }
 
-        return UCS_OK;
+        if (status != UCS_OK) {
+            /* Check the data again, to report the mismatch */
+            status = validate_recv_data(recv_buffer, length, sn, host_buffer,
+                                        UCS_LOG_LEVEL_ERROR);
+        }
+
+        return status;
     }
 
     void *alloc_validate_common(size_t buffer_length)
