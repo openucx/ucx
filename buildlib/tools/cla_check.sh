@@ -81,8 +81,9 @@ for sha in $new; do
         fi
         email=${rest,,}
         email=${email:-"(no email)"}
+        domain=${email##*@}
         if grep -qxF -- "$email" <<< "$emails" ||
-           grep -qxF -- "${email##*@}" <<< "$domains"; then
+           { [ "$domain" != "$email" ] && grep -qxF -- "$domain" <<< "$domains"; }; then
             continue
         fi
         missing["$kind $email"]+=" $short"
