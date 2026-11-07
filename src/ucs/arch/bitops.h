@@ -21,8 +21,8 @@ BEGIN_C_DECLS
 #  include "ppc64/bitops.h"
 #elif defined(__aarch64__)
 #  include "aarch64/bitops.h"
-#elif defined(__riscv)
-#  include "rv64/bitops.h"
+#elif defined(__riscv) || defined(__loongarch_lp64)
+#  include "generic/bitops.h"
 #else
 #  error "Unsupported architecture"
 #endif

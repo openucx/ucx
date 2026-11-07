@@ -4,7 +4,7 @@
 * See file LICENSE for terms.
 */
 
-#if defined(__riscv)
+#if defined(__riscv) || defined(__loongarch_lp64)
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
