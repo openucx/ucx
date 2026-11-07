@@ -58,8 +58,8 @@ new=$(git -C "$work/repo" rev-list "$head_sha" --not origin/master \
 echo "Checking $(wc -w <<< "$new" | tr -d " ") new commits"
 
 # GitHub's web-flow committer signs web UI commits, whose author email
-# GitHub takes from the user's verified emails. Only bot author emails
-# are exempt; unsigned commits report their emails too, so one run
+# GitHub takes from the user's verified emails. Bot author and committer
+# emails are exempt; unsigned commits report their emails too, so one run
 # shows everything to fix.
 declare -A missing=()
 unsigned=()
