@@ -23,6 +23,7 @@ jobs:
   cla:
     name: CLA
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Forks have no CLA list secrets
     if: github.repository == 'openucx/ucx'
     permissions:
