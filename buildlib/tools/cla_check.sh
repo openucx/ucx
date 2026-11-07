@@ -15,7 +15,7 @@
 # Environment: CLA_INDIVIDUALS (signer emails), CLA_ENTITIES (signer domains),
 #              one entry per line, # starts a comment; GH_TOKEN for gh.
 # --dry-run skips posting the PR comment.
-set -eEuo pipefail
+set -euo pipefail
 
 usage() {
     sed -n '/^# Usage:/,/^# --dry-run/s/^# //p' "$0"
@@ -37,8 +37,7 @@ done
 [ -n "$repo" ] && [ -n "$pr" ] && [ -n "$head_sha" ] || usage
 
 read_list() {
-    tr -d '[:blank:]\r' <<< "$1" | sed -e 's/#.*//' -e 's/^@//' |
-        tr '[:upper:]' '[:lower:]' | grep -v '^$' || true
+    tr -d '[:blank:]\r' <<< "${1,,}" | sed -e 's/#.*//' -e 's/^@//' -e '/^$/d'
 }
 
 # Fail loudly on an empty or malformed list, not as missing CLAs
@@ -70,9 +69,9 @@ git -C "$work/repo" fetch -q --filter=tree:0 --no-tags \
     "https://github.com/$repo.git" \
     "+refs/heads/master:refs/remotes/origin/master" \
     "+refs/heads/v*:refs/remotes/origin/v*" "$head_sha"
-new=$(git -C "$work/repo" rev-list "$head_sha" --not origin/master \
-    --remotes='origin/v*.*.x')
-echo "Checking $(wc -w <<< "$new" | tr -d " ") new commits"
+mapfile -t new < <(git -C "$work/repo" rev-list "$head_sha" \
+    --not origin/master --remotes='origin/v*.*.x')
+echo "Checking ${#new[@]} new commits"
 
 # GitHub's web-flow committer signs web UI commits and sets their author
 # from the acting account, so the author email stands for both. Bots get
@@ -80,27 +79,26 @@ echo "Checking $(wc -w <<< "$new" | tr -d " ") new commits"
 # commits report their emails too, so one run shows everything to fix.
 declare -A missing=()
 unsigned=()
-for sha in $new; do
+for sha in "${new[@]}"; do
     gh api "repos/$repo/commits/$sha" --jq '
-        (if .commit.verification.verified then empty
-         else "unsigned \(.sha[0:10]) \(.commit.verification.reason)" end),
-        "author \(.sha[0:10]) \(.commit.author.email)",
-        (if .committer.login == "web-flow" or
-            .commit.committer.email == .commit.author.email then empty
-         else "committer \(.sha[0:10]) \(.commit.committer.email)" end)
-        ' > "$work/commit.txt"
+        (select(.commit.verification.verified | not) |
+         "unsigned \(.commit.verification.reason)"),
+        "author \(.commit.author.email)",
+        (select(.committer.login != "web-flow" and
+                .commit.committer.email != .commit.author.email) |
+         "committer \(.commit.committer.email)")' > "$work/commit.txt"
 
-    while read -r kind short rest; do
+    short=${sha::10}
+    while read -r kind rest; do
         if [ "$kind" = "unsigned" ]; then
             unsigned+=("$short ($rest)")
             continue
         fi
         email=${rest,,}
         email=${email:-"(no email)"}
-        domain=${email##*@}
         if grep -qxF -- "$email" <<< "$emails" ||
-           { [ "$domain" != "$email" ] &&
-             grep -qxF -- "$domain" <<< "$domains"; }; then
+           { [[ $email == *@* ]] &&
+             grep -qxF -- "${email##*@}" <<< "$domains"; }; then
             continue
         fi
         missing["$kind $email"]+=" $short"
@@ -111,7 +109,7 @@ done
 post_comment() {
     local id
     if [ -n "$dry_run" ]; then
-        echo "[dry-run] would $1 the PR comment"
+        echo "[dry-run] would post the PR comment"
         return
     fi
     id=$(gh api "repos/$repo/issues/$pr/comments" --paginate --jq "first(.[] |
@@ -121,30 +119,21 @@ post_comment() {
     if [ -n "$id" ]; then
         gh api -X PATCH "repos/$repo/issues/comments/$id" \
             -F body=@"$work/summary.md" > /dev/null
-    elif [ "$1" = create ]; then
+    elif [ "$failed" = 1 ]; then
         gh api "repos/$repo/issues/$pr/comments" \
             -F body=@"$work/summary.md" > /dev/null
     fi
 }
 
-report() {
-    tail -n +2 "$work/summary.md" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
-}
-
-if [ ${#missing[@]} -eq 0 ] && [ ${#unsigned[@]} -eq 0 ]; then
-    {
-        echo "$MARKER"
-        echo "### UCF CLA check passed"
-        echo "All commits are covered by a signed UCF CLA."
-    } > "$work/summary.md"
-    report
-    post_comment update || echo "::warning::Could not update the PR comment"
-    exit 0
-fi
-
+failed=$(( ${#missing[@]} + ${#unsigned[@]} > 0 ))
 {
     echo "$MARKER"
-    echo "### UCF CLA check failed"
+    if [ "$failed" = 0 ]; then
+        echo "### UCF CLA check passed"
+        echo "All commits are covered by a signed UCF CLA."
+    else
+        echo "### UCF CLA check failed"
+    fi
     if [ ${#unsigned[@]} -gt 0 ]; then
         printf -v list '%s, ' "${unsigned[@]}"
         echo "- Commits without a verified signature: ${list%, }."
@@ -155,12 +144,16 @@ fi
             echo "  - \`$key\`:${missing[$key]}"
         done < <(printf '%s\n' "${!missing[@]}" | sort)
     fi
-    echo
-    echo "See items 1 and 2 of [CONTRIBUTING.md]($CONTRIBUTING) for how to sign"
-    echo "the CLA and your commits. Once your email is on the CLA list, push a"
-    echo "new commit or ask for a re-run of this check."
+    if [ "$failed" = 1 ]; then
+        echo
+        echo "See items 1 and 2 of [CONTRIBUTING.md]($CONTRIBUTING) for how"
+        echo "to sign the CLA and your commits. Once your email is on the CLA"
+        echo "list, push a new commit or ask for a re-run of this check."
+    fi
 } > "$work/summary.md"
-report
-post_comment create || echo "::warning::Could not post the PR comment"
-echo "::error::UCF CLA check failed, see the job summary"
-exit 1
+tail -n +2 "$work/summary.md" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+post_comment || echo "::warning::Could not post the PR comment"
+if [ "$failed" = 1 ]; then
+    echo "::error::UCF CLA check failed, see the job summary"
+    exit 1
+fi
