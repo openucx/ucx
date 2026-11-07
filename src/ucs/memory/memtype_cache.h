@@ -103,9 +103,8 @@ void ucs_memtype_cache_update(const void *address, size_t size,
 
 
 /**
- * Remove the address range from a memtype cache.
- * Has no effect if the cache is unavailable or UCM memory type events are
- * inactive.
+ * Remove the address range from a memtype cache. Must be called only when the
+ * cache exists and tracks UCM memory type events.
  *
  * @param [in]  address         Start address to remove.
  * @param [in]  size            Size of the memory to remove.
