@@ -146,7 +146,7 @@ fi
     if [ ${#missing[@]} -gt 0 ]; then
         echo "- No signed CLA on file for these commit emails:"
         while IFS= read -r key; do
-            echo "  - $key:${missing[$key]}"
+            echo "  - \`$key\`:${missing[$key]}"
         done < <(printf '%s\n' "${!missing[@]}" | sort)
     fi
     echo
