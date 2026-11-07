@@ -22,7 +22,7 @@ usage() {
     exit 2
 }
 
-MARKER='<!-- ucf-cla-check -->'
+MARKER='<!-- ucx-cla-check -->'
 CONTRIBUTING=https://github.com/openucx/ucx/blob/master/.github/CONTRIBUTING.md
 repo="" pr="" head_sha="" dry_run=""
 while [ $# -gt 0 ]; do
