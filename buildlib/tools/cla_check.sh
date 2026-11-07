@@ -69,7 +69,7 @@ for sha in $new; do
          else "unsigned \(.sha[0:10]) \(.commit.verification.reason)" end),
         (if .author.type == "Bot" then empty
          else "author \(.sha[0:10]) \(.commit.author.email)" end),
-        (if .committer.login == "web-flow" or
+        (if .committer.type == "Bot" or .committer.login == "web-flow" or
             .commit.committer.email == .commit.author.email then empty
          else "committer \(.sha[0:10]) \(.commit.committer.email)" end)
         ' > "$work/commit.txt"
