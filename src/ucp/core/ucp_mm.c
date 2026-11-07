@@ -445,6 +445,39 @@ static void ucp_memh_put_rcache(ucp_context_h context, ucp_mem_h memh)
     UCP_THREAD_CS_EXIT(&context->mt_lock);
 }
 
+/* Add the memory of a user memory handle to the memory type cache, if the cache
+ * holds only explicitly registered memory */
+static void
+ucp_memh_memtype_cache_register(ucp_context_h context, ucp_mem_h memh)
+{
+    ucp_memory_info_t mem_info;
+
+    if (!ucs_memtype_cache_is_explicit()) {
+        return;
+    }
+
+    if (memh->alloc_method != UCT_ALLOC_METHOD_LAST) {
+        /* The allocator reports the type of the memory it created */
+        mem_info = ucp_memory_info_from_memh(memh);
+    } else {
+        /* Cache the actual memory type, not the user hint */
+        ucp_memory_detect(context, ucp_memh_address(memh),
+                          ucp_memh_length(memh), &mem_info);
+    }
+
+    ucs_memtype_cache_register(ucp_memh_address(memh), ucp_memh_length(memh),
+                               mem_info.type, mem_info.sys_dev,
+                               mem_info.flags);
+}
+
+static void ucp_memh_memtype_cache_unregister(ucp_mem_h memh)
+{
+    if (!(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+        ucs_memtype_cache_unregister(ucp_memh_address(memh),
+                                     ucp_memh_length(memh));
+    }
+}
+
 static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
 {
     uct_allocated_memory_t mem;
@@ -453,6 +486,9 @@ static void ucp_memh_cleanup(ucp_context_h context, ucp_mem_h memh)
     ucs_trace("memh %p: cleanup", memh);
 
     ucs_assert(ucp_memh_is_user_memh(memh));
+
+    /* Remove the memory from the cache before it is released */
+    ucp_memh_memtype_cache_unregister(memh);
 
     mem.address = ucp_memh_address(memh);
     mem.length  = ucp_memh_length(memh);
@@ -1129,6 +1165,7 @@ static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
         goto err_free_memh;
     }
 
+    ucp_memh_memtype_cache_register(context, memh);
     *memh_p = memh;
     return UCS_OK;
 
@@ -1262,6 +1299,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_init_uct_reg(context, memh, uct_flags, 1, alloc_name);
         if (status != UCS_OK) {
             ucs_free(memh);
+        } else {
+            ucp_memh_memtype_cache_register(context, memh);
         }
     }
 
