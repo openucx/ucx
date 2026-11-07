@@ -361,6 +361,12 @@ double test_perf::run_test(const test_spec &test, unsigned flags,
         if ((result.status == UCS_ERR_UNSUPPORTED) ||
             (result.status == UCS_ERR_UNREACHABLE))
         {
+            /* The expected failure also returns 0.0, so a test that expects a
+             * failure could not tell it from a skipped run */
+            if (expected_status != UCS_OK) {
+                UCS_TEST_SKIP_R(ucs_status_string(result.status));
+            }
+
             return 0.0; /* Skipped */
         }
 
