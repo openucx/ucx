@@ -80,6 +80,7 @@ for sha in $new; do
             continue
         fi
         email=${rest,,}
+        email=${email:-"(no email)"}
         if grep -qxF -- "$email" <<< "$emails" ||
            grep -qxF -- "${email##*@}" <<< "$domains"; then
             continue
