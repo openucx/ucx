@@ -20,6 +20,29 @@
 #define UCT_RC_GDA_WQE_ERR              UCS_BIT(63)
 #define UCT_RC_GDA_WQE_MASK             UCS_MASK(63)
 
+/* CTA mode requires every producer of a QP to belong to the same block. */
+#ifndef UCT_RC_GDAKI_RESOURCE_SHARING_MODE
+#define UCT_RC_GDAKI_RESOURCE_SHARING_MODE \
+    DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU
+#endif
+
+static_assert((UCT_RC_GDAKI_RESOURCE_SHARING_MODE ==
+               DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_CTA) ||
+              (UCT_RC_GDAKI_RESOURCE_SHARING_MODE ==
+               DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_GPU),
+              "GDAKI QPs require CTA or GPU resource sharing");
+
+static constexpr cuda::thread_scope uct_rc_gdaki_thread_scope =
+        (UCT_RC_GDAKI_RESOURCE_SHARING_MODE ==
+         DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_CTA) ?
+                cuda::thread_scope_block : cuda::thread_scope_device;
+
+static constexpr doca_gpu_dev_verbs_sync_scope uct_rc_gdaki_sync_scope =
+        (UCT_RC_GDAKI_RESOURCE_SHARING_MODE ==
+         DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_CTA) ?
+                DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA :
+                DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU;
+
 #ifndef UCT_RC_GDA_USE_LDG
 #define UCT_RC_GDA_USE_LDG 0
 #endif
@@ -101,17 +124,17 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
         uct_rc_gdaki_dev_ep_t *ep, unsigned cid, unsigned count)
 {
     uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
+    cuda::atomic_ref<uint64_t, uct_rc_gdaki_thread_scope> rsvd_ref(
+            qp->sq_rsvd_index);
     /* Do not attempt to reserve if the available space is less than the
      * requested count, to avoid starvation of threads trying to rollback the
      * reservation with atomicCAS. */
     uint64_t max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, cid, count);
-    if (qp->sq_rsvd_index > max_wqe_base) {
+    if (rsvd_ref.load(cuda::memory_order_relaxed) > max_wqe_base) {
         return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
     }
 
-    uint64_t wqe_base = atomicAdd(reinterpret_cast<unsigned long long*>(
-                                          &qp->sq_rsvd_index),
-                                  static_cast<unsigned long long>(count));
+    uint64_t wqe_base = rsvd_ref.fetch_add(count, cuda::memory_order_relaxed);
 
     /*
      *  Attempt to reserve 'count' WQEs by atomically incrementing the reserved
@@ -134,8 +157,8 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
      */
     while (wqe_base > max_wqe_base) {
         uint64_t wqe_next = wqe_base + count;
-        if (atomicCAS(reinterpret_cast<unsigned long long*>(&qp->sq_rsvd_index),
-                      wqe_next, wqe_base) == wqe_next) {
+        if (rsvd_ref.compare_exchange_strong(wqe_next, wqe_base,
+                                             cuda::memory_order_relaxed)) {
             return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
         }
 
@@ -205,32 +228,40 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                      uint64_t flags)
 {
     auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
-    cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
+    cuda::atomic_ref<uint64_t, uct_rc_gdaki_thread_scope> ref(
             qp->sq_ready_index);
     const uint64_t wqe_next = wqe_base + count;
-    const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY) &&
-                              !((wqe_base ^ wqe_next) & 128);
+    const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY);
 
-    if (skip_db) {
-        doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
-        const uint64_t wqe_base_orig = wqe_base;
-        while (!ref.compare_exchange_strong(wqe_base, wqe_next,
-                                            cuda::std::memory_order_relaxed)) {
-            wqe_base = wqe_base_orig;
-        }
-    } else {
-        uint32_t qpn_ds = uct_rc_mlx5_load_const(&qp->qpn_ds);
-        auto *db_ptr = (uint64_t*)uct_rc_mlx5_load_const((uintptr_t*)&qp->sq_db);
-        auto dbrec_ptr = &ep->qps[cid].qp_dbrec[MLX5_SND_DBR];
-
-        while (READ_ONCE(qp->sq_ready_index) != wqe_base) {
-        }
-        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
-        doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
-        doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
-        ref.store(wqe_next, cuda::std::memory_order_relaxed);
+    /* Publish WQEs before serializing doorbells, so a deferred producer
+     * does not wait for an earlier producer's MMIO writes. */
+    doca_gpu_dev_verbs_fence_release<uct_rc_gdaki_sync_scope>();
+    const uint64_t wqe_base_orig = wqe_base;
+    while (!ref.compare_exchange_strong(wqe_base, wqe_next,
+                                        cuda::std::memory_order_relaxed)) {
+        wqe_base = wqe_base_orig;
     }
-    doca_gpu_dev_verbs_fence_acquire<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_CTA>();
+    doca_gpu_dev_verbs_fence_acquire<uct_rc_gdaki_sync_scope>();
+
+    if (!skip_db) {
+        doca_gpu_dev_verbs_lock<
+                UCT_RC_GDAKI_RESOURCE_SHARING_MODE>(&qp->sq_lock);
+        const uint64_t old_pi = doca_gpu_dev_verbs_atomic_max<
+                uint64_t, UCT_RC_GDAKI_RESOURCE_SHARING_MODE, true>(
+                &qp->sq_wqe_pi, wqe_next);
+        if (old_pi < wqe_next) {
+            const uint32_t qpn_ds = uct_rc_mlx5_load_const(&qp->qpn_ds);
+            auto *db_ptr = (uint64_t*)uct_rc_mlx5_load_const(
+                    (uintptr_t*)&qp->sq_db);
+            auto *dbrec_ptr = &qp->qp_dbrec[MLX5_SND_DBR];
+
+            doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+            doca_gpu_dev_common_update_dbr(dbrec_ptr, wqe_next);
+            doca_gpu_dev_common_ring_db(db_ptr, qpn_ds, wqe_next);
+        }
+        doca_gpu_dev_verbs_unlock<
+                UCT_RC_GDAKI_RESOURCE_SHARING_MODE>(&qp->sq_lock);
+    }
 }
 
 template<ucs_device_level_t level>
