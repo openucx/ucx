@@ -32,7 +32,7 @@ jobs:
       # The script comes from the base branch, never from the PR
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
           sparse-checkout: buildlib/tools/cla_check.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
