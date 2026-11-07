@@ -1200,8 +1200,7 @@ private:
     ucs_status_t wait_recv_data(void *recv_buffer, size_t length, psn_t sn,
                                 void *host_buffer)
     {
-        ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC);
+        ucs_time_t deadline = 0;
         ucs_status_t status;
 
         for (;;) {
@@ -1209,8 +1208,15 @@ private:
             ucs_memory_cpu_load_fence();
             status = validate_recv_data(recv_buffer, length, sn, host_buffer,
                                         UCS_LOG_LEVEL_TRACE_POLL);
-            if ((status == UCS_OK) || (CMD != UCX_PERF_CMD_PUT) ||
-                (ucs_get_time() >= deadline)) {
+            if ((status == UCS_OK) || (CMD != UCX_PERF_CMD_PUT)) {
+                return status;
+            }
+
+            /* Start the timeout at the first mismatch */
+            if (deadline == 0) {
+                deadline = ucs_get_time() +
+                           ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC);
+            } else if (ucs_get_time() >= deadline) {
                 return status;
             }
 
