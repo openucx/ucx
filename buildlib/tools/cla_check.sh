@@ -18,7 +18,7 @@
 set -eEuo pipefail
 
 usage() {
-    grep -E '^# (Usage|Environment|       |--dry)' "$0" | sed 's/^# //'
+    sed -n '/^# Usage:/,/^# --dry-run/s/^# //p' "$0"
     exit 2
 }
 
