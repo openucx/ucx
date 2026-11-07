@@ -25,7 +25,11 @@ func closeWorker(ucpContext *UcpContext, ucpWorker *UcpWorker) {
 }
 
 func TestUcpWorkerEfd(t *testing.T) {
-	ucpContext, _ := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
+	ucpContext, err := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
+	if err != nil {
+		t.Fatalf("Failed to create a context %v", err)
+	}
+
 	ucpWorkerParams := &UcpWorkerParams{}
 	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
 	ucpWorkerParams.WakeupEdge()
@@ -124,7 +128,11 @@ func TestUcpWorkerEfd(t *testing.T) {
 }
 
 func TestUcpWorkerWakeup(t *testing.T) {
-	ucpContext, _ := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
+	ucpContext, err := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
+	if err != nil {
+		t.Fatalf("Failed to create a context %v", err)
+	}
+
 	ucpWorkerParams := &UcpWorkerParams{}
 	var cpuMask big.Int
 	cpuMask.SetBit(&cpuMask, 0, 1)
