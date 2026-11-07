@@ -58,21 +58,21 @@ new=$(git -C "$work/repo" rev-list "$head_sha" --not origin/master \
 echo "Checking $(wc -w <<< "$new" | tr -d " ") new commits"
 
 # GitHub's web-flow committer signs web UI commits, whose author email
-# GitHub takes from the user's verified emails. Bot commits need a
-# signature too; only their emails are exempt.
+# GitHub takes from the user's verified emails. Only bot author emails
+# are exempt; unsigned commits report their emails too, so one run
+# shows everything to fix.
 declare -A missing=()
 unsigned=()
 for sha in $new; do
     gh api "repos/$repo/commits/$sha" --jq '
-        if .commit.verification.verified | not then
-            "unsigned \(.sha[0:10])"
-        elif .author.type == "Bot" then empty
-        else
-            "author \(.sha[0:10]) \(.commit.author.email)",
-            if .committer.login == "web-flow" or
-               .commit.committer.email == .commit.author.email then empty
-            else "committer \(.sha[0:10]) \(.commit.committer.email)" end
-        end' > "$work/commit.txt"
+        (if .commit.verification.verified then empty
+         else "unsigned \(.sha[0:10])" end),
+        (if .author.type == "Bot" then empty
+         else "author \(.sha[0:10]) \(.commit.author.email)" end),
+        (if .committer.login == "web-flow" or
+            .commit.committer.email == .commit.author.email then empty
+         else "committer \(.sha[0:10]) \(.commit.committer.email)" end)
+        ' > "$work/commit.txt"
 
     while read -r kind short email; do
         if [ "$kind" = "unsigned" ]; then
