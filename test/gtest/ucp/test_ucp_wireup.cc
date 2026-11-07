@@ -1033,6 +1033,29 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
     }
 }
 
+UCS_TEST_P(test_ucp_wireup_errh_peer, force_close_simultaneous_connect) {
+    if (get_variant_value() & NO_EP_MATCH) {
+        UCS_TEST_SKIP_R("simultaneous connect requires EP matching");
+    }
+
+    /* The connection request of the worker with the lower UUID is respected
+     * by the peer, so force close its EP before its request is handled */
+    bool sender_wins = sender().worker()->uuid < receiver().worker()->uuid;
+    entity &winner   = sender_wins ? sender() : receiver();
+    entity &peer     = sender_wins ? receiver() : sender();
+
+    winner.connect(&peer, get_ep_params());
+    peer.connect(&winner, get_ep_params());
+    disconnect(winner, true);
+
+    winner.connect(&peer, get_ep_params());
+    if (get_variant_value() & TEST_TAG) {
+        send_recv(winner.ep(), peer.worker(), NULL, 1, 1);
+    }
+    flush_worker(winner);
+    disconnect(peer, true);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
 
 class test_ucp_wireup_errh_peer_self : public test_ucp_wireup_errh_peer
