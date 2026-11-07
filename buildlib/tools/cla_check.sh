@@ -27,9 +27,9 @@ CONTRIBUTING=https://github.com/openucx/ucx/blob/master/.github/CONTRIBUTING.md
 repo="" pr="" head_sha="" dry_run=""
 while [ $# -gt 0 ]; do
     case $1 in
-    --repo)     repo=$2; shift 2 ;;
-    --pr)       pr=$2; shift 2 ;;
-    --head-sha) head_sha=$2; shift 2 ;;
+    --repo)     [ $# -ge 2 ] || usage; repo=$2; shift 2 ;;
+    --pr)       [ $# -ge 2 ] || usage; pr=$2; shift 2 ;;
+    --head-sha) [ $# -ge 2 ] || usage; head_sha=$2; shift 2 ;;
     --dry-run)  dry_run=1; shift ;;
     *)          usage ;;
     esac
