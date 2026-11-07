@@ -2,11 +2,13 @@
 1. Please sign the [UCX contributors agreement](http://www.openucx.org/license).
    Once it is countersigned, a maintainer adds the email named on it, or your
    company's email domain for a corporate CLA, to the CLA list; the `CLA`
-   check on your pull request fails until then. Every commit must be
+   check on your pull request fails until then. The author and committer
+   emails of every commit must be covered by a CLA.
+
+1. Every commit must be
    [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification)
    with a key registered on your GitHub account, using an email verified on
-   that account, and its author and committer emails must be covered by a CLA.
-   Commits already pushed unsigned can be re-signed with
+   that account. Commits already pushed unsigned can be re-signed with
    `git rebase -f --rebase-merges --gpg-sign $(git merge-base HEAD upstream/<pr-base-branch>)`
    and force-pushed, an exception to the no-force-push rule below.
 
