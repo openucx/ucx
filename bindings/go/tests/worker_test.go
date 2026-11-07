@@ -16,14 +16,12 @@ import (
 
 const wakeupTimeout = 10 * time.Second
 
-// closeWorker destroys the worker and its context, unless leak is set because a
+// closeWorker destroys the worker and its context. Do not call it while a
 // goroutine of the test may still use the worker: destroying the worker under
 // that goroutine could crash the test binary.
-func closeWorker(ucpContext *UcpContext, ucpWorker *UcpWorker, leak bool) {
-	if !leak {
-		ucpWorker.Close()
-		ucpContext.Close()
-	}
+func closeWorker(ucpContext *UcpContext, ucpWorker *UcpWorker) {
+	ucpWorker.Close()
+	ucpContext.Close()
 }
 
 func TestUcpWorkerEfd(t *testing.T) {
@@ -39,7 +37,11 @@ func TestUcpWorkerEfd(t *testing.T) {
 	}
 
 	leakWorker := false
-	defer func() { closeWorker(ucpContext, ucpWorker, leakWorker) }()
+	defer func() {
+		if !leakWorker {
+			closeWorker(ucpContext, ucpWorker)
+		}
+	}()
 
 	eventsChan := make(chan int, 1)
 	started := make(chan bool)
@@ -101,7 +103,11 @@ func TestUcpWorkerEfd(t *testing.T) {
 		leakWorker = true
 		t.Fatalf("Didn't start after %v", wakeupTimeout)
 	}
-	ucpWorker.Signal()
+	if err := ucpWorker.Signal(); err != nil {
+		// The goroutine still waits on the worker efd
+		leakWorker = true
+		t.Fatalf("Failed to signal the worker %v", err)
+	}
 
 	select {
 	case nevents := <-eventsChan:
@@ -131,7 +137,11 @@ func TestUcpWorkerWakeup(t *testing.T) {
 	}
 
 	leakWorker := false
-	defer func() { closeWorker(ucpContext, ucpWorker, leakWorker) }()
+	defer func() {
+		if !leakWorker {
+			closeWorker(ucpContext, ucpWorker)
+		}
+	}()
 
 	quit := make(chan error, 1)
 	started := make(chan bool)
@@ -142,7 +152,11 @@ func TestUcpWorkerWakeup(t *testing.T) {
 	}()
 
 	<-started
-	ucpWorker.Signal()
+	if err := ucpWorker.Signal(); err != nil {
+		// The goroutine may still use the worker
+		leakWorker = true
+		t.Fatalf("Failed to signal the worker %v", err)
+	}
 
 	select {
 	case err := <-quit:
