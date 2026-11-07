@@ -1,9 +1,5 @@
-# Check that every commit a PR adds is covered by a UCF CLA: it must have a
-# verified signature, and its author and committer emails must be listed as
-# individual signers or belong to a corporate signer's email domain.
-# The lists are repository secrets, set from the internal signer record.
-# Findings fail the check and are posted as one PR comment, updated per run;
-# the check blocks merging only once marked as required.
+# CLA check for pull requests, see buildlib/tools/cla_check.sh. The signer
+# lists are repository secrets, set from the internal signer record.
 name: CLA
 
 # pull_request_target passes secrets to fork PRs; PR code is never checked out.
