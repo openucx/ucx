@@ -95,8 +95,9 @@ post_comment() {
         echo "[dry-run] would $1 the PR comment"
         return
     fi
-    id=$(gh api "repos/$repo/issues/$pr/comments" --paginate \
-        --jq "first(.[] | select(.body | startswith(\"$MARKER\")) | .id)" | head -n1)
+    id=$(gh api "repos/$repo/issues/$pr/comments" --paginate --jq "first(.[] |
+        select(.user.type == \"Bot\" and (.body | startswith(\"$MARKER\"))) | .id)" |
+        head -n1)
     if [ -n "$id" ]; then
         gh api -X PATCH "repos/$repo/issues/comments/$id" -F body=@"$work/summary.md" > /dev/null
     elif [ "$1" = create ]; then
