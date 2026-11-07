@@ -41,18 +41,22 @@ read_list() {
         tr '[:upper:]' '[:lower:]' | grep -v '^$' || true
 }
 
+# Fail loudly on an empty or malformed list, not as missing CLAs
+check_list() {
+    if [ -z "$2" ]; then
+        echo "::error::$1 is empty"
+        exit 1
+    fi
+    if grep -qvE "$3" <<< "$2"; then
+        echo "::error::$1 has a malformed entry"
+        exit 1
+    fi
+}
+
 emails=$(read_list "${CLA_INDIVIDUALS:-}")
 domains=$(read_list "${CLA_ENTITIES:-}")
-# Fail loudly on an empty or malformed list, not as missing CLAs
-if [ -z "$emails" ] || [ -z "$domains" ]; then
-    echo "::error::A CLA list secret is empty"
-    exit 1
-fi
-if grep -qvE '^[^@]+@[a-z0-9.-]+$' <<< "$emails" ||
-   grep -qvE '^[a-z0-9.-]+$' <<< "$domains"; then
-    echo "::error::A CLA list secret has a malformed entry"
-    exit 1
-fi
+check_list CLA_INDIVIDUALS "$emails" '^[^@]+@[a-z0-9.-]+$'
+check_list CLA_ENTITIES "$domains" '^[a-z0-9.-]+$'
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
