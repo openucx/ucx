@@ -10,15 +10,20 @@
 # Findings are written to the job summary and posted as one PR comment,
 # updated on every run.
 #
-# Usage: cla_check.sh --repo <owner/name> --pr <number> --head-sha <sha> [--dry-run]
+# Usage: cla_check.sh --repo <owner/name> --pr <number> --head-sha <sha>
+#        [--dry-run]
 # Environment: CLA_INDIVIDUALS (signer emails), CLA_ENTITIES (signer domains),
 #              one entry per line, # starts a comment; GH_TOKEN for gh.
 # --dry-run skips posting the PR comment.
 set -eEuo pipefail
 
-usage() { grep -E '^# (Usage|Environment|       |--dry)' "$0" | sed 's/^# //'; exit 2; }
+usage() {
+    grep -E '^# (Usage|Environment|       |--dry)' "$0" | sed 's/^# //'
+    exit 2
+}
 
 MARKER='<!-- ucf-cla-check -->'
+CONTRIBUTING=https://github.com/openucx/ucx/blob/master/.github/CONTRIBUTING.md
 repo="" pr="" head_sha="" dry_run=""
 while [ $# -gt 0 ]; do
     case $1 in
@@ -88,7 +93,8 @@ for sha in $new; do
         email=${email:-"(no email)"}
         domain=${email##*@}
         if grep -qxF -- "$email" <<< "$emails" ||
-           { [ "$domain" != "$email" ] && grep -qxF -- "$domain" <<< "$domains"; }; then
+           { [ "$domain" != "$email" ] &&
+             grep -qxF -- "$domain" <<< "$domains"; }; then
             continue
         fi
         missing["$kind $email"]+=" $short"
@@ -103,13 +109,15 @@ post_comment() {
         return
     fi
     id=$(gh api "repos/$repo/issues/$pr/comments" --paginate --jq "first(.[] |
-        select(.user.type == \"Bot\" and (.body | startswith(\"$MARKER\"))) | .id)") ||
-        return 1
+        select(.user.type == \"Bot\" and (.body | startswith(\"$MARKER\"))) |
+        .id)") || return 1
     id=${id%%$'\n'*}
     if [ -n "$id" ]; then
-        gh api -X PATCH "repos/$repo/issues/comments/$id" -F body=@"$work/summary.md" > /dev/null
+        gh api -X PATCH "repos/$repo/issues/comments/$id" \
+            -F body=@"$work/summary.md" > /dev/null
     elif [ "$1" = create ]; then
-        gh api "repos/$repo/issues/$pr/comments" -F body=@"$work/summary.md" > /dev/null
+        gh api "repos/$repo/issues/$pr/comments" \
+            -F body=@"$work/summary.md" > /dev/null
     fi
 }
 
@@ -134,22 +142,17 @@ fi
     if [ ${#unsigned[@]} -gt 0 ]; then
         printf -v list '%s, ' "${unsigned[@]}"
         echo "- Commits without a verified signature: ${list%, }."
-        echo "  Please sign your commits with a GPG or SSH key registered on your GitHub account,"
-        echo "  using an email verified on that account (git config --global commit.gpgsign true,"
-        echo "  so merge commits are signed too)."
     fi
     if [ ${#missing[@]} -gt 0 ]; then
         echo "- No signed CLA on file for these commit emails:"
         while IFS= read -r key; do
             echo "  - $key:${missing[$key]}"
         done < <(printf '%s\n' "${!missing[@]}" | sort)
-        echo
-        echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
-        echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
-        echo "Commit with the email named on the CLA. Once the CLA is countersigned, a maintainer"
-        echo "adds that email (or your company's email domain) to the CLA list; then push a new"
-        echo "commit or ask for a re-run of this check."
     fi
+    echo
+    echo "See items 1 and 2 of [CONTRIBUTING.md]($CONTRIBUTING) for how to sign"
+    echo "the CLA and your commits. Once your email is on the CLA list, push a"
+    echo "new commit or ask for a re-run of this check."
 } > "$work/summary.md"
 report
 post_comment create || echo "::warning::Could not post the PR comment"
