@@ -111,20 +111,26 @@ done
 # Update the PR comment left by an earlier run; create one on failure
 post_comment() {
     local id
-    if [ -n "$dry_run" ]; then
-        echo "[dry-run] would post the PR comment"
-        return
-    fi
     id=$(gh api "repos/$repo/issues/$pr/comments" --paginate --jq "first(.[] |
         select(.user.type == \"Bot\" and (.body | startswith(\"$MARKER\"))) |
         .id)") || return 1
     id=${id%%$'\n'*}
     if [ -n "$id" ]; then
+        if [ -n "$dry_run" ]; then
+            echo "[dry-run] would update comment $id"
+            return
+        fi
         gh api -X PATCH "repos/$repo/issues/comments/$id" \
             -F body=@"$work/summary.md" > /dev/null
     elif [ "$failed" = 1 ]; then
+        if [ -n "$dry_run" ]; then
+            echo "[dry-run] would create the comment"
+            return
+        fi
         gh api "repos/$repo/issues/$pr/comments" \
             -F body=@"$work/summary.md" > /dev/null
+    elif [ -n "$dry_run" ]; then
+        echo "[dry-run] no comment to post"
     fi
 }
 
