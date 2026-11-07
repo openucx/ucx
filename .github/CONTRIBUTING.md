@@ -13,7 +13,7 @@
    `git config --global commit.gpgsign true` signs new commits, including
    merge commits. Commits already pushed unsigned can be
    re-signed with
-   `git rebase -f --rebase-merges --gpg-sign $(git merge-base HEAD upstream/<pr-base-branch>)`
+   `git rebase -f --rebase-merges --gpg-sign --onto $(git merge-base HEAD upstream/<pr-base-branch>) upstream/<pr-base-branch>`
    and force-pushed, an exception to the no-force-push rule below; do it
    before review starts when you can, since the rewrite also moves the anchors
    of comments already posted, and merges that resolved conflicts need
