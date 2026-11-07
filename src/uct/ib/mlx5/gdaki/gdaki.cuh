@@ -208,8 +208,9 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
     cuda::atomic_ref<uint64_t, cuda::thread_scope_device> ref(
             qp->sq_ready_index);
     const uint64_t wqe_next = wqe_base + count;
+    const uint64_t qp_depth = uct_rc_mlx5_load_const(&ep->sq_wqe_num);
     const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY) &&
-                              !((wqe_base ^ wqe_next) & 128);
+                              !((wqe_base ^ wqe_next) & qp_depth);
 
     if (skip_db) {
         doca_gpu_dev_verbs_fence_release<DOCA_GPUNETIO_VERBS_SYNC_SCOPE_GPU>();
