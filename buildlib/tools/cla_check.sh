@@ -66,7 +66,7 @@ unsigned=()
 for sha in $new; do
     gh api "repos/$repo/commits/$sha" --jq '
         (if .commit.verification.verified then empty
-         else "unsigned \(.sha[0:10])" end),
+         else "unsigned \(.sha[0:10]) \(.commit.verification.reason)" end),
         (if .author.type == "Bot" then empty
          else "author \(.sha[0:10]) \(.commit.author.email)" end),
         (if .committer.login == "web-flow" or
@@ -74,12 +74,12 @@ for sha in $new; do
          else "committer \(.sha[0:10]) \(.commit.committer.email)" end)
         ' > "$work/commit.txt"
 
-    while read -r kind short email; do
+    while read -r kind short rest; do
         if [ "$kind" = "unsigned" ]; then
-            unsigned+=("$short")
+            unsigned+=("$short ($rest)")
             continue
         fi
-        email=${email,,}
+        email=${rest,,}
         if grep -qxF -- "$email" <<< "$emails" ||
            grep -qxF -- "${email##*@}" <<< "$domains"; then
             continue
@@ -123,7 +123,8 @@ fi
     echo "$MARKER"
     echo "### UCF CLA check failed"
     if [ ${#unsigned[@]} -gt 0 ]; then
-        echo "- Commits without a verified signature: ${unsigned[*]}."
+        printf -v list '%s, ' "${unsigned[@]}"
+        echo "- Commits without a verified signature: ${list%, }."
         echo "  Please sign your commits with a GPG or SSH key registered on your GitHub account,"
         echo "  using an email verified on that account (git config --global commit.gpgsign true,"
         echo "  so merge commits are signed too)."
