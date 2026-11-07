@@ -155,6 +155,8 @@ public:
 private:
     static bool is_cuda_supported();
 
+    static bool is_musa_supported();
+
     static bool is_rocm_supported();
 
     static bool is_ze_supported();

@@ -1,0 +1,11 @@
+#
+# Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+
+UCX_CHECK_MUSA
+
+AS_IF([test "x$musa_happy" = "xyes"],
+      [uct_modules="${uct_modules}:musa"])
+
+AC_CONFIG_FILES([src/uct/musa/Makefile])

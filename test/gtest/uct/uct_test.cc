@@ -683,7 +683,7 @@ bool uct_test::has_ugni() const {
 
 bool uct_test::has_gpu() const {
     return (has_transport("cuda_copy") || has_transport("gdr_copy") ||
-            has_transport("rocm_copy"));
+            has_transport("rocm_copy") || has_transport("musa_copy"));
 }
 
 uct_test::entity *
