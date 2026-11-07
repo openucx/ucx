@@ -85,7 +85,7 @@ for sha in $new; do
            grep -qxF -- "${email##*@}" <<< "$domains"; then
             continue
         fi
-        missing[$email]+=" $short"
+        missing["$kind $email"]+=" $short"
     done < "$work/commit.txt"
 done
 
@@ -133,8 +133,8 @@ fi
     fi
     if [ ${#missing[@]} -gt 0 ]; then
         echo "- No signed CLA on file for these commit emails:"
-        for email in "${!missing[@]}"; do
-            echo "  - $email:${missing[$email]}"
+        for key in "${!missing[@]}"; do
+            echo "  - $key:${missing[$key]}"
         done
         echo
         echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
