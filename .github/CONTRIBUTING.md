@@ -8,7 +8,8 @@
 1. Every commit must be
    [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification)
    with a key registered on your GitHub account, using an email verified on
-   that account. Commits already pushed unsigned can be re-signed with
+   that account; `git config --global commit.gpgsign true` signs new commits,
+   including merge commits. Commits already pushed unsigned can be re-signed with
    `git rebase -f --rebase-merges --gpg-sign $(git merge-base HEAD upstream/<pr-base-branch>)`
    and force-pushed, an exception to the no-force-push rule below.
 
