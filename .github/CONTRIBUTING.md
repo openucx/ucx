@@ -15,7 +15,8 @@
    `git rebase -f --rebase-merges --gpg-sign $(git merge-base HEAD upstream/<pr-base-branch>)`
    and force-pushed, the one exception to the no-force-push rule below; do it
    before review starts when you can, since the rewrite also moves the anchors
-   of comments already posted.
+   of comments already posted, and merges that resolved conflicts need
+   resolving again.
 
 1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/docs/CodeStyle.md)
    and [logging style](https://github.com/openucx/ucx/blob/master/docs/LoggingStyle.md).
