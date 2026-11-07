@@ -69,8 +69,10 @@ git -C "$work/repo" fetch -q --filter=tree:0 --no-tags \
     "https://github.com/$repo.git" \
     "+refs/heads/master:refs/remotes/origin/master" \
     "+refs/heads/v*:refs/remotes/origin/v*" "$head_sha"
-mapfile -t new < <(git -C "$work/repo" rev-list "$head_sha" \
-    --not origin/master --remotes='origin/v*.*.x')
+# Through a variable so that a rev-list failure stops the script
+rev=$(git -C "$work/repo" rev-list "$head_sha" --not origin/master \
+    --remotes='origin/v*.*.x')
+mapfile -t new < <(printf '%s' "$rev")
 echo "Checking ${#new[@]} new commits"
 
 # GitHub's web-flow committer signs web UI commits and sets their author
