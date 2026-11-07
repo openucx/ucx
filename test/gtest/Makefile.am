@@ -91,7 +91,8 @@ gtest_LDFLAGS += -Wl,--disable-new-dtags
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
-	-DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\""
+	-DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\"" \
+	-DGTEST_MODULE_ORDER_LIB_DIR="\"${abs_builddir}/ucs/test_module/.libs\""
 
 gtest_SOURCES = \
 	common/main.cc \
