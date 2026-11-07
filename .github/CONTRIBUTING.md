@@ -7,7 +7,7 @@
    with a key registered on your GitHub account, using an email verified on
    that account, and its author and committer emails must be covered by a CLA.
    Commits already pushed unsigned can be re-signed with
-   `git rebase -f --rebase-merges --gpg-sign $(git merge-base HEAD upstream/master)`
+   `git rebase -f --rebase-merges --gpg-sign $(git merge-base HEAD upstream/<pr-base-branch>)`
    and force-pushed, an exception to the no-force-push rule below.
 
 1. Please follow the [code style](https://github.com/openucx/ucx/blob/master/docs/CodeStyle.md)
