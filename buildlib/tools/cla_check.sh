@@ -32,8 +32,8 @@ done
 [ -n "$repo" ] && [ -n "$pr" ] && [ -n "$head_sha" ] || usage
 
 read_list() {
-    tr -d '[:blank:]\r' <<< "$1" | sed 's/#.*//' | tr '[:upper:]' '[:lower:]' |
-        grep -v '^$' || true
+    tr -d '[:blank:]\r' <<< "$1" | sed -e 's/#.*//' -e 's/^@//' |
+        tr '[:upper:]' '[:lower:]' | grep -v '^$' || true
 }
 
 emails=$(read_list "${CLA_INDIVIDUALS:-}")
