@@ -1205,6 +1205,8 @@ private:
         ucs_status_t status;
 
         for (;;) {
+            /* Make each check load the data again, after the sequence number */
+            ucs_memory_cpu_load_fence();
             status = validate_recv_data(recv_buffer, length, sn, host_buffer,
                                         UCS_LOG_LEVEL_TRACE_POLL);
             if ((status == UCS_OK) || (CMD != UCX_PERF_CMD_PUT) ||
