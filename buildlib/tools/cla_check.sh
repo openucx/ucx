@@ -38,9 +38,14 @@ read_list() {
 
 emails=$(read_list "${CLA_INDIVIDUALS:-}")
 domains=$(read_list "${CLA_ENTITIES:-}")
-# Fail loudly on an empty list, not as missing CLAs
+# Fail loudly on an empty or malformed list, not as missing CLAs
 if [ -z "$emails" ] || [ -z "$domains" ]; then
     echo "::error::A CLA list secret is empty"
+    exit 1
+fi
+if grep -qvE '^[^@]+@[a-z0-9.-]+$' <<< "$emails" ||
+   grep -qvE '^[a-z0-9.-]+$' <<< "$domains"; then
+    echo "::error::A CLA list secret has a malformed entry"
     exit 1
 fi
 
