@@ -3,7 +3,7 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
-# Check that every commit a PR adds is covered by a UCF CLA: it must have a
+# Check that every commit a PR adds is covered by a CLA: it must have a
 # verified signature, and its author and committer emails must be listed as
 # individual signers or belong to a corporate signer's email domain.
 # Commits already on master or a release branch were checked when they landed.
@@ -132,10 +132,10 @@ failed=$(( ${#missing[@]} + ${#unsigned[@]} > 0 ))
 {
     echo "$MARKER"
     if [ "$failed" = 0 ]; then
-        echo "### UCF CLA check passed"
-        echo "All commits are covered by a signed UCF CLA."
+        echo "### CLA check passed"
+        echo "All commits are covered by a signed CLA."
     else
-        echo "### UCF CLA check failed"
+        echo "### CLA check failed"
     fi
     if [ ${#unsigned[@]} -gt 0 ]; then
         printf -v list '%s, ' "${unsigned[@]}"
@@ -157,6 +157,6 @@ failed=$(( ${#missing[@]} + ${#unsigned[@]} > 0 ))
 tail -n +2 "$work/summary.md" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
 post_comment || echo "::warning::Could not post the PR comment"
 if [ "$failed" = 1 ]; then
-    echo "::error::UCF CLA check failed, see the job summary"
+    echo "::error::CLA check failed, see the job summary"
     exit 1
 fi
