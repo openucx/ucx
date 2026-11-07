@@ -43,12 +43,15 @@ read_list() {
 
 # Fail loudly on an empty or malformed list, not as missing CLAs
 check_list() {
+    local bad
     if [ -z "$2" ]; then
         echo "::error::$1 is empty"
         exit 1
     fi
-    if grep -qvE "$3" <<< "$2"; then
-        echo "::error::$1 has a malformed entry"
+    bad=$({ grep -nvE "$3" <<< "$2" || true; } | cut -d: -f1 | paste -sd, -)
+    if [ -n "$bad" ]; then
+        echo "::error::$1 has malformed entries at positions $bad" \
+             "(blank and comment lines not counted)"
         exit 1
     fi
 }
