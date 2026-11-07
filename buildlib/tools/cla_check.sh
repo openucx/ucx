@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+#
+# Check that every commit a PR adds is covered by a UCF CLA: it must have a
+# verified signature, and its author and committer emails must be listed as
+# individual signers or belong to a corporate signer's email domain.
+# Commits already on master or a release branch were checked when they landed.
+# Findings are written to the job summary and posted as one PR comment,
+# updated on every run.
+#
+# Usage: cla_check.sh --repo <owner/name> --pr <number> --head-sha <sha> [--dry-run]
+# Environment: CLA_INDIVIDUALS (signer emails), CLA_ENTITIES (signer domains),
+#              one entry per line, # starts a comment; GH_TOKEN for gh.
+# --dry-run skips posting the PR comment.
+set -eEuo pipefail
+
+usage() { grep -E '^# (Usage|Environment|       |--dry)' "$0" | sed 's/^# //'; exit 2; }
+
+MARKER='<!-- ucf-cla-check -->'
+repo="" pr="" head_sha="" dry_run=""
+while [ $# -gt 0 ]; do
+    case $1 in
+    --repo)     repo=$2; shift 2 ;;
+    --pr)       pr=$2; shift 2 ;;
+    --head-sha) head_sha=$2; shift 2 ;;
+    --dry-run)  dry_run=1; shift ;;
+    *)          usage ;;
+    esac
+done
+[ -n "$repo" ] && [ -n "$pr" ] && [ -n "$head_sha" ] || usage
+
+read_list() {
+    tr -d '[:blank:]\r' <<< "$1" | sed 's/#.*//' | tr '[:upper:]' '[:lower:]' |
+        grep -v '^$' || true
+}
+
+emails=$(read_list "${CLA_INDIVIDUALS:-}")
+domains=$(read_list "${CLA_ENTITIES:-}")
+# Fail loudly on an empty list, not as missing CLAs
+if [ -z "$emails" ] || [ -z "$domains" ]; then
+    echo "::error::A CLA list secret is empty"
+    exit 1
+fi
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# Commits only, no trees or blobs: PR code is never checked out
+git init -q "$work/repo"
+git -C "$work/repo" fetch -q --filter=tree:0 --no-tags \
+    "https://github.com/$repo.git" \
+    "+refs/heads/master:refs/remotes/origin/master" \
+    "+refs/heads/v*:refs/remotes/origin/v*" "$head_sha"
+new=$(git -C "$work/repo" rev-list "$head_sha" --not origin/master \
+    --remotes='origin/v*.*.x')
+echo "Checking $(wc -w <<< "$new" | tr -d " ") new commits"
+
+# GitHub's web-flow committer signs web UI commits, whose author email
+# GitHub takes from the user's verified emails. Bot commits need a
+# signature too; only their emails are exempt.
+declare -A missing=()
+unsigned=()
+for sha in $new; do
+    gh api "repos/$repo/commits/$sha" --jq '
+        if .commit.verification.verified | not then
+            "unsigned \(.sha[0:10])"
+        elif .author.type == "Bot" then empty
+        else
+            "author \(.sha[0:10]) \(.commit.author.email)",
+            if .committer.login == "web-flow" or
+               .commit.committer.email == .commit.author.email then empty
+            else "committer \(.sha[0:10]) \(.commit.committer.email)" end
+        end' > "$work/commit.txt"
+
+    while read -r kind short email; do
+        if [ "$kind" = "unsigned" ]; then
+            unsigned+=("$short")
+            continue
+        fi
+        email=${email,,}
+        if grep -qxF -- "$email" <<< "$emails" ||
+           grep -qxF -- "${email##*@}" <<< "$domains"; then
+            continue
+        fi
+        missing[$email]+=" $short"
+    done < "$work/commit.txt"
+done
+
+# Update the PR comment left by an earlier run; create one on failure
+post_comment() {
+    local id
+    if [ -n "$dry_run" ]; then
+        echo "[dry-run] would $1 the PR comment"
+        return
+    fi
+    id=$(gh api "repos/$repo/issues/$pr/comments" --paginate \
+        --jq "first(.[] | select(.body | startswith(\"$MARKER\")) | .id)" | head -n1)
+    if [ -n "$id" ]; then
+        gh api -X PATCH "repos/$repo/issues/comments/$id" -F body=@"$work/summary.md" > /dev/null
+    elif [ "$1" = create ]; then
+        gh api "repos/$repo/issues/$pr/comments" -F body=@"$work/summary.md" > /dev/null
+    fi
+}
+
+report() {
+    tail -n +2 "$work/summary.md" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+}
+
+if [ ${#missing[@]} -eq 0 ] && [ ${#unsigned[@]} -eq 0 ]; then
+    {
+        echo "$MARKER"
+        echo "### UCF CLA check passed"
+        echo "All commits are covered by a signed UCF CLA."
+    } > "$work/summary.md"
+    report
+    post_comment update
+    exit 0
+fi
+
+{
+    echo "$MARKER"
+    echo "### UCF CLA check failed"
+    if [ ${#unsigned[@]} -gt 0 ]; then
+        echo "- Commits without a verified signature: ${unsigned[*]}."
+        echo "  Please sign your commits with a GPG or SSH key registered on your GitHub account,"
+        echo "  using an email verified on that account (git config --global commit.gpgsign true,"
+        echo "  so merge commits are signed too)."
+    fi
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "- No signed CLA on file for these commit emails:"
+        for email in "${!missing[@]}"; do
+            echo "  - $email:${missing[$email]}"
+        done
+        echo
+        echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
+        echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
+        echo "Commit with the email named on the CLA. Once the CLA is countersigned, a maintainer"
+        echo "adds that email (or your company's email domain) to the CLA list; then push a new"
+        echo "commit or ask for a re-run of this check."
+    fi
+} > "$work/summary.md"
+report
+post_comment create
+echo "::error::UCF CLA check failed, see the job summary"
+exit 1
