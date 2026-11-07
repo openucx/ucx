@@ -98,7 +98,8 @@ post_comment() {
         return
     fi
     id=$(gh api "repos/$repo/issues/$pr/comments" --paginate --jq "first(.[] |
-        select(.user.type == \"Bot\" and (.body | startswith(\"$MARKER\"))) | .id)")
+        select(.user.type == \"Bot\" and (.body | startswith(\"$MARKER\"))) | .id)") ||
+        return 1
     id=${id%%$'\n'*}
     if [ -n "$id" ]; then
         gh api -X PATCH "repos/$repo/issues/comments/$id" -F body=@"$work/summary.md" > /dev/null
