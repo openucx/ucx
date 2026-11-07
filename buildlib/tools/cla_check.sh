@@ -117,7 +117,7 @@ if [ ${#missing[@]} -eq 0 ] && [ ${#unsigned[@]} -eq 0 ]; then
         echo "All commits are covered by a signed UCF CLA."
     } > "$work/summary.md"
     report
-    post_comment update
+    post_comment update || echo "::warning::Could not update the PR comment"
     exit 0
 fi
 
@@ -145,6 +145,6 @@ fi
     fi
 } > "$work/summary.md"
 report
-post_comment create
+post_comment create || echo "::warning::Could not post the PR comment"
 echo "::error::UCF CLA check failed, see the job summary"
 exit 1
