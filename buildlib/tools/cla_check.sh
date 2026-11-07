@@ -97,13 +97,14 @@ for sha in "${new[@]}"; do
             continue
         fi
         email=${rest,,}
-        email=${email:-"(no email)"}
         if grep -qxF -- "$email" <<< "$emails" ||
            { [[ $email == *@* ]] &&
              grep -qxF -- "${email##*@}" <<< "$domains"; }; then
             continue
         fi
-        missing["$kind $email"]+=" $short"
+        # The email is PR-controlled text and lands in markdown
+        shown=${email//[^a-z0-9@._+%-]/?}
+        missing["$kind ${shown:-"(no email)"}"]+=" $short"
     done < "$work/commit.txt"
 done
 
