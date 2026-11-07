@@ -140,9 +140,9 @@ fi
     fi
     if [ ${#missing[@]} -gt 0 ]; then
         echo "- No signed CLA on file for these commit emails:"
-        for key in "${!missing[@]}"; do
+        while IFS= read -r key; do
             echo "  - $key:${missing[$key]}"
-        done
+        done < <(printf '%s\n' "${!missing[@]}" | sort)
         echo
         echo "To contribute, sign the individual or corporate CLA at https://openucx.org/license/"
         echo "and follow https://github.com/openucx/ucx/wiki/Guidance-for-contributors."
