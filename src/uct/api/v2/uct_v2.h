@@ -72,6 +72,8 @@ enum uct_ep_event_types {
  * Transports should use this callback for events that identify a specific
  * endpoint, such as @ref UCT_EP_EVENT_PATH_SPEED_CHANGE.
  *
+ * @note This callback is invoked from worker progress context.
+ *
  * @param [in]  arg      User argument registered with
  *                       @ref uct_iface_set_ep_event_handler.
  * @param [in]  ep       Endpoint associated with the event. It is valid only
