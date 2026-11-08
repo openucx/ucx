@@ -16,39 +16,45 @@ import (
 
 const wakeupTimeout = 10 * time.Second
 
-// closeWorker destroys the worker and its context. Do not call it while a
-// goroutine of the test may still use the worker: destroying the worker under
-// that goroutine could crash the test binary.
-func closeWorker(ucpContext *UcpContext, ucpWorker *UcpWorker) {
-	ucpWorker.Close()
-	ucpContext.Close()
+// wakeupEntity is a context with the wakeup feature and a worker on it
+type wakeupEntity struct {
+	*TestEntity
+	// Set when a goroutine of the test may still use the worker: destroying the
+	// worker under that goroutine could crash the test binary
+	leak bool
 }
 
-func TestUcpWorkerEfd(t *testing.T) {
-	ucpContext, err := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
-	if err != nil {
-		t.Fatalf("Failed to create a context %v", err)
+// prepareWakeupWorker creates a wakeupEntity, which is destroyed when the test
+// ends unless its leak is set
+func prepareWakeupWorker(t *testing.T, ucpWorkerParams *UcpWorkerParams) *wakeupEntity {
+	entity := &wakeupEntity{
+		TestEntity: prepareContext(t, (&UcpParams{}).EnableTag().EnableWakeup()),
 	}
 
-	ucpWorkerParams := &UcpWorkerParams{}
-	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
-	ucpWorkerParams.WakeupEdge()
-
-	ucpWorker, err := ucpContext.NewWorker(ucpWorkerParams)
+	worker, err := entity.context.NewWorker(ucpWorkerParams)
 	if err != nil {
-		ucpContext.Close()
+		entity.Close()
 		t.Fatalf("Failed to create a worker %v", err)
 	}
 
-	leakWorker := false
-	defer func() {
-		if !leakWorker {
-			closeWorker(ucpContext, ucpWorker)
+	entity.worker = worker
+	t.Cleanup(func() {
+		if !entity.leak {
+			entity.Close()
 		}
-	}()
+	})
+	return entity
+}
+
+func TestUcpWorkerEfd(t *testing.T) {
+	ucpWorkerParams := &UcpWorkerParams{}
+	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
+	ucpWorkerParams.WakeupEdge()
+	entity := prepareWakeupWorker(t, ucpWorkerParams)
+	ucpWorker := entity.worker
 
 	eventsChan := make(chan int, 1)
-	started := make(chan bool)
+	started := make(chan bool, 1)
 	// t.Fatalf must be called only from the test goroutine
 	threadErr := make(chan error, 1)
 
@@ -104,12 +110,12 @@ func TestUcpWorkerEfd(t *testing.T) {
 		t.Fatal(err)
 	case <-time.After(wakeupTimeout):
 		// The goroutine may still use the worker
-		leakWorker = true
+		entity.leak = true
 		t.Fatalf("Didn't start after %v", wakeupTimeout)
 	}
 	if err := ucpWorker.Signal(); err != nil {
 		// The goroutine still waits on the worker efd
-		leakWorker = true
+		entity.leak = true
 		t.Fatalf("Failed to signal the worker %v", err)
 	}
 
@@ -122,34 +128,19 @@ func TestUcpWorkerEfd(t *testing.T) {
 		t.Fatal(err)
 	case <-time.After(wakeupTimeout):
 		// The goroutine still waits on the worker efd
-		leakWorker = true
+		entity.leak = true
 		t.Fatalf("No events in epoll after %v", wakeupTimeout)
 	}
 }
 
 func TestUcpWorkerWakeup(t *testing.T) {
-	ucpContext, err := NewUcpContext((&UcpParams{}).EnableTag().EnableWakeup())
-	if err != nil {
-		t.Fatalf("Failed to create a context %v", err)
-	}
-
 	ucpWorkerParams := &UcpWorkerParams{}
 	var cpuMask big.Int
 	cpuMask.SetBit(&cpuMask, 0, 1)
 	ucpWorkerParams.SetCpuMask(&cpuMask).WakeupTX().WakeupRX()
 	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_MULTI)
-	ucpWorker, err := ucpContext.NewWorker(ucpWorkerParams)
-	if err != nil {
-		ucpContext.Close()
-		t.Fatalf("Failed to create a worker %v", err)
-	}
-
-	leakWorker := false
-	defer func() {
-		if !leakWorker {
-			closeWorker(ucpContext, ucpWorker)
-		}
-	}()
+	entity := prepareWakeupWorker(t, ucpWorkerParams)
+	ucpWorker := entity.worker
 
 	quit := make(chan error, 1)
 	started := make(chan bool)
@@ -162,7 +153,7 @@ func TestUcpWorkerWakeup(t *testing.T) {
 	<-started
 	if err := ucpWorker.Signal(); err != nil {
 		// The goroutine may still use the worker
-		leakWorker = true
+		entity.leak = true
 		t.Fatalf("Failed to signal the worker %v", err)
 	}
 
@@ -173,7 +164,7 @@ func TestUcpWorkerWakeup(t *testing.T) {
 		}
 	case <-time.After(wakeupTimeout):
 		// The goroutine is still in ucpWorker.Wait()
-		leakWorker = true
+		entity.leak = true
 		t.Fatalf("Didn't exit from wait after %v", wakeupTimeout)
 	}
 }
