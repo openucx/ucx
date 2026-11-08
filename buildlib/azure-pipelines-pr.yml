@@ -32,16 +32,5 @@ pr:
     - buildlib/tools/perf_results.py
     - buildlib/tools/perf-common.yml
 
-# TEMPORARY: validate only the allocation regression fixed by PR #12211.
-stages:
-  - stage: jucx
-    jobs:
-      - template: jucx/jucx-test.yml
-        parameters:
-          arch: amd64
-          demands: ucx_gpu
-
-      - template: jucx/jucx-test.yml
-        parameters:
-          arch: aarch64
-          demands: ucx-arm64
+extends:
+  template: pr/main.yml

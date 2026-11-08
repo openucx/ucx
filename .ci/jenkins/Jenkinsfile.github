@@ -11,11 +11,6 @@ def matrix = new com.mellanox.cicd.Matrix()
 
 import ipp.blossom.*
 
-// TEMPORARY: validate only the JUCX regression through Azure.
-echo 'Skipping Blossom jobs for temporary JUCX-only validation'
-currentBuild.result = 'NOT_BUILT'
-return
-
 def githubHelper = null
 def pipelineOverviewUrl = ""
 

@@ -41,6 +41,20 @@ jobs:
         displayName: Build UCX
 
       - bash: |
+          set -exE
+          source buildlib/az-helpers.sh
+          az_init_modules
+          az_module_load dev/mvn
+          az_module_load dev/jdk-1.8
+          TAG=`git describe --tags`
+          MAVEN_VERSION=${TAG:1}
+          make -C bindings/java/src/main/native/ publish-local \
+              JUCX_VERSION=${MAVEN_VERSION}${SUFFIX}
+        displayName: Publish-Local
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+
+
+      - bash: |
           set -xeE
           source buildlib/az-helpers.sh
           az_init_modules
@@ -48,6 +62,37 @@ jobs:
           az_module_load dev/mvn
           az_module_load dev/jdk-${JAVA_VERSION}
 
-          make -C bindings/java/src/main/native test \
-            MVN="mvn -Dtest=UcpMemoryTest#testMmapFile -DfailIfNoTests=true"
-        displayName: Run UcpMemoryTest.testMmapFile
+          ifaces=`get_rdma_interfaces`
+          if [ -z "$ifaces" ]; then
+              azure_log_warning "No active RDMA interfaces on machine"
+              exit 0;
+          fi
+          jucx_port=$((20000 + $RANDOM % 10000))
+          export JUCX_TEST_PORT=$jucx_port
+          make -C bindings/java/src/main/native test
+          make -C bindings/java/src/main/native package
+          ipv4_found=0
+          for iface in $ifaces
+          do
+              server_ip=$(get_ip ${iface})
+              if [ -z "$server_ip" ]; then
+                  continue
+              fi
+              echo "Running standalone benchmark on $iface:$jucx_port"
+              java_cmd='java -XX:ErrorFile=$(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log  \
+                  -XX:OnError="cat $(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log" \
+                  -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
+                  org.openucx.jucx.examples.$bench_class s=$server_ip p=$jucx_port t=1000000'
+              bench_class=UcxReadBWBenchmarkReceiver
+              eval "$java_cmd &"
+              java_pid=$!
+              sleep 10
+              bench_class=UcxReadBWBenchmarkSender
+              eval "$java_cmd"
+              wait $java_pid
+              ipv4_found=1
+          done
+          if [[ $ipv4_found -eq 0 ]]; then
+              azure_log_warning "No IPv4 address on any of $ifaces"
+          fi
+        displayName: Run jucx tests
