@@ -392,6 +392,8 @@ ucp_proto_rma_sgl_max_payload(const ucp_request_t *req,
                                         lpriv->max_frag);
 }
 
+/* Copy up to max_frag_count fragments (splitting elements if needed) to local
+ * arrays, and post them */
 static UCS_F_INLINE_OPTIMIZED ucs_status_t
 ucp_proto_rma_sgl_offload_send_frags(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
@@ -443,6 +445,7 @@ ucp_proto_rma_sgl_offload_send_frags(
                      uct_rkeys, frag_count);
 }
 
+/* Post the user arrays as a batch, or fall back to copying fragments */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rma_sgl_offload_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
