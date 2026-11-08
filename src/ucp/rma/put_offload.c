@@ -464,7 +464,11 @@ ucp_proto_put_sgl_offload_sw_post(ucp_request_t *req,
     };
     ucs_status_t status;
 
-    ucs_assertv(count == 1, "count=%zu", count);
+    ucs_assertv(count == 1,
+                "count=%zu offset=%zu length=%zu frag_offset=%zu", count,
+                req->send.state.dt_iter.offset,
+                req->send.state.dt_iter.length,
+                req->send.state.dt_iter.type.sgl.frag_offset);
 
     status = uct_ep_put_zcopy(uct_ep, &iov, 1, remote_addrs[0], rkeys[0],
                               &req->send.state.uct_comp);
