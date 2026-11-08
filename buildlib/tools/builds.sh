@@ -230,6 +230,7 @@ build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
 	$MAKEP
+	check_ib_symbol_versions
 
 	# Show UCX info
 	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
@@ -608,6 +609,53 @@ check_no_gga() {
 		azure_log_error "build --without-gga created GGA object"
 		exit 1
 	fi
+}
+
+#
+# Newest version nodes of the oldest host rdma-core the IB modules must load
+# on (rdma-core 50, Ubuntu 24.04 inbox);
+# newer functions are resolved with UCS_SYS_LIB_OPTIONAL_FUNC()
+#
+check_ib_symbol_versions() {
+	local max_mlx5=MLX5_1.24 max_ibverbs=IBVERBS_1.14
+	local lib versions node max failed=no num_libs=0
+
+	for lib in $(find ${ucx_build_dir}/src/uct/ib -path '*/.libs/libuct_*.so')
+	do
+		num_libs=$((num_libs + 1))
+		if ! versions=$(readelf -V "$lib")
+		then
+			azure_log_error "readelf -V $lib failed"
+			failed=yes
+			continue
+		fi
+
+		for node in $(echo "$versions" | \
+		              grep -oE 'Name: (MLX5|IBVERBS)_[0-9][0-9.]*' | \
+		              cut -d' ' -f2 | sort -u)
+		do
+			case $node in
+			MLX5_*)
+				max=$max_mlx5
+				;;
+			*)
+				max=$max_ibverbs
+				;;
+			esac
+			if [ "$(printf '%s\n' $max $node | sort -V | tail -1)" != "$max" ]
+			then
+				azure_log_error "$lib requires $node, newer than $max"
+				failed=yes
+			fi
+		done
+	done
+
+	if [ $num_libs -eq 0 ] && grep -q '^#define HAVE_IB 1' ${ucx_build_dir}/config.h
+	then
+		azure_log_error "no IB module found to check"
+		failed=yes
+	fi
+	[ "$failed" = "no" ] || exit 1
 }
 
 source ${realdir}/soname-build.sh

@@ -1,5 +1,5 @@
 #
-# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
@@ -86,6 +86,13 @@ AC_CHECK_FUNCS([cpuset_setaffinity cpuset_getaffinity])
 #
 AC_CHECK_DECLS([F_SETOWN_EX], [], [], [#define _GNU_SOURCE 1
 #include <fcntl.h>])
+
+
+#
+# Look up a specific version of a symbol
+#
+AC_CHECK_DECLS([dlvsym], [], [], [#define _GNU_SOURCE 1
+#include <dlfcn.h>])
 
 
 #
