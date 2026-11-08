@@ -54,35 +54,7 @@ enum {
 
 
 /**
- * @brief Optional hooks implemented by an external RC mlx5 extension provider.
- *
- * Attach this table through uct_ib_mlx5_ext_ops_t::rc_ops and register with
- * uct_ib_mlx5_ext_register. The common registry owns the provider's identity;
- * there is no separate RC registration. The provider owns its address payload
- * wire format and version.
- *
- * Hooks run under the existing RC worker serialization.
- *
- * Init hooks are optional. If absent, their context is NULL in subsequent
- * hooks. Init hooks publish their context only on success and unwind resources
- * on failure. A cleanup hook runs only if its corresponding init hook returned
- * UCS_OK, even if that hook published a NULL context. Endpoint cleanup runs
- * after provider operations have completed or been canceled.
- * Canceled completion callbacks must not start new endpoint work. Cleanup must
- * quiesce work referencing a provider context before releasing that context.
- *
- * A nonempty address payload requires both pack and connect hooks. With
- * uct_ep_connect_to_ep_v2 and a supplied remote endpoint-address length, UCT
- * validates address bounds and provider presence/identity before calling
- * ep_connect. Missing or incompatible providers and truncated payloads are
- * rejected, not treated as interoperable. The provider validates its payload's
- * wire version inside ep_connect.
- *
- * Calls without a remote address length, including legacy connect, require
- * matching provider presence, registry identity, payload length and wire
- * version on both peers, guaranteed by the caller. Supply the length when
- * this cannot be guaranteed; a supplied length permits bounds checks, not
- * compatibility by itself.
+ * @brief RC mlx5 operations implemented by an external plugin provider.
  */
 typedef struct uct_rc_mlx5_ext_ops {
     /**
@@ -147,8 +119,8 @@ typedef struct uct_rc_mlx5_ext_ops {
      * @brief Validate the remote provider payload.
      *
      * UCT validates the provider identity and payload bounds before this hook
-     * when the remote address length is supplied. Otherwise, callers must
-     * satisfy the matching-peer precondition above. Reject incompatible
+     * when the remote address length is supplied. Otherwise, the caller must
+     * ensure matching providers and payload formats. Reject incompatible
      * payloads, including unsupported wire versions.
      *
      * Called before RC endpoint connection. Errors are returned to the caller.
