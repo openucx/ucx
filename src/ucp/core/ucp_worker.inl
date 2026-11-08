@@ -41,6 +41,12 @@ ucp_worker_ep_path_bw_is_current(ucp_ep_h ep, const ucp_ep_path_bw_t *state)
  *
  * @param [in]  worker          UCP worker to resolve configuration on.
  * @param [in]  key             Rkey configuration key.
+ * @param [in]  lanes_distance  Remote memory distance of each lane, used if
+ *                              the configuration is added. May be NULL only
+ *                              if key->sys_dev is UCS_SYS_DEVICE_ID_UNKNOWN.
+ *                              For an existing rkey configuration on another
+ *                              endpoint configuration, use
+ *                              @ref ucp_worker_rkey_config_switch_ep.
  * @param [out] cfg_index_p     Filled with configuration index in the worker.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
