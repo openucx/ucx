@@ -39,7 +39,6 @@ typedef size_t (*uct_ib_mlx5_ext_max_put_sgl_zcopy_count_func_t)(void);
 typedef size_t (*uct_ib_mlx5_ext_max_get_sgl_zcopy_count_func_t)(void);
 
 
-#ifdef HAVE_TL_RC
 /* RC-specific provider hooks. */
 
 enum {
@@ -159,7 +158,6 @@ typedef struct uct_rc_mlx5_ext_ops {
      */
     ucs_status_t (*ep_query)(void *ep_ctx, uct_ep_attr_t *ep_attr);
 } uct_rc_mlx5_ext_ops_t;
-#endif /* HAVE_TL_RC */
 
 
 /**
@@ -172,13 +170,11 @@ typedef struct uct_ib_mlx5_ext_ops {
     uct_ib_mlx5_ext_max_get_sgl_zcopy_count_func_t max_get_sgl_zcopy_count;      /**< Maximum GET SGL zero-copy entry count callback */
     uct_ep_get_sgl_zcopy_func_t                    ep_get_sgl_zcopy;             /**< GET SGL zero-copy callback */
 
-#ifdef HAVE_TL_RC
     /**
      * Table of RC-specific operations implemented by the plugin provider,
-     * available only when the RC transport is enabled.
+     * used only when the RC transport is enabled.
      */
     const uct_rc_mlx5_ext_ops_t *rc_ops;
-#endif /* HAVE_TL_RC */
 } uct_ib_mlx5_ext_ops_t;
 
 /**
