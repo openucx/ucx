@@ -540,6 +540,8 @@ protected:
         ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
         ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
         scoped_log_handler wrap_err(wrap_errors_logger);
+        /* Do not count the errors that log_handler() tolerates */
+        scoped_log_handler tolerate_err(log_handler);
 
         /* run_test() checks peer 1, which fails with its own error or with
          * the error of peer 0 */
