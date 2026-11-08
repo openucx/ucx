@@ -101,17 +101,6 @@ typedef struct uct_rc_mlx5_ext_ops {
      * This optional hook requires the endpoint bandwidth-query attribute
      * extension. It may be omitted when that extension is unavailable.
      *
-     * UCT handles standard attributes and calls this hook only when
-     * UCT_EP_ATTR_FIELD_BANDWIDTH is requested. The provider fills only
-     * bandwidth, leaving field_mask and all other attributes unchanged.
-     * Queries without bandwidth do not depend on the provider.
-     *
-     * This hook never starts a measurement. Return UCS_ERR_UNSUPPORTED when
-     * bandwidth measurement is unsupported, UCS_ERR_NO_ELEM before the first
-     * sample, or UCS_ERR_TIMED_OUT when the cached sample is stale. Leave
-     * attributes unchanged on error; these errors apply only when bandwidth
-     * was requested, including in a mixed-attribute query.
-     *
      * @param [in]     ep_ctx  Provider context from ep_init.
      * @param [in,out] ep_attr Requested attributes and provider-owned outputs.
      * @return UCS_OK if the requested bandwidth was filled.
