@@ -390,7 +390,8 @@ UCS_TEST_P(test_uct_tcp, vrf_enable)
     query_devices("try", vrf_devices);
 
     // With "y", a device whose sockets cannot be bound to its VRF fails the
-    // whole device query instead of being skipped
+    // tcp device query instead of being skipped. uct_md_query_tl_resources()
+    // skips a transport whose query fails, so it returns UCS_OK and no devices.
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
         query_devices("y", yes_devices);
