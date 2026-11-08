@@ -1603,8 +1603,8 @@ protected:
 
     bool offload_proto_selected(ucs_status_ptr_t sptr) const {
         if (!UCS_PTR_IS_PTR(sptr)) {
-            /* Only the emulation protocol can complete the put in-place, by
-               copying the data to a bounce buffer */
+            /* Only the emulation protocol can complete the operation in-place
+               (e.g. put, by copying the data to a bounce buffer) */
             return false;
         }
 
