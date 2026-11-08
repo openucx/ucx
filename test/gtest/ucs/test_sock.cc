@@ -822,6 +822,10 @@ UCS_TEST_F(test_socket, bind_to_device) {
     ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0, &fd));
     ASSERT_UCS_OK(ucs_socket_bind_to_device(fd, "lo"));
     EXPECT_EQ("lo", socket_bound_device(fd));
+
+    /* Binding again to the same device needs no privileges */
+    ASSERT_UCS_OK(ucs_socket_bind_to_device(fd, "lo"));
+    EXPECT_EQ("lo", socket_bound_device(fd));
     ucs_close_fd(&fd);
 
     sin.sin_family      = AF_INET;

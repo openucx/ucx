@@ -122,7 +122,8 @@ ucs_status_t ucs_socket_create(int domain, int type, int protocol, int *fd_p);
 /**
  * Bind a socket to a network interface, so that the socket can use only
  * addresses and routes of that interface. Binding to a VRF device allows the
- * socket to use addresses of the VRF slave interfaces.
+ * socket to use addresses of the VRF slave interfaces. Do nothing if the socket
+ * is bound to this interface already.
  *
  * @param [in]   fd          Socket fd.
  * @param [in]   if_name     Network interface name.

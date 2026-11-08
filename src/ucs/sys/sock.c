@@ -243,6 +243,17 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 ucs_status_t ucs_socket_bind_to_device(int fd, const char *if_name)
 {
+    char bound_if_name[IFNAMSIZ] = {};
+    socklen_t len                = sizeof(bound_if_name);
+    int ret;
+
+    /* Binding a socket which is bound already requires CAP_NET_RAW, even to
+     * the same device */
+    ret = getsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, bound_if_name, &len);
+    if ((ret == 0) && !strcmp(bound_if_name, if_name)) {
+        return UCS_OK;
+    }
+
     return ucs_socket_setopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name,
                              strlen(if_name) + 1);
 }
