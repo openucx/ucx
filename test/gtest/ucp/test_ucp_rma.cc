@@ -1392,8 +1392,8 @@ protected:
         for (size_t i = 0; i < num; i++) {
             uint8_t pattern = static_cast<uint8_t>(i + 1);
 
-            ctx.src[i].memset((op() == SGL_OP_PUT) ? pattern : 0);
-            ctx.dst[i].memset((op() == SGL_OP_PUT) ? 0 : pattern);
+            data_src(ctx, i).memset(pattern);
+            data_dst(ctx, i).memset(0);
             ctx.dst[i].rkey(sender(), ctx.rkey_handles[i]);
 
             ctx.buffers[i]      = ctx.src[i].ptr();
@@ -1567,8 +1567,7 @@ protected:
         auto verify_sgl_buffers = [&]() {
             for (size_t i = 0; i < num; i++) {
                 uint8_t expected            = static_cast<uint8_t>(i + 1);
-                const mapped_buffer &result = (op() == SGL_OP_PUT) ?
-                                              ctx.dst[i] : ctx.src[i];
+                const mapped_buffer &result = data_dst(ctx, i);
                 std::vector<uint8_t> host_buf(ctx.lengths[i]);
                 mem_buffer::copy_from(host_buf.data(), result.ptr(),
                                       ctx.lengths[i], result.mem_type());
@@ -1719,24 +1718,24 @@ protected:
             size_t remote_count = 0)
     {
         expect_sgl_status_ctx(ctx, local_mask, remote_mask, count,
-                                  UCS_ERR_INVALID_PARAM, 0, remote_addr, rkey,
-                                  clear_param_mask, null_remote, remote_count);
+                              UCS_ERR_INVALID_PARAM, 0, remote_addr, rkey,
+                              clear_param_mask, null_remote, remote_count);
     }
 
     void expect_sgl_invalid_param(uint64_t local_mask,
-                                      uint64_t remote_mask,
-                                      uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
-                                      ucp_rkey_h rkey = UCP_RKEY_INVALID,
-                                      uint32_t clear_param_mask = 0,
-                                      bool null_remote = false,
-                                      size_t count = 2,
-                                      size_t remote_count = 0)
+                                  uint64_t remote_mask,
+                                  uint64_t remote_addr = UCP_REMOTE_ADDR_INVALID,
+                                  ucp_rkey_h rkey = UCP_RKEY_INVALID,
+                                  uint32_t clear_param_mask = 0,
+                                  bool null_remote = false,
+                                  size_t count = 2,
+                                  size_t remote_count = 0)
     {
         sgl_ctx ctx;
         init_sgl_ctx(ctx, count, 64);
         expect_sgl_invalid_param_ctx(ctx, local_mask, remote_mask, count,
-                                         remote_addr, rkey, clear_param_mask,
-                                         null_remote, remote_count);
+                                     remote_addr, rkey, clear_param_mask,
+                                     null_remote, remote_count);
     }
 };
 
@@ -1882,7 +1881,7 @@ UCS_TEST_P(test_ucp_rma_sgl, force_imm_cmpl) {
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_addr,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 0x1234, UCP_RKEY_INVALID);
+                             0x1234, UCP_RKEY_INVALID);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_rkey,
@@ -1890,22 +1889,22 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_rkey,
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
     expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2,
-                                     UCP_REMOTE_ADDR_INVALID, ctx.rkeys[0]);
+                                 REMOTE_MASK_DEFAULT, 2,
+                                 UCP_REMOTE_ADDR_INVALID, ctx.rkeys[0]);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_field,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 UCP_OP_ATTR_FIELD_REMOTE);
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             UCP_OP_ATTR_FIELD_REMOTE);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_datatype_field,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 UCP_OP_ATTR_FIELD_REMOTE_DATATYPE);
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             UCP_OP_ATTR_FIELD_REMOTE_DATATYPE);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_datatype,
@@ -1930,48 +1929,48 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_datatype,
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_remote,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 0, true);
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             0, true);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_local_buffers,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(UCP_DT_LOCAL_SGL_FIELD_LENGTHS,
-                                 REMOTE_MASK_DEFAULT);
+                             REMOTE_MASK_DEFAULT);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_local_lengths,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(UCP_DT_LOCAL_SGL_FIELD_BUFFERS,
-                                 REMOTE_MASK_DEFAULT);
+                             REMOTE_MASK_DEFAULT);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_addrs,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT,
-                                 UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
-                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS);
+                             UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                             UCP_DT_REMOTE_SGL_FIELD_RKEYS);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_rkeys,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT,
-                                 UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
-                                 UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
+                             UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                             UCP_DT_REMOTE_SGL_FIELD_LENGTHS);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, missing_remote_lengths,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT,
-                                 UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
-                                 UCP_DT_REMOTE_SGL_FIELD_RKEYS);
+                             UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                             UCP_DT_REMOTE_SGL_FIELD_RKEYS);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, count_mismatch,
                      !ENABLE_PARAMS_CHECK) {
     expect_sgl_invalid_param(LOCAL_MASK_DEFAULT, REMOTE_MASK_DEFAULT,
-                                 UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
-                                 0, false, 4, 3);
+                             UCP_REMOTE_ADDR_INVALID, UCP_RKEY_INVALID,
+                             0, false, 4, 3);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, mixed_mem_types,
@@ -1981,7 +1980,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, mixed_mem_types,
     sgl_ctx ctx;
     init_sgl_ctx_mixed_mem_types(ctx);
     expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+                                 REMOTE_MASK_DEFAULT, 2);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, memhs_null_memh,
@@ -2021,7 +2020,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, rkeys_null,
     init_sgl_ctx(ctx, 2, 64);
     ctx.rkeys[1] = NULL;
     expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+                                 REMOTE_MASK_DEFAULT, 2);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, rkeys_mismatched_cfg,
@@ -2032,7 +2031,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, rkeys_mismatched_cfg,
     ucp_worker_cfg_index_t saved_cfg_index = ctx.rkeys[1]->cfg_index;
     ctx.rkeys[1]->cfg_index = saved_cfg_index + 1;
     expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+                                 REMOTE_MASK_DEFAULT, 2);
     ctx.rkeys[1]->cfg_index = saved_cfg_index;
 }
 
@@ -2042,7 +2041,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, single_elem_rkey_null,
     init_sgl_ctx(ctx, 1, 64);
     ctx.rkeys[0] = NULL;
     expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 1);
+                                 REMOTE_MASK_DEFAULT, 1);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_local_arrays,
@@ -2056,7 +2055,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_local_arrays,
     for (uint64_t field : fields) {
         ctx.null_local_arrays = field;
         expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT | field,
-                                         REMOTE_MASK_DEFAULT, 2);
+                                     REMOTE_MASK_DEFAULT, 2);
     }
 }
 
@@ -2071,7 +2070,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, null_remote_arrays,
     for (uint64_t field : fields) {
         ctx.null_remote_arrays = field;
         expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                         REMOTE_MASK_DEFAULT, 2);
+                                     REMOTE_MASK_DEFAULT, 2);
     }
 }
 
@@ -2081,7 +2080,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, remote_lengths_mismatch,
     init_sgl_ctx(ctx, 2, 64);
     ctx.remote_lengths[1] = 32;
     expect_sgl_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
-                                     REMOTE_MASK_DEFAULT, 2);
+                                 REMOTE_MASK_DEFAULT, 2);
 }
 
 UCS_TEST_P(test_ucp_rma_sgl, zero_count) {
