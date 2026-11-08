@@ -60,70 +60,37 @@ enum {
 
 
 /**
- * @brief Final callback for a timestamped SGL write, in RC worker context.
+ * @brief RC completion with a hardware timestamp.
  *
- * The timestamps are raw local NIC ticks at completion of the first and last
- * SGL elements. UCS_OK means both timestamps are valid, including a raw value
- * of zero. Both timestamps are zero on error or cancellation.
- *
- * @param [in] arg             Provider callback argument.
- * @param [in] status          Final operation status.
- * @param [in] start_timestamp First SGL element's completion timestamp.
- * @param [in] end_timestamp   Last SGL element's completion timestamp.
+ * Initialize super as a normal uct_completion_t with count 1. The timestamp
+ * is set before its callback, in host byte order and raw local NIC ticks.
+ * It is valid only on UCS_OK; zero is a valid timestamp. Retain the completion
+ * until its callback and do not reuse it while the operation is outstanding.
  */
-typedef void (*uct_rc_mlx5_sgl_completion_func_t)(
-        void *arg, ucs_status_t status, uint64_t start_timestamp,
-        uint64_t end_timestamp);
+typedef struct uct_rc_mlx5_completion {
+    uct_completion_t super;
+    uint64_t         timestamp;
+} uct_rc_mlx5_completion_t;
 
 
 /**
- * @brief Completion adapter for the existing uct_ep_put_sgl_zcopy operation.
+ * @brief Post an SGL write and report its final completion timestamp.
  *
- * Initialize with uct_rc_mlx5_sgl_completion_init, then pass &adapter.super
- * only to put_sgl_zcopy on the bound endpoint with the same SGL entry count.
- * Only non-strided entries are supported: counts and strides must be NULL.
- * UCT manages every field; ordinary completions retain their normal semantics.
+ * Arguments and completion semantics follow uct_ep_put_sgl_zcopy, with a
+ * non-NULL extended completion and nonzero count. The endpoint must be RC
+ * mlx5. Only non-strided entries are supported: counts and strides are NULL.
+ * The timestamp belongs to the last SGL element's CQE; the callback runs in
+ * worker progress context after the whole operation completes or is canceled.
  *
- * An accepted timestamped post returns UCS_INPROGRESS and invokes callback
- * exactly once, after every SGL element has completed or been canceled. A
- * failed post preserves the adapter state and generates no callback. SGL
- * arrays are consumed before posting returns; the adapter, callback argument,
- * local buffers, registrations and remote targets remain valid until
- * completion.
- *
- * UCT makes the adapter idle before invoking callback, so the callback may
- * release or reinitialize it. Do not modify an in-flight adapter.
- * Initialization, posting and completion share the endpoint's worker
- * serialization.
+ * A failed post leaves the completion unchanged and invokes no callback.
+ * Return UCS_ERR_UNSUPPORTED if CQ timestamps are unavailable. Cancellation
+ * provides an error completion without a valid timestamp.
  */
-typedef struct uct_rc_mlx5_sgl_completion {
-    uct_completion_t                  super;
-    uct_ep_h                          ep;
-    size_t                            sgl_count;
-    uct_rc_mlx5_sgl_completion_func_t callback;
-    void                             *arg;
-} uct_rc_mlx5_sgl_completion_t;
-
-
-/**
- * @brief Prepare an idle adapter for an RC endpoint with completion timestamps.
- *
- * The SGL entry count must be at least two.
- *
- * @param [in]  ep         Existing RC endpoint to bind to the adapter.
- * @param [in]  sgl_count  Number of SGL entries.
- * @param [in]  callback   Final completion callback.
- * @param [in]  arg        Argument passed to callback.
- * @param [out] completion Idle adapter to initialize, unchanged on failure.
- *
- * @return UCS_OK                The adapter was initialized.
- * @return UCS_ERR_INVALID_PARAM An argument or the SGL entry count is invalid.
- * @return UCS_ERR_UNSUPPORTED   The endpoint cannot provide timestamps.
- */
-ucs_status_t uct_rc_mlx5_sgl_completion_init(
-        uct_ep_h ep, size_t sgl_count,
-        uct_rc_mlx5_sgl_completion_func_t callback, void *arg,
-        uct_rc_mlx5_sgl_completion_t *completion);
+ucs_status_t uct_rc_mlx5_ep_put_sgl_zcopy_timestamped(
+        uct_ep_h ep, void *const *buffers, const size_t *lengths,
+        uct_mem_h const *memhs, const uint64_t *remote_addrs,
+        uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
+        size_t count, uct_rc_mlx5_completion_t *comp);
 
 
 /**
