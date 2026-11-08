@@ -169,6 +169,16 @@ public:
         }
     }
 
+    int netif_is_default()
+    {
+        const char *if_name = m_tcp_iface->if_name;
+        int is_default;
+
+        ASSERT_UCS_OK(uct_tcp_netif_is_default(if_name, &is_default));
+        UCS_TEST_MESSAGE << if_name << ": is_default " << is_default;
+        return is_default;
+    }
+
 private:
     void init_data(void *buf, size_t msg_size) {
         uct_tcp_am_hdr_t *tcp_am_hdr;
@@ -529,6 +539,21 @@ UCS_TEST_P(test_uct_tcp, vrf_ipv6_local_reachable)
                   std::string(info_str).find("is a local address of VRF"))
                 << info_str;
     }
+}
+
+UCS_TEST_P(test_uct_tcp, prefer_default)
+{
+    /* UCP prefers the higher priority when transport scores are equal */
+    EXPECT_EQ(netif_is_default() ? 1 : 0, m_ent->iface_attr().priority);
+}
+
+UCS_TEST_P(test_uct_tcp, prefer_default_disabled, "TCP_PREFER_DEFAULT=n")
+{
+    if (!netif_is_default()) {
+        UCS_TEST_SKIP_R("not the default network interface");
+    }
+
+    EXPECT_EQ(0, m_ent->iface_attr().priority);
 }
 
 

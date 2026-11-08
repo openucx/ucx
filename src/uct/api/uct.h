@@ -1177,7 +1177,8 @@ struct uct_iface_attr {
     uct_ppn_bandwidth_t      bandwidth;    /**< Bandwidth model */
     ucs_linear_func_t        latency;      /**< Latency as function of number of
                                                 active endpoints */
-    uint8_t                  priority;     /**< Priority of device */
+    uint8_t                  priority;     /**< Priority of device, a higher
+                                                value is preferred */
     size_t                   max_num_eps;  /**< Maximum number of endpoints */
     unsigned                 dev_num_paths;/**< How many network paths can be
                                                 utilized on the device used by
