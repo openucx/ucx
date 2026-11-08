@@ -79,8 +79,8 @@ typedef struct uct_rc_mlx5_completion {
  * Arguments and completion semantics follow uct_ep_put_sgl_zcopy, with a
  * non-NULL extended completion and nonzero count. The endpoint must be RC
  * mlx5. Only non-strided entries are supported: counts and strides are NULL.
- * The timestamp belongs to the last SGL element's CQE; the callback runs in
- * worker progress context after the whole operation completes or is canceled.
+ * The timestamp belongs to the last SGL element's CQE. Callbacks run under
+ * RC worker serialization after the operation completes or is canceled.
  *
  * A failed post leaves the completion unchanged and invokes no callback.
  * Return UCS_ERR_UNSUPPORTED if CQ timestamps are unavailable. Cancellation
