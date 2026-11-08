@@ -46,6 +46,14 @@ func prepareWakeupWorker(t *testing.T, ucpWorkerParams *UcpWorkerParams) *wakeup
 	return entity
 }
 
+// leakFatalf fails the test while a goroutine of the test may still use the
+// worker, so the worker is leaked instead of destroyed
+func (e *wakeupEntity) leakFatalf(format string, args ...interface{}) {
+	e.t.Helper()
+	e.leak = true
+	e.t.Fatalf(format, args...)
+}
+
 func TestUcpWorkerEfd(t *testing.T) {
 	ucpWorkerParams := &UcpWorkerParams{}
 	ucpWorkerParams.SetThreadMode(UCS_THREAD_MODE_SERIALIZED)
@@ -110,13 +118,11 @@ func TestUcpWorkerEfd(t *testing.T) {
 		t.Fatal(err)
 	case <-time.After(wakeupTimeout):
 		// The goroutine may still use the worker
-		entity.leak = true
-		t.Fatalf("Didn't start after %v", wakeupTimeout)
+		entity.leakFatalf("Didn't start after %v", wakeupTimeout)
 	}
 	if err := ucpWorker.Signal(); err != nil {
 		// The goroutine still waits on the worker efd
-		entity.leak = true
-		t.Fatalf("Failed to signal the worker %v", err)
+		entity.leakFatalf("Failed to signal the worker %v", err)
 	}
 
 	select {
@@ -128,8 +134,7 @@ func TestUcpWorkerEfd(t *testing.T) {
 		t.Fatal(err)
 	case <-time.After(wakeupTimeout):
 		// The goroutine still waits on the worker efd
-		entity.leak = true
-		t.Fatalf("No events in epoll after %v", wakeupTimeout)
+		entity.leakFatalf("No events in epoll after %v", wakeupTimeout)
 	}
 }
 
@@ -153,8 +158,7 @@ func TestUcpWorkerWakeup(t *testing.T) {
 	<-started
 	if err := ucpWorker.Signal(); err != nil {
 		// The goroutine may still use the worker
-		entity.leak = true
-		t.Fatalf("Failed to signal the worker %v", err)
+		entity.leakFatalf("Failed to signal the worker %v", err)
 	}
 
 	select {
@@ -164,7 +168,6 @@ func TestUcpWorkerWakeup(t *testing.T) {
 		}
 	case <-time.After(wakeupTimeout):
 		// The goroutine is still in ucpWorker.Wait()
-		entity.leak = true
-		t.Fatalf("Didn't exit from wait after %v", wakeupTimeout)
+		entity.leakFatalf("Didn't exit from wait after %v", wakeupTimeout)
 	}
 }
