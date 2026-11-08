@@ -321,7 +321,7 @@ public:
         }
     }
 
-    inline bool is_one_sided() const
+    bool UCS_F_ALWAYS_INLINE is_one_sided() const
     {
         return (FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) ||
                (m_perf.params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED);
