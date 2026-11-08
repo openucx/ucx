@@ -169,6 +169,9 @@ typedef struct uct_ib_device_spec {
 } uct_ib_device_spec_t;
 
 
+#define UCT_IB_DEVICE_PCI_ID_CX9 {0x15b3, 0x1025}
+
+
 /**
  * Refcounted, TTL'd address handle cache entry.
  */
