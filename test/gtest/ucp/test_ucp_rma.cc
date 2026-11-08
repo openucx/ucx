@@ -1326,6 +1326,8 @@ public:
      * run with a single memory type for both source and destination */
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         static const char *op_names[] = {"put", "get"};
+        /* TODO: Enable the get variant (UCS_MASK(2)) once get SGL is
+         * supported */
         add_variant_values(variants, get_memtype_variants, UCS_BIT(SGL_OP_PUT),
                            op_names);
     }
