@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -128,6 +128,13 @@ const test_perf::test_spec test_uct_perf::tests[] =
     UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_SHORT_IOV, 0, 2, { 32, 32 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
+    0 },
+
+  { "am short iov stride latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV, 8192, 2, { 4, 4 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 2.5,
     0 },
 
   { "am bcopy latency", "usec",
@@ -270,7 +277,7 @@ public:
 
         /* gdr_copy test supports from host to GPU mem case only */
         if (has_transport("gdr_copy")) {
-            result.push_back(input);
+            result.push_back(std::move(input));
         } else if (has_transport("cuda_ipc")) {
             /* cuda_ipc test only supports GPU-GPU case */
             result.push_back({UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_CUDA});
@@ -282,7 +289,11 @@ public:
     }
 };
 
-UCS_TEST_P(test_uct_loopback_cuda, envelope)
+/* gdr_copy cannot pin memory the driver did not allocate as GPUDirect RDMA
+ * capable, which is every allocation under an MPS MLOPart device */
+UCS_TEST_SKIP_COND_P(test_uct_loopback_cuda, envelope,
+                     has_transport("gdr_copy") &&
+                             !mem_buffer::cuda_mem_is_gdr_capable())
 {
     std::vector<std::vector<ucs_memory_type_t>> pairs = mem_type_pairs();
 

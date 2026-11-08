@@ -429,9 +429,16 @@ typedef struct uct_tcp_iface {
     } config;
 
     struct {
+        double                    latency;           /* Netdev latency */
+        double                    bandwidth;         /* Min of netdev and PCI BW */
+        int                       is_default;        /* Netdev has the default route */
+    } netif_caps;
+
+    struct {
         int                       nodelay;           /* TCP_NODELAY */
         size_t                    sndbuf;            /* SO_SNDBUF */
         size_t                    rcvbuf;            /* SO_RCVBUF */
+        size_t                    maxseg;            /* TCP_MAXSEG */
     } sockopt;
 } uct_tcp_iface_t;
 
@@ -454,6 +461,7 @@ typedef struct uct_tcp_iface_config {
     uct_tcp_send_recv_buf_config_t sockopt;
     unsigned                       syn_cnt;
     ucs_time_t                     user_timeout;
+    size_t                         maxseg;
     uct_iface_mpool_config_t       tx_mpool;
     uct_iface_mpool_config_t       rx_mpool;
     ucs_range_spec_t               port_range;

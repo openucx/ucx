@@ -422,7 +422,7 @@ protected:
         for (const std::string &dev_name : dev_names) {
             std::string base_name;
             if (get_device_base_name(dev_name, base_name)) {
-                base_names.insert(base_name);
+                base_names.insert(std::move(base_name));
             }
         }
         return base_names;

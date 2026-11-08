@@ -20,6 +20,7 @@
 #include <common/test_helpers.h>
 
 #if HAVE_CUDA
+#include <cuda.h>
 #include <cuda_runtime.h>
 #include <nvml.h>
 
@@ -373,6 +374,44 @@ bool mem_buffer::cuda_gpu_has_c2c(unsigned gpu_index)
     return has_c2c;
 #else
     (void)gpu_index;
+    return false;
+#endif
+}
+
+bool mem_buffer::cuda_mem_is_gdr_capable()
+{
+#if HAVE_CUDA
+#if HAVE_DECL_CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE
+    /* Cache the device property, but only once it was probed successfully, so
+     * that a transient allocation failure does not skip every guarded test */
+    static int cached_capable = -1;
+    int is_gdr_capable        = 0;
+    void *ptr;
+
+    if (cached_capable != -1) {
+        return cached_capable == 1;
+    }
+
+    if (cudaMalloc(&ptr, 4096) != cudaSuccess) {
+        (void)cudaGetLastError(); /* do not leak the error to other tests */
+        return false;
+    }
+
+    if (cuPointerGetAttribute(&is_gdr_capable,
+                              CU_POINTER_ATTRIBUTE_IS_GPU_DIRECT_RDMA_CAPABLE,
+                              (CUdeviceptr)ptr) != CUDA_SUCCESS) {
+        cudaFree(ptr);
+        return false;
+    }
+
+    cudaFree(ptr);
+    cached_capable = !!is_gdr_capable;
+    return cached_capable == 1;
+#else
+    /* Without the attribute the memory domain assumes capability as well */
+    return true;
+#endif
+#else
     return false;
 #endif
 }

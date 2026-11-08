@@ -466,10 +466,10 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
     return UCS_OK;
 }
 
-ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind,
+ucs_status_t ucs_socket_server_bind(const struct sockaddr *saddr,
+                                    socklen_t socklen, int silent_bind,
                                     int reuse_addr, const char *bind_if_name,
-                                    int *listen_fd)
+                                    int *fd_p)
 {
     int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -518,21 +518,28 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
         goto err_close_socket;
     }
 
-    if (listen(fd, backlog) < 0) {
-        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m",
-                  fd, ucs_sockaddr_str(saddr, ip_port_str, sizeof(ip_port_str)),
-                  backlog);
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_socket;
-    }
-
-    *listen_fd = fd;
+    *fd_p = fd;
     return UCS_OK;
 
 err_close_socket:
     ucs_close_fd(&fd);
 err:
     return status;
+}
+
+ucs_status_t ucs_socket_server_listen(int fd, int backlog)
+{
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
+    if (listen(fd, backlog) < 0) {
+        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m", fd,
+                  ucs_socket_getname_str(fd, ip_port_str,
+                                         sizeof(ip_port_str)),
+                  backlog);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }
 
 int ucs_socket_max_conn()

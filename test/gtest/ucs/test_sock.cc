@@ -827,13 +827,13 @@ UCS_TEST_F(test_socket, bind_to_device) {
     sin.sin_family      = AF_INET;
     sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-    ASSERT_UCS_OK(ucs_socket_server_init((struct sockaddr*)&sin, sizeof(sin),
-                                         1, 0, 0, "lo", &fd));
+    ASSERT_UCS_OK(ucs_socket_server_bind((struct sockaddr*)&sin, sizeof(sin),
+                                         0, 0, "lo", &fd));
     EXPECT_EQ("lo", socket_bound_device(fd));
     ucs_close_fd(&fd);
 
-    ASSERT_UCS_OK(ucs_socket_server_init((struct sockaddr*)&sin, sizeof(sin),
-                                         1, 0, 0, NULL, &fd));
+    ASSERT_UCS_OK(ucs_socket_server_bind((struct sockaddr*)&sin, sizeof(sin),
+                                         0, 0, NULL, &fd));
     EXPECT_EQ("", socket_bound_device(fd));
     ucs_close_fd(&fd);
 }

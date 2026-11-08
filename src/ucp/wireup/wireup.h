@@ -313,6 +313,15 @@ void ucp_wireup_send_lanes_addr_msg(
         const ucp_wireup_lane_token_t *rx_tokens);
 
 
+/* Drop @a lanes from a parked LANES_ADDR reply. The reply is sent once
+ * nothing is waiting. */
+void ucp_wireup_tf_reply_lanes_failed(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/* Drop a LANES_ADDR reply that is still waiting for error completions. */
+void ucp_wireup_tf_reply_discard(ucp_ep_h ep);
+
+
 /* Parse one token section into per-lane slots. @a slots may be NULL to only
  * measure the section, which is what @ref ucp_wireup_skip_token_section does.
  * gtest feeds both helpers crafted buffers. */

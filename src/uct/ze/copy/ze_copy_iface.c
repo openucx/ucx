@@ -121,7 +121,7 @@ uct_ze_copy_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
      * or selects a single device deterministically.
      */
     if (full_count > 1) {
-        ucs_warn("ze_copy: %u devices found, limiting to 1 "
+        ucs_diag("ze_copy: %u devices found, limiting to 1 "
                  "for memtype ep compatibility",
                  full_count);
         *num_tl_devices_p = 1;
@@ -237,18 +237,132 @@ static uct_iface_internal_ops_t uct_ze_copy_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
+/* Create the queue and list of a device; a driver failure is logged at
+ * log_level, as the caller may be able to continue without them */
+static ucs_status_t
+uct_ze_copy_iface_queue_create(uct_ze_copy_iface_t *iface,
+                               ze_device_handle_t device,
+                               ucs_log_level_t log_level,
+                               unsigned *queue_index_p)
+{
+    uct_ze_copy_md_t *ze_md         = ucs_derived_of(iface->super.md,
+                                                     uct_ze_copy_md_t);
+    ze_command_queue_desc_t cq_desc = {};
+    ze_command_list_desc_t cl_desc  = {};
+    uct_ze_copy_queue_t *queue;
+    ze_result_t ret;
+
+    queue = ucs_array_append(&iface->queues, return UCS_ERR_NO_MEMORY);
+
+    ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc,
+                               &queue->cmdq);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_log(log_level, "ze_copy_iface: zeCommandQueueCreate failed for "
+                "device %p with 0x%x", device, ret);
+        goto err_pop;
+    }
+
+    ret = zeCommandListCreate(ze_md->ze_context, device, &cl_desc,
+                              &queue->cmdl);
+    if (ret != ZE_RESULT_SUCCESS) {
+        ucs_log(log_level, "ze_copy_iface: zeCommandListCreate failed for "
+                "device %p with 0x%x", device, ret);
+        goto err_destroy_cmdq;
+    }
+
+    queue->device  = device;
+    *queue_index_p = ucs_array_length(&iface->queues) - 1;
+    return UCS_OK;
+
+err_destroy_cmdq:
+    zeCommandQueueDestroy(queue->cmdq);
+err_pop:
+    ucs_array_pop_back(&iface->queues);
+    return UCS_ERR_NO_DEVICE;
+}
+
+/* Return the device which owns the allocation, or NULL for host memory and
+ * for allocations the context does not recognize */
+static ze_device_handle_t
+uct_ze_copy_iface_get_mem_device(uct_ze_copy_iface_t *iface,
+                                 const void *address)
+{
+    uct_ze_copy_md_t *ze_md                 = ucs_derived_of(iface->super.md,
+                                                             uct_ze_copy_md_t);
+    ze_memory_allocation_properties_t props = {
+        .stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
+    };
+    ze_device_handle_t device               = NULL;
+    ze_result_t ret;
+
+    ret = zeMemGetAllocProperties(ze_md->ze_context, address, &props, &device);
+    if ((ret != ZE_RESULT_SUCCESS) || (props.type == ZE_MEMORY_TYPE_UNKNOWN)) {
+        return NULL;
+    }
+
+    return device;
+}
+
+unsigned uct_ze_copy_iface_get_queue(uct_ze_copy_iface_t *iface,
+                                     const void *src, const void *dst)
+{
+    uct_ze_copy_queue_t *queue;
+    ze_device_handle_t device;
+    unsigned queue_index;
+    ucs_status_t status;
+    unsigned i;
+
+    /* With one device every device buffer is on the MD device */
+    if (!iface->multi_device) {
+        return 0;
+    }
+
+    /* Run the copy on the device which owns the source buffer, so it reads
+     * locally, or else on the owner of the destination. A queue on an
+     * unrelated device has to reach both buffers over PCIe. */
+    device = uct_ze_copy_iface_get_mem_device(iface, src);
+    if (device == NULL) {
+        device = uct_ze_copy_iface_get_mem_device(iface, dst);
+        if (device == NULL) {
+            return 0;
+        }
+    }
+
+    for (i = 0; i < ucs_array_length(&iface->queues); ++i) {
+        queue = &ucs_array_elem(&iface->queues, i);
+        if (queue->device == device) {
+            /* A device without a queue of its own uses the MD device queue */
+            return (queue->cmdq == NULL) ? 0 : i;
+        }
+    }
+
+    status = uct_ze_copy_iface_queue_create(iface, device, UCS_LOG_LEVEL_DEBUG,
+                                            &queue_index);
+    if (status == UCS_OK) {
+        return queue_index;
+    }
+
+    /* Fall back to the MD device queue, which reaches the buffer if the MD
+     * device has peer access to its device. Record the device without a
+     * queue, so that the next copy does not try to create one again. Without
+     * the record the copy still runs, and the next one tries again. */
+    queue         = ucs_array_append(&iface->queues, return 0);
+    queue->device = device;
+    queue->cmdq   = NULL;
+    queue->cmdl   = NULL;
+    ucs_warn("ze_copy_iface: could not create a queue on device %p, using "
+             "the queue of the MD device", device);
+    return 0;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
                            uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_ze_copy_md_t *ze_md         = ucs_derived_of(md, uct_ze_copy_md_t);
-    ze_command_queue_desc_t cq_desc = {};
-    ze_command_list_desc_t cl_desc  = {};
-    ze_device_handle_t device;
-    ze_command_queue_handle_t cmdq;
-    ze_command_list_handle_t cmdl;
-    ze_result_t ret;
+    uct_ze_copy_md_t *ze_md = ucs_derived_of(md, uct_ze_copy_md_t);
+    unsigned queue_index;
+    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_ze_copy_iface_ops,
                               &uct_ze_copy_iface_internal_ops, md, worker,
@@ -256,40 +370,49 @@ static UCS_CLASS_INIT_FUNC(uct_ze_copy_iface_t, uct_md_h md,
                               tl_config UCS_STATS_ARG(params->stats_root)
                                       UCS_STATS_ARG(UCT_ZE_COPY_TL_NAME));
 
-    /* Use the device configured in the MD */
-    device = ze_md->ze_device;
-    if (device == NULL) {
+    /* Use the device configured in the MD for host-to-host copies */
+    if (ze_md->ze_device == NULL) {
         ucs_error("ze_copy_iface: memory domain has no device");
         return UCS_ERR_NO_DEVICE;
     }
 
-    ret = zeCommandQueueCreate(ze_md->ze_context, device, &cq_desc, &cmdq);
-    if (ret != ZE_RESULT_SUCCESS) {
-        ucs_error("ze_copy_iface: zeCommandQueueCreate failed with 0x%x", ret);
-        return UCS_ERR_NO_DEVICE;
+    ucs_array_init_dynamic(&self->queues);
+
+    status = uct_ze_copy_iface_queue_create(self, ze_md->ze_device,
+                                            UCS_LOG_LEVEL_ERROR, &queue_index);
+    if (status != UCS_OK) {
+        ucs_array_cleanup_dynamic(&self->queues);
+        return status;
     }
 
-    ret = zeCommandListCreate(ze_md->ze_context, device, &cl_desc, &cmdl);
-    if (ret != ZE_RESULT_SUCCESS) {
-        ucs_error("ze_copy_iface: zeCommandListCreate failed with 0x%x", ret);
-        zeCommandQueueDestroy(cmdq);
-        return UCS_ERR_NO_DEVICE;
-    }
+    /* The fallback to the MD device queue uses element 0 */
+    ucs_assert(queue_index == 0);
 
-    self->ze_cmdq = cmdq;
-    self->ze_cmdl = cmdl;
-    self->id      = ucs_generate_uuid((uintptr_t)self);
+    self->id           = ucs_generate_uuid((uintptr_t)self);
+    self->multi_device = (uct_ze_base_get_num_subdevices() > 1);
 
-    ucs_debug("ze_copy_iface: initialized iface on device %p cmdq %p cmdl %p",
-              device, cmdq, cmdl);
+    ucs_debug("ze_copy_iface: initialized iface on device %p, %s",
+              ze_md->ze_device,
+              self->multi_device ? "queues per device" : "single device");
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_ze_copy_iface_t)
 {
-    zeCommandListDestroy(self->ze_cmdl);
-    zeCommandQueueDestroy(self->ze_cmdq);
+    uct_ze_copy_queue_t *queue;
+
+    ucs_array_for_each(queue, &self->queues) {
+        if (queue->cmdq == NULL) {
+            /* Device whose queue could not be created */
+            continue;
+        }
+
+        zeCommandListDestroy(queue->cmdl);
+        zeCommandQueueDestroy(queue->cmdq);
+    }
+
+    ucs_array_cleanup_dynamic(&self->queues);
 }
 
 UCS_CLASS_DEFINE(uct_ze_copy_iface_t, uct_base_iface_t);

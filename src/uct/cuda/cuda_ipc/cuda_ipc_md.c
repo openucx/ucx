@@ -39,6 +39,7 @@
 typedef struct {
     const void *mapped_addr;
     CUdevice   cu_dev;
+    int        free_unused_mapping;
 } uct_cuda_ipc_rkey_handle_t;
 
 typedef struct {
@@ -474,7 +475,8 @@ found:
                                                     memh->dev_num));
 }
 
-static uct_cuda_ipc_rkey_handle_t *uct_cuda_ipc_create_rkey_handle()
+static uct_cuda_ipc_rkey_handle_t *
+uct_cuda_ipc_create_rkey_handle(uint64_t flags)
 {
     uct_cuda_ipc_rkey_handle_t *rkey_handle;
 
@@ -484,8 +486,10 @@ static uct_cuda_ipc_rkey_handle_t *uct_cuda_ipc_create_rkey_handle()
         return NULL;
     }
 
-    rkey_handle->mapped_addr = NULL;
-    rkey_handle->cu_dev      = CU_DEVICE_INVALID;
+    rkey_handle->mapped_addr         = NULL;
+    rkey_handle->cu_dev              = CU_DEVICE_INVALID;
+    rkey_handle->free_unused_mapping = !!(
+            flags & UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING);
     return rkey_handle;
 }
 
@@ -496,7 +500,7 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
                                 CUdevice cu_dev)
 {
     ucs_status_t status;
-    void *d_mapped;
+    void *mapped_addr;
     uct_cuda_ipc_dev_cache_t *cache;
     uint8_t *accessible;
 
@@ -533,10 +537,10 @@ uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *component,
          * Now, we immediately insert into cache to save on calling
          * OpenMemHandle for the same handle because the cache is globally
          * accessible using rkey->pid. */
-        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &d_mapped,
+        status = uct_cuda_ipc_map_memhandle(&rkey->super, cu_dev, &mapped_addr,
                                             UCS_LOG_LEVEL_DEBUG);
         if (status == UCS_OK) {
-            rkey_handle->mapped_addr = d_mapped;
+            rkey_handle->mapped_addr = mapped_addr;
         }
 
         *accessible = ((status == UCS_OK) || (status == UCS_ERR_ALREADY_EXISTS))
@@ -562,6 +566,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     uct_cuda_ipc_unpacked_rkey_t *unpacked;
     uct_cuda_ipc_rkey_handle_t *rkey_handle;
     ucs_sys_device_t sys_dev;
+    uint64_t flags;
     CUdevice cuda_device;
     CUdevice avail_cuda_device;
     ucs_status_t status;
@@ -569,6 +574,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
 
     sys_dev = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, sys_device,
                               SYS_DEVICE, UCS_SYS_DEVICE_ID_UNKNOWN);
+    flags   = UCS_PARAM_VALUE(UCT_RKEY_UNPACK_FIELD, params, flags, FLAGS, 0);
 
     unpacked = ucs_malloc(sizeof(*unpacked), "uct_cuda_ipc_unpacked_rkey_t");
     if (NULL == unpacked) {
@@ -580,7 +586,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     unpacked->super.super      = *packed;
     unpacked->super.super.pid &= ~UCT_CUDA_IPC_RKEY_FLAG_PID_NS;
 
-    rkey_handle = uct_cuda_ipc_create_rkey_handle();
+    rkey_handle = uct_cuda_ipc_create_rkey_handle(flags);
     if (rkey_handle == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_key;
@@ -633,8 +639,12 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     uct_cuda_ipc_extended_rkey_t *extended_rkey;
     uct_cuda_ipc_rkey_t *rkey;
 
-    if ((uct_rkey == 0) || (rkey_handle == NULL) ||
-        (rkey_handle->mapped_addr == NULL)) {
+    if ((uct_rkey == 0) || (rkey_handle == NULL)) {
+        return;
+    }
+
+    if ((rkey_handle->mapped_addr == NULL) &&
+        !rkey_handle->free_unused_mapping) {
         return;
     }
 
@@ -644,7 +654,8 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
 
     uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
                                  rkey_handle->mapped_addr, rkey_handle->cu_dev,
-                                 uct_cuda_ipc_component.enable_remote_cache);
+                                 uct_cuda_ipc_component.enable_remote_cache &&
+                                         !rkey_handle->free_unused_mapping);
 }
 
 static ucs_status_t uct_cuda_ipc_rkey_release(uct_component_t *component,
@@ -881,22 +892,24 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
-ucs_status_t uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
-                                   void *handle, uint64_t raddr, void **laddr_p)
+static ucs_status_t
+uct_cuda_ipc_rkey_ptr(uct_component_t *component, uct_rkey_t rkey, void *handle,
+                      uint64_t remote_addr, void **local_addr_p)
 {
     uct_cuda_ipc_rkey_handle_t *rkey_handle     = handle;
     uct_cuda_ipc_extended_rkey_t *extended_rkey =
             (uct_cuda_ipc_extended_rkey_t*)rkey;
 
     if (rkey_handle->mapped_addr != NULL) {
-        *laddr_p = uct_cuda_ipc_rkey_get_local_address(
-                &extended_rkey->super, raddr, rkey_handle->mapped_addr);
+        *local_addr_p = uct_cuda_ipc_rkey_get_local_addr(
+                &extended_rkey->super, remote_addr, rkey_handle->mapped_addr);
         return UCS_OK;
     }
 
-    return uct_cuda_ipc_get_remote_address(extended_rkey, raddr,
-                                           rkey_handle->cu_dev, laddr_p,
-                                           &rkey_handle->mapped_addr);
+    return uct_cuda_ipc_map_remote_addr(extended_rkey, remote_addr,
+                                        rkey_handle->cu_dev,
+                                        &rkey_handle->mapped_addr,
+                                        local_addr_p);
 }
 
 uct_cuda_ipc_component_t uct_cuda_ipc_component = {

@@ -508,13 +508,14 @@ bool uct_test::is_caps_supported(uint64_t required_flags) {
     return ret;
 }
 
-bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
+bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags,
+                          uint64_t required_v2_flags) {
     FOR_EACH_ENTITY(iter) {
         if (!(*iter)->check_caps(required_flags, invalid_flags)) {
             return false;
         }
     }
-    return true;
+    return (required_v2_flags == 0) || check_caps_v2(required_v2_flags);
 }
 
 bool uct_test::check_caps_v2(uint64_t required_flags) {

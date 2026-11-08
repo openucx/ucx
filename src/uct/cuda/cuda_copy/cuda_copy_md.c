@@ -610,9 +610,10 @@ static void uct_cuda_copy_md_sync_memops_get_address_range(
         ucs_assert(md->config.alloc_whole_reg == UCS_CONFIG_ON);
     }
 
-    /* For multi-handle VMM, the physical allocation may be smaller than the
-     * mapped virtual range; preserve the caller's requested extent. */
-    if (is_vmm && (alloc_length < length)) {
+    /* For multi-handle VMM, the physical allocation containing the address
+     * may not cover the whole requested range */
+    if ((base_address == 0) || /* host-located VMM reports a zero base */
+        (is_vmm && ((base_address + alloc_length) < (address + length)))) {
         goto out_ctx_pop;
     }
 
@@ -882,6 +883,7 @@ static int
 uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
                                 const ucs_memory_info_t *mem_info,
                                 int is_async_managed, int is_host_located,
+                                int is_gdr_capable,
                                 const uct_cuda_copy_md_dmabuf_t *dmabuf)
 {
     uct_cuda_copy_md_dmabuf_t local_dmabuf;
@@ -897,9 +899,14 @@ uct_cuda_copy_md_is_registrable(uct_cuda_copy_md_t *md,
     }
 
     /* Host-located CUDA VMM is registerable even if dmabuf export fails. */
-    if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        !md->config.dmabuf_supported) {
+    if (is_host_located || (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
         return 1;
+    }
+
+    if (!md->config.dmabuf_supported) {
+        /* Without dmabuf the NIC pins the pages behind the virtual address,
+         * which the driver only allows for GPUDirect RDMA capable memory. */
+        return is_gdr_capable;
     }
 
     if (dmabuf == NULL) {
@@ -925,7 +932,8 @@ uct_cuda_copy_md_detect_mem_flags(uct_cuda_copy_md_t *md,
     uint8_t mem_flags = 0;
 
     if (uct_cuda_copy_md_is_registrable(md, mem_info, is_async_managed,
-                                        is_host_located, dmabuf)) {
+                                        is_host_located, is_gdr_capable,
+                                        dmabuf)) {
         mem_flags |= UCS_MEM_FLAG_REGISTRABLE;
     }
 
