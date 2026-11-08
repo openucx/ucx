@@ -228,18 +228,27 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
                                      uint64_t flags)
 {
     auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
-    cuda::atomic_ref<uint64_t, uct_rc_gdaki_thread_scope> ref(
-            qp->sq_ready_index);
     const uint64_t wqe_next = wqe_base + count;
     const bool skip_db      = !(flags & UCT_DEVICE_FLAG_NODELAY);
 
     /* Publish WQEs before serializing doorbells, so a deferred producer
      * does not wait for an earlier producer's MMIO writes. */
     doca_gpu_dev_verbs_fence_release<uct_rc_gdaki_sync_scope>();
-    const uint64_t wqe_base_orig = wqe_base;
-    while (!ref.compare_exchange_strong(wqe_base, wqe_next,
-                                        cuda::std::memory_order_relaxed)) {
-        wqe_base = wqe_base_orig;
+    if (UCT_RC_GDAKI_RESOURCE_SHARING_MODE ==
+        DOCA_GPUNETIO_VERBS_RESOURCE_SHARING_MODE_CTA) {
+        while (atomicCAS_block(
+                       (unsigned long long int*)&qp->sq_ready_index,
+                       (unsigned long long int)wqe_base,
+                       (unsigned long long int)wqe_next) !=
+               (unsigned long long int)wqe_base) {
+        }
+    } else {
+        while (atomicCAS(
+                       (unsigned long long int*)&qp->sq_ready_index,
+                       (unsigned long long int)wqe_base,
+                       (unsigned long long int)wqe_next) !=
+               (unsigned long long int)wqe_base) {
+        }
     }
     doca_gpu_dev_verbs_fence_acquire<uct_rc_gdaki_sync_scope>();
 
