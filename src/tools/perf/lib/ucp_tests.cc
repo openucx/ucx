@@ -32,7 +32,7 @@ public:
     static const psn_t INITIAL_SN   = 0;
     static const psn_t LAST_ITER_SN = 1;
     static const psn_t UNKNOWN_SN   = std::numeric_limits<psn_t>::max();
-    /* How long to wait for the rest of a put message */
+    /* Minimal time to wait for the rest of a put message */
     static const unsigned RECV_DATA_TIMEOUT_MSEC = 1000;
 
     ucp_perf_test_runner(ucx_perf_context_t &perf) :
@@ -1212,10 +1212,13 @@ private:
                 return status;
             }
 
-            /* Start the timeout at the first mismatch */
+            /* Start the timeout at the first mismatch. Add 1 msec per MB of
+             * the message: a put over several lanes gives each lane a part of
+             * the message, and a slow lane may still be placing its part. */
             if (deadline == 0) {
                 deadline = ucs_get_time() +
-                           ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC);
+                           ucs_time_from_msec(RECV_DATA_TIMEOUT_MSEC +
+                                              (m_length / UCS_MBYTE));
             } else if (ucs_get_time() >= deadline) {
                 return status;
             }
