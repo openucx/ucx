@@ -202,21 +202,8 @@ typedef struct uct_ib_mlx5_ext_ops {
 
 #ifdef HAVE_TL_RC
     /**
-     * Optional RC lifecycle, wireup and query hooks. Set to NULL when absent.
-     * RC binds the first registered non-NULL table at interface creation and
-     * uses that provider for the interface's lifetime. This does not change
-     * the independent PUT/GET SGL dispatch above.
-     *
-     * The registry borrows this table. Keep it immutable and retain its code
-     * and referenced data until unregistration or registry cleanup returns.
-     * Use a unique provider name and register before opening RC interfaces.
-     * Before unregistering or clearing the registry, destroy attached
-     * interfaces and quiesce callbacks and queued work.
-     * Serialize registry changes with interface creation and plugin dispatch.
-     *
-     * UCX and plugin consumers must be rebuilt together. This enlarged
-     * transport-private registration structure has no binary compatibility
-     * promise.
+     * Table of RC-specific operations implemented by the plugin provider,
+     * available only when the RC transport is enabled.
      */
     const uct_rc_mlx5_ext_ops_t *rc_ops;
 #endif /* HAVE_TL_RC */
