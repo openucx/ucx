@@ -110,14 +110,21 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_parse_cqe(uct_rc_gdaki_dev_ep_t *ep,
     return rsvd_idx - ((rsvd_idx - *wqe_cnt) & 0xffff);
 }
 
-UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_max_alloc_wqe_base(
-        uct_rc_gdaki_dev_ep_t *ep, unsigned cid, unsigned count)
+UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_refresh_rsvd_limit(
+        uct_rc_gdaki_dev_ep_t *ep, unsigned cid)
 {
+    uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     uint16_t wqe_cnt;
     uint64_t pi;
+    uint64_t limit;
+    uint64_t old_limit;
 
     pi = uct_rc_mlx5_gda_parse_cqe(ep, cid, &wqe_cnt, nullptr);
-    return pi + ep->sq_wqe_num + 1 - count;
+    limit = pi + ep->sq_wqe_num + 1;
+    old_limit = doca_gpu_dev_verbs_atomic_max<
+            uint64_t, UCT_RC_GDAKI_RESOURCE_SHARING_MODE>(
+            &qp->sq_rsvd_limit, limit);
+    return (old_limit > limit) ? old_limit : limit;
 }
 
 UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
@@ -126,12 +133,17 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
     uct_rc_gdaki_dev_qp_t *qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     cuda::atomic_ref<uint64_t, uct_rc_gdaki_thread_scope> rsvd_ref(
             qp->sq_rsvd_index);
-    /* Do not attempt to reserve if the available space is less than the
-     * requested count, to avoid starvation of threads trying to rollback the
-     * reservation with atomicCAS. */
-    uint64_t max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, cid, count);
-    if (rsvd_ref.load(cuda::memory_order_relaxed) > max_wqe_base) {
-        return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
+    cuda::atomic_ref<uint64_t, uct_rc_gdaki_thread_scope> limit_ref(
+            qp->sq_rsvd_limit);
+    uint64_t limit = limit_ref.load(cuda::memory_order_relaxed);
+
+    /* Refresh the cached exclusive reservation limit only when necessary. Do
+     * not reserve beyond it, to avoid starving threads trying to roll back. */
+    if (rsvd_ref.load(cuda::memory_order_relaxed) + count > limit) {
+        limit = uct_rc_mlx5_gda_refresh_rsvd_limit(ep, cid);
+        if (rsvd_ref.load(cuda::memory_order_relaxed) + count > limit) {
+            return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
+        }
     }
 
     uint64_t wqe_base = rsvd_ref.fetch_add(count, cuda::memory_order_relaxed);
@@ -155,14 +167,17 @@ UCS_F_DEVICE uint64_t uct_rc_mlx5_gda_reserv_wqe_thread(
      *    the reservation can now be satisfied, possibly due to other operations
      *    freeing up resources.
      */
-    while (wqe_base > max_wqe_base) {
+    while (wqe_base + count > limit) {
+        limit = uct_rc_mlx5_gda_refresh_rsvd_limit(ep, cid);
+        if (wqe_base + count <= limit) {
+            break;
+        }
+
         uint64_t wqe_next = wqe_base + count;
         if (rsvd_ref.compare_exchange_strong(wqe_next, wqe_base,
                                              cuda::memory_order_relaxed)) {
             return UCT_RC_GDA_RESV_WQE_NO_RESOURCE;
         }
-
-        max_wqe_base = uct_rc_mlx5_gda_max_alloc_wqe_base(ep, cid, count);
     }
 
     return wqe_base;
@@ -203,7 +218,8 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_wqe_prepare_put_or_atomic(
 
     cseg.opmod_idx_opcode = doca_gpu_dev_verbs_bswap32(
             ((uint32_t)wqe_idx << DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT) | opcode);
-    cseg.qpn_ds           = doca_gpu_dev_verbs_bswap32((qp->sq_num << 8) | ds);
+    cseg.qpn_ds           = uct_rc_mlx5_load_const(&qp->qpn_ds) |
+                            doca_gpu_dev_verbs_bswap32(ds);
     cseg.fm_ce_se         = ctrl_flags;
 
     rseg.raddr = doca_gpu_dev_verbs_bswap64(raddr);

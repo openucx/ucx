@@ -18,11 +18,10 @@ typedef struct {
     uint64_t                     sq_ready_index;
     uint64_t                     sq_wqe_pi;
     int                          sq_lock;
-    uint32_t                     sq_num;
+    uint32_t                     qpn_ds;
 
     uint64_t                     *sq_db;
-    uint32_t                     qpn_ds;
-    uint8_t                      pad[4];
+    uint64_t                     sq_rsvd_limit;
 } uct_rc_gdaki_dev_qp_t;
 
 
