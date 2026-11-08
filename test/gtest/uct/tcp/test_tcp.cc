@@ -384,7 +384,9 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
 
 UCS_TEST_P(test_uct_tcp, vrf_enable)
 {
+    const int process_vrf_index = uct_tcp_netif_process_vrf_index();
     std::set<std::string> devices, vrf_devices, yes_devices;
+    int vrf_index;
 
     query_devices("n", devices);
     query_devices("try", vrf_devices);
@@ -402,15 +404,20 @@ UCS_TEST_P(test_uct_tcp, vrf_enable)
         EXPECT_TRUE(yes_devices.empty());
     }
 
-    // Devices in a VRF are not reported when VRF_ENABLE is "n"
+    // Devices in a VRF other than the VRF of the process are not reported
+    // when VRF_ENABLE is "n"
     for (const auto &dev_name : devices) {
-        EXPECT_EQ(-1, vrf_master_index(dev_name)) << dev_name;
+        vrf_index = vrf_master_index(dev_name);
+        EXPECT_TRUE((vrf_index == -1) || (vrf_index == process_vrf_index))
+                << dev_name;
         EXPECT_EQ(1u, vrf_devices.count(dev_name)) << dev_name;
     }
 
     for (const auto &dev_name : vrf_devices) {
         if (devices.count(dev_name) == 0) {
-            EXPECT_NE(-1, vrf_master_index(dev_name)) << dev_name;
+            vrf_index = vrf_master_index(dev_name);
+            EXPECT_NE(-1, vrf_index) << dev_name;
+            EXPECT_NE(process_vrf_index, vrf_index) << dev_name;
             UCS_TEST_MESSAGE << dev_name << " is reported only with VRF_ENABLE";
         }
     }
@@ -425,6 +432,11 @@ UCS_TEST_P(test_uct_tcp, vrf_disabled_iface_open)
 
     if (uct_tcp_iface_vrf_name(m_tcp_iface) == NULL) {
         UCS_TEST_SKIP_R("the device is not in a VRF");
+    }
+
+    if (vrf_master_index(GetParam()->dev_name) ==
+        uct_tcp_netif_process_vrf_index()) {
+        UCS_TEST_SKIP_R("the process runs in the VRF of the device");
     }
 
     ASSERT_UCS_OK(open_md("n", &md));

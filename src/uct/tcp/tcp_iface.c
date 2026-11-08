@@ -639,9 +639,10 @@ static ucs_status_t uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
         return UCS_OK;
     }
 
-    /* Devices in a VRF are not reported by uct_tcp_query_devices() in this
-     * case, so do not open them either */
-    if (tcp_md->config.vrf_enable == UCS_NO) {
+    /* Devices in a VRF other than the VRF of the process are not reported by
+     * uct_tcp_query_devices() in this case, so do not open them either */
+    if ((tcp_md->config.vrf_enable == UCS_NO) &&
+        (vrf_index != tcp_md->process_vrf_index)) {
         ucs_error("tcp_iface %p: cannot use device %s in a VRF, using VRF "
                   "devices is disabled by UCX_TCP_VRF_ENABLE",
                   iface, iface->if_name);
@@ -1142,8 +1143,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             continue;
         }
 
+        /* Sockets of a process in a VRF are bound to that VRF already */
         vrf_index = uct_tcp_netif_vrf_index((*entry)->d_name);
-        if (vrf_index != -1) {
+        if ((vrf_index != -1) && (vrf_index != tcp_md->process_vrf_index)) {
             if (tcp_md->config.vrf_enable == UCS_NO) {
                 ucs_debug("filtered out device %s in a VRF", (*entry)->d_name);
                 continue;

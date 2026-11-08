@@ -31,7 +31,8 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
      "of such devices are bound to the VRF device. Possible values are:\n"
      " y   - Use devices in a VRF, fail if their sockets cannot be bound to\n"
      "       the VRF.\n"
-     " n   - Do not use devices in a VRF.\n"
+     " n   - Do not use devices in a VRF, except the VRF which the process\n"
+     "       runs in, as with \"ip vrf exec\".\n"
      " try - Use devices in a VRF, skip the devices whose sockets cannot be\n"
      "       bound to the VRF.",
      ucs_offsetof(uct_tcp_md_config_t, vrf_enable), UCS_CONFIG_TYPE_TERNARY},
@@ -90,6 +91,7 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
     tcp_md->config.af_prio_count = ucs_min(md_config->af_prio.count, 2);
     tcp_md->config.bridge_enable = md_config->bridge_enable;
     tcp_md->config.vrf_enable    = md_config->vrf_enable;
+    tcp_md->process_vrf_index    = uct_tcp_netif_process_vrf_index();
 
     for (i = 0; i < tcp_md->config.af_prio_count; i++) {
         if (!strcasecmp(md_config->af_prio.af[i], "inet")) {

@@ -486,6 +486,7 @@ typedef struct uct_tcp_md {
         uint8_t                  bridge_enable;
         ucs_ternary_auto_value_t vrf_enable;
     } config;
+    int                          process_vrf_index; /* VRF of the process */
 } uct_tcp_md_t;
 
 
@@ -535,6 +536,10 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
 /* Index of the VRF (L3 master) device of the interface, or -1 */
 int uct_tcp_netif_vrf_index(const char *if_name);
+
+/* Index of the VRF device which new sockets of the process are bound to, as
+ * with "ip vrf exec", or -1 */
+int uct_tcp_netif_process_vrf_index(void);
 
 /* Check that sockets of the interface can be bound to its VRF device with the
  * given index, log a failure with the given log level */

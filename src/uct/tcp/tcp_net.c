@@ -153,6 +153,35 @@ int uct_tcp_netif_vrf_index(const char *if_name)
     return ucs_netlink_get_vrf_master_index(if_index);
 }
 
+int uct_tcp_netif_process_vrf_index(void)
+{
+    char if_name[IFNAMSIZ] = {};
+    socklen_t len          = sizeof(if_name);
+    unsigned if_index;
+    int fd, ret;
+
+    /* Fail silently, since every UCP context opens the TCP md */
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+
+    ret = getsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, if_name, &len);
+    ucs_close_fd(&fd);
+    if ((ret != 0) || (if_name[0] == '\0')) {
+        return -1;
+    }
+
+    /* The process runs in a VRF if its sockets are bound to the VRF device */
+    if_index = if_nametoindex(if_name);
+    if ((if_index == 0) ||
+        (ucs_netlink_get_vrf_master_index(if_index) != (int)if_index)) {
+        return -1;
+    }
+
+    return if_index;
+}
+
 ucs_status_t uct_tcp_netif_vrf_bind_check(const char *if_name, int vrf_index,
                                           ucs_log_level_t err_log_level)
 {
