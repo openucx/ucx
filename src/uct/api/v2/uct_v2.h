@@ -495,7 +495,7 @@ struct uct_ep_attr {
      * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
      *
      * Querying this field returns the latest available bw estimate sample.
-     * Defaults to bw value provided by @ref uct_iface_estimate_perf when
+     * Defaults to @ref uct_perf_attr_t::path_bandwidth value provided by @ref uct_iface_estimate_perf when
      * unsupported.
      */
     uct_ppn_bandwidth_t      bandwidth;
@@ -1439,9 +1439,9 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
  * @retval UCS_ERR_INVALID_PARAM A required parameter field is missing.
  * @retval UCS_ERR_UNSUPPORTED   The interface does not support endpoint events.
  */
-ucs_status_t uct_iface_set_ep_event_handler(
-        uct_iface_h iface,
-        const uct_iface_set_ep_event_params_t *params);
+ucs_status_t
+uct_iface_set_ep_event_handler(uct_iface_h iface,
+                               const uct_iface_set_ep_event_params_t *params);
 
 
 /**
