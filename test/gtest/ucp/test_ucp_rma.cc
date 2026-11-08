@@ -1603,6 +1603,13 @@ protected:
         verify_sgl_buffers();
     }
 
+    void test_sgl(size_t num_elems, size_t buf_size, bool use_memhs = true,
+                  bool use_callback = false, bool set_remote_count = true,
+                  bool expect_immediate_completion = false) {
+        test_sgl(std::vector<size_t>(num_elems, buf_size), use_memhs,
+                 use_callback, set_remote_count, expect_immediate_completion);
+    }
+
     bool offload_proto_selected(ucs_status_ptr_t sptr) const {
         if (!UCS_PTR_IS_PTR(sptr)) {
             /* Only the emulation protocol can complete the operation in-place
@@ -1614,13 +1621,6 @@ protected:
         return strstr(req->send.proto_config->proto->name,
                       (op() == SGL_OP_PUT) ? "put/sgl/offload" :
                                              "get/sgl/offload") != nullptr;
-    }
-
-    void test_sgl(size_t num_elems, size_t buf_size, bool use_memhs = true,
-                  bool use_callback = false, bool set_remote_count = true,
-                  bool expect_immediate_completion = false) {
-        test_sgl(std::vector<size_t>(num_elems, buf_size), use_memhs,
-                 use_callback, set_remote_count, expect_immediate_completion);
     }
 
     mapped_buffer &data_src(sgl_ctx &ctx, size_t i) const {
