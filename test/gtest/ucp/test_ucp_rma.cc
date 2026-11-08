@@ -1920,9 +1920,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, invalid_remote_datatype,
     param.remote_datatype      = ucp_dt_make_contig(1);
 
     scoped_log_handler wrap_err(wrap_errors_logger);
-    ucs_status_ptr_t sptr = ucp_put_nbx(sender().ep(), &local, NUM_ELEMS,
-                                        UCP_REMOTE_ADDR_INVALID,
-                                        UCP_RKEY_INVALID, &param);
+    ucs_status_ptr_t sptr = sgl_op_nbx(&local, NUM_ELEMS,
+                                       UCP_REMOTE_ADDR_INVALID,
+                                       UCP_RKEY_INVALID, &param);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(sptr));
 }
 
