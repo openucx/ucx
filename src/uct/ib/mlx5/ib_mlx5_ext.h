@@ -63,14 +63,6 @@ typedef struct uct_rc_mlx5_ext_ops {
     uint64_t        flags;
 
     /**
-     * Provider-private bytes appended to the existing endpoint address.
-     * The complete endpoint address, including the RC address, UCX extension
-     * framing and provider payload, must not exceed 255 bytes. Oversized
-     * providers must be rejected before their iface_init hook is called.
-     */
-    size_t          ep_addr_len;
-
-    /**
      * @brief Initialize provider state on an existing RC interface.
      *
      * @param [in]  iface       Existing RC interface.
@@ -102,38 +94,6 @@ typedef struct uct_rc_mlx5_ext_ops {
      * @param [in] ep_ctx Provider context from ep_init.
      */
     void (*ep_cleanup)(void *ep_ctx);
-
-    /**
-     * @brief Pack an opaque payload; required when ep_addr_len is nonzero.
-     *
-     * @param [in]  ep_ctx      Provider context from ep_init.
-     * @param [out] payload     Address payload to fill.
-     * @param [in]  payload_len Available payload bytes, equal to ep_addr_len.
-     * @return UCS_OK on success, or an error if packing failed.
-     */
-    ucs_status_t (*ep_pack_addr)(void *ep_ctx, void *payload,
-                                size_t payload_len);
-
-    /**
-     * @brief Validate the remote provider payload.
-     *
-     * UCT validates the provider identity and payload bounds before this hook
-     * when the remote address length is supplied. Otherwise, the caller must
-     * ensure matching providers and payload formats. Reject incompatible
-     * payloads, including unsupported wire versions.
-     *
-     * Called before RC endpoint connection. Errors are returned to the caller.
-     * Failed calls must unwind partial state. If RC connection subsequently
-     * fails, ep_cleanup releases the retained provider state.
-     *
-     * @param [in] ep          Existing RC endpoint.
-     * @param [in] ep_ctx      Provider context from ep_init.
-     * @param [in] payload     Remote provider address payload.
-     * @param [in] payload_len Remote length; see connection preconditions.
-     * @return UCS_OK on success, or an error for an incompatible payload.
-     */
-    ucs_status_t (*ep_connect)(uct_ep_h ep, void *ep_ctx,
-                               const void *payload, size_t payload_len);
 
     /**
      * @brief Return the latest available cached endpoint bandwidth.
