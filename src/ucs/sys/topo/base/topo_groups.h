@@ -52,13 +52,6 @@ typedef ucs_topo_group_array_t ucs_topo_groups_t;
 
 /**
  * @ingroup UCS_RESOURCE
- * Bitmap of system devices.
- */
-typedef ucs_static_bitmap_s(UCS_SYS_DEVICE_ID_COUNT) ucs_sys_device_bitmap_t;
-
-
-/**
- * @ingroup UCS_RESOURCE
  * Criterion used to place GPUs and NICs into topology groups.
  */
 typedef enum {

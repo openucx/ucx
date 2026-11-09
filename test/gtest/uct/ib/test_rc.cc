@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -148,6 +148,87 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
+}
+
+void test_rc::test_sgl_reserve(bool add_pending)
+{
+    uct_iface_attr_v2_t attr = {};
+    const size_t length      = 64;
+    const size_t count       = 2;
+    ucs_status_t status;
+    uct_pending_req_t pend_req;
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+        (attr.max_put_sgl_zcopy_count < count)) {
+        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    }
+
+    mapped_buffer s0(length, 0ul, *m_e1), s1(length, 0ul, *m_e1);
+    mapped_buffer r0(length, 0ul, *m_e2), r1(length, 0ul, *m_e2);
+    void *buffers[]    = {s0.ptr(), s1.ptr()};
+    size_t lengths[]   = {length, length};
+    uct_mem_h memhs[]  = {s0.memh(), s1.memh()};
+    uint64_t raddrs[]  = {r0.addr(), r1.addr()};
+    uct_rkey_t rkeys[] = {r0.rkey(), r1.rkey()};
+
+    /* A single PUT SHORT consumes exactly one TXQP credit */
+    const int16_t initial = uct_rc_txqp_available(&rc_ep(m_e1)->txqp);
+    for (int16_t i = initial; i > (int16_t)(count - 1); --i) {
+        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
+                                       r0.rkey()));
+    }
+
+    ASSERT_EQ(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)(count - 1));
+    ASSERT_GT(rc_iface(m_e1)->tx.cq_available, (int16_t)(count - 1));
+
+    status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs, raddrs,
+                                  rkeys, NULL, NULL, count, NULL);
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_GT(rc_ep(m_e1)->txqp_reserve, 0);
+
+    if (add_pending) {
+        pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
+            return UCS_ERR_NO_RESOURCE;
+        };
+
+        ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    if (add_pending) {
+        /* The pending request never completes, so purge it to drop the
+         * reserve */
+        uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    }
+
+    /* Without pending requests, the reserve is dropped on TX completion */
+    flush();
+
+    EXPECT_EQ(0, rc_ep(m_e1)->txqp_reserve);
+    EXPECT_EQ(0, rc_ep(m_e1)->cq_reserve);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING  |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_reserve_released_on_completion,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(false);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
@@ -697,6 +778,93 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
 }
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
+
+
+/*
+ * A DevX memory domain whose flush memory key failed to register has an
+ * invalid flush rkey, and rc_verbs then does not pass the atomic MR id to the
+ * peer. Give the receiver an invalid flush rkey with non-zero bits 8-15, as
+ * older versions did, and check that an atomic operation still updates the
+ * requested address.
+ */
+class test_rc_verbs_invalid_flush_rkey : public uct_test {
+public:
+    test_rc_verbs_invalid_flush_rkey() :
+        m_sender(NULL), m_receiver(NULL), m_md(NULL), m_flush_rkey(0)
+    {
+    }
+
+    void init() override
+    {
+        uct_test::init();
+
+        m_sender = uct_test::create_entity(0);
+        m_entities.push_back(m_sender);
+        m_receiver = uct_test::create_entity(0);
+        m_entities.push_back(m_receiver);
+
+        /* The skip condition needs the entities, and must be checked before
+         * the flush rkey changes: a skip from init() does not call cleanup() */
+        check_skip_test();
+
+        /* Before connecting, so that the receiver passes no atomic MR id */
+        m_md             = ucs_derived_of(m_receiver->md(), uct_ib_md_t);
+        m_flush_rkey     = m_md->flush_rkey;
+        m_md->flush_rkey = (0x5a << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
+
+        m_sender->connect(0, *m_receiver, 0);
+        m_receiver->connect(0, *m_sender, 0);
+    }
+
+    void cleanup() override
+    {
+        /* The memory domain releases its flush memory key only when valid */
+        if (m_md != NULL) {
+            m_md->flush_rkey = m_flush_rkey;
+        }
+
+        uct_test::cleanup();
+    }
+
+protected:
+    entity      *m_sender;
+    entity      *m_receiver;
+    uct_ib_md_t *m_md;
+    uint32_t    m_flush_rkey;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_verbs_invalid_flush_rkey, atomic_add,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64))
+{
+    static const uint64_t value     = 0x5a5a5a5a5a5a5a5aul;
+    static const size_t   num_words = 512;
+    /* A misplaced update lands before the target word */
+    static const size_t   target    = 256;
+    mapped_buffer recvbuf(num_words * sizeof(uint64_t), 0ul, *m_receiver);
+
+    /* Only an indirect atomic key is created at the atomic MR offset; without
+     * DevX, the atomic key is the memory key itself */
+    uint32_t atomic_rkey = uct_ib_md_atomic_rkey(recvbuf.rkey());
+    if ((atomic_rkey == UCT_IB_INVALID_MKEY) ||
+        (atomic_rkey == uct_ib_md_direct_rkey(recvbuf.rkey()))) {
+        UCS_TEST_SKIP_R("no indirect atomic key");
+    }
+
+    recvbuf.memset(0);
+    ASSERT_UCS_OK(uct_ep_atomic64_post(m_sender->ep(0), UCT_ATOMIC_OP_ADD,
+                                       value,
+                                       recvbuf.addr() +
+                                       (target * sizeof(uint64_t)),
+                                       recvbuf.rkey()));
+    m_sender->flush();
+
+    auto words = static_cast<const uint64_t*>(recvbuf.ptr());
+    for (size_t i = 0; i < num_words; ++i) {
+        EXPECT_EQ((i == target) ? value : 0, words[i]) << "word " << i;
+    }
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_verbs_invalid_flush_rkey, rc_verbs)
 
 
 class test_rc_get_limit : public test_rc {
@@ -1353,12 +1521,10 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and send short put message to force
-     * pending queue dispatch. Can't send AM message for that, because it may
-     * trigger reordering assert due to disable/enable entity hack. */
+    /* Enable send capabilities of m_e2 and dispatch the pending queue directly,
+     * so it does not depend on a send to generate a TX completion. */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 0);
-    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
+    dispatch_pending(m_e2);
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);

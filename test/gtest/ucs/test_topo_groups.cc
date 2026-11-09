@@ -72,7 +72,7 @@ protected:
         device.device_class    = device_class;
         device.class_ordinal   = UCS_SYS_DEVICE_ORDINAL_INVALID;
         device.sys_dev_aux     = UCS_SYS_DEVICE_ID_UNKNOWN;
-        device.sibling_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        UCS_STATIC_BITMAP_RESET_ALL(&device.siblings);
 
         sys_dev = static_cast<ucs_sys_device_t>(m_devices.size());
         m_devices.push_back(device);
@@ -141,7 +141,7 @@ protected:
                                                  numa.numa_node, user_value));
             }
 
-            numa.gpus.push_back(gpu_devices);
+            numa.gpus.push_back(std::move(gpu_devices));
         }
     }
 
@@ -168,7 +168,7 @@ protected:
                                    UCS_SYS_DEVICE_USER_VALUE_EMPTY));
             }
 
-            numa.nics.push_back(nic_ports);
+            numa.nics.push_back(std::move(nic_ports));
         }
     }
 

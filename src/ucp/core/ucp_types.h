@@ -367,6 +367,41 @@ typedef enum {
 } ucp_object_version_t;
 
 
+/* The dst_version of a peer which does not pack its release version */
+#define UCP_VERSION_LEGACY 0
+
+
+/*
+ * Peer release versions (dst_version), ordered by version. A feature below is
+ * used with a peer only if dst_version of the peer is at least the given one,
+ * so peers of older releases keep working. The release version is packed in
+ * 4 bits, so dst_version of a peer more than 7 releases older can be wrong,
+ * see ucp_address_unpack_release_version().
+ */
+enum {
+    /* The lane bandwidth includes the local distance */
+    UCP_MIN_DST_VERSION_WIREUP_BW_DISTANCE        = 17,
+    /* The AM lane is separated from the RMA BW lanes */
+    UCP_MIN_DST_VERSION_WIREUP_SEPARATE_AM_LANE   = 17,
+    /* Up to UCP_MAX_LANES lanes instead of UCP_MAX_LANES_LEGACY */
+    UCP_MIN_DST_VERSION_WIREUP_MAX_LANES          = 18,
+    /* No legacy bits in the MD index field of a v1 worker address */
+    UCP_MIN_DST_VERSION_ADDRESS_MD_INDEX          = 19,
+    /* UCX_CONNECT_ALL_TO_ALL connects all local and remote device pairs */
+    UCP_MIN_DST_VERSION_WIREUP_CONNECT_ALL_TO_ALL = 19,
+    /* A non-empty remote key always packs the system device */
+    UCP_MIN_DST_VERSION_RKEY_SYS_DEV              = 20,
+    /* The PSN protocol of multi-fragment AM */
+    UCP_MIN_DST_VERSION_AM_PSN                    = 21,
+    /* The endpoint recovery */
+    UCP_MIN_DST_VERSION_EP_RECOVERY               = 22,
+    /* The rendezvous protocols of RMA operations */
+    UCP_MIN_DST_VERSION_PROTO_RMA_RNDV            = 22,
+    /* The token trailer of the LANES_ADDR messages */
+    UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN         = 24
+};
+
+
 /**
  * Active message tracer.
  */

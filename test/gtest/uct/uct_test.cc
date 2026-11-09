@@ -17,6 +17,10 @@
 #include <malloc.h>
 #endif
 
+extern "C" {
+#include <uct/tcp/tcp.h>
+}
+
 #if HAVE_IB
 #include <uct/ib/base/ib_md.h>
 #if HAVE_MLX5_DV
@@ -504,13 +508,14 @@ bool uct_test::is_caps_supported(uint64_t required_flags) {
     return ret;
 }
 
-bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags) {
+bool uct_test::check_caps(uint64_t required_flags, uint64_t invalid_flags,
+                          uint64_t required_v2_flags) {
     FOR_EACH_ENTITY(iter) {
         if (!(*iter)->check_caps(required_flags, invalid_flags)) {
             return false;
         }
     }
-    return true;
+    return (required_v2_flags == 0) || check_caps_v2(required_v2_flags);
 }
 
 bool uct_test::check_caps_v2(uint64_t required_flags) {
@@ -1444,6 +1449,10 @@ void uct_test::entity::connect_to_iface(unsigned index, entity &other,
 
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index)
 {
+    if (tcp_vrf_drops_loopback()) {
+        UCS_TEST_SKIP_R("same-host traffic in VRF is dropped");
+    }
+
     if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         connect_to_ep(index, other, other_index);
     } else if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
@@ -1647,6 +1656,16 @@ void uct_test::entity::async_wrapper::check_miss()
 
 ucs_async_context_t &uct_test::entity::async() const {
     return m_async.m_async;
+}
+
+bool uct_test::entity::tcp_vrf_drops_loopback() const
+{
+    const uct_tcp_iface_t *tcp_iface = ucs_derived_of(iface(), uct_tcp_iface_t);
+
+    /* Same-host IPv6 addresses of a VRF with disabled IPv6 are unreachable */
+    return (m_resource.tl_name == "tcp") &&
+           (tcp_iface->config.ifaddr.ss_family == AF_INET6) &&
+           !tcp_iface->config.vrf_ipv6_local_reachable;
 }
 
 ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)

@@ -32,8 +32,6 @@ typedef struct {
  * packed in the worker address */
 #define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
 
-#define UCP_RELEASE_LEGACY 0
-
 #define UCP_WIREUP_UCT_EVENT_CAP_FLAGS \
     (UCT_IFACE_FLAG_EVENT_SEND_COMP | UCT_IFACE_FLAG_EVENT_RECV)
 
@@ -57,13 +55,6 @@ enum {
 
     UCP_WIREUP_MSG_LAST
 };
-
-
-/*
- * Minimal peer release version which understands the token trailer of the
- * LANES_ADDR messages. Older peers get the messages without any token.
- */
-#define UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION 24
 
 
 /**
@@ -168,7 +159,7 @@ typedef struct ucp_wireup_msg_lanes_info_t {
      * present, these are also the TX-token lanes. */
     ucp_lane_map_t         provided_lane_map;
     /* @ref ucp_wireup_msg_tokens_info_t (only towards peers of release version
-     * UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION and above), then packed addresses
+     * UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN and above), then packed addresses
      * follow */
 } UCS_S_PACKED ucp_wireup_msg_lanes_info_t;
 
@@ -311,6 +302,15 @@ void ucp_wireup_send_lanes_addr_msg(
         ucp_ep_h ep, uint8_t msg_type, ucp_lane_map_t requested_lane_map,
         ucp_lane_map_t provided_lane_map, uint32_t request_id,
         const ucp_wireup_lane_token_t *rx_tokens);
+
+
+/* Drop @a lanes from a parked LANES_ADDR reply. The reply is sent once
+ * nothing is waiting. */
+void ucp_wireup_tf_reply_lanes_failed(ucp_ep_h ep, ucp_lane_map_t lanes);
+
+
+/* Drop a LANES_ADDR reply that is still waiting for error completions. */
+void ucp_wireup_tf_reply_discard(ucp_ep_h ep);
 
 
 /* Parse one token section into per-lane slots. @a slots may be NULL to only

@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -1128,6 +1129,33 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
 
+class test_ucp_proto_cpu_accessible : public test_ucp_proto {
+};
+
+/* CPU-accessible memory is packed by memcpy, so small messages have to select
+ * an eager protocol, as for host memory */
+UCS_TEST_P(test_ucp_proto_cpu_accessible, small_msg_eager)
+{
+    const ucp_proto_threshold_elem_t *thresh;
+    unsigned mem_type;
+
+    ucs_memory_type_for_each(mem_type) {
+        if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
+            !(UCS_MEMORY_TYPES_CPU_ACCESSIBLE & UCS_BIT(mem_type))) {
+            continue;
+        }
+
+        thresh = select_tag_send_protocol(
+                static_cast<ucs_memory_type_t>(mem_type), 1);
+        ASSERT_NE(nullptr, thresh);
+        EXPECT_EQ(0, strncmp("egr/", thresh->proto_config.proto->name, 4))
+                << ucs_memory_type_names[mem_type] << ": "
+                << thresh->proto_config.proto->name;
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_proto_cpu_accessible)
+
 class test_perf_node : public test_ucp_proto {
 };
 
@@ -1323,7 +1351,7 @@ protected:
         return make_perf_ptr(perf);
     }
 
-    static void add_funcs(perf_ptr_t perf, size_t start, size_t end,
+    static void add_funcs(const perf_ptr_t &perf, size_t start, size_t end,
                           const perf_factors_map_t &factors)
     {
         ucp_proto_perf_factors_t perf_factors =
@@ -1339,7 +1367,7 @@ protected:
                                                perf_factors, perf_node, NULL));
     }
 
-    static void add_func(perf_ptr_t perf, size_t start, size_t end,
+    static void add_func(const perf_ptr_t &perf, size_t start, size_t end,
                          ucp_proto_perf_factor_id_t factor_id,
                          ucs_linear_func_t func)
     {
@@ -1352,13 +1380,14 @@ protected:
         add_func(m_perf, start, end, factor_id, func);
     }
 
-    static ucp_proto_perf_segment_t *find_lb(perf_ptr_t perf, size_t start)
+    static ucp_proto_perf_segment_t *
+    find_lb(const perf_ptr_t &perf, size_t start)
     {
         return ucp_proto_perf_find_segment_lb(perf.get(), start);
     }
 
     static const ucp_proto_flat_perf_range_t *
-    find_lb(flat_perf_ptr_t flat_perf, size_t start)
+    find_lb(const flat_perf_ptr_t &flat_perf, size_t start)
     {
         return ucp_proto_flat_perf_find_lb(flat_perf.get(), start);
     }
@@ -1443,8 +1472,8 @@ private:
     }
 
     template<typename PerfPtrType>
-    void
-    expect_perf_empty_range(PerfPtrType perf, size_t start, size_t end) const
+    void expect_perf_empty_range(const PerfPtrType &perf, size_t start,
+                                 size_t end) const
     {
         ASSERT_NE(perf.get(), nullptr);
         auto *seg = find_lb(perf, start);
@@ -1454,8 +1483,8 @@ private:
                 << " end=" << end;
     }
 
-    void expect_flat_range(flat_perf_ptr_t flat_perf, size_t start, size_t end,
-                           ucs_linear_func_t exp_func) const
+    void expect_flat_range(const flat_perf_ptr_t &flat_perf, size_t start,
+                           size_t end, ucs_linear_func_t exp_func) const
     {
         auto *range     = find_lb(flat_perf, start);
         size_t midpoint = start + (end - start) / 2;
@@ -1714,7 +1743,7 @@ UCS_TEST_F(test_proto_perf, agg2)
              local_cpu_func);
     UCS_TEST_MESSAGE << perf2.get();
 
-    m_perf = aggregate({perf1, perf2});
+    m_perf = aggregate({std::move(perf1), std::move(perf2)});
 
     make_flat_perf();
     print_perf();
@@ -1754,7 +1783,7 @@ UCS_TEST_F(test_proto_perf, agg3)
              local_cpu_func);
     UCS_TEST_MESSAGE << perf3.get();
 
-    m_perf = aggregate({perf1, perf2, perf3});
+    m_perf = aggregate({std::move(perf1), std::move(perf2), std::move(perf3)});
 
     make_flat_perf();
     print_perf();
@@ -1917,7 +1946,7 @@ protected:
 
 private:
     // Collect points of sampling based on perf structure segments
-    static std::vector<size_t> get_sample_points(perf_ptr_t perf);
+    static std::vector<size_t> get_sample_points(const perf_ptr_t &perf);
 
     // Calculate the expected aggregation result at a given point. If the
     // expected result is undefined, return nullptr.
@@ -1927,7 +1956,7 @@ private:
 };
 
 std::vector<size_t>
-test_proto_perf_aggregate::get_sample_points(perf_ptr_t perf)
+test_proto_perf_aggregate::get_sample_points(const perf_ptr_t &perf)
 {
     std::vector<size_t> points;
 
@@ -1957,7 +1986,7 @@ test_proto_perf_aggregate::expected_aggregate_result(
         const std::vector<perf_ptr_t> &perfs, size_t point)
 {
     perf_factors_map_t agg;
-    for (auto perf : perfs) {
+    for (const auto &perf : perfs) {
         ucp_proto_perf_segment_t *seg = find_lb(perf, point);
         if ((seg == NULL) || (point < ucp_proto_perf_segment_start(seg))) {
             return nullptr; // Point not found in one of the perf objects
@@ -1977,7 +2006,8 @@ test_proto_perf_aggregate::expected_aggregate_result(
         }
     }
 
-    return std::unique_ptr<perf_factors_map_t>(new perf_factors_map_t(agg));
+    return std::unique_ptr<perf_factors_map_t>(
+            new perf_factors_map_t(std::move(agg)));
 }
 
 void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
@@ -1990,7 +2020,7 @@ void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
                     });
 
     std::set<size_t> sample_points;
-    for (auto perf : perfs) {
+    for (const auto &perf : perfs) {
         auto perf_points = get_sample_points(perf);
         std::copy(perf_points.begin(), perf_points.end(),
                   std::inserter(sample_points, sample_points.begin()));

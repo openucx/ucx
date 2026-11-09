@@ -607,6 +607,11 @@ UCS_TEST_SKIP_COND_P(test_mem_alloc_device,
                      "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=try")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
+
+    if (!check_dmabuf_export(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("dmabuf export is not supported");
+    }
+
     cuda_exportable_mem_pool_buffer buffer(size);
 
     query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
@@ -626,6 +631,59 @@ UCS_TEST_P(test_mem_alloc_device, async_managed_mem_pool_not_gdr_capable,
            "CUDA_COPY_ASYNC_MEM_TYPE=cuda-managed")
 {
     test_mem_pool_not_gdr_capable();
+}
+
+/* Without dmabuf the NIC pins the pages behind the virtual address, which the
+ * driver only allows for GPUDirect RDMA capable memory. Stream-ordered memory
+ * is typed as cuda to keep it out of the managed flow, which is
+ * non-registrable on its own. */
+UCS_TEST_P(test_mem_alloc_device, mem_pool_not_registrable_without_dmabuf,
+           "CUDA_COPY_ASYNC_MEM_TYPE=cuda", "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size         = 4 * UCS_MBYTE;
+    uct_md_mem_attr_v2_t mem_attr = {};
+
+    if (!mem_buffer::is_async_supported(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("asynchronous CUDA memory is not supported");
+    }
+
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA,
+                      mem_buffer::alloc_mode::ASYNC);
+
+    query_mem_attr(buffer.ptr(), size, &mem_attr);
+    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+    EXPECT_FALSE(mem_attr.mem_flags & UCS_MEM_FLAG_REGISTRABLE);
+}
+
+/* Plain device memory remains registrable, unless allocated under an MPS
+ * MLOPart device, where the driver allocates none as GDR capable */
+UCS_TEST_P(test_mem_alloc_device, legacy_mem_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size    = 4 * UCS_MBYTE;
+    const int is_gdr_capable = mem_buffer::cuda_mem_is_gdr_capable();
+    mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, is_gdr_capable,
+                                  is_gdr_capable);
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_mem_not_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, 0, 0);
+}
+
+UCS_TEST_P(test_mem_alloc_device, gdr_vmm_mem_registrable_without_dmabuf,
+           "CUDA_COPY_DMABUF=no")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_gdr_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    query_registrable_gdr_capable(buffer.ptr(), size, 1, 1);
 }
 
 #if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
@@ -655,19 +713,97 @@ UCS_TEST_SKIP_COND_P(test_mem_alloc_device,
                      "CUDA_COPY_ASYNC_MEM_TYPE=cuda")
 {
     constexpr size_t size = 4 * UCS_MBYTE;
+
+    /* VMM memory is not GDR capable, so only dmabuf makes it registrable */
+    if (!check_dmabuf_export(UCS_MEMORY_TYPE_CUDA)) {
+        UCS_TEST_SKIP_R("dmabuf export is not supported");
+    }
+
     cuda_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
     query_registrable_no_current_context(buffer.ptr(), size);
 }
 
+UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on")
+{
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 3);
+
+    /* The handle containing the address covers only the first chunk, so the
+     * requested extent must be kept */
+    check_mem_query_exact_range(buffer.ptr(), buffer.size());
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_locality_domain_mem_type)
+{
+#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
+    ASSERT_EQ(cudaSuccess, cudaSetDevice(0));
+
+    auto check_domain = [this](unsigned char domain_id,
+                               ucs_sys_device_t &sys_dev) {
+        cuda_vmm_mem_buffer buffer;
+        CUresult ret = buffer.alloc(64, 0,
+                                    CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN,
+                                    1, domain_id);
+        if (ret != CUDA_SUCCESS) {
+            return false;
+        }
+
+        uct_md_mem_attr_t mem_attr;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+
+        ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
+                                       &mem_attr));
+        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
+        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+        sys_dev = mem_attr.sys_dev;
+        return true;
+    };
+
+    ucs_sys_device_t sys_dev0, sys_dev1;
+
+    /* Domain 1 is present only on a device with several locality domains, so
+     * its absence is what tells a single-domain device apart */
+    if (!check_domain(1, sys_dev1)) {
+        UCS_TEST_SKIP_R("single locality-domain device");
+    }
+
+    if (!check_domain(0, sys_dev0)) {
+        ADD_FAILURE() << "locality domain 0 allocation failed even though "
+                         "domain 1 succeeded";
+        return;
+    }
+
+    EXPECT_EQ(sys_dev0, sys_dev1);
+#else
+    UCS_TEST_SKIP_R("built without locality-domain support");
+#endif
+}
+
+UCS_TEST_P(test_mem_alloc_device, vmm_multi_handle_unaligned_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on")
+{
+    cuda_vmm_mem_buffer buffer(4 * UCS_MBYTE, UCS_MEMORY_TYPE_CUDA, 2);
+    size_t chunk_size = buffer.size() / 2;
+    void *address     = UCS_PTR_BYTE_OFFSET(buffer.ptr(), chunk_size / 2);
+    uct_md_mem_attr_t mem_attr;
+
+    /* Contained in the first handle: extended to the whole handle */
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), address, chunk_size / 2, &mem_attr));
+    EXPECT_EQ(buffer.ptr(), mem_attr.base_address);
+    EXPECT_EQ(chunk_size, mem_attr.alloc_length);
+
+    /* Ends in the second handle, while being shorter than a single handle:
+     * the requested extent must be kept */
+    check_mem_query_exact_range(address, (chunk_size / 2) + 1);
+}
+
 #if CUDA_VERSION >= 12020
-/* Host-located VMM is not dmabuf-exportable but is registrable by IB.
- *
- * TODO: REG_WHOLE_ALLOC=off is needed because of an existing issue with
- * base_address being set to 0, causing cache pollution with this type of memory
- */
-UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
-           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+/* Host-located VMM is not dmabuf-exportable but is registrable by IB */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
@@ -677,13 +813,23 @@ UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_registrable,
 
 /* Host-located VMM is typed as CUDA memory, but cannot be allocated as
  * GPUDirect RDMA capable */
-UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_not_gdr_capable,
-           "CUDA_COPY_REG_WHOLE_ALLOC=off")
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_not_gdr_capable)
 {
     constexpr size_t size = 4 * UCS_MBYTE;
     cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
 
     query_registrable_gdr_capable(buffer.ptr(), size, 1, 0);
+}
+
+/* cuMemGetAddressRange() reports a zero base address for host-located VMM, so
+ * the registration range must not be extended to it */
+UCS_TEST_P(test_mem_alloc_device, host_vmm_mem_range,
+           "CUDA_COPY_REG_WHOLE_ALLOC=on")
+{
+    constexpr size_t size = 4 * UCS_MBYTE;
+    cuda_host_vmm_mem_buffer buffer(size, UCS_MEMORY_TYPE_CUDA);
+
+    check_mem_query_exact_range(buffer.ptr(), buffer.size());
 }
 #endif
 
