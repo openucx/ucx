@@ -237,15 +237,8 @@ out:
 static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
                                     int prot, const char *path)
 {
-    static const char rocm_path_pattern[] = "/dev/dri";
-    ucm_event_handler_t *handler          = arg;
-
-    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, rocm_path_pattern, sizeof(rocm_path_pattern) - 1)) {
-        return 0;
-    }
-    ucm_dispatch_existing_mem_type_alloc(handler, addr, length, path);
-
+    ucm_dispatch_existing_mem_type_alloc(arg, addr, length, prot, path,
+                                         "/dev/dri");
     return 0;
 }
 

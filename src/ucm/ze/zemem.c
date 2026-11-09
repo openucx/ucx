@@ -200,16 +200,8 @@ out:
 static int ucm_zemem_scan_regions_cb(void *arg, void *addr, size_t length,
                                      int prot, const char *path)
 {
-    static const char ze_path_pattern[] = "/dev/dri";
-    ucm_event_handler_t *handler        = arg;
-
-    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, ze_path_pattern, sizeof(ze_path_pattern) - 1)) {
-        return 0;
-    }
-
-    ucm_dispatch_existing_mem_type_alloc(handler, addr, length, path);
-
+    ucm_dispatch_existing_mem_type_alloc(arg, addr, length, prot, path,
+                                         "/dev/dri");
     return 0;
 }
 

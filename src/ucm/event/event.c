@@ -679,10 +679,18 @@ UCS_STATIC_CLEANUP {
 }
 
 void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
-                                          void *addr, size_t length,
-                                          const char *path)
+                                          void *addr, size_t length, int prot,
+                                          const char *path,
+                                          const char *path_pattern)
 {
     ucm_event_t event;
+
+    /* we are interested in blocks which don't have any access permissions, or
+     * mapped to the device matching the given path pattern */
+    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
+        strncmp(path, path_pattern, strlen(path_pattern))) {
+        return;
+    }
 
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);

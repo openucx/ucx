@@ -439,19 +439,8 @@ out:
 static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
                                        int prot, const char *path)
 {
-    static const char cuda_path_pattern[] = "/dev/nvidia";
-    ucm_event_handler_t *handler          = arg;
-
-    /* we are interested in blocks which don't have any access permissions, or
-     * mapped to nvidia device.
-     */
-    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, cuda_path_pattern, sizeof(cuda_path_pattern) - 1)) {
-        return 0;
-    }
-
-    ucm_dispatch_existing_mem_type_alloc(handler, addr, length, path);
-
+    ucm_dispatch_existing_mem_type_alloc(arg, addr, length, prot, path,
+                                         "/dev/nvidia");
     return 0;
 }
 

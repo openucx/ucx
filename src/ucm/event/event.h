@@ -111,10 +111,20 @@ ucm_dispatch_mem_type_free(void *addr, size_t length,
 
 /**
  * Report an existing memory region of unknown memory type to a single handler,
- * as part of dispatching the initial memory type allocations.
+ * as part of dispatching the initial memory type allocations. Only regions
+ * without any access permissions, or mapped from a path starting with
+ * @a path_pattern, are reported.
+ *
+ * @param [in] handler       Event handler to report the region to.
+ * @param [in] addr          Region start address.
+ * @param [in] length        Region length.
+ * @param [in] prot          Region protection flags (PROT_xxx).
+ * @param [in] path          Path of the file mapped to the region.
+ * @param [in] path_pattern  Device path prefix to match, e.g. "/dev/nvidia".
  */
 void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
-                                          void *addr, size_t length,
-                                          const char *path);
+                                          void *addr, size_t length, int prot,
+                                          const char *path,
+                                          const char *path_pattern);
 
 #endif
