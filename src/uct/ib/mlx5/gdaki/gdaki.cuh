@@ -245,9 +245,10 @@ UCS_F_DEVICE void uct_rc_mlx5_gda_db(uct_rc_gdaki_dev_ep_t *ep, unsigned cid,
 {
     auto qp = uct_rc_mlx5_gda_get_qp(ep, cid);
     const uint64_t wqe_next = wqe_base + count;
+    const uint64_t qp_depth = uct_rc_mlx5_load_const(&ep->sq_wqe_num);
     const bool skip_db      = (flags & UCT_DEVICE_FLAG_NO_DB) ||
                               (!(flags & UCT_DEVICE_FLAG_NODELAY) &&
-                               !((wqe_base ^ wqe_next) & 128));
+                               !((wqe_base ^ wqe_next) & qp_depth));
 
     /* Publish WQEs before serializing doorbells, so a deferred producer
      * does not wait for an earlier producer's MMIO writes. */
