@@ -32,62 +32,6 @@ static std::string get_sysfs_device_path(const std::string &bdf)
     }
 }
 
-class test_topo_pci_bw : public ucs::test {
-protected:
-    void init() override
-    {
-        char path[PATH_MAX];
-
-        ucs::test::init();
-        ucs_snprintf_safe(path, sizeof(path), "%s/ucx_pci_bw_XXXXXX",
-                          ucs_get_tmpdir());
-        ASSERT_NE(nullptr, mkdtemp(path));
-        m_path = path;
-        ASSERT_EQ(0, mkdir((m_path + "/pf").c_str(), S_IRWXU));
-        ASSERT_EQ(0, mkdir((m_path + "/vf").c_str(), S_IRWXU));
-    }
-
-    void cleanup() override
-    {
-        if (!m_path.empty()) {
-            unlink((m_path + "/vf/physfn").c_str());
-            for (const auto &device : {"pf", "vf"}) {
-                const std::string path = m_path + "/" + device;
-
-                unlink((path + "/current_link_width").c_str());
-                unlink((path + "/current_link_speed").c_str());
-                rmdir(path.c_str());
-            }
-            rmdir(m_path.c_str());
-        }
-        ucs::test::cleanup();
-    }
-
-    std::string m_path;
-};
-
-UCS_TEST_F(test_topo_pci_bw, virtual_function)
-{
-    const std::string pf_path = m_path + "/pf";
-    const std::string vf_path = m_path + "/vf";
-    double expected_bw;
-
-    std::ofstream(pf_path + "/current_link_width") << "16\n";
-    std::ofstream(pf_path + "/current_link_speed") << "16.0 GT/s\n";
-    std::ofstream(vf_path + "/current_link_width") << "0\n";
-    std::ofstream(vf_path + "/current_link_speed") << "Unknown speed\n";
-
-    expected_bw = ucs_topo_get_pci_bw("pf", pf_path.c_str());
-    ASSERT_GT(expected_bw, 0.0);
-    ASSERT_LT(expected_bw, UCS_INFINITY);
-    EXPECT_EQ(UCS_INFINITY, ucs_topo_get_pci_bw("vf", vf_path.c_str()));
-    EXPECT_EQ(UCS_INFINITY, ucs_topo_get_pci_bw("missing", nullptr));
-
-    ASSERT_EQ(0, symlink("../pf", (vf_path + "/physfn").c_str()));
-    EXPECT_DOUBLE_EQ(expected_bw,
-                     ucs_topo_get_pci_bw("vf", vf_path.c_str()));
-}
-
 static ucs_status_t topo_test_distance_a(ucs_sys_device_t, ucs_sys_device_t,
                                          ucs_sys_dev_distance_t *distance)
 {
@@ -1219,4 +1163,73 @@ UCS_TEST_F(test_topo_multi_dev_sibling, stale_siblings)
     EXPECT_FALSE(ucs_topo_is_sibling(plane, gpu_dev));
     EXPECT_FALSE(ucs_topo_device_has_sibling(plane));
     EXPECT_FALSE(ucs_topo_device_has_sibling(gpu_dev));
+}
+
+class test_topo_pci_bw : public ucs::test {
+protected:
+    void init() override
+    {
+        char path[PATH_MAX];
+
+        ucs::test::init();
+        ucs_snprintf_safe(path, sizeof(path), "%s/ucx_pci_bw_XXXXXX",
+                          ucs_get_tmpdir());
+        ASSERT_NE(nullptr, mkdtemp(path));
+        m_path = path;
+        ASSERT_EQ(0, mkdir((m_path + "/pf").c_str(), S_IRWXU));
+        ASSERT_EQ(0, mkdir((m_path + "/vf").c_str(), S_IRWXU));
+    }
+
+    void cleanup() override
+    {
+        if (!m_path.empty()) {
+            unlink((m_path + "/vf/physfn").c_str());
+            for (const auto &device : {"pf", "vf"}) {
+                const std::string path = m_path + "/" + device;
+
+                unlink((path + "/current_link_width").c_str());
+                unlink((path + "/current_link_speed").c_str());
+                rmdir(path.c_str());
+            }
+            rmdir(m_path.c_str());
+        }
+        ucs::test::cleanup();
+    }
+
+    std::string m_path;
+};
+
+UCS_TEST_F(test_topo_pci_bw, virtual_function)
+{
+    const std::string pf_path = m_path + "/pf";
+    const std::string vf_path = m_path + "/vf";
+    double expected_bw, virtual_function_bw;
+
+    std::ofstream(pf_path + "/current_link_width") << "16\n";
+    std::ofstream(pf_path + "/current_link_speed") << "16.0 GT/s\n";
+    std::ofstream(vf_path + "/current_link_width") << "0\n";
+    std::ofstream(vf_path + "/current_link_speed") << "Unknown speed\n";
+
+    expected_bw = ucs_topo_get_pci_bw("pf", pf_path.c_str());
+    ASSERT_GT(expected_bw, 0.0);
+    ASSERT_LT(expected_bw, UCS_INFINITY);
+    EXPECT_EQ(UCS_INFINITY, ucs_topo_get_pci_bw("vf", vf_path.c_str()));
+    EXPECT_EQ(UCS_INFINITY, ucs_topo_get_pci_bw("missing", nullptr));
+
+    ASSERT_EQ(0, symlink("../pf", (vf_path + "/physfn").c_str()));
+    EXPECT_DOUBLE_EQ(expected_bw,
+                     ucs_topo_get_pci_bw("vf", vf_path.c_str()));
+
+    std::ofstream(vf_path + "/current_link_width") << "8\n";
+    std::ofstream(vf_path + "/current_link_speed") << "8.0 GT/s\n";
+    EXPECT_DOUBLE_EQ(expected_bw,
+                     ucs_topo_get_pci_bw("vf", vf_path.c_str()));
+
+    ASSERT_EQ(0, unlink((vf_path + "/physfn").c_str()));
+    virtual_function_bw = ucs_topo_get_pci_bw("vf", vf_path.c_str());
+    ASSERT_GT(virtual_function_bw, 0.0);
+    ASSERT_LT(virtual_function_bw, expected_bw);
+    ASSERT_EQ(0, symlink("../missing", (vf_path + "/physfn").c_str()));
+    EXPECT_DOUBLE_EQ(virtual_function_bw,
+                     ucs_topo_get_pci_bw("vf", vf_path.c_str()));
 }

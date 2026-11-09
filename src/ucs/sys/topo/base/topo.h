@@ -436,7 +436,8 @@ ucs_status_t ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev,
 
 
 /**
- * Calculates and returns a specific PCIe device BW.
+ * Calculates and returns the PCIe link bandwidth of the device.
+ * For a VF with an available physfn, returns its PF's link bandwidth.
  *
  * @param dev_name   Device name of the underlying sysfs_path (eg. 'ib0').
  * @param sysfs_path Path to the device system folder.
