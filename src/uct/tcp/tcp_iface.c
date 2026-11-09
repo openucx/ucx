@@ -80,6 +80,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
+  UCT_TCP_MAXSEG(ucs_offsetof(uct_tcp_iface_config_t, maxseg)),
+
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
 
@@ -379,8 +381,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->bandwidth.dedicated = 0;
     attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
-    attr->priority            = (iface->config.prefer_default &&
-                                 !iface->netif_caps.is_default) ? 1 : 0;
+    attr->priority            = iface->netif_caps.priority;
 
     return UCS_OK;
 }
@@ -515,6 +516,11 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
         return status;
     }
 
+    status = ucs_tcp_base_set_maxseg(fd, iface->sockopt.maxseg);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return ucs_tcp_base_set_user_timeout(fd, iface->config.user_timeout);
 }
 
@@ -580,9 +586,10 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
             return status;
         }
 
-        status = ucs_socket_server_init((struct sockaddr*)&bind_addr, addr_len,
-                                        ucs_socket_max_conn(), retry, 0,
-                                        &iface->listen_fd);
+        status = ucs_tcp_base_server_init((struct sockaddr*)&bind_addr,
+                                          addr_len, ucs_socket_max_conn(),
+                                          retry, 0, iface->sockopt.maxseg,
+                                          &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
     return status;
@@ -672,6 +679,7 @@ static ucs_status_t uct_tcp_iface_netif_caps_init(uct_tcp_iface_t *iface)
     const char *sysfs_path;
     char *path_buffer;
     ucs_status_t status;
+    int is_default;
 
     status = uct_tcp_netif_caps(iface->if_name, &iface->netif_caps.latency,
                                 &network_bw);
@@ -691,12 +699,17 @@ static ucs_status_t uct_tcp_iface_netif_caps_init(uct_tcp_iface_t *iface)
     iface->netif_caps.bandwidth = ucs_min(pci_bw, network_bw);
 
     if (!iface->config.prefer_default) {
-        iface->netif_caps.is_default = 0;
+        iface->netif_caps.priority = 0;
         return UCS_OK;
     }
 
-    return uct_tcp_netif_is_default(iface->if_name,
-                                    &iface->netif_caps.is_default);
+    status = uct_tcp_netif_is_default(iface->if_name, &is_default);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->netif_caps.priority = is_default ? 1 : 0;
+    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -770,6 +783,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    status = ucs_tcp_base_check_maxseg(config->maxseg);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     self->config.zcopy.max_hdr     = self->config.tx_seg_size -
                                      self->config.zcopy.hdr_offset;
     self->config.prefer_default    = config->prefer_default;
@@ -782,6 +800,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+    self->sockopt.maxseg           = config->maxseg;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
     self->config.ep_bind_src_addr  = config->ep_bind_src_addr;

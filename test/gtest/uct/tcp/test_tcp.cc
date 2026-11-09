@@ -25,6 +25,15 @@ public:
         m_tcp_iface = (uct_tcp_iface*)m_ent->iface();
     }
 
+    static int get_maxseg(int fd) {
+        int maxseg    = 0;
+        socklen_t len = sizeof(maxseg);
+
+        EXPECT_EQ(0, getsockopt(fd, IPPROTO_TCP, TCP_MAXSEG, &maxseg, &len))
+                << strerror(errno);
+        return maxseg;
+    }
+
     size_t get_accepted_conn_num(entity& ent) {
         size_t num = 0;
         uct_tcp_ep_t *ep;
@@ -154,6 +163,16 @@ public:
 
             EXPECT_EQ(1, ucs_socket_is_connected(fd));
         }
+    }
+
+    int netif_is_default()
+    {
+        const char *if_name = m_tcp_iface->if_name;
+        int is_default;
+
+        ASSERT_UCS_OK(uct_tcp_netif_is_default(if_name, &is_default));
+        UCS_TEST_MESSAGE << if_name << ": is_default " << is_default;
+        return is_default;
     }
 
 private:
@@ -310,5 +329,142 @@ UCS_TEST_P(test_uct_tcp, check_addr_len)
     EXPECT_EQ(sizeof(uct_tcp_ep_addr_t), iface_attr.ep_addr_len);
 }
 
+UCS_TEST_P(test_uct_tcp, prefer_default)
+{
+    /* UCP prefers the higher priority when transport scores are equal */
+    EXPECT_EQ(netif_is_default() ? 1 : 0, m_ent->iface_attr().priority);
+}
+
+UCS_TEST_P(test_uct_tcp, prefer_default_disabled, "TCP_PREFER_DEFAULT=n")
+{
+    if (!netif_is_default()) {
+        UCS_TEST_SKIP_R("not the default network interface");
+    }
+
+    EXPECT_EQ(0, m_ent->iface_attr().priority);
+}
+
+
+UCS_TEST_P(test_uct_tcp, maxseg_auto)
+{
+    // Room for the IPv6 and TCP headers with options
+    static const int hdrs_len = 120;
+    static const int limit    = 1000;
+    std::vector<int> fds;
+    struct ifreq ifr;
+
+    ASSERT_UCS_OK(ucs_netif_ioctl(GetParam()->dev_name.c_str(), SIOCGIFMTU,
+                                  &ifr));
+    if (ifr.ifr_mtu - hdrs_len <= limit) {
+        UCS_TEST_SKIP_R("device MTU " + ucs::to_string(ifr.ifr_mtu) +
+                        " is too small");
+    }
+
+    // No TCP_MAXSEG is set by default, so the segment size follows the MTU
+    setup_conns_to_entity(*m_ent, 1, fds);
+    EXPECT_GT(get_maxseg(fds.front()), limit);
+    close(fds.front());
+}
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_tcp, tcp)
+
+
+class test_uct_tcp_maxseg : public test_uct_tcp {
+public:
+    void init() {
+        modify_config("TCP_MAXSEG", ucs::to_string(MAXSEG));
+        test_uct_tcp::init();
+    }
+
+protected:
+    class scoped_fd {
+    public:
+        scoped_fd() : m_fd(-1) {}
+        scoped_fd(const scoped_fd&) = delete;
+        scoped_fd &operator=(const scoped_fd&) = delete;
+
+        ~scoped_fd() {
+            if (m_fd >= 0) {
+                close(m_fd);
+            }
+        }
+
+        int get() const {
+            return m_fd;
+        }
+
+        int *ptr() {
+            return &m_fd;
+        }
+
+    private:
+        int m_fd;
+    };
+
+    static constexpr int MAXSEG = 1000;
+};
+
+constexpr int test_uct_tcp_maxseg::MAXSEG;
+
+UCS_TEST_P(test_uct_tcp_maxseg, set_sockopt)
+{
+    struct sockaddr_in sin = {};
+    socklen_t addr_len     = sizeof(sin);
+
+    {
+        scoped_fd listen_fd, fd;
+
+        // Older kernels report the segment size only for a connected socket
+        sin.sin_family      = AF_INET;
+        sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0,
+                                        listen_fd.ptr()));
+        ASSERT_EQ(0, bind(listen_fd.get(), (struct sockaddr*)&sin,
+                          sizeof(sin)));
+        ASSERT_EQ(0, listen(listen_fd.get(), 1));
+        ASSERT_EQ(0, getsockname(listen_fd.get(), (struct sockaddr*)&sin,
+                                 &addr_len));
+
+        // A connecting socket limits the segment size of its connection
+        ASSERT_UCS_OK(ucs_socket_create(AF_INET, SOCK_STREAM, 0, fd.ptr()));
+        ASSERT_UCS_OK(uct_tcp_iface_set_sockopt(m_tcp_iface, fd.get(), 0));
+        ASSERT_UCS_OK(ucs_socket_connect(fd.get(), (struct sockaddr*)&sin));
+        EXPECT_LE(get_maxseg(fd.get()), MAXSEG);
+    }
+
+    // The listener advertises the segment size to a peer, which does not
+    // limit it itself, and the accepted socket gets it from the listener
+    std::vector<int> fds;
+    setup_conns_to_entity(*m_ent, 1, fds);
+    EXPECT_LE(get_maxseg(fds.front()), MAXSEG);
+    {
+        uct_tcp_ep_t *ep;
+
+        UCS_ASYNC_BLOCK(m_tcp_iface->super.worker->async);
+        EXPECT_FALSE(ucs_list_is_empty(&m_tcp_iface->ep_list));
+        ucs_list_for_each(ep, &m_tcp_iface->ep_list, list) {
+            EXPECT_LE(get_maxseg(ep->fd), MAXSEG);
+        }
+        UCS_ASYNC_UNBLOCK(m_tcp_iface->super.worker->async);
+    }
+    close(fds.front());
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_tcp_maxseg, tcp)
+
+
+class test_uct_tcp_base : public ucs::test {
+};
+
+UCS_TEST_F(test_uct_tcp_base, check_maxseg)
+{
+    EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(UCS_MEMUNITS_AUTO));
+    EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(88));
+    EXPECT_UCS_OK(ucs_tcp_base_check_maxseg(32767));
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_tcp_base_check_maxseg(87));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_tcp_base_check_maxseg(32768));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucs_tcp_base_check_maxseg(UCS_MEMUNITS_INF));
+}

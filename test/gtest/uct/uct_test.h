@@ -397,7 +397,8 @@ protected:
     virtual bool has_gpu() const;
 
     bool is_caps_supported(uint64_t required_flags);
-    bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0,
+                    uint64_t required_v2_flags = 0);
     bool check_caps_v2(uint64_t required_flags);
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_skip_flush_remote();

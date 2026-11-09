@@ -222,28 +222,39 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 
 
 /**
- * Initialize a TCP server.
- * Open a socket, bind a sockaddr to that socket and start listening on it for
- * incoming connection requests.
+ * Open a non-blocking TCP server socket and bind a sockaddr to it. Socket
+ * options which accepted sockets inherit can then be set before
+ * @ref ucs_socket_server_listen.
  *
  * @param [in]  saddr             Sockaddr for the server to listen on.
  *                                If the port number inside is set to zero -
  *                                use a random port.
  * @param [in]  socklen           Size of saddr.
- * @param [in]  backlog           Length of the queue for pending connections -
- *                                for the listen() call.
  * @param [in]  silent_bind       Whether or not to print error message on bind
  *                                failure with EADDRINUSE.
  * @param [in]  reuse_addr        Whether or not to allow the socket to use an
  *                                address that is already in use and was not
  *                                released by another socket yet.
- * @param [out] listen_fd         The fd that belongs to the server.
+ * @param [out] fd_p              The bound socket.
  *
  * @return UCS_OK on success or an error code on failure.
  */
-ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind, int reuse_addr,
-                                    int *listen_fd);
+ucs_status_t ucs_socket_server_bind(const struct sockaddr *saddr,
+                                    socklen_t socklen, int silent_bind,
+                                    int reuse_addr, int *fd_p);
+
+
+/**
+ * Start listening for incoming connection requests on a socket bound by
+ * @ref ucs_socket_server_bind.
+ *
+ * @param [in]  fd                The bound socket.
+ * @param [in]  backlog           Length of the queue for pending connections -
+ *                                for the listen() call.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_socket_server_listen(int fd, int backlog);
 
 
 /**

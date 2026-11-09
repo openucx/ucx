@@ -28,6 +28,8 @@ ucs_config_field_t uct_tcp_sockcm_config_table[] = {
 
    UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_sockcm_config_t, user_timeout)),
 
+   UCT_TCP_MAXSEG(ucs_offsetof(uct_tcp_sockcm_config_t, maxseg)),
+
   {NULL}
 };
 
@@ -213,6 +215,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
 {
     uct_tcp_sockcm_config_t *cm_config = ucs_derived_of(config,
                                                         uct_tcp_sockcm_config_t);
+    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops,
@@ -225,6 +228,12 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
     self->sockopt_rcvbuf = cm_config->sockopt.rcvbuf;
     self->syn_cnt        = cm_config->syn_cnt;
     self->user_timeout   = cm_config->user_timeout;
+    self->maxseg         = cm_config->maxseg;
+
+    status = ucs_tcp_base_check_maxseg(self->maxseg);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ucs_list_head_init(&self->ep_list);
 
