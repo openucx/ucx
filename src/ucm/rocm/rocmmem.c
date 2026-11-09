@@ -19,12 +19,9 @@
 #include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
 
-#include <sys/mman.h>
-
 #include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <string.h>
 
 /* Use the PTR variant so that ucm_orig_<fn> is a function pointer that bistro
  * can redirect to the relocated (trampoline) original, allowing us to intercept
@@ -234,19 +231,9 @@ out:
     return status;
 }
 
-static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
-                                    int prot, const char *path)
-{
-    ucm_dispatch_existing_mem_type_alloc(arg, addr, length, prot, path,
-                                         "/dev/dri");
-    return 0;
-}
-
 static void ucm_rocmmem_get_existing_alloc(ucm_event_handler_t *handler)
 {
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_rocm_scan_regions_cb, handler);
-    }
+    ucm_get_existing_mem_type_alloc(handler, "/dev/dri");
 }
 
 static ucm_event_installer_t ucm_rocm_initializer = {

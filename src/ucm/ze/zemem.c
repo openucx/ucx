@@ -17,11 +17,9 @@
 #include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <string.h>
 
 UCM_DEFINE_REPLACE_DLSYM_FUNC(zeMemAllocHost, ze_result_t, -1,
                               ze_context_handle_t,
@@ -197,19 +195,9 @@ out:
     return status;
 }
 
-static int ucm_zemem_scan_regions_cb(void *arg, void *addr, size_t length,
-                                     int prot, const char *path)
-{
-    ucm_dispatch_existing_mem_type_alloc(arg, addr, length, prot, path,
-                                         "/dev/dri");
-    return 0;
-}
-
 static void ucm_zemem_get_existing_alloc(ucm_event_handler_t *handler)
 {
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_zemem_scan_regions_cb, handler);
-    }
+    ucm_get_existing_mem_type_alloc(handler, "/dev/dri");
 }
 
 static ucm_event_installer_t ucm_ze_initializer = {

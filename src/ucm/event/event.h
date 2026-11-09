@@ -109,9 +109,7 @@ ucm_dispatch_mem_type_free(void *addr, size_t length,
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
-void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
-                                          void *addr, size_t length, int prot,
-                                          const char *path,
-                                          const char *path_pattern);
+void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
+                                     const char *path_pattern);
 
 #endif

@@ -671,23 +671,23 @@ ucs_status_t ucm_test_external_events(int events)
     return ucm_mmap_test_events(events & ucm_external_events, "external");
 }
 
-UCS_STATIC_CLEANUP {
-    UCS_CLEANUP_ONCE(&ucm_library_init_once) {
-        kh_destroy_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
-        pthread_spin_destroy(&ucm_kh_lock);
-    }
-}
+typedef struct {
+    ucm_event_handler_t *handler;
+    const char          *path_pattern;
+} ucm_existing_mem_type_ctx_t;
 
-void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
-                                          void *addr, size_t length, int prot,
-                                          const char *path,
-                                          const char *path_pattern)
+static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
+                                         int prot, const char *path)
 {
+    ucm_existing_mem_type_ctx_t *ctx = arg;
     ucm_event_t event;
 
+    /* we are interested in blocks which don't have any access permissions, or
+     * mapped to the given device path.
+     */
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, path_pattern, strlen(path_pattern))) {
-        return;
+        strncmp(path, ctx->path_pattern, strlen(ctx->path_pattern))) {
+        return 0;
     }
 
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
@@ -697,6 +697,25 @@ void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
                             UCS_MEM_FLAG_REGISTRABLE);
 
     ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
+    ctx->handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, ctx->handler->arg);
     ucm_event_leave();
+
+    return 0;
+}
+
+void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
+                                     const char *path_pattern)
+{
+    ucm_existing_mem_type_ctx_t ctx = {handler, path_pattern};
+
+    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
+        ucm_parse_proc_self_maps(ucm_existing_mem_type_scan_cb, &ctx);
+    }
+}
+
+UCS_STATIC_CLEANUP {
+    UCS_CLEANUP_ONCE(&ucm_library_init_once) {
+        kh_destroy_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
+        pthread_spin_destroy(&ucm_kh_lock);
+    }
 }

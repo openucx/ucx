@@ -19,9 +19,6 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 
-#include <sys/mman.h>
-#include <string.h>
-
 
 /* Create a body of CUDA memory allocation replacement function */
 #define UCM_CUDA_ALLOC_FUNC(_name, _retval, _success, _size, _ptr_type, _ref, \
@@ -436,19 +433,9 @@ out:
     return status;
 }
 
-static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
-                                       int prot, const char *path)
-{
-    ucm_dispatch_existing_mem_type_alloc(arg, addr, length, prot, path,
-                                         "/dev/nvidia");
-    return 0;
-}
-
 static void ucm_cudamem_get_existing_alloc(ucm_event_handler_t *handler)
 {
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_cudamem_scan_regions_cb, handler);
-    }
+    ucm_get_existing_mem_type_alloc(handler, "/dev/nvidia");
 }
 
 static ucm_event_installer_t ucm_cuda_initializer = {
