@@ -78,7 +78,8 @@ ucs_status_t ucs_tcp_base_set_maxseg(int fd, size_t maxseg);
 ucs_status_t ucs_tcp_base_server_init(const struct sockaddr *saddr,
                                       socklen_t socklen, int backlog,
                                       int silent_bind, int reuse_addr,
-                                      size_t maxseg, int *listen_fd_p);
+                                      const char *bind_if_name, size_t maxseg,
+                                      int *listen_fd_p);
 ucs_status_t ucs_tcp_base_set_user_timeout(int fd, ucs_time_t user_timeout);
 
 #endif /* UCT_TCP_BASE_H */

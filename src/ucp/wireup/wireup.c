@@ -290,7 +290,7 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
 static int ucp_wireup_ep_supports_tokens(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.dst_version >=
-           UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION;
+           UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN;
 }
 
 static size_t
