@@ -844,6 +844,7 @@ ucp_proto_t ucp_put_sgl_contig_proto = {
     .probe       = ucp_proto_put_sgl_contig_probe,
     .query       = ucp_proto_default_query,
     .progress    = {ucp_proto_put_sgl_contig_progress},
-    .abort       = ucp_proto_request_bcopy_abort,
-    .reset       = ucp_proto_request_bcopy_reset
+    .abort       = ucp_proto_abort_fatal_not_implemented,
+    .reset       = (ucp_request_reset_func_t)
+                   ucp_proto_reset_fatal_not_implemented
 };
