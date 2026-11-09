@@ -2649,10 +2649,7 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     const unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
                                                             select_ctx);
     ucp_wireup_select_bw_info_t bw_info = {};
-    const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA),
-                                           UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
-                                                   UCS_BIT(UCS_MEMORY_TYPE_HOST),
-                                           UCS_BIT(UCS_MEMORY_TYPE_ROCM)};
+    const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA)};
     int found_lane                      = 0;
     size_t i;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
