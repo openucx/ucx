@@ -2036,8 +2036,20 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_rkeys_mismatched_cfg,
     sgl_ctx ctx;
     init_sgl_ctx(ctx, 2, 64);
 
+    /* Give rkeys[1] a configuration which differs from the one of rkeys[0] in
+     * the unreachable MD map, not only in the endpoint configuration */
+    ucp_worker_h worker                    = sender().worker();
     ucp_worker_cfg_index_t saved_cfg_index = ctx.rkeys[1]->cfg_index;
-    ctx.rkeys[1]->cfg_index = saved_cfg_index + 1;
+    const ucp_rkey_config_t *rkey_config   = ucp_rkey_config(worker,
+                                                             ctx.rkeys[1]);
+    ucp_rkey_config_key_t key              = rkey_config->key;
+    ucp_worker_cfg_index_t cfg_index;
+
+    key.unreachable_md_map ^= UCS_BIT(UCP_MAX_MDS - 1);
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &key,
+                                             rkey_config->lanes_distance,
+                                             &cfg_index));
+    ctx.rkeys[1]->cfg_index = cfg_index;
     expect_sgl_put_invalid_param_ctx(ctx, LOCAL_MASK_DEFAULT,
                                      REMOTE_MASK_DEFAULT, 2);
     ctx.rkeys[1]->cfg_index = saved_cfg_index;
