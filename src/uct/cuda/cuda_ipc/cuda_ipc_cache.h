@@ -43,6 +43,14 @@ struct uct_cuda_ipc_cache {
 };
 
 
+typedef struct {
+    pid_t        pid;          /**< Remote process ID */
+    ucs_sys_ns_t pid_ns;       /**< Remote PID namespace */
+    uintptr_t    d_bptr;       /**< Remote allocation base address */
+    const void   *mapped_addr; /**< Local mapped address */
+} uct_cuda_ipc_remote_mapping_t;
+
+
 ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
                                        const char *name);
 
@@ -70,9 +78,29 @@ ucs_status_t uct_cuda_ipc_map_memhandle(uct_cuda_ipc_extended_rkey_t *key,
                                         ucs_log_level_t log_level);
 
 
-void uct_cuda_ipc_unmap_memhandle(pid_t pid, ucs_sys_ns_t pid_ns,
-                                  uintptr_t d_bptr, const void *mapped_addr,
+void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_remote_mapping_t *mapping,
                                   CUdevice cu_dev, int cache_enabled);
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_remote_mapping_init(uct_cuda_ipc_remote_mapping_t *mapping,
+                                 const uct_cuda_ipc_unpacked_rkey_t *key,
+                                 const void *mapped_addr)
+{
+    mapping->pid         = key->super.super.pid;
+    mapping->pid_ns      = key->super.pid_ns;
+    mapping->d_bptr      = (uintptr_t)key->super.super.d_bptr;
+    mapping->mapped_addr = mapped_addr;
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_cuda_ipc_remote_mapping_unmap(const uct_cuda_ipc_remote_mapping_t *mapping,
+                                  CUdevice cu_dev)
+{
+    uct_cuda_ipc_unmap_memhandle(mapping, cu_dev,
+                                 uct_cuda_ipc_component.enable_remote_cache);
+}
 
 
 /**
