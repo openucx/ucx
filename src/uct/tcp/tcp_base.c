@@ -58,13 +58,14 @@ ucs_status_t ucs_tcp_base_set_maxseg(int fd, size_t maxseg)
 ucs_status_t ucs_tcp_base_server_init(const struct sockaddr *saddr,
                                       socklen_t socklen, int backlog,
                                       int silent_bind, int reuse_addr,
-                                      size_t maxseg, int *listen_fd_p)
+                                      const char *bind_if_name, size_t maxseg,
+                                      int *listen_fd_p)
 {
     ucs_status_t status;
     int fd;
 
     status = ucs_socket_server_bind(saddr, socklen, silent_bind, reuse_addr,
-                                    &fd);
+                                    bind_if_name, &fd);
     if (status != UCS_OK) {
         return status;
     }
