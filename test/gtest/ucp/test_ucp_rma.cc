@@ -2105,8 +2105,39 @@ UCS_TEST_SKIP_COND_P(test_ucp_rma_sgl, put_without_proto,
             REMOTE_MASK_DEFAULT, 2, UCS_ERR_UNSUPPORTED);
 }
 
+class test_ucp_rma_sgl_contig : public test_ucp_rma_sgl {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, get_base_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA));
+    }
+
+    test_ucp_rma_sgl_contig() {
+        modify_config("PROTOS", "put/sgl/contig,put/rndv,rndv/*");
+    }
+
+    virtual void init() override {
+        if (mem_buffer::cuda_mem_is_gdr_capable()) {
+            m_env.push_back(
+                    new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+        }
+
+        test_ucp_rma_sgl::init();
+        m_require_zcopy_lane = false;
+    }
+};
+
+UCS_TEST_P(test_ucp_rma_sgl_contig, put) {
+    test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+}
+
+UCS_TEST_P(test_ucp_rma_sgl_contig, put_with_callback) {
+    test_put_sgl(10, UCS_KBYTE, true, true);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl, tcp, "tcp")
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_contig, ib, "ib")
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl_data, all, "all")
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_rma_sgl_data, tcp, "tcp")
