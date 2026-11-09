@@ -85,7 +85,6 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
 typedef struct {
     uct_cuda_event_desc_t         super;
     uct_cuda_ipc_remote_mapping_t remote_mapping;
-    uct_cuda_ipc_ep_t             *ep;
     CUdevice                      cuda_device;
     uct_cuda_ipc_sgl_mapping_t    *sgl_mapping;
 } uct_cuda_ipc_event_desc_t;
