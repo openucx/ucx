@@ -676,7 +676,7 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
     void *buffer                 = dt_iter->type.sgl.buffers[index];
     size_t length                = dt_iter->type.sgl.lengths[index];
     ucp_rkey_h rkey              = req->send.rma.sgl.rkeys[index];
-    ucp_request_param_t param = {
+    ucp_request_param_t param    = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                         UCP_OP_ATTR_FIELD_USER_DATA |
                         ucp_proto_select_op_attr_unpack(
