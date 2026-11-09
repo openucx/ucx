@@ -40,8 +40,9 @@
         const char *_str = (_buf); \
         int _length      = 0; \
         \
-        (sscanf(_str, _fmt " %n", (_value), &_length) == 1) && \
-                ((size_t)_length <= strlen(_str)) && (_str[_length] == '\0'); \
+        (sscanf(_str, _fmt "%n", (_value), &_length) == 1) && \
+                ((size_t)_length <= strlen(_str)) && \
+                ucs_string_is_blank(_str + _length); \
     })
 
 
@@ -519,15 +520,8 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
     memset(units, 0, sizeof(units));
     num_fields = sscanf(buf, "%lf%n%2[a-zA-Z]%n", &value, &length, units,
                         &length);
-    if ((num_fields < 1) || ((size_t)length > strlen(buf))) {
-        return 0;
-    }
-
-    while (isspace(buf[length])) {
-        ++length;
-    }
-
-    if (buf[length] != '\0') {
+    if ((num_fields < 1) || ((size_t)length > strlen(buf)) ||
+        !ucs_string_is_blank(buf + length)) {
         return 0;
     }
 
@@ -600,7 +594,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     double *dst     = (double*)dest;
     char    str[16] = {0};
     int     offset  = 0;
-    int length      = 0;
+    int     length  = 0;
     size_t  divider;
     size_t  units;
     double  value;
@@ -611,9 +605,11 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
         return 1;
     }
 
-    num_fields = sscanf(buf, "%lf%15s %n", &value, str, &length);
+    /* Units must follow the number directly, and may be followed only by
+     * whitespace */
+    num_fields = sscanf(buf, "%lf%15[^ \t\n\v\f\r]%n", &value, str, &length);
     if ((num_fields < 2) || ((size_t)length > strlen(buf)) ||
-        (buf[length] != '\0')) {
+        !ucs_string_is_blank(buf + length)) {
         return 0;
     }
 

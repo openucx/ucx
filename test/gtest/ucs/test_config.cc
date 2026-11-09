@@ -809,6 +809,7 @@ UCS_TEST_F(test_config, sscanf_number_trailing_chars) {
     EXPECT_TRUE(ucs_config_sscanf_bw("1024MBps ", &double_value, NULL));
     EXPECT_EQ(1024.0 * UCS_MBYTE, double_value);
     EXPECT_FALSE(ucs_config_sscanf_bw("1024MBps junk", &double_value, NULL));
+    EXPECT_FALSE(ucs_config_sscanf_bw("1024 MBps", &double_value, NULL));
 
     EXPECT_TRUE(ucs_config_sscanf_range_spec("100", &range, NULL));
     EXPECT_EQ(100U, range.first);

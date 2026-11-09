@@ -157,6 +157,14 @@ UCS_TEST_F(test_string, split) {
     }
 }
 
+UCS_TEST_F(test_string, is_blank) {
+    EXPECT_TRUE(ucs_string_is_blank(""));
+    EXPECT_TRUE(ucs_string_is_blank(" \t\n"));
+    EXPECT_FALSE(ucs_string_is_blank("a"));
+    EXPECT_FALSE(ucs_string_is_blank("  a "));
+    EXPECT_FALSE(ucs_string_is_blank("\xff"));
+}
+
 UCS_TEST_F(test_string, to_memunits) {
     size_t value;
 
