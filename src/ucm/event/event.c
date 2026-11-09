@@ -685,8 +685,6 @@ void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
 {
     ucm_event_t event;
 
-    /* we are interested in blocks which don't have any access permissions, or
-     * mapped to the device matching the given path pattern */
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
         strncmp(path, path_pattern, strlen(path_pattern))) {
         return;
@@ -695,7 +693,6 @@ void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
-    /* unknown memory type */
     ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
                             UCS_MEM_FLAG_REGISTRABLE);
 
