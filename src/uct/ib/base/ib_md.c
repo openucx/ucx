@@ -1740,10 +1740,10 @@ static void uct_ib_log_mellanox_visible_devices()
 {
     const char *value = getenv("MELLANOX_VISIBLE_DEVICES");
 
-    if (value == NULL) {
-        ucs_debug("MELLANOX_VISIBLE_DEVICES is not set");
-    } else {
-        ucs_debug("MELLANOX_VISIBLE_DEVICES is '%s'", value);
+    if (value != NULL) {
+        ucs_debug("MELLANOX_VISIBLE_DEVICES is '%s', device list may have "
+                  "been filtered by a container runtime",
+                  value);
     }
 }
 
