@@ -2689,7 +2689,7 @@ UCS_TEST_P(test_ucp_wireup_bw_lanes, older_peer) {
 
     receiver_address.unpack(sender().worker());
     receiver_address.address.dst_version =
-            UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION - 1;
+            UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES - 1;
     select_lanes(sender(), receiver_address.address, key);
 
     /* With an older peer CMA still takes a lane slot and is dropped */

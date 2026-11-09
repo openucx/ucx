@@ -1309,14 +1309,14 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_slow_dev, older_peer_lanes,
     ucp_ep_config_key_t key;
 
     /* Both paths of both fast devices */
-    select_lanes(UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION, key);
+    select_lanes(UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES, key);
     EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1},
                            {dev1, dev1}}),
               lane_devs(key, UCP_LANE_TYPE_AM_BW));
 
     /* The slow device takes the lane of the second path of mock_1:1 and is
      * dropped */
-    select_lanes(UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION - 1, key);
+    select_lanes(UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES - 1, key);
     EXPECT_EQ(lane_devs_t({{dev0, dev0}, {dev0, dev0}, {dev1, dev1}}),
               lane_devs(key, UCP_LANE_TYPE_AM_BW));
 }

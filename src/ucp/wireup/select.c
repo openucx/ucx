@@ -1928,7 +1928,7 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     bw_info->criteria.arg = &dev_count;
     max_ratio             = 1. / context->config.ext.multi_lane_max_ratio;
     skip_slow_lanes       = (select_params->address->dst_version >=
-                             UCP_WIREUP_SKIP_SLOW_LANES_MIN_DST_VERSION);
+                             UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES);
 
     /* Each dev_count entry counts at most the selected lanes plus excl_lane,
      * so it can reach UCP_MAX_LANES + 1 */
