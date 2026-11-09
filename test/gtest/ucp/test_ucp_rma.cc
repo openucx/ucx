@@ -1318,12 +1318,12 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
     }
 
+    /* Parameter validation tests do not depend on the memory type, so they
+     * run with a single memory type for both source and destination */
     static void get_memtype_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_memtypes(variants, get_base_variants, SGL_MEM_TYPES_MASK);
     }
 
-    /* Parameter validation tests do not depend on the memory type, so they
-     * run with a single memory type for both source and destination */
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         static const char *op_names[] = {"put", "get"};
         /* TODO: Enable the get variant (UCS_MASK(2)) once get SGL is
