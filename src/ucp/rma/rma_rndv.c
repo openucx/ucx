@@ -639,3 +639,211 @@ ucp_proto_t ucp_get_rndv_proto = {
     .abort       = ucp_proto_get_rndv_abort,
     .reset       = ucp_proto_get_rndv_reset
 };
+
+static void
+ucp_proto_put_sgl_contig_finish(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
+                              UCS_BIT(UCP_DATATYPE_SGL));
+    ucp_request_complete_send(req, status);
+}
+
+static void ucp_proto_put_sgl_contig_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_put_sgl_contig_finish(req, self->status);
+}
+
+static void ucp_proto_put_sgl_contig_elem_complete(void *request,
+                                                   ucs_status_t status,
+                                                   void *user_data)
+{
+    ucp_request_t *elem_req = (ucp_request_t*)request - 1;
+    ucp_request_t *req      = user_data;
+
+    ucp_request_put(elem_req);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+}
+
+static ucs_status_t
+ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
+                                   uint32_t fence_flag)
+{
+    ucp_ep_h ep                  = req->send.ep;
+    ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
+    void *buffer                 = dt_iter->type.sgl.buffers[index];
+    size_t length                = dt_iter->type.sgl.lengths[index];
+    ucp_rkey_h rkey              = req->send.rma.sgl.rkeys[index];
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_USER_DATA |
+                        ucp_proto_select_op_attr_unpack(
+                                req->send.proto_config->select_param.op_attr),
+        .cb.send      = ucp_proto_put_sgl_contig_elem_complete,
+        .user_data    = req
+    };
+    ucp_request_t *elem_req;
+    ucs_status_ptr_t sptr;
+
+    elem_req = ucp_request_get(ep->worker);
+    if (ucs_unlikely(elem_req == NULL)) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    elem_req->send.rma.rkey        = rkey;
+    elem_req->send.rma.remote_addr = req->send.rma.sgl.remote_addrs[index];
+
+    if (dt_iter->type.sgl.memhs != NULL) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh          = dt_iter->type.sgl.memhs[index];
+    }
+
+    sptr = ucp_proto_request_send_op_rma(ep, rkey, elem_req, fence_flag,
+                                         UCP_OP_ID_PUT, buffer, length,
+                                         ucp_dt_make_contig(1), length, &param,
+                                         0, 0);
+    if (UCS_PTR_IS_PTR(sptr)) {
+        ++req->send.state.uct_comp.count;
+        return UCS_OK;
+    }
+
+    return UCS_PTR_STATUS(sptr);
+}
+
+static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req            = ucs_container_of(self, ucp_request_t,
+                                                     send.uct);
+    const size_t *lengths         = req->send.state.dt_iter.type.sgl.lengths;
+    size_t count                  = req->send.state.dt_iter.length;
+    uint32_t fence_flag           = req->flags &
+                                    UCP_REQUEST_FLAG_FENCE_REQUIRED;
+    ucs_status_t status;
+    size_t index;
+
+    ucp_proto_completion_init(&req->send.state.uct_comp,
+                              ucp_proto_put_sgl_contig_completion);
+
+    for (index = 0; index < count; ++index) {
+        if (lengths[index] == 0) {
+            continue;
+        }
+
+        status = ucp_proto_put_sgl_contig_send_elem(req, index, fence_flag);
+        if (status != UCS_OK) {
+            uct_completion_update_status(&req->send.state.uct_comp, status);
+            break;
+        }
+
+        if (fence_flag != 0) {
+            fence_flag = ucp_ep_rma_get_fence_flag(req->send.ep);
+        }
+    }
+
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_OK);
+    return UCS_OK;
+}
+
+static void
+ucp_proto_put_sgl_contig_add_variant(
+        const ucp_proto_init_params_t *init_params,
+        ucp_proto_init_elem_t *proto)
+{
+    ucp_context_h context = init_params->worker->context;
+    ucp_proto_perf_t *overhead_perf;
+    UCS_STRING_BUFFER_ONSTACK(perf_name, 128);
+    ucp_proto_perf_t *perf;
+    ucs_status_t status;
+
+    ucs_string_buffer_appendf(&perf_name,
+                              "SGL contig" UCP_PROTO_PERF_NODE_NEW_LINE "%s",
+                              ucp_proto_perf_name(proto->perf));
+
+    status = ucp_proto_rma_rndv_overhead_perf(
+            "SGL/PUT contig", context->config.ext.proto_overhead_single,
+            &overhead_perf);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    status = ucp_proto_perf_aggregate2(ucs_string_buffer_cstr(&perf_name),
+                                       proto->perf, overhead_perf, &perf);
+    ucp_proto_perf_destroy(overhead_perf);
+    if (status != UCS_OK) {
+        return;
+    } else if (ucp_proto_perf_is_empty(perf)) {
+        ucp_proto_perf_destroy(perf);
+        return;
+    }
+
+    ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
+                               proto->cfg_priority, perf, NULL, 0);
+}
+
+static void
+ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
+{
+    ucp_worker_h worker                          = init_params->worker;
+    const ucp_proto_select_param_t *select_param = init_params->select_param;
+    const ucp_proto_select_init_protocols_t *proto_init;
+    ucp_proto_select_param_t contig_sel_param;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_proto_select_elem_t *select_elem;
+    ucp_proto_select_t *proto_select;
+    ucp_proto_init_elem_t *proto;
+    ucp_memory_info_t mem_info;
+
+    if (!ucp_proto_init_check_op(init_params, UCS_BIT(UCP_OP_ID_PUT)) ||
+        (select_param->dt_class != UCP_DATATYPE_SGL) ||
+        (init_params->rkey_config_key == NULL)) {
+        return;
+    }
+
+    mem_info = ucp_proto_common_select_param_mem_info(select_param);
+    ucp_proto_select_param_init(&contig_sel_param, UCP_OP_ID_PUT,
+                                ucp_proto_select_op_attr_unpack(
+                                        select_param->op_attr),
+                                0, UCP_DATATYPE_CONTIG, &mem_info, 1);
+
+    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
+                                        init_params->rkey_cfg_index,
+                                        &rkey_cfg_index);
+    if (proto_select == NULL) {
+        return;
+    }
+
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
+                                               init_params->ep_cfg_index,
+                                               rkey_cfg_index,
+                                               &contig_sel_param);
+    if (select_elem == NULL) {
+        return;
+    }
+
+    proto_init = &select_elem->proto_init;
+    ucs_array_for_each(proto, &proto_init->protocols) {
+        if ((ucp_proto_id_field(proto->proto_id, flags) &
+             UCP_PROTO_FLAG_INVALID) ||
+            !(ucp_proto_id_field(proto->proto_id, proto_class) &
+              UCP_PROTO_CLASS_RMA_RNDV)) {
+            continue;
+        }
+
+        ucp_proto_put_sgl_contig_add_variant(init_params, proto);
+    }
+}
+
+ucp_proto_t ucp_put_sgl_contig_proto = {
+    .name        = "put/sgl/contig",
+    .desc        = "sgl as put per element",
+    .flags       = 0,
+    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask     = UCS_BIT(UCP_DATATYPE_SGL),
+    .probe       = ucp_proto_put_sgl_contig_probe,
+    .query       = ucp_proto_default_query,
+    .progress    = {ucp_proto_put_sgl_contig_progress},
+    .abort       = ucp_proto_request_bcopy_abort,
+    .reset       = ucp_proto_request_bcopy_reset
+};

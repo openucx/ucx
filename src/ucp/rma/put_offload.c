@@ -575,15 +575,16 @@ ucp_proto_put_sgl_offload_progress(uct_pending_req_t *self)
 }
 
 ucp_proto_t ucp_put_sgl_offload_proto = {
-    .name     = "put/sgl/offload",
-    .desc     = "sgl",
-    .flags    = 0,
-    .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
-    .probe    = ucp_proto_put_sgl_offload_probe,
-    .query    = ucp_proto_multi_query,
-    .progress = {ucp_proto_put_sgl_offload_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = ucp_proto_offload_zcopy_reset
+    .name           = "put/sgl/offload",
+    .desc           = "sgl",
+    .flags          = 0,
+    .fallback_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask        = UCS_BIT(UCP_DATATYPE_SGL),
+    .probe          = ucp_proto_put_sgl_offload_probe,
+    .query          = ucp_proto_multi_query,
+    .progress       = {ucp_proto_put_sgl_offload_progress},
+    .abort          = ucp_proto_request_zcopy_abort,
+    .reset          = ucp_proto_offload_zcopy_reset
 };
 
 static void
@@ -666,13 +667,14 @@ ucp_proto_put_sgl_offload_sw_progress(uct_pending_req_t *self)
 }
 
 ucp_proto_t ucp_put_sgl_offload_sw_proto = {
-    .name     = "put/sgl/offload_sw",
-    .desc     = "sgl per-element " UCP_PROTO_ZCOPY_DESC,
-    .flags    = 0,
-    .dt_mask  = UCS_BIT(UCP_DATATYPE_SGL),
-    .probe    = ucp_proto_put_sgl_offload_sw_probe,
-    .query    = ucp_proto_multi_query,
-    .progress = {ucp_proto_put_sgl_offload_sw_progress},
-    .abort    = ucp_proto_request_zcopy_abort,
-    .reset    = ucp_proto_offload_zcopy_reset
+    .name           = "put/sgl/offload_sw",
+    .desc           = "sgl per-element " UCP_PROTO_ZCOPY_DESC,
+    .flags          = 0,
+    .fallback_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .dt_mask        = UCS_BIT(UCP_DATATYPE_SGL),
+    .probe          = ucp_proto_put_sgl_offload_sw_probe,
+    .query          = ucp_proto_multi_query,
+    .progress       = {ucp_proto_put_sgl_offload_sw_progress},
+    .abort          = ucp_proto_request_zcopy_abort,
+    .reset          = ucp_proto_offload_zcopy_reset
 };
