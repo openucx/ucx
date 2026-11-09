@@ -38,6 +38,8 @@ public:
         size_t address_length;
         ucs_status_t status;
 
+        ASSERT_TRUE(m_address == NULL);
+
         status = ucp_worker_get_address(m_remote_worker, &m_address,
                                         &address_length);
         ASSERT_UCS_OK(status);
@@ -59,6 +61,8 @@ public:
                 m_remote_worker);
         size_t address_length;
         void *buffer;
+
+        ASSERT_TRUE(m_address == NULL);
 
         ASSERT_UCS_OK(ucp_address_pack(
                 m_remote_worker, NULL, &tl_bitmap, flags,
