@@ -70,12 +70,13 @@ typedef struct {
 
 static UCS_F_ALWAYS_INLINE void
 uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
-                                 CUdevice cuda_device)
+                                 CUdevice cuda_device, int enable_cache)
 {
     size_t i;
 
     for (i = 0; i < mapping->count; i++) {
-        uct_cuda_ipc_remote_mapping_unmap(&mapping->entries[i], cuda_device);
+        uct_cuda_ipc_unmap_memhandle(&mapping->entries[i], cuda_device,
+                                     enable_cache);
     }
 
     ucs_free(mapping);

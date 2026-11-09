@@ -823,7 +823,8 @@ static void uct_cuda_ipc_md_mem_elem_release(uct_md_h md, void *release_handle)
 {
     uct_cuda_ipc_mem_elem_release_handle_t *handle = release_handle;
 
-    uct_cuda_ipc_remote_mapping_unmap(&handle->remote_mapping, handle->cu_dev);
+    uct_cuda_ipc_unmap_memhandle(&handle->remote_mapping, handle->cu_dev,
+                                 uct_cuda_ipc_component.enable_remote_cache);
     ucs_free(handle);
 }
 

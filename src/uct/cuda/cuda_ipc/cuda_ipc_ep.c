@@ -418,7 +418,8 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
     goto out_ctx;
 
 out_unmap:
-    uct_cuda_ipc_sgl_mapping_destroy(mapping, cuda_device);
+    uct_cuda_ipc_sgl_mapping_destroy(
+            mapping, cuda_device, uct_cuda_ipc_component.enable_remote_cache);
 
 out_ctx:
     uct_cuda_ipc_check_and_pop_ctx(is_ctx_pushed);

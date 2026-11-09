@@ -94,15 +94,6 @@ uct_cuda_ipc_remote_mapping_init(uct_cuda_ipc_remote_mapping_t *mapping,
 }
 
 
-static UCS_F_ALWAYS_INLINE void
-uct_cuda_ipc_remote_mapping_unmap(const uct_cuda_ipc_remote_mapping_t *mapping,
-                                  CUdevice cu_dev)
-{
-    uct_cuda_ipc_unmap_memhandle(mapping, cu_dev,
-                                 uct_cuda_ipc_component.enable_remote_cache);
-}
-
-
 /**
  * @brief Set global cache limits for newly created CUDA IPC remote caches
  *

@@ -422,13 +422,15 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
                                                                uct_cuda_ipc_event_desc_t);
 
     if (cuda_ipc_event->sgl_mapping != NULL) {
-        uct_cuda_ipc_sgl_mapping_destroy(cuda_ipc_event->sgl_mapping,
-                                         cuda_ipc_event->cuda_device);
+        uct_cuda_ipc_sgl_mapping_destroy(
+                cuda_ipc_event->sgl_mapping, cuda_ipc_event->cuda_device,
+                uct_cuda_ipc_component.enable_remote_cache);
         return;
     }
 
-    uct_cuda_ipc_remote_mapping_unmap(&cuda_ipc_event->remote_mapping,
-                                      cuda_ipc_event->cuda_device);
+    uct_cuda_ipc_unmap_memhandle(&cuda_ipc_event->remote_mapping,
+                                 cuda_ipc_event->cuda_device,
+                                 uct_cuda_ipc_component.enable_remote_cache);
 }
 
 static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
