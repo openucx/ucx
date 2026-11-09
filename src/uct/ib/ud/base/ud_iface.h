@@ -206,6 +206,7 @@ struct uct_ud_iface {
         unsigned             max_inline;
         int                  check_grh_dgid;
         unsigned             max_window;
+        double               extra_overhead;
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)

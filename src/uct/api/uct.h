@@ -690,7 +690,10 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17),
 
     /** Enables @ref uct_iface_params_t::features */
-    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18)
+    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18),
+
+    /** Enables @ref uct_iface_params_t::estimated_num_eps */
+    UCT_IFACE_PARAM_FIELD_ESTIMATED_NUM_EPS  = UCS_BIT(19)
 };
 
 /**
@@ -1313,6 +1316,14 @@ struct uct_iface_params {
      * initialization.
      */
     uint64_t                                     features;
+
+    /**
+     * Estimated number of endpoints that will use the interface. Transports
+     * may use this hint to adjust their performance estimates. It does not
+     * limit the number of endpoints. If unspecified or zero, the estimate is
+     * unknown and the default transport estimates are used.
+     */
+    size_t                                       estimated_num_eps;
 };
 
 
