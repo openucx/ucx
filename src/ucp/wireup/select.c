@@ -2649,9 +2649,8 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
     const unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
                                                             select_ctx);
     ucp_wireup_select_bw_info_t bw_info = {};
-    const uint64_t mem_type_bitmaps[]   = {UCS_BIT(UCS_MEMORY_TYPE_CUDA)};
     int found_lane                      = 0;
-    size_t i;
+    unsigned i;
     ucp_tl_bitmap_t mem_type_tl_bitmap;
 
     if (!context->config.ext.proto_enable ||
@@ -2682,9 +2681,10 @@ ucp_wireup_add_device_lanes(const ucp_wireup_select_params_t *select_params,
      */
     bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
 
-    for (i = 0; i < ucs_static_array_size(mem_type_bitmaps); ++i) {
-        ucp_wireup_memaccess_bitmap(context, mem_type_bitmaps[i],
-                                    &mem_type_tl_bitmap);
+    for (i = 0; i < context->config.ext.device_mem_types.count; ++i) {
+        ucp_wireup_memaccess_bitmap(
+                context, context->config.ext.device_mem_types.mem_types[i],
+                &mem_type_tl_bitmap);
         found_lane |= ucp_wireup_add_bw_lanes(select_params, &bw_info,
                                               mem_type_tl_bitmap, UCP_NULL_LANE,
                                               select_ctx, 0);

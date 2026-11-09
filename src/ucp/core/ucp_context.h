@@ -104,6 +104,9 @@ typedef struct ucp_context_config {
     double                                 multi_lane_max_ratio;
     /* Bandwidth efficiency ratio */
     double                                 multi_path_ratio;
+    /** Memory type sets to select device lanes for, in order. Each set is a
+     *  bitmap of memory types which the selected transports must access */
+    UCS_CONFIG_ARRAY_FIELD(uint64_t, mem_types) device_mem_types;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */

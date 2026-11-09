@@ -180,6 +180,64 @@ const char *ucp_extra_op_attr_flags_names[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
+/* Parse a '|'-separated set of memory types into a bitmap */
+static int ucp_config_sscanf_mem_type_set(const char *buf, void *dest,
+                                          const void *arg)
+{
+    uint64_t *mem_types = dest;
+    char *str, *p, *saveptr;
+    int mem_type, ret;
+
+    str = ucs_strdup(buf, "config_mem_type_set_str");
+    if (str == NULL) {
+        return 0;
+    }
+
+    ret        = 1;
+    *mem_types = 0;
+    for (p = strtok_r(str, "|", &saveptr); p != NULL;
+         p = strtok_r(NULL, "|", &saveptr)) {
+        mem_type = ucs_string_find_in_list(p, ucs_memory_type_names, 0);
+        if ((mem_type < 0) || (mem_type >= UCS_MEMORY_TYPE_LAST)) {
+            ret = 0;
+            break;
+        }
+
+        *mem_types |= UCS_BIT(mem_type);
+    }
+
+    ucs_free(str);
+    return ret && (*mem_types != 0);
+}
+
+static int ucp_config_sprintf_mem_type_set(char *buf, size_t max,
+                                           const void *src, const void *arg)
+{
+    ucs_string_buffer_t strb;
+    ucs_memory_type_t mem_type;
+
+    ucs_string_buffer_init_fixed(&strb, buf, max);
+    ucs_for_each_bit(mem_type, *(const uint64_t*)src) {
+        ucs_string_buffer_appendf(&strb, "%s|",
+                                  ucs_memory_type_names[mem_type]);
+    }
+
+    ucs_string_buffer_rtrim(&strb, "|");
+    return 1;
+}
+
+static void ucp_config_help_mem_type_set(char *buf, size_t max, const void *arg)
+{
+    snprintf(buf, max, "'|'-separated set of memory types");
+}
+
+static UCS_CONFIG_DEFINE_ARRAY(mem_type_sets, sizeof(uint64_t),
+                               {ucp_config_sscanf_mem_type_set,
+                                ucp_config_sprintf_mem_type_set,
+                                ucs_config_clone_ulong, ucs_config_release_nop,
+                                ucp_config_help_mem_type_set,
+                                ucs_config_doc_nop, NULL});
+
 static ucs_config_field_t ucp_context_config_table[] = {
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -237,6 +295,14 @@ static ucs_config_field_t ucp_context_config_table[] = {
    "based on the maximal number of paths supported by the device.",
    ucs_offsetof(ucp_context_config_t, multi_path_ratio),
    UCS_CONFIG_TYPE_POS_DOUBLE},
+
+  {"DEVICE_MEM_TYPES", "cuda",
+   "Comma-separated list of memory type sets to select device API lanes for,\n"
+   "in order. Lanes for a set are selected from the transports which can\n"
+   "access all of its memory types. Memory types in a set are separated by\n"
+   "'|', for example: \"cuda,cuda|host,rocm\".",
+   ucs_offsetof(ucp_context_config_t, device_mem_types),
+   UCS_CONFIG_TYPE_ARRAY(mem_type_sets)},
 
   {"MAX_EAGER_LANES", NULL, "",
    ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
@@ -2701,6 +2767,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (context->config.env_prefix == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_free_config_ext;
+    }
+
+    if (context->config.ext.device_mem_types.count == 0) {
+        ucs_error("No device memory types specified - aborting");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_env_prefix;
     }
 
     /* Get allocation alignment from configuration, make sure it's valid */
