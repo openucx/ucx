@@ -778,8 +778,8 @@ ucp_proto_put_sgl_contig_add_variant(
         return;
     }
 
-    ucp_proto_select_add_proto(init_params, proto->cfg_thresh,
-                               proto->cfg_priority, perf, NULL, 0);
+    ucp_proto_select_add_proto(init_params, UCS_MEMUNITS_AUTO, 20, perf, NULL,
+                               0);
 }
 
 static void
