@@ -272,13 +272,8 @@ protected:
 
     std::string module_filename(const char *name) const
     {
-#ifdef UCX_MODULE_FILE_SUFFIX
-        const char *file_suffix = UCX_MODULE_FILE_SUFFIX;
-#else
-        const char *file_suffix = "";
-#endif
-
-        return std::string("libtestorder_") + name + file_suffix + m_extension;
+        return std::string("libtestorder_") + name + UCS_MODULE_FILE_SUFFIX +
+               m_extension;
     }
 
     std::string module_path(const char *directory, const char *name) const
@@ -287,7 +282,7 @@ protected:
     }
 
     void copy_module(const char *source, const char *directory,
-                      const char *name)
+                     const char *name)
     {
         const std::string source_path =
                 GTEST_MODULE_ORDER_LIB_DIR "/" + module_filename(source);
@@ -352,7 +347,8 @@ UCS_TEST_F(test_module_load_order, dependency_copy)
      * the original build-tree base. Load the copied base first, so DT_NEEDED
      * reuses it rather than introducing a second physical base library. */
     ucs_load_modules("testorder", ":missing::base:dependent:base:blocked:",
-                      &init_once, 0);
+                     &init_once, 0);
+    /* Release the local once object's mutex before its lifetime ends. */
     EXPECT_EQ(0, pthread_mutex_destroy(&init_once.lock));
 
     EXPECT_EQ(base_before + 1, ucs_test_module_base_loaded);

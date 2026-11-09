@@ -4,9 +4,6 @@
 # See file LICENSE for terms.
 #
 
-# Module link rules update the same directory for every fixture library.
-.NOTPARALLEL:
-
 module_LTLIBRARIES         = libtest_module.la
 libtest_module_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libtest_module_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)

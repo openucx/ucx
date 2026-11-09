@@ -12,11 +12,15 @@ AM_V_LN_1 = true
 
 local_la_modules = $(patsubst %, $(localmoduledir)/%, $(module_LTLIBRARIES))
 
-all-local: $(local_la_modules)
+.PHONY: module-links
+
+all-local: module-links
+
+$(local_la_modules): $(module_LTLIBRARIES) | module-links
 
 # Create symbolic links for the built modules under $(localmoduledir)
 # Link also *.la files to create proper makefile dependencies
-$(local_la_modules): $(module_LTLIBRARIES)
+module-links: $(module_LTLIBRARIES)
 	$(AM_V_at)$(MKDIR_P) $(localmoduledir)
 	$(AM_V_at)for lib in *.la $(objdir)/*$(shrext)*; do \
 		(cd $(localmoduledir) && $(LN_RS) -nf $(shell pwd)/$$lib); \

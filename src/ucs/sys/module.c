@@ -270,7 +270,7 @@ static void *ucs_module_try_load(const char *module_path, int mode)
 }
 
 static int ucs_module_load_path(const char *module_path, const char *base,
-                                 int mode, ucs_string_set_t *loaded_set)
+                                int mode, ucs_string_set_t *loaded_set)
 {
     void *dl;
 
@@ -304,13 +304,8 @@ static const char *ucs_module_get_search_path(unsigned index)
 
 static void
 ucs_module_load_expected(const char *framework, const char *expected_modules,
-                         int mode, ucs_string_set_t *loaded_set)
+                        int mode, ucs_string_set_t *loaded_set)
 {
-#ifdef UCX_MODULE_FILE_SUFFIX
-    const char *file_suffix = UCX_MODULE_FILE_SUFFIX;
-#else
-    const char *file_suffix = "";
-#endif
     ucs_string_buffer_t strb;
     char *module_path, *module_name;
     const char *dir;
@@ -339,12 +334,13 @@ ucs_module_load_expected(const char *framework, const char *expected_modules,
         snprintf(base, sizeof(base), "lib%s_%s", framework, module_name);
         for (i = 0; (dir = ucs_module_get_search_path(i)) != NULL; ++i) {
             snprintf(module_path, PATH_MAX, "%s/%s%s%s", dir, base,
-                     file_suffix, ucs_module_loader_state.module_ext);
+                     UCS_MODULE_FILE_SUFFIX,
+                     ucs_module_loader_state.module_ext);
             if (ucs_module_load_path(module_path, base, mode, loaded_set)) {
                 break;
             }
 
-            if (file_suffix[0] != '\0') {
+            if (UCS_MODULE_FILE_SUFFIX[0] != '\0') {
                 snprintf(module_path, PATH_MAX, "%s/%s%s", dir, base,
                          ucs_module_loader_state.module_ext);
                 if (ucs_module_load_path(module_path, base, mode, loaded_set)) {
