@@ -439,8 +439,11 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, get_mode_variants,
-                           UCS_MASK(ucs_static_array_size(
-                                   gpu_nic_assignment_group_by)),
+                           UCS_BIT(GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA),
+                           gpu_nic_assignment_group_by);
+        /* Grouping does not depend on the mode, so one mode covers it */
+        add_variant_values(variants, get_shared_mode_variants,
+                           UCS_BIT(GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH),
                            gpu_nic_assignment_group_by);
     }
 
@@ -474,6 +477,14 @@ protected:
         add_variant_values(variants, get_rma_variants,
                            UCS_MASK(ucs_static_array_size(
                                    gpu_nic_assignment_modes)),
+                           gpu_nic_assignment_modes);
+    }
+
+    static void
+    get_shared_mode_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_rma_variants,
+                           UCS_BIT(GPU_NIC_ASSIGNMENT_MODE_SHARED),
                            gpu_nic_assignment_modes);
     }
 

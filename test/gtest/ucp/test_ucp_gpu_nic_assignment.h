@@ -21,11 +21,24 @@ extern "C" {
 #include <string>
 
 
+/* Indices of gpu_nic_assignment_modes */
+enum {
+    GPU_NIC_ASSIGNMENT_MODE_FLIP,
+    GPU_NIC_ASSIGNMENT_MODE_ROUND_ROBIN,
+    GPU_NIC_ASSIGNMENT_MODE_SHARED
+};
+
 /* UCX_GPU_NIC_ASSIGNMENT_MODE values that set explicit assignment modes */
 static const char *gpu_nic_assignment_modes[] = {
     "flip",
     "round_robin",
     "shared",
+};
+
+/* Indices of gpu_nic_assignment_group_by */
+enum {
+    GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA,
+    GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH
 };
 
 /* UCX_GPU_NIC_ASSIGNMENT_GROUP_BY values that set explicit grouping criteria */

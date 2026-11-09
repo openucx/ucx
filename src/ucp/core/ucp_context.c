@@ -710,9 +710,9 @@ static ucs_config_field_t ucp_context_config_table[] = {
    " - pci_switch : every GPU uses the deepest PCIe switch it shares with\n"
    "                a NIC, and GPUs using the same PCIe switch share a group.\n"
    "                A NIC joins the group of the deepest such PCIe switch\n"
-   "                above it. GPUs sharing no PCIe switch with a NIC, and\n"
-   "                NICs below none of these PCIe switches, are grouped\n"
-   "                by NUMA node.",
+   "                above it. GPUs sharing no PCIe switch with a NIC, GPUs\n"
+   "                whose group got no NIC, and NICs below none of these\n"
+   "                PCIe switches, are grouped by NUMA node.",
    ucs_offsetof(ucp_context_config_t, gpu_nic_assignment_group_by),
    UCS_CONFIG_TYPE_ENUM(ucp_gpu_nic_assignment_group_by_names)},
 

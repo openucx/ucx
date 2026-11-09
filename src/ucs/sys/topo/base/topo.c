@@ -28,6 +28,8 @@
 
 #define UCS_TOPO_SYSFS_PCI_PREFIX    "/sys/bus/pci/devices/"
 #define UCS_TOPO_SYSFS_DEVICES_ROOT  "/sys/devices"
+/* Scan format of a PCI root path, "%n" gets the length of the matched prefix */
+#define UCS_TOPO_SYSFS_PCI_ROOT_FMT  UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n"
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
 #define UCS_TOPO_DEVICE_NAME_INVALID "<invalid>"
 
@@ -615,7 +617,7 @@ static int ucs_topo_is_sys_root(const char *path)
 static int ucs_topo_is_pci_root(const char *path)
 {
     int count = -1;
-    sscanf(path, UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n", &count);
+    sscanf(path, UCS_TOPO_SYSFS_PCI_ROOT_FMT, &count);
     return count == strlen(path);
 }
 
@@ -1390,7 +1392,7 @@ ucs_topo_get_common_pci_bridge_depth(ucs_sys_device_t sys_dev1,
     }
 
     /* A common path outside of a PCI hierarchy shares no PCIe bridge */
-    sscanf(common_path, UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n", &count);
+    sscanf(common_path, UCS_TOPO_SYSFS_PCI_ROOT_FMT, &count);
     if ((count > 0) && (common_path[count] == '/')) {
         depth = ucs_string_count_char(common_path + count, '/');
     }

@@ -498,6 +498,22 @@ UCS_TEST_F(test_topo_groups, pci_switch_deepest_switch_wins) {
     expect_groups(expected_groups);
 }
 
+UCS_TEST_F(test_topo_groups, pci_switch_group_without_nics) {
+    const ucs_sys_device_t gpu0 = add_switch_device(
+            "gpu0", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0});
+    const ucs_sys_device_t gpu1 = add_switch_device(
+            "gpu1", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 1});
+    const ucs_sys_device_t nic0 = add_switch_device(
+            "nic0", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0, 1});
+
+    /* gpu0 decided switch 0, but its only NIC joins gpu1 below the deeper
+     * switch 1, so gpu0 is grouped by its NUMA node */
+    ASSERT_UCS_OK(build_by_pci_switch());
+    ASSERT_EQ(2, ucs_array_length(&m_groups));
+    expect_group(ucs_array_elem(&m_groups, 0), {{gpu1}}, {{nic0}});
+    expect_group(ucs_array_elem(&m_groups, 1), {{gpu0}}, {});
+}
+
 UCS_TEST_F(test_topo_groups, pci_switch_unmatched_devices) {
     const ucs_sys_device_t local_gpu = add_switch_device(
             "local_gpu", UCS_TOPO_DEVICE_CLASS_ACC, 0);

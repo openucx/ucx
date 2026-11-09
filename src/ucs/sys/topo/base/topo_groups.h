@@ -63,8 +63,8 @@ typedef enum {
      * any NIC, and GPUs which decided the same PCIe switch form one group. A
      * NIC joins the group with the deepest decided PCIe switch above it, so it
      * is never placed in more than one group. GPUs sharing no PCIe switch
-     * with any NIC, and NICs below no decided PCIe switch, are grouped as by
-     * @ref UCS_TOPO_GROUP_BY_NUMA.
+     * with any NIC, GPUs whose group got no NIC, and NICs below no decided
+     * PCIe switch, are grouped as by @ref UCS_TOPO_GROUP_BY_NUMA.
      */
     UCS_TOPO_GROUP_BY_PCI_SWITCH,
 

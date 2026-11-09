@@ -25,8 +25,13 @@
 
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_sys_dev_array_t, size_t,
                        ucs_sys_device_t);
+typedef struct {
+    ucs_numa_node_t numa_node;
+    size_t          group_idx;
+} ucs_topo_groups_numa_node_t;
+
 UCS_ARRAY_DECLARE_TYPE(ucs_topo_groups_numa_node_array_t, size_t,
-                       ucs_numa_node_t);
+                       ucs_topo_groups_numa_node_t);
 
 
 static int
@@ -236,21 +241,20 @@ static ucs_status_t ucs_topo_groups_get_or_add_group_by_numa_node(
         ucs_topo_groups_numa_node_array_t *numa_nodes,
         ucs_topo_groups_t *groups, ucs_topo_group_t **group_p)
 {
-    /* The groups of the NUMA nodes are the last ones, in the same order */
-    const size_t first_group = ucs_array_length(groups) -
-                               ucs_array_length(numa_nodes);
+    ucs_topo_groups_numa_node_t *entry;
     ucs_topo_group_t *group;
-    size_t i;
 
     /* Check if the group already exists for the given NUMA node. */
-    for (i = 0; i < ucs_array_length(numa_nodes); ++i) {
-        if (ucs_array_elem(numa_nodes, i) == numa_node) {
-            *group_p = &ucs_array_elem(groups, first_group + i);
+    ucs_array_for_each(entry, numa_nodes) {
+        if (entry->numa_node == numa_node) {
+            *group_p = &ucs_array_elem(groups, entry->group_idx);
             return UCS_OK;
         }
     }
 
-    *ucs_array_append(numa_nodes, return UCS_ERR_NO_MEMORY) = numa_node;
+    entry            = ucs_array_append(numa_nodes, return UCS_ERR_NO_MEMORY);
+    entry->numa_node = numa_node;
+    entry->group_idx = ucs_array_length(groups);
 
     group = ucs_array_append(groups, return UCS_ERR_NO_MEMORY);
     ucs_topo_init_group(group);
@@ -419,6 +423,41 @@ static ucs_status_t ucs_topo_groups_add_nics_by_pci_switch(
     return UCS_OK;
 }
 
+/* A PCIe switch group is left without NICs when all its NICs joined deeper
+ * PCIe switches, so its GPUs are moved to the unmatched ones. Every slot of
+ * groups stays a valid group on failure, to be released by the caller. */
+static ucs_status_t ucs_topo_groups_remove_pci_switch_groups_without_nics(
+        ucs_topo_groups_t *groups, ucs_topo_group_t *unmatched)
+{
+    const ucs_topo_group_element_t *gpu;
+    size_t group_idx, num_groups;
+    ucs_topo_group_t *group;
+
+    num_groups = 0;
+    ucs_array_for_each_index(group, group_idx, groups) {
+        if (!ucs_array_is_empty(&group->nics)) {
+            if (group_idx != num_groups) {
+                ucs_array_elem(groups, num_groups) = *group;
+                ucs_topo_init_group(group);
+            }
+
+            ++num_groups;
+            continue;
+        }
+
+        ucs_array_for_each(gpu, &group->gpus) {
+            *ucs_array_append(&unmatched->gpus,
+                              return UCS_ERR_NO_MEMORY) = *gpu;
+        }
+
+        ucs_topo_release_group(group);
+        ucs_topo_init_group(group);
+    }
+
+    ucs_array_set_length(groups, num_groups);
+    return UCS_OK;
+}
+
 /* See UCS_TOPO_GROUP_BY_PCI_SWITCH */
 static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
         const ucs_topo_sys_device_info_t *devices,
@@ -435,23 +474,26 @@ static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
 
     ucs_assert(pci_bridge_depth != NULL);
 
+    if (num_gpus == 0) {
+        /* No GPU decides a PCIe switch */
+        return ucs_topo_groups_build_groups_by_numa(devices, inventory,
+                                                    groups);
+    }
+
     ucs_topo_init_group(&unmatched);
 
-    if (num_gpus > 0) {
-        switch_depths = ucs_calloc(num_gpus, sizeof(*switch_depths),
-                                   "topo switch depths");
-        gpu_groups    = ucs_malloc(num_gpus * sizeof(*gpu_groups),
-                                   "topo gpu groups");
-        depths        = ucs_malloc(num_gpus * ucs_max(num_nics, 1) *
-                                   sizeof(*depths), "topo depths");
-        if ((switch_depths == NULL) || (gpu_groups == NULL) ||
-            (depths == NULL)) {
-            ucs_error("failed to allocate pci switch grouping state for %zu "
-                      "gpus and %zu nics",
-                      num_gpus, num_nics);
-            status = UCS_ERR_NO_MEMORY;
-            goto out;
-        }
+    switch_depths = ucs_calloc(num_gpus, sizeof(*switch_depths),
+                               "topo switch depths");
+    gpu_groups    = ucs_malloc(num_gpus * sizeof(*gpu_groups),
+                               "topo gpu groups");
+    depths        = ucs_malloc(num_gpus * ucs_max(num_nics, 1) *
+                               sizeof(*depths), "topo depths");
+    if ((switch_depths == NULL) || (gpu_groups == NULL) || (depths == NULL)) {
+        ucs_error("failed to allocate pci switch grouping state for %zu gpus "
+                  "and %zu nics",
+                  num_gpus, num_nics);
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     ucs_topo_groups_get_pci_bridge_depths(inventory, pci_bridge_depth, depths,
@@ -468,6 +510,12 @@ static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
     status = ucs_topo_groups_add_nics_by_pci_switch(inventory, depths,
                                                     switch_depths, gpu_groups,
                                                     groups, &unmatched);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucs_topo_groups_remove_pci_switch_groups_without_nics(groups,
+                                                                   &unmatched);
     if (status != UCS_OK) {
         goto out;
     }
