@@ -1348,6 +1348,9 @@ protected:
 
     bool m_require_zcopy_lane = true;
 
+    virtual void check_posted_request(ucs_status_ptr_t sptr) {
+    }
+
     struct sgl_ctx {
         std::vector<mapped_buffer>           src;
         std::vector<mapped_buffer>           dst;
@@ -1550,6 +1553,7 @@ protected:
         ucs_status_ptr_t sptr = sgl_op_nbx(op, &local, num,
                                            UCP_REMOTE_ADDR_INVALID,
                                            UCP_RKEY_INVALID, &param);
+        check_posted_request(sptr);
         if (expect_immediate_completion) {
             EXPECT_FALSE(UCS_PTR_IS_ERR(sptr));
             EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
@@ -2124,6 +2128,13 @@ public:
 
         test_ucp_rma_sgl::init();
         m_require_zcopy_lane = false;
+    }
+
+protected:
+    virtual void check_posted_request(ucs_status_ptr_t sptr) override {
+        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+        const ucp_request_t *req = (const ucp_request_t*)sptr - 1;
+        EXPECT_STREQ("put/sgl/contig", req->send.proto_config->proto->name);
     }
 };
 
