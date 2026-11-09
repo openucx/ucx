@@ -234,7 +234,7 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(cuMemExportToShareableHandle(
             &key->ph.handle.posix_fd.fd, alloc_handle,
             CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0));
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
