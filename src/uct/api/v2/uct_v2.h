@@ -76,8 +76,7 @@ enum uct_ep_event_types {
  *
  * @param [in]  arg      User argument registered with
  *                       @ref uct_iface_set_ep_event_handler.
- * @param [in]  ep       Endpoint associated with the event. It is valid only
- *                       for the duration of the callback.
+ * @param [in]  ep       Endpoint associated with the event.
  * @param [in]  events   Event flags from @ref uct_ep_event_types.
  */
 typedef void (*uct_ep_event_cb_t)(void *arg, uct_ep_h ep, unsigned events);
@@ -340,7 +339,6 @@ enum uct_ep_attr_field {
     UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1),
     /** Enables @ref uct_ep_attr::tx_token */
     UCT_EP_ATTR_FIELD_TX_TOKEN        = UCS_BIT(2),
-
     /** Enables @ref uct_ep_attr::bandwidth */
     UCT_EP_ATTR_FIELD_BANDWIDTH       = UCS_BIT(3)
 };
@@ -496,8 +494,9 @@ struct uct_ep_attr {
      * Endpoint bandwidth estimate, in bytes per second.
      * Valid when @ref UCT_EP_ATTR_FIELD_BANDWIDTH is set in @ref field_mask.
      *
-     * Querying this field returns the latest available bw estimate sample.
-     * Defaults to @ref uct_perf_attr_t::path_bandwidth value provided by @ref uct_iface_estimate_perf when
+     * Querying this field returns the latest available bandwidth estimate sample.
+     * Defaults to @ref uct_perf_attr_t::path_bandwidth value provided
+     * by @ref uct_iface_estimate_perf when
      * unsupported.
      */
     uct_ppn_bandwidth_t      bandwidth;
