@@ -1236,7 +1236,7 @@ UCS_TEST_P(test_worker_cpu_mask, all_cpus)
             set_cpu(cpu);
             UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
             create_entity();
-            ucp_test::cleanup();
+            cleanup();
         }
     }
 }
