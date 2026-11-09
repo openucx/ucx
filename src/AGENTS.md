@@ -15,7 +15,9 @@ layer boundaries below.
   specific transport backend unless the existing code already does so.
 - `ucm`: memory allocation/event interception and memory hook logic. Be careful
   with initialization order, async-signal-safety assumptions, and interactions
-  with external allocators.
+  with external allocators. UCM modules (`libucm_cuda`, `libucm_rocm`, ...)
+  must not link or call into `libucs`; use UCS headers only for macros and
+  inline functions.
 - `tools`: user-facing utilities. Keep command-line behavior and output stable
   unless the task explicitly changes it.
 
