@@ -73,9 +73,7 @@ ucm_zeMemFree_dispatch_events(ze_context_handle_t ze_context, void *ptr)
         (void)zeMemGetAddressRange(ze_context, ptr, NULL, &size);
     }
 
-out:
-    ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_FREE, ptr, size, mem_type,
-                          UCS_MEM_FLAG_REGISTRABLE);
+    ucm_dispatch_mem_type_free(ptr, size, mem_type);
 }
 
 ze_result_t ucm_zeMemAllocHost(ze_context_handle_t context,
@@ -89,9 +87,8 @@ ze_result_t ucm_zeMemAllocHost(ze_context_handle_t context,
     ret = ucm_orig_zeMemAllocHost(context, host_desc, size, alignment, ptr);
     if (ret == ZE_RESULT_SUCCESS) {
         ucm_trace("ucm_zeMemAllocHost(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_ALLOC, *ptr, size,
-                              UCS_MEMORY_TYPE_ZE_HOST,
-                              UCS_MEM_FLAG_REGISTRABLE);
+        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_ZE_HOST,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();
@@ -111,9 +108,8 @@ ze_result_t ucm_zeMemAllocDevice(ze_context_handle_t context,
                                     device, ptr);
     if (ret == ZE_RESULT_SUCCESS) {
         ucm_trace("ucm_zeMemAllocDevice(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_ALLOC, *ptr, size,
-                              UCS_MEMORY_TYPE_ZE_DEVICE,
-                              UCS_MEM_FLAG_REGISTRABLE);
+        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_ZE_DEVICE,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();
@@ -134,9 +130,8 @@ ze_result_t ucm_zeMemAllocShared(ze_context_handle_t context,
                                     alignment, device, ptr);
     if (ret == ZE_RESULT_SUCCESS) {
         ucm_trace("ucm_zeMemAllocShared(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_ALLOC, *ptr, size,
-                              UCS_MEMORY_TYPE_ZE_MANAGED,
-                              UCS_MEM_FLAG_REGISTRABLE);
+        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_ZE_MANAGED,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();
@@ -207,23 +202,13 @@ static int ucm_zemem_scan_regions_cb(void *arg, void *addr, size_t length,
 {
     static const char ze_path_pattern[] = "/dev/dri";
     ucm_event_handler_t *handler        = arg;
-    ucm_event_t event;
 
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
         strncmp(path, ze_path_pattern, sizeof(ze_path_pattern) - 1)) {
         return 0;
     }
 
-    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
-              UCS_PTR_BYTE_OFFSET(addr, length), path);
-
-    /* unknown memory type */
-    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
-                            UCS_MEM_FLAG_REGISTRABLE);
-
-    ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
-    ucm_event_leave();
+    ucm_dispatch_existing_mem_type_alloc(handler, addr, length, path);
 
     return 0;
 }

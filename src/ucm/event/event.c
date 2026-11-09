@@ -677,3 +677,21 @@ UCS_STATIC_CLEANUP {
         pthread_spin_destroy(&ucm_kh_lock);
     }
 }
+
+void ucm_dispatch_existing_mem_type_alloc(ucm_event_handler_t *handler,
+                                          void *addr, size_t length,
+                                          const char *path)
+{
+    ucm_event_t event;
+
+    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
+              UCS_PTR_BYTE_OFFSET(addr, length), path);
+
+    /* unknown memory type */
+    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
+                            UCS_MEM_FLAG_REGISTRABLE);
+
+    ucm_event_enter();
+    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
+    ucm_event_leave();
+}

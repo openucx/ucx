@@ -71,8 +71,7 @@ static void ucm_hsa_amd_memory_pool_free_dispatch_events(void *ptr)
         }
     }
 
-    ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_FREE, ptr, size, mem_type,
-                          UCS_MEM_FLAG_REGISTRABLE);
+    ucm_dispatch_mem_type_free(ptr, size, mem_type);
 }
 
 hsa_status_t ucm_hsa_amd_memory_pool_free(void* ptr)
@@ -102,9 +101,8 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     status = ucm_orig_hsa_amd_memory_pool_allocate(memory_pool, size, flags, ptr);
     if (status == HSA_STATUS_SUCCESS) {
         ucm_trace("ucm_hsa_amd_memory_pool_allocate(ptr=%p size:%lu)", *ptr, size);
-        ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_ALLOC, *ptr, size,
-                              UCS_MEMORY_TYPE_UNKNOWN,
-                              UCS_MEM_FLAG_REGISTRABLE);
+        ucm_dispatch_mem_type_alloc(*ptr, size, UCS_MEMORY_TYPE_UNKNOWN,
+                                    UCS_MEM_FLAG_REGISTRABLE);
     }
 
     ucm_event_leave();
@@ -241,22 +239,12 @@ static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
 {
     static const char rocm_path_pattern[] = "/dev/dri";
     ucm_event_handler_t *handler          = arg;
-    ucm_event_t event;
 
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
         strncmp(path, rocm_path_pattern, sizeof(rocm_path_pattern) - 1)) {
         return 0;
     }
-    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
-              UCS_PTR_BYTE_OFFSET(addr, length), path);
-
-    /* unknown memory type */
-    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
-                            UCS_MEM_FLAG_REGISTRABLE);
-
-    ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
-    ucm_event_leave();
+    ucm_dispatch_existing_mem_type_alloc(handler, addr, length, path);
 
     return 0;
 }

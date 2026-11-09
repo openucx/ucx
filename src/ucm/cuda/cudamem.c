@@ -159,8 +159,7 @@ static void ucm_cuda_dispatch_mem_type_alloc(CUdeviceptr ptr, size_t length,
                                              ucs_memory_type_t mem_type,
                                              uint8_t mem_flags)
 {
-    ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_ALLOC, (void*)ptr, length,
-                          mem_type, mem_flags);
+    ucm_dispatch_mem_type_alloc((void*)ptr, length, mem_type, mem_flags);
 }
 
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
@@ -195,8 +194,7 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
         }
     }
 
-    ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_FREE, (void*)ptr, length,
-                          mem_type, UCS_MEM_FLAG_REGISTRABLE);
+    ucm_dispatch_mem_type_free((void*)ptr, length, mem_type);
 }
 
 /* Driver API replacements */
@@ -443,7 +441,6 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
 {
     static const char cuda_path_pattern[] = "/dev/nvidia";
     ucm_event_handler_t *handler          = arg;
-    ucm_event_t event;
 
     /* we are interested in blocks which don't have any access permissions, or
      * mapped to nvidia device.
@@ -453,16 +450,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
         return 0;
     }
 
-    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
-              UCS_PTR_BYTE_OFFSET(addr, length), path);
-
-    /* unknown memory type */
-    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
-                            UCS_MEM_FLAG_REGISTRABLE);
-
-    ucm_event_enter();
-    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
-    ucm_event_leave();
+    ucm_dispatch_existing_mem_type_alloc(handler, addr, length, path);
 
     return 0;
 }
