@@ -210,7 +210,7 @@ static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {
     .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
-    .iface_is_reachable       = uct_ugni_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
@@ -237,7 +237,7 @@ static uct_iface_ops_t uct_ugni_gemini_rdma_iface_ops = {
     .iface_query              = uct_ugni_rdma_iface_query,
     .iface_get_device_address = uct_ugni_iface_get_dev_address,
     .iface_get_address        = uct_ugni_iface_get_address,
-    .iface_is_reachable       = uct_ugni_iface_is_reachable
+    .iface_is_reachable       = uct_base_iface_is_reachable
 };
 
 static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {

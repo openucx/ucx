@@ -672,7 +672,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         .field_mask = UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR |
                       UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR |
                       UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR_LENGTH |
-                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH
+                      UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR_LENGTH |
+                      UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING |
+                      UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH
     };
     ucx_perf_ep_info_t info, *remote_info;
     unsigned group_size, i, group_index;
@@ -688,6 +690,10 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     struct iovec vec[5];
     void *buffer;
     void *req;
+    char reachability_info[EXTRA_INFO_SIZE];
+
+    reachable_params.info_string        = reachability_info;
+    reachable_params.info_string_length = sizeof(reachability_info);
 
     buffer = malloc(buffer_size);
     if (buffer == NULL) {
@@ -815,7 +821,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
                 remote_info->uct.iface_addr_len ? iface_addr : NULL;
         reachable_params.iface_addr_length  = remote_info->uct.iface_addr_len;
         if (!uct_iface_is_reachable_v2(perf->uct.iface, &reachable_params)) {
-            ucs_error("Destination is unreachable");
+            ucs_error("Destination is unreachable: %s", reachability_info);
             status = UCS_ERR_UNREACHABLE;
             goto err_destroy_eps;
         }
