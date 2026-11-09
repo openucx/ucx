@@ -4031,6 +4031,72 @@ public:
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 
+    /* Put an SGL of the first @a count buffers of @a rbufs, each element with
+     * its own remote key from @a rkeys, and check the remote data */
+    ucs_status_t put_sgl(const ucs::ptr_vector<mapped_buffer> &rbufs,
+                         const std::vector<ucp_rkey_h> &rkeys, uint64_t seed,
+                         size_t count)
+    {
+        ucs::ptr_vector<mem_buffer> lbufs;
+        std::vector<void*> buffers;
+        std::vector<size_t> lengths;
+        std::vector<uint64_t> remote_addrs;
+        ucp_dt_local_sgl_t local   = {};
+        ucp_dt_remote_sgl_t remote = {};
+        ucp_request_param_t param  = {};
+        ucs_status_t status;
+        size_t i;
+
+        for (i = 0; i < count; ++i) {
+            lbufs.push_back(new mem_buffer(rbufs.at(i).size(),
+                                           UCS_MEMORY_TYPE_HOST, seed + i));
+            buffers.push_back(lbufs.at(i).ptr());
+            lengths.push_back(lbufs.at(i).size());
+            remote_addrs.push_back((uint64_t)rbufs.at(i).ptr());
+        }
+
+        local.field_mask      = UCP_DT_LOCAL_SGL_FIELD_BUFFERS |
+                                UCP_DT_LOCAL_SGL_FIELD_LENGTHS;
+        local.buffers         = buffers.data();
+        local.lengths         = lengths.data();
+        remote.field_mask     = UCP_DT_REMOTE_SGL_FIELD_REMOTE_ADDRS |
+                                UCP_DT_REMOTE_SGL_FIELD_LENGTHS |
+                                UCP_DT_REMOTE_SGL_FIELD_RKEYS;
+        remote.remote_addrs   = remote_addrs.data();
+        remote.lengths        = lengths.data();
+        remote.rkeys          = rkeys.data();
+        param.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE |
+                                UCP_OP_ATTR_FIELD_REMOTE_DATATYPE |
+                                UCP_OP_ATTR_FIELD_REMOTE;
+        param.datatype        = ucp_dt_make_sgl();
+        param.remote_datatype = ucp_dt_make_sgl();
+        param.remote          = &remote;
+
+        status = request_wait(ucp_put_nbx(sender().ep(), &local, count,
+                                          UCP_REMOTE_ADDR_INVALID,
+                                          UCP_RKEY_INVALID, &param));
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        flush_ep(sender());
+        for (i = 0; i < count; ++i) {
+            rbufs.at(i).pattern_check(seed + i);
+        }
+
+        return UCS_OK;
+    }
+
+    /* The configuration of @a rkey must be for the current endpoint
+     * configuration */
+    void check_rkey_ep_config(ucp_rkey_h rkey)
+    {
+        const ucp_rkey_config_t *rkey_config =
+                ucp_worker_rkey_config(sender().worker(), rkey->cfg_index);
+
+        EXPECT_EQ(ep_config_index(sender()), rkey_config->key.ep_cfg_index);
+    }
+
 protected:
     std::map<std::string, double> m_port_speed;
 };
@@ -4051,6 +4117,42 @@ UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_get,
         EXPECT_EQ(send_recv_rma(64 * UCS_KBYTE, UCP_OP_ID_GET),
                   rkey_cfg_index);
     }, UCP_OP_ID_GET);
+}
+
+/* Each element of the SGL has its own remote key. After a port speed change,
+ * the put moves the first remote key to a configuration for the new endpoint
+ * configuration, and it works also when the first one has it already. */
+UCS_TEST_P(test_ucp_proto_mock_rcx_speed_change, rma_put_sgl,
+           "IB_NUM_PATHS?=1", "MAX_RMA_RAILS=2", "ZCOPY_THRESH=0")
+{
+    const size_t num_elems = 4;
+    ucs::ptr_vector<mapped_buffer> rbufs;
+    std::vector<ucs::handle<ucp_rkey_h>> rkey_handles;
+    std::vector<ucp_rkey_h> rkeys;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+
+    for (size_t i = 0; i < num_elems; ++i) {
+        rbufs.push_back(new mapped_buffer(16 * UCS_KBYTE, receiver()));
+        rkey_handles.push_back(rbufs.at(i).rkey(sender()));
+        rkeys.push_back(rkey_handles.back());
+    }
+
+    ASSERT_UCS_OK(put_sgl(rbufs, rkeys, 1, num_elems));
+    check_rkey_ep_config(rkeys[0]);
+    rkey_cfg_index = rkeys[0]->cfg_index;
+
+    set_port_speed("mock_0:1", 14e9);
+    EXPECT_UCS_OK(put_sgl(rbufs, rkeys, 2, num_elems));
+    EXPECT_NE(rkey_cfg_index, rkeys[0]->cfg_index);
+    check_rkey_ep_config(rkeys[0]);
+    rkey_cfg_index = rkeys[0]->cfg_index;
+
+    /* The put of the first element alone moves the first remote key */
+    set_port_speed("mock_1:1", 14e9);
+    EXPECT_UCS_OK(put_sgl(rbufs, rkeys, 3, 1));
+    EXPECT_NE(rkey_cfg_index, rkeys[0]->cfg_index);
+    check_rkey_ep_config(rkeys[0]);
+    EXPECT_UCS_OK(put_sgl(rbufs, rkeys, 4, num_elems));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_mock_rcx_speed_change, rcx, "rc_x")
