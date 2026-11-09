@@ -1755,6 +1755,8 @@ double ucs_topo_get_pci_bw(const char *dev_name, const char *sysfs_path)
         }
 
         if (access(physfn_path, F_OK) == 0) {
+            ucs_debug("%s: using the physical function link at '%s'", dev_name,
+                      physfn_path);
             sysfs_path = physfn_path;
         }
     }
