@@ -29,7 +29,7 @@ require_real_ze=${require_real_ze:-}
 [ "${require_real_ze}" = "\$(require_real_ze)" ] && require_real_ze=
 
 case "${build_mode}" in
-long|short|sanity|compilers|soname_suffix|ze)
+long|short|sanity|compilers|soname_suffix|ze|obj_size)
 	;;
 *)
 	azure_log_error "Unsupported build mode: ${build_mode}"
@@ -247,6 +247,17 @@ build_sanity() {
 
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
 	$MAKEP
+}
+
+#
+# Check object sizes in a release build
+#
+check_obj_size() {
+	echo "==== Check object sizes ===="
+	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --enable-gtest \
+		--disable-dependency-tracking --without-go --without-java --without-valgrind
+	$MAKEP
+	env UCX_HANDLE_ERRORS=bt GTEST_FILTER='*test_obj_size*' $MAKE -C test/gtest test
 }
 
 #
@@ -653,6 +664,9 @@ soname_suffix)
 	;;
 ze)
 	tests=('build_ze')
+	;;
+obj_size)
+	tests=('check_obj_size')
 	;;
 esac
 
