@@ -236,13 +236,16 @@ static ucs_status_t ucs_topo_groups_get_or_add_group_by_numa_node(
         ucs_topo_groups_numa_node_array_t *numa_nodes,
         ucs_topo_groups_t *groups, ucs_topo_group_t **group_p)
 {
+    /* The groups of the NUMA nodes are the last ones, in the same order */
+    const size_t first_group = ucs_array_length(groups) -
+                               ucs_array_length(numa_nodes);
     ucs_topo_group_t *group;
     size_t i;
 
     /* Check if the group already exists for the given NUMA node. */
     for (i = 0; i < ucs_array_length(numa_nodes); ++i) {
         if (ucs_array_elem(numa_nodes, i) == numa_node) {
-            *group_p = &ucs_array_elem(groups, i);
+            *group_p = &ucs_array_elem(groups, first_group + i);
             return UCS_OK;
         }
     }
@@ -346,7 +349,7 @@ static ucs_status_t ucs_topo_groups_add_gpus_by_pci_switch(
         const ucs_topo_group_t *inventory,
         ucs_topo_pci_bridge_depth_func_t pci_bridge_depth,
         const unsigned *switch_depths, size_t *gpu_groups,
-        ucs_topo_groups_t *groups)
+        ucs_topo_groups_t *groups, ucs_topo_group_t *unmatched)
 {
     const ucs_topo_group_element_t *gpu, *prev_gpu;
     size_t gpu_idx, prev_idx;
@@ -354,16 +357,19 @@ static ucs_status_t ucs_topo_groups_add_gpus_by_pci_switch(
 
     ucs_array_for_each_index(gpu, gpu_idx, &inventory->gpus) {
         gpu_groups[gpu_idx] = SIZE_MAX;
-        if (switch_depths[gpu_idx] > 0) {
-            for (prev_idx = 0; prev_idx < gpu_idx; ++prev_idx) {
-                prev_gpu = &ucs_array_elem(&inventory->gpus, prev_idx);
-                if ((switch_depths[prev_idx] == switch_depths[gpu_idx]) &&
-                    (pci_bridge_depth(prev_gpu->sys_devs[0],
-                                      gpu->sys_devs[0]) >=
-                     switch_depths[gpu_idx])) {
-                    gpu_groups[gpu_idx] = gpu_groups[prev_idx];
-                    break;
-                }
+        if (switch_depths[gpu_idx] == 0) {
+            *ucs_array_append(&unmatched->gpus,
+                              return UCS_ERR_NO_MEMORY) = *gpu;
+            continue;
+        }
+
+        for (prev_idx = 0; prev_idx < gpu_idx; ++prev_idx) {
+            prev_gpu = &ucs_array_elem(&inventory->gpus, prev_idx);
+            if ((switch_depths[prev_idx] == switch_depths[gpu_idx]) &&
+                (pci_bridge_depth(prev_gpu->sys_devs[0], gpu->sys_devs[0]) >=
+                 switch_depths[gpu_idx])) {
+                gpu_groups[gpu_idx] = gpu_groups[prev_idx];
+                break;
             }
         }
 
@@ -385,16 +391,13 @@ static ucs_status_t ucs_topo_groups_add_gpus_by_pci_switch(
 static ucs_status_t ucs_topo_groups_add_nics_by_pci_switch(
         const ucs_topo_group_t *inventory, const unsigned *depths,
         const unsigned *switch_depths, const size_t *gpu_groups,
-        ucs_topo_groups_t *groups)
+        ucs_topo_groups_t *groups, ucs_topo_group_t *unmatched)
 {
     const size_t num_gpus = ucs_array_length(&inventory->gpus);
     const ucs_topo_group_element_t *nic;
-    ucs_topo_group_t unmatched_nics, *group;
     size_t gpu_idx, nic_idx, group_idx;
+    ucs_topo_group_t *group;
     unsigned best_depth;
-    ucs_status_t status;
-
-    ucs_topo_init_group(&unmatched_nics);
 
     ucs_array_for_each_index(nic, nic_idx, &inventory->nics) {
         best_depth = 0;
@@ -408,28 +411,17 @@ static ucs_status_t ucs_topo_groups_add_nics_by_pci_switch(
             }
         }
 
-        group = (group_idx == SIZE_MAX) ? &unmatched_nics :
+        group = (group_idx == SIZE_MAX) ? unmatched :
                                           &ucs_array_elem(groups, group_idx);
-        *ucs_array_append(&group->nics, status = UCS_ERR_NO_MEMORY;
-                          goto out) = *nic;
+        *ucs_array_append(&group->nics, return UCS_ERR_NO_MEMORY) = *nic;
     }
 
-    if (!ucs_array_is_empty(&unmatched_nics.nics)) {
-        *ucs_array_append(groups, status = UCS_ERR_NO_MEMORY;
-                          goto out) = unmatched_nics;
-        /* Ownership of the group arrays moved to groups */
-        ucs_topo_init_group(&unmatched_nics);
-    }
-
-    status = UCS_OK;
-
-out:
-    ucs_topo_release_group(&unmatched_nics);
-    return status;
+    return UCS_OK;
 }
 
 /* See UCS_TOPO_GROUP_BY_PCI_SWITCH */
 static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
+        const ucs_topo_sys_device_info_t *devices,
         const ucs_topo_group_t *inventory,
         ucs_topo_pci_bridge_depth_func_t pci_bridge_depth,
         ucs_topo_groups_t *groups)
@@ -438,9 +430,12 @@ static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
     const size_t num_nics = ucs_array_length(&inventory->nics);
     unsigned *depths = NULL, *switch_depths = NULL;
     size_t *gpu_groups = NULL;
+    ucs_topo_group_t unmatched;
     ucs_status_t status;
 
     ucs_assert(pci_bridge_depth != NULL);
+
+    ucs_topo_init_group(&unmatched);
 
     if (num_gpus > 0) {
         switch_depths = ucs_calloc(num_gpus, sizeof(*switch_depths),
@@ -465,16 +460,22 @@ static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
     status = ucs_topo_groups_add_gpus_by_pci_switch(inventory,
                                                     pci_bridge_depth,
                                                     switch_depths, gpu_groups,
-                                                    groups);
+                                                    groups, &unmatched);
     if (status != UCS_OK) {
         goto out;
     }
 
     status = ucs_topo_groups_add_nics_by_pci_switch(inventory, depths,
                                                     switch_depths, gpu_groups,
-                                                    groups);
+                                                    groups, &unmatched);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = ucs_topo_groups_build_groups_by_numa(devices, &unmatched, groups);
 
 out:
+    ucs_topo_release_group(&unmatched);
     ucs_free(depths);
     ucs_free(gpu_groups);
     ucs_free(switch_depths);
@@ -489,7 +490,7 @@ ucs_topo_groups_build_groups(const ucs_topo_sys_device_info_t *devices,
                              ucs_topo_groups_t *groups)
 {
     if (group_by == UCS_TOPO_GROUP_BY_PCI_SWITCH) {
-        return ucs_topo_groups_build_groups_by_pci_switch(inventory,
+        return ucs_topo_groups_build_groups_by_pci_switch(devices, inventory,
                                                           pci_bridge_depth,
                                                           groups);
     }

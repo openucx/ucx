@@ -334,7 +334,8 @@ typedef enum {
     /** Group GPUs and NICs by NUMA node */
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_NUMA,
 
-    /** Group GPUs and NICs by the PCIe switch they share */
+    /** Group GPUs and NICs by the PCIe switch they share, otherwise by NUMA
+     *  node */
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_PCI_SWITCH,
 
     UCP_GPU_NIC_ASSIGNMENT_GROUP_BY_LAST

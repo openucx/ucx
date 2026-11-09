@@ -510,46 +510,23 @@ UCS_TEST_F(test_topo_groups, pci_switch_unmatched_devices) {
     const ucs_sys_device_t root_nic = add_device(
             "root_nic", generate_bus_id(), UCS_TOPO_DEVICE_CLASS_NET, 0,
             UCS_SYS_DEVICE_USER_VALUE_EMPTY);
-    std::vector<physical_device> gpus           = {{local_gpu}, {lonely_gpu}};
     std::vector<physical_device> unmatched_nics = {{lonely_nic}, {root_nic}};
 
-    sort_devices(gpus);
     sort_devices(unmatched_nics);
 
+    /* The unmatched devices are grouped by their NUMA node */
     ASSERT_UCS_OK(build_by_pci_switch());
-    ASSERT_EQ(3, ucs_array_length(&m_groups));
-    for (size_t i = 0; i < gpus.size(); ++i) {
-        const std::vector<physical_device> nics =
-                (gpus[i].front() == local_gpu) ?
-                        std::vector<physical_device>{{local_nic}} :
-                        std::vector<physical_device>{};
-
-        expect_group(ucs_array_elem(&m_groups, i), {gpus[i]}, nics);
-    }
-
-    expect_group(ucs_array_elem(&m_groups, 2), {}, unmatched_nics);
+    ASSERT_EQ(2, ucs_array_length(&m_groups));
+    expect_group(ucs_array_elem(&m_groups, 0), {{local_gpu}}, {{local_nic}});
+    expect_group(ucs_array_elem(&m_groups, 1), {{lonely_gpu}}, unmatched_nics);
 }
 
 UCS_TEST_F(test_topo_groups, pci_switch_no_shared_switch) {
-    const std::vector<numa_devices> numa_groups = add_vera_rubin_devices();
-    std::vector<physical_device> gpus, nics;
+    const std::vector<numa_devices> expected_groups = add_vera_rubin_devices();
 
-    for (const auto &numa : numa_groups) {
-        gpus.insert(gpus.end(), numa.gpus.begin(), numa.gpus.end());
-        nics.insert(nics.end(), numa.nics.begin(), numa.nics.end());
-    }
-
-    sort_devices(gpus);
-    sort_devices(nics);
-
-    /* Every GPU forms its own group, and all NICs are unmatched */
+    /* Without a shared PCIe switch, all devices are grouped by NUMA node */
     ASSERT_UCS_OK(build_by_pci_switch());
-    ASSERT_EQ(gpus.size() + 1, ucs_array_length(&m_groups));
-    for (size_t i = 0; i < gpus.size(); ++i) {
-        expect_group(ucs_array_elem(&m_groups, i), {gpus[i]}, {});
-    }
-
-    expect_group(ucs_array_elem(&m_groups, gpus.size()), {}, nics);
+    expect_groups(expected_groups);
 }
 
 UCS_TEST_F(test_topo_groups, pci_switch_nic_only_group) {
