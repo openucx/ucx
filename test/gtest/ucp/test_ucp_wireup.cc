@@ -10,6 +10,7 @@
 #include "common/test.h"
 #include "common/test_helpers.h"
 #include "ucp/ucp_test.h"
+#include "test_ucp_wireup.h"
 
 #include <algorithm>
 #include <memory>
@@ -2019,68 +2020,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_address_v2, diff_seg_sizes,
 UCP_INSTANTIATE_TEST_CASE(test_ucp_address_v2)
 
 
-class unpacked_address {
-public:
-    unpacked_address(ucp_worker_h remote_worker) :
-        address(), m_remote_worker(remote_worker), m_address(NULL)
-    {
-    }
-
-    ~unpacked_address()
-    {
-        if (m_address != NULL) {
-            ucp_worker_release_address(m_remote_worker, m_address);
-        }
-        ucs_free(address.address_list);
-    }
-
-    void unpack(ucp_worker_h local_worker)
-    {
-        size_t address_length;
-        ucs_status_t status;
-
-        status = ucp_worker_get_address(m_remote_worker, &m_address,
-                                        &address_length);
-        ASSERT_UCS_OK(status);
-        ASSERT_GT(address_length, 0ul);
-
-        status = ucp_address_unpack(
-                local_worker, m_address,
-                ucp_worker_default_address_pack_flags(m_remote_worker),
-                &address);
-        ASSERT_UCS_OK(status);
-    }
-
-    /* Unpack an address with only the given transports, like the address of a
-     * wireup message. The unpacked entries point to the packed buffer, which is
-     * kept until the destructor */
-    void unpack(ucp_worker_h local_worker, const ucp_tl_bitmap_t &tl_bitmap)
-    {
-        const unsigned flags = ucp_worker_default_address_pack_flags(
-                m_remote_worker);
-        size_t address_length;
-        void *buffer;
-
-        ASSERT_UCS_OK(ucp_address_pack(
-                m_remote_worker, NULL, &tl_bitmap, flags,
-                m_remote_worker->context->config.ext.worker_addr_version, NULL,
-                UINT_MAX, &address_length, &buffer));
-        m_address = static_cast<ucp_address_t*>(buffer);
-        ASSERT_UCS_OK(
-                ucp_address_unpack(local_worker, m_address, flags, &address));
-    }
-
-    ucp_unpacked_address_t address;
-
-private:
-    unpacked_address(const unpacked_address&);
-    unpacked_address& operator=(const unpacked_address&);
-
-    ucp_worker_h m_remote_worker;
-    ucp_address_t *m_address;
-};
-
-
 static uint64_t wireup_aux_local_iface_flags(int has_cm, int err_mode_peer)
 {
     uint64_t flags = UCT_IFACE_FLAG_AM_BCOPY |
@@ -2604,28 +2543,6 @@ protected:
              !has_resource(sender(), "rc_verbs"))) {
             UCS_TEST_SKIP_R("cma and rc are required");
         }
-    }
-
-    /* Select lanes like ucp_wireup_try_select_lanes(), without connecting */
-    static void select_lanes(entity &e,
-                             const ucp_unpacked_address_t &remote_address,
-                             ucp_ep_config_key_t &key)
-    {
-        unsigned addr_indices[UCP_MAX_LANES];
-        ucs_status_t status;
-        ucp_ep_h ep;
-
-        ucp_ep_config_key_reset(&key);
-        key.dst_version = remote_address.dst_version;
-
-        ucs::scoped_async_lock lock(e.worker()->async);
-        ASSERT_UCS_OK(ucp_ep_create_base(e.worker(), UCP_EP_INIT_FLAG_INTERNAL,
-                                         "bw-lanes", "bw-lanes", &ep));
-        status = ucp_wireup_select_lanes(ep, 0, ucp_tl_bitmap_max,
-                                         &remote_address, addr_indices, &key,
-                                         1);
-        ucp_ep_delete(ep);
-        ASSERT_UCS_OK(status);
     }
 
     static unsigned num_rma_bw_lanes(const ucp_ep_config_key_t &key)

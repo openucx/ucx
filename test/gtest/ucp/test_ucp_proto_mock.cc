@@ -5,6 +5,7 @@
  */
 
 #include "ucp_test.h"
+#include "test_ucp_wireup.h"
 
 extern "C" {
 #include <ucp/core/ucp_ep.inl>
@@ -1227,35 +1228,11 @@ protected:
      * the given release version */
     void select_lanes(unsigned dst_version, ucp_ep_config_key_t &key)
     {
-        ucp_worker_h worker = receiver().worker();
-        unsigned addr_indices[UCP_MAX_LANES];
-        ucp_unpacked_address_t remote_address;
-        ucp_address_t *address;
-        size_t address_length;
-        ucs_status_t status;
+        unpacked_address receiver_address(receiver().worker());
 
-        ucp_ep_config_key_reset(&key);
-        key.dst_version = dst_version;
-
-        ASSERT_UCS_OK(ucp_worker_get_address(worker, &address,
-                                             &address_length));
-
-        status = ucp_address_unpack(
-                sender().worker(), address,
-                ucp_worker_default_address_pack_flags(worker),
-                &remote_address);
-        if (status == UCS_OK) {
-            ucs::scoped_async_lock lock(sender().worker()->async);
-
-            remote_address.dst_version = dst_version;
-            status = ucp_wireup_select_lanes(sender().ep(), 0,
-                                             ucp_tl_bitmap_max, &remote_address,
-                                             addr_indices, &key, 1);
-            ucs_free(remote_address.address_list);
-        }
-
-        ucp_worker_release_address(worker, address);
-        ASSERT_UCS_OK(status);
+        receiver_address.unpack(sender().worker());
+        receiver_address.address.dst_version = dst_version;
+        ::select_lanes(sender(), receiver_address.address, key);
     }
 
     /* Local and remote system devices of the sender lanes of the given type */

@@ -386,6 +386,7 @@ noinst_HEADERS = \
 	ucp/test_ucp_gpu_nic_assignment.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
+	ucp/test_ucp_wireup.h \
 	ucp/ucp_test.h \
 	ucp/ucp_datatype.h
 
