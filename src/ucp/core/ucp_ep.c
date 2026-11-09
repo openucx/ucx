@@ -2190,8 +2190,10 @@ static void ucp_ep_recovery_lane_ready(ucp_ep_h ep, ucp_lane_index_t lane)
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
     ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
 
+    /* A probe can finish after connect failed. That lane stays failed. */
     if ((wireup_ep == NULL) ||
-        (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)) {
+        (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) ||
+        !(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED)) {
         return;
     }
 
@@ -2290,9 +2292,13 @@ ucp_ep_recovery_rebuild_p2p_lane(
     if (status != UCS_OK) {
         ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
                  ep, lane, ucs_status_string(status));
-        ucp_ep_recovery_reset_probe(probe);
-        ucp_ep_recovery_arg(ep)->state  = UCP_EP_RECOVERY_STATE_IDLE;
-        ucp_ep_recovery_arg(ep)->resend = 1;
+        /* The transport still owns an in-flight probe completion. */
+        if (ucp_ep_recovery_probe_status(probe) != UCS_INPROGRESS) {
+            ucp_ep_recovery_reset_probe(probe);
+            ucp_ep_recovery_arg(ep)->state  = UCP_EP_RECOVERY_STATE_IDLE;
+            ucp_ep_recovery_arg(ep)->resend = 1;
+        }
+
         return status;
     }
 
