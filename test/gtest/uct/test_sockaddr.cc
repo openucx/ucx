@@ -223,12 +223,26 @@ protected:
     void connect(uct_test::entity &e, unsigned index,
                  uct_ep_disconnect_cb_t disconnect_cb,
                  const ucs::sock_addr_storage *local_addr = NULL) {
+        ASSERT_UCS_OK(try_connect(e, index, disconnect_cb, local_addr));
+    }
+
+    ucs_status_t try_connect(uct_test::entity &e, unsigned index,
+                             uct_ep_disconnect_cb_t disconnect_cb,
+                             const ucs::sock_addr_storage *local_addr = NULL) {
         client_user_data *user_data = new client_user_data(*this, e, index);
         ucs::scoped_async_lock lock(e.async());
-        e.connect_to_sockaddr(index, m_connect_addr, local_addr,
-                              client_resolve_cb, client_connect_cb,
-                              disconnect_cb, user_data);
-        add_user_data(user_data);
+        ucs_status_t status;
+
+        status = e.try_connect_to_sockaddr(index, m_connect_addr, local_addr,
+                                           client_resolve_cb, client_connect_cb,
+                                           disconnect_cb, user_data);
+        if (status == UCS_OK) {
+            add_user_data(user_data);
+        } else {
+            delete user_data;
+        }
+
+        return status;
     }
 
     void connect(unsigned index = 0) {
@@ -689,7 +703,7 @@ protected:
             std::string err_str = format_message(message, ap);
             if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
                 (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
-                ((strcmp(function, "ucs_socket_connect") == 0) &&
+                ((strcmp(function, UCS_PP_QUOTE(ucs_socket_connect)) == 0) &&
                  (strstr(err_str.c_str(), "connect(fd="))) ||
                 (strstr(err_str.c_str(), "error event on client ep"))) {
                 UCS_TEST_MESSAGE << err_str;
@@ -1163,7 +1177,8 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     /* Listen */
     start_listen(test_uct_sockaddr::conn_request_cb);
 
-    /* Use a reserved address in the same family as the configured source. */
+    /* Use reserved addresses (RFC1112 class E and RFC3849 documentation)
+     * in the same family as the original destination. */
     ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr(
             m_connect_addr.get_sock_addr_ptr()->sa_family == AF_INET ?
                     "240.0.0.0" : "2001:db8::1", &addr));
@@ -1177,30 +1192,14 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     {
         scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
-        {
-            client_user_data *user_data = new client_user_data(*this, *m_client,
-                                                               0);
-            ucs::scoped_async_lock lock(m_client->async());
-
-            status = m_client->try_connect_to_sockaddr(
-                    0, m_connect_addr, NULL, client_resolve_cb,
-                    client_connect_cb, client_disconnect_cb, user_data);
-            if (status == UCS_OK) {
-                add_user_data(user_data);
-            } else {
-                delete user_data;
-            }
-        }
+        status = try_connect(*m_client, 0, client_disconnect_cb);
 
         if (status == UCS_OK) {
             wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE,
                           300);
             EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
         } else {
-            /* rdmacm reports synchronous resolution failures as I/O error. */
-            EXPECT_EQ((GetParam()->component_name == "rdmacm") ?
-                              UCS_ERR_IO_ERROR : UCS_ERR_UNREACHABLE,
-                      status);
+            EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
         }
 
         EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
