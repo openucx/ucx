@@ -52,7 +52,8 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
 
   {"RX_MAX_WR", "128",
    "Maximum number of receive WRs per QP when SRQ_ENABLE=n or the device\n"
-   "does not support SRQ.",
+   "does not support SRQ. Each QP which receives messages keeps up to\n"
+   "RX_MAX_WR receive buffers of SEG_SIZE bytes posted.",
    ucs_offsetof(uct_rc_verbs_iface_config_t, rx_max_wr), UCS_CONFIG_TYPE_UINT},
 
   {"RX_CQ_LEN", "32768",
@@ -330,6 +331,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     const char *dev_name;
     ucs_status_t status;
     double soft_thresh;
+    size_t max_num_eps;
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
     int srq_enabled;
@@ -349,6 +351,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     if (srq_enabled) {
         rx_max_wr                 = 0;
         rx_cq_len                 = ib_config->rx.queue_len;
+        rx_batch_limit            = ucs_min(ib_config->rx.max_batch,
+                                            ib_config->rx.queue_len / 4);
+        max_num_eps               = ib_config->super.max_num_eps;
         init_attr.fc_max_wnd_size = ib_config->rx.queue_len;
     } else {
         rx_wr_limit = ucs_min(IBV_DEV_ATTR(&ib_md->dev, max_qp_wr), UINT16_MAX);
@@ -360,6 +365,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         }
 
         rx_max_wr      = config->rx_max_wr;
+        /* Limit by rx_max_wr, so that a QP can reach the repost threshold. */
         rx_batch_limit = ucs_max(ucs_min(ib_config->rx.max_batch,
                                          rx_max_wr / 4), 1);
         rx_cq_len      = ucs_min(config->rx_cq_len,
@@ -372,6 +378,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                       rx_cq_len, rx_max_wr);
             return UCS_ERR_INVALID_PARAM;
         }
+
+        /* Each endpoint reserves RX_MAX_WR RX CQ entries. */
+        max_num_eps = ucs_min(ib_config->super.max_num_eps,
+                              rx_cq_len / rx_max_wr);
 
         ucs_debug("%s: RX CQ length %u, %u receive WRs per QP without an SRQ, "
                   "batch size %u, at most %u QPs",
@@ -417,10 +427,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->rx_repost_needed               = 0;
     uct_ib_iface_set_reverse_sl(&self->super.super, ib_config);
 
-    /* A QP must be able to reach the repost threshold. */
-    if (!srq_enabled) {
-        self->super.super.config.rx_max_batch = rx_batch_limit;
-    }
+    self->super.super.config.rx_max_batch      = rx_batch_limit;
+    self->super.super.super.config.max_num_eps = max_num_eps;
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {

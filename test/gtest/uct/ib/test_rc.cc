@@ -1546,6 +1546,7 @@ UCS_TEST_P(test_rc_no_srq, rx_cq_num_eps,
     int ep_idx;
 
     ASSERT_EQ(wr, rx_max_wr(m_e2));
+    EXPECT_EQ((size_t)num_eps, m_e2->iface_attr().max_num_eps);
 
     /* The connected endpoints of the fixture already took their quota. */
     EXPECT_EQ((num_eps - NUM_EPS) * wr, iface->rx_cq_available);
