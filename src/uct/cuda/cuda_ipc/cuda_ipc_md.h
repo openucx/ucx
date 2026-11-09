@@ -14,18 +14,27 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/config/types.h>
 
+
 typedef enum {
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC = 0,
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY, /* cudaMalloc memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM, /* cuMemCreate memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL, /* cudaMallocAsync memory */
     UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD, /* POSIX file descriptor */
-    UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT, /* CUDA logical endpoint */
 } uct_cuda_ipc_key_handle_t;
+
+
+typedef enum {
+    /* Memory is also bound to a CUDA logical endpoint, see cft */
+    UCT_CUDA_IPC_KEY_FLAG_CFT = UCS_BIT(0)
+} uct_cuda_ipc_key_flags_t;
 
 
 typedef struct uct_cuda_ipc_md_handle {
     uct_cuda_ipc_key_handle_t handle_type;
+    /* uct_cuda_ipc_key_flags_t, in the padding before the handle, so it is
+     * zero in the keys of older peers */
+    uint32_t                  flags;
     union {
         CUipcMemHandle        legacy;        /* Legacy IPC handle */
 #if HAVE_CUDA_FABRIC
@@ -36,17 +45,23 @@ typedef struct uct_cuda_ipc_md_handle {
             uint64_t          system_id;     /* Machine identifier for
                                                 same-machine verification */
         } posix_fd;
+    } handle;
+#if HAVE_CUDA_FABRIC
+    union {
+        /* Mempool export data, for UCT_CUDA_IPC_KEY_HANDLE_TYPE_MEMPOOL */
+        struct {
+            CUmemPoolPtrExportData ptr;
+            CUmemoryPool           pool;
+        };
 #if HAVE_CUDA_LOGICAL_ENDPOINT
+        /* Logical endpoint, with UCT_CUDA_IPC_KEY_FLAG_CFT */
         struct {
             CUlogicalEndpointFabricHandle handle; /* Logical endpoint handle */
             uint64_t                      offset; /* Allocation offset in the
                                                      logical endpoint */
         } cft;
 #endif
-    } handle;
-#if HAVE_CUDA_FABRIC
-    CUmemPoolPtrExportData    ptr;
-    CUmemoryPool              pool;
+    };
 #endif
     unsigned long long        buffer_id;
 } uct_cuda_ipc_md_handle_t;
@@ -143,6 +158,7 @@ typedef struct uct_cuda_ipc_md_config {
     ucs_ternary_auto_value_t enable_cft;        /**< Enable CUDA fabric transport */
     size_t                   cft_le_size;       /**< Logical endpoint size */
 } uct_cuda_ipc_md_config_t;
+
 
 /**
  * @brief list of cuda ipc regions registered for memh

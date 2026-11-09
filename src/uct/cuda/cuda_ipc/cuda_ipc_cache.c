@@ -532,10 +532,6 @@ uct_cuda_ipc_open_memhandle(uct_cuda_ipc_extended_rkey_t *ext_key,
         return uct_cuda_ipc_open_memhandle_posix_fd(ext_key, cu_dev, mapped_addr,
                                                     log_level);
 #endif
-    case UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT:
-        ucs_log(log_level, "memory bound to a logical endpoint is accessible "
-                "only by device operations");
-        return UCS_ERR_UNSUPPORTED;
     case UCT_CUDA_IPC_KEY_HANDLE_TYPE_NO_IPC:
         level = UCS_LOG_LEVEL_DEBUG;
         break;

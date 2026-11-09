@@ -203,7 +203,12 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_cft_submit_wait(
     } while (!ready);
 
     slot.phase ^= 1;
-    return has_report ? UCS_ERR_IO_ERROR : UCS_OK;
+    if (ucs_unlikely(has_report)) {
+        ucs_device_error("fabric operation failed, report 0x%x", report);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }
 
 
@@ -358,9 +363,10 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_cft_atomic_add_thread(
     /* Add zero to the other half of the 16-byte block */
     payload[0] = (le_offset == block_offset) ? inc_value : 0;
     payload[1] = (le_offset == block_offset) ? 0 : inc_value;
-    asm volatile("fence.proxy.async.shared::cta;" ::: "memory");
 
+    /* Make the barrier and the payload visible to the fabric operation */
     uct_cuda_ipc_cft_bar_init(slot);
+    asm volatile("fence.proxy.async.shared::cta;" ::: "memory");
     uct_cuda_ipc_cft_red_add_u64(le_id, block_offset, payload, slot);
     status = uct_cuda_ipc_cft_submit_wait(slot, 1);
     uct_cuda_ipc_cft_bar_inval(slot);

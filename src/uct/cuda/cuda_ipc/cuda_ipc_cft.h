@@ -13,10 +13,10 @@
 
 /*
  * CUDA fabric transport (CFT) support for cuda_ipc: memory registered with
- * cuda_ipc is bound into a per-device CUDA logical endpoint (LE) instead of
- * being exported with an IPC handle, and the LE fabric handle and offset are
- * carried in the rkey. Peers import the LE and access the memory only by
- * device operations, with fabric operations, since it cannot be mapped.
+ * cuda_ipc is also bound into a per-device CUDA logical endpoint (LE), and the
+ * LE fabric handle and offset are carried in the rkey next to the IPC handle.
+ * Peers import the LE and access the memory by device fabric operations
+ * instead of mapping it, while host operations still use the IPC handle.
  *
  * The LE driver API is resolved at runtime, so UCX still loads with drivers
  * that do not provide it.
@@ -77,6 +77,13 @@ void uct_cuda_ipc_cft_unbind(CUdevice cu_dev, uint64_t le_offset,
 ucs_status_t
 uct_cuda_ipc_cft_import(const CUlogicalEndpointFabricHandle *handle,
                         uint32_t *le_id_p);
+
+
+/**
+ * @return Nonzero if fabric operations issued on @a cu_dev can access memory
+ *         of @a cu_dev itself.
+ */
+int uct_cuda_ipc_cft_owner_access_supported(CUdevice cu_dev);
 
 #endif /* HAVE_CUDA_LOGICAL_ENDPOINT */
 

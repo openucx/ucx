@@ -76,9 +76,9 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      UCS_CONFIG_TYPE_BOOL},
 
     {"ENABLE_CFT", "no",
-     "Enable CUDA fabric transport: bind memory to CUDA logical endpoints\n"
-     "instead of exporting IPC handles. Such memory cannot be mapped by peers,\n"
-     "it is accessible only by device operations using fabric operations.",
+     "Enable CUDA fabric transport: also bind memory to CUDA logical endpoints,\n"
+     "so device operations of peers on other devices access it with fabric\n"
+     "operations instead of mapping it. Host operations still use IPC handles.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, enable_cft), UCS_CONFIG_TYPE_TERNARY},
 
     {"CFT_LE_SIZE", "256g",
@@ -324,8 +324,8 @@ static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
 #endif /* HAVE_CUDA_FABRIC */
 
 static ucs_status_t
-uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
-                         uct_cuda_ipc_lkey_t **key_p)
+uct_cuda_ipc_mem_add_reg(const uct_cuda_ipc_md_t *md, void *addr,
+                         uct_cuda_ipc_memh_t *memh, uct_cuda_ipc_lkey_t **key_p)
 {
     uct_cuda_ipc_lkey_t *key;
     ucs_status_t status;
@@ -386,17 +386,6 @@ uct_cuda_ipc_mem_add_reg(void *addr, uct_cuda_ipc_memh_t *memh,
         goto legacy_path;
     }
 
-#if HAVE_CUDA_LOGICAL_ENDPOINT
-    /* Memory which cannot be bound falls back to the other handle types */
-    if (uct_cuda_ipc_cft_is_enabled() &&
-        (uct_cuda_ipc_cft_bind(cuda_device, key->d_bptr, key->b_len,
-                               &key->ph.handle.cft.handle,
-                               &key->ph.handle.cft.offset) == UCS_OK)) {
-        key->ph.handle_type = UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT;
-        goto common_path;
-    }
-#endif
-
 #if HAVE_CUDA_FABRIC
     if (allowed_handle_types & CU_MEM_HANDLE_TYPE_FABRIC) {
         status = uct_cuda_ipc_mem_export_fabric(addr, key, mempool);
@@ -430,11 +419,23 @@ legacy_path:
     }
 
 common_path:
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+    /* Mempool export data occupies the logical endpoint fields */
+    if (md->cft_enabled &&
+        ((key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_VMM) ||
+         (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_POSIX_FD)) &&
+        (uct_cuda_ipc_cft_bind(cuda_device, key->d_bptr, key->b_len,
+                               &key->ph.cft.handle,
+                               &key->ph.cft.offset) == UCS_OK)) {
+        key->ph.flags |= UCT_CUDA_IPC_KEY_FLAG_CFT;
+    }
+#endif
+
     ucs_list_add_tail(&memh->list, &key->link);
-    ucs_trace("registered addr:%p/%p length:%zd type:%u dev_num:%d "
+    ucs_trace("registered addr:%p/%p length:%zd type:%u flags:0x%x dev_num:%d "
               "buffer_id:%llu",
               addr, (void*)key->d_bptr, key->b_len, key->ph.handle_type,
-              cuda_device, key->ph.buffer_id);
+              key->ph.flags, cuda_device, key->ph.buffer_id);
 
     memh->dev_num = cuda_device;
     *key_p        = key;
@@ -468,7 +469,8 @@ uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h tl_memh, void *address,
         }
     }
 
-    status = uct_cuda_ipc_mem_add_reg(address, memh, &key);
+    status = uct_cuda_ipc_mem_add_reg(ucs_derived_of(md, uct_cuda_ipc_md_t),
+                                      address, memh, &key);
     if (status != UCS_OK) {
         return status;
     }
@@ -617,17 +619,6 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
         unpacked->super.pid_ns = ucs_sys_get_default_ns(UCS_SYS_NS_TYPE_PID);
     }
 
-    /* Memory bound to a logical endpoint cannot be mapped, it is accessible
-     * only by device operations */
-    if (packed->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT) {
-        if (!uct_cuda_ipc_cft_is_enabled()) {
-            status = UCS_ERR_UNREACHABLE;
-            goto err_free_rkey_handle;
-        }
-
-        goto out;
-    }
-
     status = uct_cuda_ctx_primary_push_avail(0, sys_dev, &cuda_device,
                                              &avail_cuda_device,
                                              UCS_LOG_LEVEL_DEBUG);
@@ -643,12 +634,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     if (cuda_device != avail_cuda_device) {
         uct_cuda_ctx_primary_pop_and_release(avail_cuda_device);
     }
-
     if (status != UCS_OK) {
         goto err_free_rkey_handle;
     }
 
-out:
     *handle_p = rkey_handle;
     *rkey_p   = (uintptr_t) unpacked;
     return UCS_OK;
@@ -727,8 +716,8 @@ uct_cuda_ipc_mem_dereg(uct_md_h md, const uct_md_mem_dereg_params_t *params)
             close(key->ph.handle.posix_fd.fd);
         }
 #if HAVE_CUDA_LOGICAL_ENDPOINT
-        if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT) {
-            uct_cuda_ipc_cft_unbind(memh->dev_num, key->ph.handle.cft.offset,
+        if (key->ph.flags & UCT_CUDA_IPC_KEY_FLAG_CFT) {
+            uct_cuda_ipc_cft_unbind(memh->dev_num, key->ph.cft.offset,
                                     key->b_len);
         }
 #endif
@@ -807,39 +796,40 @@ static void uct_cuda_ipc_md_close(uct_md_h md)
     ucs_free(md);
 }
 
+/* Check whether a mem element used on @a cuda_device accesses the memory of
+ * @a rkey through its logical endpoint instead of mapping it */
+static int uct_cuda_ipc_md_mem_elem_use_cft(const uct_cuda_ipc_md_t *md,
+                                            const uct_cuda_ipc_rkey_t *rkey,
+                                            CUdevice cuda_device)
+{
+#if HAVE_CUDA_LOGICAL_ENDPOINT
+    int same_device;
+
+    if (!md->cft_enabled || !(rkey->ph.flags & UCT_CUDA_IPC_KEY_FLAG_CFT) ||
+        (uct_cuda_ipc_rkey_is_on_device(rkey, cuda_device, &same_device) !=
+         UCS_OK)) {
+        return 0;
+    }
+
+    return !same_device || uct_cuda_ipc_cft_owner_access_supported(cuda_device);
+#else
+    return 0;
+#endif
+}
+
 static ucs_status_t
-uct_cuda_ipc_md_mem_elem_pack_cft(const uct_cuda_ipc_md_t *md,
-                                  const uct_cuda_ipc_rkey_t *rkey,
-                                  CUdevice cuda_device,
+uct_cuda_ipc_md_mem_elem_pack_cft(const uct_cuda_ipc_rkey_t *rkey,
                                   uct_cuda_ipc_md_device_mem_element_t *elem)
 {
 #if HAVE_CUDA_LOGICAL_ENDPOINT
     ucs_status_t status;
-    int same_device;
 
-    if (!md->cft_enabled) {
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    status = uct_cuda_ipc_rkey_is_on_device(rkey, cuda_device, &same_device);
+    status = uct_cuda_ipc_cft_import(&rkey->ph.cft.handle, &elem->le_id);
     if (status != UCS_OK) {
         return status;
     }
 
-    /* Fabric operations cannot target memory of the issuing device */
-    if (same_device) {
-        ucs_debug("rkey d_bptr 0x%llx is on the issuing device %d",
-                  rkey->d_bptr, cuda_device);
-        return UCS_ERR_UNREACHABLE;
-    }
-
-    status = uct_cuda_ipc_cft_import(&rkey->ph.handle.cft.handle,
-                                     &elem->le_id);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    elem->le_offset_delta = rkey->ph.handle.cft.offset - rkey->d_bptr;
+    elem->le_offset_delta = rkey->ph.cft.offset - rkey->d_bptr;
     ucs_trace("rkey d_bptr 0x%llx uses logical endpoint %u", rkey->d_bptr,
               elem->le_id);
     return UCS_OK;
@@ -873,9 +863,9 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     }
 
     mapped_addr = NULL;
-    if (key->super.super.ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_CFT) {
-        status = uct_cuda_ipc_md_mem_elem_pack_cft(ipc_md, &key->super.super,
-                                                   cuda_device,
+    if (uct_cuda_ipc_md_mem_elem_use_cft(ipc_md, &key->super.super,
+                                         cuda_device)) {
+        status = uct_cuda_ipc_md_mem_elem_pack_cft(&key->super.super,
                                                    cuda_ipc_md_mem_element);
     } else {
         status = uct_cuda_ipc_map_memhandle(&key->super, cuda_device,
@@ -971,6 +961,8 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
         if ((status != UCS_OK) && (ipc_config->enable_cft == UCS_YES)) {
             ucs_error("CUDA fabric transport support is requested but not "
                       "supported");
+            ucs_free(md);
+            return status;
         }
         md->cft_enabled = (status == UCS_OK);
     } else {

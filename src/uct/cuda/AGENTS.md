@@ -22,6 +22,19 @@ absent.
   / `cuIpcOpenMemHandle`. Includes a per-handle cache (`cuda_ipc_cache.[ch]`)
   to amortize the open/close cost. `cuda_ipc.cuh` is a CUDA-syntax header
   pulled in by callers that need device-side declarations.
+  - `cuda_ipc_cft.[ch]`/`.cuh` — CUDA fabric transport (CFT): VMM memory is
+    also bound to a per-device CUDA logical endpoint (LE), the rkey carries
+    the LE fabric handle and offset next to the IPC handle, and device
+    put/atomic use `fabric.*` PTX operations staged through shared memory.
+    Pitfalls:
+    - The `cuLogicalEndpoint*` driver API is resolved at runtime with
+      `cuGetProcAddress`; never call it directly, so UCX still loads with
+      drivers that lack it.
+    - LE and imported LE state is process-global, shared by all MDs, and
+      released only at process exit.
+    - Fabric operations must not target memory of the issuing GPU (illegal
+      memory access) unless the device reports owner access support, so such
+      mem elements use the mapped path.
 - `gdr_copy/` — GPUDirect RDMA via the gdrcopy library. Maps device memory
   into host VA space for low-latency CPU-driven transfers. Built as its
   own module only when `--with-gdrcopy` is enabled (own `configure.m4`

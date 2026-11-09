@@ -18,6 +18,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/ptr_arith.h>
+#include <ucs/time/time.h>
 
 #include <inttypes.h>
 #include <pthread.h>
@@ -28,6 +29,8 @@
 
 /* Minimal driver version which provides the logical endpoint API */
 #define UCT_CUDA_IPC_CFT_DRIVER_VERSION 13030
+
+#define UCT_CUDA_IPC_CFT_READY_TIMEOUT  10.0
 
 /* Logical endpoint driver functions resolved at runtime */
 #define UCT_CUDA_IPC_CFT_FOREACH_OP(_op) \
@@ -124,17 +127,34 @@ static ucs_status_t uct_cuda_ipc_cft_load_ops(void)
     return UCS_OK;
 }
 
-static int uct_cuda_ipc_cft_device_supported(CUdevice cu_dev)
+static int uct_cuda_ipc_cft_device_attr(CUdevice cu_dev,
+                                        CUdevice_attribute attr)
 {
-    int supported;
+    int value;
 
-    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGetAttribute(
-                &supported, CU_DEVICE_ATTRIBUTE_LOGICAL_ENDPOINT_UNICAST_SUPPORTED,
-                cu_dev)) != UCS_OK) {
+    if (UCT_CUDADRV_FUNC_LOG_DEBUG(cuDeviceGetAttribute(&value, attr,
+                                                        cu_dev)) != UCS_OK) {
         return 0;
     }
 
-    return supported;
+    return value;
+}
+
+static int uct_cuda_ipc_cft_device_supported(CUdevice cu_dev)
+{
+    return uct_cuda_ipc_cft_device_attr(
+            cu_dev, CU_DEVICE_ATTRIBUTE_LOGICAL_ENDPOINT_UNICAST_SUPPORTED);
+}
+
+int uct_cuda_ipc_cft_owner_access_supported(CUdevice cu_dev)
+{
+#if HAVE_DECL_CU_DEVICE_ATTRIBUTE_LOGICAL_ENDPOINT_UNICAST_ACCESS_ON_OWNER_DEVICE_SUPPORTED
+    return uct_cuda_ipc_cft_device_attr(
+            cu_dev,
+            CU_DEVICE_ATTRIBUTE_LOGICAL_ENDPOINT_UNICAST_ACCESS_ON_OWNER_DEVICE_SUPPORTED);
+#else
+    return 0;
+#endif
 }
 
 ucs_status_t uct_cuda_ipc_cft_init(size_t le_size)
@@ -164,15 +184,22 @@ int uct_cuda_ipc_cft_is_enabled(void)
 
 static ucs_status_t uct_cuda_ipc_cft_wait_ready(uint32_t le_id)
 {
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(UCT_CUDA_IPC_CFT_READY_TIMEOUT);
     ucs_status_t status;
     int ready;
 
     do {
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 uct_cuda_ipc_cft.ops.Query(le_id, 1, &ready));
-    } while ((status == UCS_OK) && !ready);
+        if ((status != UCS_OK) || ready) {
+            return status;
+        }
+    } while (ucs_get_time() < deadline);
 
-    return status;
+    ucs_warn("logical endpoint %u is not ready after %.1f seconds", le_id,
+              UCT_CUDA_IPC_CFT_READY_TIMEOUT);
+    return UCS_ERR_TIMED_OUT;
 }
 
 static void uct_cuda_ipc_cft_id_destroy(uint32_t le_id)
