@@ -228,7 +228,7 @@ bool test_ib_md::has_atomic_ksm() const {
 #if HAVE_DEVX
     return has_ksm() &&
            (m_mlx5_flags & UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS) &&
-           ib_md().config.enable_indirect_atomic;
+           (m_mlx5_flags & UCT_IB_MLX5_MD_FLAG_ATOMIC_OFFSET);
 #else
     return false;
 #endif

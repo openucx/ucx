@@ -1992,15 +1992,17 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_rc_mlx5_ep_address_t *rc_addr       = (uct_rc_mlx5_ep_address_t*)addr;
-    uct_ib_md_t *md                         = uct_ib_iface_md(ucs_derived_of(
-                                              tl_ep->iface, uct_ib_iface_t));
+    uct_ib_mlx5_md_t *md                    = uct_ib_mlx5_iface_md(
+                                              &iface->super.super);
     uct_rc_mlx5_ep_ext_address_t *ext_addr;
+    int atomic_offset;
     void *ptr;
 
+    atomic_offset = !!(md->flags & UCT_IB_MLX5_MD_FLAG_ATOMIC_OFFSET);
+
     uct_ib_pack_uint24(rc_addr->super.qp_num, ep->super.tx.wq.super.qp_num);
-    if (uct_rc_iface_flush_rkey_enabled(&iface->super) ||
-        md->config.enable_indirect_atomic) {
-        rc_addr->atomic_mr_id = uct_ib_md_get_atomic_mr_id(md);
+    if (uct_rc_iface_flush_rkey_enabled(&iface->super) || atomic_offset) {
+        rc_addr->atomic_mr_id = uct_ib_md_get_atomic_mr_id(&md->super);
     } else {
         rc_addr->atomic_mr_id = 0;
     }
@@ -2013,8 +2015,8 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
         ext_addr->flags                     = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
         ptr                                 = ext_addr + 1;
-        *ucs_serialize_next(&ptr, uint16_t) = md->flush_rkey >> 16;
-        if (!md->config.enable_indirect_atomic) {
+        *ucs_serialize_next(&ptr, uint16_t) = md->super.flush_rkey >> 16;
+        if (!atomic_offset) {
             ext_addr->flags |= UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET;
         }
     }
