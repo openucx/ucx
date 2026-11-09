@@ -21,7 +21,10 @@ extern "C" {
 class unpacked_address {
 public:
     unpacked_address(ucp_worker_h remote_worker) :
-        address(), m_remote_worker(remote_worker), m_address(NULL)
+        address(),
+        m_remote_worker(remote_worker),
+        m_address(NULL),
+        m_packed_address(NULL)
     {
     }
 
@@ -30,6 +33,7 @@ public:
         if (m_address != NULL) {
             ucp_worker_release_address(m_remote_worker, m_address);
         }
+        ucs_free(m_packed_address);
         ucs_free(address.address_list);
     }
 
@@ -38,7 +42,7 @@ public:
         size_t address_length;
         ucs_status_t status;
 
-        ASSERT_TRUE(m_address == NULL);
+        ASSERT_TRUE((m_address == NULL) && (m_packed_address == NULL));
 
         status = ucp_worker_get_address(m_remote_worker, &m_address,
                                         &address_length);
@@ -60,17 +64,15 @@ public:
         const unsigned flags = ucp_worker_default_address_pack_flags(
                 m_remote_worker);
         size_t address_length;
-        void *buffer;
 
-        ASSERT_TRUE(m_address == NULL);
+        ASSERT_TRUE((m_address == NULL) && (m_packed_address == NULL));
 
         ASSERT_UCS_OK(ucp_address_pack(
                 m_remote_worker, NULL, &tl_bitmap, flags,
                 m_remote_worker->context->config.ext.worker_addr_version, NULL,
-                UINT_MAX, &address_length, &buffer));
-        m_address = static_cast<ucp_address_t*>(buffer);
-        ASSERT_UCS_OK(
-                ucp_address_unpack(local_worker, m_address, flags, &address));
+                UINT_MAX, &address_length, &m_packed_address));
+        ASSERT_UCS_OK(ucp_address_unpack(local_worker, m_packed_address, flags,
+                                         &address));
     }
 
     ucp_unpacked_address_t address;
@@ -80,7 +82,10 @@ private:
     unpacked_address& operator=(const unpacked_address&);
 
     ucp_worker_h m_remote_worker;
+    /* Released by ucp_worker_release_address() */
     ucp_address_t *m_address;
+    /* Packed by ucp_address_pack(), released by ucs_free() */
+    void *m_packed_address;
 };
 
 
