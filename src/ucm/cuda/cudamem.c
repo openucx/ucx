@@ -159,14 +159,8 @@ static void ucm_cuda_dispatch_mem_type_alloc(CUdeviceptr ptr, size_t length,
                                              ucs_memory_type_t mem_type,
                                              uint8_t mem_flags)
 {
-    ucm_event_t event;
-
-    event.mem_type.address   = (void*)ptr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = mem_type;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = mem_flags;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
+    ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_ALLOC, (void*)ptr, length,
+                          mem_type, mem_flags);
 }
 
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
@@ -180,7 +174,6 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
                                        ucs_memory_type_t mem_type,
                                        const char *func_name)
 {
-    ucm_event_t event;
     CUdeviceptr pbase;
     CUresult ret;
 
@@ -202,12 +195,8 @@ static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
         }
     }
 
-    event.mem_type.address   = (void*)ptr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = mem_type;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
+    ucm_dispatch_mem_type(UCM_EVENT_MEM_TYPE_FREE, (void*)ptr, length,
+                          mem_type, UCS_MEM_FLAG_REGISTRABLE);
 }
 
 /* Driver API replacements */
@@ -467,11 +456,9 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
-    event.mem_type.address   = addr;
-    event.mem_type.size      = length;
-    event.mem_type.mem_type  = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    /* unknown memory type */
+    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
+                            UCS_MEM_FLAG_REGISTRABLE);
 
     ucm_event_enter();
     handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);

@@ -77,4 +77,25 @@ ucm_dispatch_vm_munmap(void *addr, size_t length)
     ucm_event_dispatch(UCM_EVENT_VM_UNMAPPED, &event);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucm_event_mem_type_init(ucm_event_t *event, void *addr, size_t length,
+                        ucs_memory_type_t mem_type, uint8_t mem_flags)
+{
+    event->mem_type.address   = addr;
+    event->mem_type.size      = length;
+    event->mem_type.mem_type  = mem_type;
+    event->mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    event->mem_type.mem_flags = mem_flags;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucm_dispatch_mem_type(ucm_event_type_t event_type, void *addr, size_t length,
+                      ucs_memory_type_t mem_type, uint8_t mem_flags)
+{
+    ucm_event_t event;
+
+    ucm_event_mem_type_init(&event, addr, length, mem_type, mem_flags);
+    ucm_event_dispatch(event_type, &event);
+}
+
 #endif
