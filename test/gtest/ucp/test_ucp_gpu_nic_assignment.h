@@ -28,6 +28,12 @@ static const char *gpu_nic_assignment_modes[] = {
     "shared",
 };
 
+/* UCX_GPU_NIC_ASSIGNMENT_GROUP_BY values that set explicit grouping criteria */
+static const char *gpu_nic_assignment_group_by[] = {
+    "numa",
+    "pci_switch",
+};
+
 /* Helpers for tests that move GPU memory with a gpu-nic assignment */
 class gpu_nic_assignment_checks {
 protected:

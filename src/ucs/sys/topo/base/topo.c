@@ -1376,9 +1376,9 @@ static unsigned
 ucs_topo_get_common_pci_bridge_depth(ucs_sys_device_t sys_dev1,
                                      ucs_sys_device_t sys_dev2)
 {
-    char *path1, *path2, *common_path;
     unsigned depth = 0;
     int count      = -1;
+    char *path1, *path2, *common_path;
 
     if (ucs_topo_get_common_path(sys_dev1, sys_dev2, &path1, &path2,
                                  &common_path) != UCS_OK) {

@@ -323,13 +323,10 @@ class test_ucp_tag_mem_type_gpu_nic :
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        size_t mode;
-
-        for (mode = 0; mode < ucs_static_array_size(gpu_nic_assignment_modes);
-             ++mode) {
-            add_variant_with_value(variants, get_ctx_params(), mode,
-                                   gpu_nic_assignment_modes[mode]);
-        }
+        add_variant_values(variants, get_mode_variants,
+                           UCS_MASK(ucs_static_array_size(
+                                   gpu_nic_assignment_group_by)),
+                           gpu_nic_assignment_group_by);
     }
 
     virtual void init() override
@@ -343,7 +340,9 @@ public:
         m_recv_mem_type = UCS_MEMORY_TYPE_CUDA;
 
         modify_config("GPU_NIC_ASSIGNMENT_MODE",
-                      gpu_nic_assignment_modes[get_variant_value()]);
+                      gpu_nic_assignment_modes[get_variant_value(0)]);
+        modify_config("GPU_NIC_ASSIGNMENT_GROUP_BY",
+                      gpu_nic_assignment_group_by[get_variant_value(1)]);
         /* Enough lanes to use every NIC assigned to a GPU */
         modify_config("MAX_EAGER_LANES", "4");
         modify_config("MAX_RNDV_LANES", "8");
@@ -353,6 +352,17 @@ public:
     }
 
 protected:
+    static void get_mode_variants(std::vector<ucp_test_variant> &variants)
+    {
+        size_t mode;
+
+        for (mode = 0; mode < ucs_static_array_size(gpu_nic_assignment_modes);
+             ++mode) {
+            add_variant_with_value(variants, get_ctx_params(), mode,
+                                   gpu_nic_assignment_modes[mode]);
+        }
+    }
+
     void test_xfer_sizes(const std::vector<size_t> &sizes)
     {
         if (!is_buffer_gpu_assigned(sender().ucph())) {
