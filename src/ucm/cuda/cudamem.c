@@ -442,7 +442,7 @@ static ucs_status_t ucm_cudamem_install(int events)
 
 out_unlock:
     if (status != UCS_OK) {
-        ucm_diag("failed to install cuda hooks: %s", ucs_status_string(status));
+        ucm_diag("failed to install cuda hooks: status %d", status);
     }
     pthread_mutex_unlock(&install_mutex);
 out:
