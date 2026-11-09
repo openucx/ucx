@@ -396,7 +396,7 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
             }
 
             uct_cuda_ipc_remote_mapping_t remote_mapping;
-            uct_cuda_ipc_remote_mapping_init(&remote_mapping, unpacked,
+            uct_cuda_ipc_remote_mapping_init(&remote_mapping, &unpacked->super,
                                              mapped_addr);
             uct_cuda_ipc_unmap_memhandle(&remote_mapping, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));

@@ -216,8 +216,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     cuda_ipc_event->super.comp  = comp;
     cuda_ipc_event->cuda_device = cuda_device;
     cuda_ipc_event->sgl_mapping = NULL;
-    uct_cuda_ipc_remote_mapping_init(&cuda_ipc_event->remote_mapping, key,
-                                     mapped_addr);
+    uct_cuda_ipc_remote_mapping_init(&cuda_ipc_event->remote_mapping,
+                                     &key->super, mapped_addr);
     ucs_trace("cuMemcpyDtoDAsync issued :%p dst:%p, src:%p  len:%ld",
              cuda_ipc_event, (void *) dst, (void *) src, iov[0].length);
     status = UCS_INPROGRESS;
@@ -367,8 +367,8 @@ uct_cuda_ipc_post_cuda_sgl_async_copy(uct_ep_h tl_ep, void * const *buffers,
             goto out_unmap;
         }
 
-        uct_cuda_ipc_remote_mapping_init(&mapping->entries[mapping->count], key,
-                                         mapped_addr);
+        uct_cuda_ipc_remote_mapping_init(&mapping->entries[mapping->count],
+                                         &key->super, mapped_addr);
         local_addrs[mapping->count]  = (CUdeviceptr)local_addr;
         buffer_addrs[mapping->count] = (CUdeviceptr)buffers[i];
         copy_lengths[mapping->count] = lengths[i];

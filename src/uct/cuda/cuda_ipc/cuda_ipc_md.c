@@ -644,7 +644,7 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
     }
 
     uct_cuda_ipc_remote_mapping_init(&remote_mapping,
-                                     (uct_cuda_ipc_unpacked_rkey_t*)uct_rkey,
+                                     (uct_cuda_ipc_extended_rkey_t*)uct_rkey,
                                      rkey_handle->mapped_addr);
     uct_cuda_ipc_unmap_memhandle(&remote_mapping, rkey_handle->cu_dev,
                                  uct_cuda_ipc_component.enable_remote_cache &&
@@ -811,8 +811,8 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     cuda_ipc_md_mem_element->mapped_offset =
             UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
 
-    uct_cuda_ipc_remote_mapping_init(&release_handle->remote_mapping, key,
-                                     mapped_addr);
+    uct_cuda_ipc_remote_mapping_init(&release_handle->remote_mapping,
+                                     &key->super, mapped_addr);
     release_handle->cu_dev = cuda_device;
     *release_handle_p      = release_handle;
 
