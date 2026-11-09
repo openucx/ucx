@@ -36,7 +36,10 @@ typedef struct ucp_device_request {
  */
 typedef enum {
     UCP_DEVICE_FLAG_NODELAY =
-            UCT_DEVICE_FLAG_NODELAY /**< Complete before return. */
+            UCT_DEVICE_FLAG_NODELAY, /**< Complete before return. */
+    UCP_DEVICE_FLAG_NO_DB   =
+            UCT_DEVICE_FLAG_NO_DB /**< Post without ringing the doorbell; it is
+                                       rung by an explicit PUSH */
 } ucp_device_flags_t;
 
 
