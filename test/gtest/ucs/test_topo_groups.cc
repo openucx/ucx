@@ -505,13 +505,19 @@ UCS_TEST_F(test_topo_groups, pci_switch_group_without_nics) {
             "gpu1", UCS_TOPO_DEVICE_CLASS_ACC, std::vector<int>{0, 1});
     const ucs_sys_device_t nic0 = add_switch_device(
             "nic0", UCS_TOPO_DEVICE_CLASS_NET, std::vector<int>{0, 1});
+    const ucs_sys_device_t lonely_gpu = add_switch_device(
+            "lonely_gpu", UCS_TOPO_DEVICE_CLASS_ACC, 2);
+    std::vector<physical_device> unmatched_gpus = {{gpu0}, {lonely_gpu}};
+
+    sort_devices(unmatched_gpus);
 
     /* gpu0 decided switch 0, but its only NIC joins gpu1 below the deeper
-     * switch 1, so gpu0 is grouped by its NUMA node */
+     * switch 1, so gpu0 is grouped by its NUMA node, in bus id order with
+     * the GPU sharing no PCIe switch with any NIC */
     ASSERT_UCS_OK(build_by_pci_switch());
     ASSERT_EQ(2, ucs_array_length(&m_groups));
     expect_group(ucs_array_elem(&m_groups, 0), {{gpu1}}, {{nic0}});
-    expect_group(ucs_array_elem(&m_groups, 1), {{gpu0}}, {});
+    expect_group(ucs_array_elem(&m_groups, 1), unmatched_gpus, {});
 }
 
 UCS_TEST_F(test_topo_groups, pci_switch_unmatched_devices) {
