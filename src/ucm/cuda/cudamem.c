@@ -75,9 +75,8 @@
         if (ret == CUDA_SUCCESS) { \
             ucm_trace("%s(size_ptr=%p, obj=%p, name=%s) returned dptr=%p", \
                       __func__, bytes, obj, name, (void*)(*dptr)); \
-            ucm_cuda_dispatch_mem_type_alloc(*dptr, *size_ptr, \
-                                             UCS_MEMORY_TYPE_CUDA_MANAGED, \
-                                             0); \
+            ucm_dispatch_mem_type_alloc((void*)*dptr, *size_ptr, \
+                                        UCS_MEMORY_TYPE_CUDA_MANAGED, 0); \
         } \
         ucm_event_leave(); \
         return ret; \
@@ -152,18 +151,11 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocPitch, cudaError_t, -1, void**,
 UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaGetSymbolAddress, cudaError_t, -1, void**,
                                   const void*)
 
-static void ucm_cuda_dispatch_mem_type_alloc(CUdeviceptr ptr, size_t length,
-                                             ucs_memory_type_t mem_type,
-                                             uint8_t mem_flags)
-{
-    ucm_dispatch_mem_type_alloc((void*)ptr, length, mem_type, mem_flags);
-}
-
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
 {
     /* Indicate unknown type and let cuda_md detect attributes. */
-    ucm_cuda_dispatch_mem_type_alloc(ptr, length, UCS_MEMORY_TYPE_LAST,
-                                     UCS_MEM_FLAG_REGISTRABLE);
+    ucm_dispatch_mem_type_alloc((void*)ptr, length, UCS_MEMORY_TYPE_LAST,
+                                UCS_MEM_FLAG_REGISTRABLE);
 }
 
 static void ucm_cuda_dispatch_mem_free(CUdeviceptr ptr, size_t length,
@@ -284,9 +276,8 @@ cudaError_t ucm_cudaGetSymbolAddress(void **devPtr, const void *symbol)
     ret = ucm_orig_cudaGetSymbolAddress(devPtr, symbol);
     if (ret == cudaSuccess) {
         ucm_trace("%s(symbol=%p) allocated %p", __func__, symbol, *devPtr);
-        ucm_cuda_dispatch_mem_type_alloc((CUdeviceptr)*devPtr,
-                                         ucm_cuda_get_symbol_size(symbol),
-                                         UCS_MEMORY_TYPE_CUDA_MANAGED, 0);
+        ucm_dispatch_mem_type_alloc(*devPtr, ucm_cuda_get_symbol_size(symbol),
+                                    UCS_MEMORY_TYPE_CUDA_MANAGED, 0);
     }
     ucm_event_leave();
     return ret;
