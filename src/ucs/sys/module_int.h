@@ -14,13 +14,6 @@
 #include <string.h>
 
 
-#ifdef UCX_MODULE_FILE_SUFFIX
-#  define UCS_MODULE_FILE_SUFFIX UCX_MODULE_FILE_SUFFIX
-#else
-#  define UCS_MODULE_FILE_SUFFIX ""
-#endif
-
-
 static inline void ucs_module_normalize_base(char *base, const char *prefix)
 {
 #ifdef UCX_MODULE_FILE_SUFFIX
