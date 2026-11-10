@@ -262,7 +262,7 @@ uct_cuda_ipc_mem_export_fabric_mempool(const void *addr,
 
     status = UCT_CUDADRV_FUNC(cuMemPoolExportToShareableHandle(
             (void*)&key->ph.handle.fabric_handle, mempool,
-            CU_MEM_HANDLE_TYPE_FABRIC, 0), UCS_LOG_LEVEL_DEBUG);
+            CU_MEM_HANDLE_TYPE_FABRIC, 0), UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         ucs_debug("unable to export handle for mempool ptr: %p", addr);
         return UCS_ERR_UNSUPPORTED;
@@ -292,7 +292,7 @@ static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
         status = UCT_CUDADRV_FUNC(
                 cuMemExportToShareableHandle(&key->ph.handle.fabric_handle,
                                              handle, CU_MEM_HANDLE_TYPE_FABRIC,
-                                             0), UCS_LOG_LEVEL_DEBUG);
+                                             0), UCS_LOG_LEVEL_DIAG);
         UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
         if (status != UCS_OK) {
             ucs_debug("unable to export handle for VMM ptr: %p", addr);
