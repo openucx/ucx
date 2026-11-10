@@ -227,19 +227,19 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
     CUmemGenericAllocationHandle alloc_handle;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
-            cuMemRetainAllocationHandle(&alloc_handle, addr));
+    status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&alloc_handle, addr),
+                              UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
         ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
         return status;
     }
 
-    status = UCT_CUDADRV_FUNC_LOG_DIAG(cuMemExportToShareableHandle(
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemExportToShareableHandle(
             &key->ph.handle.posix_fd.fd, alloc_handle,
             CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR, 0));
     UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(alloc_handle));
     if (status != UCS_OK) {
-        ucs_diag("unable to export POSIX FD handle for ptr: %p", addr);
+        ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
         return status;
     }
 
@@ -260,11 +260,11 @@ uct_cuda_ipc_mem_export_fabric_mempool(const void *addr,
 {
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_DIAG(cuMemPoolExportToShareableHandle(
+    status = UCT_CUDADRV_FUNC(cuMemPoolExportToShareableHandle(
             (void*)&key->ph.handle.fabric_handle, mempool,
-            CU_MEM_HANDLE_TYPE_FABRIC, 0));
+            CU_MEM_HANDLE_TYPE_FABRIC, 0), UCS_LOG_LEVEL_DIAG);
     if (status != UCS_OK) {
-        ucs_diag("unable to export handle for mempool ptr: %p", addr);
+        ucs_debug("unable to export handle for mempool ptr: %p", addr);
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -286,16 +286,16 @@ static ucs_status_t uct_cuda_ipc_mem_export_fabric(void *addr,
     CUmemGenericAllocationHandle handle;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_DIAG(
-            cuMemRetainAllocationHandle(&handle, addr));
+    status = UCT_CUDADRV_FUNC(cuMemRetainAllocationHandle(&handle, addr),
+                              UCS_LOG_LEVEL_DIAG);
     if (status == UCS_OK) {
-        status = UCT_CUDADRV_FUNC_LOG_DIAG(
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuMemExportToShareableHandle(&key->ph.handle.fabric_handle,
                                              handle, CU_MEM_HANDLE_TYPE_FABRIC,
                                              0));
         UCT_CUDADRV_FUNC_LOG_WARN(cuMemRelease(handle));
         if (status != UCS_OK) {
-            ucs_diag("unable to export handle for VMM ptr: %p", addr);
+            ucs_debug("unable to export handle for VMM ptr: %p", addr);
             return UCS_ERR_UNSUPPORTED;
         }
 

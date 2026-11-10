@@ -366,30 +366,29 @@ out:
 static ucs_status_t cuda_ipc_rem_mpool_cache_create(uct_cuda_ipc_rkey_t *key,
                                                     CUdevice cu_dev,
                                                     CUmemoryPool *mpool,
-                                                    CUdeviceptr *mapped_addr,
-                                                    ucs_log_level_t log_level)
+                                                    CUdeviceptr *mapped_addr)
 {
     CUmemAccessDesc access_desc = {};
     CUdeviceptr dptr;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC(cuMemPoolImportFromShareableHandle(
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportFromShareableHandle(
                 mpool, (void *)&key->ph.handle.fabric_handle,
-                CU_MEM_HANDLE_TYPE_FABRIC, 0), log_level);
+                CU_MEM_HANDLE_TYPE_FABRIC, 0));
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = UCT_CUDADRV_FUNC(cuMemPoolImportPointer(&dptr, *mpool,
-                (CUmemPoolPtrExportData*)&key->ph.ptr), log_level);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemPoolImportPointer(&dptr, *mpool,
+                (CUmemPoolPtrExportData*)&key->ph.ptr));
     if (status != UCS_OK) {
         goto err_free_mpool;
     }
 
     uct_cuda_ipc_init_access_desc(&access_desc, cu_dev);
 
-    status = UCT_CUDADRV_FUNC(cuMemPoolSetAccess(*mpool, &access_desc, 1),
-                              log_level);
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuMemPoolSetAccess(*mpool, &access_desc, 1));
     if (status != UCS_OK) {
         goto err_free_ptr;
     }
@@ -433,7 +432,7 @@ uct_cuda_ipc_open_memhandle_mempool(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
         status = cuda_ipc_rem_mpool_cache_create(key, cu_dev, &mpool,
-                                                 mapped_addr, log_level);
+                                                 mapped_addr);
         if (status != UCS_OK) {
             /* Remove stale key from the hash if failed to construct new value.
              * Otherwise next lookup will return NULL value. */
