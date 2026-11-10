@@ -35,6 +35,9 @@
 
 #define UCT_CUDA_IPC_CFT_ALIGN 16
 
+/* Maximal tx-count of an mbarrier phase, in 16-byte blocks */
+#define UCT_CUDA_IPC_CFT_MAX_TX_COUNT ((1u << 20) - 1)
+
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000) && \
     ((__CUDACC_VER_MAJOR__ * 100 + __CUDACC_VER_MINOR__) >= 1303) && \
     (UCT_CUDA_IPC_CFT_STAGE_SIZE > 0)
@@ -169,19 +172,26 @@ uct_cuda_ipc_cft_red_add_u64(uint32_t le_id, uint64_t le_offset,
 }
 
 
-/* Submit the staged operations of @a num_blocks 16-byte blocks and wait for
- * their completion */
-UCS_F_DEVICE ucs_status_t uct_cuda_ipc_cft_submit_wait(
-        uct_cuda_ipc_cft_slot_t &slot, uint32_t num_blocks)
+/* Submit the issued operations of @a num_blocks 16-byte blocks, and make the
+ * current mbarrier phase track their completion */
+UCS_F_DEVICE void
+uct_cuda_ipc_cft_submit(const uct_cuda_ipc_cft_slot_t &slot, uint32_t num_blocks)
 {
-    int ready, has_report = 0;
-    uint32_t report       = 0;
-
     asm volatile("fabric.submit;" ::: "memory");
     asm volatile("mbarrier.expect_tx.relaxed.cta.shared::cta.b64 [%0], %1;"
                  :
                  : "r"(slot.bar), "r"(num_blocks)
                  : "memory");
+}
+
+
+/* Wait for the completion of all operations submitted in the current mbarrier
+ * phase */
+UCS_F_DEVICE ucs_status_t uct_cuda_ipc_cft_wait(uct_cuda_ipc_cft_slot_t &slot)
+{
+    int ready, has_report = 0;
+    uint32_t report       = 0;
+
     asm volatile("mbarrier.arrive.relaxed.cta.shared::cta.b64 _, [%0], 1;"
                  :
                  : "r"(slot.bar)
@@ -213,10 +223,11 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_cft_submit_wait(
 
 
 /* Write a staged chunk which starts @a shift bytes into a 16-byte aligned
- * logical endpoint block, masking partial head and tail blocks */
-UCS_F_DEVICE ucs_status_t
+ * logical endpoint block, masking partial head and tail blocks. Returns when
+ * the fabric has read the staging buffer, without waiting for completion. */
+UCS_F_DEVICE void
 uct_cuda_ipc_cft_put_chunk(uint32_t le_id, uint64_t le_offset, uint32_t shift,
-                           uint32_t length, uct_cuda_ipc_cft_slot_t &slot)
+                           uint32_t length, const uct_cuda_ipc_cft_slot_t &slot)
 {
     const uint32_t end    = shift + length;
     const uint32_t total  = (end + UCT_CUDA_IPC_CFT_ALIGN - 1) &
@@ -232,7 +243,7 @@ uct_cuda_ipc_cft_put_chunk(uint32_t le_id, uint64_t le_offset, uint32_t shift,
         uct_cuda_ipc_cft_put_masked(le_id, le_offset, slot.buf,
                                     head_mask & (tail ? tail_mask : 0xffff),
                                     slot);
-        return uct_cuda_ipc_cft_submit_wait(slot, 1);
+        goto out;
     }
 
     body_start = 0;
@@ -254,7 +265,10 @@ uct_cuda_ipc_cft_put_chunk(uint32_t le_id, uint64_t le_offset, uint32_t shift,
                                    body_end - body_start, slot);
     }
 
-    return uct_cuda_ipc_cft_submit_wait(slot, total / UCT_CUDA_IPC_CFT_ALIGN);
+out:
+    uct_cuda_ipc_cft_submit(slot, total / UCT_CUDA_IPC_CFT_ALIGN);
+    /* Wait only for the fabric to read the staging buffer, for reuse */
+    asm volatile("fabric.wait.sync_restrict::reads;" ::: "memory");
 }
 
 
@@ -314,7 +328,9 @@ uct_cuda_ipc_cft_put_level(uint32_t le_id, uint64_t le_offset,
 {
     uct_cuda_ipc_cft_slot_t slot = uct_cuda_ipc_cft_slot<level>();
     const uint8_t *src           = static_cast<const uint8_t*>(address);
+    const uint32_t max_blocks    = slot.size / UCT_CUDA_IPC_CFT_ALIGN;
     ucs_status_t status          = UCS_OK;
+    uint32_t pending             = 0; /* Blocks in the current phase */
     unsigned lane_id, num_lanes;
     uint32_t shift, chunk;
     size_t done;
@@ -334,13 +350,26 @@ uct_cuda_ipc_cft_put_level(uint32_t le_id, uint64_t le_offset,
         uct_cuda_ipc_level_sync<level>();
 
         if ((lane_id == 0) && (status == UCS_OK)) {
-            status = uct_cuda_ipc_cft_put_chunk(le_id, le_offset + done - shift,
-                                                shift, chunk, slot);
+            /* Keep the tx-count of the mbarrier phase in range */
+            if ((pending + max_blocks) > UCT_CUDA_IPC_CFT_MAX_TX_COUNT) {
+                status  = uct_cuda_ipc_cft_wait(slot);
+                pending = 0;
+            }
+
+            if (status == UCS_OK) {
+                uct_cuda_ipc_cft_put_chunk(le_id, le_offset + done - shift,
+                                           shift, chunk, slot);
+                pending += (shift + chunk + UCT_CUDA_IPC_CFT_ALIGN - 1) /
+                           UCT_CUDA_IPC_CFT_ALIGN;
+            }
         }
         uct_cuda_ipc_level_sync<level>();
     }
 
     if (lane_id == 0) {
+        if (pending > 0) {
+            status = uct_cuda_ipc_cft_wait(slot);
+        }
         uct_cuda_ipc_cft_bar_inval(slot);
     }
 
@@ -368,7 +397,8 @@ UCS_F_DEVICE ucs_status_t uct_cuda_ipc_cft_atomic_add_thread(
     uct_cuda_ipc_cft_bar_init(slot);
     asm volatile("fence.proxy.async.shared::cta;" ::: "memory");
     uct_cuda_ipc_cft_red_add_u64(le_id, block_offset, payload, slot);
-    status = uct_cuda_ipc_cft_submit_wait(slot, 1);
+    uct_cuda_ipc_cft_submit(slot, 1);
+    status = uct_cuda_ipc_cft_wait(slot);
     uct_cuda_ipc_cft_bar_inval(slot);
     return status;
 }
