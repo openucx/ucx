@@ -596,12 +596,17 @@ static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
 static void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
                                             const char *path_pattern)
 {
-    ucm_existing_mem_type_ctx_t ctx = {handler, path_pattern,
-                                       strlen(path_pattern)};
+    ucm_existing_mem_type_ctx_t ctx;
 
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_existing_mem_type_scan_cb, &ctx);
+    if ((path_pattern == NULL) ||
+        !(handler->events & UCM_EVENT_MEM_TYPE_ALLOC)) {
+        return;
     }
+
+    ctx.handler      = handler;
+    ctx.path_pattern = path_pattern;
+    ctx.path_len     = strlen(path_pattern);
+    ucm_parse_proc_self_maps(ucm_existing_mem_type_scan_cb, &ctx);
 }
 
 ucs_status_t ucm_set_event_handler(int events, int priority,

@@ -154,7 +154,7 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaGetSymbolAddress, cudaError_t, -1, void**,
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length)
 {
     /* Indicate unknown type and let cuda_md detect attributes. */
-    ucm_dispatch_mem_type_alloc((void*)ptr, length, UCS_MEMORY_TYPE_LAST,
+    ucm_dispatch_mem_type_alloc((void*)ptr, length, UCS_MEMORY_TYPE_UNKNOWN,
                                 UCS_MEM_FLAG_REGISTRABLE);
 }
 
