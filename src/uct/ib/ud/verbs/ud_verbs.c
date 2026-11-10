@@ -31,6 +31,7 @@
 #include <uct/ib/ud/base/ud_inl.h>
 
 
+/* Includes 50 ns calibration for UD/DC selection in hybrid Alltoallv. */
 #define UCT_UD_VERBS_IFACE_OVERHEAD 155e-9
 
 

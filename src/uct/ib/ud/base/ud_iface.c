@@ -678,12 +678,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
     {"IFACE_OVERHEAD", "0",
      "Estimated software overhead per operation for the interface and receive\n"
-     "performance estimates. Defaults include an empirical 50 ns calibration:\n"
-     "previous estimates could favor UD over DC despite slower completion\n"
-     "observed with UCC hybrid Alltoallv on Funk. This calibrates transport\n"
-     "selection; this is not an isolated ACK/retransmission measurement.\n"
-     "Tune for scale, hardware and communication pattern in use. Send-side\n"
-     "estimates are configured separately with SEND_OVERHEAD.",
+     "performance estimates.",
      ucs_offsetof(uct_ud_iface_config_t, iface_overhead), UCS_CONFIG_TYPE_TIME},
 
     {"LINGER_TIMEOUT", "5.0m",
