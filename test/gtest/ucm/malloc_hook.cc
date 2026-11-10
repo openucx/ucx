@@ -1122,6 +1122,23 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
 #endif
 }
 
+UCS_TEST_SKIP_COND_F(malloc_hook, calloc_overflow,
+                     skip_on_bistro_without_valgrind()) {
+    /* volatile - prevent the compiler from folding the call */
+    volatile size_t nmemb = (SIZE_MAX / 2) + 2;
+    volatile size_t size  = 2; /* nmemb * size wraps around to 2 */
+    mmap_event<malloc_hook> event(this);
+    void *ptr;
+
+    ASSERT_UCS_OK(event.set(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED));
+
+    errno = 0;
+    ptr   = calloc(nmemb, size);
+    EXPECT_EQ((void*)NULL, ptr);
+    EXPECT_EQ(ENOMEM, errno);
+    free(ptr);
+}
+
 UCS_TEST_SKIP_COND_F(malloc_hook, test_event, RUNNING_ON_VALGRIND) {
     mmap_event<malloc_hook> event(this);
     ucs_status_t status;
