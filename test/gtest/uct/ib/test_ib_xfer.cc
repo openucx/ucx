@@ -79,7 +79,7 @@ constexpr size_t uct_p2p_rma_test_atomic_key::NUM_WORDS;
 /* The mlx5 memory domain without DevX has no indirect atomic keys, and weak
  * fence mode makes a fence take effect on any device */
 UCS_TEST_P(uct_p2p_rma_test_atomic_key, fence_put_no_devx, "RC_FENCE=weak",
-           "IB_MLX5_DEVX?=n") {
+           "IB_MLX5_DEVX?=n", "IB_PCI_RELAXED_ORDERING?=try") {
     if (check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
         test_fence_put(static_cast<send_func_t>(&uct_p2p_rma_test::put_short));
     }
