@@ -70,7 +70,8 @@ test_cuda_ipc_overlap_SOURCES  = test_cuda_ipc_overlap.c
 test_cuda_ipc_overlap_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 test_cuda_ipc_overlap_CFLAGS   = $(BASE_CFLAGS)
 test_cuda_ipc_overlap_LDFLAGS  = $(CUDA_LDFLAGS)
-test_cuda_ipc_overlap_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la
+test_cuda_ipc_overlap_LDADD    = $(CUDA_LIBS) $(top_builddir)/src/ucs/libucs.la \
+                                $(top_builddir)/src/uct/libuct.la
 
 test_rma_cuda_SOURCES  = test_rma_cuda.c
 test_rma_cuda_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)

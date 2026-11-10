@@ -9,27 +9,89 @@
 #endif
 
 #include "test_cuda_check_def.h"
+#include "test_ucx_check_def.h"
 
 #include <ucs/debug/log_def.h>
+#include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* Run on one node with two GPUs, a logging-enabled UCX build, and an MPI
- * configured to use that build. For Open MPI:
- * OMPI_MCA_pml=ucx OMPI_MCA_pml_ucx_tls=any \
- * UCX_TLS=sm,self,cuda_copy,cuda_ipc UCX_RNDV_THRESH=1 \
- * UCX_RNDV_SCHEME=get_zcopy UCX_LOG_LEVEL=trace \
- * mpirun -np 2 ./test_cuda_ipc_overlap
- * Exit 77 means that the GPU/allocator/transport prerequisites were not met. */
+/* Run on one node with two GPUs and UCX_LOG_LEVEL=warn. MPI exchanges only
+ * host-side metadata; GPU data is accessed through the cuda_ipc MD so an MPI
+ * transport fallback cannot bypass the cache being tested. Exit 77 means
+ * that a GPU/allocator/component prerequisite was not met. */
 
 #define BLOCK_SIZE 32768
 #define ITERATIONS 30
 
-static unsigned import_errors;
-static unsigned imported_regions;
+typedef struct {
+    uct_component_h component;
+    uct_md_h        md;
+    void            *rkey_buffer;
+    size_t          rkey_size;
+} ipc_context_t;
+
+static unsigned errors_and_warnings;
+
+static int open_ipc(ipc_context_t *ipc)
+{
+    uct_component_h *components;
+    uct_component_attr_t attr;
+    uct_md_config_t *config;
+    uct_md_attr_t md_attr;
+    unsigned count, i;
+
+    UCX_CHECK(uct_query_components(&components, &count));
+    for (i = 0; i < count; ++i) {
+        attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
+        UCX_CHECK(uct_component_query(components[i], &attr));
+        if (strcmp(attr.name, "cuda_ipc") == 0) {
+            ipc->component = components[i];
+            break;
+        }
+    }
+
+    uct_release_component_list(components);
+    if (ipc->component == NULL) {
+        return 0;
+    }
+
+    attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+    UCX_CHECK(uct_component_query(ipc->component, &attr));
+    if (attr.md_resource_count == 0) {
+        return 0;
+    }
+
+    attr.md_resources = calloc(attr.md_resource_count,
+                               sizeof(*attr.md_resources));
+    if (attr.md_resources == NULL) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+    UCX_CHECK(uct_component_query(ipc->component, &attr));
+    UCX_CHECK(uct_md_config_read(ipc->component, NULL, NULL, &config));
+    UCX_CHECK(uct_config_modify(config, "CUDA_IPC_CACHE", "y"));
+    UCX_CHECK(uct_config_modify(config, "CUDA_IPC_CACHE_MAX_REGIONS", "inf"));
+    UCX_CHECK(uct_config_modify(config, "CUDA_IPC_CACHE_MAX_SIZE", "inf"));
+    UCX_CHECK(uct_md_open(ipc->component, attr.md_resources[0].md_name,
+                          config, &ipc->md));
+    uct_config_release(config);
+    free(attr.md_resources);
+
+    UCX_CHECK(uct_md_query(ipc->md, &md_attr));
+    ipc->rkey_size   = md_attr.rkey_packed_size;
+    ipc->rkey_buffer = malloc(ipc->rkey_size);
+    if (ipc->rkey_buffer == NULL) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    return 1;
+}
 
 static int check_ipc(int rank, CUdeviceptr ptr)
 {
@@ -65,34 +127,42 @@ static int check_ipc(int rank, CUdeviceptr ptr)
 }
 
 static ucs_log_func_rc_t
-count_import_errors(const char *file, unsigned line, const char *function,
-                    ucs_log_level_t level,
-                    const ucs_log_component_config_t *comp, const char *format,
-                    va_list ap)
+count_errors_and_warnings(const char *file, unsigned line, const char *function,
+                         ucs_log_level_t level,
+                         const ucs_log_component_config_t *comp,
+                         const char *format, va_list ap)
 {
-    if (strstr(format, "cuIpcOpenMemHandle() failed") != NULL) {
-        ++import_errors;
-    }
-
-    if (strstr(format, "cuda_ipc cache new region:") != NULL) {
-        ++imported_regions;
+    if ((level == UCS_LOG_LEVEL_ERROR) || (level == UCS_LOG_LEVEL_WARN)) {
+        ++errors_and_warnings;
     }
 
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
-static void transfer(int rank, CUdeviceptr send, CUdeviceptr recv, size_t size,
-                     unsigned char value, unsigned char *host)
+static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
+                     CUdeviceptr recv, size_t size, unsigned char value,
+                     unsigned char *host)
 {
+    uct_md_mkey_pack_params_t pack_params = {0};
+    uct_mem_h memh;
+    uct_rkey_bundle_t rkey;
+    void *mapped;
     size_t i;
 
     if (rank == 0) {
         CUDA_CHECK(cuMemsetD8(send, value, size));
         CUDA_CHECK(cuCtxSynchronize());
-        MPI_Send((void*)send, size, MPI_BYTE, 1, 0, MPI_COMM_WORLD);
-    } else {
-        MPI_Recv((void*)recv, size, MPI_BYTE, 0, 0, MPI_COMM_WORLD,
-                 MPI_STATUS_IGNORE);
+        UCX_CHECK(uct_md_mem_reg(ipc->md, (void*)send, size, 0, &memh));
+        UCX_CHECK(uct_md_mkey_pack_v2(ipc->md, memh, (void*)send, size,
+                                      &pack_params, ipc->rkey_buffer));
+    }
+
+    MPI_Bcast(&send, sizeof(send), MPI_BYTE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(ipc->rkey_buffer, ipc->rkey_size, MPI_BYTE, 0, MPI_COMM_WORLD);
+    if (rank == 1) {
+        UCX_CHECK(uct_rkey_unpack(ipc->component, ipc->rkey_buffer, &rkey));
+        UCX_CHECK(uct_rkey_ptr(ipc->component, &rkey, send, &mapped));
+        CUDA_CHECK(cuMemcpyDtoD(recv, (CUdeviceptr)mapped, size));
         CUDA_CHECK(cuMemcpyDtoH(host, recv, size));
         for (i = 0; i < size; ++i) {
             if (host[i] != value) {
@@ -101,15 +171,20 @@ static void transfer(int rank, CUdeviceptr send, CUdeviceptr recv, size_t size,
                 MPI_Abort(MPI_COMM_WORLD, 1);
             }
         }
+        UCX_CHECK(uct_rkey_release(ipc->component, &rkey));
     }
 
     /* The sender must not free an allocation until its receiver is done. */
     MPI_Barrier(MPI_COMM_WORLD);
+    if (rank == 0) {
+        UCX_CHECK(uct_md_mem_dereg(ipc->md, memh));
+    }
 }
 
 int main(int argc, char **argv)
 {
-    unsigned overlaps = 0, total_overlaps, total_errors, total_regions;
+    ipc_context_t ipc = {0};
+    unsigned overlaps = 0, total_overlaps, total_errors;
     CUdeviceptr lower = 0, old = 0, upper = 0, replacement = 0, recv;
     CUuuid uuid, uuids[2];
     CUdevice device;
@@ -129,8 +204,8 @@ int main(int argc, char **argv)
         return 77;
     }
 
-    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
-        printf("SKIP: requires logging support and UCX_LOG_LEVEL=trace\n");
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_WARN)) {
+        printf("SKIP: requires UCX_LOG_LEVEL=warn or more verbose\n");
         MPI_Finalize();
         return 77;
     }
@@ -182,7 +257,16 @@ int main(int argc, char **argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    ucs_log_push_handler(count_import_errors);
+    available = open_ipc(&ipc);
+    MPI_Allreduce(&available, &all_available, 1, MPI_INT, MPI_MIN,
+                  MPI_COMM_WORLD);
+    if (!all_available) {
+        printf("SKIP: a rank has no cuda_ipc memory domain\n");
+        ret = 77;
+        goto out_free_ipc;
+    }
+
+    ucs_log_push_handler(count_errors_and_warnings);
 
     for (iteration = 0; iteration < ITERATIONS; ++iteration) {
         if (rank == 0) {
@@ -191,27 +275,7 @@ int main(int argc, char **argv)
             CUDA_CHECK(cuMemAlloc(&upper, BLOCK_SIZE));
         }
 
-        transfer(rank, old, recv, BLOCK_SIZE, iteration + 1, host);
-        if (iteration == 0) {
-            /* Check transport selection before recycling any allocation. */
-            MPI_Allreduce(&imported_regions, &total_regions, 1, MPI_UNSIGNED,
-                          MPI_SUM, MPI_COMM_WORLD);
-            MPI_Allreduce(&import_errors, &total_errors, 1, MPI_UNSIGNED,
-                          MPI_SUM, MPI_COMM_WORLD);
-            if ((total_errors != 0) || (total_regions == 0)) {
-                ret = (total_errors != 0) ? 1 : 77;
-                printf("%s: IPC preflight errors=%u, regions=%u\n",
-                       (ret == 77) ? "SKIP" : "FAIL", total_errors,
-                       total_regions);
-                if (rank == 0) {
-                    CUDA_CHECK(cuMemFree(old));
-                    CUDA_CHECK(cuMemFree(lower));
-                    CUDA_CHECK(cuMemFree(upper));
-                }
-                ucs_log_pop_handler();
-                goto out_free_host;
-            }
-        }
+        transfer(&ipc, rank, old, recv, BLOCK_SIZE, iteration + 1, host);
 
         if (rank == 0) {
             CUDA_CHECK(cuMemFree(old));
@@ -221,7 +285,7 @@ int main(int argc, char **argv)
                         ((replacement + 2 * BLOCK_SIZE) > old);
         }
 
-        transfer(rank, replacement, recv, 2 * BLOCK_SIZE, iteration + 101,
+        transfer(&ipc, rank, replacement, recv, 2 * BLOCK_SIZE, iteration + 101,
                  host);
         if (rank == 0) {
             CUDA_CHECK(cuMemFree(replacement));
@@ -232,20 +296,23 @@ int main(int argc, char **argv)
     ucs_log_pop_handler();
     MPI_Allreduce(&overlaps, &total_overlaps, 1, MPI_UNSIGNED, MPI_SUM,
                   MPI_COMM_WORLD);
-    MPI_Allreduce(&import_errors, &total_errors, 1, MPI_UNSIGNED, MPI_SUM,
-                  MPI_COMM_WORLD);
-    MPI_Allreduce(&imported_regions, &total_regions, 1, MPI_UNSIGNED, MPI_SUM,
+    MPI_Allreduce(&errors_and_warnings, &total_errors, 1, MPI_UNSIGNED, MPI_SUM,
                   MPI_COMM_WORLD);
     ret = (total_errors != 0) ? 1 :
-          (((total_overlaps == 0) || (total_regions == 0)) ? 77 : 0);
+          ((total_overlaps == 0) ? 77 : 0);
     if (rank == 0) {
-        printf("%s: lower overlaps=%u, IPC import errors=%u, regions=%u; "
+        printf("%s: lower overlaps=%u, UCX errors/warnings=%u; "
                "data checks passed\n",
                (ret == 0) ? "PASS" : ((ret == 77) ? "SKIP" : "FAIL"),
-               total_overlaps, total_errors, total_regions);
+               total_overlaps, total_errors);
     }
 
-out_free_host:
+out_free_ipc:
+    free(ipc.rkey_buffer);
+    if (ipc.md != NULL) {
+        uct_md_close(ipc.md);
+    }
+
     free(host);
 out_free_recv:
     CUDA_CHECK(cuMemFree(recv));

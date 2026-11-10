@@ -982,7 +982,7 @@ run_mpi_tests() {
 			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-			build release-mt --with-mpi --enable-assertions --enable-logging
+			build release-mt --with-mpi --enable-assertions
 
 			# check whether installation is valid (it compiles examples at least)
 			$MAKEP installcheck
@@ -1021,15 +1021,16 @@ run_mpi_tests() {
 
 				echo "==== Running CUDA IPC overlap regression ===="
 				local overlap_status=0
-				# Let the test report SKIP when CUDA IPC is unavailable.
-				# Select installed libraries after MPI sets up its environment;
-				# bypass the libtool wrapper's build-tree library paths.
-				${MPIRUN_COMMON} -np 2 -mca pml ucx -mca pml_ucx_tls any \
+				local overlap_test=./test/mpi/test_cuda_ipc_overlap
+				# Shared builds need the real binary to avoid libtool's paths;
+				# static builds place the executable directly in test/mpi.
+				if [ -x ./test/mpi/.libs/test_cuda_ipc_overlap ]; then
+					overlap_test=./test/mpi/.libs/test_cuda_ipc_overlap
+				fi
+				${MPIRUN} -np 2 \
 					env LD_LIBRARY_PATH=${ucx_inst}/lib:${ucx_inst}/lib/ucx:${LD_LIBRARY_PATH} \
 					UCX_MODULE_DIR=${ucx_inst}/lib/ucx \
-					UCX_TLS=sm,self,cuda_copy,cuda_ipc \
-					UCX_RNDV_THRESH=1 UCX_RNDV_SCHEME=get_zcopy \
-					UCX_LOG_LEVEL=trace ./test/mpi/.libs/test_cuda_ipc_overlap \
+					UCX_LOG_LEVEL=warn "$overlap_test" \
 					|| overlap_status=$?
 				if [ "$overlap_status" -eq 77 ]; then
 					log_warning "CUDA IPC overlap regression skipped"
