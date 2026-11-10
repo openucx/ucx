@@ -342,8 +342,12 @@ typedef union uct_rc_mlx5_dm_copy_data {
 KHASH_INIT(uct_rc_mlx5_tag_addrs, void*, char, 0, uct_rc_mlx5_tag_addr_hash,
            kh_int64_hash_equal)
 
+struct uct_rc_mlx5_ext_ops;
+
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                     super;
+    const struct uct_rc_mlx5_ext_ops   *ext_ops;
+    void                              *ext_ctx;
     struct {
         ucs_mpool_t                    atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t        mmio_mode;

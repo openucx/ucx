@@ -8,6 +8,7 @@
 #define UCT_RC_MLX5_H
 
 #include "rc_mlx5_common.h"
+#include <uct/ib/mlx5/ib_mlx5_ext.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -48,7 +49,8 @@ enum {
     /* EP address includes flush_rkey value */
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
     /* atomic key has no offset */
-    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1)
+    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1),
+    UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_PROBE      = UCS_BIT(3)
 };
 
 
@@ -57,15 +59,16 @@ enum {
  */
 typedef struct uct_rc_mlx5_base_ep {
     uct_rc_ep_t              super;
+    void                    *ext_ctx;
     struct {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
     uint8_t                  err_handler_inprogress;
+    uint8_t                  flush_probe;
 } uct_rc_mlx5_base_ep_t;
 
 typedef __be32 uct_rc_mlx5_tx_token_t;
 typedef __be32 uct_rc_mlx5_rx_token_t;
-
 
 /**
  * Generic RC remote endpoint with HW TM support
@@ -105,7 +108,6 @@ typedef struct uct_rc_mlx5_ep_ext_address {
     uct_rc_mlx5_ep_address_t super;
     uint8_t                  flags;
 } UCS_S_PACKED uct_rc_mlx5_ep_ext_address_t;
-
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);

@@ -19,6 +19,14 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/ptr_arith.h>
 
+#define UCT_IB_MLX5_FLUSH_PROBE_OFFSET 65536
+#define UCT_IB_MLX5_FLUSH_PROBE_SIZE   65536
+
+struct uct_rc_mlx5_ext_ops;
+
+/* The common registry selects one RC provider for an interface lifetime. */
+const struct uct_rc_mlx5_ext_ops *uct_ib_mlx5_ext_get_rc_provider(void);
+
 /**
  * When using a clang version that is higher than 3.0, the GNUC_MINOR is set
  * to 2, which affects the offset of several fields that are used by UCX from

@@ -27,6 +27,8 @@ typedef struct uct_priv_worker {
     ucs_async_context_t    *async;
     ucs_thread_mode_t      thread_mode;
     ucs_list_link_t        tl_data;
+    void                  (*wakeup_cb)(void *arg);
+    void                  *wakeup_arg;
 } uct_priv_worker_t;
 
 
@@ -86,6 +88,13 @@ typedef struct uct_worker_progress {
 
 
 void uct_worker_progress_init(uct_worker_progress_t *prog);
+
+/* Bind a consumer's wakeup signal; serialize changes with async callbacks. */
+void uct_worker_set_wakeup_cb(uct_worker_h worker, void (*callback)(void *),
+                              void *arg);
+
+/* Wake the consumer after asynchronously queueing worker progress. */
+void uct_worker_signal(uct_worker_h worker);
 
 void uct_worker_progress_add_safe(uct_priv_worker_t *worker, ucs_callback_t cb,
                                   void *arg, uct_worker_progress_t *prog);

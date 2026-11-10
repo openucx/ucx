@@ -326,10 +326,14 @@ typedef ucs_status_t (*uct_ep_get_sgl_zcopy_func_t)(
         uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
         size_t count, uct_completion_t *comp);
 
-
 /* Purge outstanding operations from an endpoint */
 typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);
+
+
+/* Register an endpoint-specific event handler. */
+typedef ucs_status_t (*uct_iface_set_ep_event_func_t)(
+        uct_iface_h iface, const uct_iface_set_ep_event_params_t *params);
 
 
 /* Internal operations, not exposed by the external API */
@@ -346,6 +350,7 @@ typedef struct uct_iface_internal_ops {
     uct_ep_put_sgl_zcopy_func_t      ep_put_sgl_zcopy;
     uct_ep_get_sgl_zcopy_func_t      ep_get_sgl_zcopy;
     uct_ep_outstanding_purge_func_t  ep_outstanding_purge;
+    uct_iface_set_ep_event_func_t    iface_set_ep_event_handler;
 } uct_iface_internal_ops_t;
 
 
@@ -362,6 +367,8 @@ typedef struct uct_base_iface {
     uct_am_tracer_t          am_tracer;        /* Active message tracer */
     void                     *am_tracer_arg;   /* Tracer argument */
     uct_error_handler_t      err_handler;      /* Error handler */
+    uct_ep_event_cb_t        ep_event_cb;
+    void                    *ep_event_arg;
     void                     *err_handler_arg; /* Error handler argument */
     uint32_t                 err_handler_flags; /* Error handler callback flags */
     uct_worker_progress_t    prog;             /* Will be removed once all transports
@@ -876,6 +883,17 @@ void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp);
 void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg);
+
+ucs_status_t uct_base_iface_set_ep_event_handler(
+        uct_iface_h iface, const uct_iface_set_ep_event_params_t *params);
+
+static inline void uct_iface_invoke_ep_event(uct_base_iface_t *iface,
+                                             uct_ep_h ep, unsigned events)
+{
+    if (iface->ep_event_cb != NULL) {
+        iface->ep_event_cb(iface->ep_event_arg, ep, events);
+    }
+}
 
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);
