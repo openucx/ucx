@@ -372,12 +372,13 @@ static void* ucm_calloc(size_t nmemb, size_t size)
     size_t total_size;
     void *ptr;
 
-    if (ucs_unlikely(__builtin_mul_overflow(nmemb, size, &total_size))) {
+    if (ucs_unlikely((size != 0) && (nmemb > (SIZE_MAX / size)))) {
         errno = ENOMEM;
         return NULL;
     }
 
-    ptr = ucm_malloc_impl(total_size, "calloc");
+    total_size = nmemb * size;
+    ptr        = ucm_malloc_impl(total_size, "calloc");
     if (ptr != NULL) {
         memset(ptr, 0, total_size);
     }
