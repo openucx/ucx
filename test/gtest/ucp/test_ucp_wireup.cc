@@ -452,6 +452,24 @@ public:
     }
 
     ucp_lane_index_t m_lanes2remote[UCP_MAX_LANES];
+
+protected:
+    /* A send whose callback flushes the endpoint of the send */
+    struct flush_send_arg {
+        ucp_ep_h     ep;
+        ucs_status_t status;
+        void         *flush_req;
+    };
+
+    static void flush_send_cb(void *request, ucs_status_t status,
+                              void *user_data)
+    {
+        flush_send_arg *arg       = static_cast<flush_send_arg*>(user_data);
+        ucp_request_param_t param = {};
+
+        arg->status    = status;
+        arg->flush_req = ucp_ep_flush_nbx(arg->ep, &param);
+    }
 };
 
 UCS_TEST_P(test_ucp_wireup_1sided, address) {
@@ -786,6 +804,42 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, am_lane_iface_activation,
 
     flush_worker(sender());
     disconnect(sender());
+}
+
+/* A send which waits for the wireup in a pending queue is replayed when the
+ * lanes are connected, with flushes of the endpoint blocked. A send which
+ * completes when it is posted calls its callback from the replay, so a flush
+ * issued there must start after the replay, and complete. */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, flush_from_replayed_send_cb,
+                     !(get_variant_value() & TEST_TAG))
+{
+    flush_send_arg arg = {NULL, UCS_INPROGRESS, NULL};
+    ucp_request_param_t param;
+    void *req;
+
+    sender().connect(&receiver(), get_ep_params());
+
+    arg.ep             = sender().ep();
+    m_send_data[0]     = SEND_DATA;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                         UCP_OP_ATTR_FIELD_USER_DATA |
+                         UCP_OP_ATTR_FIELD_DATATYPE;
+    param.cb.send      = flush_send_cb;
+    param.user_data    = &arg;
+    param.datatype     = DT_U64;
+    req                = ucp_tag_send_nbx(arg.ep, m_send_data.data(), 1, TAG,
+                                          &param);
+    ASSERT_UCS_PTR_OK(req);
+
+    /* Before a skip as well: a message left unmatched makes the cleanup warn */
+    recv_b(receiver().worker(), receiver().ep(), 1, 1);
+    if (req == NULL) {
+        UCS_TEST_SKIP_R("the send did not wait for the wireup");
+    }
+
+    EXPECT_EQ(UCS_OK, request_wait(req));
+    EXPECT_EQ(UCS_OK, arg.status);
+    EXPECT_EQ(UCS_OK, request_wait(arg.flush_req));
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
