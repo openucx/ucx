@@ -578,7 +578,7 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     }
 
     iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD +
-                          iface->super.config.extra_overhead;
+                           iface->super.config.extra_overhead;
 
     return UCS_OK;
 }

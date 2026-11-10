@@ -1261,27 +1261,28 @@ extern "C" {
 
 class test_ud_iface_attrs : public test_uct_iface_attrs {
 public:
-    void check_scale_overhead(size_t estimated_num_eps, bool scale_hint,
-                              double extra_overhead)
+    void check_extra_overhead(double extra_overhead)
     {
         uct_iface_params_t params = m_e->iface_params();
+        entity *e                = create_entity(params);
+        entity *reference;
         uct_iface_attr_t attr;
 
-        params.estimated_num_eps = estimated_num_eps;
-        if (scale_hint) {
-            params.field_mask |= UCT_IFACE_PARAM_FIELD_ESTIMATED_NUM_EPS;
-        } else {
-            params.field_mask &= ~UCT_IFACE_PARAM_FIELD_ESTIMATED_NUM_EPS;
-        }
-
-        entity *e = create_entity(params);
         m_entities.push_back(e);
 
+        modify_config("UD_EXTRA_OVERHEAD", "0ns");
+        reference = create_entity(params);
+        m_entities.push_back(reference);
+
         ASSERT_UCS_OK(uct_iface_query(e->iface(), &attr));
-        EXPECT_DOUBLE_EQ(m_e->iface_attr().overhead + extra_overhead,
+        EXPECT_DOUBLE_EQ(reference->iface_attr().overhead + extra_overhead,
                          attr.overhead);
-        EXPECT_DOUBLE_EQ(m_e->iface_attr().latency.c, attr.latency.c);
-        EXPECT_DOUBLE_EQ(m_e->iface_attr().latency.m, attr.latency.m);
+        EXPECT_DOUBLE_EQ(reference->iface_attr().latency.c, attr.latency.c);
+        EXPECT_DOUBLE_EQ(reference->iface_attr().latency.m, attr.latency.m);
+        EXPECT_DOUBLE_EQ(reference->iface_attr().bandwidth.dedicated,
+                         attr.bandwidth.dedicated);
+        EXPECT_DOUBLE_EQ(reference->iface_attr().bandwidth.shared,
+                         attr.bandwidth.shared);
 
         for (const auto operation : {UCT_EP_OP_AM_BCOPY, UCT_EP_OP_AM_ZCOPY}) {
             uct_perf_attr_t baseline_perf_attr = {};
@@ -1291,12 +1292,14 @@ public:
                     UCT_PERF_ATTR_FIELD_OPERATION |
                     UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                     UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
-                    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD;
+                    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
+                    UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                    UCT_PERF_ATTR_FIELD_LATENCY;
             baseline_perf_attr.operation = operation;
             perf_attr.field_mask         = baseline_perf_attr.field_mask;
             perf_attr.operation          = operation;
 
-            ASSERT_UCS_OK(uct_iface_estimate_perf(m_e->iface(),
+            ASSERT_UCS_OK(uct_iface_estimate_perf(reference->iface(),
                                                   &baseline_perf_attr));
             ASSERT_UCS_OK(uct_iface_estimate_perf(e->iface(), &perf_attr));
             EXPECT_DOUBLE_EQ(baseline_perf_attr.send_pre_overhead,
@@ -1304,6 +1307,12 @@ public:
             EXPECT_DOUBLE_EQ(baseline_perf_attr.send_post_overhead,
                              perf_attr.send_post_overhead);
             EXPECT_DOUBLE_EQ(attr.overhead, perf_attr.recv_overhead);
+            EXPECT_DOUBLE_EQ(baseline_perf_attr.bandwidth.dedicated,
+                             perf_attr.bandwidth.dedicated);
+            EXPECT_DOUBLE_EQ(baseline_perf_attr.bandwidth.shared,
+                             perf_attr.bandwidth.shared);
+            EXPECT_DOUBLE_EQ(baseline_perf_attr.latency.c, perf_attr.latency.c);
+            EXPECT_DOUBLE_EQ(baseline_perf_attr.latency.m, perf_attr.latency.m);
         }
     }
 
@@ -1335,39 +1344,18 @@ UCS_TEST_P(test_ud_iface_attrs, iface_attrs)
     basic_iov_test();
 }
 
-UCS_TEST_P(test_ud_iface_attrs, scale_overhead)
+UCS_TEST_P(test_ud_iface_attrs, extra_overhead)
 {
-    const double base_overhead = has_transport("ud_mlx5") ? 80e-9 : 105e-9;
-
-    EXPECT_DOUBLE_EQ(base_overhead, m_e->iface_attr().overhead);
-    check_scale_overhead(0, true, 0.0);
-    check_scale_overhead(160, true, 0.0);
-    check_scale_overhead(161, true, 50e-9);
-    check_scale_overhead(256, true, 50e-9);
-    check_scale_overhead(1ul << 20, true, 50e-9);
-    check_scale_overhead(1ul << 20, false, 0.0);
+    check_extra_overhead(50e-9);
 }
 
-UCS_TEST_P(test_ud_iface_attrs, scale_overhead_config)
+UCS_TEST_P(test_ud_iface_attrs, extra_overhead_config)
 {
-    modify_config("UD_OVERHEAD_SCALE_THRESHOLD", "32");
-    modify_config("UD_OVERHEAD_SCALE_PENALTY", "125ns");
-    check_scale_overhead(0, true, 0.0);
-    check_scale_overhead(32, true, 0.0);
-    check_scale_overhead(33, true, 125e-9);
-    check_scale_overhead(256, true, 125e-9);
-    check_scale_overhead(1ul << 20, false, 0.0);
+    modify_config("UD_EXTRA_OVERHEAD", "75ns");
+    check_extra_overhead(75e-9);
 
-    modify_config("UD_OVERHEAD_SCALE_THRESHOLD", "0");
-    check_scale_overhead(0, true, 0.0);
-    check_scale_overhead(1, true, 125e-9);
-
-    modify_config("UD_OVERHEAD_SCALE_PENALTY", "0ns");
-    check_scale_overhead(256, true, 0.0);
-
-    modify_config("UD_OVERHEAD_SCALE_PENALTY", "125ns");
-    modify_config("UD_OVERHEAD_SCALE_THRESHOLD", "inf");
-    check_scale_overhead(1ul << 20, true, 0.0);
+    modify_config("UD_EXTRA_OVERHEAD", "0ns");
+    check_extra_overhead(0.0);
 }
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)

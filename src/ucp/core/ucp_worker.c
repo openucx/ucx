@@ -1535,9 +1535,6 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params.field_mask |= UCT_IFACE_PARAM_FIELD_FEATURES;
     iface_params.features    = ucp_worker_get_uct_features(context);
 
-    iface_params.field_mask       |= UCT_IFACE_PARAM_FIELD_ESTIMATED_NUM_EPS;
-    iface_params.estimated_num_eps = context->config.est_num_eps;
-
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, &iface_params, iface_config,
                             &wiface->iface);

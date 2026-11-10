@@ -484,12 +484,11 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     self->config.max_window = config->max_window;
 
-    /* Account for increased software overhead at larger endpoint counts. */
-    self->config.extra_overhead =
-            (UCT_IFACE_PARAM_VALUE(params, estimated_num_eps,
-                                   ESTIMATED_NUM_EPS, 0) >
-             config->overhead_scale_threshold) ?
-                    config->overhead_scale_penalty : 0.0;
+    /* Adjust the interface overhead, also used as receive overhead by the IB
+     * performance estimator. Keep the configured send posting/completion costs
+     * unchanged.
+     */
+    self->config.extra_overhead = config->extra_overhead;
 
     self->rx.async_max_poll = config->rx_async_max_poll;
 
@@ -719,16 +718,10 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      "Max number of receive completions to pick during asynchronous TX poll",
      ucs_offsetof(uct_ud_iface_config_t, rx_async_max_poll), UCS_CONFIG_TYPE_UINT},
 
-    {"OVERHEAD_SCALE_THRESHOLD", "160",
-     "Advertise extra software overhead when the estimated endpoint count\n"
-     "strictly exceeds this threshold. Use inf to disable the correction.",
-     ucs_offsetof(uct_ud_iface_config_t, overhead_scale_threshold),
-     UCS_CONFIG_TYPE_ULUNITS},
-
-    {"OVERHEAD_SCALE_PENALTY", "50ns",
-     "Extra software overhead above OVERHEAD_SCALE_THRESHOLD.\n"
-     "This only adjusts performance estimates. Use 0ns to disable it.",
-     ucs_offsetof(uct_ud_iface_config_t, overhead_scale_penalty),
+    {"EXTRA_OVERHEAD", "50ns",
+     "Extra interface and receive overhead used for performance estimation.\n"
+     "Use 0ns to disable the correction.",
+     ucs_offsetof(uct_ud_iface_config_t, extra_overhead),
      UCS_CONFIG_TYPE_TIME},
 
     {NULL}

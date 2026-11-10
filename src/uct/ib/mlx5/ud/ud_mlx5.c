@@ -633,7 +633,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     }
 
     iface_attr->overhead = UCT_UD_MLX5_IFACE_OVERHEAD +
-                          iface->config.extra_overhead;
+                           iface->config.extra_overhead;
 
     return UCS_OK;
 }
