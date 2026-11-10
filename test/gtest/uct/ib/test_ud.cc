@@ -1422,5 +1422,22 @@ UCS_TEST_P(test_ud_iface_attrs, iface_attrs)
     basic_iov_test();
 }
 
+UCS_TEST_P(test_ud_iface_attrs, default_extra_overhead)
+{
+    constexpr double extra_overhead = 50e-9;
+    uct_perf_attr_t perf_attr{};
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                           UCT_PERF_ATTR_FIELD_RECV_OVERHEAD;
+    perf_attr.operation  = UCT_EP_OP_AM_SHORT;
+    ASSERT_UCS_OK(uct_iface_estimate_perf(m_e->iface(), &perf_attr));
+
+    // AM_SHORT exposes the default WQE posting cost without bcopy additions.
+    EXPECT_DOUBLE_EQ(perf_attr.send_pre_overhead + extra_overhead,
+                     m_e->iface_attr().overhead);
+    EXPECT_DOUBLE_EQ(m_e->iface_attr().overhead, perf_attr.recv_overhead);
+}
+
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)
 

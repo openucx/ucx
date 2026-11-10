@@ -602,7 +602,8 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD; /* Software overhead */
+    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD +
+                           UCT_UD_IFACE_EXTRA_OVERHEAD;
 
     return UCS_OK;
 }
