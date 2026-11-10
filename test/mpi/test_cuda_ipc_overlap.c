@@ -19,7 +19,8 @@
 
 /* Run on one node with two GPUs, a logging-enabled UCX build, and an MPI
  * configured to use that build. For Open MPI:
- * OMPI_MCA_pml=ucx UCX_TLS=sm,self,cuda_copy,cuda_ipc UCX_RNDV_THRESH=1 \
+ * OMPI_MCA_pml=ucx OMPI_MCA_pml_ucx_tls=any \
+ * UCX_TLS=sm,self,cuda_copy,cuda_ipc UCX_RNDV_THRESH=1 \
  * UCX_RNDV_SCHEME=get_zcopy UCX_LOG_LEVEL=trace \
  * mpirun -np 2 ./test_cuda_ipc_overlap
  * Exit 77 means that the GPU/allocator/transport prerequisites were not met. */
@@ -29,6 +30,39 @@
 
 static unsigned import_errors;
 static unsigned imported_regions;
+
+static int check_ipc(int rank, CUdeviceptr ptr)
+{
+    CUipcMemHandle handle;
+    CUdeviceptr mapped;
+    CUresult result = CUDA_SUCCESS;
+
+    if (rank == 0) {
+        result = cuIpcGetMemHandle(&handle, ptr);
+    }
+    MPI_Bcast(&result, sizeof(result), MPI_BYTE, 0, MPI_COMM_WORLD);
+    if (result == CUDA_SUCCESS) {
+        MPI_Bcast(&handle, sizeof(handle), MPI_BYTE, 0, MPI_COMM_WORLD);
+        if (rank == 1) {
+            result = cuIpcOpenMemHandle(&mapped, handle,
+                                       CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
+            if (result == CUDA_SUCCESS) {
+                result = cuIpcCloseMemHandle(mapped);
+            }
+        }
+        MPI_Bcast(&result, sizeof(result), MPI_BYTE, 1, MPI_COMM_WORLD);
+    }
+
+    if ((result == CUDA_ERROR_PEER_ACCESS_UNSUPPORTED) ||
+        (result == CUDA_ERROR_TOO_MANY_PEERS) ||
+        (result == CUDA_ERROR_NOT_SUPPORTED)) {
+        printf("SKIP: CUDA IPC unavailable: %s\n", _CUDA_ERROR_STRING(result));
+        return 77;
+    }
+
+    CUDA_CHECK(result);
+    return 0;
+}
 
 static ucs_log_func_rc_t
 count_import_errors(const char *file, unsigned line, const char *function,
@@ -82,14 +116,17 @@ int main(int argc, char **argv)
     CUcontext context;
     MPI_Comm local_comm;
     unsigned char *host;
-    int rank, size, local_size, device_count, iteration, ret;
+    CUresult result;
+    int rank, size, local_size, available, all_available, iteration, ret;
+    int device_count = 0;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     if (size != 2) {
-        fprintf(stderr, "requires exactly two MPI ranks\n");
-        MPI_Abort(MPI_COMM_WORLD, 1);
+        printf("SKIP: requires exactly two MPI ranks\n");
+        MPI_Finalize();
+        return 77;
     }
 
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE)) {
@@ -99,7 +136,7 @@ int main(int argc, char **argv)
     }
 
     MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank,
-                        MPI_INFO_NULL, &local_comm);
+                       MPI_INFO_NULL, &local_comm);
     MPI_Comm_size(local_comm, &local_size);
     MPI_Comm_free(&local_comm);
     if (local_size != 2) {
@@ -108,10 +145,18 @@ int main(int argc, char **argv)
         return 77;
     }
 
-    CUDA_CHECK(cuInit(0));
-    CUDA_CHECK(cuDeviceGetCount(&device_count));
-    if (device_count == 0) {
-        MPI_Abort(MPI_COMM_WORLD, 1);
+    result = cuInit(0);
+    if (result != CUDA_ERROR_NO_DEVICE) {
+        CUDA_CHECK(result);
+        CUDA_CHECK(cuDeviceGetCount(&device_count));
+    }
+    available = device_count > 0;
+    MPI_Allreduce(&available, &all_available, 1, MPI_INT, MPI_MIN,
+                  MPI_COMM_WORLD);
+    if (!all_available) {
+        printf("SKIP: a rank has no CUDA device\n");
+        MPI_Finalize();
+        return 77;
     }
 
     CUDA_CHECK(cuDeviceGet(&device, rank % device_count));
@@ -127,6 +172,11 @@ int main(int argc, char **argv)
     CUDA_CHECK(cuDevicePrimaryCtxRetain(&context, device));
     CUDA_CHECK(cuCtxPushCurrent(context));
     CUDA_CHECK(cuMemAlloc(&recv, 2 * BLOCK_SIZE));
+    ret = check_ipc(rank, recv);
+    if (ret != 0) {
+        goto out_free_recv;
+    }
+
     host = malloc(2 * BLOCK_SIZE);
     if (host == NULL) {
         MPI_Abort(MPI_COMM_WORLD, 1);
@@ -142,6 +192,27 @@ int main(int argc, char **argv)
         }
 
         transfer(rank, old, recv, BLOCK_SIZE, iteration + 1, host);
+        if (iteration == 0) {
+            /* Check transport selection before recycling any allocation. */
+            MPI_Allreduce(&imported_regions, &total_regions, 1, MPI_UNSIGNED,
+                          MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(&import_errors, &total_errors, 1, MPI_UNSIGNED,
+                          MPI_SUM, MPI_COMM_WORLD);
+            if ((total_errors != 0) || (total_regions == 0)) {
+                ret = (total_errors != 0) ? 1 : 77;
+                printf("%s: IPC preflight errors=%u, regions=%u\n",
+                       (ret == 77) ? "SKIP" : "FAIL", total_errors,
+                       total_regions);
+                if (rank == 0) {
+                    CUDA_CHECK(cuMemFree(old));
+                    CUDA_CHECK(cuMemFree(lower));
+                    CUDA_CHECK(cuMemFree(upper));
+                }
+                ucs_log_pop_handler();
+                goto out_free_host;
+            }
+        }
+
         if (rank == 0) {
             CUDA_CHECK(cuMemFree(old));
             CUDA_CHECK(cuMemFree(lower));
@@ -160,11 +231,11 @@ int main(int argc, char **argv)
 
     ucs_log_pop_handler();
     MPI_Allreduce(&overlaps, &total_overlaps, 1, MPI_UNSIGNED, MPI_SUM,
-                   MPI_COMM_WORLD);
+                  MPI_COMM_WORLD);
     MPI_Allreduce(&import_errors, &total_errors, 1, MPI_UNSIGNED, MPI_SUM,
-                   MPI_COMM_WORLD);
+                  MPI_COMM_WORLD);
     MPI_Allreduce(&imported_regions, &total_regions, 1, MPI_UNSIGNED, MPI_SUM,
-                   MPI_COMM_WORLD);
+                  MPI_COMM_WORLD);
     ret = (total_errors != 0) ? 1 :
           (((total_overlaps == 0) || (total_regions == 0)) ? 77 : 0);
     if (rank == 0) {
@@ -174,7 +245,9 @@ int main(int argc, char **argv)
                total_overlaps, total_errors, total_regions);
     }
 
+out_free_host:
     free(host);
+out_free_recv:
     CUDA_CHECK(cuMemFree(recv));
     MPI_Finalize();
     CUDA_CHECK(cuCtxPopCurrent(NULL));
