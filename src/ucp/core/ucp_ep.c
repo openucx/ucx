@@ -26,6 +26,7 @@
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
+#include <ucp/rndv/proto_rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucp/rma/rma.inl>
@@ -532,6 +533,7 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         ucp_ep_local_disconnect_progress_remove_filter(elem, arg) ||
         ucp_ep_set_failed_remove_filter(elem, arg) ||
         ucp_ep_wireup_eps_progress_filter(elem, arg) ||
+        ucp_proto_rndv_mtype_fc_reschedule_filter(elem, arg) ||
         ucp_ep_tf_purge_remove_filter(elem, arg)) {
         return 1;
     }
@@ -2128,6 +2130,7 @@ static void ucp_ep_recovery_arg_free(ucp_ep_h ep)
 
     seen_peer_id = arg->seen_peer_id;
     ucp_ep_refcount_assert(ep, probe, ==, 0);
+    ucp_wireup_tf_reply_discard(ep);
     ucp_ep_tf_cleanup(ep);
     ucs_free(arg);
     ep->ext->recovery_arg = NULL;
@@ -2415,10 +2418,11 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
 
-    if (ucp_ep_config(ep)->key.dst_version < 22) {
-        ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
-                 "remote peer version %d is not supported",
-                 ep, ucp_ep_config(ep)->key.dst_version);
+    if (ucp_ep_config(ep)->key.dst_version < UCP_MIN_DST_VERSION_EP_RECOVERY) {
+        ucs_diag("ep: %p: recovery support requires UCX 1.%d or later, "
+                 "remote peer version %u is not supported",
+                 ep, UCP_MIN_DST_VERSION_EP_RECOVERY,
+                 ucp_ep_config(ep)->key.dst_version);
         return UCS_OK;
     }
 
@@ -2506,8 +2510,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
 
     failed = ucp_ep_get_failed_lanes(ep);
     if (failed == 0) {
-        /* Recovery completed between rounds, the ep operates normally. */
-        ucs_assert(ucp_ep_recovery_arg(ep) == NULL);
+        /* A peer request moves the transport endpoint to error and waits
+         * for that completion before this lane is failed. Recovery stays
+         * idle until the completion holds it. */
+        arg = ucp_ep_recovery_arg(ep);
+        ucs_assert((arg == NULL) || (arg->tf_reply != NULL));
         goto done;
     }
 
@@ -2732,7 +2739,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         ucp_ep_has_cm_lane(ep) ||
         (ucp_ep_config(ep)->key.dst_version <
-         UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION) ||
+         UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN) ||
         (ucp_ep_get_lane(ep, lane) != uct_ep)) {
         return 0;
     }
@@ -3039,26 +3046,6 @@ static void ucp_ep_tf_lane_release(ucp_ep_h ep, ucp_ep_lane_tf_t *tf)
                                                tf->deactivate_cfg_index);
         tf->deactivate_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
     }
-}
-
-ucp_lane_map_t ucp_ep_tf_drop_invalidated(ucp_ep_h ep, ucp_lane_map_t lanes)
-{
-    ucp_lane_map_t dropped = 0;
-    ucp_lane_index_t lane;
-    ucp_ep_lane_tf_t *tf;
-
-    ucs_for_each_bit(lane, lanes) {
-        tf = ucp_ep_tf_get(ep, lane);
-        if ((tf == NULL) || (tf->state != UCP_EP_TF_LANE_INVALIDATED) ||
-            (tf->uct_ep != NULL)) {
-            continue;
-        }
-
-        ucp_ep_tf_lane_release(ep, tf);
-        dropped |= UCS_BIT(lane);
-    }
-
-    return dropped;
 }
 
 static void
@@ -3414,11 +3401,15 @@ void ucp_ep_set_lanes_failed(ucp_ep_h ucp_ep, ucp_lane_map_t lanes,
         cm_lane == UCP_NULL_LANE) {
         reconfig_status = ucp_ep_failover_reconfig(ucp_ep, lanes, status);
         if (reconfig_status == UCS_OK) {
+            /* These lanes produce no error completion, so the parked
+             * reply must not keep waiting for one. */
+            ucp_wireup_tf_reply_lanes_failed(ucp_ep, lanes);
             return;
         }
     }
 
-    /* else: unrecoverable error, mark the endpoint as failed. */
+    /* Unrecoverable. A failed endpoint cannot send the parked reply. */
+    ucp_wireup_tf_reply_discard(ucp_ep);
     ucp_ep_set_failed(ucp_ep,
                       ((cm_lane != UCP_NULL_LANE) &&
                        (lanes == UCS_BIT(cm_lane)) ?
@@ -5475,6 +5466,8 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     ucs_hlist_head_t *proto_reqs = &ucp_ep->ext->proto_reqs;
     ucp_ep_flush_state_t *flush_state;
     ucp_request_t *req;
+
+    ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep, status);
 
     while (!ucs_hlist_is_empty(proto_reqs)) {
         req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);

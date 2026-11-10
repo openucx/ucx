@@ -18,6 +18,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
+#include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup_lane_info.h>
@@ -88,18 +89,19 @@ static ucs_stats_class_t ucp_worker_stats_class = {
     .num_counters   = UCP_WORKER_STAT_LAST,
     .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
-        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "tag_rx_eager_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "tag_rx_sync_msg",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "tag_rx_eager_chunk_exp",
-        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "tag_rx_eager_chunk_unexp",
-        [UCP_WORKER_STAT_RNDV_RX_EXP]              = "rndv_rx_exp",
-        [UCP_WORKER_STAT_RNDV_RX_UNEXP]            = "rndv_rx_unexp",
-        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]           = "rndv_put_zcopy",
-        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]     = "rndv_put_mtype_zcopy",
-        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]           = "rndv_get_zcopy",
-        [UCP_WORKER_STAT_RNDV_RTR]                 = "rndv_rtr",
-        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]           = "rndv_rtr_mtype",
-        [UCP_WORKER_STAT_RNDV_RKEY_PTR]            = "rndv_rkey_ptr"
+        [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]          = "tag_rx_eager_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]     = "tag_rx_sync_msg",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]    = "tag_rx_eager_chunk_exp",
+        [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP]  = "tag_rx_eager_chunk_unexp",
+        [UCP_WORKER_STAT_RNDV_RX_EXP]               = "rndv_rx_exp",
+        [UCP_WORKER_STAT_RNDV_RX_UNEXP]             = "rndv_rx_unexp",
+        [UCP_WORKER_STAT_RNDV_PUT_ZCOPY]            = "rndv_put_zcopy",
+        [UCP_WORKER_STAT_RNDV_PUT_MTYPE_ZCOPY]      = "rndv_put_mtype_zcopy",
+        [UCP_WORKER_STAT_RNDV_GET_ZCOPY]            = "rndv_get_zcopy",
+        [UCP_WORKER_STAT_RNDV_RTR]                  = "rndv_rtr",
+        [UCP_WORKER_STAT_RNDV_RTR_MTYPE]            = "rndv_rtr_mtype",
+        [UCP_WORKER_STAT_RNDV_RKEY_PTR]             = "rndv_rkey_ptr",
+        [UCP_WORKER_STAT_RNDV_MTYPE_FC_THROTTLED]   = "rndv_mtype_fc_throttled"
     }
 };
 #endif
@@ -472,6 +474,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         return UCS_OK;
     }
 
+    /* The lane slot may already be the replacement. This error belongs
+     * to the transport endpoint that is still held. */
+    if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
+        ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
+        return UCS_INPROGRESS;
+    }
+
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
     if ((wireup_ep == NULL) || !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
         !ucp_ep_is_local_connected(ucp_ep)) {
@@ -480,15 +489,12 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
          * endpoint here; the transport keeps it only when this returns
          * UCS_INPROGRESS. */
         if (wireup_ep == NULL) {
-            /* This endpoint is already held. Keep it until its completion. */
-            if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
-                return UCS_INPROGRESS;
-            }
-
             if (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK) {
                 /* Purge after return, once the outstanding range is
-                 * recorded. */
+                 * recorded. The hold is the error this request was waiting
+                 * for. A deferred reply rebuilds the lane only after it. */
                 ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
+                ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
                 return UCS_INPROGRESS;
             }
         }
@@ -565,8 +571,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_debug("worker %p: error handler called for UCT EP %p: %s",
-              worker, uct_ep, ucs_status_string(status));
+    ucs_debug("worker %p: error handler called for UCT EP %p: %s", worker,
+              uct_ep, ucs_status_string(status));
 
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
@@ -2217,7 +2223,8 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
         if (!kh_exist(&worker->mpool_hash, iter)) {
             continue;
         }
-        ucs_mpool_cleanup(&kh_val(&worker->mpool_hash, iter), 1);
+        ucs_mpool_cleanup(kh_val(&worker->mpool_hash, iter), 1);
+        ucs_free(kh_val(&worker->mpool_hash, iter));
     }
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
@@ -2712,6 +2719,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
+    unsigned q_index;
 
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
@@ -2742,6 +2750,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->counters.ep_creation_failures = 0;
     worker->counters.ep_closures          = 0;
     worker->counters.ep_failures          = 0;
+
+    /* Initialize RNDV mtype flow control pending queues */
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; q_index++) {
+        ucs_queue_head_init(&worker->rndv_mtype_fc.pending_q[q_index]);
+    }
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &

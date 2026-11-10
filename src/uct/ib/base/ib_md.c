@@ -871,6 +871,8 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     */
     if ((stat(device_path, &st) != 0) || !S_ISCHR(st.st_mode) ||
         (access(device_path, R_OK | W_OK) != 0)) {
+        ucs_debug("%s: %s is not accessible", ibv_get_device_name(device),
+                  device_path);
         return 0;
     }
 
@@ -1745,6 +1747,17 @@ uct_component_t uct_ib_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
+static void uct_ib_log_mellanox_visible_devices()
+{
+    const char *value = getenv("MELLANOX_VISIBLE_DEVICES");
+
+    if (value != NULL) {
+        ucs_debug("MELLANOX_VISIBLE_DEVICES is '%s', device list may have "
+                  "been filtered by a container runtime",
+                  value);
+    }
+}
+
 void UCS_F_CTOR uct_ib_init()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
@@ -1756,6 +1769,8 @@ void UCS_F_CTOR uct_ib_init()
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
     }
+
+    uct_ib_log_mellanox_visible_devices();
 
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 }

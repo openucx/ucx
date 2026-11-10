@@ -39,6 +39,61 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_xfer, fence_relaxed_order,
 
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_xfer)
 
+/*
+ * A put after a fence uses the atomic key of the remote memory, at the atomic
+ * MR offset which the peer passes in its address. Check that it updates the
+ * requested remote address and nothing else.
+ */
+class uct_p2p_rma_test_atomic_key : public uct_p2p_rma_test {
+protected:
+    static constexpr uint64_t VALUE = 0x5a5a5a5a5a5a5a5aul;
+
+    /* Covers the largest atomic MR offset, 255 words */
+    static constexpr size_t NUM_WORDS = 512;
+
+    void test_fence_put(send_func_t send)
+    {
+        mapped_buffer sendbuf(sizeof(uint64_t), sender());
+        mapped_buffer recvbuf(NUM_WORDS * sizeof(uint64_t), receiver());
+
+        *static_cast<uint64_t*>(sendbuf.ptr()) = VALUE;
+        recvbuf.memset(0);
+
+        /* The first put after a fence uses the atomic key */
+        ASSERT_UCS_OK(uct_iface_fence(sender().iface(), 0));
+        blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
+        wait_for_remote();
+
+        /* Also report where a misplaced put went */
+        auto words = static_cast<const uint64_t*>(recvbuf.ptr());
+        for (size_t i = 0; i < NUM_WORDS; ++i) {
+            EXPECT_EQ((i == 0) ? VALUE : 0, words[i]) << "word " << i;
+        }
+    }
+};
+
+constexpr uint64_t uct_p2p_rma_test_atomic_key::VALUE;
+constexpr size_t uct_p2p_rma_test_atomic_key::NUM_WORDS;
+
+/* The mlx5 memory domain without DevX has no indirect atomic keys, and weak
+ * fence mode makes a fence take effect on any device */
+UCS_TEST_P(uct_p2p_rma_test_atomic_key, fence_put_no_devx, "RC_FENCE=weak",
+           "IB_MLX5_DEVX?=n") {
+    if (check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
+        test_fence_put(static_cast<send_func_t>(&uct_p2p_rma_test::put_short));
+    }
+
+    if (check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+        test_fence_put(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy));
+    }
+
+    if (check_caps(UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        test_fence_put(static_cast<send_func_t>(&uct_p2p_rma_test::put_zcopy));
+    }
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(uct_p2p_rma_test_atomic_key)
+
 class uct_p2p_rma_test_inlresp : public uct_p2p_rma_test {};
 
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp0,

@@ -1000,7 +1000,7 @@ UCS_TEST_SKIP_COND_F(malloc_hook_cplusplus, mmap_ptrs, RUNNING_ON_VALGRIND) {
      */
     while (m_mapped_size == 0) {
         std::vector<char> str(size, 'r');
-        ptrs.push_back(str);
+        ptrs.push_back(std::move(str));
         ++large_blocks;
     }
 

@@ -22,7 +22,6 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
 
 
@@ -36,7 +35,7 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (init_params->ep_config_key->dst_version <
-         UCP_PROTO_RMA_RNDV_MIN_DST_VERSION) ||
+         UCP_MIN_DST_VERSION_PROTO_RMA_RNDV) ||
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }
@@ -510,6 +509,7 @@ static ucs_status_t ucp_proto_get_rndv_init(ucp_request_t *get_req,
     rndv_req->send.rndv.remote_address     = address;
     rndv_req->send.rndv.rkey               = get_req->send.rma.rkey;
     rndv_req->send.rndv.offset             = 0;
+    ucp_proto_rndv_req_fc_init(rndv_req);
 
     UCS_PROFILE_CALL_VOID(ucp_datatype_iter_move,
                           &rndv_req->send.state.dt_iter,
