@@ -595,6 +595,12 @@ protected:
         ucs::test::cleanup();
     }
 
+    ucs_status_t lookup(const void *base, size_t offset, size_t size,
+                        ucs_memory_info_t *info) const {
+        return ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, offset),
+                                        size, info);
+    }
+
     int m_enable_events;
 };
 
@@ -609,21 +615,23 @@ UCS_TEST_F(test_memtype_explicit, lookup_and_unregister) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x10000);
 
+    ASSERT_TRUE(ucs_memtype_cache_is_explicit());
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 5);
-    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
-                      UCS_PTR_BYTE_OFFSET(base, 0x100), 0x100, &info));
+
+    /* The real bounds of the registration are reported */
+    EXPECT_EQ(UCS_OK, lookup(base, 0x100, 0x100, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
     EXPECT_EQ(UCS_SYS_DEVICE_ID_UNKNOWN, info.sys_dev);
     EXPECT_EQ(5, info.mem_flags);
-    EXPECT_EQ(UCS_PTR_BYTE_OFFSET(base, 0x100), info.base_address);
-    EXPECT_EQ(0x100, info.alloc_length);
-    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
-                      UCS_PTR_BYTE_OFFSET(base, 0xff0), 0x20, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
+    EXPECT_EQ(base, info.base_address);
+    EXPECT_EQ(0x1000u, info.alloc_length);
+
+    /* A range which is not fully inside the registration is a miss */
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0xff0, 0x20, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0x1000, 0x10, &info));
 
     EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
 }
 
 /* A=[0,0x2000), B=[0x1000,0x3000) */
@@ -634,25 +642,25 @@ UCS_TEST_F(test_memtype_explicit, partial_overlap) {
     EXPLICIT_REG(base, 0, 0x2000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_REG(base, 0x1000, 0x2000, UCS_MEMORY_TYPE_CUDA, 1);
 
-    /* Lookup crossing the split points is still a hit */
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x3000, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    ASSERT_UCS_OK(lookup(base, 0, 0x2000, &info));
     EXPECT_EQ(base, info.base_address);
-    EXPECT_EQ(0x3000, info.alloc_length);
+    EXPECT_EQ(0x2000u, info.alloc_length);
+
+    ASSERT_UCS_OK(lookup(base, 0x1800, 0x1000, &info));
+    EXPECT_EQ(UCS_PTR_BYTE_OFFSET(base, 0x1000), info.base_address);
+    EXPECT_EQ(0x2000u, info.alloc_length);
+
+    /* No single registration contains the whole range */
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x3000, &info));
 
     /* Unregistering A leaves exactly B */
     EXPLICIT_UNREG(base, 0, 0x2000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED, ucs_memtype_cache_lookup(base, 0x100,
-                                                            &info));
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 0x1000),
-                                           0x2000, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
+    ASSERT_UCS_OK(lookup(base, 0x1000, 0x2000, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-    EXPECT_EQ(0x2000, info.alloc_length);
 
     EXPLICIT_UNREG(base, 0x1000, 0x2000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 0x1000),
-                                       0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0x1000, 0x100, &info));
 }
 
 /* Nested registration, released in either order */
@@ -663,82 +671,50 @@ UCS_TEST_F(test_memtype_explicit, nested_registrations) {
     for (int outer_first = 0; outer_first < 2; ++outer_first) {
         EXPLICIT_REG(base, 0, 0x4000, UCS_MEMORY_TYPE_CUDA, 1);
         EXPLICIT_REG(base, 0x1000, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-        ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x4000, &info));
+        ASSERT_UCS_OK(lookup(base, 0, 0x4000, &info));
         EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
 
         if (outer_first) {
             EXPLICIT_UNREG(base, 0, 0x4000);
-            ASSERT_UCS_OK(ucs_memtype_cache_lookup(
-                    UCS_PTR_BYTE_OFFSET(base, 0x1000), 0x1000, &info));
-            EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-            EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-                      ucs_memtype_cache_lookup(base, 0x100, &info));
+            ASSERT_UCS_OK(lookup(base, 0x1000, 0x1000, &info));
+            EXPECT_EQ(0x1000u, info.alloc_length);
+            EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
             EXPLICIT_UNREG(base, 0x1000, 0x1000);
         } else {
             EXPLICIT_UNREG(base, 0x1000, 0x1000);
-            /* Regions are merged back into one */
-            ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
-            EXPECT_EQ(1u,
-                      ucs_memtype_cache_global_instance->pgtable.num_regions);
+            ASSERT_UCS_OK(lookup(base, 0x1000, 0x100, &info));
+            EXPECT_EQ(0x4000u, info.alloc_length);
             EXPLICIT_UNREG(base, 0, 0x4000);
         }
 
-        EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-                  ucs_memtype_cache_lookup(base, 0x100, &info));
-        EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
+        EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0x1000, 0x100, &info));
     }
 }
 
-UCS_TEST_F(test_memtype_explicit, conflicting_attributes_unknown) {
-    ucs_memory_info_t info;
-    const void *base = reinterpret_cast<void*>(0x20000);
-
-    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPLICIT_REG(base, 0x800, 0x100, UCS_MEMORY_TYPE_CUDA_MANAGED, 2);
-
-    /* Conflict: neither type is trusted */
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 0x800),
-                                           0x80, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
-
-    /* The rest of the outer range keeps its own attributes */
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-
-    /* Releasing the inner registration must not restore a wrong type for the
-     * overlapped part, which is still covered by the outer registration */
-    EXPLICIT_UNREG(base, 0x800, 0x100);
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 0x800),
-                                           0x80, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-
-    EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
-}
-
-/* Adjacent registrations may be merged, but a lookup must not report a range
- * larger than the one which was asked for */
+/* Adjacent registrations are not merged, so a range spanning both is a miss
+ * and each registration keeps its own bounds */
 UCS_TEST_F(test_memtype_explicit, adjacent_registrations) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x40000);
 
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_REG(base, 0x1000, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPECT_EQ(1u, ucs_memtype_cache_global_instance->pgtable.num_regions);
 
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x1000, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    ASSERT_UCS_OK(lookup(base, 0, 0x1000, &info));
     EXPECT_EQ(base, info.base_address);
-    EXPECT_EQ(0x1000, info.alloc_length);
+    EXPECT_EQ(0x1000u, info.alloc_length);
+    ASSERT_UCS_OK(lookup(base, 0x1000, 0x1000, &info));
+    EXPECT_EQ(UCS_PTR_BYTE_OFFSET(base, 0x1000), info.base_address);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0x800, 0x1000, &info));
 
     EXPLICIT_UNREG(base, 0, 0x1000);
     EXPLICIT_UNREG(base, 0x1000, 0x1000);
-    EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0x1000, 0x100, &info));
 }
 
+/* N registrations of a range need N unregistrations */
 UCS_TEST_F(test_memtype_explicit, duplicate_registrations) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x30000);
@@ -746,16 +722,31 @@ UCS_TEST_F(test_memtype_explicit, duplicate_registrations) {
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_OK, lookup(base, 0, 0x100, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
 
     EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
 }
 
-/* Unregistering memory which is not registered must not drop references of
- * other registrations */
+/* Registrations with the same start and different ends are distinct */
+UCS_TEST_F(test_memtype_explicit, same_start_different_end) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x34000);
+
+    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
+    EXPLICIT_REG(base, 0, 0x3000, UCS_MEMORY_TYPE_CUDA, 1);
+
+    EXPLICIT_UNREG(base, 0, 0x3000);
+    ASSERT_UCS_OK(lookup(base, 0, 0x1000, &info));
+    EXPECT_EQ(0x1000u, info.alloc_length);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x2000, &info));
+
+    EXPLICIT_UNREG(base, 0, 0x1000);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
+}
+
+/* Unregistering a range which is not registered must not remove others */
 UCS_TEST_F(test_memtype_explicit, unregister_unknown_range) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x38000);
@@ -763,101 +754,96 @@ UCS_TEST_F(test_memtype_explicit, unregister_unknown_range) {
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_UNREG(base, 0x4000, 0x1000);
     EXPLICIT_UNREG(base, 0, 0);
-    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPLICIT_UNREG(base, 0, 0x800);
+    EXPECT_EQ(UCS_OK, lookup(base, 0, 0x100, &info));
 
     EXPLICIT_UNREG(base, 0, 0x1000);
     EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
-}
-
-/* A lookup continues into a neighbor only if its attributes are the same */
-UCS_TEST_F(test_memtype_explicit, lookup_across_different_attributes) {
-    ucs_memory_info_t info;
-    const void *base = reinterpret_cast<void*>(0x3c000);
-
-    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPLICIT_REG(base, 0x1000, 0x1000, UCS_MEMORY_TYPE_CUDA_MANAGED, 1);
-
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x1000, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x2000, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, info.type);
-
-    EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPLICIT_UNREG(base, 0x1000, 0x1000);
-}
-
-UCS_TEST_F(test_memtype_explicit, ignored_registrations) {
-    const void *base = reinterpret_cast<void*>(0x3e000);
-
-    ucs_memtype_cache_global_create();
-    ASSERT_TRUE(ucs_memtype_cache_global_instance != NULL);
-    EXPLICIT_REG(base, 0, 0, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_LAST, 1);
-    EXPECT_EQ(0u, ucs_memtype_cache_global_instance->pgtable.num_regions);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
 }
 
 UCS_TEST_F(test_memtype_explicit, host_registration) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x3d000);
 
-    ucs_memtype_cache_global_create();
-    ASSERT_TRUE(ucs_memtype_cache_global_instance != NULL);
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_HOST, 1);
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x1000, &info));
+    ASSERT_UCS_OK(lookup(base, 0, 0x1000, &info));
     EXPECT_EQ(UCS_MEMORY_TYPE_HOST, info.type);
 
     EXPLICIT_UNREG(base, 0, 0x1000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x1000, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x1000, &info));
 }
 
-/* Without free events, a detection result cannot be cached safely */
-UCS_TEST_F(test_memtype_explicit, update_ignored) {
+UCS_TEST_F(test_memtype_explicit, ignored_registrations) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x3e000);
+
+    EXPLICIT_REG(base, 0, 0, UCS_MEMORY_TYPE_CUDA, 1);
+    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_LAST, 1);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
+}
+
+/* The event-driven cache is not created in explicit mode, and a detection
+ * result cannot be cached without free events */
+UCS_TEST_F(test_memtype_explicit, no_event_cache) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x39000);
 
+    ucs_memtype_cache_global_create();
+    EXPECT_TRUE(ucs_memtype_cache_global_instance == NULL);
+
     ucs_memtype_cache_update(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
                              UCS_SYS_DEVICE_ID_UNKNOWN, 1);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
+    EXPECT_FALSE(ucs_memtype_cache_is_empty());
+}
+
+/* Registrations which were not released are dropped by the cleanup */
+UCS_TEST_F(test_memtype_explicit, leftover_registrations) {
+    ucs_memory_info_t info;
+    const void *base = reinterpret_cast<void*>(0x3f000);
+
+    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
+    EXPLICIT_REG(base, 0x2000, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
+
+    ucs_memtype_cache_cleanup();
+    ucs_memtype_cache_global_init();
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
 }
 
 UCS_TEST_F(test_memtype_explicit, unaligned_range) {
     ucs_memory_info_t info;
     const void *base = reinterpret_cast<void*>(0x40000);
 
-    /* Neither the start nor the length is aligned */
     EXPLICIT_REG(base, 3, 1000, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPECT_EQ(UCS_OK, ucs_memtype_cache_lookup(
-                      UCS_PTR_BYTE_OFFSET(base, 3), 1000, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
+    ASSERT_UCS_OK(lookup(base, 3, 1000, &info));
+    EXPECT_EQ(UCS_PTR_BYTE_OFFSET(base, 3), info.base_address);
+    EXPECT_EQ(1000u, info.alloc_length);
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 2, 1000, &info));
 
     EXPLICIT_UNREG(base, 3, 1000);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(UCS_PTR_BYTE_OFFSET(base, 3), 1000,
-                                       &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 3, 1000, &info));
 }
 
 UCS_TEST_F(test_memtype_explicit, disabled_cache) {
     ucs_memory_info_t info;
-    const void *base = reinterpret_cast<void*>(0x50000);
+    const void *base          = reinterpret_cast<void*>(0x50000);
     const void *disabled_base = reinterpret_cast<void*>(0x51000);
 
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
+    ASSERT_UCS_OK(lookup(base, 0, 0x100, &info));
 
     modify_config("MEMTYPE_CACHE", "n");
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_FALSE(ucs_memtype_cache_is_explicit());
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
     EXPLICIT_REG(disabled_base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_UNREG(base, 0, 0x1000);
 
+    /* Disabled calls had no effect: the first range is still registered */
     modify_config("MEMTYPE_CACHE", "y");
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED,
-              ucs_memtype_cache_lookup(disabled_base, 0x100, &info));
+    EXPECT_EQ(UCS_OK, lookup(base, 0, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(disabled_base, 0, 0x100, &info));
+    EXPLICIT_UNREG(base, 0, 0x1000);
 }
 
 /* With UCM events the cache is event-driven and explicit registration is a
@@ -870,16 +856,14 @@ UCS_TEST_F(test_memtype_explicit, events_preferred_when_available) {
     ucs_memtype_cache_cleanup();
     ucs_memtype_cache_global_init();
     ucm_global_opts.enable_events = 1;
+    ASSERT_FALSE(ucs_memtype_cache_is_explicit());
     {
-        /* With events enabled, a failure to install the hooks is an error and
-         * does not fall back to explicit registration */
         scoped_log_handler slh(hide_warns_logger);
         ucs_memtype_cache_global_create();
     }
     if (ucs_memtype_cache_global_instance == NULL) {
         UCS_TEST_SKIP_R("UCM memory event handler could not be installed");
     }
-    ASSERT_FALSE(ucs_memtype_cache_global_instance->is_explicit);
 
     unsigned num_regions =
         ucs_memtype_cache_global_instance->pgtable.num_regions;
@@ -898,6 +882,5 @@ UCS_TEST_F(test_memtype_explicit, events_preferred_when_available) {
     EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
 
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
-    EXPECT_EQ(UCS_ERR_NO_ELEM,
-              ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_EQ(UCS_ERR_NO_ELEM, ucs_memtype_cache_lookup(base, 0x100, &info));
 }

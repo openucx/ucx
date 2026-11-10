@@ -104,6 +104,37 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type_alloc_before_init, all, "all")
 
+/* Disables UCM events and resets the global memory type cache, and restores
+ * both on destruction, also when the test fails or is skipped in init() */
+class memtype_explicit_guard {
+public:
+    memtype_explicit_guard() : m_enable_events(0), m_active(false) {
+    }
+
+    ~memtype_explicit_guard() {
+        if (m_active) {
+            reset_cache();
+            ucm_global_opts.enable_events = m_enable_events;
+        }
+    }
+
+    void enable() {
+        m_enable_events               = ucm_global_opts.enable_events;
+        m_active                      = true;
+        ucm_global_opts.enable_events = 0;
+        reset_cache();
+    }
+
+private:
+    static void reset_cache() {
+        ucs_memtype_cache_cleanup();
+        ucs_memtype_cache_global_init();
+    }
+
+    int  m_enable_events;
+    bool m_active;
+};
+
 /* Memory type cache without UCM events: only ranges mapped by ucp_mem_map() are
  * cached, and they are removed by ucp_mem_unmap() */
 class test_ucp_memtype_explicit : public test_ucp_mem_type {
@@ -115,20 +146,9 @@ public:
     }
 
     virtual void init() {
-        m_enable_events = ucm_global_opts.enable_events;
-
-        ucm_global_opts.enable_events = 0;
         modify_config("MEMTYPE_CACHE", "y");
-        ucs_memtype_cache_cleanup();
-        ucs_memtype_cache_global_init();
+        m_guard.enable();
         ucp_test::init();
-    }
-
-    virtual void cleanup() {
-        ucp_test::cleanup();
-        ucs_memtype_cache_cleanup();
-        ucs_memtype_cache_global_init();
-        ucm_global_opts.enable_events = m_enable_events;
     }
 
 protected:
@@ -158,7 +178,7 @@ protected:
     }
 
 private:
-    int m_enable_events;
+    memtype_explicit_guard m_guard;
 };
 
 UCS_TEST_P(test_ucp_memtype_explicit, map_unmap) {

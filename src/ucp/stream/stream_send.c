@@ -175,7 +175,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
                                         UCP_OP_ID_STREAM_SEND, buffer, count,
                                         datatype, contig_length, param, 0, 0);
     } else {
-        if (!ucs_memtype_cache_needs_detect()) {
+        if (ucs_memtype_cache_is_empty()) {
             if (ucs_likely(attr_mask == 0)) {
                 status = ucp_stream_send_nbx_am_short(ep, buffer, count);
                 UCP_STREAM_SEND_CHECK_STATUS(ep, status, ret, goto out);

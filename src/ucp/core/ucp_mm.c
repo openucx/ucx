@@ -449,6 +449,8 @@ ucp_memh_memtype_cache_register(ucp_context_h context, ucp_mem_h memh)
 {
     ucp_memory_info_t mem_info;
 
+    ucs_assert(!(memh->flags & UCP_MEMH_FLAG_IMPORTED));
+
     if (!ucs_memtype_cache_is_explicit()) {
         return;
     }
@@ -999,6 +1001,7 @@ ucp_memh_init_uct_reg(ucp_context_h context, ucp_mem_h memh, unsigned uct_flags,
     }
 
     ucs_assert(ucp_memh_is_user_memh(memh));
+    ucp_memh_memtype_cache_register(context, memh);
     return UCS_OK;
 
 err_put_rcache:
@@ -1158,7 +1161,6 @@ static ucs_status_t ucp_memh_alloc(ucp_context_h context, void *address,
         goto err_free_memh;
     }
 
-    ucp_memh_memtype_cache_register(context, memh);
     *memh_p = memh;
     return UCS_OK;
 
@@ -1292,8 +1294,6 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         status = ucp_memh_init_uct_reg(context, memh, uct_flags, 1, alloc_name);
         if (status != UCS_OK) {
             ucs_free(memh);
-        } else {
-            ucp_memh_memtype_cache_register(context, memh);
         }
     }
 

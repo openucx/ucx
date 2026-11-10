@@ -40,10 +40,8 @@ typedef struct ucs_memory_info {
 
 
 struct ucs_memtype_cache {
-    ucs_spinlock_t lock;       /**< Protects cache state */
-    ucs_pgtable_t  pgtable;    /**< Cached regions */
-    int            is_explicit; /**< Only explicit registrations, no UCM
-                                     events */
+    ucs_spinlock_t        lock;       /**< protests the page table */
+    ucs_pgtable_t         pgtable;    /**< Page table to hold the regions */
 };
 
 
@@ -51,8 +49,7 @@ void ucs_memtype_cache_global_init(void);
 
 
 /**
- * Create the global memory type cache and install event handlers when
- * available.
+ * Create the global memory type cache and install its event handlers.
  */
 void ucs_memtype_cache_global_create(void);
 
@@ -70,12 +67,11 @@ void ucs_memtype_cache_cleanup(void);
  *                              means the memory type is an unknown non-host
  *                              memory, and should be detected in another way.
  *
- * @return UCS_OK              - an element was found and the memory info is
- *                               valid.
- * @return UCS_ERR_NO_ELEM     - an element was not found in the event cache.
- * @return UCS_ERR_UNSUPPORTED - the cache is disabled, or it has no UCM events
- *                               and the address is not in a registered region.
- *                               The memory type cannot be assumed to be host.
+ * @return UCS_OK              - an element was found and the memory info is valid.
+ * @return UCS_ERR_NO_ELEM     - an element was not found.
+ * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled, or it holds
+ *                               only explicit registrations and none of them
+ *                               contains the range.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);
@@ -83,9 +79,8 @@ ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
 
 /**
  * Update the memory type of an address range.
- * Can be used after ucs_memtype_cache_lookup() reports
- * UCS_MEMORY_TYPE_UNKNOWN to cache the detected type. This function has no
- * effect if the cache is unavailable or UCM memory type events are inactive.
+ * Can be used after @ucs_memtype_cache_lookup returns UCM_MEM_TYPE_LAST, to
+ * set the memory type after it was detected.
  *
  * @param [in]  address         Start address to update.
  * @param [in]  size            Size of the memory to update.
@@ -103,8 +98,7 @@ void ucs_memtype_cache_update(const void *address, size_t size,
 
 
 /**
- * Remove the address range from a memtype cache. Must be called only when the
- * cache exists and tracks UCM memory type events.
+ * Remove the address range from a memtype cache.
  *
  * @param [in]  address         Start address to remove.
  * @param [in]  size            Size of the memory to remove.
@@ -113,7 +107,9 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
 
 
 /**
- * Check if the memtype cache holds only explicitly registered memory.
+ * Check if the memtype cache holds only explicitly registered memory, which is
+ * the case when it is enabled with UCX_MEMTYPE_CACHE=y while UCM events are
+ * disabled (UCX_MEM_EVENTS=n).
  *
  * @return 1 if memory must be registered explicitly, 0 otherwise.
  */
@@ -121,15 +117,14 @@ int ucs_memtype_cache_is_explicit(void);
 
 
 /**
- * Add memory with a known lifetime to the memory type cache. Used when the
- * cache is not tracking allocations by UCM events; otherwise the call has no
- * effect.
+ * Register memory with a known lifetime in the explicit memtype cache. Has no
+ * effect unless @ref ucs_memtype_cache_is_explicit returns 1.
  *
- * The range is extended to UCS_PGT_ADDR_ALIGN. Every address in it holds a
- * reference count, so ranges may be registered more than once and may overlap.
- * The caller must unregister the same range with
- * @ref ucs_memtype_cache_unregister before the memory is released, since
- * without free events the cache cannot detect that it became invalid.
+ * Every call adds a separate entry, so a range may be registered more than once
+ * and ranges may overlap. Overlapping registrations must describe the same
+ * memory. The caller must call @ref ucs_memtype_cache_unregister with the same
+ * range once per registration, before the memory is released, since without
+ * UCM events the cache cannot detect that it became invalid.
  *
  * @param [in]  address         Start address of the memory.
  * @param [in]  size            Size of the memory.
@@ -143,9 +138,8 @@ void ucs_memtype_cache_register(const void *address, size_t size,
 
 
 /**
- * Drop one reference from an address range added by
- * @ref ucs_memtype_cache_register. Addresses whose reference count reaches
- * zero are removed from the cache. Ranges that are not registered are ignored.
+ * Remove one registration of exactly this range, which was added by
+ * @ref ucs_memtype_cache_register. Ranges that are not registered are ignored.
  *
  * @param [in]  address         Start address passed to register.
  * @param [in]  size            Size passed to register.
@@ -154,16 +148,16 @@ void ucs_memtype_cache_unregister(const void *address, size_t size);
 
 
 /**
- * Find if memory type detection is needed. An explicit-only cache
- * cannot prove that an unregistered address is host memory.
+ * Find if global memtype_cache is empty. Without a cache instance (the cache is
+ * disabled, or it holds only explicit registrations) it returns 0, since the
+ * memory may not be host.
  *
- * @return 1 if detection is needed, 0 otherwise.
+ * @return 1 if empty 0 if otherwise.
  */
-static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_needs_detect(void)
+static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty(void)
 {
-    return (ucs_memtype_cache_global_instance == NULL) ||
-           ucs_memtype_cache_global_instance->is_explicit ||
-           (ucs_memtype_cache_global_instance->pgtable.num_regions != 0);
+    return (ucs_memtype_cache_global_instance != NULL) &&
+           (ucs_memtype_cache_global_instance->pgtable.num_regions == 0);
 }
 
 
