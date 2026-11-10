@@ -475,6 +475,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     self->rx.quota              = 0;
     self->config.rx_qp_len      = config->super.rx.queue_len;
     self->config.tx_qp_len      = config->super.tx.queue_len;
+    self->config.iface_overhead = config->iface_overhead;
     self->config.min_poke_time  = ucs_time_from_sec(config->min_poke_time);
     self->config.check_grh_dgid = config->dgid_check &&
                                   uct_ib_iface_is_roce(&self->super);
@@ -674,6 +675,16 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
     {"UD_", "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
+
+    {"IFACE_OVERHEAD", "0",
+     "Estimated software overhead per operation for the interface and receive\n"
+     "performance estimates. Defaults include an empirical 50 ns calibration:\n"
+     "previous estimates could favor UD over DC despite slower completion\n"
+     "observed with UCC hybrid Alltoallv on Funk. This calibrates transport\n"
+     "selection; this is not an isolated ACK/retransmission measurement.\n"
+     "Tune for scale, hardware and communication pattern in use. Send-side\n"
+     "estimates are configured separately with SEND_OVERHEAD.",
+     ucs_offsetof(uct_ud_iface_config_t, iface_overhead), UCS_CONFIG_TYPE_TIME},
 
     {"LINGER_TIMEOUT", "5.0m",
      "Keep the connection open internally for this amount of time after closing it",
