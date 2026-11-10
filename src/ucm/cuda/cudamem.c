@@ -424,14 +424,9 @@ out:
     return status;
 }
 
-static void ucm_cudamem_get_existing_alloc(ucm_event_handler_t *handler)
-{
-    ucm_get_existing_mem_type_alloc(handler, "/dev/nvidia");
-}
-
 static ucm_event_installer_t ucm_cuda_initializer = {
-    .install            = ucm_cudamem_install,
-    .get_existing_alloc = ucm_cudamem_get_existing_alloc
+    .install      = ucm_cudamem_install,
+    .path_pattern = "/dev/nvidia"
 };
 
 UCS_STATIC_INIT

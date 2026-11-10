@@ -195,14 +195,9 @@ out:
     return status;
 }
 
-static void ucm_zemem_get_existing_alloc(ucm_event_handler_t *handler)
-{
-    ucm_get_existing_mem_type_alloc(handler, "/dev/dri");
-}
-
 static ucm_event_installer_t ucm_ze_initializer = {
-    .install            = ucm_zemem_install,
-    .get_existing_alloc = ucm_zemem_get_existing_alloc
+    .install      = ucm_zemem_install,
+    .path_pattern = "/dev/dri"
 };
 
 UCS_STATIC_INIT

@@ -33,7 +33,7 @@ typedef struct ucm_event_handler {
 
 typedef struct ucm_event_installer {
     ucs_status_t          (*install)(int events);
-    void                  (*get_existing_alloc)(ucm_event_handler_t *handler);
+    const char            *path_pattern;
     ucs_list_link_t       list;
 } ucm_event_installer_t;
 
@@ -108,8 +108,5 @@ ucm_dispatch_mem_type_free(void *addr, size_t length,
                             UCS_MEM_FLAG_REGISTRABLE);
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
-
-void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
-                                     const char *path_pattern);
 
 #endif

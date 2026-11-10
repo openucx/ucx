@@ -560,6 +560,48 @@ out_unlock:
     return status;
 }
 
+typedef struct {
+    ucm_event_handler_t *handler;
+    const char          *path_pattern;
+} ucm_existing_mem_type_ctx_t;
+
+static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
+                                         int prot, const char *path)
+{
+    ucm_existing_mem_type_ctx_t *ctx = arg;
+    ucm_event_t event;
+
+    /* we are interested in blocks which don't have any access permissions, or
+     * mapped to the given device path.
+     */
+    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
+        (strncmp(path, ctx->path_pattern, strlen(ctx->path_pattern)) != 0)) {
+        return 0;
+    }
+
+    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
+              UCS_PTR_BYTE_OFFSET(addr, length), path);
+
+    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_UNKNOWN,
+                            UCS_MEM_FLAG_REGISTRABLE);
+
+    ucm_event_enter();
+    ctx->handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, ctx->handler->arg);
+    ucm_event_leave();
+
+    return 0;
+}
+
+static void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
+                                            const char *path_pattern)
+{
+    ucm_existing_mem_type_ctx_t ctx = {handler, path_pattern};
+
+    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
+        ucm_parse_proc_self_maps(ucm_existing_mem_type_scan_cb, &ctx);
+    }
+}
+
 ucs_status_t ucm_set_event_handler(int events, int priority,
                                    ucm_event_callback_t cb, void *arg)
 {
@@ -611,7 +653,8 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
 
     if (flags & UCM_EVENT_FLAG_EXISTING_ALLOC) {
         ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
-            event_installer->get_existing_alloc(handler);
+            ucm_get_existing_mem_type_alloc(handler,
+                                            event_installer->path_pattern);
         }
     }
 
@@ -669,48 +712,6 @@ ucs_status_t ucm_test_external_events(int events)
 {
     ucm_library_init();
     return ucm_mmap_test_events(events & ucm_external_events, "external");
-}
-
-typedef struct {
-    ucm_event_handler_t *handler;
-    const char          *path_pattern;
-} ucm_existing_mem_type_ctx_t;
-
-static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
-                                         int prot, const char *path)
-{
-    ucm_existing_mem_type_ctx_t *ctx = arg;
-    ucm_event_t event;
-
-    /* we are interested in blocks which don't have any access permissions, or
-     * mapped to the given device path.
-     */
-    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        (strncmp(path, ctx->path_pattern, strlen(ctx->path_pattern)) != 0)) {
-        return 0;
-    }
-
-    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
-              UCS_PTR_BYTE_OFFSET(addr, length), path);
-
-    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_UNKNOWN,
-                            UCS_MEM_FLAG_REGISTRABLE);
-
-    ucm_event_enter();
-    ctx->handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, ctx->handler->arg);
-    ucm_event_leave();
-
-    return 0;
-}
-
-void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
-                                     const char *path_pattern)
-{
-    ucm_existing_mem_type_ctx_t ctx = {handler, path_pattern};
-
-    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
-        ucm_parse_proc_self_maps(ucm_existing_mem_type_scan_cb, &ctx);
-    }
 }
 
 UCS_STATIC_CLEANUP {
