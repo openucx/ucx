@@ -908,6 +908,30 @@ protected:
     static ucs::mock        *m_probe_mock;
     static unsigned          m_probe_count;
 
+    static ucs_status_t recovery_probe_hold_once(uct_ep_h ep, unsigned flags,
+                                                 uct_completion_t *comp)
+    {
+        if ((comp != NULL) && (m_probe_count++ == 0)) {
+            m_held_probe_comp = comp;
+            return UCS_INPROGRESS;
+        }
+
+        return m_probe_mock->orig_func(&ep->iface->ops.ep_check, ep, flags,
+                                       comp);
+    }
+
+    void progress_for(double sec)
+    {
+        ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(sec);
+
+        while (ucs_get_time() < deadline) {
+            short_progress_loop();
+        }
+    }
+
+    ucp_lane_index_t setup_one_failed_lane(ucs::mock &mock);
+    void run_probe_completes_after_handshake();
+    void run_probe_fail_after_peer_recovered();
     void run_initiator_failure();
     void run_target_failure();
     void run_probe_gated_recovery();
@@ -1278,6 +1302,156 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
             << "data did not flow on live lanes after recovery give-up";
 }
 
+ucp_lane_index_t
+test_ucp_fault_tolerance::setup_one_failed_lane(ucs::mock &mock)
+{
+    ucp_ep_h ep           = sender().ep(0, INJECTED_EP_INDEX);
+    ucp_lane_index_t lane = UCP_NULL_LANE;
+    ucs_status_t status;
+
+    flush_workers();
+    for (ucp_lane_index_t l : get_lanes(TEST_OP_AM)) {
+        if (ucp_ep_is_lane_p2p(ep, l) &&
+            (l != ucp_ep_config(ep)->key.am_lane)) {
+            lane = l;
+            break;
+        }
+    }
+
+    if (lane == UCP_NULL_LANE) {
+        return UCP_NULL_LANE;
+    }
+
+    m_held_probe_comp = NULL;
+    m_probe_count     = 0;
+    mock_recovery_probe(sender().worker(), mock, recovery_probe_hold_once);
+
+    status = uct_ep_invalidate(ucp_ep_get_lane(ep, lane), 0);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        return UCP_NULL_LANE;
+    }
+
+    EXPECT_UCS_OK(status);
+    EXPECT_UCS_OK(do_am_send_and_wait(ep, am_msg_size(), true));
+    UCS_TEST_MESSAGE << "failed lane " << int(lane);
+    return lane;
+}
+
+void test_ucp_fault_tolerance::run_probe_completes_after_handshake()
+{
+    ucp_ep_h ep                = sender().ep(0, INJECTED_EP_INDEX);
+    ucp_ep_h peer_ep           = receiver().ep(0, INJECTED_EP_INDEX);
+    ucp_ep_recovery_arg_t *arg = NULL;
+    ucp_wireup_ep_t *wireup_ep;
+    uint16_t req_id, peer_req_id;
+    ucp_lane_index_t lane;
+
+    skip_unless_rc_probe_gate();
+    ucs::mock mock;
+    lane = setup_one_failed_lane(mock);
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no suitable p2p lane");
+    }
+
+    wait_for_cond([&]() {
+        arg = ucp_ep_recovery_arg(ep);
+        return (arg != NULL) && (m_held_probe_comp != NULL) &&
+               (arg->state == UCP_EP_RECOVERY_STATE_PROBING) &&
+               (ucp_ep_get_failed_lanes(peer_ep) == 0);
+    }, [this]() { short_progress_loop(); });
+    ASSERT_NE(nullptr, arg);
+    ASSERT_EQ(&arg->probe[lane].comp, m_held_probe_comp);
+    ASSERT_EQ(UCP_EP_RECOVERY_STATE_PROBING, arg->state);
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(peer_ep));
+
+    wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
+    ASSERT_NE(nullptr, wireup_ep);
+    EXPECT_EQ(UCS_BIT(lane), ucp_ep_get_failed_lanes(ep));
+    EXPECT_FALSE(wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY);
+    EXPECT_TRUE(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED)
+            << "lane was not connected during the exchange";
+
+    req_id      = ep->ext->tf_request_id;
+    peer_req_id = peer_ep->ext->tf_request_id;
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    mock_invoke_completion(UCS_OK);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+
+    wait_for_cond([&]() {
+        return (ucp_ep_get_failed_lanes(ep) == 0) &&
+               (ucp_ep_recovery_arg(ep) == NULL) &&
+               !ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane));
+    }, [this]() { short_progress_loop(); });
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "late probe did not recover";
+
+    progress_for(0.5);
+    ASSERT_EQ(req_id, ep->ext->tf_request_id)
+            << "late probe started another LANES_ADDR exchange";
+    EXPECT_EQ(peer_req_id, peer_ep->ext->tf_request_id);
+    EXPECT_EQ(0, ucp_ep_get_failed_lanes(peer_ep));
+    EXPECT_EQ(1u, m_probe_count);
+    EXPECT_UCS_OK(do_am_send_and_wait(ep, am_msg_size(), true));
+    EXPECT_EQ(0, total_err_count());
+}
+
+void test_ucp_fault_tolerance::run_probe_fail_after_peer_recovered()
+{
+    ucp_ep_h ep                = sender().ep(0, INJECTED_EP_INDEX);
+    ucp_ep_h peer_ep           = receiver().ep(0, INJECTED_EP_INDEX);
+    ucp_ep_recovery_arg_t *arg = NULL;
+    mem_buffer sbuf(UCS_MBYTE, UCS_MEMORY_TYPE_HOST);
+    ucp_request_param_t param  = {};
+    uint16_t req_id;
+    ucp_lane_index_t lane;
+    int i;
+
+    skip_unless_rc_probe_gate();
+    ucs::mock mock;
+    lane = setup_one_failed_lane(mock);
+    if (lane == UCP_NULL_LANE) {
+        UCS_TEST_SKIP_R("no suitable p2p lane");
+    }
+
+    /* Our probe is held, the peer has fully recovered its lane */
+    wait_for_cond([&]() {
+        arg = ucp_ep_recovery_arg(ep);
+        return (arg != NULL) && (m_held_probe_comp != NULL) &&
+               (ucp_ep_get_failed_lanes(peer_ep) == 0);
+    }, [this]() { short_progress_loop(); });
+    ASSERT_NE(nullptr, arg);
+    ASSERT_EQ(&arg->probe[lane].comp, m_held_probe_comp);
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(peer_ep));
+
+    /* Our probe fails: the retry makes the peer rebuild its lane */
+    req_id = ep->ext->tf_request_id;
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    mock_invoke_completion(UCS_ERR_ENDPOINT_TIMEOUT);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+
+    wait_for_cond([&]() {
+        return (ucp_ep_get_failed_lanes(ep) == 0) &&
+               (ucp_ep_get_failed_lanes(peer_ep) == 0) &&
+               (ucp_ep_recovery_arg(ep) == NULL) &&
+               !ucp_wireup_ep_test(ucp_ep_get_lane(ep, lane));
+    }, [this]() { short_progress_loop(); });
+    ASSERT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "lane did not recover";
+    UCS_TEST_MESSAGE << "recovered, requests sent after the failed probe: "
+                     << int(uint16_t(ep->ext->tf_request_id - req_id));
+
+    /* Large AMs are split across the eager lanes, so this lane is used */
+    for (i = 0; i < 50; ++i) {
+        request_wait(ucp_am_send_nbx(ep, AM_ID, NULL, 0, sbuf.ptr(),
+                                     UCS_MBYTE, &param));
+    }
+    request_wait(ucp_ep_flush_nbx(ep, &param));
+    progress_for(3.0);
+
+    EXPECT_EQ(0, ucp_ep_get_failed_lanes(ep)) << "recovered lane failed again";
+    EXPECT_EQ(uint16_t(req_id + 1), ep->ext->tf_request_id)
+            << "extra recovery rounds after the lane became READY";
+    EXPECT_EQ(0, total_err_count());
+}
+
 #define UCP_FT_TEST(_fixture, _name, ...) \
     UCS_TEST_P(_fixture, _name, __VA_ARGS__) \
     { \
@@ -1295,6 +1469,12 @@ void test_ucp_fault_tolerance::run_recovery_retries_exhausted_live_lanes()
                 "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000") \
     UCP_FT_TEST(_fixture, worker_flush_during_recovery, \
                 "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=1000", \
+                "KEEPALIVE_INTERVAL=0.1s") \
+    UCP_FT_TEST(_fixture, probe_completes_after_handshake, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=100", \
+                "KEEPALIVE_INTERVAL=0.1s") \
+    UCP_FT_TEST(_fixture, probe_fail_after_peer_recovered, \
+                "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=100", \
                 "KEEPALIVE_INTERVAL=0.1s") \
     UCP_FT_TEST(_fixture, recovery_retries_exhausted_live_lanes, \
                 "MAX_EAGER_LANES=8", "RECOVERY_RETRIES=2", \
