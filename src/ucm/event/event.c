@@ -686,7 +686,7 @@ static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
      * mapped to the given device path.
      */
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        strncmp(path, ctx->path_pattern, strlen(ctx->path_pattern))) {
+        (strncmp(path, ctx->path_pattern, strlen(ctx->path_pattern)) != 0)) {
         return 0;
     }
 
