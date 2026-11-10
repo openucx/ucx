@@ -615,6 +615,8 @@ static int ucs_topo_is_sys_root(const char *path)
 static int ucs_topo_is_pci_root(const char *path)
 {
     int count = -1;
+
+    /* coverity[check_return] */
     sscanf(path, UCS_TOPO_SYSFS_DEVICES_ROOT "/pci%*x:%*x%n", &count);
     return count == strlen(path);
 }
