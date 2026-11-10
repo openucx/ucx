@@ -25,9 +25,6 @@
 
 #define UCT_UD_IFACE_CEP_CONN_SN_MAX ((uct_ud_ep_conn_sn_t)-1)
 
-#define UCT_UD_IFACE_OVERHEAD_SCALE_THRESHOLD 160
-#define UCT_UD_IFACE_OVERHEAD_SCALE_PENALTY   50e-9
-
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
@@ -491,8 +488,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     self->config.extra_overhead =
             (UCT_IFACE_PARAM_VALUE(params, estimated_num_eps,
                                    ESTIMATED_NUM_EPS, 0) >
-             UCT_UD_IFACE_OVERHEAD_SCALE_THRESHOLD) ?
-                    UCT_UD_IFACE_OVERHEAD_SCALE_PENALTY : 0.0;
+             config->overhead_scale_threshold) ?
+                    config->overhead_scale_penalty : 0.0;
 
     self->rx.async_max_poll = config->rx_async_max_poll;
 
@@ -721,6 +718,18 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
     {"RX_ASYNC_MAX_POLL", "64",
      "Max number of receive completions to pick during asynchronous TX poll",
      ucs_offsetof(uct_ud_iface_config_t, rx_async_max_poll), UCS_CONFIG_TYPE_UINT},
+
+    {"OVERHEAD_SCALE_THRESHOLD", "160",
+     "Advertise extra software overhead when the estimated endpoint count\n"
+     "strictly exceeds this threshold. Use inf to disable the correction.",
+     ucs_offsetof(uct_ud_iface_config_t, overhead_scale_threshold),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"OVERHEAD_SCALE_PENALTY", "50ns",
+     "Extra software overhead above OVERHEAD_SCALE_THRESHOLD.\n"
+     "This only adjusts performance estimates. Use 0ns to disable it.",
+     ucs_offsetof(uct_ud_iface_config_t, overhead_scale_penalty),
+     UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };

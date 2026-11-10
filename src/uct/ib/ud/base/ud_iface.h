@@ -69,6 +69,8 @@ typedef struct uct_ud_iface_config {
     int                           dgid_check;
     unsigned                      max_window;
     unsigned                      rx_async_max_poll;
+    unsigned long                 overhead_scale_threshold;
+    double                        overhead_scale_penalty;
 } uct_ud_iface_config_t;
 
 

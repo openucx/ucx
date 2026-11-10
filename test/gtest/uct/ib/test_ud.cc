@@ -1348,5 +1348,27 @@ UCS_TEST_P(test_ud_iface_attrs, scale_overhead)
     check_scale_overhead(1ul << 20, false, 0.0);
 }
 
+UCS_TEST_P(test_ud_iface_attrs, scale_overhead_config)
+{
+    modify_config("UD_OVERHEAD_SCALE_THRESHOLD", "32");
+    modify_config("UD_OVERHEAD_SCALE_PENALTY", "125ns");
+    check_scale_overhead(0, true, 0.0);
+    check_scale_overhead(32, true, 0.0);
+    check_scale_overhead(33, true, 125e-9);
+    check_scale_overhead(256, true, 125e-9);
+    check_scale_overhead(1ul << 20, false, 0.0);
+
+    modify_config("UD_OVERHEAD_SCALE_THRESHOLD", "0");
+    check_scale_overhead(0, true, 0.0);
+    check_scale_overhead(1, true, 125e-9);
+
+    modify_config("UD_OVERHEAD_SCALE_PENALTY", "0ns");
+    check_scale_overhead(256, true, 0.0);
+
+    modify_config("UD_OVERHEAD_SCALE_PENALTY", "125ns");
+    modify_config("UD_OVERHEAD_SCALE_THRESHOLD", "inf");
+    check_scale_overhead(1ul << 20, true, 0.0);
+}
+
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)
 
