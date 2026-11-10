@@ -50,6 +50,10 @@ ucs_status_t uct_cuda_driver_get_version(int *version_p);
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_WARN)
 
 
+#define UCT_CUDADRV_FUNC_LOG_DIAG(_func) \
+    UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DIAG)
+
+
 #define UCT_CUDADRV_FUNC_LOG_DEBUG(_func) \
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_DEBUG)
 
