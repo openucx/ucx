@@ -107,9 +107,9 @@ uct_cuda_ipc_rkey_get_local_addr(const uct_cuda_ipc_rkey_t *rkey,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_cuda_ipc_remote_mapping_init(uct_cuda_ipc_remote_mapping_t *mapping,
-                                 const uct_cuda_ipc_extended_rkey_t *key,
-                                 const void *mapped_addr)
+uct_cuda_ipc_mapping_init(uct_cuda_ipc_mapping_t *mapping,
+                          const uct_cuda_ipc_extended_rkey_t *key,
+                          const void *mapped_addr)
 {
     mapping->pid         = key->super.pid;
     mapping->pid_ns      = key->pid_ns;

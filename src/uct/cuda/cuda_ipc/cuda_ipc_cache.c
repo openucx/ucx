@@ -670,7 +670,7 @@ uct_cuda_ipc_cache_destroy_region(uct_cuda_ipc_cache_t *cache, uintptr_t d_bptr,
     pthread_rwlock_unlock(&cache->lock);
 }
 
-void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_remote_mapping_t *mapping,
+void uct_cuda_ipc_unmap_memhandle(const uct_cuda_ipc_mapping_t *mapping,
                                   CUdevice cu_dev, int cache_enabled)
 {
     const uct_cuda_ipc_cache_hash_key_t key = {mapping->pid, mapping->pid_ns,

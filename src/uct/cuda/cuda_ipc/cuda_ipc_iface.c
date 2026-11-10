@@ -428,7 +428,7 @@ static void uct_cuda_ipc_complete_event(uct_iface_h tl_iface,
         return;
     }
 
-    uct_cuda_ipc_unmap_memhandle(&cuda_ipc_event->remote_mapping,
+    uct_cuda_ipc_unmap_memhandle(&cuda_ipc_event->mapping,
                                  cuda_ipc_event->cuda_device,
                                  uct_cuda_ipc_component.enable_remote_cache);
 }

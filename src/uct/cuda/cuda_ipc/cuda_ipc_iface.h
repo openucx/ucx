@@ -62,8 +62,8 @@ typedef struct {
 
 
 typedef struct {
-    size_t                        count;
-    uct_cuda_ipc_remote_mapping_t *entries;
+    size_t                 count;
+    uct_cuda_ipc_mapping_t *entries;
 } uct_cuda_ipc_sgl_mapping_t;
 
 
@@ -83,10 +83,10 @@ uct_cuda_ipc_sgl_mapping_destroy(uct_cuda_ipc_sgl_mapping_t *mapping,
 
 
 typedef struct {
-    uct_cuda_event_desc_t         super;
-    uct_cuda_ipc_remote_mapping_t remote_mapping;
-    CUdevice                      cuda_device;
-    uct_cuda_ipc_sgl_mapping_t    *sgl_mapping;
+    uct_cuda_event_desc_t      super;
+    uct_cuda_ipc_mapping_t     mapping;
+    CUdevice                   cuda_device;
+    uct_cuda_ipc_sgl_mapping_t *sgl_mapping;
 } uct_cuda_ipc_event_desc_t;
 
 

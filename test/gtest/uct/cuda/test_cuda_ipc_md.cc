@@ -396,10 +396,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                 ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
             }
 
-            uct_cuda_ipc_remote_mapping_t remote_mapping;
-            uct_cuda_ipc_remote_mapping_init(&remote_mapping, &unpacked->super,
-                                             mapped_addr);
-            uct_cuda_ipc_unmap_memhandle(&remote_mapping, dev, 0);
+            uct_cuda_ipc_mapping_t mapping;
+            uct_cuda_ipc_mapping_init(&mapping, &unpacked->super,
+                                      mapped_addr);
+            uct_cuda_ipc_unmap_memhandle(&mapping, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
