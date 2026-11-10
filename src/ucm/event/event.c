@@ -693,7 +693,7 @@ static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
     ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
-    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_LAST,
+    ucm_event_mem_type_init(&event, addr, length, UCS_MEMORY_TYPE_UNKNOWN,
                             UCS_MEM_FLAG_REGISTRABLE);
 
     ucm_event_enter();
