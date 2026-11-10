@@ -334,6 +334,8 @@ ucp_proto_put_offload_zcopy_probe_param(
         .super.reg_mem_info     = ucp_proto_common_select_param_mem_info(
                                                      init_params->select_param),
         .max_lanes              = context->config.ext.max_rma_lanes,
+        .auto_lanes             = (context->config.ext.max_rma_lanes_config ==
+                                   UCS_ULUNITS_AUTO),
         .min_chunk              = context->config.ext.min_rma_chunk_size,
         .initial_reg_md_map     = 0,
         .first.tl_cap_flags     = UCT_IFACE_FLAG_PUT_ZCOPY,

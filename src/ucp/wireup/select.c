@@ -2067,6 +2067,18 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     return found_lane;
 }
 
+/* rndv/am of a GPU buffer may use the AM_BW lanes of all the GPU's NICs.
+ * Wireup does not know the buffer, so it creates the lanes for every endpoint
+ * and lets the protocol select among them. rndv/am runs only with the auto
+ * and am rendezvous schemes. */
+static int ucp_wireup_is_auto_gpu_am_bw_needed(ucp_context_h context)
+{
+    return context->config.auto_gpu_lanes &&
+           (context->config.ext.max_rndv_lanes_config == UCS_ULUNITS_AUTO) &&
+           ((context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) ||
+            (context->config.ext.rndv_mode == UCP_RNDV_MODE_AM));
+}
+
 static ucs_status_t
 ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
                            ucp_wireup_select_context_t *select_ctx)
@@ -2083,8 +2095,9 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
           (UCP_FEATURE_TAG | UCP_FEATURE_AM)) ||
         (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
                           UCP_EP_INIT_CREATE_AM_LANE_ONLY)) ||
-        /* TODO: Check MAX_RNDV_LANES here for rndv/am case */
-        (context->config.ext.max_eager_lanes < 2)) {
+        /* TODO: Check an explicit MAX_RNDV_LANES here for rndv/am case */
+        (!ucp_context_eager_uses_am_bw_lanes(context) &&
+         !ucp_wireup_is_auto_gpu_am_bw_needed(context))) {
         return UCS_OK;
     }
 
@@ -2108,7 +2121,9 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.remote_dev_bitmap = UINT64_MAX;
     excluded_am_lane          = UCP_NULL_LANE;
 
-    if (context->config.ext.proto_enable) {
+    if (ucp_wireup_is_auto_gpu_am_bw_needed(context)) {
+        bw_info.max_lanes = ucp_wireup_bw_max_lanes(select_params);
+    } else if (context->config.ext.proto_enable) {
         /* rndv/am/zcopy proto should take max_rndv_lanes value into account */
         bw_info.max_lanes = ucs_max(context->config.ext.max_eager_lanes,
                                     context->config.ext.max_rndv_lanes);

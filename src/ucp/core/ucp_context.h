@@ -527,6 +527,10 @@ typedef struct ucp_context {
         /* Indicate whether tracing for used protocol selections is enabled */
         int                       trace_used_proto_selections;
 
+        /* Indicate whether GPU buffers may get an 'auto' rail limit based on
+         * their GPU's NICs */
+        int                       auto_gpu_lanes;
+
         struct {
            unsigned               count;
            size_t                 *sizes;
@@ -806,6 +810,14 @@ ucp_context_rndv_is_enabled(ucp_context_h context)
 {
     return (context->config.ext.rndv_intra_thresh != UCS_MEMUNITS_INF) ||
            (context->config.ext.rndv_inter_thresh != UCS_MEMUNITS_INF);
+}
+
+/* Return whether eager protocols may use AM_BW lanes, which needs
+ * UCX_MAX_EAGER_RAILS of 2 or more */
+static UCS_F_ALWAYS_INLINE int
+ucp_context_eager_uses_am_bw_lanes(ucp_context_h context)
+{
+    return context->config.ext.max_eager_lanes >= 2;
 }
 
 static UCS_F_ALWAYS_INLINE int

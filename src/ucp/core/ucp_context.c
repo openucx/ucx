@@ -252,14 +252,20 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MAX_RNDV_RAILS", "auto",
    "Maximal number of devices on which a rendezvous operation may be\n"
    "executed in parallel.\n"
-   " - auto : use UCX_MAX_RNDV_RAILS_FALLBACK.\n"
+   " - auto : for host memory, use UCX_MAX_RNDV_RAILS_FALLBACK.\n"
+   "          for GPU memory:\n"
+   "           - with NICs assigned by UCX_GPU_NIC_ASSIGNMENT_MODE, use the\n"
+   "             lanes on those NICs.\n"
+   "           - without assigned NICs, use UCX_MAX_RNDV_RAILS_FALLBACK.\n"
    " - <N>  : use up to N devices.",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes_config),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"MAX_RNDV_RAILS_FALLBACK", "2",
    "Maximal number of devices for a rendezvous operation when\n"
-   "UCX_MAX_RNDV_RAILS is 'auto'. Ignored when UCX_MAX_RNDV_RAILS is a number.",
+   "UCX_MAX_RNDV_RAILS is 'auto' and selects no NICs for the memory (see\n"
+   "UCX_MAX_RNDV_RAILS), and for protocols v1. Ignored when\n"
+   "UCX_MAX_RNDV_RAILS is a number.",
    ucs_offsetof(ucp_context_config_t, max_rndv_lanes_fallback),
    UCS_CONFIG_TYPE_UINT},
 
@@ -270,14 +276,19 @@ static ucs_config_field_t ucp_context_config_table[] = {
   {"MAX_RMA_RAILS", "auto",
    "Maximal number of devices on which a RMA operation may be executed in\n"
    "parallel.\n"
-   " - auto : use UCX_MAX_RMA_RAILS_FALLBACK.\n"
+   " - auto : for host memory, use UCX_MAX_RMA_RAILS_FALLBACK.\n"
+   "          for GPU memory:\n"
+   "           - with NICs assigned by UCX_GPU_NIC_ASSIGNMENT_MODE, use the\n"
+   "             lanes on those NICs.\n"
+   "           - without assigned NICs, use UCX_MAX_RMA_RAILS_FALLBACK.\n"
    " - <N>  : use up to N devices.",
    ucs_offsetof(ucp_context_config_t, max_rma_lanes_config),
    UCS_CONFIG_TYPE_ULUNITS},
 
   {"MAX_RMA_RAILS_FALLBACK", "1",
    "Maximal number of devices for a RMA operation when UCX_MAX_RMA_RAILS is\n"
-   "'auto'. Ignored when UCX_MAX_RMA_RAILS is a number.",
+   "'auto' and selects no NICs for the memory (see UCX_MAX_RMA_RAILS), and\n"
+   "for protocols v1. Ignored when UCX_MAX_RMA_RAILS is a number.",
    ucs_offsetof(ucp_context_config_t, max_rma_lanes_fallback),
    UCS_CONFIG_TYPE_UINT},
 
@@ -3222,6 +3233,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     if (status != UCS_OK) {
         goto err_free_res;
     }
+
+    context->config.auto_gpu_lanes = (context->gpu_nic_assignment != NULL);
 
     context->uuid             = ucs_generate_uuid((uintptr_t)context);
     context->next_memh_reg_id = 0;
