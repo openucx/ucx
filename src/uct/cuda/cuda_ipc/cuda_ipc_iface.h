@@ -12,7 +12,6 @@
 #include <cuda.h>
 
 #include "cuda_ipc_md.h"
-#include "cuda_ipc_ep.h"
 #include "cuda_ipc_cache.h"
 
 
