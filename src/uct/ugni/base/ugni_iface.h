@@ -10,6 +10,8 @@
 #include <uct/base/uct_iface.h>
 #include <uct/api/uct.h>
 
+extern uct_iface_internal_ops_t uct_ugni_iface_internal_ops;
+
 UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, uct_iface_ops_t*,
                   uct_iface_internal_ops_t*,

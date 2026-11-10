@@ -50,7 +50,7 @@ int uct_ugni_iface_is_reachable_v2(const uct_iface_h tl_iface,
            uct_iface_scope_is_reachable(tl_iface, params);
 }
 
-static uct_iface_internal_ops_t uct_ugni_iface_internal_ops = {
+uct_iface_internal_ops_t uct_ugni_iface_internal_ops = {
     .iface_query_v2        = uct_iface_base_query_v2,
     .iface_estimate_perf   = uct_base_iface_estimate_perf,
     .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
@@ -99,10 +99,6 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
     unsigned grow =  (config->mpool.bufs_grow == 0) ? 128 : config->mpool.bufs_grow;
 
     ucs_assert(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE);
-
-    if (internal_ops == NULL) {
-        internal_ops = &uct_ugni_iface_internal_ops;
-    }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops,
                               internal_ops, md, worker, params,

@@ -259,7 +259,8 @@ class test_uct_loopback_cuda : public test_uct_perf {
 protected:
     void init() override
     {
-        /* Export config for the separate iface opened by libperf. */
+        /* uct_test::modify_config() updates only the test's iface config;
+         * libperf opens a separate iface and needs the environment export. */
         ucs::test_base::modify_config("CUDA_IPC_ENABLE_SAME_PROCESS", "y",
                                       SETENV_IF_NOT_EXIST);
         test_uct_perf::init();
