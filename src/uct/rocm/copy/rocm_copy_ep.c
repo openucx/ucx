@@ -220,8 +220,7 @@ ucs_status_t uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep, uint64_t remote_addr,
         ucs_mpool_put(rocm_copy_signal);
         ret = UCS_OK;
     } else {
-        rocm_copy_signal->comp        = comp;
-        rocm_copy_signal->mapped_addr = NULL;
+        uct_rocm_base_signal_desc_set(rocm_copy_signal, comp, NULL, NULL, NULL);
         ucs_queue_push(&iface->signal_queue, &rocm_copy_signal->queue);
     }
 
