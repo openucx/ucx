@@ -240,7 +240,7 @@ protected:
         m_extension = extension;
 
         ucs_snprintf_safe(path, sizeof(path), "%s/ucx_module_order_XXXXXX",
-                          ucs_get_tmpdir());
+                          GTEST_MODULE_ORDER_LIB_DIR);
         ASSERT_NE(nullptr, mkdtemp(path));
         m_path = path;
         ASSERT_EQ(0, mkdir((m_path + "/first").c_str(), S_IRWXU));

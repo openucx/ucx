@@ -55,9 +55,12 @@ typedef enum {
  *
  * Module shared libraries are searched in the following locations (in order of
  * priority):
- *  1. 'ucx' sub-directory inside the directory of the current shared library (libucs)
- *  2. ${libdir}/ucx, where ${libdir} is the directory where libraries are installed
- * Note that if libucs is loaded from its installation path, (1) and (2) are the
+ *  1. Directories listed in UCX_PLUGIN_PATH (colon-separated)
+ *  2. 'ucx' sub-directory inside the directory of the current shared library
+ *     (libucs)
+ *  3. ${libdir}/ucx, where ${libdir} is the directory where libraries are
+ *     installed
+ * Note that if libucs is loaded from its installation path, (2) and (3) are the
  * same location. Only if libucs is moved or ran from build directory, the paths
  * will be different, in which case we prefer the 'local' library rather than the
  * 'installed' one.
