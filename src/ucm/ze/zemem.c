@@ -14,8 +14,6 @@
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
 #include <ucs/debug/assert.h>
-#include <ucm/util/sys.h>
-#include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <unistd.h>
 #include <pthread.h>

@@ -15,7 +15,6 @@
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
-#include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 

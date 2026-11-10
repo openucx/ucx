@@ -16,8 +16,6 @@
 #include <ucm/util/replace.h>
 #include <ucm/bistro/bistro.h>
 #include <ucs/debug/assert.h>
-#include <ucm/util/sys.h>
-#include <ucs/sys/compiler.h>
 
 #include <unistd.h>
 #include <pthread.h>
