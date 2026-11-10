@@ -735,9 +735,8 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
         }
     }
 
-    /* A new allocation can start below a stale cached region, so the point
-     * lookup misses it. Keep the cache-hit path above and remove all stale
-     * overlaps before importing any handle type. */
+    /* A new allocation can start below a stale cached region, so a point
+     * lookup can miss a mapping that would conflict with the import. */
     uct_cuda_ipc_cache_invalidate_regions(
             cache, (void *)key->d_bptr,
             UCS_PTR_BYTE_OFFSET(key->d_bptr, key->b_len));
@@ -746,8 +745,8 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
                                          (CUdeviceptr*)mapped_addr, log_level);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
-            /* The overlapping range is already invalidated. Retain the
-             * fallback for conflicts outside the advertised range. */
+            /* A remaining mapping conflict may lie outside the advertised
+             * range, so recovery requires purging the entire cache. */
             uct_cuda_ipc_cache_purge(cache, 1);
             status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
                                                  (CUdeviceptr*)mapped_addr,
