@@ -49,7 +49,7 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
                                   ucs_offsetof(uct_mm_iface_config_t, mp), ""),
 
     {"FIFO_HUGETLB", "no",
-     "Enable using huge pages for internal shared memory buffers."
+     "Enable using huge pages for internal shared memory buffers.\n"
      "Possible values are:\n"
      " y   - Allocate memory using huge pages only.\n"
      " n   - Allocate memory using regular pages only.\n"
