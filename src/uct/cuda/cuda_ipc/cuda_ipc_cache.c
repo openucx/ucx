@@ -365,9 +365,9 @@ out:
 #if HAVE_CUDA_FABRIC
 static ucs_status_t cuda_ipc_rem_mpool_cache_create(uct_cuda_ipc_rkey_t *key,
                                                     CUdevice cu_dev,
-                                                    ucs_log_level_t log_level,
                                                     CUmemoryPool *mpool,
-                                                    CUdeviceptr *mapped_addr)
+                                                    CUdeviceptr *mapped_addr,
+                                                    ucs_log_level_t log_level)
 {
     CUmemAccessDesc access_desc = {};
     CUdeviceptr dptr;
@@ -432,8 +432,8 @@ uct_cuda_ipc_open_memhandle_mempool(uct_cuda_ipc_rkey_t *key, CUdevice cu_dev,
     khiter = kh_put(cuda_ipc_rem_mpool_cache, hash, *hkey, &khret);
     if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
         (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
-        status = cuda_ipc_rem_mpool_cache_create(key, cu_dev, log_level, &mpool,
-                                                 mapped_addr);
+        status = cuda_ipc_rem_mpool_cache_create(key, cu_dev, &mpool,
+                                                 mapped_addr, log_level);
         if (status != UCS_OK) {
             /* Remove stale key from the hash if failed to construct new value.
              * Otherwise next lookup will return NULL value. */

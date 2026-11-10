@@ -227,10 +227,10 @@ uct_cuda_ipc_mem_export_posix_fd(void *addr, uct_cuda_ipc_lkey_t *key)
     CUmemGenericAllocationHandle alloc_handle;
     ucs_status_t status;
 
-    status = UCT_CUDADRV_FUNC_LOG_DIAG(
+    status = UCT_CUDADRV_FUNC_LOG_DEBUG(
             cuMemRetainAllocationHandle(&alloc_handle, addr));
     if (status != UCS_OK) {
-        ucs_diag("unable to export POSIX FD handle for ptr: %p", addr);
+        ucs_debug("unable to export POSIX FD handle for ptr: %p", addr);
         return status;
     }
 
