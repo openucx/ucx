@@ -304,7 +304,8 @@ static const char *ucs_module_get_search_path(unsigned index)
 
 static void
 ucs_module_load_expected(const char *framework, const char *expected_modules,
-                        int mode, ucs_string_set_t *loaded_set)
+                         int mode, ucs_string_set_t *loaded_set,
+                         ucs_string_set_t *expected_set)
 {
     ucs_string_buffer_t strb;
     char *module_path, *module_name;
@@ -332,6 +333,7 @@ ucs_module_load_expected(const char *framework, const char *expected_modules,
         }
 
         snprintf(base, sizeof(base), "lib%s_%s", framework, module_name);
+        (void)ucs_string_set_add(expected_set, base);
         for (i = 0; (dir = ucs_module_get_search_path(i)) != NULL; ++i) {
             snprintf(module_path, PATH_MAX, "%s/%s%s%s", dir, base,
                      UCS_MODULE_FILE_SUFFIX,
@@ -382,7 +384,8 @@ ucs_module_filename_to_base(const char *filename, char *base, size_t base_max)
 }
 
 static void ucs_module_load_from_dir(const char *dir, const char *framework,
-                                     int mode, ucs_string_set_t *loaded_set)
+                                     int mode, ucs_string_set_t *loaded_set,
+                                     const ucs_string_set_t *expected_set)
 {
     char prefix[NAME_MAX];
     char base[NAME_MAX];
@@ -421,6 +424,10 @@ static void ucs_module_load_from_dir(const char *dir, const char *framework,
         snprintf(module_path, PATH_MAX, "%s/%s", dir, entry->d_name);
         if (!ucs_module_is_enabled(base + prefix_len)) {
             ucs_module_debug("module is disabled: %s, skipping", base + prefix_len);
+            continue;
+        }
+
+        if (ucs_string_set_contains(expected_set, base)) {
             continue;
         }
 
@@ -470,7 +477,7 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
     const char *dir;
     unsigned i;
     int mode;
-    ucs_string_set_t loaded_set;
+    ucs_string_set_t loaded_set, expected_set;
 
     ucs_module_loader_init_paths();
 
@@ -478,18 +485,22 @@ void ucs_load_modules(const char *framework, const char *expected_modules,
         ucs_assert(ucs_sys_is_dynamic_lib());
 
         ucs_string_set_init(&loaded_set);
+        ucs_string_set_init(&expected_set);
         mode = ucs_module_flags_to_dlopen_mode(flags);
 
-        ucs_module_load_expected(framework, expected_modules, mode, &loaded_set);
+        ucs_module_load_expected(framework, expected_modules, mode, &loaded_set,
+                                 &expected_set);
 
         /* Discover plugins which were not in the configured module list. */
         for (i = 0; (dir = ucs_module_get_search_path(i)) != NULL; ++i) {
-            ucs_module_load_from_dir(dir, framework, mode, &loaded_set);
+            ucs_module_load_from_dir(dir, framework, mode, &loaded_set,
+                                     &expected_set);
         }
 
         ucs_module_check_expected_loaded(framework, expected_modules,
                                          &loaded_set);
 
+        ucs_string_set_cleanup(&expected_set);
         ucs_string_set_cleanup(&loaded_set);
     }
 #endif /* UCX_SHARED_LIB */

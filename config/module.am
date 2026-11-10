@@ -10,13 +10,9 @@ AM_V_LN_  = $(AM_V_LN_@AM_DEFAULT_V@)
 AM_V_LN_0 = echo "  LN      "
 AM_V_LN_1 = true
 
-local_la_modules = $(patsubst %, $(localmoduledir)/%, $(module_LTLIBRARIES))
-
 .PHONY: module-links
 
 all-local: module-links
-
-$(local_la_modules): $(module_LTLIBRARIES) | module-links
 
 # Create symbolic links for the built modules under $(localmoduledir)
 # Link also *.la files to create proper makefile dependencies
