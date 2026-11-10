@@ -33,6 +33,8 @@ typedef struct ucm_event_handler {
 
 typedef struct ucm_event_installer {
     ucs_status_t          (*install)(int events);
+    /* Prefix of the mapped device file path (as in /proc/self/maps) used to
+     * report existing allocations, or NULL if the module has none */
     const char            *path_pattern;
     ucs_list_link_t       list;
 } ucm_event_installer_t;
