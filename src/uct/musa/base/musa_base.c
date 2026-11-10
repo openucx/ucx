@@ -1,0 +1,756 @@
+/*
+ * Copyright (C) MThreads 2026. ALL RIGHTS RESERVED.
+ * See file LICENSE for terms.
+ */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
+#include "musa_base.h"
+
+#include <ucs/debug/log.h>
+#include <ucs/memory/memtype_cache.h>
+#include <ucs/sys/module.h>
+#include <ucs/sys/ptr_arith.h>
+#include <ucs/sys/sock.h>
+#include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/topo/base/topo.h>
+
+#include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+
+#define UCT_MUSA_PCI_BUS_ID_LEN 32
+
+#define UCT_MUSA_DMABUF_HANDLE_TYPE MU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD
+
+static pthread_once_t uct_musa_base_once = PTHREAD_ONCE_INIT;
+static ucs_status_t  uct_musa_base_init_status;
+static unsigned      uct_musa_base_num_devices;
+static pthread_once_t uct_musa_base_sys_dev_once = PTHREAD_ONCE_INIT;
+static ucs_status_t  uct_musa_base_sys_dev_status;
+static ucs_sys_device_t *uct_musa_base_sys_devices;
+
+static const char *uct_musa_error_string(musaError_t error)
+{
+    const char *error_string = musaGetErrorString(error);
+    return error_string != NULL ? error_string : "unknown MUSA error";
+}
+
+ucs_status_t uct_musa_base_status(musaError_t error, const char *operation)
+{
+    if (error == musaSuccess) {
+        return UCS_OK;
+    }
+
+    ucs_debug("%s failed: %s", operation, uct_musa_error_string(error));
+    if (error == musaErrorInvalidValue) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_ERR_IO_ERROR;
+}
+
+static void uct_musa_base_init_once(void)
+{
+    int count = 0;
+
+    uct_musa_base_init_status =
+            uct_musa_base_status(musaGetDeviceCount(&count),
+                                 "musaGetDeviceCount");
+    if (uct_musa_base_init_status != UCS_OK) {
+        return;
+    }
+
+    if (count <= 0) {
+        uct_musa_base_init_status = UCS_ERR_NO_DEVICE;
+        return;
+    }
+
+    uct_musa_base_num_devices = (unsigned)count;
+}
+
+ucs_status_t uct_musa_base_get_device_count(unsigned *count_p)
+{
+    pthread_once(&uct_musa_base_once, uct_musa_base_init_once);
+    if (uct_musa_base_init_status != UCS_OK) {
+        return uct_musa_base_init_status;
+    }
+
+    *count_p = uct_musa_base_num_devices;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_musa_base_query_md_resources(uct_component_h component,
+                                 uct_md_resource_desc_t **resources_p,
+                                 unsigned *num_resources_p)
+{
+    unsigned count;
+    ucs_status_t status;
+
+    status = uct_musa_base_get_device_count(&count);
+    if (status != UCS_OK) {
+        ucs_debug("MUSA runtime is unavailable: %s", ucs_status_string(status));
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    if (count == 0) {
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    return uct_md_query_single_md_resource(component, resources_p,
+                                           num_resources_p);
+}
+
+static ucs_status_t
+uct_musa_base_query_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
+{
+    ucs_sys_bus_id_t bus_id;
+    ucs_sys_device_t sys_dev;
+    char pci_bus_id[UCT_MUSA_PCI_BUS_ID_LEN];
+    ucs_status_t status;
+    musaError_t err;
+
+    /* MUSA runtime exposes the PCI location only as a
+     * "domain:bus:slot.function" string (no per-attribute query). */
+    err = musaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), (int)device);
+    if (err != musaSuccess) {
+        ucs_debug("musaDeviceGetPCIBusId(device=%u) failed: %s", device,
+                  musaGetErrorString(err));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!uct_musa_parse_pci_bus_id(pci_bus_id, &bus_id)) {
+        ucs_debug("failed to parse MUSA PCI bus id \"%s\"", pci_bus_id);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_sys_device_set_class(sys_dev, UCS_TOPO_DEVICE_CLASS_ACC);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_sys_device_enable_aux_path(sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *sys_dev_p = sys_dev;
+    return UCS_OK;
+}
+
+static void uct_musa_base_init_sys_devs(void)
+{
+    unsigned i;
+
+    uct_musa_base_sys_dev_status =
+            uct_musa_base_get_device_count(&uct_musa_base_num_devices);
+    if (uct_musa_base_sys_dev_status != UCS_OK) {
+        return;
+    }
+
+    uct_musa_base_sys_devices =
+            ucs_calloc(uct_musa_base_num_devices,
+                       sizeof(*uct_musa_base_sys_devices), "musa sys devices");
+    if (uct_musa_base_sys_devices == NULL) {
+        uct_musa_base_sys_dev_status = UCS_ERR_NO_MEMORY;
+        return;
+    }
+
+    for (i = 0; i < uct_musa_base_num_devices; ++i) {
+        uct_musa_base_sys_devices[i] = UCS_SYS_DEVICE_ID_UNKNOWN;
+        uct_musa_base_query_sys_dev(i, &uct_musa_base_sys_devices[i]);
+    }
+}
+
+static ucs_status_t
+uct_musa_base_get_sys_dev(unsigned device, ucs_sys_device_t *sys_dev_p)
+{
+    pthread_once(&uct_musa_base_sys_dev_once, uct_musa_base_init_sys_devs);
+    if (uct_musa_base_sys_dev_status != UCS_OK) {
+        return uct_musa_base_sys_dev_status;
+    }
+    if (device >= uct_musa_base_num_devices) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    *sys_dev_p = uct_musa_base_sys_devices[device];
+    return (*sys_dev_p == UCS_SYS_DEVICE_ID_UNKNOWN) ? UCS_ERR_NO_DEVICE :
+                                                       UCS_OK;
+}
+
+ucs_status_t
+uct_musa_base_get_device_by_sys_dev(ucs_sys_device_t sys_dev, int *device_p)
+{
+    pthread_once(&uct_musa_base_sys_dev_once, uct_musa_base_init_sys_devs);
+    if (uct_musa_base_sys_dev_status != UCS_OK) {
+        return uct_musa_base_sys_dev_status;
+    }
+
+    return uct_musa_lookup_device_by_sys_dev(uct_musa_base_sys_devices,
+                                             uct_musa_base_num_devices,
+                                             sys_dev, device_p);
+}
+
+ucs_status_t
+uct_musa_base_query_devices(uct_md_h md,
+                            uct_tl_device_resource_t **tl_devices_p,
+                            unsigned *num_tl_devices_p)
+{
+    uct_tl_device_resource_t *devices;
+    unsigned count;
+    unsigned i;
+    ucs_status_t status;
+
+    status = uct_musa_base_get_device_count(&count);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    devices = ucs_calloc(count, sizeof(*devices), "musa tl devices");
+    if (devices == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < count; ++i) {
+        devices[i].type        = UCT_DEVICE_TYPE_ACC;
+        devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+        uct_musa_base_get_sys_dev(i, &devices[i].sys_device);
+        ucs_snprintf_zero(devices[i].name, sizeof(devices[i].name), "musa%u",
+                          i);
+    }
+
+    *tl_devices_p     = devices;
+    *num_tl_devices_p = count;
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_musa_base_get_current_device(int *device_p)
+{
+    return uct_musa_base_status(musaGetDevice(device_p), "musaGetDevice");
+}
+
+ucs_status_t uct_musa_base_set_device(int device)
+{
+    return uct_musa_base_status(musaSetDevice(device), "musaSetDevice");
+}
+
+void uct_musa_base_restore_device(int device, int valid)
+{
+    if (valid && (musaSetDevice(device) != musaSuccess)) {
+        ucs_warn("failed to restore MUSA device %d", device);
+    }
+}
+
+static ucs_status_t
+uct_musa_base_query_pointer_attributes(const void *address,
+                                       uct_musa_pointer_info_t *info)
+{
+    unsigned mem_type   = 0;
+    unsigned is_managed = 0;
+    int device          = 0;
+    MUresult result;
+
+    result = muPointerGetAttribute(&mem_type, MU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                    (MUdeviceptr)address);
+    if ((result == MUSA_ERROR_INVALID_VALUE) ||
+        ((result == MUSA_SUCCESS) && (mem_type == MU_MEMORYTYPE_HOST))) {
+        info->kind   = UCT_MUSA_POINTER_HOST;
+        info->device = -1;
+        return UCS_OK;
+    }
+
+    if (result != MUSA_SUCCESS) {
+        goto err;
+    }
+
+    result = muPointerGetAttribute(&is_managed, MU_POINTER_ATTRIBUTE_IS_MANAGED,
+                                    (MUdeviceptr)address);
+    if (result != MUSA_SUCCESS) {
+        goto err;
+    }
+
+    result = muPointerGetAttribute(&device, MU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+                                    (MUdeviceptr)address);
+    if (result != MUSA_SUCCESS) {
+        goto err;
+    }
+
+    info->kind   = is_managed ? UCT_MUSA_POINTER_MANAGED :
+                               UCT_MUSA_POINTER_DEVICE;
+    info->device = device;
+    return UCS_OK;
+
+err:
+    ucs_debug("muPointerGetAttribute(%p) failed: 0x%x", address, result);
+    return UCS_ERR_IO_ERROR;
+}
+
+ucs_status_t
+uct_musa_base_query_pointer(const void *address, size_t length,
+                            uct_musa_pointer_info_t *info)
+{
+    MUdeviceptr allocation_base;
+    size_t allocation_length;
+    int current_device = -1;
+    int have_current_device;
+    int switched_device;
+    ucs_status_t status;
+
+    if ((address == NULL) || (length == 0) ||
+        ((uintptr_t)address > (UINTPTR_MAX - length))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    memset(info, 0, sizeof(*info));
+    info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    status = uct_musa_base_query_pointer_attributes(address, info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    info->base_address = (void *)address;
+    info->alloc_length = length;
+    if ((info->kind == UCT_MUSA_POINTER_HOST) ||
+        (info->kind == UCT_MUSA_POINTER_MANAGED)) {
+        return UCS_OK;
+    }
+
+    have_current_device =
+            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
+    switched_device = (info->device >= 0) &&
+                      uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       info->device);
+    if (switched_device) {
+        status = uct_musa_base_set_device(info->device);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if ((info->device >= 0) &&
+        (uct_musa_base_get_sys_dev(info->device, &info->sys_dev) != UCS_OK)) {
+        info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    allocation_base   = 0;
+    allocation_length = 0;
+    status = uct_musa_base_status(
+            muMemGetAddressRange(&allocation_base, &allocation_length,
+                                 (MUdeviceptr)address),
+            "muMemGetAddressRange");
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* Metadata queries may extend past the allocation, but their starting
+     * address must belong to the allocation returned by the driver. */
+    if (!uct_musa_range_is_valid((uintptr_t)allocation_base, allocation_length,
+                                (uintptr_t)address, 1)) {
+        ucs_debug("invalid MUSA allocation range for address %p", address);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    info->base_address = (void *)(uintptr_t)allocation_base;
+    info->alloc_length = allocation_length;
+    return UCS_OK;
+}
+
+int uct_musa_base_has_dmabuf(void)
+{
+#ifdef HAVE_MUSA_DMABUF
+    unsigned count;
+    unsigned i;
+    int supported;
+    MUresult result;
+
+    if (uct_musa_base_get_device_count(&count) != UCS_OK) {
+        return 0;
+    }
+
+    /* The MD covers every device, so advertise only a shared capability. */
+    for (i = 0; i < count; ++i) {
+        result = muDeviceGetAttribute(&supported,
+                                      MU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, i);
+        if ((result != MUSA_SUCCESS) || !supported) {
+            return 0;
+        }
+    }
+
+    return count != 0;
+#else
+    return 0;
+#endif
+}
+
+ucs_status_t
+uct_musa_base_export_dmabuf(const void *address, size_t length, int *fd_p,
+                            size_t *offset_p)
+{
+#ifdef HAVE_MUSA_DMABUF
+    uct_musa_pointer_info_t info;
+    int current_device = -1;
+    int have_current_device;
+    int switched_device;
+    int fd;
+    ucs_status_t status;
+    MUresult result;
+    uintptr_t aligned_start;
+    uintptr_t aligned_end;
+    uintptr_t allocation_end;
+    size_t page_size;
+#endif
+
+    *fd_p     = UCT_DMABUF_FD_INVALID;
+    *offset_p = 0;
+
+#ifndef HAVE_MUSA_DMABUF
+    return UCS_ERR_UNSUPPORTED;
+#else
+    status = uct_musa_base_query_pointer(address, length, &info);
+    if (status != UCS_OK) {
+        return status;
+    }
+    if (info.kind != UCT_MUSA_POINTER_DEVICE) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    if (!uct_musa_range_is_valid((uintptr_t)info.base_address,
+                                info.alloc_length, (uintptr_t)address,
+                                length)) {
+        ucs_debug("MUSA DMA-BUF range does not contain %p len %zu",
+                  address, length);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    page_size      = ucs_get_page_size();
+    allocation_end = (uintptr_t)info.base_address + info.alloc_length;
+    if (allocation_end > (UINTPTR_MAX - (page_size - 1))) {
+        ucs_debug("MUSA DMA-BUF range overflows after page alignment");
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    aligned_start = ucs_align_down_pow2((uintptr_t)info.base_address,
+                                       page_size);
+    aligned_end   = ucs_align_up_pow2(allocation_end, page_size);
+
+    have_current_device =
+            (uct_musa_base_get_current_device(&current_device) == UCS_OK);
+    switched_device = uct_musa_base_need_device_switch(have_current_device,
+                                                       current_device,
+                                                       info.device);
+    if (switched_device) {
+        status = uct_musa_base_set_device(info.device);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    fd = UCT_DMABUF_FD_INVALID;
+    result = muMemGetHandleForAddressRange(
+            &fd, (MUdeviceptr)aligned_start, aligned_end - aligned_start,
+            UCT_MUSA_DMABUF_HANDLE_TYPE, 0);
+    if (switched_device) {
+        uct_musa_base_restore_device(current_device, have_current_device);
+    }
+    if (result != MUSA_SUCCESS) {
+        ucs_debug("muMemGetHandleForAddressRange failed: 0x%x", result);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *fd_p = fd;
+    *offset_p = (uintptr_t)address - aligned_start;
+    return UCS_OK;
+#endif
+}
+
+ucs_status_t
+uct_musa_base_mem_query(const void *address, size_t length, int have_dmabuf,
+                        uct_md_mem_attr_v2_t *mem_attr_p)
+{
+    uct_musa_pointer_info_t info;
+    ucs_sys_device_t sys_dev;
+    ucs_memory_type_t mem_type;
+    ucs_status_t status;
+    int dmabuf_fd;
+    int have_dmabuf_fd;
+    size_t dmabuf_offset;
+
+    status = uct_musa_base_query_pointer(address, length, &info);
+    if (status != UCS_OK) {
+        return status;
+    }
+    if (info.kind == UCT_MUSA_POINTER_MANAGED) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+    if (info.kind != UCT_MUSA_POINTER_DEVICE) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    mem_type = UCS_MEMORY_TYPE_MUSA;
+    sys_dev = info.sys_dev;
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_TYPE) {
+        mem_attr_p->mem_type = mem_type;
+    }
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_SYS_DEV) {
+        mem_attr_p->sys_dev = sys_dev;
+    }
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_BASE_ADDRESS) {
+        mem_attr_p->base_address = info.base_address;
+    }
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_ALLOC_LENGTH) {
+        mem_attr_p->alloc_length = info.alloc_length;
+    }
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_MEM_FLAGS) {
+        mem_attr_p->mem_flags = UCS_MEM_FLAG_REGISTRABLE;
+    }
+
+    dmabuf_fd     = UCT_DMABUF_FD_INVALID;
+    dmabuf_offset = 0;
+    if (have_dmabuf &&
+        ((mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) ||
+         (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET))) {
+        status = uct_musa_base_export_dmabuf(address, length, &dmabuf_fd,
+                                             &dmabuf_offset);
+        if (status != UCS_OK) {
+            dmabuf_fd = UCT_DMABUF_FD_INVALID;
+        }
+    }
+
+    have_dmabuf_fd = dmabuf_fd != UCT_DMABUF_FD_INVALID;
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_OFFSET) {
+        mem_attr_p->dmabuf_offset = have_dmabuf_fd ? dmabuf_offset : 0;
+    }
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_V2_FIELD_DMABUF_FD) {
+        mem_attr_p->dmabuf_fd = dmabuf_fd;
+    } else if (have_dmabuf_fd) {
+        ucs_close_fd(&dmabuf_fd);
+    }
+
+    ucs_memtype_cache_update(info.base_address, info.alloc_length, mem_type,
+                             sys_dev, UCS_MEM_FLAG_REGISTRABLE);
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_musa_base_detect_memory_type(uct_md_h md, const void *address,
+                                 size_t length,
+                                 ucs_memory_type_t *mem_type_p)
+{
+    uct_musa_pointer_info_t info;
+    ucs_status_t status;
+
+    *mem_type_p = UCS_MEMORY_TYPE_HOST;
+    status = uct_musa_base_query_pointer(address, length, &info);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (info.kind == UCT_MUSA_POINTER_MANAGED) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (info.kind == UCT_MUSA_POINTER_DEVICE) {
+        *mem_type_p = UCS_MEMORY_TYPE_MUSA;
+    }
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_musa_base_query_copy_pointer(const void *address, size_t length,
+                                 uct_musa_pointer_info_t *info)
+{
+    ucs_memory_info_t mem_info;
+    ucs_status_t status;
+
+    if ((address == NULL) || (length == 0)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = ucs_memtype_cache_lookup(address, length, &mem_info);
+    if (status == UCS_ERR_NO_ELEM) {
+        /* The memtype cache tracks only MUSA allocations reported by the
+         * hooks, so a miss is usually a host buffer. Ask the driver before
+         * assuming host memory: with the hooks disabled or bypassed, a device
+         * pointer would otherwise be classified as host and copied by CPU
+         * memcpy() (cuda_copy is immune because every copy is issued as a
+         * driver copy, which only fails on a wrong pointer type). Keep the
+         * heavier musaSetDevice()/muMemGetAddressRange() queries out of this
+         * path; the driver classification sets kind and device directly. */
+        memset(info, 0, sizeof(*info));
+        info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        status = uct_musa_base_query_pointer_attributes(address, info);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        info->base_address = (void *)address;
+        info->alloc_length = length;
+        return UCS_OK;
+    }
+
+    if ((status == UCS_OK) && (mem_info.type == UCS_MEMORY_TYPE_MUSA)) {
+        if (mem_info.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            memset(info, 0, sizeof(*info));
+            info->kind         = UCT_MUSA_POINTER_DEVICE;
+            info->device       = -1;
+            info->sys_dev      = mem_info.sys_dev;
+            info->base_address = (void *)address;
+            info->alloc_length = length;
+            if (uct_musa_base_get_device_by_sys_dev(info->sys_dev,
+                                                    &info->device) == UCS_OK) {
+                return UCS_OK;
+            }
+        }
+
+        return uct_musa_base_query_pointer(address, length, info);
+    }
+
+    if ((status == UCS_OK) &&
+        (mem_info.type != UCS_MEMORY_TYPE_UNKNOWN)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return uct_musa_base_query_pointer(address, length, info);
+}
+
+ucs_status_t
+uct_musa_base_select_device(const uct_musa_pointer_info_t *src_info,
+                            const uct_musa_pointer_info_t *dst_info,
+                            int default_device, int *device_p)
+{
+    if ((src_info->kind == UCT_MUSA_POINTER_MANAGED) ||
+        (dst_info->kind == UCT_MUSA_POINTER_MANAGED)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if ((src_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+        (src_info->device >= 0)) {
+        *device_p = src_info->device;
+    } else if ((src_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+               (src_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+               (uct_musa_base_get_device_by_sys_dev(src_info->sys_dev,
+                                                    device_p) == UCS_OK)) {
+        /* Device index was recovered from the memory cache. */
+    } else if ((dst_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+               (dst_info->device >= 0)) {
+        *device_p = dst_info->device;
+    } else if ((dst_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+               (dst_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+               (uct_musa_base_get_device_by_sys_dev(dst_info->sys_dev,
+                                                    device_p) == UCS_OK)) {
+        /* Device index was recovered from the memory cache. */
+    } else {
+        *device_p = default_device;
+    }
+
+    return (*device_p >= 0) ? UCS_OK : UCS_ERR_NO_DEVICE;
+}
+
+static void
+uct_musa_base_copy_kind(const uct_musa_pointer_info_t *src_info,
+                        const uct_musa_pointer_info_t *dst_info,
+                        enum musaMemcpyKind *kind_p)
+{
+    if ((src_info->kind == UCT_MUSA_POINTER_HOST) &&
+        (dst_info->kind == UCT_MUSA_POINTER_DEVICE)) {
+        *kind_p = musaMemcpyHostToDevice;
+    } else if ((src_info->kind == UCT_MUSA_POINTER_DEVICE) &&
+               (dst_info->kind == UCT_MUSA_POINTER_HOST)) {
+        *kind_p = musaMemcpyDeviceToHost;
+    } else {
+        *kind_p = musaMemcpyDeviceToDevice;
+    }
+}
+
+static ucs_status_t
+uct_musa_base_copy_with_info(const void *src, void *dst, size_t length,
+                             const uct_musa_pointer_info_t *src_info,
+                             const uct_musa_pointer_info_t *dst_info,
+                             musaError_t (*copy_func)(void *, const void *,
+                                                      size_t,
+                                                      enum musaMemcpyKind,
+                                                      musaStream_t),
+                             musaStream_t stream, const char *copy_name)
+{
+    enum musaMemcpyKind kind;
+
+    if ((src_info->kind == UCT_MUSA_POINTER_HOST) &&
+        (dst_info->kind == UCT_MUSA_POINTER_HOST)) {
+        memcpy(dst, src, length);
+        return UCS_OK;
+    }
+
+    /* The caller has made the stream's device current. */
+    uct_musa_base_copy_kind(src_info, dst_info, &kind);
+    return uct_musa_base_status(
+            copy_func(dst, src, length, kind, stream), copy_name);
+}
+
+static musaError_t
+uct_musa_base_memcpy(void *dst, const void *src, size_t length,
+                     enum musaMemcpyKind kind, musaStream_t stream)
+{
+    musaError_t error;
+
+    error = musaMemcpyAsync(dst, src, length, kind, stream);
+    if (error != musaSuccess) {
+        return error;
+    }
+
+    return musaStreamSynchronize(stream);
+}
+
+static musaError_t
+uct_musa_base_memcpy_async(void *dst, const void *src, size_t length,
+                           enum musaMemcpyKind kind, musaStream_t stream)
+{
+    return musaMemcpyAsync(dst, src, length, kind, stream);
+}
+
+ucs_status_t uct_musa_base_copy(const void *src, void *dst, size_t length,
+                                musaStream_t stream,
+                                const uct_musa_pointer_info_t *src_info,
+                                const uct_musa_pointer_info_t *dst_info)
+{
+    if (length == 0) {
+        return UCS_OK;
+    }
+
+    return uct_musa_base_copy_with_info(src, dst, length, src_info,
+                                        dst_info, uct_musa_base_memcpy,
+                                        stream, "MUSA short copy");
+}
+
+ucs_status_t
+uct_musa_base_copy_async(const void *src, void *dst, size_t length,
+                         musaStream_t stream,
+                         const uct_musa_pointer_info_t *src_info,
+                         const uct_musa_pointer_info_t *dst_info)
+{
+    if (length == 0) {
+        return UCS_OK;
+    }
+
+    return uct_musa_base_copy_with_info(src, dst, length, src_info,
+                                        dst_info, uct_musa_base_memcpy_async,
+                                        stream, "musaMemcpyAsync");
+}
+
+UCS_MODULE_INIT()
+{
+    return UCS_OK;
+}

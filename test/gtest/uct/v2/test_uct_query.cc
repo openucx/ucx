@@ -90,7 +90,8 @@ UCS_TEST_P(test_uct_query, query_perf)
                             UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
                             UCT_PERF_ATTR_FIELD_BANDWIDTH;
     EXPECT_EQ(iface_estimate_perf(&perf_attr),
-              has_transport("cuda_copy") ? UCS_ERR_UNSUPPORTED : UCS_OK);
+              (has_transport("cuda_copy") || has_transport("musa_copy")) ?
+                      UCS_ERR_UNSUPPORTED : UCS_OK);
 
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
     perf_attr.operation          = UCT_EP_OP_PUT_SHORT;

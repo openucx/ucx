@@ -50,6 +50,7 @@ extern "C" {
                    rocm_cpy, \
                    rocm_ipc, \
                    ze_cpy, \
+                   musa_cpy, \
                    ib, \
                    ugni, \
                    gdr_copy, \
@@ -609,6 +610,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
             EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
             if ((alloc_mem_type == UCS_MEMORY_TYPE_CUDA) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ROCM) ||
+                (alloc_mem_type == UCS_MEMORY_TYPE_MUSA) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_HOST) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_DEVICE) ||
                 (alloc_mem_type == UCS_MEMORY_TYPE_ZE_MANAGED)) {
