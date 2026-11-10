@@ -9,7 +9,6 @@
 #include <uct/api/tl.h>
 #include <fenv.h>
 #include <string>
-#include <sys/resource.h>
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
@@ -1201,6 +1200,11 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
     }
 
+    test_worker_cpu_mask() :
+        m_rlimit(RLIMIT_NOFILE, m_fd_per_cpu * ucs_sys_get_num_cpus())
+    {
+    }
+
 protected:
     void init() override
     {
@@ -1221,48 +1225,34 @@ protected:
         m_cpu = cpu;
     }
 
+    ucs::rlimit_setter   m_rlimit;
+    static constexpr int m_fd_per_cpu = 60;
+    static constexpr int m_max_workers = 32;
+
 private:
     unsigned m_cpu = 0;
 };
 
 UCS_TEST_P(test_worker_cpu_mask, all_cpus)
 {
-    const unsigned descriptor_headroom_factor = 2;
-    size_t descriptors_per_entity             = 0;
-    size_t open_descriptors                   = ucs::get_open_fds().size();
-    size_t previous_open_descriptors;
-    struct rlimit file_limit;
+    /* Leave half the descriptor budget for process and startup overhead. */
+    const rlim_t max_workers = std::max<rlim_t>(
+            1, std::min<rlim_t>(m_max_workers,
+                               m_rlimit.limit() / m_fd_per_cpu / 2));
     ucs_sys_cpuset_t mask;
 
-    ASSERT_EQ(0, getrlimit(RLIMIT_NOFILE, &file_limit));
     CPU_ZERO(&mask);
     ASSERT_GE(ucs_sys_getaffinity(&mask), 0);
 
     for (auto cpu = 0; cpu < ucs_sys_get_num_cpus(); ++cpu) {
         if (CPU_ISSET(cpu, &mask)) {
-            /* Reserve an extra entity's footprint for transient allocations
-             * during worker creation. */
-            if ((open_descriptors >= file_limit.rlim_cur) ||
-                (descriptors_per_entity >=
-                 (file_limit.rlim_cur - open_descriptors) /
-                         descriptor_headroom_factor)) {
-                UCS_TEST_MESSAGE << "release " << entities().size()
-                                 << " entities with " << open_descriptors
-                                 << " open file descriptors";
+            if (entities().size() >= max_workers) {
                 cleanup();
-                open_descriptors = ucs::get_open_fds().size();
             }
 
             set_cpu(cpu);
             UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
-            previous_open_descriptors = open_descriptors;
             create_entity();
-            open_descriptors = ucs::get_open_fds().size();
-            if (open_descriptors > previous_open_descriptors) {
-                descriptors_per_entity = std::max(
-                        descriptors_per_entity,
-                        open_descriptors - previous_open_descriptors);
-            }
         }
     }
 }
