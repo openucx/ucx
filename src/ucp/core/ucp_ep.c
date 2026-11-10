@@ -2525,6 +2525,28 @@ static ucp_lane_map_t ucp_ep_tf_held_lanes(ucp_ep_h ep)
     return held;
 }
 
+/* A failed probe must not keep the endpoint it connected. The retry has to
+ * connect to the peer's replacement. */
+static void ucp_ep_recovery_probe_failed(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
+    ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
+
+    if ((wireup_ep == NULL) ||
+        (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)) {
+        return;
+    }
+
+    ucp_wireup_ep_destroy_aux_ep(wireup_ep);
+    if (wireup_ep->super.uct_ep != NULL) {
+        ucp_wireup_ep_destroy_next_ep(wireup_ep);
+    }
+
+    if ((arg != NULL) && (arg->probe[lane].comp.count == 0)) {
+        ucp_ep_recovery_reset_probe(&arg->probe[lane]);
+    }
+}
+
 int ucp_ep_recovery_progress(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
@@ -2625,6 +2647,15 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
                 goto done;
             }
 
+            if ((status != UCS_OK) && (status != UCS_ERR_UNREACHABLE) &&
+                (status != UCS_ERR_NO_RESOURCE)) {
+                ucp_ep_recovery_probe_failed(ep, lane);
+                if (arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK) {
+                    arg->state = UCP_EP_RECOVERY_STATE_PROBING;
+                }
+                continue;
+            }
+
             if (status != UCS_ERR_NO_RESOURCE) {
                 continue;
             }
@@ -2635,6 +2666,11 @@ int ucp_ep_recovery_progress(ucp_ep_h ep)
             if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
                 ret = 1;
                 goto done;
+            }
+
+            if (status != UCS_OK) {
+                ucp_ep_recovery_probe_failed(ep, lane);
+                arg->state = UCP_EP_RECOVERY_STATE_PROBING;
             }
         }
 
