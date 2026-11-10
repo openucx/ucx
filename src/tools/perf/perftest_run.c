@@ -317,8 +317,9 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
             free(ctx->test_names[depth]);
             ctx->test_names[depth] = NULL;
 
-            /* Go on after a failed test, e.g. an unsupported one, but stop on
-             * an I/O error of a test with -V or of an inner batch */
+            /* Stop on an I/O error of a test with -V, which is how the test
+             * reports wrong data, or of an inner batch. Go on after any other
+             * failure, e.g. of an unsupported test, as without -V. */
             if ((test_status == UCS_ERR_IO_ERROR) &&
                 ((params.super.flags & UCX_PERF_TEST_FLAG_VALIDATE) ||
                  ((depth + 1) < ctx->num_batch_files))) {
