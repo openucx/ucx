@@ -563,6 +563,7 @@ out_unlock:
 typedef struct {
     ucm_event_handler_t *handler;
     const char          *path_pattern;
+    size_t              path_len;
 } ucm_existing_mem_type_ctx_t;
 
 static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
@@ -575,7 +576,7 @@ static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
      * mapped to the given device path.
      */
     if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
-        (strncmp(path, ctx->path_pattern, strlen(ctx->path_pattern)) != 0)) {
+        (strncmp(path, ctx->path_pattern, ctx->path_len) != 0)) {
         return 0;
     }
 
@@ -595,7 +596,8 @@ static int ucm_existing_mem_type_scan_cb(void *arg, void *addr, size_t length,
 static void ucm_get_existing_mem_type_alloc(ucm_event_handler_t *handler,
                                             const char *path_pattern)
 {
-    ucm_existing_mem_type_ctx_t ctx = {handler, path_pattern};
+    ucm_existing_mem_type_ctx_t ctx = {handler, path_pattern,
+                                       strlen(path_pattern)};
 
     if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
         ucm_parse_proc_self_maps(ucm_existing_mem_type_scan_cb, &ctx);
