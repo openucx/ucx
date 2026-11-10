@@ -31,7 +31,7 @@
 #include <uct/ib/ud/base/ud_inl.h>
 
 
-#define UCT_UD_VERBS_IFACE_OVERHEAD 105e-9
+#define UCT_UD_VERBS_IFACE_OVERHEAD 155e-9
 
 
 static UCS_F_NOINLINE void
@@ -602,8 +602,7 @@ uct_ud_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
         return status;
     }
 
-    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD +
-                           UCT_UD_IFACE_EXTRA_OVERHEAD;
+    iface_attr->overhead = UCT_UD_VERBS_IFACE_OVERHEAD; /* Software overhead */
 
     return UCS_OK;
 }

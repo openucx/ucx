@@ -33,12 +33,6 @@ BEGIN_C_DECLS
 #define UCT_UD_MIN_TIMER_TIMER_BACKOFF 1.0
 
 
-/* Selection heuristic for interface/receive overhead, independent of the
- * configured send posting and completion costs.
- */
-#define UCT_UD_IFACE_EXTRA_OVERHEAD 50e-9
-
-
 /* Must be less than peer_timeout to avoid false positive errors taking into
  * account timer resolution and not too small to avoid performance degradation
  */
