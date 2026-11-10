@@ -742,6 +742,16 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
         }
     }
 
+    /* A new allocation can start below a stale cached region and overlap it,
+     * so the point lookup above misses the stale mapping. Invalidate the full
+     * range before importing a legacy handle to avoid ALREADY_MAPPED and the
+     * subsequent recovery. Cache hits have already returned. */
+    if (key->ph.handle_type == UCT_CUDA_IPC_KEY_HANDLE_TYPE_LEGACY) {
+        uct_cuda_ipc_cache_invalidate_regions(cache, (void *)key->d_bptr,
+                                              UCS_PTR_BYTE_OFFSET(key->d_bptr,
+                                                                  key->b_len));
+    }
+
     status = uct_cuda_ipc_open_memhandle(ext_key, cu_dev,
                                          (CUdeviceptr*)mapped_addr, log_level);
     if (ucs_unlikely(status != UCS_OK)) {
