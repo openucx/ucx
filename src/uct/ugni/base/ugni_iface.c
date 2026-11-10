@@ -42,6 +42,11 @@ ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, const uct_iface_addr_t *iface_addr)
+{
+    return 1;
+}
+
 int uct_ugni_iface_is_reachable_v2(const uct_iface_h tl_iface,
                                    const uct_iface_is_reachable_params_t *params)
 {
@@ -49,25 +54,6 @@ int uct_ugni_iface_is_reachable_v2(const uct_iface_h tl_iface,
                    params, UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR) &&
            uct_iface_scope_is_reachable(tl_iface, params);
 }
-
-uct_iface_internal_ops_t uct_ugni_iface_internal_ops = {
-    .iface_query_v2        = uct_iface_base_query_v2,
-    .iface_estimate_perf   = uct_base_iface_estimate_perf,
-    .iface_vfs_refresh     = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query              =
-        (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
-    .ep_invalidate         =
-        (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
-    .ep_connect_to_ep_v2   =
-        (uct_ep_connect_to_ep_v2_func_t)ucs_empty_function_return_unsupported,
-    .iface_is_reachable_v2 = uct_ugni_iface_is_reachable_v2,
-    .ep_is_connected       =
-        (uct_ep_is_connected_func_t)ucs_empty_function_return_zero_int,
-    .ep_get_device_ep      =
-        (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
-    .ep_outstanding_purge  =
-        (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
-};
 
 static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,

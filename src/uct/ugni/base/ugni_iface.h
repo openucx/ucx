@@ -10,8 +10,6 @@
 #include <uct/base/uct_iface.h>
 #include <uct/api/uct.h>
 
-extern uct_iface_internal_ops_t uct_ugni_iface_internal_ops;
-
 UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, uct_iface_ops_t*,
                   uct_iface_internal_ops_t*,
@@ -20,6 +18,8 @@ UCS_CLASS_DECLARE(uct_ugni_iface_t, uct_md_h, uct_worker_h,
 ucs_status_t uct_ugni_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                   uct_completion_t *comp);
 ucs_status_t uct_ugni_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
+int uct_ugni_iface_is_reachable(uct_iface_h tl_iface, const uct_device_addr_t *dev_addr, 
+				const uct_iface_addr_t *iface_addr);
 int uct_ugni_iface_is_reachable_v2(
         const uct_iface_h iface, const uct_iface_is_reachable_params_t *params);
 void uct_ugni_base_desc_init(ucs_mpool_t *mp, void *obj, void *chunk);
