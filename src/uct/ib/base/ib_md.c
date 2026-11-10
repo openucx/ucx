@@ -126,6 +126,17 @@ ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, ext.gda_max_hca_per_gpu),
      UCS_CONFIG_TYPE_ULUNITS},
 
+    {"GDA_FABRIC_DETECT", "y",
+     "Detect the fabric plane of each RoCE HCA device from its IPv4 routes,\n"
+     "and assign HCA devices to GPUs so that all GPUs have devices of the\n"
+     "same planes. HCA devices of different planes cannot reach each other,\n"
+     "so GPUs with different planes could not communicate. HCA devices which\n"
+     "are not on a plane are not assigned to GPUs when planes are detected.\n"
+     "If disabled, or if the network device of any HCA device is not known,\n"
+     "devices are assigned by PCIe distance only.",
+     ucs_offsetof(uct_ib_md_config_t, ext.gda_fabric_detect),
+     UCS_CONFIG_TYPE_BOOL},
+
     {"GDA_DMABUF_ENABLE", "try",
      "Enable DMA-BUF in GDA.",
      ucs_offsetof(uct_ib_md_config_t, ext.gda_dmabuf_enable), UCS_CONFIG_TYPE_TERNARY},

@@ -10,9 +10,12 @@
 
 #include "gdaki.h"
 
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/time/time.h>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/type/init_once.h>
@@ -23,11 +26,16 @@
 #include <uct/cuda/base/cuda_ctx.h>
 #include <uct/cuda/base/cuda_nvml.h>
 
+#include <limits.h>
+#include <linux/rtnetlink.h>
 #include <string.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
 #define UCT_GDAKI_MAX_CUDA_DEVICES 64
+
+/* Plane rank of a device which is not on any plane */
+#define UCT_GDAKI_PLANE_NONE UINT_MAX
 
 #define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
 #define UCT_GDAKI_DEV_EP_SIZE          64
@@ -1281,6 +1289,7 @@ typedef struct {
     ucs_sys_dev_distance_t dist;
     int                    usecount;
     int                    reachable;
+    unsigned               plane; /* Plane rank, or UCT_GDAKI_PLANE_NONE */
 } uct_gdaki_dev_score_t;
 
 typedef struct {
@@ -1316,6 +1325,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
     const uct_gdaki_dev_score_t *a = pa;
     const uct_gdaki_dev_score_t *b = pb;
+    int result;
 
     /* Sort reachable devices before unreachable ones */
     if (a->reachable != b->reachable) {
@@ -1323,9 +1333,30 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
     }
 
     /* Prefer lower latency device, and if same latency prefer the less utilized */
-    return (ucs_fp_compare(a->dist.latency, b->dist.latency) *
-            UCT_GDAKI_MAX_CUDA_DEVICES) +
-           ucs_signum(a->usecount - b->usecount);
+    result = (ucs_fp_compare(a->dist.latency, b->dist.latency) *
+              UCT_GDAKI_MAX_CUDA_DEVICES) +
+             ucs_signum(a->usecount - b->usecount);
+    if (result != 0) {
+        return result;
+    }
+
+    /* Break the remaining ties by IB device index, so that equally close and
+     * equally used devices are picked in a deterministic order, which keeps the
+     * devices of one NIC together */
+    return ucs_signum((int64_t)a->ibdev_index - b->ibdev_index);
+}
+
+/* Assign a device to a GPU */
+static void
+uct_gdaki_dev_matrix_select(const uct_gdaki_gpu_info_t *gpu,
+                            uct_gdaki_dev_matrix_elem_t *dmat,
+                            uct_gdaki_dev_score_t *score)
+{
+    if (gpu->cuda_idx >= 0) {
+        dmat[score->ibdev_index].cuda_map |= UCS_BIT(gpu->cuda_idx);
+    }
+
+    score->usecount++;
 }
 
 static ucs_status_t
@@ -1445,20 +1476,289 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
     return UCS_OK;
 }
 
+/* IPv4 network which a device routes to, identifying its fabric plane. All the
+ * networks are assumed to have the same prefix length, so the address alone
+ * identifies a network. */
+typedef struct {
+    uint32_t addr; /* Network address, without the host bits, 0 for none */
+    unsigned dev;  /* Index of the active device */
+} uct_gdaki_fabric_route_t;
+
+UCS_ARRAY_DECLARE_TYPE(uct_gdaki_fabric_routes_t, unsigned,
+                       uct_gdaki_fabric_route_t);
+
+typedef struct {
+    uct_gdaki_fabric_routes_t *routes;
+    unsigned                  dev;
+    ucs_status_t              status;
+} uct_gdaki_fabric_collect_t;
+
+static int
+uct_gdaki_fabric_route_compare(const void *pa, const void *pb, void *arg)
+{
+    const uct_gdaki_fabric_route_t *a = pa;
+    const uct_gdaki_fabric_route_t *b = pb;
+
+    if (a->addr != b->addr) {
+        return ucs_signum((int64_t)a->addr - b->addr);
+    }
+
+    return ucs_signum((int64_t)a->dev - b->dev);
+}
+
+/**
+ * Group devices into fabric planes by the networks they route to.
+ *
+ * The plane of a device is named by the lowest network which it shares with
+ * enough devices to be a plane: at least one device for each GPU, but not all
+ * the devices, since a network of all of them, like a summary route, cannot
+ * tell them apart. Networks which fewer devices share are not planes.
+ * Devices of the same name are on the same plane, and devices which have no
+ * name are not on a plane. Planes are used only if there are at least two of
+ * them: with a single plane there is nothing to balance, and with none the
+ * topology is not known. In both cases the caller keeps assigning devices by
+ * PCIe distance only.
+ *
+ * Planes are ranked by their network, which is the same on all hosts of a
+ * fabric. GPUs which take the first planes in rank order therefore always have
+ * planes in common, also across hosts.
+ *
+ * @param [in,out] routes      Routes of the devices, sorted by this function.
+ * @param [in]     num_routes  Number of routes.
+ * @param [in]     num_devs    Number of active devices.
+ * @param [in]     num_gpus    Number of GPUs, including the ones not visible.
+ * @param [out]    plane       Plane rank of each device, or
+ *                             UCT_GDAKI_PLANE_NONE if it cannot be used.
+ * @param [out]    auto_k_p    Number of devices to assign to each GPU when it
+ *                             is not configured explicitly.
+ *
+ * @return Number of planes, or 0 if the devices should not be grouped, in which
+ *         case the outputs are not valid.
+ */
+static unsigned
+uct_gdaki_fabric_classify(uct_gdaki_fabric_route_t *routes,
+                          unsigned num_routes, unsigned num_devs,
+                          unsigned num_gpus, unsigned *plane,
+                          unsigned long *auto_k_p)
+{
+    const unsigned min_devs = ucs_max(num_gpus, 2u);
+    unsigned num_planes     = 0;
+    unsigned long auto_k    = 0;
+    uct_gdaki_fabric_route_t *names, *name;
+    unsigned i, j, k, num_run_devs;
+
+    ucs_assert(num_gpus > 0);
+
+    *auto_k_p = 0;
+
+    /* The name of each device, which has no network until one is found */
+    names = ucs_calloc(num_devs, sizeof(*names), "gdaki fabric names");
+    if (names == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < num_devs; ++i) {
+        names[i].dev = i;
+        plane[i]     = UCT_GDAKI_PLANE_NONE;
+    }
+
+    ucs_qsort_r(routes, num_routes, sizeof(*routes),
+                uct_gdaki_fabric_route_compare, NULL);
+
+    /* The routes of one network are adjacent and sorted by device */
+    for (i = 0; i < num_routes; i = j) {
+        num_run_devs = 1;
+        j            = i + 1;
+        while ((j < num_routes) && (routes[j].addr == routes[i].addr)) {
+            num_run_devs += (routes[j].dev != routes[j - 1].dev);
+            ++j;
+        }
+
+        if ((num_run_devs < min_devs) || (num_run_devs >= num_devs)) {
+            continue;
+        }
+
+        /* The networks come in ascending order, so the lowest one stays */
+        for (k = i; k < j; ++k) {
+            ucs_assert(routes[k].dev < num_devs);
+            name = &names[routes[k].dev];
+            if (name->addr == 0) {
+                name->addr = routes[i].addr;
+            }
+        }
+    }
+
+    /* Devices of the same name are a plane, if there is one for each GPU. The
+     * names are sorted, so the planes are ranked by their network. */
+    ucs_qsort_r(names, num_devs, sizeof(*names), uct_gdaki_fabric_route_compare,
+                NULL);
+    for (i = 0; i < num_devs; i = j) {
+        j = i + 1;
+        while ((j < num_devs) && (names[j].addr == names[i].addr)) {
+            ++j;
+        }
+
+        if ((names[i].addr == 0) || ((j - i) < num_gpus)) {
+            continue;
+        }
+
+        for (k = i; k < j; ++k) {
+            plane[names[k].dev] = num_planes;
+        }
+
+        auto_k += (j - i) / num_gpus;
+        num_planes++;
+    }
+
+    ucs_free(names);
+    if (num_planes < 2) {
+        return 0;
+    }
+
+    *auto_k_p = auto_k;
+    return num_planes;
+}
+
+/* Find out the network device of a RoCE device while its context is open.
+ * Returns 0 if the device is not a RoCE one, or its network device is not
+ * found. */
+static unsigned
+uct_gdaki_dev_ndev_index(uct_ib_device_t *dev)
+{
+    uint8_t port_num = dev->first_port;
+    char ndev_name[IFNAMSIZ];
+    unsigned gid_index, ndev_index;
+
+    if (!uct_ib_device_is_port_roce(dev, port_num)) {
+        return 0;
+    }
+
+    /* Any valid GID of the port leads to the network device it runs over */
+    for (gid_index = 0;
+         gid_index < uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+         ++gid_index) {
+        if ((uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                              ndev_name,
+                                              sizeof(ndev_name)) == UCS_OK) &&
+            (ucs_ifname_to_ndev_index(ndev_name, &ndev_index) == UCS_OK)) {
+            return ndev_index;
+        }
+    }
+
+    return 0;
+}
+
+static void
+uct_gdaki_fabric_collect_route(const struct sockaddr *dest, unsigned prefix_len,
+                               uint8_t route_type, void *arg)
+{
+    uct_gdaki_fabric_collect_t *collect = arg;
+    uct_gdaki_fabric_route_t *route;
+    uint32_t addr;
+
+    /* Only the IPv4 routes which can tell fabrics apart are used. Not the
+     * default and host routes, which are not specific to a fabric, and not the
+     * link-local and multicast routes, which every interface has. The
+     * destination of a kernel route has no host bits, so routes to the same
+     * network have the same address. */
+    if ((route_type != RTN_UNICAST) || (dest->sa_family != AF_INET) ||
+        (prefix_len >= 32)) {
+        return;
+    }
+
+    addr = ntohl(UCS_SOCKET_INET_ADDR(dest).s_addr);
+    if ((addr == 0) || ((addr & 0xffff0000) == 0xa9fe0000) ||
+        IN_MULTICAST(addr) || IN_BADCLASS(addr)) {
+        return;
+    }
+
+    route = ucs_array_append(collect->routes,
+                             collect->status = UCS_ERR_NO_MEMORY; return);
+    route->addr = addr;
+    route->dev  = collect->dev;
+}
+
+/*
+ * Group the active devices by fabric plane, and set the plane of each score. A
+ * device which is not on a plane gets UCT_GDAKI_PLANE_NONE. The planes are
+ * found by the routes of the network devices of RoCE devices only.
+ *
+ * Returns the number of planes, or 0 if the devices are not grouped, in which
+ * case the scores are left as they are.
+ */
+static unsigned
+uct_gdaki_fabric_detect(const unsigned *ndev_indexes, unsigned num_devs,
+                        unsigned num_gpus, uct_gdaki_dev_score_t *scores,
+                        unsigned long *auto_k_p)
+{
+    uct_gdaki_fabric_collect_t collect;
+    uct_gdaki_fabric_routes_t routes;
+    unsigned num_planes = 0;
+    unsigned *plane;
+    unsigned i;
+
+    plane = ucs_calloc(num_devs, sizeof(*plane), "gdaki dev planes");
+    if (plane == NULL) {
+        return 0;
+    }
+
+    ucs_array_init_dynamic(&routes);
+    collect.routes = &routes;
+    collect.status = UCS_OK;
+
+    for (i = 0; i < num_devs; ++i) {
+        /* A device without a network device, such as an InfiniBand one, has no
+         * routes to find its plane by: keep assigning by PCIe distance only */
+        if (ndev_indexes[i] == 0) {
+            goto out;
+        }
+
+        collect.dev = i;
+        ucs_netlink_foreach_route(ndev_indexes[i],
+                                  uct_gdaki_fabric_collect_route, &collect);
+    }
+
+    if (collect.status != UCS_OK) {
+        goto out;
+    }
+
+    num_planes = uct_gdaki_fabric_classify(ucs_array_begin(&routes),
+                                           ucs_array_length(&routes), num_devs,
+                                           num_gpus, plane, auto_k_p);
+    if (num_planes == 0) {
+        goto out;
+    }
+
+    ucs_debug("detected %u fabric planes among %u active IB devices",
+              num_planes, num_devs);
+    for (i = 0; i < num_devs; ++i) {
+        scores[i].plane = plane[i];
+    }
+
+out:
+    ucs_array_cleanup_dynamic(&routes);
+    ucs_free(plane);
+    return num_planes;
+}
+
 static uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     int num_sys_active_ibdevs         = 0;
+    unsigned long fabric_ib_per_cuda  = 0;
+    unsigned num_planes               = 0;
     uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
     ucs_status_t status;
     int ibdev_index, ibdev_count, score_index;
-    unsigned long num_gpu_reachable_ibdevs, num_gpu_selected_ibdevs;
-    unsigned gpu_count, gpu_index;
+    unsigned long num_gpu_reachable_ibdevs, num_plane_selected_ibdevs;
+    unsigned long plane_ib_per_cuda;
+    unsigned gpu_count, gpu_index, num_used_planes, plane;
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
     uct_gdaki_dev_score_t *scores;
+    unsigned *ndev_indexes;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     struct ibv_context *context;
 
@@ -1481,6 +1781,14 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     if (scores == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto out_dmat;
+    }
+
+    /* Allocate memory for network device indexes */
+    ndev_indexes = ucs_calloc(ibdev_count, sizeof(*ndev_indexes),
+                              "dev ndev indexes");
+    if (ndev_indexes == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_scores;
     }
 
     /* Query each IB device so its sys_dev is resolved and its port state is
@@ -1516,6 +1824,8 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 
         ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(&tmp_dev, 1) !=
                              UCS_SYS_DEVICE_ID_UNKNOWN;
+        ndev_indexes[num_sys_active_ibdevs] =
+                uct_gdaki_dev_ndev_index(&tmp_dev);
         scores[num_sys_active_ibdevs++].ibdev_index = ibdev_index;
         ibv_close_device(context);
     }
@@ -1540,10 +1850,26 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         goto out;
     }
 
+    /* The fabric planes are needed to give all GPUs the same planes, even if
+     * the number of devices per GPU is configured explicitly */
+    if (ib_md->config.gda_fabric_detect) {
+        num_planes = uct_gdaki_fabric_detect(ndev_indexes,
+                                             num_sys_active_ibdevs, gpu_count,
+                                             scores, &fabric_ib_per_cuda);
+    }
+
     if (ib_per_cuda == UCS_ULUNITS_AUTO) {
-        ib_per_cuda = ucs_max(1ul,
+        ib_per_cuda = (num_planes > 0) ?
+                      fabric_ib_per_cuda :
+                      ucs_max(1ul,
                               (unsigned long)num_sys_active_ibdevs / gpu_count);
     }
+
+    /* A GPU gets the same number of devices from each of the first planes, in
+     * the rank order. Without planes there is a single one, which has all the
+     * devices. */
+    num_used_planes   = ucs_max(ucs_min(num_planes, ib_per_cuda), 1ul);
+    plane_ib_per_cuda = ib_per_cuda / num_used_planes;
 
     /* Map each GPU to the best suited IB devices */
     for (gpu_index = 0; gpu_index < gpu_count; gpu_index++) {
@@ -1552,8 +1878,11 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         for (score_index = 0; score_index < num_sys_active_ibdevs;
              score_index++) {
             ibdesc = &dmat[scores[score_index].ibdev_index];
-            scores[score_index].reachable = ucs_topo_is_reachable(
-                    ibdesc->sys_dev, gpus[gpu_index].sys_dev);
+            /* A device which is not on a plane is not used */
+            scores[score_index].reachable =
+                    (scores[score_index].plane != UCT_GDAKI_PLANE_NONE) &&
+                    ucs_topo_is_reachable(ibdesc->sys_dev,
+                                          gpus[gpu_index].sys_dev);
             if (!scores[score_index].reachable) {
                 continue;
             }
@@ -1578,25 +1907,27 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         ucs_qsort_r(scores, num_sys_active_ibdevs, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
 
-        num_gpu_selected_ibdevs = ucs_min(ib_per_cuda,
-                                          num_gpu_reachable_ibdevs);
+        /* Direct NIC is closest and can be only one */
+        if (dmat[scores[0].ibdev_index].direct_nic) {
+            uct_gdaki_dev_matrix_select(&gpus[gpu_index], dmat, &scores[0]);
+            continue;
+        }
 
-        /* Reachable devices are sorted first, so the loop selects only
-         * devices reachable from this GPU */
-        for (score_index = 0; score_index < num_gpu_selected_ibdevs;
-             score_index++) {
-            ucs_assert(scores[score_index].reachable);
-
-            ibdesc = &dmat[scores[score_index].ibdev_index];
-            if (gpus[gpu_index].cuda_idx >= 0) {
-                ibdesc->cuda_map |= UCS_BIT(gpus[gpu_index].cuda_idx);
-            }
-            scores[score_index].usecount++;
-
-            /* Direct NIC is closest and can be only one */
-            if (ibdesc->direct_nic) {
-                ucs_assert_always(score_index == 0);
-                break;
+        /* Select the best suited devices of each used plane. Reachable
+         * devices are sorted first, so the loops select only devices
+         * reachable from this GPU */
+        for (plane = 0; plane < num_used_planes; plane++) {
+            num_plane_selected_ibdevs = 0;
+            for (score_index = 0;
+                 (score_index < num_sys_active_ibdevs) &&
+                 scores[score_index].reachable &&
+                 (num_plane_selected_ibdevs < plane_ib_per_cuda);
+                 score_index++) {
+                if (scores[score_index].plane == plane) {
+                    uct_gdaki_dev_matrix_select(&gpus[gpu_index], dmat,
+                                                &scores[score_index]);
+                    num_plane_selected_ibdevs++;
+                }
             }
         }
     }
@@ -1605,6 +1936,8 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     *dmat_length_p = ibdev_count;
 
 out:
+    ucs_free(ndev_indexes);
+out_scores:
     ucs_free(scores);
 out_dmat:
     if (status != UCS_OK) {
