@@ -136,8 +136,12 @@ publish-local:
 publish:
 	$(MVNCMD) deploy -DskipTests ${ARGS}
 
+# Remove module copies left by older resource-copy rules.
 test:
-	$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
+	$(RM) -r "$(topdir)/bindings/java/resources/ucx" \
+		"$(java_build_dir)/test-classes/ucx"
+	UCX_MODULE_DIR="$(localmoduledir)" \
+		$(MVNCMD) test -DargLine="-XX:OnError='cat hs_err_pid%p.log'"
 docs:
 	$(MVNCMD) javadoc:javadoc
 
