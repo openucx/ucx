@@ -384,9 +384,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                               rx_cq_len / rx_max_wr);
 
         ucs_debug("%s: RX CQ length %u, %u receive WRs per QP without an SRQ, "
-                  "batch size %u, at most %u QPs",
+                  "batch size %u, at most %zu QPs",
                   uct_ib_device_name(&ib_md->dev), rx_cq_len, rx_max_wr,
-                  rx_batch_limit, rx_cq_len / rx_max_wr);
+                  rx_batch_limit, max_num_eps);
 
         /* The soft threshold is validated later by uct_rc_init_fc_thresh(),
          * so clamp it here to keep the division safe. */

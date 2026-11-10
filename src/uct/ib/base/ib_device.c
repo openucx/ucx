@@ -411,6 +411,13 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_CQ_ERR:
         event.cookie = ibevent.element.cq;
         break;
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        if (ibevent.element.qp->srq == NULL) {
+            ucs_debug("%s: ignoring LAST_WQE on QP 0x%x without SRQ",
+                      uct_ib_device_name(dev), ibevent.element.qp->qp_num);
+            goto out;
+        }
+        /* Fall through */
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
     case IBV_EVENT_QP_ACCESS_ERR:
@@ -418,12 +425,6 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
-        event.qp_num = ibevent.element.qp->qp_num;
-        break;
-    case IBV_EVENT_QP_LAST_WQE_REACHED:
-        ucs_assertv(ibevent.element.qp->srq != NULL,
-                    "LAST_WQE on QP 0x%x without SRQ",
-                    ibevent.element.qp->qp_num);
         event.qp_num = ibevent.element.qp->qp_num;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -452,6 +453,7 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     };
 
     uct_ib_handle_async_event(dev, &event);
+out:
     ibv_ack_async_event(&ibevent);
 }
 
