@@ -9,6 +9,7 @@
 #include <uct/api/tl.h>
 #include <fenv.h>
 #include <string>
+#include <sys/resource.h>
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
@@ -1226,17 +1227,42 @@ private:
 
 UCS_TEST_P(test_worker_cpu_mask, all_cpus)
 {
+    const unsigned descriptor_headroom_factor = 2;
+    size_t descriptors_per_entity             = 0;
+    size_t open_descriptors                   = ucs::get_open_fds().size();
+    size_t previous_open_descriptors;
+    struct rlimit file_limit;
     ucs_sys_cpuset_t mask;
 
+    ASSERT_EQ(0, getrlimit(RLIMIT_NOFILE, &file_limit));
     CPU_ZERO(&mask);
     ASSERT_GE(ucs_sys_getaffinity(&mask), 0);
 
     for (auto cpu = 0; cpu < ucs_sys_get_num_cpus(); ++cpu) {
         if (CPU_ISSET(cpu, &mask)) {
+            /* Reserve an extra entity's footprint for transient allocations
+             * during worker creation. */
+            if ((open_descriptors >= file_limit.rlim_cur) ||
+                (descriptors_per_entity >=
+                 (file_limit.rlim_cur - open_descriptors) /
+                         descriptor_headroom_factor)) {
+                UCS_TEST_MESSAGE << "release " << entities().size()
+                                 << " entities with " << open_descriptors
+                                 << " open file descriptors";
+                cleanup();
+                open_descriptors = ucs::get_open_fds().size();
+            }
+
             set_cpu(cpu);
             UCS_TEST_MESSAGE << "create entity on cpu " << cpu;
+            previous_open_descriptors = open_descriptors;
             create_entity();
-            cleanup();
+            open_descriptors = ucs::get_open_fds().size();
+            if (open_descriptors > previous_open_descriptors) {
+                descriptors_per_entity = std::max(
+                        descriptors_per_entity,
+                        open_descriptors - previous_open_descriptors);
+            }
         }
     }
 }
