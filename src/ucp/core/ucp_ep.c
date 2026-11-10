@@ -2190,17 +2190,29 @@ static void ucp_ep_recovery_lane_ready(ucp_ep_h ep, ucp_lane_index_t lane)
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ep, lane));
     ucp_ep_recovery_arg_t *arg = ucp_ep_recovery_arg(ep);
 
+    /* Consumed here, including when this lane cannot become ready yet.
+     * A stale success would skip arming the next probe. */
+    if (arg != NULL) {
+        ucp_ep_recovery_reset_probe(&arg->probe[lane]);
+    }
+
     /* A probe can finish after connect failed. That lane stays failed. */
     if ((wireup_ep == NULL) ||
-        (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) ||
-        !(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED)) {
+        (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY)) {
+        return;
+    }
+
+    if (!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED)) {
+        /* Not connected, so this success must not end the round. */
+        if ((arg != NULL) &&
+            (arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK)) {
+            arg->state = UCP_EP_RECOVERY_STATE_PROBING;
+        }
+
         return;
     }
 
     ucp_wireup_ep_destroy_aux_ep(wireup_ep);
-    if (arg != NULL) {
-        ucp_ep_recovery_reset_probe(&arg->probe[lane]);
-    }
 
     ucp_wireup_update_flags(ep, UCS_BIT(lane),
                             UCP_WIREUP_EP_FLAG_READY |
@@ -2223,6 +2235,7 @@ ucp_ep_recovery_rebuild_p2p_lane(
     const ucp_address_entry_ep_addr_t *ep_entry;
     ucp_wireup_ep_t *wireup_ep;
     ucp_ep_recovery_probe_t *probe;
+    ucp_ep_recovery_arg_t *arg;
     uct_ep_h aux_ep;
     ucp_rsc_index_t aux_rsc_index;
     ucp_lane_index_t remote_lane;
@@ -2292,11 +2305,15 @@ ucp_ep_recovery_rebuild_p2p_lane(
     if (status != UCS_OK) {
         ucs_diag("ep %p: connect_to_ep_v2 failed for recovery p2p lane %d: %s",
                  ep, lane, ucs_status_string(status));
-        /* The transport still owns an in-flight probe completion. */
+        /* The transport owns an in-flight completion. A finished probe is
+         * dropped, and progress counts the round from PROBING. */
         if (ucp_ep_recovery_probe_status(probe) != UCS_INPROGRESS) {
+            arg = ucp_ep_recovery_arg(ep);
             ucp_ep_recovery_reset_probe(probe);
-            ucp_ep_recovery_arg(ep)->state  = UCP_EP_RECOVERY_STATE_IDLE;
-            ucp_ep_recovery_arg(ep)->resend = 1;
+            if ((arg->state == UCP_EP_RECOVERY_STATE_IDLE) ||
+                (arg->state == UCP_EP_RECOVERY_STATE_PROBE_OK)) {
+                arg->state = UCP_EP_RECOVERY_STATE_PROBING;
+            }
         }
 
         return status;

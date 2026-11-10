@@ -1533,8 +1533,7 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
 
         arg->tf_reply = reply;
     } else {
-        ucp_wireup_free_lane_tokens(reply->provided_lane_map,
-                                    reply->rx_tokens);
+        ucp_wireup_free_lane_tokens(reply->provided_lane_map, reply->rx_tokens);
         ucs_free(reply->address);
     }
 
@@ -1551,6 +1550,11 @@ ucp_wireup_tf_reply_store(ucp_ep_h ep, const ucp_wireup_msg_lanes_info_t *info,
     memset(rx_tokens, 0, sizeof(reply->rx_tokens));
     ucs_debug("ep %p: LANES_ADDR_REQ defer reply id 0x%x waiting 0x%" PRIx64,
               ep, request_id, (uint64_t)reply->waiting);
+    /* A lane dropped by this request has no completion that sends the reply. */
+    if (reply->waiting == 0) {
+        ucp_wireup_tf_reply_schedule(ep);
+    }
+
     return UCS_OK;
 }
 
