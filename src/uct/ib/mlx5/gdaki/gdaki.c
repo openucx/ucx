@@ -22,6 +22,7 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
 #include <uct/cuda/base/cuda_nvml.h>
+#include <uct/cuda/cuda_copy/cuda_copy_md.h>
 
 #include <string.h>
 
@@ -92,9 +93,8 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t
-uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
-                         uct_cuda_copy_alloc_handle_t *alloc_handle)
+static ucs_status_t uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
+                                             uct_cuda_mem_t *cuda_mem)
 {
     CUdevice cu_device;
     ucs_status_t status;
@@ -106,26 +106,26 @@ uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
 
     return uct_cuda_mem_alloc(UCS_LOG_LEVEL_ERROR, UCS_MEMORY_TYPE_CUDA,
                               UCS_TRY, cu_device, size, granularity_p,
-                              alloc_handle);
+                              cuda_mem);
 }
 
-static ucs_status_t
-uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
-                   uct_cuda_copy_alloc_handle_t *alloc_handle, void **buf_p)
+static ucs_status_t uct_rc_gdaki_alloc(size_t size, size_t align,
+                                       size_t *granularity_p,
+                                       uct_cuda_mem_t *cuda_mem, void **buf_p)
 {
     unsigned int flag = 1;
     ucs_status_t status;
     void *buf;
 
     status = uct_gdaki_cuda_mem_alloc(size + align - 1, granularity_p,
-                                      alloc_handle);
+                                      cuda_mem);
     if (status != UCS_OK) {
         return status;
     }
 
-    buf = (void*)ucs_align_up_pow2_ptr(alloc_handle->ptr, align);
+    buf = (void*)ucs_align_up_pow2_ptr(cuda_mem->ptr, align);
 
-    if (!alloc_handle->is_vmm) {
+    if (!cuda_mem->is_vmm) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
                                       (CUdeviceptr)buf));
@@ -138,7 +138,7 @@ uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
     return UCS_OK;
 
 err:
-    uct_cuda_mem_free(alloc_handle);
+    uct_cuda_mem_free(cuda_mem);
     return status;
 }
 
@@ -166,17 +166,17 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     size_t granularity                 = SIZE_MAX;
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_alloc_handle_t alloc_handle;
+    uct_cuda_mem_t cuda_mem;
     ucs_status_t status;
     struct mlx5dv_devx_umem *umem;
     uct_cuda_copy_md_dmabuf_t dmabuf;
 
-    status = uct_gdaki_cuda_mem_alloc(1, &granularity, &alloc_handle);
+    status = uct_gdaki_cuda_mem_alloc(1, &granularity, &cuda_mem);
     if (status != UCS_OK) {
         goto out;
     }
 
-    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)alloc_handle.ptr, 1,
+    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)cuda_mem.ptr, 1,
                                          UCS_SYS_DEVICE_ID_UNKNOWN);
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         goto out_free;
@@ -200,7 +200,7 @@ out_dereg:
 out_close:
     ucs_close_fd(&dmabuf.fd);
 out_free:
-    uct_cuda_mem_free(&alloc_handle);
+    uct_cuda_mem_free(&cuda_mem);
 out:
 #endif
     return ret;
