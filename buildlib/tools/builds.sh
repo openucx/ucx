@@ -438,6 +438,13 @@ build_ze() {
 # runtime installed.
 #
 build_rdu() {
+	# RDU memory is registered by the IB memory domain, so RDU needs IB verbs
+	if [ ! -f /usr/include/infiniband/verbs.h ]
+	then
+		echo "==== Not building with rdu flags (no IB verbs) ===="
+		return
+	fi
+
 	echo "==== Build with enable rdu ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rdu
 	$MAKEP

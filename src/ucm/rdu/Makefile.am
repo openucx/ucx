@@ -3,7 +3,7 @@
 # See file LICENSE for terms.
 #
 
-if HAVE_UCM_RDU
+if HAVE_RDU
 
 module_LTLIBRARIES     = libucm_rdu.la
 libucm_rdu_la_CPPFLAGS = $(BASE_CPPFLAGS)
