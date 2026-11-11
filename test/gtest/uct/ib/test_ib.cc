@@ -558,8 +558,7 @@ UCS_TEST_P(test_uct_ib_roce, local_subnet_only,
     send_recv_short();
 }
 
-UCS_TEST_P(test_uct_ib_roce, kernel_route, "IB_ROCE_REACHABILITY_MODE=kernel")
-{
+UCS_TEST_P(test_uct_ib_roce, kernel_route, "IB_ROCE_REACHABILITY_MODE=kernel") {
     send_recv_short();
 }
 

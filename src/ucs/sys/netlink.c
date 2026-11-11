@@ -546,10 +546,9 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
     return (ucs_netlink_max_netmask_len(if_index, sa_remote) == netmask_len);
 }
 
-static void
-ucs_netlink_route_req_add_attr(ucs_netlink_route_req_t *req, size_t *len_p,
-                               unsigned short type, const void *data,
-                               size_t data_len)
+static void ucs_netlink_route_req_add_attr(ucs_netlink_route_req_t *req,
+                                           size_t *len_p, unsigned short type,
+                                           const void *data, size_t data_len)
 {
     struct rtattr *rta = UCS_PTR_BYTE_OFFSET(req, *len_p);
 
@@ -595,10 +594,10 @@ ucs_netlink_parse_route_cb(const struct nlmsghdr *nlh, void *arg)
     return UCS_OK;
 }
 
-static ucs_status_t
-ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
-                         const struct sockaddr *sa_local, int if_index,
-                         ucs_netlink_route_t *route_p)
+static ucs_status_t ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
+                                             const struct sockaddr *sa_local,
+                                             int if_index,
+                                             ucs_netlink_route_t *route_p)
 {
     ucs_netlink_route_req_t req = {{0}};
     ucs_netlink_route_t route   = {.type = RTN_UNSPEC};
@@ -619,8 +618,7 @@ ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
 
     if (sa_local != NULL) {
         status = ucs_netlink_route_req_add_addr(&req, &req_len, RTA_SRC,
-                                                sa_local,
-                                                &req.rtm.rtm_src_len);
+                                                sa_local, &req.rtm.rtm_src_len);
         if (status != UCS_OK) {
             return status;
         }

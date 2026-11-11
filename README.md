@@ -146,8 +146,9 @@ $ make -C test/gtest test
   details.
 
 * If network routing is incorrectly recognized, leading to peers reported as
-  "unreachable", change the default reachability check mode by setting:
-  UCX_IB_ROCE_REACHABILITY_MODE=all.
+  "unreachable", change the default reachability check mode by setting
+  UCX_IB_ROCE_REACHABILITY_MODE=kernel, to use the routes selected by the
+  kernel, or UCX_IB_ROCE_REACHABILITY_MODE=all, to skip the check.
 
 <hr>
 

@@ -947,8 +947,8 @@ uct_ib_iface_roce_is_reachable(uct_ib_iface_t *iface,
     if (iface->config.reachability_mode == UCT_IB_REACHABILITY_MODE_KERNEL) {
         return uct_ib_iface_roce_is_kernel_routable(
                 iface, local_gid_info.gid_index,
-                (const struct sockaddr*)&sa_local,
-                (struct sockaddr*)&sa_remote, params);
+                (const struct sockaddr*)&sa_local, (struct sockaddr*)&sa_remote,
+                params);
     }
 
     ucs_assert(iface->config.reachability_mode ==
