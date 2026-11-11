@@ -617,6 +617,8 @@ static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
             break;
         }
 
+        /* A weak fence leaves the flag set, so the next element is fenced too.
+         * A strong fence clears it. */
         if (fence_flag != 0) {
             fence_flag = ucp_ep_rma_get_fence_flag(req->send.ep);
         }
