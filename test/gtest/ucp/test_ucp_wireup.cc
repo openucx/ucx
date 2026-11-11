@@ -2516,7 +2516,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_msg_lane, all, "^sm")
  * registration, so it is selected first, although it is much slower than RC.
  * The address of a wireup request has only the transports of the peer lanes,
  * and the lanes selected from it must be the same as from the worker address,
- * so a selected lane must not be dropped as too slow.
+ * so CMA must not take a lane slot even when it is selected first.
  */
 class test_ucp_wireup_bw_lanes : public ucp_test {
 public:
@@ -2557,20 +2557,42 @@ protected:
         return num_lanes;
     }
 
+    /* The transport, device and path of a lane */
+    static std::string
+    lane_str(entity &e, const ucp_ep_config_key_t &key, ucp_lane_index_t lane)
+    {
+        const uct_tl_resource_desc_t &rsc =
+                e.ucph()->tl_rscs[key.lanes[lane].rsc_index].tl_rsc;
+        std::stringstream ss;
+
+        ss << rsc.tl_name << "/" << rsc.dev_name << "."
+           << static_cast<unsigned>(key.lanes[lane].path_index);
+        return ss.str();
+    }
+
     /* The lanes of a key, for failure messages */
     static std::string lanes_str(entity &e, const ucp_ep_config_key_t &key)
     {
-        const ucp_context_h context = e.ucph();
-        std::stringstream ss;
+        std::string result;
 
         for (ucp_lane_index_t lane = 0; lane < key.num_lanes; ++lane) {
-            const uct_tl_resource_desc_t &rsc =
-                    context->tl_rscs[key.lanes[lane].rsc_index].tl_rsc;
-            ss << " " << rsc.tl_name << "/" << rsc.dev_name << "."
-               << static_cast<unsigned>(key.lanes[lane].path_index);
+            result += " " + lane_str(e, key, lane);
         }
 
-        return ss.str();
+        return result;
+    }
+
+    /* The RMA BW lanes of a key, in any order */
+    static std::multiset<std::string>
+    rma_bw_lanes(entity &e, const ucp_ep_config_key_t &key)
+    {
+        std::multiset<std::string> result;
+
+        for (unsigned i = 0; i < num_rma_bw_lanes(key); ++i) {
+            result.insert(lane_str(e, key, key.rma_bw_lanes[i]));
+        }
+
+        return result;
     }
 };
 
@@ -2592,12 +2614,49 @@ UCS_TEST_P(test_ucp_wireup_bw_lanes, request_address) {
     request_address.unpack(sender().worker(), tl_bitmap);
     select_lanes(sender(), request_address.address, request_key);
 
-    /* The selected CMA lane is not dropped, so both RMA BW lanes are kept */
-    EXPECT_EQ(2u, num_rma_bw_lanes(full_key))
+    /* CMA is too slow, so the lanes are selected again without it, and both
+     * RMA BW lanes are on RC */
+    const std::multiset<std::string> lanes = rma_bw_lanes(sender(), full_key);
+    EXPECT_EQ(2u, lanes.size()) << "lanes:" << lanes_str(sender(), full_key);
+    EXPECT_TRUE(std::none_of(lanes.begin(), lanes.end(),
+                             [](const std::string &lane) {
+                                 return lane.find("cma/") == 0;
+                             }))
             << "lanes:" << lanes_str(sender(), full_key);
     EXPECT_TRUE(ucp_ep_config_is_equal(&full_key, &request_key))
             << "full address lanes:" << lanes_str(sender(), full_key)
             << ", request address lanes:" << lanes_str(sender(), request_key);
+}
+
+/* With the registration cache the peer prefers RC to CMA, so it selects RC
+ * first, while the sender selects CMA first. Both must still select the same
+ * RMA BW lanes, from the worker address and from the wireup request address */
+UCS_TEST_P(test_ucp_wireup_bw_lanes, rcache_peer) {
+    modify_config("RCACHE_ENABLE", "try");
+    entity &peer = *create_entity();
+    if (peer.ucph()->rcache == NULL) {
+        UCS_TEST_SKIP_R("registration cache is not available");
+    }
+
+    unpacked_address sender_address(sender().worker());
+    unpacked_address peer_address(peer.worker());
+    unpacked_address request_address(sender().worker());
+    ucp_ep_config_key_t sender_key, peer_key, request_key;
+    ucp_tl_bitmap_t tl_bitmap;
+
+    sender_address.unpack(peer.worker());
+    peer_address.unpack(sender().worker());
+    select_lanes(sender(), peer_address.address, sender_key);
+    select_lanes(peer, sender_address.address, peer_key);
+
+    /* The peer selects its lanes again from the sender wireup request */
+    ucp_ep_get_tl_bitmap(&sender_key, &tl_bitmap);
+    request_address.unpack(peer.worker(), tl_bitmap);
+    select_lanes(peer, request_address.address, request_key);
+
+    EXPECT_EQ(rma_bw_lanes(sender(), sender_key), rma_bw_lanes(peer, peer_key));
+    EXPECT_EQ(rma_bw_lanes(sender(), sender_key),
+              rma_bw_lanes(peer, request_key));
 }
 
 UCS_TEST_P(test_ucp_wireup_bw_lanes, older_peer) {

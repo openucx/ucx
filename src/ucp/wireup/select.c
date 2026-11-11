@@ -1897,18 +1897,20 @@ static int ucp_wireup_add_fast_lanes_pairwise(
     return found_lane;
 }
 
-static int ucp_wireup_add_bw_lanes_pairwise(
+/* Select up to max_lanes BW lanes into sinfo_array, skipping the candidates
+ * slower than min_lane_bw, and return the bandwidth of the fastest one */
+static double ucp_wireup_select_bw_lanes_pairwise(
         const ucp_wireup_select_params_t *select_params,
         ucp_wireup_select_bw_info_t *bw_info, ucp_tl_bitmap_t tl_bitmap,
         ucp_lane_index_t excl_lane, ucp_wireup_select_context_t *select_ctx,
-        unsigned allow_extra_path)
+        unsigned allow_extra_path, double min_lane_bw,
+        ucp_proto_select_info_array_t *sinfo_array)
 {
-    ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
-    ucp_rsc_index_t skip_dev_index            = UCP_NULL_RESOURCE;
-    ucp_ep_h ep                               = select_params->ep;
-    ucp_context_h context                     = ep->worker->context;
-    ucp_wireup_dev_usage_count dev_count      = {};
-    double max_bw                             = 0;
+    ucp_rsc_index_t skip_dev_index       = UCP_NULL_RESOURCE;
+    ucp_ep_h ep                          = select_params->ep;
+    ucp_context_h context                = ep->worker->context;
+    ucp_wireup_dev_usage_count dev_count = {};
+    double max_bw                        = 0;
     const uct_iface_attr_t *iface_attr;
     const ucp_address_entry_t *ae;
     ucs_status_t status;
@@ -1918,17 +1920,13 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
     ucp_wireup_select_info_t *sinfo;
-    int found_lane;
     unsigned local_num_paths, remote_num_paths;
-    double max_ratio, min_lane_bw;
-    int skip_slow_lanes;
 
-    local_dev_bitmap      = bw_info->local_dev_bitmap;
-    remote_dev_bitmap     = bw_info->remote_dev_bitmap;
-    bw_info->criteria.arg = &dev_count;
-    max_ratio             = 1. / context->config.ext.multi_lane_max_ratio;
-    skip_slow_lanes       = (select_params->address->dst_version >=
-                             UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES);
+    local_dev_bitmap              = bw_info->local_dev_bitmap;
+    remote_dev_bitmap             = bw_info->remote_dev_bitmap;
+    bw_info->criteria.arg         = &dev_count;
+    bw_info->criteria.min_lane_bw = min_lane_bw;
+    ucs_array_clear(sinfo_array);
 
     /* Each dev_count entry counts at most the selected lanes plus excl_lane,
      * so it can reach UCP_MAX_LANES + 1 */
@@ -1940,23 +1938,15 @@ static int ucp_wireup_add_bw_lanes_pairwise(
     /* lookup for requested number of lanes or limit of MD map
      * (we have to limit MD's number to avoid malloc in
      * memory registration) */
-    while (ucs_array_length(&sinfo_array) < bw_info->max_lanes) {
+    while (ucs_array_length(sinfo_array) < bw_info->max_lanes) {
         if (excl_lane == UCP_NULL_LANE) {
-            if (skip_slow_lanes) {
-                /* Skip lanes much slower than the fastest lane selected so far,
-                 * and never drop a selected lane: the peer may select the lanes
-                 * again from our wireup address, which has only the devices of
-                 * the added lanes, and it must get the same lanes. */
-                bw_info->criteria.min_lane_bw = max_bw * max_ratio;
-            }
-
-            sinfo  = ucs_array_append(&sinfo_array, break);
+            sinfo  = ucs_array_append(sinfo_array, break);
             status = ucp_wireup_select_transport(select_ctx, select_params,
                                                  &bw_info->criteria, tl_bitmap,
                                                  UINT64_MAX, local_dev_bitmap,
                                                  remote_dev_bitmap, 0, sinfo);
             if (status != UCS_OK) {
-                ucs_array_pop_back(&sinfo_array);
+                ucs_array_pop_back(sinfo_array);
                 break;
             }
 
@@ -2017,12 +2007,64 @@ static int ucp_wireup_add_bw_lanes_pairwise(
 
     bw_info->criteria.arg         = NULL; /* To suppress compiler warning */
     bw_info->criteria.min_lane_bw = 0;
+    return max_bw;
+}
 
-    /* With an older peer, drop the slow lanes after the selection as it does */
-    min_lane_bw = skip_slow_lanes ? 0 : (max_bw * max_ratio);
-    found_lane  = ucp_wireup_add_fast_lanes_pairwise(
-            ep->worker, select_params, &sinfo_array,
-            bw_info->criteria.lane_type, min_lane_bw, select_ctx);
+static int
+ucp_wireup_has_slow_lane(const ucp_proto_select_info_array_t *sinfo_array,
+                         double min_lane_bw)
+{
+    const ucp_wireup_select_info_t *sinfo;
+
+    ucs_array_for_each(sinfo, sinfo_array) {
+        if (sinfo->bandwidth < min_lane_bw) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int ucp_wireup_add_bw_lanes_pairwise(
+        const ucp_wireup_select_params_t *select_params,
+        ucp_wireup_select_bw_info_t *bw_info, ucp_tl_bitmap_t tl_bitmap,
+        ucp_lane_index_t excl_lane, ucp_wireup_select_context_t *select_ctx,
+        unsigned allow_extra_path)
+{
+    ucp_proto_select_info_array_t sinfo_array = UCS_ARRAY_DYNAMIC_INITIALIZER;
+    ucp_ep_h ep                               = select_params->ep;
+    ucp_context_h context                     = ep->worker->context;
+    double min_lane_bw                        = 0;
+    double max_ratio, max_bw;
+    int skip_slow_lanes, found_lane;
+
+    max_ratio       = 1. / context->config.ext.multi_lane_max_ratio;
+    skip_slow_lanes = (select_params->address->dst_version >=
+                       UCP_MIN_DST_VERSION_WIREUP_SKIP_SLOW_LANES);
+
+    /* With an older peer, drop the slow lanes after the selection. Otherwise,
+     * select again without them, so they take no lane slots or paths. */
+    for (;;) {
+        max_bw = ucp_wireup_select_bw_lanes_pairwise(select_params, bw_info,
+                                                     tl_bitmap, excl_lane,
+                                                     select_ctx,
+                                                     allow_extra_path,
+                                                     min_lane_bw, &sinfo_array);
+        min_lane_bw = max_bw * max_ratio;
+        if (!skip_slow_lanes ||
+            !ucp_wireup_has_slow_lane(&sinfo_array, min_lane_bw)) {
+            break;
+        }
+
+        ucs_trace("ep %p: selecting %s lanes again without the lanes slower"
+                  " than %.2f MB/s",
+                  ep, bw_info->criteria.title, min_lane_bw / UCS_MBYTE);
+    }
+
+    found_lane = ucp_wireup_add_fast_lanes_pairwise(ep->worker, select_params,
+                                                    &sinfo_array,
+                                                    bw_info->criteria.lane_type,
+                                                    min_lane_bw, select_ctx);
 
     ucs_array_cleanup_dynamic(&sinfo_array);
     return found_lane;
