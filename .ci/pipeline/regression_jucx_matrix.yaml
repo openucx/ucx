@@ -20,7 +20,7 @@ env:
   SLURM_HEAD_USER: svcnbu-swx-hpcx
   SSH_CREDENTIALS_ID: svcnbu-swx-hpcx_id_rsa_ssh_key
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
-  CONTAINER_NAME: "ucx-regression-jucx-${BUILD_NUMBER}"
+  CONTAINER_NAME: "ucx-regression-jucx-14"
   CI_IMAGE_TAG: "20261018-1"
 pvc_volumes:
   - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
@@ -35,39 +35,7 @@ matrix:
     arch: [aarch64]
 taskName: '${arch}/${name}'
 steps:
-  - name: Allocate GB200
-    containerSelector: "{name: 'build_helper_dl'}"
-    parallel: false
-    shell: action
-    module: slurmCI
-    run: allocation
-    args:
-      partition: gb200nvl72_ci
-      headNode: "${SLURM_HEAD_NODE}"
-      headUser: "${SLURM_HEAD_USER}"
-      nodes: 1
-      jobTimeout: '02:00:00'
-      immediateTimeout: 1800
-      jobName: "${CONTAINER_NAME}"
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
-      credentialsId: "${SSH_CREDENTIALS_ID}"
-      extraArgs: ['--account=oberon-gb-ci', '--gres=gpu:1', '--mem=128G', '--mincpus=24']
-  - name: Checkout harness
-    containerSelector: "{name: 'build_helper_dl'}"
-    parallel: false
-    timeout: 20
-    shell: action
-    module: slurmCI
-    run: run
-    args: &remote
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
-      headNode: "${SLURM_HEAD_NODE}"
-      headUser: "${SLURM_HEAD_USER}"
-      dockerImage: "${DOCKER_IMAGE}"
-      credentialsId: "${SSH_CREDENTIALS_ID}"
-      containerName: "${CONTAINER_NAME}"
-      extraArgs: ['--container-remap-root']
-      testScript: 'set -e; apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openjdk-11-jdk-headless; git clone https://github.com/shasson5/ucx.git .; git checkout ${sha1}'
+  # Reuse the GB200 allocation and compiled source from build 14.
   - name: Verify selected JUCX tests
     containerSelector: "{name: 'build_helper_dl'}"
     parallel: false
@@ -76,5 +44,11 @@ steps:
     module: slurmCI
     run: run
     args:
-      <<: *remote
-      testScript: 'bash .ci/scripts/verify_blossom_jucx.sh'
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_14.txt"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      extraArgs: ['--container-remap-root']
+      testScript: 'set -e; test "$SLURM_JOB_ID" = 3196440; git fetch --no-tags origin ${sha1}; git checkout ${sha1}; bash .ci/scripts/verify_blossom_jucx.sh'

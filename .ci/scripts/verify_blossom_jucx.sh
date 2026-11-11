@@ -11,16 +11,20 @@ printf 'JUCX host=%s page_size=%s PR=12311 SHA=%s\n' \
 ulimit -l unlimited
 export UCX_HANDLE_ERRORS=bt UCX_LOG_LEVEL=info UCX_TLS=rc
 unset UCX_NET_DEVICES
-git clone --no-checkout https://github.com/openucx/ucx.git regression-jucx
+if [ ! -d regression-jucx/.git ]; then
+    git clone --no-checkout https://github.com/openucx/ucx.git regression-jucx
+fi
 cd regression-jucx
 git fetch --no-tags origin "$revision"
 git checkout --detach "$revision"
 test "$(git rev-parse HEAD)" = "$revision"
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-arm64
 export PATH=$JAVA_HOME/bin:$PATH
-./autogen.sh
-./contrib/configure-devel --prefix="$PWD/install" --with-java \
-    --enable-gtest=no --with-cuda=no
+if [ ! -f Makefile ]; then
+    ./autogen.sh
+    ./contrib/configure-devel --prefix="$PWD/install" --with-java \
+        --enable-gtest=no --with-cuda=no
+fi
 make -j24
 test -f src/uct/ib/.libs/libuct_ib.so
 test -f src/uct/ib/rdmacm/.libs/libuct_rdmacm.so
@@ -32,8 +36,11 @@ for jdk in java-8-openjdk-arm64 java-11-openjdk-arm64; do
     export JAVA_HOME=/usr/lib/jvm/$jdk
     export PATH=$JAVA_HOME/bin:$PATH
     printf 'VERIFY PR=12311 SHA=%s JDK=%s\n' "$revision" "$jdk"
-    timeout 300 make -C bindings/java/src/main/native test \
-        MVN='mvn -Dtest=UcpMemoryTest#testMmapFile,UcpListenerTest#testConnectionHandler -DfailIfNoTests=true'
+    rm -f bindings/java/src/main/native/build-java/surefire-reports/TEST-*.xml
+    for selection in UcpMemoryTest#testMmapFile UcpListenerTest#testConnectionHandler; do
+        timeout 300 make -C bindings/java/src/main/native test \
+            MVN="mvn -Dtest=$selection -DfailIfNoTests=true"
+    done
     test ! -d bindings/java/resources/ucx
     test ! -d bindings/java/src/main/native/build-java/test-classes/ucx
     python3 - <<'PY'
