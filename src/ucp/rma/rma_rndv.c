@@ -316,12 +316,9 @@ ucp_proto_get_rndv_add_variant(
 static void
 ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_worker_h worker                     = init_params->worker;
     const ucp_proto_select_init_protocols_t *proto_init;
     ucp_proto_select_param_t rndv_sel_param;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_select_elem_t *select_elem;
-    ucp_proto_select_t *proto_select;
     ucp_proto_init_elem_t *proto;
     ucp_memory_info_t mem_info;
     ucp_lane_index_t lane;
@@ -341,22 +338,12 @@ ucp_proto_get_rndv_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_select_param_init(&rndv_sel_param, UCP_OP_ID_RNDV_RECV, 0, 0,
                                 UCP_DATATYPE_CONTIG, &mem_info, 1);
 
-    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
-                                        init_params->rkey_cfg_index,
-                                        &rkey_cfg_index);
-    if (proto_select == NULL) {
+    proto_init = ucp_proto_select_lookup_init(init_params, &rndv_sel_param,
+                                              &rkey_cfg_index);
+    if (proto_init == NULL) {
         return;
     }
 
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
-                                               init_params->ep_cfg_index,
-                                               rkey_cfg_index,
-                                               &rndv_sel_param);
-    if (select_elem == NULL) {
-        return;
-    }
-
-    proto_init = &select_elem->proto_init;
     ucs_array_for_each(proto, &proto_init->protocols) {
         if (ucp_proto_id_field(proto->proto_id, flags) &
             UCP_PROTO_FLAG_INVALID) {
@@ -785,13 +772,10 @@ ucp_proto_put_sgl_contig_add_variant(
 static void
 ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
 {
-    ucp_worker_h worker                          = init_params->worker;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     const ucp_proto_select_init_protocols_t *proto_init;
     ucp_proto_select_param_t contig_sel_param;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_select_elem_t *select_elem;
-    ucp_proto_select_t *proto_select;
     ucp_proto_init_elem_t *proto;
     ucp_memory_info_t mem_info;
 
@@ -807,22 +791,12 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
                                         select_param->op_attr),
                                 0, UCP_DATATYPE_CONTIG, &mem_info, 1);
 
-    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
-                                        init_params->rkey_cfg_index,
-                                        &rkey_cfg_index);
-    if (proto_select == NULL) {
+    proto_init = ucp_proto_select_lookup_init(init_params, &contig_sel_param,
+                                              &rkey_cfg_index);
+    if (proto_init == NULL) {
         return;
     }
 
-    select_elem = ucp_proto_select_lookup_slow(worker, proto_select, 1,
-                                               init_params->ep_cfg_index,
-                                               rkey_cfg_index,
-                                               &contig_sel_param);
-    if (select_elem == NULL) {
-        return;
-    }
-
-    proto_init = &select_elem->proto_init;
     ucs_array_for_each(proto, &proto_init->protocols) {
         if ((ucp_proto_id_field(proto->proto_id, flags) &
              UCP_PROTO_FLAG_INVALID) ||
