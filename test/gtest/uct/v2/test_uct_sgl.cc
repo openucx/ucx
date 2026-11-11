@@ -130,6 +130,34 @@ protected:
         test_sgl(std::vector<size_t>(count, elem_size(UCS_KBYTE)), &comp);
     }
 
+    void test_sgl_zero_length(const std::vector<size_t> &empty_indices)
+    {
+        static const size_t count = 3;
+        sgl_completion comp       = {};
+
+        connect_or_skip();
+
+        if (max_count() < count) {
+            UCS_TEST_SKIP_R("not enough sgl elements");
+        }
+
+        if (min_zcopy() > 0) {
+            UCS_TEST_SKIP_R("zero length is not supported");
+        }
+
+        comp.uct.func   = completion_cb;
+        comp.uct.count  = 1;
+        comp.uct.status = UCS_OK;
+
+        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(), op(),
+                       std::vector<size_t>(count, elem_size(UCS_KBYTE)));
+        for (size_t index : empty_indices) {
+            sgl.lengths[index] = 0;
+        }
+
+        test_sgl(sgl, &comp);
+    }
+
 private:
     enum sgl_op_t {
         SGL_OP_PUT,
@@ -213,17 +241,21 @@ private:
                sgl_iface_attr().max_get_sgl_zcopy_count;
     }
 
+    size_t min_zcopy()
+    {
+        return (op() == SGL_OP_PUT) ?
+               m_sender->iface_attr().cap.put.min_zcopy :
+               m_sender->iface_attr().cap.get.min_zcopy;
+    }
+
     size_t elem_size(size_t size)
     {
         const uct_iface_attr &attr = m_sender->iface_attr();
-        size_t min_zcopy           = (op() == SGL_OP_PUT) ?
-                                     attr.cap.put.min_zcopy :
-                                     attr.cap.get.min_zcopy;
         size_t max_zcopy           = (op() == SGL_OP_PUT) ?
                                      attr.cap.put.max_zcopy :
                                      attr.cap.get.max_zcopy;
 
-        return ucs_min(ucs_max(size, min_zcopy), max_zcopy);
+        return ucs_min(ucs_max(size, min_zcopy()), max_zcopy);
     }
 
     ucs_memory_type_t first_supported_mem_type()
@@ -261,19 +293,19 @@ private:
     void check_sgl(const sgl_arrays &sgl)
     {
         for (size_t i = 0; i < sgl.lengths.size(); ++i) {
+            /* The target of a zero-length element keeps its initial data */
+            uint64_t seed = (sgl.lengths[i] == 0) ? SEED2 : (SEED1 + i);
+
             if (op() == SGL_OP_PUT) {
-                sgl.remote[i]->pattern_check(SEED1 + i);
+                sgl.remote[i]->pattern_check(seed);
             } else {
-                sgl.local[i]->pattern_check(SEED1 + i);
+                sgl.local[i]->pattern_check(seed);
             }
         }
     }
 
-    void test_sgl(const std::vector<size_t> &sizes,
-                  sgl_completion *comp = NULL)
+    void test_sgl(const sgl_arrays &sgl, sgl_completion *comp = NULL)
     {
-        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(),
-                       op(), sizes);
         ucs_status_t status = sgl_op(sgl, (comp == NULL) ? NULL : &comp->uct);
 
         ASSERT_UCS_OK_OR_INPROGRESS(status);
@@ -285,7 +317,22 @@ private:
         }
 
         m_sender->flush();
+
+        if ((comp != NULL) && (status == UCS_OK)) {
+            /* Completion is not called for an operation completed in place */
+            EXPECT_EQ(0u, comp->done);
+        }
+
         check_sgl(sgl);
+    }
+
+    void test_sgl(const std::vector<size_t> &sizes,
+                  sgl_completion *comp = NULL)
+    {
+        sgl_arrays sgl(*m_sender, *m_receiver, first_supported_mem_type(),
+                       op(), sizes);
+
+        test_sgl(sgl, comp);
     }
 
     static void completion_cb(uct_completion_t *self)
@@ -325,6 +372,18 @@ UCS_TEST_P(test_uct_sgl, zero_count) {
 
 UCS_TEST_P(test_uct_sgl, with_callback) {
     test_sgl_with_callback();
+}
+
+UCS_TEST_P(test_uct_sgl, zero_length_element) {
+    test_sgl_zero_length({1});
+}
+
+UCS_TEST_P(test_uct_sgl, zero_length_first_last_elements) {
+    test_sgl_zero_length({0, 2});
+}
+
+UCS_TEST_P(test_uct_sgl, zero_length_all_elements) {
+    test_sgl_zero_length({0, 1, 2});
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_sgl)

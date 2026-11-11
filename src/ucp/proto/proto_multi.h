@@ -178,6 +178,27 @@ typedef ucs_status_t (*ucp_proto_multi_lane_send_func_t)(ucp_request_t *req,
                                                          ucp_lane_index_t lane);
 
 
+/**
+ * Post callback for RMA SGL protocols
+ *
+ * @param [in] req          Request to post.
+ * @param [in] lpriv        Lane to post on.
+ * @param [in] buffers      Local buffers array, @a count elements.
+ * @param [in] lengths      Lengths array, @a count elements.
+ * @param [in] memhs        UCT memory handles array, @a count elements.
+ * @param [in] remote_addrs Remote addresses array, @a count elements.
+ * @param [in] rkeys        UCT remote keys array, @a count elements.
+ * @param [in] count        Number of elements in each array.
+ *
+ * @return Post operation status, using same semantics as returned from UCT
+ *         send functions.
+ */
+typedef ucs_status_t (*ucp_proto_rma_sgl_post_func_t)(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        void *const *buffers, const size_t *lengths, uct_mem_h const *memhs,
+        const uint64_t *remote_addrs, uct_rkey_t const *rkeys, size_t count);
+
+
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   const char *perf_name,
                                   ucp_proto_perf_t **perf_p,

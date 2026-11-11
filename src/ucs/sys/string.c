@@ -170,6 +170,7 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
 {
     char units[3];
     int num_fields;
+    int length = 0;
     size_t value;
     size_t bytes;
 
@@ -185,17 +186,22 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
         return UCS_OK;
     }
 
+    /* Units are optional, and may be followed only by whitespace */
     memset(units, 0, sizeof(units));
-    num_fields = sscanf(buf, "%ld%c%c", &value, &units[0], &units[1]);
+    num_fields = sscanf(buf, "%ld%n%2[a-zA-Z]%n", &value, &length, units,
+                        &length);
+    if ((num_fields < 1) || ((size_t)length > strlen(buf)) ||
+        !ucs_string_is_blank(buf + length)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     if (num_fields == 1) {
         bytes = 1;
-    } else if ((num_fields == 2) || (num_fields == 3)) {
+    } else {
         bytes = ucs_string_quantity_prefix_value(toupper(units[0]));
-        if (!bytes || ((num_fields == 3) && tolower(units[1]) != 'b')) {
+        if (!bytes || ((units[1] != '\0') && (tolower(units[1]) != 'b'))) {
             return UCS_ERR_INVALID_PARAM;
         }
-    } else {
-        return UCS_ERR_INVALID_PARAM;
     }
 
     *(size_t*)dest = value * bytes;
@@ -268,6 +274,15 @@ char *ucs_strtrim(char *str)
     }
 
     return start;
+}
+
+int ucs_string_is_blank(const char *str)
+{
+    while (isspace((unsigned char)*str)) {
+        ++str;
+    }
+
+    return *str == '\0';
 }
 
 const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,

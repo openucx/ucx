@@ -27,10 +27,11 @@ protected:
 
     /* cuda_ipc cannot open memory handles exported by the same process, so it
      * reports such peers as unreachable unless same process communication is
-     * explicitly enabled */
+     * explicitly enabled. TCP reports same-host IPv6 addresses of a VRF with
+     * disabled IPv6 as unreachable. */
     virtual bool expected_reachability() const
     {
-        return !has_cuda_ipc();
+        return !has_cuda_ipc() && !m_entities.at(0).tcp_vrf_drops_loopback();
     }
 };
 
@@ -67,7 +68,7 @@ void test_uct_iface::test_is_reachable()
 
     bool is_reachable = uct_iface_is_reachable_v2(iface, &params);
     EXPECT_EQ(expected_reachability(), is_reachable);
-    if (!expected_reachability()) {
+    if (!expected_reachability() && has_cuda_ipc()) {
         EXPECT_EQ(std::string("same process"), std::string(info_str));
     }
 
