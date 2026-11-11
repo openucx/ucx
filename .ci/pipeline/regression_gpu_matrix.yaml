@@ -1,0 +1,81 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+---
+job: ucx-regression-gpu
+failFast: false
+timeout_minutes: 190
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
+  privileged: true
+credentials:
+  - {credentialsId: ucx_harbor_credentials, usernameVariable: REPO_USER, passwordVariable: REPO_PASS}
+env:
+  DOCKER_IMAGE: "harbor.mellanox.com#hpcx/x86_64/ubuntu24.04/builder:doca-3.1.0-gpunetio"
+  SCCTL_CREDENTIALS_ID: svcnbu-swx-hpcx-scctl
+  JOB_ID_FILE: "/mnt/pvc/${JOB_BASE_NAME}/job_id_focused_gpu_${BUILD_NUMBER}.txt"
+  CONTAINER_NAME: "ucx-focused-gpu-${BUILD_NUMBER}"
+  CI_IMAGE_TAG: "20260223-1"
+empty_volumes:
+  - {mountPath: /var/lib/containers/storage, memory: false}
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+runs_on_dockers:
+  - file: .ci/dockerfiles/Dockerfile.build_helper
+    name: build_helper_ucx
+    tag: "${CI_IMAGE_TAG}"
+    build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04'
+matrix:
+  axes:
+    arch: [x86_64]
+taskName: '${arch}/${name}'
+steps:
+  # One allocation and one row; all three regression tests run sequentially.
+  - name: Allocate one Funk node
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: funk
+      headNode: scctl
+      nodes: 1
+      jobTimeout: '03:00:00'
+      immediateTimeout: 1800
+      jobName: "${CONTAINER_NAME}"
+      jobIdFile: "${JOB_ID_FILE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      extraArgs: ['--gres=gpu:1', '--mincpus=64', '--cpus-per-task=64', '--mem=64G']
+  - name: Checkout verification script
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    timeout: 15
+    shell: action
+    module: slurmCI
+    run: run
+    args: &remote
+      jobIdFile: "${JOB_ID_FILE}"
+      headNode: scctl
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SCCTL_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      extraArgs: ['--container-mounts=/hpc/local:/hpc/local', '--ntasks=1', '--cpus-per-task=64']
+      slurmEnv: ['NVIDIA_VISIBLE_DEVICES=all']
+      testScript: 'set -e; mkdir -p /ws; cd /ws; git clone https://github.com/shasson5/ucx.git .; git checkout ${sha1}'
+  - name: Verify three GPU regressions
+    containerSelector: "{name: 'build_helper_ucx'}"
+    parallel: false
+    timeout: 155
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      <<: *remote
+      testScript: 'cd /ws && bash .ci/scripts/verify_blossom_gpu.sh'
+# Retain the only allocation for follow-up; its scheduler timeout still applies.
