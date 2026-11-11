@@ -326,6 +326,7 @@ typedef ucs_status_t (*uct_ep_get_sgl_zcopy_func_t)(
         uct_rkey_t const *rkeys, const size_t *counts, const size_t *strides,
         size_t count, uct_completion_t *comp);
 
+
 /* Purge outstanding operations from an endpoint */
 typedef ucs_status_t (*uct_ep_outstanding_purge_func_t)(
         uct_ep_h ep, const uct_ep_outstanding_purge_params_t *params);

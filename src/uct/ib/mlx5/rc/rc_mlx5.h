@@ -68,6 +68,7 @@ typedef struct uct_rc_mlx5_base_ep {
 typedef __be32 uct_rc_mlx5_tx_token_t;
 typedef __be32 uct_rc_mlx5_rx_token_t;
 
+
 /**
  * Generic RC remote endpoint with HW TM support
  */
@@ -106,6 +107,7 @@ typedef struct uct_rc_mlx5_ep_ext_address {
     uct_rc_mlx5_ep_address_t super;
     uint8_t                  flags;
 } UCS_S_PACKED uct_rc_mlx5_ep_ext_address_t;
+
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);

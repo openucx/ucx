@@ -122,13 +122,11 @@ static unsigned uct_rc_mlx5_iface_progress_cyclic(void *arg)
     return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP);
 }
 
-
 static unsigned uct_rc_mlx5_iface_progress_cyclic_zip(void *arg)
 {
     return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
                                            UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
-
 
 static unsigned uct_rc_mlx5_iface_progress_ll(void *arg)
 {
@@ -137,14 +135,12 @@ static unsigned uct_rc_mlx5_iface_progress_ll(void *arg)
                                            UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
 
-
 static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
 {
     return uct_rc_mlx5_iface_progress(arg, UCT_IB_MLX5_POLL_FLAG_HAS_EP |
                                            UCT_IB_MLX5_POLL_FLAG_TM |
                                            UCT_IB_MLX5_POLL_FLAG_CQE_ZIP);
 }
-
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
@@ -1002,7 +998,6 @@ typedef struct {
     uct_rc_mlx5_iface_common_t  super;
 } uct_rc_mlx5_iface_t;
 
-
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
                     uct_md_h tl_md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -1073,7 +1068,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         }
     }
 
-
     return UCS_OK;
 }
 
@@ -1112,7 +1106,6 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
 
     return status;
 }
-
 
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
