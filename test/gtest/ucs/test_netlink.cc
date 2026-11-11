@@ -265,6 +265,46 @@ UCS_TEST_F(test_netlink, route_get) {
     UCS_TEST_MESSAGE << num_addrs << " local addresses checked";
 }
 
+UCS_TEST_F(test_netlink, kernel_route_matches) {
+    unsigned num_defaults  = 0;
+    struct sockaddr_in sin = {};
+    struct if_nameindex *ifs, *ifp;
+    ucs_netlink_route_t route;
+    uint8_t best_prefix_len;
+    ucs_status_t status;
+
+    sin.sin_family = AF_INET;
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    status = ucs_netlink_kernel_route_matches(if_nametoindex("lo"),
+                                              (struct sockaddr*)&sin, NULL,
+                                              &best_prefix_len);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
+    }
+
+    /* TEST-NET-2 address has no route through the loopback device */
+    EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
+
+    /* No interface has a more specific route than the default to TEST-NET-2 */
+    ifs = if_nameindex();
+    ASSERT_NE(nullptr, ifs);
+    for (ifp = ifs; ifp->if_index != 0; ++ifp) {
+        if ((ucs_netlink_route_get((struct sockaddr*)&sin, NULL, ifp->if_index,
+                                   &route) == UCS_OK) &&
+            (route.prefix_len == 0)) {
+            EXPECT_EQ(UCS_OK, ucs_netlink_kernel_route_matches(
+                                      ifp->if_index, (struct sockaddr*)&sin,
+                                      NULL, &best_prefix_len))
+                    << ifp->if_name;
+            EXPECT_EQ(0, best_prefix_len) << ifp->if_name;
+            ++num_defaults;
+        }
+    }
+
+    if_freenameindex(ifs);
+    UCS_TEST_MESSAGE << num_defaults << " default routes checked";
+}
+
 UCS_TEST_F(test_netlink, is_host_addr) {
     struct sockaddr_in sin = {};
     struct ifaddrs *ifaddrs, *ifa;

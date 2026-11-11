@@ -784,7 +784,7 @@ static int uct_ib_iface_roce_is_kernel_routable(
         const uct_iface_is_reachable_params_t *params)
 {
     char ndev_ifname[IFNAMSIZ], remote_str[UCS_SOCKADDR_STRING_LEN];
-    ucs_netlink_route_t route, best_route;
+    uint8_t best_prefix_len;
     unsigned ndev_index;
     ucs_status_t status;
 
@@ -799,43 +799,28 @@ static int uct_ib_iface_roce_is_kernel_routable(
     }
 
     /* The kernel resolves the remote address with the same parameters */
-    status = ucs_netlink_route_get(sa_remote, sa_local, ndev_index, &route);
-    if (status == UCS_ERR_UNSUPPORTED) {
+    status = ucs_netlink_kernel_route_matches(ndev_index, sa_remote, sa_local,
+                                              &best_prefix_len);
+    if (status == UCS_OK) {
+        return 1;
+    } else if (status == UCS_ERR_UNSUPPORTED) {
         return uct_ib_iface_roce_is_routable(iface, gid_index, sa_remote,
                                              params);
-    } else if (status != UCS_OK) {
-        uct_iface_fill_info_str_buf(
-                params, "kernel route to %s via %s: %s",
-                ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)),
-                ucs_ndev_index_to_ifname(ndev_index, ndev_ifname,
-                                         sizeof(ndev_ifname)),
-                ucs_status_string(status));
-        return 0;
     }
 
-    if (route.prefix_len > 0) {
-        return 1;
-    }
-
-    /* A default route is used only if the routing domain of the netdev has no
-     * more specific route. The lookup is done without the source address,
-     * because per-source routing tables can have a default route to any
-     * destination. */
-    status = ucs_netlink_route_get(
-            sa_remote, NULL,
-            ucs_max(ucs_netlink_get_vrf_master_index(ndev_index), 0),
-            &best_route);
-    if ((status == UCS_OK) && (best_route.prefix_len > 0)) {
+    ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str));
+    ucs_ndev_index_to_ifname(ndev_index, ndev_ifname, sizeof(ndev_ifname));
+    if (best_prefix_len > 0) {
         uct_iface_fill_info_str_buf(
                 params, "default route to %s via %s, while a /%u route exists",
-                ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)),
-                ucs_ndev_index_to_ifname(ndev_index, ndev_ifname,
-                                         sizeof(ndev_ifname)),
-                best_route.prefix_len);
-        return 0;
+                remote_str, ndev_ifname, best_prefix_len);
+    } else {
+        uct_iface_fill_info_str_buf(params, "kernel route to %s via %s: %s",
+                                    remote_str, ndev_ifname,
+                                    ucs_status_string(status));
     }
 
-    return 1;
+    return 0;
 }
 
 static int

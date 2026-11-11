@@ -164,6 +164,30 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
                                    int if_index, ucs_netlink_route_t *route_p);
 
 /**
+ * Check whether the kernel routes a destination address through a network
+ * interface. As in @ref ucs_netlink_route_matches with
+ * UCS_NETLINK_ROUTE_CHECK_RELAXED, a default route is accepted only if the
+ * routing domain of the interface has no more specific route.
+ *
+ * @param [in]  if_index         Network interface index.
+ * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [in]  sa_local         Optional pointer to the source address, of the
+ *                               same address family as the destination, or
+ *                               NULL.
+ * @param [out] best_prefix_len_p Set to the prefix length of the more specific
+ *                               route when a default route is rejected because
+ *                               of it, or to 0 otherwise.
+ *
+ * @return UCS_OK if the destination is routed through the interface,
+ *         UCS_ERR_UNREACHABLE if it is not, UCS_ERR_UNSUPPORTED if the kernel
+ *         cannot report the selected route, or error code otherwise.
+ */
+ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
+                                              const struct sockaddr *sa_remote,
+                                              const struct sockaddr *sa_local,
+                                              uint8_t *best_prefix_len_p);
+
+/**
  * Check whether an address is assigned to a network interface of the host, in
  * any routing domain. Unlike local routes, addresses are not affected by policy
  * routing tables. The addresses are read once and cached at the first call.

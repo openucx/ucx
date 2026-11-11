@@ -604,9 +604,6 @@ static ucs_status_t ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
     size_t req_len              = NLMSG_ALIGN(sizeof(req.rtm));
     ucs_status_t status;
 
-    ucs_assert((sa_local == NULL) ||
-               (sa_local->sa_family == sa_remote->sa_family));
-
     req.rtm.rtm_family = sa_remote->sa_family;
     req.rtm.rtm_flags  = RTM_F_FIB_MATCH;
 
@@ -693,6 +690,9 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
     khiter_t iter;
     int khret;
 
+    ucs_assert((sa_local == NULL) ||
+               (sa_local->sa_family == sa_remote->sa_family));
+
     if (!ucs_netlink_is_fib_match_supported()) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -735,6 +735,35 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
 out_unlock:
     pthread_mutex_unlock(&ucs_netlink_route_cache_lock);
     return status;
+}
+
+ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
+                                              const struct sockaddr *sa_remote,
+                                              const struct sockaddr *sa_local,
+                                              uint8_t *best_prefix_len_p)
+{
+    ucs_netlink_route_t route, best_route;
+    ucs_status_t status;
+
+    *best_prefix_len_p = 0;
+
+    status = ucs_netlink_route_get(sa_remote, sa_local, if_index, &route);
+    if ((status != UCS_OK) || (route.prefix_len > 0)) {
+        return status;
+    }
+
+    /* The lookup is done without the source address, because per-source
+     * routing tables can have a default route to any destination */
+    status = ucs_netlink_route_get(
+            sa_remote, NULL,
+            ucs_max(ucs_netlink_get_vrf_master_index(if_index), 0),
+            &best_route);
+    if ((status == UCS_OK) && (best_route.prefix_len > 0)) {
+        *best_prefix_len_p = best_route.prefix_len;
+        return UCS_ERR_UNREACHABLE;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t
