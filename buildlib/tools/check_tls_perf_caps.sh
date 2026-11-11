@@ -45,7 +45,8 @@ do
         old_cap=$(echo "$old_caps" | grep $cap | sed -e "s/^[^:]*:[ \t]*//" || true)
         new_cap=$(echo "$new_caps" | grep $cap | sed -e "s/^[^:]*:[ \t]*//" || true)
 
-        # Update legacy UD baselines for the 50 ns overhead calibration.
+        # Update UCX v1.15.x-v1.18.x UD baselines for the 50 ns calibration.
+        # Remove this remap when those versions leave the wire-compat matrix.
         case "${tl_name}/${cap}/${old_cap}" in
           "ud_verbs/overhead/105 nsec") old_cap="155 nsec" ;;
           "ud_mlx5/overhead/80 nsec") old_cap="130 nsec" ;;

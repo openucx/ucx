@@ -40,7 +40,8 @@
 
 static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
   {"UD_", UCT_IB_SEND_OVERHEAD_DEFAULT(UCT_UD_MLX5_IFACE_OVERHEAD)
-          ";IFACE_OVERHEAD=" UCS_PP_MAKE_STRING(UCT_UD_MLX5_IFACE_OVERHEAD), NULL,
+          ";IFACE_OVERHEAD="
+          UCS_PP_MAKE_STRING(UCT_UD_MLX5_IFACE_OVERHEAD), NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
