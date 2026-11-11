@@ -520,7 +520,7 @@ static void ucs_memtype_cache_explicit_release_cb(ucs_interval_map_node_t *node,
 
 static void ucs_memtype_cache_explicit_cleanup(void)
 {
-    ucs_memtype_cache_entry_t *entry, *tmp;
+    ucs_memtype_cache_entry_t *entry;
     UCS_LIST_HEAD(entry_list);
 
     if (ucs_interval_map_count(&ucs_memtype_cache_explicit_map) > 0) {
@@ -529,7 +529,9 @@ static void ucs_memtype_cache_explicit_cleanup(void)
                 ucs_memtype_cache_explicit_release_cb, &entry_list);
     }
 
-    ucs_list_for_each_safe(entry, tmp, &entry_list, list) {
+    while (!ucs_list_is_empty(&entry_list)) {
+        entry = ucs_list_extract_head(&entry_list, ucs_memtype_cache_entry_t,
+                                      list);
         ucs_interval_map_remove(&ucs_memtype_cache_explicit_map, &entry->super);
         ucs_free(entry);
     }
