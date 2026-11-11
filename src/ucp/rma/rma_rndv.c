@@ -618,7 +618,7 @@ ucp_proto_t ucp_put_rndv_proto = {
     .name        = "put/rndv",
     .desc        = UCP_PROTO_RNDV_DESC,
     .flags       = 0,
-    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .proto_class = UCP_PROTO_CLASS_RMA_FALLBACK,
     .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe       = ucp_proto_put_rndv_probe,
     .query       = ucp_proto_rma_rndv_query,
@@ -631,7 +631,7 @@ ucp_proto_t ucp_get_rndv_proto = {
     .name        = "get/rndv",
     .desc        = UCP_PROTO_RNDV_DESC,
     .flags       = 0,
-    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .proto_class = UCP_PROTO_CLASS_RMA_FALLBACK,
     .dt_mask     = UCS_BIT(UCP_DATATYPE_CONTIG),
     .probe       = ucp_proto_get_rndv_probe,
     .query       = ucp_proto_rma_rndv_query,
@@ -827,7 +827,7 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
         if ((ucp_proto_id_field(proto->proto_id, flags) &
              UCP_PROTO_FLAG_INVALID) ||
             !(ucp_proto_id_field(proto->proto_id, proto_class) &
-              UCP_PROTO_CLASS_RMA_RNDV)) {
+              UCP_PROTO_CLASS_RMA_FALLBACK)) {
             continue;
         }
 
@@ -839,7 +839,7 @@ ucp_proto_t ucp_put_sgl_contig_proto = {
     .name        = "put/sgl/contig",
     .desc        = "sgl as put per element",
     .flags       = 0,
-    .proto_class = UCP_PROTO_CLASS_RMA_RNDV,
+    .proto_class = UCP_PROTO_CLASS_RMA_FALLBACK,
     .dt_mask     = UCS_BIT(UCP_DATATYPE_SGL),
     .probe       = ucp_proto_put_sgl_contig_probe,
     .query       = ucp_proto_default_query,
