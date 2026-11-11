@@ -135,16 +135,12 @@ static void uct_rdu_md_close(uct_md_h uct_md)
 static ucs_status_t uct_rdu_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_md_base_md_query(md_attr);
-    md_attr->flags            = 0;
     md_attr->detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_RDU);
     /* The IB memory domain registers RDU memory with the dma-buf file
      * descriptor returned by mem_query, when the driver can export one */
     md_attr->dmabuf_mem_types = uct_rdu_devmem_dmabuf_supported() ?
                                         UCS_BIT(UCS_MEMORY_TYPE_RDU) :
                                         0;
-    md_attr->access_mem_types = 0;
-    md_attr->max_alloc        = 0;
-    md_attr->max_reg          = ULONG_MAX;
     return UCS_OK;
 }
 
@@ -291,6 +287,7 @@ static uct_md_ops_t uct_rdu_md_ops = {
             ucs_empty_function_return_unsupported,
     .mem_elem_pack      = (uct_md_mem_elem_pack_func_t)
             ucs_empty_function_return_unsupported,
+    .mem_elem_release   = (uct_md_mem_elem_release_func_t)ucs_empty_function,
     .detect_memory_type = uct_rdu_md_detect_memory_type,
 };
 
@@ -367,6 +364,8 @@ static uct_iface_internal_ops_t uct_rdu_iface_internal_ops = {
             ucs_empty_function_return_zero_int,
 };
 
+static void UCS_CLASS_DELETE_FUNC_NAME(uct_rdu_iface_t)(uct_iface_t*);
+
 static uct_iface_ops_t uct_rdu_iface_ops = {
     .ep_pending_purge = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_connect    = (uct_ep_connect_func_t)ucs_empty_function_return_success,
@@ -414,7 +413,7 @@ static uct_iface_ops_t uct_rdu_iface_ops = {
             ucs_empty_function_return_unsupported,
     .iface_event_arm          = (uct_iface_event_arm_func_t)
             ucs_empty_function_return_unsupported,
-    .iface_close              = (uct_iface_close_func_t)ucs_empty_function,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_rdu_iface_t),
     .iface_query              = uct_rdu_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)
             ucs_empty_function_return_success,
@@ -462,6 +461,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rdu_iface_t)
 UCS_CLASS_DEFINE(uct_rdu_iface_t, uct_base_iface_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_rdu_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
                           const uct_iface_params_t*, const uct_iface_config_t*);
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rdu_iface_t, uct_iface_t);
 
 static ucs_status_t
 uct_rdu_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
