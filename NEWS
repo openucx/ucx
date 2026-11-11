@@ -7,9 +7,10 @@
 ##
 #
 
-## Current
+## 1.21.1 (Nov 11, 2026)
 ### Features:
-### Bugfixes:
+#### UCP
+ * Added UCX_RNDV_FRAG_WORKER_MAX_MEM to limit rendezvous staging-fragment memory per worker, assuming worker uses single GPU
 
 ## 1.21.0 (June 24, 2026)
 ### Features:
