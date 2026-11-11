@@ -1,0 +1,80 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+---
+job: ucx-regression-jucx
+failFast: false
+timeout_minutes: 150
+registry_host: harbor.mellanox.com
+registry_auth: ucx_harbor_credentials
+registry_path: /ucx/ci
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+  limits: "{memory: 8Gi, cpu: 4000m}"
+  requests: "{memory: 8Gi, cpu: 4000m}"
+credentials:
+  - {credentialsId: ucx_harbor_credentials, usernameVariable: REPO_USER, passwordVariable: REPO_PASS}
+env:
+  DOCKER_IMAGE: "harbor.mellanox.com#ucx/ci/aarch64/dl-base:20261018-1"
+  SLURM_HEAD_NODE: dlcluster.nvidia.com
+  SLURM_HEAD_USER: svcnbu-swx-hpcx
+  SSH_CREDENTIALS_ID: svcnbu-swx-hpcx_id_rsa_ssh_key
+  JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
+  CONTAINER_NAME: "ucx-regression-jucx-${BUILD_NUMBER}"
+  CI_IMAGE_TAG: "20261018-1"
+pvc_volumes:
+  - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
+runs_on_dockers:
+  - file: .ci/dockerfiles/Dockerfile.build_helper
+    name: build_helper_dl
+    arch: aarch64
+    tag: "${CI_IMAGE_TAG}"
+    build_args: '--build-arg BASE_IMAGE=dockerhub.nvidia.com/ubuntu:24.04 --build-arg ARCH=aarch64'
+matrix:
+  axes:
+    arch: [aarch64]
+taskName: '${arch}/${name}'
+steps:
+  - name: Allocate GB200
+    containerSelector: "{name: 'build_helper_dl'}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: allocation
+    args:
+      partition: gb200nvl72_ci
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      nodes: 1
+      jobTimeout: '02:00:00'
+      immediateTimeout: 1800
+      jobName: "${CONTAINER_NAME}"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      extraArgs: ['--account=oberon-gb-ci', '--gres=gpu:1', '--mem=128G', '--mincpus=24']
+  - name: Checkout harness
+    containerSelector: "{name: 'build_helper_dl'}"
+    parallel: false
+    timeout: 20
+    shell: action
+    module: slurmCI
+    run: run
+    args: &remote
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_jucx_${BUILD_NUMBER}.txt"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "${CONTAINER_NAME}"
+      extraArgs: ['--container-remap-root']
+      testScript: 'set -e; apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends openjdk-11-jdk-headless; git clone https://github.com/shasson5/ucx.git .; git checkout ${sha1}'
+  - name: Verify selected JUCX tests
+    containerSelector: "{name: 'build_helper_dl'}"
+    parallel: false
+    timeout: 100
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      <<: *remote
+      testScript: 'bash .ci/scripts/verify_blossom_jucx.sh'
