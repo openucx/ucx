@@ -44,6 +44,69 @@ static const void *ucp_proto_select_init_priv_buf(
     return &ucs_array_elem(&proto_init->priv_buf, proto->priv_offset);
 }
 
+/* Print the protocols which are disabled on the current message size range */
+static void ucp_proto_select_trace_disabled(
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *disabled_proto_mask)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
+    const ucp_proto_init_elem_t *proto;
+    unsigned proto_idx;
+
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE) ||
+        ucs_dynamic_bitmap_is_zero(disabled_proto_mask)) {
+        return;
+    }
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, disabled_proto_mask) {
+        proto = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        ucs_string_buffer_appendf(&strb, "%s,",
+                                  ucp_proto_id_field(proto->proto_id, name));
+    }
+
+    ucs_string_buffer_rtrim(&strb, ",");
+    ucs_trace("disabled: %s", ucs_string_buffer_cstr(&strb));
+}
+
+/*
+ * Disables the protocols which are a fallback for a protocol available on the
+ * current message size range.
+ */
+static void ucp_proto_select_disable_fallback(
+        const ucp_proto_select_init_protocols_t *proto_init,
+        const ucs_dynamic_bitmap_t *proto_mask,
+        ucs_dynamic_bitmap_t *disabled_proto_mask)
+{
+    const ucp_proto_init_elem_t *proto;
+    unsigned overridden_classes, proto_class, fallback_class;
+    unsigned proto_idx;
+
+    overridden_classes = 0;
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto          = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        proto_class    = ucp_proto_id_field(proto->proto_id, proto_class);
+        fallback_class = ucp_proto_id_field(proto->proto_id, fallback_class);
+        ucs_assertv((proto_class & fallback_class) == 0,
+                    "%s: proto_class 0x%x overlaps fallback_class 0x%x",
+                    ucp_proto_id_field(proto->proto_id, name), proto_class,
+                    fallback_class);
+
+        if (ucs_dynamic_bitmap_get(disabled_proto_mask, proto_idx)) {
+            continue;
+        }
+
+        overridden_classes |= fallback_class;
+    }
+
+    UCS_DYNAMIC_BITMAP_FOR_EACH_BIT(proto_idx, proto_mask) {
+        proto       = &ucs_array_elem(&proto_init->protocols, proto_idx);
+        proto_class = ucp_proto_id_field(proto->proto_id, proto_class);
+        if (proto_class & overridden_classes) {
+            ucs_dynamic_bitmap_set(disabled_proto_mask, proto_idx);
+        }
+    }
+}
+
 /*
  * Fills 'proto_mask' and 'perf_list' with candidate protocols for the next
  * range, and sets *max_length_p to the end of that range.
@@ -75,9 +138,7 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     ucs_dynamic_bitmap_reset_all(proto_mask);
     ucs_dynamic_bitmap_init(&disabled_proto_mask);
 
-    for (proto_idx = 0; proto_idx < ucs_array_length(&proto_init->protocols);
-         ++proto_idx) {
-        proto = &ucs_array_elem(&proto_init->protocols, proto_idx);
+    ucs_array_for_each_index(proto, proto_idx, &proto_init->protocols) {
         range = ucp_proto_flat_perf_find_lb(proto->flat_perf, msg_length);
         if (range == NULL) {
             ucs_trace("skipping proto %s for msg_length %zu",
@@ -142,19 +203,24 @@ static ucs_status_t ucp_proto_thresholds_next_range(
                   proto->cfg_priority, max_prio_proto_name, max_cfg_priority);
     }
 
-    /* Remove disabled protocols. 'disabled_proto_mask' must be contained in
-     * 'valid_proto_mask'. */
+    /* If all protocols were disabled, we couldn't have any configured protocol
+     * (because that protocol would be enabled). In this case we allow using
+     * disabled protocols as well.
+     */
     if (ucs_dynamic_bitmap_is_equal(proto_mask, &disabled_proto_mask)) {
-        /* If all protocols were disabled, we couldn't have any configured
-         * protocol (because that protocol would be enabled). In this case we
-         * allow using disabled protocols as well.
-         */
         ucs_assert(max_cfg_priority == 0);
-    } else {
-        ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
-                                       ucs_dynamic_bitmap_num_bits(proto_mask));
-        ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
+        ucs_dynamic_bitmap_reset_all(&disabled_proto_mask);
     }
+
+    ucp_proto_select_disable_fallback(proto_init, proto_mask,
+                                      &disabled_proto_mask);
+    ucp_proto_select_trace_disabled(proto_init, &disabled_proto_mask);
+
+    /* Remove disabled protocols. 'disabled_proto_mask' is contained in
+     * 'proto_mask', and the fallback rule never disables all protocols. */
+    ucs_dynamic_bitmap_not_inplace(&disabled_proto_mask,
+                                   ucs_dynamic_bitmap_num_bits(proto_mask));
+    ucs_dynamic_bitmap_and_inplace(proto_mask, &disabled_proto_mask);
     ucs_assert(!ucs_dynamic_bitmap_is_zero(proto_mask));
 
     /* Add data to perf_list */
@@ -209,7 +275,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
         init_params.rkey_config_key = NULL;
     } else {
         init_params.rkey_config_key =
-                &ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
+                &ucp_worker_rkey_config(worker, rkey_cfg_index)->key;
 
         /* rkey configuration must be for the same ep */
         ucs_assertv_always(
@@ -463,11 +529,11 @@ ucp_proto_select_wiface_activate(ucp_worker_h worker,
 
     ep_config = ucp_worker_ep_config(worker, ep_cfg_index);
     lane_map  = ucp_proto_select_get_lane_map(worker, select_elem) &
-                ~ep_config->proto_lane_map;
+                ~ep_config->active_lane_map;
     ucp_wiface_process_for_each_lane(worker, ep_config, lane_map,
                                      ucp_worker_iface_progress_ep);
 
-    ep_config->proto_lane_map |= lane_map;
+    ep_config->active_lane_map |= lane_map;
 }
 
 static ucs_status_t
@@ -549,6 +615,11 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     ucs_status_t status;
     khiter_t khiter;
     int khret;
+
+    ucs_assert(!ucs_async_is_from_async(&worker->async));
+
+    /* Initialize short-circuit thresholds on the relevant endpoint config */
+    ucp_ep_config_proto_short_lazy_init(worker, ep_cfg_index);
 
     key.param = *select_param;
     khiter    = kh_get(ucp_proto_select_hash, proto_select->hash, key.u64);
@@ -866,8 +937,7 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
         return &ucs_array_elem(&worker->ep_config, ep_cfg_index).proto_select;
     } else {
-        rkey_config_key =
-                ucs_array_elem(&worker->rkey_config, rkey_cfg_index).key;
+        rkey_config_key = ucp_worker_rkey_config(worker, rkey_cfg_index)->key;
 
         rkey_config_key.ep_cfg_index = ep_cfg_index;
         status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
@@ -877,8 +947,7 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
             return NULL;
         }
 
-        return &ucs_array_elem(&worker->rkey_config, *new_rkey_cfg_index)
-                        .proto_select;
+        return &ucp_worker_rkey_config(worker, *new_rkey_cfg_index)->proto_select;
     }
 }
 

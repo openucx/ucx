@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2019-2026. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -147,7 +147,7 @@ static ucp_rsc_index_t
 ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
                              const ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_rsc_index_t rsc_index = UCS_STATIC_BITMAP_FFS(*tl_bitmap);
+    ucp_rsc_index_t rsc_index = ucp_tl_bitmap_ffs(tl_bitmap, 0);
     ucp_rsc_index_t dev_index;
 
     ucs_assert(!UCS_STATIC_BITMAP_IS_ZERO(*tl_bitmap));
@@ -156,7 +156,7 @@ ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
     dev_index = context->tl_rscs[rsc_index].dev_index;
 
     /* check that all TL resources in the TL bitmap have the same dev_index */
-    UCS_STATIC_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
+    UCP_TL_BITMAP_FOR_EACH_BIT(rsc_index, tl_bitmap) {
         ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
     }
 
@@ -411,7 +411,7 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
             continue;
         }
 
-        status = ucp_wireup_ep_create(ep, &uct_ep);
+        status = ucp_wireup_ep_create(ep, 1, &uct_ep);
         if (status != UCS_OK) {
             goto out;
         }
@@ -863,8 +863,8 @@ static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
 
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     if ((ucp_ep->flags & UCP_EP_FLAG_CLOSED) &&
-        (ucp_ep->ext->close_req != NULL)) {
-        ucp_request_complete_send(ucp_ep->ext->close_req, UCS_OK);
+        (ucp_ep_close_req(ucp_ep) != NULL)) {
+        ucp_request_complete_send(ucp_ep_close_req(ucp_ep), UCS_OK);
         return;
     }
 
@@ -908,17 +908,17 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
            - if close req is valid this is ucp_ep_close_nb request and it will
              be completed as the ep is destroyed, i.e. flushed and disconnected
              with any status */
-        if (ucp_ep->ext->close_req != NULL) {
+        if (ucp_ep_close_req(ucp_ep) != NULL) {
             ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         }
     } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
-    } else if (ucp_ep->ext->close_req != NULL) {
+    } else if (ucp_ep_close_req(ucp_ep) != NULL) {
         /* if the EP is not local connected, the EP has been closed and flushed,
            CM lane is disconnected, complete close request and destroy EP */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_REMOTE_CONNECTED);
-        close_req = ucp_ep->ext->close_req;
+        close_req = ucp_ep_close_req(ucp_ep);
         ucp_ep_local_disconnect_progress(close_req);
         /* don't touch UCP EP after local disconnect, since it is not valid
          * anymore */
@@ -1272,8 +1272,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect to remote address on "
                  "device %s, tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
-                 ep, conn_request->dev_name, tl_bitmap.bits[0],
-                 tl_bitmap.bits[1], ucs_status_string(status));
+                 ep, conn_request->dev_name, UCT_TL_BITMAP_ARG(&tl_bitmap),
+                 ucs_status_string(status));
         uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
         goto err_destroy_ep;
     }
@@ -1443,7 +1443,7 @@ ucp_ep_cm_connect_server_lane(ucp_ep_h ep, uct_listener_h uct_listener,
     ucs_assert(max_num_paths > 0);
 
     /* TODO: split CM and wireup lanes */
-    status = ucp_wireup_ep_create(ep, &uct_ep);
+    status = ucp_wireup_ep_create(ep, 1, &uct_ep);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to create wireup CM lane, status %s",
                  ep, ucs_status_string(status));

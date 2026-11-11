@@ -80,6 +80,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   UCT_TCP_USER_TIMEOUT(ucs_offsetof(uct_tcp_iface_config_t, user_timeout)),
 
+  UCT_TCP_MAXSEG(ucs_offsetof(uct_tcp_iface_config_t, maxseg)),
+
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, 128m, 1.0, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
 
@@ -207,6 +209,7 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
     int is_local_loopback, is_remote_loopback;
     struct sockaddr_storage remote_addr;
     char remote_addr_str[UCS_SOCKADDR_STRING_LEN];
+    char vrf_info[IFNAMSIZ + sizeof(" in VRF ")];
     unsigned ndev_index;
     ucs_status_t status;
 
@@ -266,20 +269,49 @@ uct_tcp_iface_is_reachable_v2(const uct_iface_h tl_iface,
         return 0;
     }
 
-    if (!ucs_netlink_is_best_route(ndev_index,
-                                   (const struct sockaddr*)&remote_addr)) {
+    vrf_info[0] = '\0';
+    if (uct_tcp_iface_vrf_name(iface) != NULL) {
+        ucs_snprintf_zero(vrf_info, sizeof(vrf_info), " in VRF %s",
+                          iface->config.vrf_name);
+    }
+
+    /* TODO: Check using relaxed route (might need bind to device socket
+     * option). We currently assume here that with or without src address bind,
+     * kernel is going to anyway use the best route. So we make UCX refuse other
+     * interfaces. */
+    if (!ucs_netlink_route_matches(ndev_index,
+                                   (const struct sockaddr*)&remote_addr,
+                                   UCS_NETLINK_ROUTE_CHECK_BEST)) {
         uct_iface_fill_info_str_buf(
-                    params, "no route to %s",
+                params, "no route to %s%s",
+                ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
+                                 remote_addr_str, UCS_SOCKADDR_STRING_LEN),
+                vrf_info);
+        return 0;
+    }
+
+    /* Same-host IPv6 traffic in a VRF is dropped if IPv6 is disabled on the
+     * VRF device (sysctl net.ipv6.conf.<vrf>.disable_ipv6). Local routes of
+     * other VRFs are handled by the route check above. */
+    if ((remote_addr.ss_family == AF_INET6) &&
+        !iface->config.vrf_ipv6_local_reachable &&
+        ucs_netlink_is_local_addr(ndev_index,
+                                  (const struct sockaddr*)&remote_addr)) {
+        uct_iface_fill_info_str_buf(
+                    params, "%s is a local address of VRF %s with disabled "
+                    "IPv6",
                     ucs_sockaddr_str((const struct sockaddr *)&remote_addr,
-                                     remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+                                     remote_addr_str, UCS_SOCKADDR_STRING_LEN),
+                    iface->config.vrf_name);
         return 0;
     }
 
     /* This interface has the best route */
-    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s",
+    ucs_trace("tcp_iface %p (%s): this interface has the best route to %s%s",
               iface, iface->if_name,
               ucs_sockaddr_str((const struct sockaddr*)&remote_addr,
-                               remote_addr_str, UCS_SOCKADDR_STRING_LEN));
+                               remote_addr_str, UCS_SOCKADDR_STRING_LEN),
+              vrf_info);
     return 1;
 }
 
@@ -320,31 +352,13 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
     size_t am_buf_size     = iface->config.tx_seg_size -
                              sizeof(uct_tcp_am_hdr_t);
-    ucs_status_t status;
-    int is_default;
-    double pci_bw, network_bw, calculated_bw;
-    char *path_buffer;
-    const char *sysfs_path;
 
     uct_base_iface_query(&iface->super, attr);
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c, &network_bw);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    sysfs_path             = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
-    pci_bw                 = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
-    calculated_bw          = ucs_min(pci_bw, network_bw);
-
+    attr->latency.c        = iface->netif_caps.latency;
     /* Bandwidth is bounded by TCP stack computation time */
-    attr->bandwidth.shared = ucs_min(calculated_bw, iface->config.max_bw);
-
+    attr->bandwidth.shared = ucs_min(iface->netif_caps.bandwidth,
+                                     iface->config.max_bw);
     attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_tcp_iface_addr_t);
     attr->device_addr_len  = uct_tcp_iface_get_device_address_length(iface);
@@ -392,22 +406,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface,
     attr->bandwidth.dedicated = 0;
     attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
+    attr->priority            = iface->netif_caps.priority;
 
-    if (iface->config.prefer_default) {
-        status = uct_tcp_netif_is_default(iface->if_name, &is_default);
-        if (status != UCS_OK) {
-            goto out_free_path_buffer;
-        }
-
-        attr->priority    = is_default ? 0 : 1;
-    } else {
-        attr->priority    = 0;
-    }
-
-out_free_path_buffer:
-    ucs_free(path_buffer);
-out:
-    return status;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
@@ -540,6 +541,11 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
         return status;
     }
 
+    status = ucs_tcp_base_set_maxseg(fd, iface->sockopt.maxseg);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return ucs_tcp_base_set_user_timeout(fd, iface->config.user_timeout);
 }
 
@@ -605,12 +611,66 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
             return status;
         }
 
-        status = ucs_socket_server_init((struct sockaddr*)&bind_addr, addr_len,
-                                        ucs_socket_max_conn(), retry, 0,
-                                        &iface->listen_fd);
+        status = ucs_tcp_base_server_init((struct sockaddr*)&bind_addr,
+                                          addr_len, ucs_socket_max_conn(),
+                                          retry, 0,
+                                          uct_tcp_iface_vrf_name(iface),
+                                          iface->sockopt.maxseg,
+                                          &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
     return status;
+}
+
+static ucs_status_t uct_tcp_iface_vrf_init(uct_tcp_iface_t *iface)
+{
+    uct_tcp_md_t *tcp_md = ucs_derived_of(iface->super.md, uct_tcp_md_t);
+    long vrf_ipv6_disabled;
+    int vrf_index;
+
+    iface->config.vrf_name[0]              = '\0';
+    iface->config.vrf_ipv6_local_reachable = 1;
+
+    /* Addresses in a VRF can be used only by sockets bound to the VRF, so
+     * bind all sockets of the interface to the VRF device */
+    vrf_index = uct_tcp_netif_vrf_index(iface->if_name);
+    if (vrf_index == -1) {
+        return UCS_OK;
+    }
+
+    /* Devices in a VRF other than the VRF of the process are not reported by
+     * uct_tcp_query_devices() in this case, so do not open them either */
+    if ((tcp_md->config.vrf_enable == UCS_NO) &&
+        (vrf_index != tcp_md->process_vrf_index)) {
+        ucs_error("tcp_iface %p: cannot use device %s in a VRF, using VRF "
+                  "devices is disabled by UCX_TCP_VRF_ENABLE",
+                  iface, iface->if_name);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (if_indextoname(vrf_index, iface->config.vrf_name) == NULL) {
+        ucs_error("tcp_iface %p: cannot use device %s: failed to get name of "
+                  "VRF device index %d: %m",
+                  iface, iface->if_name, vrf_index);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    ucs_debug("tcp_iface %p: %s belongs to VRF %s", iface, iface->if_name,
+              iface->config.vrf_name);
+
+    /* Same-host traffic in a VRF is looped back through the VRF device, which
+     * drops IPv6 packets if IPv6 is disabled on it */
+    if ((ucs_read_file_number(&vrf_ipv6_disabled, 1,
+                              "/proc/sys/net/ipv6/conf/%s/disable_ipv6",
+                              iface->config.vrf_name) == UCS_OK) &&
+        vrf_ipv6_disabled) {
+        ucs_debug("tcp_iface %p: IPv6 is disabled on VRF %s, local IPv6 "
+                  "addresses of the VRF are unreachable",
+                  iface, iface->config.vrf_name);
+        iface->config.vrf_ipv6_local_reachable = 0;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
@@ -691,6 +751,45 @@ static uct_iface_internal_ops_t uct_tcp_iface_internal_ops = {
     .ep_outstanding_purge   = (uct_ep_outstanding_purge_func_t)ucs_empty_function_return_unsupported
 };
 
+static ucs_status_t uct_tcp_iface_netif_caps_init(uct_tcp_iface_t *iface)
+{
+    double pci_bw, network_bw;
+    const char *sysfs_path;
+    char *path_buffer;
+    ucs_status_t status;
+    int is_default;
+
+    status = uct_tcp_netif_caps(iface->if_name, &iface->netif_caps.latency,
+                                &network_bw);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_string_alloc_path_buffer(&path_buffer, "path_buffer");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    sysfs_path = uct_tcp_iface_get_sysfs_path(iface->if_name, path_buffer);
+    pci_bw     = ucs_topo_get_pci_bw(iface->if_name, sysfs_path);
+    ucs_free(path_buffer);
+
+    iface->netif_caps.bandwidth = ucs_min(pci_bw, network_bw);
+
+    if (!iface->config.prefer_default) {
+        iface->netif_caps.priority = 0;
+        return UCS_OK;
+    }
+
+    status = uct_tcp_netif_is_default(iface->if_name, &is_default);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface->netif_caps.priority = is_default ? 1 : 0;
+    return UCS_OK;
+}
+
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -762,6 +861,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    status = ucs_tcp_base_check_maxseg(config->maxseg);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     self->config.zcopy.max_hdr     = self->config.tx_seg_size -
                                      self->config.zcopy.hdr_offset;
     self->config.prefer_default    = config->prefer_default;
@@ -774,6 +878,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+    self->sockopt.maxseg           = config->maxseg;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
     self->config.ep_bind_src_addr  = config->ep_bind_src_addr;
@@ -800,6 +905,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
                   self->config.rx_seg_size, self->config.tx_seg_size);
         status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    status = uct_tcp_iface_netif_caps_init(self);
+    if (status != UCS_OK) {
         goto err;
     }
 
@@ -845,6 +955,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
                                  &self->config.sockaddr_len);
     if (status != UCS_OK) {
         return status;
+    }
+
+    status = uct_tcp_iface_vrf_init(self);
+    if (status != UCS_OK) {
+        goto err_cleanup_rx_mpool;
     }
 
     ucs_list_head_init(&self->ep_list);
@@ -981,7 +1096,8 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     uct_tl_device_resource_t *devices, *tmp;
     struct dirent **entries, **entry;
     unsigned num_devices;
-    int is_active, i, n;
+    int is_active, vrf_index, i, n;
+    ucs_log_level_t log_level;
     ucs_status_t status;
     const char *sysfs_path;
     char *path_buffer;
@@ -1030,6 +1146,31 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             uct_tcp_is_bridge((*entry)->d_name)) {
             ucs_debug("filtered out bridge device %s", (*entry)->d_name);
             continue;
+        }
+
+        /* Sockets of a process in a VRF are bound to that VRF already */
+        vrf_index = uct_tcp_netif_vrf_index((*entry)->d_name);
+        if ((vrf_index != -1) && (vrf_index != tcp_md->process_vrf_index)) {
+            if (tcp_md->config.vrf_enable == UCS_NO) {
+                ucs_debug("filtered out device %s in a VRF", (*entry)->d_name);
+                continue;
+            }
+
+            /* A device whose sockets cannot be bound to its VRF is an error
+             * with "y" and is skipped with "try" */
+            log_level = (tcp_md->config.vrf_enable == UCS_YES) ?
+                                UCS_LOG_LEVEL_ERROR :
+                                UCS_LOG_LEVEL_DIAG;
+            status = uct_tcp_netif_vrf_bind_check((*entry)->d_name, vrf_index,
+                                                  log_level);
+            if (status != UCS_OK) {
+                if (tcp_md->config.vrf_enable == UCS_YES) {
+                    ucs_free(devices);
+                    goto out_release;
+                }
+
+                continue;
+            }
         }
 
         tmp = ucs_realloc(devices, sizeof(*devices) * (num_devices + 1),

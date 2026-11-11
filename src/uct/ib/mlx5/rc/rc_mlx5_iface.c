@@ -194,6 +194,10 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                       qp_num),
                                                uct_rc_mlx5_base_ep_t);
     uint16_t pi               = ntohs(cqe->wqe_counter);
+#if UCS_ENABLE_ASSERT
+    uct_iface_attr_v2_t iface_attr;
+    ucs_status_t query_status;
+#endif
     ucs_log_level_t log_lvl;
     ucs_status_t status;
 
@@ -203,15 +207,14 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
-    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
+    uct_rc_ep_schedule_pending(&ep->super);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        goto out;
+        goto out_update_tx_res;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
@@ -219,10 +222,42 @@ void uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
-    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
-                                               ep_status);
+
+    if (status == UCS_INPROGRESS) {
+#if UCS_ENABLE_ASSERT
+        iface_attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS;
+
+        query_status = uct_iface_query_v2(&iface->super.super.super,
+                                          &iface_attr);
+        ucs_assert(query_status == UCS_OK);
+        ucs_assert(iface_attr.cap.flags & UCT_IFACE_FLAG_V2_QUERY_TOKEN);
+#endif
+
+        /* Save last completed WQE. TX QP resources are reserved until purge. */
+        ep->tx.wq.ft_ci            = ep->tx.wq.prev_sw_pi -
+                                     (ep->tx.wq.bb_max -
+                                      uct_rc_txqp_available(&ep->super.txqp));
+        ep->err_handler_inprogress = 1;
+
+        ucs_debug("ep %p outstanding WQE range (%u, %u)", ep, ep->tx.wq.ft_ci,
+                  ep->tx.wq.sw_pi);
+
+        log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, UCS_OK,
+                                                   ep_status);
+    } else {
+        log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                                   ep_status);
+    }
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
+
+out_update_tx_res:
+    if (!(ep->err_handler_inprogress)) {
+        uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+        uct_rc_mlx5_ep_update_tx_qp_res(ep, pi);
+    }
+
+    uct_rc_mlx5_iface_update_tx_cq_res(iface, ep, pi);
 
 out:
     uct_rc_iface_arbiter_dispatch(iface);
@@ -316,7 +351,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (attr->super.cap.max_send_wr) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
-                                       iface->tx.mmio_mode, txwq,
+                                       iface->tx.mmio_mode,
+                                       iface->tx.bf_copy_mode, txwq,
                                        qp->verbs.qp);
         if (status != UCS_OK) {
             ucs_error("Failed to get mlx5 QP information");
@@ -744,10 +780,11 @@ uct_rc_mlx5_iface_need_strong_order(uct_rc_mlx5_iface_common_t *iface)
 static ucs_status_t
 uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
                                    uct_rc_iface_common_config_t *rc_config,
-                                   uct_ib_mlx5_md_t *md,
-                                   uct_ib_device_t *dev)
+                                   uct_ib_mlx5_md_t *md, uct_ib_device_t *dev,
+                                   int strong_order_required)
 {
-    int strong_order = uct_rc_mlx5_iface_need_strong_order(iface);
+    int strong_order = uct_rc_mlx5_iface_need_strong_order(iface) ||
+                       strong_order_required;
     int pci_atomics  = uct_ib_device_has_pci_atomics(dev);
 
     iface->config.put_fence_flag =
@@ -758,7 +795,8 @@ uct_rc_mlx5_iface_init_fence_flags(uct_rc_mlx5_iface_common_t *iface,
         break;
     case UCT_RC_FENCE_MODE_AUTO:
         if (strong_order || pci_atomics ||
-            uct_ib_md_is_relaxed_order(&md->super)) {
+            uct_ib_md_is_relaxed_order(&md->super) ||
+            md->super.relaxed_order_required) {
             break;
         }
 
@@ -819,6 +857,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
+    init_attr->fc_max_wnd_size       = rc_config->super.rx.queue_len;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
     init_attr->xport_hdr_len         = ucs_max(sizeof(uct_rc_hdr_t),
@@ -829,6 +868,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
 
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
+    self->tx.bf_copy_mode     = mlx5_config->super.bf_copy_mode;
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
 
@@ -867,7 +907,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     self->config.log_ack_req_freq  = ucs_min(mlx5_config->log_ack_req_freq,
                                              UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ);
 
-    status = uct_rc_mlx5_iface_init_fence_flags(self, rc_config, md, dev);
+    status = uct_rc_mlx5_iface_init_fence_flags(
+            self, rc_config, md, dev,
+            (init_attr->qp_type == IBV_QPT_RC) &&
+                    md->super.relaxed_order_required);
     if (status != UCS_OK) {
         goto cleanup_dm;
     }
@@ -1033,15 +1076,6 @@ uct_rc_mlx5_ep_put_sgl_zcopy(uct_ep_h ep, void * const *buffers,
     return status;
 }
 
-static void uct_rc_mlx5_iface_fill_ext_query_attr(
-        uct_iface_attr_v2_t *iface_attr,
-        uct_ib_mlx5_ext_iface_query_attr_t *ext_attr)
-{
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        ext_attr->field_mask |= UCT_IB_MLX5_EXT_IFACE_QUERY_ATTR_FIELD_CAP_FLAGS;
-    }
-}
-
 static ucs_status_t
 uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
                                  uct_iface_attr_v2_t *iface_attr)
@@ -1077,8 +1111,9 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
 
     rc_ep = uct_rc_iface_lookup_ep(iface, remote_qpn);
     if (rc_ep == NULL) {
-        ucs_error("rc mlx5: no ep for QPN %u", remote_qpn);
-        return UCS_ERR_INVALID_PARAM;
+        /* A resent token can name a QP that failover already destroyed. */
+        ucs_debug("rc mlx5: no ep for QPN %u", remote_qpn);
+        return UCS_ERR_NO_ELEM;
     }
 
     ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_base_ep_t);
@@ -1101,13 +1136,34 @@ uct_rc_mlx5_iface_query_rx_token(uct_iface_h tl_iface,
 }
 
 static ucs_status_t
+uct_rc_mlx5_ep_get_sgl_zcopy(uct_ep_h ep, void * const *buffers,
+                             const size_t *lengths, uct_mem_h const *memhs,
+                             const uint64_t *remote_addrs,
+                             uct_rkey_t const *rkeys, const size_t *counts,
+                             const size_t *strides, size_t count,
+                             uct_completion_t *comp)
+{
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_ext_ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
+                                              remote_addrs, rkeys, counts,
+                                              strides, count, comp);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        status = uct_rc_mlx5_base_ep_get_sgl_zcopy(ep, buffers, lengths, memhs,
+                                                   remote_addrs, rkeys, counts,
+                                                   strides, count, comp);
+    }
+
+    return status;
+}
+
+static ucs_status_t
 uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
                            uct_iface_attr_v2_t *iface_attr)
 {
-    uct_ib_mlx5_ext_iface_query_attr_t ext_attr = {0};
     uct_rc_mlx5_iface_common_t *mlx5_iface;
     uct_ib_mlx5_md_t *md;
-    size_t max_sgl;
+    size_t max_put_sgl, max_get_sgl;
     ucs_status_t status;
 
     uct_iface_query_v2_init(tl_iface, iface_attr);
@@ -1125,6 +1181,10 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
     md = uct_ib_mlx5_iface_md(ucs_derived_of(tl_iface, uct_ib_iface_t));
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_QUERY_TOKEN;
+        }
+
         if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_RX_TOKEN) {
             status = uct_rc_mlx5_iface_query_rx_token(tl_iface, iface_attr);
             if (status != UCS_OK) {
@@ -1151,37 +1211,38 @@ uct_rc_mlx5_iface_query_v2(uct_iface_h tl_iface,
 
     if (iface_attr->field_mask &
         (UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
-         UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT)) {
-        mlx5_iface = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
-        max_sgl    = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
-        if (max_sgl == 0) {
-            max_sgl = uct_rc_mlx5_base_put_sgl_zcopy_max_count(mlx5_iface);
+         UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT |
+         UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT)) {
+        mlx5_iface  = ucs_derived_of(tl_iface, uct_rc_mlx5_iface_common_t);
+        max_put_sgl = uct_ib_mlx5_ext_max_put_sgl_zcopy_count();
+        max_get_sgl = uct_ib_mlx5_ext_max_get_sgl_zcopy_count();
+        if (max_put_sgl == 0) {
+            max_put_sgl = uct_rc_mlx5_base_sgl_zcopy_max_count(mlx5_iface);
         }
 
-        if ((iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) &&
-            (max_sgl > 0)) {
-            iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+        if (max_get_sgl == 0) {
+            max_get_sgl = uct_rc_mlx5_base_sgl_zcopy_max_count(mlx5_iface);
+        }
+
+        if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
+            if (max_put_sgl > 0) {
+                iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY;
+            }
+
+            if (max_get_sgl > 0) {
+                iface_attr->cap.flags |= UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY;
+            }
         }
 
         if (iface_attr->field_mask &
             UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT) {
-            iface_attr->max_put_sgl_zcopy_count = max_sgl;
+            iface_attr->max_put_sgl_zcopy_count = max_put_sgl;
         }
-    }
 
-    uct_rc_mlx5_iface_fill_ext_query_attr(iface_attr, &ext_attr);
-
-    if (ext_attr.field_mask == 0) {
-        return UCS_OK;
-    }
-
-    status = uct_ib_mlx5_ext_iface_query(tl_iface, &ext_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (iface_attr->field_mask & UCT_IFACE_ATTR_FIELD_CAP_FLAGS) {
-        iface_attr->cap.flags |= ext_attr.cap.flags;
+        if (iface_attr->field_mask &
+            UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT) {
+            iface_attr->max_get_sgl_zcopy_count = max_get_sgl;
+        }
     }
 
     return UCS_OK;
@@ -1200,7 +1261,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_is_connected        = uct_rc_mlx5_base_ep_is_connected,
             .ep_get_device_ep       = (uct_ep_get_device_ep_func_t)ucs_empty_function_return_unsupported,
             .ep_put_sgl_zcopy       = uct_rc_mlx5_ep_put_sgl_zcopy,
-            .ep_outstanding_purge   = uct_ib_mlx5_ext_ep_outstanding_purge
+            .ep_get_sgl_zcopy       = uct_rc_mlx5_ep_get_sgl_zcopy,
+            .ep_outstanding_purge   = uct_rc_mlx5_ep_outstanding_purge
         },
         .create_cq      = uct_rc_mlx5_iface_common_create_cq,
         .destroy_cq     = uct_rc_mlx5_iface_common_destroy_cq,

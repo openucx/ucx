@@ -57,7 +57,7 @@ int uct_ib_kh_ah_hash_equal(struct ibv_ah_attr a, struct ibv_ah_attr b)
     return !memcmp(&a, &b, sizeof(a));
 }
 
-KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
+KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, uct_ib_ah_entry_t*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
@@ -170,16 +170,19 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
    UCT_IB_DEVICE_FLAG_DC_V2, 100},
   {"BlueField", {0x15b3, 0xa2d2},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 41},
+   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 41},
   {"BlueField VF", {0x15b3, 0xa2d3},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 41},
+   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 41},
   {"BlueField 2", {0x15b3, 0xa2d6},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 61},
+   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 61},
   {"BlueField 3", {0x15b3, 0xa2dc},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 61},
+   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 61},
+  {"BlueField 4", {0x15b3, 0xa2df},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 61},
   {"Generic HCA", UCS_SYS_PCI_ID_UNDEFINED, 0, 0},
   {NULL}
 };
@@ -255,9 +258,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
     }
 }
 
-static void
-uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
-                                   const uct_ib_async_event_t *event)
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event)
 {
     ucs_spin_lock(&dev->async_event_lock);
     uct_ib_device_async_event_dispatch_nolock(dev, event);
@@ -409,6 +411,13 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_CQ_ERR:
         event.cookie = ibevent.element.cq;
         break;
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        if (ibevent.element.qp->srq == NULL) {
+            ucs_debug("%s: ignoring LAST_WQE on QP 0x%x without SRQ",
+                      uct_ib_device_name(dev), ibevent.element.qp->qp_num);
+            goto out;
+        }
+        /* Fall through */
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
     case IBV_EVENT_QP_ACCESS_ERR:
@@ -416,7 +425,6 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
-    case IBV_EVENT_QP_LAST_WQE_REACHED:
         event.qp_num = ibevent.element.qp->qp_num;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -445,6 +453,7 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     };
 
     uct_ib_handle_async_event(dev, &event);
+out:
     ibv_ack_async_event(&ibevent);
 }
 
@@ -709,11 +718,21 @@ err:
     return status;
 }
 
+static void
+uct_ib_ah_entry_release(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry);
+
 static void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 {
-    struct ibv_ah *ah;
+    uct_ib_ah_entry_t *entry;
 
-    kh_foreach_value(&dev->ah_hash, ah, ibv_destroy_ah(ah));
+    kh_foreach_value(&dev->ah_hash, entry, {
+        if (entry->refcount != 1) {
+            ucs_warn("ah_entry %p (ah=%p) is still referenced, refcount=%d",
+                     entry, entry->ah, entry->refcount);
+        }
+        /* Drop the cache's own reference, a referenced entry stays valid */
+        uct_ib_ah_entry_release(dev, entry);
+    });
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 }
 
@@ -766,8 +785,12 @@ static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 static ucs_status_t
 uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
 {
+    static const ucs_config_allow_list_t subnets_allow_all = {
+        .mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL
+    };
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
     const uct_ib_device_spec_t *dev_info;
+    uct_ib_device_gid_info_t gid_info;
     uint8_t required_dev_flags;
     ucs_status_t status;
     unsigned gid_index;
@@ -790,7 +813,7 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
     }
 
     if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
-        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+        if (!uct_ib_device_has_srq(dev)) {
             ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
                       port_num);
             return UCS_ERR_UNSUPPORTED;
@@ -818,6 +841,15 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
         ucs_trace("%s:%d (%s) does not support flags 0x%x", uct_ib_device_name(dev),
                   port_num, dev_info->name, required_dev_flags);
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (uct_ib_device_is_port_roce(dev, port_num) &&
+        (md->config.gid_index == UCS_ULUNITS_AUTO)) {
+        /* Run the same selection as iface open, to avoid reporting a port
+         * which has no operational gid. The subnet filter is part of the iface
+         * configuration and is not known yet. */
+        return uct_ib_device_select_gid(dev, port_num, &subnets_allow_all,
+                                        &gid_info);
     }
 
     gid_index = uct_ib_device_get_ib_gid_index(md);
@@ -1180,9 +1212,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    gid_info->gid_index             = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
-    gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
-    gid_info->roce_info.addr_family = AF_INET;
+    ucs_debug("%s:%d has no operational gid", uct_ib_device_name(dev),
+              port_num);
+    return UCS_ERR_NO_DEVICE;
 
 out_print:
     ucs_debug("%s:%d using gid_index=%d ver=%d addr_family=%d",
@@ -1421,7 +1453,7 @@ const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
     return ibv_wc_status_str(wc_status);
 }
 
-ucs_status_t
+static ucs_status_t
 uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
                         struct ibv_pd *pd, const char *usage,
                         struct ibv_ah **ah_p)
@@ -1442,69 +1474,134 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_device_get_ah_cached(uct_ib_device_t *dev,
-                                         struct ibv_ah_attr *ah_attr,
-                                         struct ibv_ah **ah_p)
+static void uct_ib_device_destroy_ah(uct_ib_device_t *dev, struct ibv_ah *ah)
 {
-    ucs_status_t status = UCS_OK;
+    int ret = ibv_destroy_ah(ah);
+
+    if (ret != 0) {
+        ucs_warn("%s: ibv_destroy_ah(ah=%p) failed with error %d: %m",
+                 uct_ib_device_name(dev), ah, ret);
+    }
+}
+
+static uct_ib_ah_entry_t *
+uct_ib_ah_entry_alloc(const struct ibv_ah_attr *ah_attr, struct ibv_ah *ah,
+                      int refcount)
+{
+    uct_ib_ah_entry_t *entry = ucs_malloc(sizeof(*entry), "uct_ib_ah_entry");
+
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    entry->ah            = ah;
+    entry->refcount      = refcount;
+    entry->creation_time = ucs_get_time();
+    entry->dlid          = ah_attr->dlid;
+    entry->is_global     = ah_attr->is_global;
+    if (ah_attr->is_global) {
+        entry->dgid = ah_attr->grh.dgid;
+    }
+
+    return entry;
+}
+
+/* Must be called with dev->ah_lock held for an entry reachable via ah_hash */
+static void
+uct_ib_ah_entry_release(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry)
+{
+    ucs_assert(entry->refcount > 0);
+    if (--entry->refcount == 0) {
+        uct_ib_device_destroy_ah(dev, entry->ah);
+        ucs_free(entry);
+    }
+}
+
+ucs_status_t
+uct_ib_device_ah_get(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                     struct ibv_pd *pd, const char *usage,
+                     uct_ib_ah_entry_t **entry_p)
+{
+    int cache_enabled = (dev->ah_cache_ttl != 0);
+    ucs_status_t status;
+    uct_ib_ah_entry_t *entry;
+    struct ibv_ah *ah;
     khiter_t iter;
+    int ret;
+    char buf[128];
 
     ucs_recursive_spin_lock(&dev->ah_lock);
 
-    /* looking for existing AH with same attributes */
-    iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
-    if (iter == kh_end(&dev->ah_hash)) {
-        status = UCS_ERR_NO_ELEM;
-        goto unlock;
-    } else {
-        /* found existing AH */
-        *ah_p = kh_value(&dev->ah_hash, iter);
+    if (cache_enabled) {
+        iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
+        if (iter != kh_end(&dev->ah_hash)) {
+            entry = kh_value(&dev->ah_hash, iter);
+            if ((dev->ah_cache_ttl == UCS_TIME_INFINITY) ||
+                ((ucs_get_time() - entry->creation_time) <
+                 dev->ah_cache_ttl)) {
+                /* Reuse the existing, shared entry */
+                entry->refcount++;
+                goto out;
+            }
+
+            /* Stale: drop the cache's own reference and forget this entry */
+            ucs_trace("evicting stale ah_entry %p (ah %p) refcount %d %s",
+                      entry, entry->ah, entry->refcount,
+                      uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
+            uct_ib_ah_entry_release(dev, entry);
+            kh_del(uct_ib_ah, &dev->ah_hash, iter);
+        }
     }
+
+    /* Miss, or cache disabled: create a fresh, initially-private entry */
+    status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, &ah);
+    if (status != UCS_OK) {
+        goto unlock;
+    }
+
+    entry = uct_ib_ah_entry_alloc(ah_attr, ah, 1);
+    if (entry == NULL) {
+        uct_ib_device_destroy_ah(dev, ah);
+        status = UCS_ERR_NO_MEMORY;
+        goto unlock;
+    }
+
+    if (cache_enabled) {
+        /* Add the cache's own reference and store it for reuse */
+        iter = kh_put(uct_ib_ah, &dev->ah_hash, *ah_attr, &ret);
+        if (iter == kh_end(&dev->ah_hash)) {
+            uct_ib_device_destroy_ah(dev, ah);
+            ucs_free(entry);
+            status = UCS_ERR_NO_MEMORY;
+            goto unlock;
+        }
+
+        entry->refcount++;
+        kh_value(&dev->ah_hash, iter) = entry;
+    }
+
+out:
+    *entry_p = entry;
+    status   = UCS_OK;
 
 unlock:
     ucs_recursive_spin_unlock(&dev->ah_lock);
     return status;
 }
 
-ucs_status_t
-uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
-                               struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
-                               const char *usage, struct ibv_ah **ah_p)
+void uct_ib_device_ah_put(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry)
 {
-    ucs_status_t status = UCS_OK;
-    khiter_t iter;
-    int ret;
-
     ucs_recursive_spin_lock(&dev->ah_lock);
-
-    /* looking for existing AH with same attributes */
-    iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
-    if (iter == kh_end(&dev->ah_hash)) {
-        /* new AH */
-        status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, ah_p);
-        if (status != UCS_OK) {
-            goto unlock;
-        }
-
-        /* store AH in hash */
-        iter = kh_put(uct_ib_ah, &dev->ah_hash, *ah_attr, &ret);
-
-        /* failed to store - rollback */
-        if (iter == kh_end(&dev->ah_hash)) {
-            ibv_destroy_ah(*ah_p);
-            status = UCS_ERR_NO_MEMORY;
-            goto unlock;
-        }
-
-        kh_value(&dev->ah_hash, iter) = *ah_p;
-    } else {
-        /* found existing AH */
-        *ah_p = kh_value(&dev->ah_hash, iter);
-    }
-
-unlock:
+    uct_ib_ah_entry_release(dev, entry);
     ucs_recursive_spin_unlock(&dev->ah_lock);
-    return status;
+}
+
+void uct_ib_device_ah_hold(uct_ib_device_t *dev, uct_ib_ah_entry_t *entry)
+{
+    ucs_recursive_spin_lock(&dev->ah_lock);
+    ucs_assert(entry->refcount > 0);
+    ++entry->refcount;
+    ucs_recursive_spin_unlock(&dev->ah_lock);
 }
 
 int uct_ib_get_cqe_size(int cqe_size_min)
@@ -1698,7 +1795,8 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     is_smi = 0;
     status = ucs_netlink_send_request(
             NETLINK_RDMA, RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
-            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi);
+            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi,
+            UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return 0;
     }

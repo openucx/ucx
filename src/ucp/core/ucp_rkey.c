@@ -847,7 +847,8 @@ ucp_rkey_extract_sys_dev(const ucp_ep_config_t *ep_config, ucp_rkey_h rkey,
                          ucp_rkey_config_key_t *rkey_config_key)
 {
     if ((*buffer_p < buffer_end) ||
-        ((ep_config->key.dst_version > 19) && (rkey->md_map != 0))) {
+        ((ep_config->key.dst_version >= UCP_MIN_DST_VERSION_RKEY_SYS_DEV) &&
+         (rkey->md_map != 0))) {
         rkey_config_key->sys_dev = *ucs_serialize_next(buffer_p, const uint8_t);
     } else {
         rkey_config_key->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -891,7 +892,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
     /* Starting with UCX v1.20, lane distances are always packed if sys_dev is
      * not UNKNOWN. Even if the rkey length is not explicitly passed to the API,
      * we can safely assume that lane distances are included. */
-    if ((ep_config->key.dst_version > 19) &&
+    if ((ep_config->key.dst_version >= UCP_MIN_DST_VERSION_RKEY_SYS_DEV) &&
         (rkey_config_key.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) &&
         (buffer_end <= buffer)) {
         buffer_end = (void*)UINTPTR_MAX;
@@ -914,10 +915,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
                  (ep, buffer, length, unpack_md_map, skip_md_map, sys_dev,
-                  rkey_p),
+                  uct_flags, rkey_p),
                  ucp_ep_h ep, const void *buffer, size_t length,
                  ucp_md_map_t unpack_md_map, ucp_md_map_t skip_md_map,
-                 ucs_sys_device_t sys_dev, ucp_rkey_h *rkey_p)
+                 ucs_sys_device_t sys_dev, uint64_t uct_flags,
+                 ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -974,8 +976,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     rkey->ep       = ep;
 #endif
 
-    unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE;
+    unpack_params.field_mask = UCT_RKEY_UNPACK_FIELD_SYS_DEVICE |
+                               UCT_RKEY_UNPACK_FIELD_FLAGS;
     unpack_params.sys_device = sys_dev;
+    unpack_params.flags      = uct_flags;
 
     /* Go over remote MD indices and unpack rkey of each UCT MD */
     rkey_index = 0; /* Index of the rkey in the array */
@@ -1056,16 +1060,32 @@ out:
     return status;
 }
 
-ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
-                                ucp_rkey_h *rkey_p)
+static ucs_status_t
+ucp_ep_rkey_unpack_flags(ucp_ep_h ep, const void *rkey_buffer,
+                         uint64_t uct_flags, ucp_rkey_h *rkey_p)
 {
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-    status = ucp_ep_rkey_unpack_reachable(ep, rkey_buffer, 0, rkey_p);
+    status = ucp_ep_rkey_unpack_reachable(ep, rkey_buffer, 0, uct_flags,
+                                          rkey_p);
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
     return status;
+}
+
+ucs_status_t
+ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer, ucp_rkey_h *rkey_p)
+{
+    return ucp_ep_rkey_unpack_flags(ep, rkey_buffer,
+                                    UCT_RKEY_UNPACK_FLAG_FREE_UNUSED_MAPPING,
+                                    rkey_p);
+}
+
+ucs_status_t ucp_ep_rkey_unpack_wo_flags(ucp_ep_h ep, const void *rkey_buffer,
+                                         ucp_rkey_h *rkey_p)
+{
+    return ucp_ep_rkey_unpack_flags(ep, rkey_buffer, 0, rkey_p);
 }
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,
@@ -1278,8 +1298,8 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 ucs_string_buffer_t *strb)
 {
-    const ucp_rkey_config_t *rkey_config = &ucs_array_elem(&worker->rkey_config,
-                                                           rkey_cfg_index);
+    const ucp_rkey_config_t *rkey_config =
+            ucp_worker_rkey_config(worker, rkey_cfg_index);
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
     ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,

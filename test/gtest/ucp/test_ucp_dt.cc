@@ -430,13 +430,13 @@ protected:
     }
 
 private:
-    ucs::handle<ucp_context_h> m_ucph;
     std::vector<ucp_rkey_h>    m_rkeys;
     ucp_rkey_t                 m_dummy_rkey;
     ucp_dt_local_sgl_t         m_local;
     ucp_dt_remote_sgl_t        m_remote;
 
 protected:
+    ucs::handle<ucp_context_h> m_ucph;
     std::vector<void*>         m_buffers;
     std::vector<size_t>        m_lengths;
     std::vector<uint64_t>      m_remote_addrs;
@@ -451,6 +451,54 @@ protected:
     std::vector<uint64_t>      m_desc_remote_addrs;
     std::vector<size_t>        m_desc_elem_indices;
 };
+
+UCS_TEST_F(test_ucp_dt_sgl, mem_reg_provided_memh_missing_md) {
+    static constexpr size_t NUM_ELEMS = 2;
+    static constexpr size_t LENGTH    = UCS_KBYTE;
+    static constexpr unsigned FLAGS   = UCT_MD_MEM_ACCESS_RMA;
+
+    ucp_md_map_t cache_md_map = m_ucph->cache_md_map[UCS_MEMORY_TYPE_HOST];
+    if (ucs_popcount(cache_md_map) < 2) {
+        UCS_TEST_SKIP_R("need at least 2 cacheable memory domains");
+    }
+
+    /* Restricting md_map requires ucp_memh_get(), so these aren't user memhs */
+    ucp_md_index_t md_index = ucs_ffs64(cache_md_map);
+    ucp_md_map_t reg_md_map = cache_md_map & ~UCS_BIT(md_index);
+    std::vector<std::vector<uint8_t>> data(NUM_ELEMS,
+                                           std::vector<uint8_t>(LENGTH));
+    std::vector<void*> buffers(NUM_ELEMS);
+    std::vector<size_t> lengths(NUM_ELEMS, LENGTH);
+    std::vector<ucp_mem_h> memhs(NUM_ELEMS);
+
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        buffers[i] = data[i].data();
+        ASSERT_UCS_OK(ucp_memh_get(m_ucph, buffers[i], LENGTH,
+                                   UCS_MEMORY_TYPE_HOST, reg_md_map, FLAGS,
+                                   "test_sgl_memh", &memhs[i]));
+        ASSERT_FALSE(memhs[i]->md_map & UCS_BIT(md_index));
+    }
+
+    ucp_datatype_iter_t dt_iter  = {};
+    dt_iter.dt_class             = UCP_DATATYPE_SGL;
+    dt_iter.length               = NUM_ELEMS;
+    dt_iter.offset               = 0;
+    dt_iter.type.sgl.buffers     = buffers.data();
+    dt_iter.type.sgl.lengths     = lengths.data();
+    dt_iter.type.sgl.memhs       = memhs.data();
+    dt_iter.type.sgl.frag_offset = 0;
+    ucp_memory_info_set_host(&dt_iter.mem_info);
+
+    EXPECT_UCS_OK(ucp_datatype_iter_mem_reg(m_ucph, &dt_iter,
+                                            UCS_BIT(md_index), FLAGS,
+                                            UCS_BIT(UCP_DATATYPE_SGL)));
+
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        EXPECT_TRUE(memhs[i]->md_map & UCS_BIT(md_index));
+        EXPECT_TRUE(memhs[i]->uct[md_index] != UCT_MEM_HANDLE_NULL);
+        ucp_memh_put(memhs[i]);
+    }
+}
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_chunked) {
     static constexpr size_t NUM_ELEMS    = 10;
@@ -607,26 +655,30 @@ UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_zero_length) {
 }
 
 UCS_TEST_F(test_ucp_dt_sgl, iter_next_frag_mixed_lengths) {
-    static constexpr size_t MAX_FRAG  = 32;
+    static constexpr size_t MAX_TOTAL = 32;
     static constexpr size_t MAX_COUNT = 2;
 
     init_sgl_iter(3, {16, 80, 16});
 
-    /* A whole element is batched with the first fragment of the next one */
-    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
+    /* A whole element is batched with a part of the next one */
+    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_TOTAL));
     check_desc(0, 0, 0, 16);
-    check_desc(1, 1, 0, MAX_FRAG);
-    check_next_iter(1, MAX_FRAG);
+    check_desc(1, 1, 0, 16);
+    check_next_iter(1, 16);
     advance();
 
-    /* Two more fragments of the same element, the last one is the remainder */
-    ASSERT_EQ(2u, next_batch(MAX_COUNT, MAX_FRAG));
-    check_desc(0, 1, MAX_FRAG, MAX_FRAG);
-    check_desc(1, 1, 2 * MAX_FRAG, 80 - (2 * MAX_FRAG));
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 1, 16, MAX_TOTAL);
+    check_next_iter(1, 16 + MAX_TOTAL);
+    advance();
+
+    /* The fragment ends exactly at the end of the element */
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
+    check_desc(0, 1, 48, MAX_TOTAL);
     check_next_iter(2, 0);
     advance();
 
-    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_FRAG));
+    ASSERT_EQ(1u, next_batch(MAX_COUNT, MAX_TOTAL));
     check_desc(0, 2, 0, 16);
     check_next_iter(3, 0);
     advance();

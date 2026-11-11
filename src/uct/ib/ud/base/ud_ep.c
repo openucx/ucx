@@ -22,11 +22,6 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
-/* Must be less then peer_timeout to avoid false positive errors taking into
- * account timer resolution and not too small to avoid performance degradation
- */
-#define UCT_UD_SLOW_TIMER_MAX_TICK(_iface)  ((_iface)->config.peer_timeout / 3)
-
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
 
 static void uct_ud_peer_name(uct_ud_peer_name_t *peer)
@@ -124,6 +119,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
                                         uct_ud_iface_t)->config.max_window;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    ep->tx.send_time   = ucs_get_time();
     uct_ud_ep_reset_max_psn(ep);
     ucs_queue_head_init(&ep->tx.window);
 
@@ -136,6 +132,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
     ucs_frag_list_init(ep->tx.psn-1, &ep->rx.ooo_pkts, 0 /*TODO: ooo support */
                        UCS_STATS_ARG(ep->super.stats));
+    ep->rx.check_sn  = ucs_frag_list_sn(&ep->rx.ooo_pkts);
 }
 
 static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
@@ -282,7 +279,7 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
     }
 
     if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
-        ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+        uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
         uct_ep_destroy(&ep->super.super);
         goto out;
     }
@@ -330,12 +327,42 @@ static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
 
+    if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+        /* The peer is gone, stop matching the endpoint by new connections */
+        uct_ud_iface_cep_remove_ep(iface, ep);
+    }
+
     ucs_callbackq_add_oneshot(&iface->super.super.worker->super.progress_q, ep,
                               uct_ud_ep_deferred_timeout_handler, ep);
     if (iface->async.event_cb != NULL) {
         /* notify user */
         iface->async.event_cb(iface->async.event_arg, 0);
     }
+}
+
+/* A private endpoint is not owned by the upper layer, so nobody checks whether
+ * its peer is still there. Probe the peer once it becomes silent, to release an
+ * endpoint whose peer is gone. */
+static void uct_ud_ep_check_peer(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+{
+    uct_ud_psn_t check_sn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
+    ucs_time_t idle_time  = ucs_get_time() - ep->tx.send_time;
+
+    if (check_sn != ep->rx.check_sn) {
+        /* The peer is sending, so it does not have to be probed */
+        ep->rx.check_sn = check_sn;
+    } else if (idle_time >= iface->config.keepalive_interval) {
+        /* Ask for an ack, otherwise the probe is acked only after the resend
+         * flow requests it. An alive peer acks the probe, otherwise the
+         * endpoint is released by the peer timeout flow. */
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+        if (uct_ud_ep_check(&ep->super.super, 0, NULL) == UCS_OK) {
+            return;
+        }
+    }
+
+    ucs_wtimer_add(&iface->tx.timer, &ep->timer,
+                   iface->config.keepalive_interval);
 }
 
 static void uct_ud_ep_timer(ucs_wtimer_t *self)
@@ -354,6 +381,8 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
             if (status == UCS_INPROGRESS) {
                 goto timer_backoff;
             }
+        } else if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+            uct_ud_ep_check_peer(iface, ep);
         }
         return;
     }
@@ -651,17 +680,21 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto err_ep_destroy;
     }
 
-    status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
-                                        conn_sn, ep);
+    peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
+    status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
+                                              ep->path_index, peer_address);
     if (status != UCS_OK) {
         goto err_ep_disconnect;
     }
 
-    peer_address = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
-                                             ep_get_peer_address, ep);
+    status = uct_ud_ep_resolve_peer_address(ep, ib_addr, peer_address);
+    if (status != UCS_OK) {
+        goto err_ep_disconnect;
+    }
 
-    status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
-                                              ep->path_index, peer_address);
+    /* Connection matching gets its removal key from the resolved endpoint. */
+    status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
+                                        conn_sn, ep);
     if (status != UCS_OK) {
         goto err_ep_disconnect;
     }
@@ -703,6 +736,7 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     const uct_ud_ep_addr_t *ep_addr = (const uct_ud_ep_addr_t*)uct_ep_addr;
     uct_ib_device_t *dev            = uct_ib_iface_device(&iface->super);
     void *peer_address;
+    ucs_status_t status;
     char buf[128];
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
@@ -721,11 +755,15 @@ uct_ud_ep_connect_to_ep_v2(uct_ep_h tl_ep,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num));
 
-    peer_address = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
-                                             ep_get_peer_address, ep);
-    return uct_ud_iface_unpack_peer_address(iface, ib_addr,
-                                            &ep_addr->iface_addr,
-                                            ep->path_index, peer_address);
+    peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
+    status = uct_ud_iface_unpack_peer_address(iface, ib_addr,
+                                              &ep_addr->iface_addr,
+                                              ep->path_index, peer_address);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ud_ep_resolve_peer_address(ep, ib_addr, peer_address);
 }
 
 static UCS_F_ALWAYS_INLINE void

@@ -8,6 +8,15 @@
 
 #include "test_peer_failure.h"
 
+#include <cstring>
+#include <functional>
+
+#if HAVE_TL_RC
+extern "C" {
+#include <uct/ib/rc/base/rc_ep.h>
+}
+#endif
+
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
                                                         UCT_IFACE_FLAG_PENDING   |
                                                         UCT_IFACE_FLAG_CB_SYNC   |
@@ -231,12 +240,37 @@ ucs_status_t test_uct_peer_failure::add_pending(uct_ep_h ep,
     return uct_ep_pending_add(ep, &req.uct, 0);
 }
 
+/* True when posting one more AM would consume the invalidate NOP credit. */
+bool test_uct_peer_failure::invalidate_credit_left()
+{
+#if HAVE_TL_RC
+    uct_rc_ep_t    *rc_ep;
+    uct_rc_iface_t *iface;
+
+    if ((!has_transport("rc_mlx5")) && (!has_transport("gga_mlx5"))) {
+        return false;
+    }
+
+    rc_ep = ucs_derived_of(ep0(), uct_rc_ep_t);
+    iface = ucs_derived_of(rc_ep->super.super.iface, uct_rc_iface_t);
+    return (uct_rc_txqp_available(&rc_ep->txqp) <= 1) ||
+           (iface->tx.cq_available <= 1);
+#else
+    return false;
+#endif
+}
+
 void test_uct_peer_failure::fill_resources(bool expect_error,
                                            ucs_time_t loop_end_limit)
 {
     const uint64_t send_data = 0;
     ucs_status_t status;
+
     do {
+        if (invalidate_credit_left()) {
+            return;
+        }
+
         status = uct_ep_am_short(ep0(), 0, 0, &send_data,
                                  sizeof(send_data));
     } while ((status == UCS_OK) && (ucs_get_time() < loop_end_limit));
@@ -344,6 +378,772 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
 
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
+
+class test_uct_purge_outstanding : public uct_test {
+public:
+    static const uint64_t SEND_SEED       = 0xa1a1a1a1a1a1a1a1ul;
+    static const uint64_t RECV_SEED       = 0xb2b2b2b2b2b2b2b2ul;
+    static const uint64_t AM_ZCOPY_SEED   = 0xc3c3c3c3c3c3c3c3ul;
+    static const uint64_t SENTINEL_SEED   = 0xd4d4d4d4d4d4d4d4ul;
+    static const uint8_t AM_SHORT_ID      = 3;
+    static const uint8_t AM_BCOPY_ID      = 4;
+    static const uint8_t AM_ZCOPY_ID      = 5;
+    static const uint64_t AM_SHORT_HEADER = 0x0123456789abcdefull;
+
+    void init() override
+    {
+        uct_test::init();
+
+        reduce_tl_send_queues();
+
+        m_sender = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_sender);
+
+        check_skip_test();
+
+        if (!m_sender->check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) ||
+            !m_sender->check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN)) {
+            UCS_TEST_SKIP_R("UCT endpoint outstanding purge is not supported");
+        }
+
+        m_receiver = uct_test::create_entity(0, err_handler);
+        m_entities.push_back(m_receiver);
+        m_sender->connect(0, *m_receiver, 0);
+
+        flush();
+    }
+
+protected:
+    struct purge_ctx {
+        test_uct_purge_outstanding *self;
+        uct_ep_operation_t         operation;
+        uct_completion_t           comp;
+        uint32_t                   num_ops_purged;
+        uint32_t                   num_ops_purged_at_completion;
+        uint32_t                   num_ops_posted_after_flush;
+        unsigned                   num_completions;
+        const void                 *am_header;
+        size_t                     am_header_length;
+        uint64_t                   remote_addr;
+        uct_rkey_t                 rkey;
+        const void                 *send_buf;
+        size_t                     send_len;
+        const uct_iov_t            *iov;
+        size_t                     iovcnt;
+        uct_unpack_callback_t      unpack_cb;
+        void                       *unpack_arg;
+        size_t                     unpack_length;
+    };
+
+    using send_func_t =
+            std::function<ucs_status_t(uct_ep_h, uct_completion_t*)>;
+
+    static ucs_status_t post_op(uct_ep_h ep, uct_completion_t *comp,
+                                const send_func_t &send_func)
+    {
+        ucs_status_t status;
+
+        ++comp->count;
+        status = send_func(ep, comp);
+        if (status != UCS_INPROGRESS) {
+            --comp->count;
+        }
+
+        return status;
+    }
+
+    static void post_flush(uct_ep_h ep, uct_completion_t *comp,
+                           unsigned flush_flags = UCT_FLUSH_FLAG_LOCAL)
+    {
+        ucs_status_t status;
+
+        ++comp->count;
+        status = uct_ep_flush(ep, flush_flags, comp);
+        if (status == UCS_INPROGRESS) {
+            return;
+        }
+
+        --comp->count;
+        ASSERT_UCS_OK(status);
+    }
+
+    static uint32_t post_until_error(uct_ep_h ep, uct_completion_t *comp,
+                                     const send_func_t &send_func)
+    {
+        uint32_t count = 0;
+        ucs_time_t deadline;
+        ucs_status_t status;
+
+        deadline = ucs::get_deadline();
+        while (ucs_get_time() < deadline) {
+            status = post_op(ep, comp, send_func);
+            if (UCS_STATUS_IS_ERR(status)) {
+                return count;
+            }
+
+            ++count;
+        }
+
+        UCS_TEST_ABORT("operation remained postable after endpoint "
+                       "invalidation");
+    }
+
+    void validate_op(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_OPERATION);
+        ASSERT_EQ(ctx->operation, info->operation);
+
+        switch (info->operation) {
+        case UCT_EP_OP_AM_SHORT:
+            validate_am_short(info, ctx);
+            return;
+        case UCT_EP_OP_AM_BCOPY:
+            validate_am_bcopy(info, ctx);
+            return;
+        case UCT_EP_OP_AM_ZCOPY:
+            validate_am_zcopy(info, ctx);
+            return;
+        case UCT_EP_OP_PUT_SHORT:
+        case UCT_EP_OP_PUT_BCOPY:
+        case UCT_EP_OP_PUT_ZCOPY:
+            validate_put(info, ctx);
+            return;
+        case UCT_EP_OP_GET_BCOPY:
+        case UCT_EP_OP_GET_ZCOPY:
+            validate_get(info, ctx);
+            return;
+        default:
+            UCS_TEST_ABORT("unsupported operation " << info->operation
+                                                     << " at index "
+                                                     << ctx->num_ops_purged);
+        }
+    }
+
+    void validate_am_short(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint16_t required_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                UCT_EP_OP_INFO_AM_FIELD_HEADER_VALUE |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
+        ASSERT_TRUE(ucs_test_all_flags(info->am.field_mask, required_fields));
+        EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        EXPECT_EQ(AM_SHORT_ID, info->am.am_id);
+        EXPECT_EQ(AM_SHORT_HEADER, info->am.header.value);
+        ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
+        ASSERT_NE(nullptr, info->am.payload.data.buffer);
+        mem_buffer::pattern_check(info->am.payload.data.buffer,
+                                  info->am.payload.data.length, SEND_SEED);
+        ++ctx->num_ops_purged;
+    }
+
+    void validate_am_bcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint16_t required_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID |
+                UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_DATA;
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
+        ASSERT_TRUE(ucs_test_all_flags(info->am.field_mask, required_fields));
+        EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        EXPECT_EQ(AM_BCOPY_ID, info->am.am_id);
+        EXPECT_EQ(0u, info->am.flags);
+        ASSERT_EQ(ctx->send_len, info->am.payload.data.length);
+        ASSERT_NE(nullptr, info->am.payload.data.buffer);
+        mem_buffer::pattern_check(info->am.payload.data.buffer,
+                                  info->am.payload.data.length, SEND_SEED);
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_am_zcopy(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint16_t expected_am_fields =
+                UCT_EP_OP_INFO_AM_FIELD_AM_ID | UCT_EP_OP_INFO_AM_FIELD_FLAGS |
+                UCT_EP_OP_INFO_AM_FIELD_HEADER_ZCOPY |
+                UCT_EP_OP_INFO_AM_FIELD_PAYLOAD_ZCOPY;
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_AM);
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->am.field_mask, expected_am_fields));
+        EXPECT_EQ(AM_ZCOPY_ID, info->am.am_id);
+        EXPECT_EQ(0u, info->am.flags);
+
+        ASSERT_EQ(ctx->am_header_length, info->am.header.zcopy.length);
+        mem_buffer::pattern_check(info->am.header.zcopy.buffer,
+                                  info->am.header.zcopy.length, AM_ZCOPY_SEED);
+
+        ASSERT_EQ(ctx->iovcnt, info->am.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer, info->am.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length, info->am.payload.zcopy.iov[i].length);
+        }
+
+        ASSERT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+        EXPECT_EQ(&ctx->comp, info->comp);
+        uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
+
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_rma_addr(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_RMA_FIELD_REMOTE_ADDR |
+                                         UCT_EP_OP_INFO_RMA_FIELD_RKEY;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->rma.field_mask, expected_fields));
+        EXPECT_EQ(ctx->remote_addr, info->rma.remote_addr);
+        EXPECT_EQ(uint32_t(ctx->rkey), uint32_t(info->rma.rkey));
+    }
+
+    static void validate_rma_iov(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        EXPECT_TRUE(info->rma.field_mask &
+                    UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_ZCOPY);
+        ASSERT_EQ(ctx->iovcnt, info->rma.payload.zcopy.iovcnt);
+        for (size_t i = 0; i < ctx->iovcnt; ++i) {
+            EXPECT_EQ(ctx->iov[i].buffer,
+                      info->rma.payload.zcopy.iov[i].buffer);
+            EXPECT_EQ(ctx->iov[i].length,
+                      info->rma.payload.zcopy.iov[i].length);
+        }
+    }
+
+    static void validate_put(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        ASSERT_TRUE(
+                ucs_test_all_flags(info->field_mask, UCT_EP_OP_INFO_FIELD_RMA));
+        validate_rma_addr(info, ctx);
+
+        if (ctx->operation == UCT_EP_OP_PUT_ZCOPY) {
+            EXPECT_TRUE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+            EXPECT_EQ(&ctx->comp, info->comp);
+            validate_rma_iov(info, ctx);
+
+            uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
+        } else {
+            EXPECT_FALSE(info->field_mask & UCT_EP_OP_INFO_FIELD_COMP);
+
+            EXPECT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_DATA);
+            ASSERT_EQ(ctx->send_len, info->rma.payload.data.length);
+            ASSERT_NE(nullptr, info->rma.payload.data.buffer);
+            mem_buffer::pattern_check(info->rma.payload.data.buffer,
+                                      info->rma.payload.data.length, SEND_SEED);
+        }
+
+        ++ctx->num_ops_purged;
+    }
+
+    static void validate_get(const uct_ep_op_info_t *info, purge_ctx *ctx)
+    {
+        const uint64_t expected_fields = UCT_EP_OP_INFO_FIELD_COMP |
+                                         UCT_EP_OP_INFO_FIELD_RMA;
+
+        ASSERT_TRUE(ucs_test_all_flags(info->field_mask, expected_fields));
+        EXPECT_EQ(&ctx->comp, info->comp);
+        validate_rma_addr(info, ctx);
+
+        if (ctx->operation == UCT_EP_OP_GET_ZCOPY) {
+            validate_rma_iov(info, ctx);
+        } else {
+            ASSERT_TRUE(info->rma.field_mask &
+                        UCT_EP_OP_INFO_RMA_FIELD_PAYLOAD_UNPACK);
+            EXPECT_EQ(ctx->unpack_cb, info->rma.payload.unpack.unpack_cb);
+            EXPECT_EQ(ctx->unpack_arg, info->rma.payload.unpack.arg);
+            EXPECT_EQ(ctx->unpack_length, info->rma.payload.unpack.length);
+        }
+
+        uct_invoke_completion(info->comp, UCS_ERR_CANCELED);
+        ++ctx->num_ops_purged;
+    }
+
+    static ucs_status_t err_handler(void *arg, uct_ep_h ep,
+                                    ucs_status_t status)
+    {
+        test_uct_purge_outstanding *self =
+                static_cast<test_uct_purge_outstanding*>(arg);
+
+        EXPECT_EQ(self->m_sender->ep(0), ep);
+        EXPECT_TRUE(UCS_STATUS_IS_ERR(status));
+        ++self->m_err_count;
+        return UCS_INPROGRESS;
+    }
+
+    static void purge_cb(const uct_ep_op_info_t *info, void *arg)
+    {
+        purge_ctx *ctx = static_cast<purge_ctx*>(arg);
+
+        ASSERT_TRUE(info != NULL);
+
+        ctx->self->validate_op(info, ctx);
+    }
+
+    static void completion_cb(uct_completion_t *comp)
+    {
+        purge_ctx *ctx = ucs_container_of(comp, purge_ctx, comp);
+
+        ctx->num_ops_purged_at_completion = ctx->num_ops_purged;
+        ++ctx->num_completions;
+    }
+
+    static ucs_status_t am_handler(void*, void*, size_t, unsigned)
+    {
+        return UCS_OK;
+    }
+
+    static void unpack_cb(void*, const void*, size_t)
+    {
+    }
+
+    void purge_outstanding(purge_ctx *ctx, bool with_rx_token = true)
+    {
+        uct_ep_outstanding_purge_params_t purge_params = {};
+        /* Lives until purge returns. The params keep a pointer into it. */
+        std::vector<uint8_t> rx_token;
+
+        purge_params.field_mask = UCT_EP_OUTSTANDING_FIELD_CB |
+                                  UCT_EP_OUTSTANDING_FIELD_ARG;
+        purge_params.cb         = purge_cb;
+        purge_params.arg        = ctx;
+
+        if (with_rx_token) {
+            uct_iface_attr_v2_t  tx_attr = {};
+            uct_iface_attr_v2_t  rx_attr = {};
+            uct_ep_attr_t        ep_attr = {};
+            std::vector<uint8_t> tx_token;
+
+            tx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN_LENGTH;
+            ASSERT_UCS_OK(uct_iface_query_v2(m_sender->iface(), &tx_attr));
+
+            rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_RX_TOKEN_LENGTH;
+            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+
+            tx_token.resize(tx_attr.tx_token_length);
+            rx_token.resize(rx_attr.rx_token_length);
+
+            ep_attr.field_mask = UCT_EP_ATTR_FIELD_TX_TOKEN;
+            ep_attr.tx_token   = tx_token.data();
+            ASSERT_UCS_OK(uct_ep_query(m_sender->ep(0), &ep_attr));
+
+            rx_attr.field_mask = UCT_IFACE_ATTR_FIELD_TX_TOKEN |
+                                 UCT_IFACE_ATTR_FIELD_RX_TOKEN;
+            rx_attr.tx_token   = tx_token.data();
+            rx_attr.rx_token   = rx_token.data();
+            ASSERT_UCS_OK(uct_iface_query_v2(m_receiver->iface(), &rx_attr));
+
+            purge_params.field_mask |= UCT_EP_OUTSTANDING_FIELD_RX_TOKEN;
+            purge_params.rx_token    = rx_token.data();
+        }
+
+        ASSERT_UCS_OK(uct_ep_outstanding_purge(m_sender->ep(0),
+                                               &purge_params));
+    }
+
+    void test_purge_outstanding(const send_func_t &send_func, purge_ctx &ctx,
+                                unsigned flush_flags = UCT_FLUSH_FLAG_LOCAL,
+                                bool with_rx_token = true)
+    {
+        static constexpr uint32_t NUM_MSG_BEFORE_INVALIDATE = 2;
+        uct_ep_invalidate_params_t invalidate_params = {};
+        uint32_t num_posted = 0;
+        unsigned num_outstanding, num_completions;
+        ucs_status_t status;
+
+        for (; num_posted < NUM_MSG_BEFORE_INVALIDATE; ++num_posted) {
+            status = post_op(m_sender->ep(0), &ctx.comp, send_func);
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+        }
+
+        ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
+        /* Make flush wait for failed work even if it reuses a signaled WQE. */
+        status = post_op(m_sender->ep(0), &ctx.comp, send_func);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        ++num_posted;
+
+        post_flush(m_sender->ep(0), &ctx.comp, flush_flags);
+        ctx.num_ops_posted_after_flush = post_until_error(
+                m_sender->ep(0), &ctx.comp, send_func);
+        num_posted += ctx.num_ops_posted_after_flush;
+
+        wait_for_flag(&m_err_count);
+        ASSERT_EQ(1u, m_err_count);
+
+        num_outstanding = ctx.comp.count;
+        num_completions = ctx.num_completions;
+        purge_outstanding(&ctx, with_rx_token);
+
+        EXPECT_GT(ctx.num_ops_purged, 0u);
+        EXPECT_LE(ctx.num_ops_purged, num_posted);
+
+        wait_for_value(&ctx.comp.count, 0, true);
+        if (num_outstanding != 0) {
+            EXPECT_EQ(UCS_ERR_CANCELED, ctx.comp.status);
+            ++num_completions;
+        }
+
+        EXPECT_EQ(num_completions, ctx.num_completions);
+
+        flush();
+        EXPECT_EQ(0, ctx.comp.count);
+    }
+
+    void test_put_bcopy(unsigned flush_flags, bool with_rx_token)
+    {
+        const uct_iface_attr_t &attr = m_sender->iface_attr();
+        const size_t size = ucs_min((size_t)4096, attr.cap.put.max_bcopy);
+        mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+        mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+        purge_ctx ctx = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
+        ctx.remote_addr = recvbuf.addr();
+        ctx.rkey        = recvbuf.rkey();
+        ctx.send_buf    = sendbuf.ptr();
+        ctx.send_len    = size;
+
+        send_func_t put_bcopy = [&](uct_ep_h ep, uct_completion_t*) {
+            ssize_t ret = uct_ep_put_bcopy(ep, mapped_buffer::pack, &sendbuf,
+                                           ctx.remote_addr, ctx.rkey);
+            return (ret >= 0) ? UCS_OK : (ucs_status_t)ret;
+        };
+
+        test_purge_outstanding(put_bcopy, ctx, flush_flags, with_rx_token);
+    }
+
+    void test_flush_purge_delivered(unsigned flush_flags)
+    {
+        const uct_iface_attr_t &attr = m_sender->iface_attr();
+        const size_t size = ucs_min((size_t)4096, attr.cap.put.max_bcopy);
+        mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+        mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+        purge_ctx ctx = {this, UCT_EP_OP_PUT_BCOPY, {completion_cb, 0, UCS_OK}};
+        ctx.remote_addr = recvbuf.addr();
+        ctx.rkey        = recvbuf.rkey();
+        ctx.send_buf    = sendbuf.ptr();
+        ctx.send_len    = size;
+
+        ssize_t ret = uct_ep_put_bcopy(m_sender->ep(0), mapped_buffer::pack,
+                                       &sendbuf, ctx.remote_addr, ctx.rkey);
+        ASSERT_EQ((ssize_t)size, ret);
+        post_flush(m_sender->ep(0), &ctx.comp, flush_flags);
+
+        const size_t sentinel_size   = ucs_min((size_t)4, size);
+        const size_t sentinel_offset = size - sentinel_size;
+        mapped_buffer sentinel_buf(sentinel_size, SENTINEL_SEED, *m_sender);
+        ret = uct_ep_put_bcopy(m_sender->ep(0), mapped_buffer::pack,
+                               &sentinel_buf, ctx.remote_addr + sentinel_offset,
+                               ctx.rkey);
+        ASSERT_EQ((ssize_t)sentinel_buf.length(), ret);
+
+        /*
+         * Observe the sentinel before moving the QP to ERR, which can drop
+         * the write. The sender is not progressed, so the flush stays
+         * outstanding.
+         */
+        const uint8_t *tail = (uint8_t*)recvbuf.ptr() + sentinel_offset;
+        uct_ep_invalidate_params_t invalidate_params = {};
+
+        wait_for_value(tail, *(uint8_t*)sentinel_buf.ptr(), false);
+        ASSERT_EQ(*(uint8_t*)sentinel_buf.ptr(), *tail);
+        ASSERT_UCS_OK(uct_ep_invalidate(m_sender->ep(0), &invalidate_params));
+
+        wait_for_flag(&m_err_count);
+        ASSERT_EQ(1u, m_err_count);
+
+        purge_outstanding(&ctx, true);
+
+        EXPECT_EQ(0u, ctx.num_ops_purged);
+        EXPECT_EQ(0, ctx.comp.count);
+        EXPECT_UCS_OK(ctx.comp.status);
+        EXPECT_EQ(1u, ctx.num_completions);
+    }
+
+    void test_am_short(bool with_rx_token)
+    {
+        const size_t max_size = m_sender->iface_attr().cap.am.max_short -
+                                sizeof(AM_SHORT_HEADER);
+        const size_t size     = ucs::rand() % max_size + 1;
+        std::vector<uint8_t> payload(size);
+
+        mem_buffer::pattern_fill(payload.data(), payload.size(), SEND_SEED);
+
+        purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+        ctx.send_buf  = payload.data();
+        ctx.send_len  = payload.size();
+
+        ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
+                                               am_handler, NULL, 0));
+
+        send_func_t am_short = [&](uct_ep_h ep, uct_completion_t*) {
+            return uct_ep_am_short(ep, AM_SHORT_ID, AM_SHORT_HEADER,
+                                   ctx.send_buf, ctx.send_len);
+        };
+        test_purge_outstanding(am_short, ctx, UCT_FLUSH_FLAG_LOCAL,
+                               with_rx_token);
+
+        EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
+        EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
+        EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
+                                      ctx.num_ops_posted_after_flush);
+    }
+
+    void test_am_short_iov()
+    {
+        const size_t hdr_size = sizeof(AM_SHORT_HEADER);
+        const size_t max_size = m_sender->iface_attr().cap.am.max_short -
+                                hdr_size;
+        const size_t size     = ucs::rand() % max_size + 1;
+        mapped_buffer sendbuf(hdr_size + size, SEND_SEED, *m_sender);
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), 2);
+
+        memcpy(sendbuf.ptr(), &AM_SHORT_HEADER, hdr_size);
+        mem_buffer::pattern_fill(UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), hdr_size),
+                                 size, SEND_SEED);
+
+        purge_ctx ctx = {this, UCT_EP_OP_AM_SHORT, {completion_cb, 0, UCS_OK}};
+        ctx.send_buf  = UCS_PTR_BYTE_OFFSET(sendbuf.ptr(), hdr_size);
+        ctx.send_len  = size;
+
+        ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_SHORT_ID,
+                                               am_handler, NULL, 0));
+
+        send_func_t am_short_iov = [&](uct_ep_h ep, uct_completion_t*) {
+            return uct_ep_am_short_iov(ep, AM_SHORT_ID, iov, iovcnt);
+        };
+        test_purge_outstanding(am_short_iov, ctx);
+    }
+
+    entity   *m_sender;
+    entity   *m_receiver;
+    unsigned m_err_count = 0;
+};
+
+const uint8_t test_uct_purge_outstanding::AM_SHORT_ID;
+const uint8_t test_uct_purge_outstanding::AM_BCOPY_ID;
+const uint8_t test_uct_purge_outstanding::AM_ZCOPY_ID;
+const uint64_t test_uct_purge_outstanding::AM_SHORT_HEADER;
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_am_short(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short_no_rx_token,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_am_short(false);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_short_iov,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_am_short_iov();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size = ucs_min((size_t)4096, attr.cap.am.max_bcopy);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+
+    purge_ctx ctx = {this, UCT_EP_OP_AM_BCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.send_buf  = sendbuf.ptr();
+    ctx.send_len  = size;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_BCOPY_ID,
+                                           am_handler, NULL, 0));
+
+    send_func_t am_bcopy = [&](uct_ep_h ep, uct_completion_t*) {
+        ssize_t packed_len;
+
+        packed_len = uct_ep_am_bcopy(ep, AM_BCOPY_ID, mapped_buffer::pack,
+                                     &sendbuf, 0);
+        if (packed_len >= 0) {
+            EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
+            return UCS_OK;
+        }
+
+        return (ucs_status_t)packed_len;
+    };
+    test_purge_outstanding(am_bcopy, ctx);
+
+    EXPECT_GT(ctx.num_ops_purged_at_completion, 0u);
+    EXPECT_GT(ctx.num_ops_posted_after_flush, 0u);
+    EXPECT_EQ(ctx.num_ops_purged, ctx.num_ops_purged_at_completion +
+                                  ctx.num_ops_posted_after_flush);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.am.max_iov, 2);
+    const size_t hdr_size        = ucs_min((size_t)64, attr.cap.am.max_hdr);
+    const size_t size = ucs_min((size_t)4096, attr.cap.am.max_zcopy);
+    purge_ctx ctx     = {this, UCT_EP_OP_AM_ZCOPY, {completion_cb, 0, UCS_OK}};
+    std::vector<uint8_t> header(hdr_size);
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+
+    mem_buffer::pattern_fill(header.data(), header.size(), AM_ZCOPY_SEED);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    ctx.am_header        = header.data();
+    ctx.am_header_length = header.size();
+    ctx.iov              = iov;
+    ctx.iovcnt           = iovcnt;
+
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_receiver->iface(), AM_ZCOPY_ID,
+                                           am_handler, NULL, 0));
+
+    send_func_t am_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_am_zcopy(ep, AM_ZCOPY_ID, ctx.am_header,
+                               ctx.am_header_length, iov, iovcnt, 0, comp);
+    };
+
+    test_purge_outstanding(am_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_short,
+                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size            = ucs::rand() % attr.cap.put.max_short + 1;
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_SHORT, {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.send_buf    = sendbuf.ptr();
+    ctx.send_len    = size;
+
+    send_func_t put_short = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_short(ep, ctx.send_buf, ctx.send_len, ctx.remote_addr,
+                                ctx.rkey);
+    };
+
+    test_purge_outstanding(put_short, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    test_put_bcopy(UCT_FLUSH_FLAG_LOCAL, true);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, put_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.put.max_iov, 2);
+    const size_t size            = ucs_max(attr.cap.put.min_zcopy,
+                                           ucs_min((size_t)4096, attr.cap.put.max_zcopy));
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    purge_ctx ctx   = {this, UCT_EP_OP_PUT_ZCOPY, {completion_cb, 0, UCS_OK}};
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t put_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_put_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(put_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t num_iov         = ucs_min(attr.cap.get.max_iov, 2);
+    const size_t size            = ucs_max(attr.cap.get.min_zcopy,
+                                           ucs_min((size_t)4096, attr.cap.get.max_zcopy));
+    purge_ctx ctx = {this, UCT_EP_OP_GET_ZCOPY, {completion_cb, 0, UCS_OK}};
+    mapped_buffer sendbuf(size, SEND_SEED, *m_sender);
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), num_iov);
+
+    ctx.remote_addr = recvbuf.addr();
+    ctx.rkey        = recvbuf.rkey();
+    ctx.iov         = iov;
+    ctx.iovcnt      = iovcnt;
+
+    send_func_t get_zcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_get_zcopy(ep, iov, iovcnt, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(get_zcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, get_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY))
+{
+    const uct_iface_attr_t &attr = m_sender->iface_attr();
+    const size_t size = ucs_min((size_t)4096, attr.cap.get.max_bcopy);
+    purge_ctx ctx = {this, UCT_EP_OP_GET_BCOPY, {completion_cb, 0, UCS_OK}};
+    mapped_buffer recvbuf(size, RECV_SEED, *m_receiver);
+
+    ctx.remote_addr   = recvbuf.addr();
+    ctx.rkey          = recvbuf.rkey();
+    ctx.unpack_cb     = unpack_cb;
+    ctx.unpack_arg    = this;
+    ctx.unpack_length = size;
+
+    send_func_t get_bcopy = [&](uct_ep_h ep, uct_completion_t *comp) {
+        return uct_ep_get_bcopy(ep, ctx.unpack_cb, ctx.unpack_arg,
+                                ctx.unpack_length, ctx.remote_addr, ctx.rkey,
+                                comp);
+    };
+
+    test_purge_outstanding(get_bcopy, ctx);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    check_skip_flush_remote();
+    test_put_bcopy(UCT_FLUSH_FLAG_REMOTE, true);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote_no_rx_token,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    check_skip_flush_remote();
+    test_put_bcopy(UCT_FLUSH_FLAG_REMOTE, false);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_purge_delivered,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    test_flush_purge_delivered(UCT_FLUSH_FLAG_LOCAL);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_purge_outstanding, flush_remote_purge_delivered,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY))
+{
+    check_skip_flush_remote();
+    test_flush_purge_delivered(UCT_FLUSH_FLAG_REMOTE);
+}
+
+UCT_INSTANTIATE_TEST_CASE(test_uct_purge_outstanding)
 
 class test_uct_peer_failure_multiple : public test_uct_peer_failure
 {
@@ -630,6 +1430,21 @@ UCS_TEST_SKIP_COND_P(test_uct_ep_check_async, no_comp_when_connected,
 }
 
 
+/* Destroying an EP while the ep_check without completion is still outstanding.
+ * It will be silently purged. */
+UCS_TEST_SKIP_COND_P(test_uct_ep_check_async,
+                     destroy_with_outstanding_check_no_comp,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    m_e1->connect(0, *m_e2, 0);
+    flush();
+
+    ASSERT_EQ(UCS_OK, uct_ep_check(m_e1->ep(0), 0, NULL));
+
+    m_e1->destroy_ep(0);
+}
+
+
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_ep_check_async)
 
 
@@ -779,3 +1594,367 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_rma_zcopy, get,
 
 _UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_rma_zcopy, cma)
 
+class test_uct_peer_failure_sgl_zcopy : public test_uct_peer_failure
+{
+public:
+    static const size_t SGL_COUNT  = 4;
+    static const size_t SGL_LENGTH = 256;
+    static const size_t NO_INDEX   = SIZE_MAX;
+
+    /* Fail one element of the SGL by accessing memory outside of the remote
+     * buffer, the whole operation must complete with the endpoint error
+     * status. The element at empty_index is of zero length */
+    void test_sgl_zcopy_peer_failure(bool is_put_op, size_t failed_index,
+                                     size_t empty_index = NO_INDEX)
+    {
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        op_completion comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+        mapped_buffer remotebuf(SGL_COUNT * SGL_LENGTH, 0,
+                                *m_receivers.front());
+
+        set_remote_sgl(remotebuf, failed_index, remote_addrs, rkeys);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(is_put_op, localbuf, remote_addrs, rkeys,
+                                     &comp, empty_index));
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+    /* Fail the first element of an SGL put, which is of zero length, so its
+     * WQE has no data segment. The remote address of a zero-length element is
+     * not accessed, so the failure is caused by killing the receiver */
+    void test_sgl_zcopy_empty_element_failure()
+    {
+        uint64_t remote_addrs[SGL_COUNT] = {};
+        uct_rkey_t rkeys[SGL_COUNT]      = {};
+        op_completion comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            kill_receiver();
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(true, localbuf, remote_addrs, rkeys,
+                                     &comp, 0));
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+    /* Fail a zero-length put_short posted right before an SGL put. The SGL put
+     * must not be completed by the failure of the put_short WQE, since its own
+     * WQEs are not reported yet, but by the flush of the QP */
+    void test_sgl_zcopy_after_failed_put_short()
+    {
+        /* The receiver is killed, so the remote memory is not accessed */
+        uint64_t remote_addrs[SGL_COUNT] = {};
+        uct_rkey_t rkeys[SGL_COUNT]      = {};
+        op_completion comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            kill_receiver();
+            ASSERT_UCS_OK(uct_ep_put_short(ep0(), NULL, 0, 0, 0));
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(true, localbuf, remote_addrs, rkeys,
+                                     &comp));
+            wait_for_flag(&comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(UCS_ERR_CANCELED, comp.uct.status)
+                << ucs_status_string(comp.uct.status);
+    }
+
+    /* Fail the first element of an SGL put followed by a put_zcopy. The SGL put
+     * completes with the endpoint error status, while the put_zcopy is not
+     * completed by this failure, but by the flush of the QP */
+    void test_put_zcopy_after_failed_sgl_zcopy()
+    {
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        op_completion sgl_comp, zcopy_comp;
+
+        skip_no_op_failure();
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, 0, *m_sender);
+        mapped_buffer remotebuf(SGL_COUNT * SGL_LENGTH, 0,
+                                *m_receivers.front());
+
+        set_remote_sgl(remotebuf, 0, remote_addrs, rkeys);
+
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+
+            ASSERT_EQ(UCS_INPROGRESS,
+                      post_sgl_zcopy(true, localbuf, remote_addrs, rkeys,
+                                     &sgl_comp));
+            init_completion(&zcopy_comp);
+            ASSERT_EQ(UCS_INPROGRESS,
+                      uct_ep_put_zcopy(ep0(), localbuf.iov(), 1,
+                                       remotebuf.addr(), remotebuf.rkey(),
+                                       &zcopy_comp.uct));
+            wait_for_flag(&sgl_comp.done);
+            wait_for_flag(&zcopy_comp.done);
+            flush();
+        }
+
+        ASSERT_EQ(1u, sgl_comp.done);
+        ASSERT_EQ(1u, zcopy_comp.done);
+        ASSERT_EQ(1ul, m_failed_eps.count(ep0()));
+        EXPECT_EQ(m_failed_eps[ep0()], sgl_comp.uct.status)
+                << ucs_status_string(sgl_comp.uct.status);
+        EXPECT_EQ(UCS_ERR_CANCELED, zcopy_comp.uct.status)
+                << ucs_status_string(zcopy_comp.uct.status);
+    }
+
+    /* Without a failure the operation completes with UCS_OK by the CQE of the
+     * last WQE of the chain, so the data of all its elements is in place. The
+     * element at empty_index is of zero length, so its data is not moved */
+    void test_sgl_zcopy_completion(bool is_put_op,
+                                   size_t empty_index = NO_INDEX)
+    {
+        const uint64_t local_seed  = 1;
+        const uint64_t remote_seed = 2;
+        uint64_t remote_addrs[SGL_COUNT];
+        uct_rkey_t rkeys[SGL_COUNT];
+        op_completion comp;
+
+        mapped_buffer localbuf(SGL_COUNT * SGL_LENGTH, local_seed, *m_sender, 0,
+                               mem_type());
+        mapped_buffer remotebuf(SGL_COUNT * SGL_LENGTH, remote_seed,
+                                *m_receivers.front(), 0, mem_type());
+
+        set_remote_sgl(remotebuf, NO_INDEX, remote_addrs, rkeys);
+        ASSERT_EQ(UCS_INPROGRESS,
+                  post_sgl_zcopy(is_put_op, localbuf, remote_addrs, rkeys,
+                                 &comp, empty_index));
+        wait_for_flag(&comp.done);
+
+        ASSERT_EQ(1u, comp.done);
+        EXPECT_UCS_OK(comp.uct.status);
+        if (is_put_op) {
+            /* Put completion does not imply remote completion */
+            flush();
+        }
+
+        /* The buffers are filled with different patterns, so they are equal at
+         * the offset of an element only if its data was moved */
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            const size_t offset = i * SGL_LENGTH;
+
+            EXPECT_EQ(i != empty_index,
+                      mem_buffer::compare(
+                              UCS_PTR_BYTE_OFFSET(localbuf.ptr(), offset),
+                              UCS_PTR_BYTE_OFFSET(remotebuf.ptr(), offset),
+                              SGL_LENGTH, mem_type(), mem_type()))
+                    << "element " << i;
+        }
+
+        EXPECT_EQ(0ul, m_failed_eps.count(ep0()));
+    }
+
+private:
+    struct op_completion {
+        uct_completion_t uct;
+        unsigned         done;
+    };
+
+    static void completion_cb(uct_completion_t *self)
+    {
+        ucs_container_of(self, op_completion, uct)->done = 1;
+    }
+
+    static void init_completion(op_completion *comp)
+    {
+        comp->uct.func   = completion_cb;
+        comp->uct.count  = 1;
+        comp->uct.status = UCS_OK;
+        comp->done       = 0;
+    }
+
+    /* cuda_ipc does not report errors of posted operations, and a copy to an
+     * invalid remote address is a fatal CUDA error */
+    void skip_no_op_failure() const
+    {
+        if (has_cuda_ipc()) {
+            UCS_TEST_SKIP_R("cuda_ipc does not fail posted operations");
+        }
+    }
+
+    ucs_memory_type_t mem_type() const
+    {
+        return has_cuda_ipc() ? UCS_MEMORY_TYPE_CUDA : UCS_MEMORY_TYPE_HOST;
+    }
+
+    /* The element at failed_index points outside of the remote buffer */
+    static void set_remote_sgl(const mapped_buffer &remotebuf,
+                               size_t failed_index, uint64_t *remote_addrs,
+                               uct_rkey_t *rkeys)
+    {
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            remote_addrs[i] = (i == failed_index) ?
+                              0 : (remotebuf.addr() + (i * SGL_LENGTH));
+            rkeys[i]        = remotebuf.rkey();
+        }
+    }
+
+    ucs_status_t post_sgl_zcopy(bool is_put_op, const mapped_buffer &localbuf,
+                                const uint64_t *remote_addrs,
+                                const uct_rkey_t *rkeys, op_completion *comp,
+                                size_t empty_index = NO_INDEX)
+    {
+        void *buffers[SGL_COUNT];
+        size_t lengths[SGL_COUNT];
+        uct_mem_h memhs[SGL_COUNT];
+
+        for (size_t i = 0; i < SGL_COUNT; ++i) {
+            buffers[i] = UCS_PTR_BYTE_OFFSET(localbuf.ptr(), i * SGL_LENGTH);
+            lengths[i] = (i == empty_index) ? 0 : SGL_LENGTH;
+            memhs[i]   = localbuf.memh();
+        }
+
+        init_completion(comp);
+        if (is_put_op) {
+            return uct_ep_put_sgl_zcopy(ep0(), buffers, lengths, memhs,
+                                        remote_addrs, rkeys, NULL, NULL,
+                                        SGL_COUNT, &comp->uct);
+        }
+
+        return uct_ep_get_sgl_zcopy(ep0(), buffers, lengths, memhs,
+                                    remote_addrs, rkeys, NULL, NULL, SGL_COUNT,
+                                    &comp->uct);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_first,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_middle,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, SGL_COUNT / 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_last,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, SGL_COUNT - 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_fail_first,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(false, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_fail_middle,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(false, SGL_COUNT / 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_fail_last,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(false, SGL_COUNT - 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy,
+                     put_after_failed_put_short,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_PUT_SHORT,
+                                 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_after_failed_put_short();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy,
+                     put_zcopy_after_failed_sgl,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY,
+                                 0, UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_put_zcopy_after_failed_sgl_zcopy();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_completion,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_completion(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, get_completion,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY))
+{
+    test_sgl_zcopy_completion(false);
+}
+
+/* Only put allows elements of zero length */
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_empty,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_empty_element_failure();
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_fail_after_empty,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_peer_failure(true, SGL_COUNT / 2, 0);
+}
+
+/* TODO: run on cuda_ipc when it supports zero-length SGL elements */
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_sgl_zcopy, put_completion_empty,
+                     has_cuda_ipc() ||
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE, 0,
+                                 UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY))
+{
+    test_sgl_zcopy_completion(true, SGL_COUNT / 2);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_sgl_zcopy, rc_mlx5)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_sgl_zcopy, cuda_ipc)

@@ -1,5 +1,5 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2019. ALL RIGHTS RESERVED.
+* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.All rights reserved.
 * See file LICENSE for terms.
@@ -8,6 +8,14 @@
 #include "test_rc.h"
 #include <uct/ib/rc/verbs/rc_verbs.h>
 #include <uct/test_peer_failure.h>
+
+#include <memory>
+#include <vector>
+
+extern "C" {
+#include <ucs/arch/cpu.h>
+#include <uct/api/v2/uct_v2.h>
+}
 
 #ifdef HAVE_MLX5_DV
 extern "C" {
@@ -140,6 +148,231 @@ UCS_TEST_P(test_rc, fence_am_short_consumed, "RC_FENCE=weak")
 
     ASSERT_UCS_OK(uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
     EXPECT_EQ(rc_iface(m_e1)->tx.fi.fence_beat, fence_info->fence_beat);
+}
+
+void test_rc::test_sgl_reserve(bool add_pending)
+{
+    uct_iface_attr_v2_t attr = {};
+    const size_t length      = 64;
+    const size_t count       = 2;
+    ucs_status_t status;
+    uct_pending_req_t pend_req;
+
+    attr.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                      UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+    ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+    if (!(attr.cap.flags & UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY) ||
+        (attr.max_put_sgl_zcopy_count < count)) {
+        UCS_TEST_SKIP_R("put_sgl_zcopy is not supported");
+    }
+
+    mapped_buffer s0(length, 0ul, *m_e1), s1(length, 0ul, *m_e1);
+    mapped_buffer r0(length, 0ul, *m_e2), r1(length, 0ul, *m_e2);
+    void *buffers[]    = {s0.ptr(), s1.ptr()};
+    size_t lengths[]   = {length, length};
+    uct_mem_h memhs[]  = {s0.memh(), s1.memh()};
+    uint64_t raddrs[]  = {r0.addr(), r1.addr()};
+    uct_rkey_t rkeys[] = {r0.rkey(), r1.rkey()};
+
+    /* A single PUT SHORT consumes exactly one TXQP credit */
+    const int16_t initial = uct_rc_txqp_available(&rc_ep(m_e1)->txqp);
+    for (int16_t i = initial; i > (int16_t)(count - 1); --i) {
+        ASSERT_UCS_OK(uct_ep_put_short(m_e1->ep(0), s0.ptr(), 8, r0.addr(),
+                                       r0.rkey()));
+    }
+
+    ASSERT_EQ(uct_rc_txqp_available(&rc_ep(m_e1)->txqp), (int16_t)(count - 1));
+    ASSERT_GT(rc_iface(m_e1)->tx.cq_available, (int16_t)(count - 1));
+
+    status = uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs, raddrs,
+                                  rkeys, NULL, NULL, count, NULL);
+    ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_GT(rc_ep(m_e1)->txqp_reserve, 0);
+
+    if (add_pending) {
+        pend_req.func = [](uct_pending_req_t*) -> ucs_status_t {
+            return UCS_ERR_NO_RESOURCE;
+        };
+
+        ASSERT_UCS_OK(uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                   raddrs, rkeys, NULL, NULL, count, NULL));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+              uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0));
+
+    if (add_pending) {
+        /* The pending request never completes, so purge it to drop the
+         * reserve */
+        uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+    }
+
+    /* Without pending requests, the reserve is dropped on TX completion */
+    flush();
+
+    EXPECT_EQ(0, rc_ep(m_e1)->txqp_reserve);
+    EXPECT_EQ(0, rc_ep(m_e1)->cq_reserve);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_pending_am_order,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING  |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, sgl_reserve_released_on_completion,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PUT_SHORT))
+{
+    test_sgl_reserve(false);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_strong_fence,
+                     GetParam()->tl_name != "rc_mlx5",
+                     "IB_PCI_RELAXED_ORDERING=yes")
+{
+#ifdef HAVE_MLX5_DV
+    uct_rc_mlx5_iface_common_t *iface =
+            ucs_derived_of(m_e1->iface(), uct_rc_mlx5_iface_common_t);
+
+    EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
+              iface->config.put_fence_flag);
+    EXPECT_EQ(UCT_IB_MLX5_WQE_CTRL_FLAG_STRONG_ORDER,
+              iface->config.atomic_fence_flag);
+#endif
+}
+
+UCS_TEST_SKIP_COND_P(test_rc, relaxed_order_required_rejects_verbs,
+                     GetParam()->tl_name != "rc_verbs")
+{
+    uct_ib_md_t *md                  = uct_ib_iface_md(&rc_iface(m_e1)->super);
+    int saved_relaxed_order_required = md->relaxed_order_required;
+    uct_iface_h iface                = NULL;
+    ucs_status_t status;
+
+    md->relaxed_order_required = 1;
+    status = uct_iface_open(m_e1->md(), m_e1->worker(), &m_e1->iface_params(),
+                            m_iface_config, &iface);
+    md->relaxed_order_required = saved_relaxed_order_required;
+
+    if (status == UCS_OK) {
+        uct_iface_close(iface);
+    }
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+}
+
+/* Synthesize an error receive completion by replacing the poll_cq() operation
+ * of the device context: receive work requests go to the shared receive queue,
+ * which verbs can not move to an error state. */
+static struct {
+    struct ibv_cq      *cq;
+    void               *desc;
+    int                inject;
+} failed_rx;
+
+static int failed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
+                             struct ibv_wc *wc)
+{
+    if ((cq != failed_rx.cq) || (num_entries < 1) || !failed_rx.inject) {
+        return 0;
+    }
+
+    failed_rx.inject = 0;
+    wc[0].status     = IBV_WC_REM_ABORT_ERR;
+    wc[0].wr_id      = (uintptr_t)failed_rx.desc;
+    return 1;
+}
+
+static bool is_desc_in_pool(ucs_mpool_t *mp, void *desc)
+{
+    ucs_mpool_elem_t *elem;
+
+    for (elem = mp->freelist; elem != NULL; elem = elem->next) {
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof(*elem));
+        if (UCS_PTR_BYTE_OFFSET(elem, sizeof(*elem)) == desc) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* The repost batch must stay above the single completion reported here, so
+ * that the released descriptor is not posted again. */
+UCS_TEST_SKIP_COND_P(test_rc, failed_rx_release_desc,
+                     GetParam()->tl_name != "rc_verbs", "IB_RX_MAX_BATCH=16")
+{
+    uct_rc_iface_t *rc = rc_iface(m_e2);
+
+    if (ucs_derived_of(rc, uct_rc_verbs_iface_t)->srq == NULL) {
+        UCS_TEST_SKIP_R("SRQ is disabled");
+    }
+
+    failed_rx.desc = ucs_mpool_get(&rc->rx.mp);
+    ASSERT_TRUE(failed_rx.desc != NULL);
+
+    failed_rx.cq     = rc->super.cq[UCT_IB_DIR_RX];
+    failed_rx.inject = 1;
+
+    ucs::mock mock;
+    mock.setup(&failed_rx.cq->context->ops.poll_cq, failed_rx_poll_cq);
+
+    progress();
+    ASSERT_FALSE(failed_rx.inject);
+
+    /* The completion was reported for a work request the queue never held */
+    rc->rx.srq.available--;
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, failed_rx.desc))
+            << "receive descriptor leaked";
+}
+
+/* A transport which fails to initialize an endpoint must remove it from
+ * iface->ep_list, or uct_rc_iface_flush() would touch freed memory. */
+UCS_TEST_SKIP_COND_P(test_rc, ep_init_failure_removed_from_ep_list,
+                     GetParam()->tl_name != "rc_verbs")
+{
+    /* rx.max_bufs bounds the receive pool below rx.queue_len, and pinning
+     * rx.bufs_grow keeps the pool valid regardless of rx.queue_len. */
+    if (uct_config_modify(m_iface_config, "IB_RX_MAX_BUFS", "8") != UCS_OK) {
+        UCS_TEST_SKIP_R("cannot limit the receive buffer pool");
+    }
+
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_BUFS_GROW", "8"));
+
+    ucs::handle<uct_iface_h> new_iface;
+    UCS_TEST_CREATE_HANDLE(uct_iface_h, new_iface, uct_iface_close,
+                           uct_iface_open, m_e1->md(), m_e1->worker(),
+                           &m_e1->iface_params(), m_iface_config);
+
+    uct_rc_iface_t *rc = ucs_derived_of(new_iface.get(), uct_rc_iface_t);
+    if (rc->rx.srq.quota == 0) {
+        UCS_TEST_SKIP_R("SRQ is disabled");
+    }
+
+    /* Compare the entry rather than walk the list, to not read freed memory. */
+    ucs_list_link_t *first = rc->ep_list.next;
+
+    uct_ep_params_t ep_params;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = new_iface.get();
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    scoped_log_handler wrap_warn(wrap_warns_logger);
+    uct_ep_h ep          = NULL;
+    ucs_status_t status  = uct_ep_create(&ep_params, &ep);
+
+    if (ep != NULL) {
+        uct_ep_destroy(ep); /* an unexpected ep would add a cleanup warning */
+    }
+
+    ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+    EXPECT_EQ(first, rc->ep_list.next);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
@@ -276,6 +509,1287 @@ UCS_TEST_SKIP_COND_P(test_rc_max_wr, send_limit,
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
 
+#ifdef HAVE_MLX5_DV
+class test_rc_mlx5_bf_copy : public test_rc {
+public:
+    virtual void init()
+    {
+        test_rc::init();
+
+        if (!check_bf_caps()) {
+            cleanup();
+            UCS_TEST_SKIP_R("write-combining UAR is not supported");
+        }
+
+        m_rx_count  = 0;
+        m_rx_errors = 0;
+        uct_iface_set_am_handler(m_e2->iface(), AM_ID, am_handler, this, 0);
+    }
+
+    /* BlueFlame writes the full WQE to the MMIO register, which is only valid
+     * when the UAR is write-combining. */
+    bool check_bf_caps()
+    {
+        FOR_EACH_ENTITY(entity) {
+            uct_ib_mlx5_md_t *md = ucs_derived_of((*entity)->md(),
+                                                  uct_ib_mlx5_md_t);
+            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_UAR_USE_WC)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+protected:
+    enum {
+        AM_ID       = 0,
+        NUM_ITERS   = 512,
+        MAX_PAYLOAD = UCT_IB_MLX5_BF_REG_SIZE
+    };
+
+    /* Post AM shorts of varying size, so that single-BB and multi-BB BlueFlame
+     * copies and the send queue wrap-around are all exercised. */
+    void test_bf_copy()
+    {
+        uct_rc_mlx5_base_ep_t *ep;
+        uint8_t payload[MAX_PAYLOAD];
+        size_t max_len, len, i;
+        ucs_status_t status;
+        unsigned iter;
+
+        ep = ucs_derived_of(m_e1->ep(0), uct_rc_mlx5_base_ep_t);
+        ASSERT_TRUE(ep->tx.wq.reg != NULL);
+        ASSERT_EQ(UCT_IB_MLX5_MMIO_MODE_BF_POST, ep->tx.wq.reg->mode);
+
+        max_len = m_e1->iface_attr().cap.am.max_short - sizeof(uint64_t);
+        if (max_len > sizeof(payload)) {
+            max_len = sizeof(payload);
+        }
+
+        for (iter = 0; iter < NUM_ITERS; ++iter) {
+            len = iter % (max_len + 1);
+            for (i = 0; i < len; ++i) {
+                payload[i] = iter + i;
+            }
+
+            do {
+                status = uct_ep_am_short(m_e1->ep(0), AM_ID, iter, payload,
+                                         len);
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    progress_loop();
+                }
+            } while (status == UCS_ERR_NO_RESOURCE);
+
+            ASSERT_UCS_OK(status);
+        }
+
+        flush();
+        wait_for_value(&m_rx_count, (unsigned)NUM_ITERS, true);
+        EXPECT_EQ((unsigned)NUM_ITERS, m_rx_count);
+        EXPECT_EQ(0u, m_rx_errors);
+    }
+
+    static ucs_status_t am_handler(void *arg, void *data, size_t length,
+                                   unsigned flags)
+    {
+        test_rc_mlx5_bf_copy *self = reinterpret_cast<test_rc_mlx5_bf_copy*>(
+                arg);
+        const uint8_t *payload;
+        uint64_t hdr;
+        size_t i;
+
+        if (length < sizeof(hdr)) {
+            ++self->m_rx_errors;
+            return UCS_OK;
+        }
+
+        memcpy(&hdr, data, sizeof(hdr));
+        payload = reinterpret_cast<const uint8_t*>(data) + sizeof(hdr);
+
+        for (i = 0; i < (length - sizeof(hdr)); ++i) {
+            if (payload[i] != (uint8_t)(hdr + i)) {
+                ++self->m_rx_errors;
+                break;
+            }
+        }
+
+        ++self->m_rx_count;
+        return UCS_OK;
+    }
+
+    volatile unsigned m_rx_count;
+    volatile unsigned m_rx_errors;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_copy, generic,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=generic",
+                     "RC_FC_ENABLE?=n")
+{
+    test_bf_copy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_copy, rc_mlx5)
+
+#if UCT_IB_MLX5_HAVE_ST64B
+class test_rc_mlx5_bf_copy_st64b : public test_rc_mlx5_bf_copy {
+public:
+    virtual void init()
+    {
+        if (!ucs_cpu_has_flag(UCS_CPU_FLAG_LS64)) {
+            UCS_TEST_SKIP_R("CPU does not report LS64 support");
+        }
+
+        test_rc_mlx5_bf_copy::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_bf_copy_st64b, st64b,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT),
+                     "RC_MLX5_MMIO_MODE=bf_post",
+                     "RC_MLX5_BF_COPY_MODE=st64b",
+                     "RC_FC_ENABLE?=n")
+{
+    test_bf_copy();
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_bf_copy_st64b, rc_mlx5)
+#endif
+
+#endif
+
+
+/* Force rc_verbs to create QPs without an SRQ. */
+class test_rc_no_srq : public test_rc {
+protected:
+    static const int NUM_EPS = 2;
+    static const uint8_t RECOVERY_AM_ID = 1;
+
+    virtual void init() {
+        if (uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "n") !=
+            UCS_OK) {
+            UCS_TEST_ABORT("Error: cannot disable SRQ");
+        }
+
+        test_rc::init();
+
+        /* Fail instead of silently exercising the SRQ path. */
+        if (verbs_iface(m_e1)->srq != NULL) {
+            UCS_TEST_ABORT("SRQ is not disabled as requested");
+        }
+    }
+
+    /* Use two QPs to exercise receive posting across multiple endpoints. */
+    virtual void connect() {
+        for (int i = 0; i < NUM_EPS; i++) {
+            m_e1->connect(i, *m_e2, i);
+            m_e2->connect(i, *m_e1, i);
+        }
+
+        uct_iface_set_am_handler(m_e1->iface(), 0, am_dummy_handler, NULL, 0);
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
+    }
+
+    uct_rc_verbs_iface_t *verbs_iface(entity *e) {
+        return ucs_derived_of(rc_iface(e), uct_rc_verbs_iface_t);
+    }
+
+    uint16_t rx_max_wr(entity *e) {
+        return verbs_iface(e)->config.rx_max_wr;
+    }
+
+    uint16_t rx_available(entity *e, int ep_idx) {
+        return ucs_derived_of(rc_ep(e, ep_idx),
+                              uct_rc_verbs_ep_t)->rx_available;
+    }
+
+    void check_rx_config(entity *e, unsigned expected_batch) {
+        unsigned batch   = rc_iface(e)->super.config.rx_max_batch;
+        unsigned max_wr  = rx_max_wr(e);
+        unsigned prepost = ucs_min(2 * expected_batch, max_wr);
+
+        EXPECT_TRUE(rc_iface(e)->config.fc_enabled);
+        EXPECT_GT(batch, 0u);
+        EXPECT_EQ(expected_batch, batch);
+        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            EXPECT_EQ(rx_max_wr(e) - prepost, rx_available(e, ep_idx));
+        }
+
+        EXPECT_GT(rc_iface(e)->config.fc_wnd_size, 0);
+        EXPECT_LE(rc_iface(e)->config.fc_wnd_size +
+                  rc_iface(e)->config.fc_soft_thresh - 1,
+                  max_wr - batch + 1);
+    }
+
+    void check_rx_prepost_grows(unsigned expected_batch) {
+        unsigned am_count  = 0;
+        unsigned max_wr    = rx_max_wr(m_e2);
+        unsigned available = max_wr - ucs_min(2 * expected_batch, max_wr);
+
+        ASSERT_EQ(expected_batch, rc_iface(m_e2)->super.config.rx_max_batch);
+        ASSERT_EQ(available, rx_available(m_e2, 0));
+        ASSERT_EQ(available, rx_available(m_e2, 1));
+
+        uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                                 am_count_handler, &am_count, 0);
+        ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+        for (unsigned i = 0; i < expected_batch; i++) {
+            ASSERT_UCS_OK(send_am_message(m_e1, RECOVERY_AM_ID, 0));
+            wait_for_value(&am_count, i + 1, true);
+            ASSERT_EQ(i + 1, am_count);
+            EXPECT_EQ((available + i + 1) % expected_batch,
+                      rx_available(m_e2, 0));
+        }
+
+        EXPECT_EQ(available, rx_available(m_e2, 1));
+        flush();
+    }
+
+    int max_qp_wr() {
+        return IBV_DEV_ATTR(&ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev,
+                            max_qp_wr);
+    }
+
+    ucs_status_t open_iface(uct_iface_h *iface_p) {
+        return uct_iface_open(m_e1->md(), m_e1->worker(),
+                              &m_e1->iface_params(), m_iface_config, iface_p);
+    }
+
+    /* Open an interface with the given count of receive WRs per QP, to check
+     * if the interface accepts it. */
+    ucs_status_t try_rx_max_wr(const char *wr_count) {
+        uct_iface_h iface;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_MAX_WR",
+                                        wr_count));
+        status = open_iface(&iface);
+        if (status == UCS_OK) {
+            uct_iface_close(iface);
+        }
+
+        return status;
+    }
+
+    static ucs_status_t am_keep_desc(void *arg, void *data, size_t length,
+                                     unsigned flags)
+    {
+        std::vector<void*> *descs = (std::vector<void*>*)arg;
+
+        if (!(flags & UCT_CB_PARAM_FLAG_DESC)) {
+            return UCS_OK;
+        }
+
+        descs->push_back(data);
+        return UCS_INPROGRESS;
+    }
+
+    static ucs_status_t am_count_handler(void *arg, void *data, size_t length,
+                                         unsigned flags)
+    {
+        ++(*(unsigned*)arg);
+        return UCS_OK;
+    }
+
+    static void reset_am_count_handler(entity *e) {
+        uct_iface_set_am_handler(e->iface(), RECOVERY_AM_ID, am_dummy_handler,
+                                 NULL, 0);
+    }
+
+    /* Send one active message, waiting while the endpoint has no resources
+     * for it. */
+    void send_am_message_wait(entity *e, int ep_idx, uint8_t am_id = 0) {
+        ucs_status_t status = UCS_ERR_NO_RESOURCE;
+
+        wait_for_cond([&]() {
+            status = send_am_message(e, am_id, ep_idx);
+            return status != UCS_ERR_NO_RESOURCE;
+        }, [this]() { progress(); }, 10.0);
+
+        ASSERT_UCS_OK(status);
+    }
+
+    static ucs_log_func_rc_t
+    no_rx_bufs_log_handler(const char *file, unsigned line,
+                           const char *function, ucs_log_level_t level,
+                           const ucs_log_component_config_t *comp_conf,
+                           const char *message, va_list ap)
+    {
+        /* These tests intentionally exhaust the receive buffer pool and may
+         * attempt to create a QP while no receive descriptor is available. */
+        if (((level == UCS_LOG_LEVEL_WARN) &&
+             !strcmp(function, UCS_PP_QUOTE(uct_iface_mpool_empty_warn))) ||
+            ((level == UCS_LOG_LEVEL_ERROR) &&
+             !strcmp(function,
+                     UCS_PP_QUOTE(uct_rc_verbs_ep_prepost_recvs)))) {
+            UCS_TEST_MESSAGE << file << ":" << line << ": "
+                             << format_message(message, ap);
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    /* Whether some QP waits for receive buffers to post its receive WRs */
+    bool rx_post_recv_pending(entity *e) {
+        return verbs_iface(e)->rx_repost_needed;
+    }
+
+    bool rx_post_recv_waits(entity *e, int ep_idx) {
+        return rx_available(e, ep_idx) == rx_max_wr(e);
+    }
+
+    /* Hold received descriptors until a QP runs out of receive WRs and
+     * requests a retry from progress. */
+    void exhaust_rx_bufs(std::vector<void*> &descs, int num_eps = NUM_EPS) {
+        size_t expected = descs.size();
+
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_keep_desc, &descs, 0);
+
+        wait_for_cond([this]() { return rx_post_recv_pending(m_e2); }, [&]() {
+            ucs_status_t status;
+
+            for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
+                if (rx_post_recv_waits(m_e2, ep_idx)) {
+                    continue;
+                }
+
+                status = send_am_message(m_e1, 0, ep_idx);
+                if (status == UCS_OK) {
+                    expected++;
+                    /* Do not send past the last hardware WR while its CQE
+                     * still awaits receive-slot accounting. */
+                    wait_for_cond([&]() { return descs.size() == expected; },
+                                  [this]() { progress(); }, 5.0);
+                    if (descs.size() != expected) {
+                        UCS_TEST_ABORT("preparation receive did not complete");
+                    }
+                } else if (status != UCS_ERR_NO_RESOURCE) {
+                    UCS_TEST_ABORT("failed to send: " <<
+                                   ucs_status_string(status));
+                }
+
+                if (rx_post_recv_pending(m_e2)) {
+                    break;
+                }
+            }
+
+            progress();
+        }, 10.0);
+
+        if (!rx_post_recv_pending(m_e2)) {
+            UCS_TEST_ABORT("receive posting did not request a retry after the "
+                           "receive buffer pool was exhausted");
+        }
+
+        /* Observe every preparation message before replacing its handler. */
+        wait_for_cond([&]() { return descs.size() == expected; },
+                      [this]() { progress(); }, 5.0);
+        ASSERT_EQ(expected, descs.size());
+        flush(ucs::get_deadline(5.0));
+    }
+
+    /* Return receive descriptors to the pool, so that progress can post
+     * receives again. */
+    void release_rx_bufs(std::vector<void*> &descs, size_t first, size_t last) {
+        uct_iface_set_am_handler(m_e2->iface(), 0, am_dummy_handler, NULL, 0);
+
+        for (size_t i = first; i < last; i++) {
+            uct_iface_release_desc(descs[i]);
+        }
+    }
+
+    /* Index of the endpoint which gets receive buffers first once they are
+     * returned. */
+    int first_waiting_ep_index() {
+        uct_rc_ep_t *ep;
+
+        ucs_list_for_each(ep, &rc_iface(m_e2)->ep_list, list) {
+            for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+                if ((m_e2->ep(ep_idx) != NULL) &&
+                    (rc_ep(m_e2, ep_idx) == ep) &&
+                    rx_post_recv_waits(m_e2, ep_idx)) {
+                    return ep_idx;
+                }
+            }
+        }
+
+        UCS_TEST_ABORT("no waiting endpoint found");
+    }
+
+    /* Drain every QP while holding descriptors, so recovery cannot depend on
+     * an unpolled preparation completion or a receive WR still on the QP. */
+    void exhaust_empty_rx_qps(std::vector<void*> &descs,
+                              uint16_t *prev_available) {
+        exhaust_rx_bufs(descs);
+
+        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            wait_for_cond([&]() {
+                return rx_post_recv_waits(m_e2, ep_idx);
+            }, [&]() {
+                size_t expected = descs.size() + 1;
+
+                send_am_message_wait(m_e1, ep_idx);
+                wait_for_cond([&]() { return descs.size() == expected; },
+                              [this]() { progress(); }, 5.0);
+                if (descs.size() != expected) {
+                    UCS_TEST_ABORT("preparation receive did not complete");
+                }
+            }, 5.0);
+
+            if (rx_available(m_e2, ep_idx) != rx_max_wr(m_e2)) {
+                UCS_TEST_ABORT("receive queue did not become empty");
+            }
+
+            prev_available[ep_idx] = rx_available(m_e2, ep_idx);
+        }
+
+        flush(ucs::get_deadline(5.0));
+        if (!rx_post_recv_pending(m_e2)) {
+            UCS_TEST_ABORT("empty receive queues did not request a retry");
+        }
+    }
+
+    bool qp_gc_list_empty() {
+        return ucs_list_is_empty(&rc_iface(m_e1)->qp_gc_list) &&
+               ucs_list_is_empty(&rc_iface(m_e2)->qp_gc_list);
+    }
+
+    /* Poll flush completions for QPs pending destruction. Use a short timeout
+     * so a broken drain fails before the test watchdog expires. */
+    void wait_qp_gc_list_empty() {
+        wait_for_cond([this]() { return qp_gc_list_empty(); },
+                      [this]() { progress(); }, 5.0);
+        EXPECT_TRUE(qp_gc_list_empty());
+    }
+
+    /* Verify that receive posting skips an endpoint which is marked as being
+     * removed: flow control requests are ignored for it, so it must not
+     * receive any more. Check one of the marks used for that. */
+    void expect_no_repost_on_marked_ep(uint8_t ep_mark) {
+        scoped_log_handler slh(no_rx_bufs_log_handler);
+        unsigned batch = verbs_iface(m_e2)->super.super.config.rx_max_batch;
+        std::vector<void*> descs;
+        uint16_t prev_available[NUM_EPS];
+
+        exhaust_empty_rx_qps(descs, prev_available);
+        rc_ep(m_e2, 0)->flags |= ep_mark;
+        release_rx_bufs(descs, 0, descs.size());
+        progress_loop();
+
+        EXPECT_EQ(prev_available[0], rx_available(m_e2, 0));
+        EXPECT_EQ(prev_available[1] - batch, rx_available(m_e2, 1));
+        EXPECT_FALSE(rx_post_recv_pending(m_e2));
+        rc_ep(m_e2, 0)->flags &= ~ep_mark;
+
+        /* The other QP was refilled by progress, so its next completion can
+         * exercise the guard without directly posting receive WRs. */
+        prev_available[1] = rx_available(m_e2, 1);
+        ASSERT_LT(prev_available[1], rx_max_wr(m_e2));
+        ASSERT_UCS_OK(send_am_message(m_e1, 0, 1));
+        rc_ep(m_e2, 1)->flags |= ep_mark;
+        progress_loop();
+        EXPECT_EQ(prev_available[1] + 1, rx_available(m_e2, 1));
+
+        /* A marked endpoint ignores flow control requests and must not have
+         * anything scheduled on it later, so do not leave it in this state. */
+        rc_ep(m_e2, 1)->flags &= ~ep_mark;
+    }
+};
+
+UCS_TEST_P(test_rc_no_srq, last_wqe_after_rx_drain)
+{
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e1);
+    unsigned quota              = iface->rx_cq_available;
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+
+    m_e1->destroy_ep(0);
+    ASSERT_EQ(1ul, ucs_list_length(&iface->super.qp_gc_list));
+    cleanup_ctx = ucs_list_head(&iface->super.qp_gc_list,
+                                uct_rc_verbs_iface_qp_cleanup_ctx_t,
+                                super.list);
+    ASSERT_GT(cleanup_ctx->rx_remaining, 0u);
+
+    /* Progress only the iface to verify that draining schedules cleanup. */
+    wait_for_cond([&]() {
+        return ucs_list_is_empty(&iface->super.qp_gc_list) ||
+               (cleanup_ctx->rx_remaining == 0);
+    }, [this]() { uct_iface_progress(m_e1->iface()); }, 5.0);
+
+    ASSERT_FALSE(ucs_list_is_empty(&iface->super.qp_gc_list));
+    EXPECT_EQ(0u, cleanup_ctx->rx_remaining);
+    EXPECT_NE(UCS_CALLBACKQ_ID_NULL, cleanup_ctx->super.super.cb_id);
+    EXPECT_EQ(quota, iface->rx_cq_available);
+
+    wait_qp_gc_list_empty();
+    EXPECT_EQ(quota + rx_max_wr(m_e1), iface->rx_cq_available);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_already_drained,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    scoped_log_handler slh(hide_warns_logger);
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e1);
+    unsigned quota              = iface->rx_cq_available;
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+
+    send_am_messages(m_e1, 8, UCS_OK);
+    ASSERT_UCS_OK_OR_INPROGRESS(
+            uct_ep_flush(m_e1->ep(0), UCT_FLUSH_FLAG_CANCEL, NULL));
+    ASSERT_TRUE(rc_ep(m_e1)->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL);
+
+    wait_for_cond([this]() {
+        return rx_available(m_e1, 0) == rx_max_wr(m_e1);
+    }, [this]() { uct_iface_progress(m_e1->iface()); }, 5.0);
+    ASSERT_EQ(rx_max_wr(m_e1), rx_available(m_e1, 0));
+
+    /* No receive WR remains, so no later RX CQE can trigger cleanup. */
+    m_e1->destroy_ep(0);
+    ASSERT_EQ(1ul, ucs_list_length(&iface->super.qp_gc_list));
+    cleanup_ctx = ucs_list_head(&iface->super.qp_gc_list,
+                                uct_rc_verbs_iface_qp_cleanup_ctx_t,
+                                super.list);
+    EXPECT_EQ(0u, cleanup_ctx->rx_remaining);
+    EXPECT_NE(UCS_CALLBACKQ_ID_NULL, cleanup_ctx->super.super.cb_id);
+
+    wait_qp_gc_list_empty();
+    EXPECT_EQ(quota + rx_max_wr(m_e1), iface->rx_cq_available);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, last_wqe_from_am_callback,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_VERBS_RX_MAX_WR=2", "IB_RX_MAX_BATCH=1",
+                     "RC_FC_ENABLE=n")
+{
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e2);
+    int quota                   = iface->rx_cq_available;
+    struct destroy_ctx {
+        entity *receiver;
+        uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
+        unsigned rx_remaining;
+    } ctx = {m_e2, NULL, 0};
+
+    ASSERT_EQ(2u, iface->config.rx_max_wr);
+    ASSERT_EQ(0, rx_available(m_e2, 0));
+    ASSERT_TRUE(ucs_list_is_empty(&iface->super.qp_gc_list));
+
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+            [](void *arg, void *data, size_t length, unsigned flags) {
+                destroy_ctx *ctx = static_cast<destroy_ctx*>(arg);
+                uct_rc_verbs_iface_t *iface = ucs_derived_of(
+                        ctx->receiver->iface(), uct_rc_verbs_iface_t);
+
+                ctx->receiver->destroy_ep(0);
+                ctx->cleanup_ctx = ucs_list_head(&iface->super.qp_gc_list,
+                        uct_rc_verbs_iface_qp_cleanup_ctx_t, super.list);
+                ctx->rx_remaining = ctx->cleanup_ctx->rx_remaining;
+                return UCS_OK;
+            }, &ctx, 0);
+    ucs::handle<entity*> handler(m_e2, reset_am_count_handler);
+
+    ASSERT_UCS_OK(send_am_message(m_e1, RECOVERY_AM_ID, 0));
+    /* Progress only the iface, leaving the cleanup callback pending. */
+    wait_for_cond([&]() { return ctx.cleanup_ctx != NULL; },
+                  [this]() { uct_iface_progress(m_e2->iface()); }, 5.0);
+    ASSERT_TRUE(ctx.cleanup_ctx != NULL);
+    EXPECT_EQ(2u, ctx.rx_remaining);
+    EXPECT_LT(ctx.cleanup_ctx->rx_remaining, ctx.rx_remaining);
+
+    wait_for_cond([&]() { return ctx.cleanup_ctx->rx_remaining == 0; },
+                  [this]() { uct_iface_progress(m_e2->iface()); }, 5.0);
+    ASSERT_EQ(0u, ctx.cleanup_ctx->rx_remaining);
+    EXPECT_NE(UCS_CALLBACKQ_ID_NULL, ctx.cleanup_ctx->super.super.cb_id);
+    EXPECT_EQ(quota, iface->rx_cq_available);
+
+    wait_qp_gc_list_empty();
+    EXPECT_EQ(quota + 2, iface->rx_cq_available);
+}
+
+/* Limit the refill batch to a quarter of the per-QP queue and reserve
+ * receive WRs for messages sent before a flow control grant. */
+UCS_TEST_P(test_rc_no_srq, rx_config, "IB_RX_MAX_BATCH=16",
+           "RC_VERBS_RX_MAX_WR=32", "RC_FC_ENABLE=y")
+{
+    check_rx_config(m_e1, 8);
+    check_rx_config(m_e2, 8);
+}
+
+UCS_TEST_P(test_rc_no_srq, rx_batch_limits,
+           "RC_VERBS_RX_MAX_WR=128", "RC_FC_ENABLE=y")
+{
+    const struct {
+        const char *max_batch;
+        const char *queue_len;
+        unsigned expected_batch;
+    } configs[] = {{"0", NULL, 1}, {"16", "1", 16}, {"16", "32", 16}};
+
+    for (const auto &config : configs) {
+        SCOPED_TRACE(::testing::Message() << "RX_MAX_BATCH=" << config.max_batch
+                     << " RX_QUEUE_LEN=" <<
+                     ((config.queue_len == NULL) ? "unchanged" :
+                                                   config.queue_len));
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_MAX_BATCH",
+                                        config.max_batch));
+        if (config.queue_len != NULL) {
+            ASSERT_UCS_OK(uct_config_modify(m_iface_config, "IB_RX_QUEUE_LEN",
+                                            config.queue_len));
+        }
+
+        entity *e = create_entity(0);
+        m_entities.push_back(e);
+        for (int ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+            e->create_ep(ep_idx);
+            ASSERT_TRUE(e->ep(ep_idx) != NULL);
+        }
+
+        check_rx_config(e, config.expected_batch);
+        e->destroy_eps();
+        m_entities.remove(e);
+    }
+}
+
+UCS_TEST_P(test_rc_no_srq, fc_window,
+           "IB_RX_MAX_BATCH=16", "RC_VERBS_RX_MAX_WR=128",
+           "RC_FC_ENABLE=y", "RC_FC_WND_SIZE=512",
+           "RC_FC_SOFT_THRESH=0.5", "RC_FC_HARD_THRESH=0.25")
+{
+    const struct {
+        const char *max_wr;
+        const char *soft_thresh;
+        unsigned expected_window;
+    } configs[] = {{"128", "0.5", 75}, {"128", "0.75", 64},
+                   {"48", "0.5", 24}, {"48", "0.75", 21},
+                   {"1", "0.5", 1}};
+
+    for (const auto &config : configs) {
+        SCOPED_TRACE(::testing::Message() << "RX_MAX_WR=" << config.max_wr
+                     << " FC_SOFT_THRESH=" << config.soft_thresh);
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_MAX_WR",
+                                        config.max_wr));
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_FC_SOFT_THRESH",
+                                        config.soft_thresh));
+
+        uct_iface_h iface   = NULL;
+        ucs_status_t status = open_iface(&iface);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(config.expected_window,
+                  ucs_derived_of(iface, uct_rc_verbs_iface_t)->
+                          super.config.fc_wnd_size);
+        uct_iface_close(iface);
+    }
+}
+
+UCS_TEST_P(test_rc_no_srq, fc_soft_thresh_invalid,
+           "RC_FC_ENABLE=y", "RC_FC_SOFT_THRESH=0.5",
+           "RC_FC_HARD_THRESH=0.25")
+{
+    scoped_log_handler slh(wrap_errors_logger);
+
+    for (const char *value : {"-1", "0", "0.25", "1", "inf"}) {
+        SCOPED_TRACE(::testing::Message() << "FC_SOFT_THRESH=" << value);
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_FC_SOFT_THRESH",
+                                        value));
+
+        uct_iface_h iface   = NULL;
+        ucs_status_t status = open_iface(&iface);
+        if (status == UCS_OK) {
+            uct_iface_close(iface);
+        }
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+    }
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_prepost_grows,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "IB_RX_MAX_BATCH=16", "RC_VERBS_RX_MAX_WR=128",
+                     "IB_RX_MAX_BUFS=-1", "RC_FC_ENABLE=n")
+{
+    check_rx_prepost_grows(16);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rx_prepost_grows_batch_one,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "IB_RX_MAX_BATCH=1", "RC_VERBS_RX_MAX_WR=128",
+                     "IB_RX_MAX_BUFS=-1", "RC_FC_ENABLE=n")
+{
+    check_rx_prepost_grows(1);
+}
+
+/* Report a real receive completion as failed, to exercise the error path of a
+ * QP which has its own receive queue: the completion carries a valid QP
+ * number, which the accounting of such a QP looks up. */
+static struct {
+    struct ibv_cq *cq;
+    int           (*poll_cq)(struct ibv_cq*, int, struct ibv_wc*);
+    void          *desc;
+    uint32_t      qp_num;
+    int           reported;
+} flushed_rx;
+
+static int flushed_rx_poll_cq(struct ibv_cq *cq, int num_entries,
+                              struct ibv_wc *wc)
+{
+    int count = flushed_rx.poll_cq(cq, num_entries, wc);
+
+    if ((cq == flushed_rx.cq) && (count > 0) && !flushed_rx.reported &&
+        (wc[0].status == IBV_WC_SUCCESS)) {
+        flushed_rx.desc     = (void*)(uintptr_t)wc[0].wr_id;
+        flushed_rx.qp_num   = wc[0].qp_num;
+        flushed_rx.reported = 1;
+        wc[0].status        = IBV_WC_WR_FLUSH_ERR;
+    }
+
+    return count;
+}
+
+/* A flushed receive WR delivers no active message, so its descriptor must be
+ * released and its slot must not be posted again. The repost batch is one, so
+ * that reposting the slot would be visible. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, failed_rx_release_desc,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "IB_RX_MAX_BATCH=1")
+{
+    uct_rc_iface_t *rc      = rc_iface(m_e2);
+    uint16_t prev_available = rx_available(m_e2, 0);
+
+    ASSERT_EQ(1u, rc->super.config.rx_max_batch);
+    ASSERT_EQ(rx_max_wr(m_e2) - ucs_min(2u, rx_max_wr(m_e2)), prev_available);
+
+    flushed_rx.cq       = rc->super.cq[UCT_IB_DIR_RX];
+    flushed_rx.poll_cq  = flushed_rx.cq->context->ops.poll_cq;
+    flushed_rx.desc     = NULL;
+    flushed_rx.reported = 0;
+
+    ucs::mock mock;
+    mock.setup(&flushed_rx.cq->context->ops.poll_cq, flushed_rx_poll_cq);
+
+    send_am_messages(m_e1, 1, UCS_OK, 0, 0);
+    wait_for_value(&flushed_rx.reported, 1, true);
+    ASSERT_TRUE(flushed_rx.reported);
+
+    /* The completion of this test is reported for the first QP only. */
+    ASSERT_EQ(ucs_derived_of(rc_ep(m_e2, 0), uct_rc_verbs_ep_t)->qp->qp_num,
+              flushed_rx.qp_num);
+
+    EXPECT_TRUE(is_desc_in_pool(&rc->rx.mp, flushed_rx.desc))
+            << "receive descriptor leaked";
+    EXPECT_EQ(prev_available + 1, rx_available(m_e2, 0));
+}
+
+/* Two 384-entry receive queues can hold 768 descriptors. Limit the pool to
+ * 1024 descriptors, so holding received descriptors eventually exhausts it
+ * and prevents receive reposting from the completion path. */
+#define UCT_TEST_NO_RX_BUFS_CONFIG \
+    "IB_RX_MAX_BUFS~=1024", "RC_VERBS_RX_MAX_WR~=384"
+
+/* Verify that progress retries receive posting after the shared receive buffer
+ * pool is exhausted and descriptors are returned. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    unsigned am_count   = 0;
+    std::vector<void*> descs;
+    unsigned prev_total = 0;
+    unsigned total      = 0;
+    int ep_idx;
+
+    exhaust_rx_bufs(descs);
+
+    for (ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+        prev_total += rx_available(m_e2, ep_idx);
+    }
+
+    /* Returning the descriptors must allow progress to repost receives. */
+    release_rx_bufs(descs, 0, descs.size());
+
+    wait_for_cond([this]() { return !rx_post_recv_pending(m_e2); },
+                  [this]() { progress(); }, 5.0);
+    EXPECT_FALSE(rx_post_recv_pending(m_e2));
+
+    /* Verify that the waiting QPs reduced the total number of free receive WR
+     * slots. */
+    for (ep_idx = 0; ep_idx < NUM_EPS; ep_idx++) {
+        total += rx_available(m_e2, ep_idx);
+    }
+
+    EXPECT_LT(total, prev_total);
+
+    /* Count only recovery messages, not delayed preparation messages. */
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                             am_count_handler, &am_count, 0);
+    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+    send_am_message_wait(m_e1, 0, RECOVERY_AM_ID);
+    wait_for_value(&am_count, 1u, true);
+    EXPECT_EQ(1u, am_count);
+    flush(ucs::get_deadline(5.0));
+}
+
+/* Verify that the QP which the shared receive buffer pool left short gets the
+ * next batch of receive WRs, before a QP which already got one. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_order,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    unsigned batch    = verbs_iface(m_e2)->super.super.config.rx_max_batch;
+    unsigned am_count = 0;
+    std::vector<void*> descs;
+    uint16_t prev_available[NUM_EPS];
+    int short_ep, first_ep;
+
+    exhaust_empty_rx_qps(descs, prev_available);
+    ASSERT_GT(batch, 1u);
+    ASSERT_GE(descs.size(), batch + 1);
+    first_ep = first_waiting_ep_index();
+
+    /* A single WR is enough to resume completion-driven reposting. */
+    release_rx_bufs(descs, 0, 1);
+    progress_loop();
+    EXPECT_EQ(prev_available[first_ep] - 1, rx_available(m_e2, first_ep));
+    EXPECT_FALSE(rx_post_recv_waits(m_e2, first_ep));
+    EXPECT_TRUE(rx_post_recv_pending(m_e2));
+
+    short_ep = first_waiting_ep_index();
+    EXPECT_NE(first_ep, short_ep);
+    EXPECT_EQ(prev_available[short_ep], rx_available(m_e2, short_ep));
+    progress_loop();
+    EXPECT_TRUE(rx_post_recv_pending(m_e2));
+    EXPECT_EQ(prev_available[short_ep], rx_available(m_e2, short_ep));
+
+    /* The next batch reaches the empty QP, not the partially filled one. */
+    release_rx_bufs(descs, 1, batch + 1);
+    progress_loop();
+    EXPECT_EQ(prev_available[first_ep] - 1, rx_available(m_e2, first_ep));
+    EXPECT_EQ(prev_available[short_ep] - batch, rx_available(m_e2, short_ep));
+    EXPECT_FALSE(rx_post_recv_pending(m_e2));
+    release_rx_bufs(descs, batch + 1, descs.size());
+
+    /* Consuming the single posted WR must trigger completion-driven refill. */
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                             am_count_handler, &am_count, 0);
+    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+    send_am_message_wait(m_e1, first_ep, RECOVERY_AM_ID);
+    wait_for_value(&am_count, 1u, true);
+    EXPECT_EQ(rx_max_wr(m_e2) % batch, rx_available(m_e2, first_ep));
+    flush(ucs::get_deadline(5.0));
+}
+
+/* Verify that destroying an empty QP at the retry position leaves the other
+ * QP reachable by the next scan. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_ep_destroy,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    unsigned batch = verbs_iface(m_e2)->super.super.config.rx_max_batch;
+    std::vector<void*> descs;
+    uint16_t prev_available[NUM_EPS];
+    int first_ep, other_ep;
+
+    exhaust_empty_rx_qps(descs, prev_available);
+    first_ep = first_waiting_ep_index();
+    other_ep = (first_ep == 0) ? 1 : 0;
+
+    m_e2->destroy_ep(first_ep);
+    EXPECT_EQ(other_ep, first_waiting_ep_index());
+
+    /* The remaining QP must still get receive WRs posted. */
+    release_rx_bufs(descs, 0, descs.size());
+    progress_loop();
+    EXPECT_EQ(prev_available[other_ep] - batch,
+              rx_available(m_e2, other_ep));
+    EXPECT_FALSE(rx_post_recv_pending(m_e2));
+
+    wait_qp_gc_list_empty();
+}
+
+/* Verify that destroying all empty QPs clears a stale interface retry flag. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_waiting_all_eps_destroy,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    std::vector<void*> descs;
+    uint16_t prev_available[NUM_EPS];
+
+    exhaust_empty_rx_qps(descs, prev_available);
+    m_e2->destroy_eps();
+    EXPECT_TRUE(ucs_list_is_empty(&rc_iface(m_e2)->ep_list));
+    EXPECT_TRUE(rx_post_recv_pending(m_e2));
+    uct_iface_progress(m_e2->iface());
+    EXPECT_FALSE(rx_post_recv_pending(m_e2));
+    release_rx_bufs(descs, 0, descs.size());
+    wait_qp_gc_list_empty();
+}
+
+/* Verify that receive posting recovers on every QP when many QPs share an
+ * exhausted receive buffer pool. 16 receive queues of 32 WRs can hold 512
+ * descriptors, so a pool of 576 leaves little room for reposting. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_many_eps,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     "IB_RX_MAX_BUFS~=576", "RC_VERBS_RX_MAX_WR~=32")
+{
+    const int many_eps = 16;
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    unsigned am_count   = 0;
+    std::vector<void*> descs;
+    int ep_idx;
+
+    for (ep_idx = NUM_EPS; ep_idx < many_eps; ep_idx++) {
+        m_e1->connect(ep_idx, *m_e2, ep_idx);
+        m_e2->connect(ep_idx, *m_e1, ep_idx);
+    }
+
+    exhaust_rx_bufs(descs, many_eps);
+    release_rx_bufs(descs, 0, descs.size());
+
+    /* Every QP delivers one recovery AM with a separate ID from preparation. */
+    uct_iface_set_am_handler(m_e2->iface(), RECOVERY_AM_ID,
+                             am_count_handler, &am_count, 0);
+    ucs::handle<entity*> count_handler(m_e2, reset_am_count_handler);
+    for (ep_idx = 0; ep_idx < many_eps; ep_idx++) {
+        send_am_message_wait(m_e1, ep_idx, RECOVERY_AM_ID);
+    }
+
+    wait_for_value(&am_count, (unsigned)many_eps, true);
+    EXPECT_EQ((unsigned)many_eps, am_count);
+    flush(ucs::get_deadline(5.0));
+}
+
+/* Verify that fallback receive posting skips an endpoint marked for flush
+ * cancellation after the receive buffer pool is exhausted. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_flush_cancel_ep,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    expect_no_repost_on_marked_ep(UCT_RC_EP_FLAG_FLUSH_CANCEL);
+}
+
+/* Verify that fallback receive posting skips an endpoint which the error
+ * handler marked, as its QP is in the error state then. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_failed_ep,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    expect_no_repost_on_marked_ep(UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED);
+}
+
+/* Verify that endpoint creation fails when no receive WR can be posted, but
+ * succeeds when the pool can supply only part of RC_VERBS_RX_MAX_WR. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, no_rx_bufs_ep_create,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     UCT_TEST_NO_RX_BUFS_CONFIG)
+{
+    const unsigned num_spare = 4;
+    scoped_log_handler slh(no_rx_bufs_log_handler);
+    std::vector<void*> descs;
+    ucs::handle<uct_ep_h> ep;
+    uct_ep_params_t ep_params;
+    uct_ep_h failed_ep;
+    ucs_status_t status;
+
+    exhaust_rx_bufs(descs);
+    ASSERT_GT(descs.size(), num_spare);
+
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e2->iface();
+
+    /* No receive descriptor is available, so endpoint creation must fail. */
+    status = uct_ep_create(&ep_params, &failed_ep);
+    if (status == UCS_OK) {
+        /* Destroy an unexpected endpoint, since the interface would report it
+         * as not destroyed at cleanup, and that warning would hide this
+         * failure behind an extra one. */
+        uct_ep_destroy(failed_ep);
+    }
+    ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+
+    /* Return descriptors without progressing the existing QPs, so the new QP
+     * can post only these receive WRs. */
+    release_rx_bufs(descs, 0, num_spare);
+
+    UCS_TEST_CREATE_HANDLE(uct_ep_h, ep, uct_ep_destroy, uct_ep_create,
+                           &ep_params);
+    EXPECT_EQ(rx_max_wr(m_e2) - num_spare,
+              ucs_derived_of(ep.get(), uct_rc_verbs_ep_t)->rx_available);
+
+    /* The posted receive WRs must also be drained when the QP is destroyed. */
+    ep.reset();
+    release_rx_bufs(descs, num_spare, descs.size());
+
+    wait_qp_gc_list_empty();
+}
+
+/* Each endpoint reserves its full receive queue in the RX CQ. */
+UCS_TEST_P(test_rc_no_srq, rx_cq_num_eps,
+           "RC_VERBS_RX_CQ_LEN=128", "RC_VERBS_RX_MAX_WR=32")
+{
+    const int num_eps           = 4;
+    const int wr                = 32;
+    scoped_log_handler slh(wrap_errors_logger);
+    uct_rc_verbs_iface_t *iface = verbs_iface(m_e2);
+    uct_ep_params_t ep_params;
+    uct_ep_h refused_ep;
+    ucs_status_t status;
+    int ep_idx;
+
+    ASSERT_EQ(wr, rx_max_wr(m_e2));
+    EXPECT_EQ((size_t)num_eps, m_e2->iface_attr().max_num_eps);
+
+    /* The connected endpoints of the fixture already took their quota. */
+    EXPECT_EQ((num_eps - NUM_EPS) * wr, iface->rx_cq_available);
+
+    for (ep_idx = NUM_EPS; ep_idx < num_eps; ep_idx++) {
+        m_e2->create_ep(ep_idx);
+    }
+
+    EXPECT_EQ(0, iface->rx_cq_available);
+
+    /* The RX CQ has no room for the receive WRs of one more endpoint. */
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    ep_params.iface      = m_e2->iface();
+    status               = uct_ep_create(&ep_params, &refused_ep);
+    if (status == UCS_OK) {
+        uct_ep_destroy(refused_ep);
+    }
+    EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
+
+    /* Destroying an endpoint returns its quota after its receive WRs are
+     * drained, so that another endpoint can be created. */
+    m_e2->destroy_ep(num_eps - 1);
+    wait_for_value(&iface->rx_cq_available, wr, true);
+    ASSERT_EQ(wr, iface->rx_cq_available);
+    m_e2->create_ep(num_eps - 1);
+}
+
+UCS_TEST_P(test_rc_no_srq, rx_cq_len_invalid,
+           "RC_VERBS_RX_MAX_WR=32", "RC_VERBS_RX_CQ_LEN=128")
+{
+    scoped_log_handler slh(wrap_errors_logger);
+
+    for (const char *value : {"0", "31"}) {
+        uct_iface_h iface = NULL;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN",
+                                        value));
+        status = open_iface(&iface);
+        if (status == UCS_OK) {
+            uct_iface_close(iface);
+        }
+
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status) << " value: " << value;
+    }
+}
+
+UCS_TEST_P(test_rc_no_srq, rx_cq_len_device_limit,
+           "RC_VERBS_RX_MAX_WR=32", "RC_VERBS_RX_CQ_LEN=128")
+{
+    uct_ib_device_t *dev = &ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev;
+    int max_cqe          = IBV_DEV_ATTR(dev, max_cqe);
+    int limit            = ucs_min(max_cqe, 128);
+
+    /* Bound the simulated device limit to avoid allocating its largest CQ. */
+    for (const char *value : {"inf", "256"}) {
+        uct_iface_h iface = NULL;
+        ucs_status_t status;
+
+        ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN",
+                                        value));
+        IBV_DEV_ATTR(dev, max_cqe) = limit;
+        status                     = open_iface(&iface);
+        IBV_DEV_ATTR(dev, max_cqe) = max_cqe;
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(limit,
+                  ucs_derived_of(iface, uct_rc_verbs_iface_t)->rx_cq_available);
+        uct_iface_close(iface);
+    }
+}
+
+/* Without flow control, the peer can send more messages than one receive
+ * queue holds. Verify that all of them are delivered after RNR retries. */
+UCS_TEST_SKIP_COND_P(test_rc_no_srq, rnr_fc_disabled,
+                     (RUNNING_ON_VALGRIND ||
+                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY)),
+                     "RC_FC_ENABLE=n", "RC_VERBS_RX_MAX_WR=32")
+{
+    unsigned am_count = 0;
+    unsigned target   = rx_max_wr(m_e2) * 2;
+    unsigned sent     = 0;
+
+    if (rc_iface(m_e2)->config.fc_enabled) {
+        UCS_TEST_SKIP_R("flow control is enabled");
+    }
+
+    uct_iface_set_am_handler(m_e2->iface(), 0, am_count_handler, &am_count, 0);
+
+    /* Progress the sender only, so that the receive queue of the peer runs out
+     * of receive WRs and the fabric reports RNR. */
+    wait_for_cond([&]() { return sent >= target; }, [&]() {
+        ucs_status_t status = send_am_message(m_e1, 0, 0);
+
+        if (status == UCS_OK) {
+            sent++;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            uct_iface_progress(m_e1->iface());
+        } else {
+            UCS_TEST_ABORT("failed to send: " << ucs_status_string(status));
+        }
+    }, 10.0);
+
+    ASSERT_GT(sent, (unsigned)rx_max_wr(m_e2));
+
+    wait_for_value(&am_count, sent, true);
+    EXPECT_EQ(sent, am_count);
+    flush();
+}
+
+/* The count of receive WRs per QP must fit the receive queue of a QP: it may
+ * not be zero, since a QP without an SRQ cannot receive anything then, and may
+ * not exceed what the device allows or the 16 bits it is stored in. Note that
+ * "inf" and a negative value both reach the validation as UINT_MAX, since the
+ * numeric parser has no range check. */
+UCS_TEST_P(test_rc_no_srq, rx_max_wr_invalid, "RC_VERBS_RX_CQ_LEN=256",
+           "RC_VERBS_RX_MAX_WR=128")
+{
+    static const char *const invalid_values[] = {"0", "65536", "inf", "-1"};
+    const int max_qp_wr_limit                 = max_qp_wr();
+    const int max_cqe                         = IBV_DEV_ATTR(
+            &ucs_derived_of(m_e1->md(), uct_ib_md_t)->dev, max_cqe);
+    char str[32];
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+
+        for (size_t i = 0; i < ucs_static_array_size(invalid_values); i++) {
+            EXPECT_EQ(UCS_ERR_INVALID_PARAM, try_rx_max_wr(invalid_values[i]))
+                    << " value: " << invalid_values[i];
+        }
+
+        /* A count which the device cannot hold must be rejected too. */
+        snprintf(str, sizeof(str), "%d", max_qp_wr_limit + 1);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, try_rx_max_wr(str));
+    }
+
+    /* The boundaries of the supported range must be accepted. */
+    EXPECT_EQ(UCS_OK, try_rx_max_wr("1"));
+
+    snprintf(str, sizeof(str), "%d",
+             ucs_min(ucs_min(max_qp_wr_limit, (int)UINT16_MAX), max_cqe));
+    ASSERT_UCS_OK(uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN", str));
+    EXPECT_EQ(UCS_OK, try_rx_max_wr(str));
+}
+
+/* This fixture accesses rc_verbs-specific state. */
+_UCT_INSTANTIATE_TEST_CASE(test_rc_no_srq, rc_verbs)
+
+class test_rc_srq_select : public test_rc {
+protected:
+    ucs_status_t open_iface(uct_iface_h *iface_p)
+    {
+        return uct_iface_open(m_e1->md(), m_e1->worker(),
+                              &m_e1->iface_params(), m_iface_config, iface_p);
+    }
+
+    /* Open an interface as if the device did not support an SRQ */
+    ucs_status_t open_without_srq(uct_iface_h *iface_p)
+    {
+        uct_ib_device_t *dev = &uct_ib_iface_md(&rc_iface(m_e1)->super)->dev;
+        int max_srq          = IBV_DEV_ATTR(dev, max_srq);
+        ucs_status_t status;
+
+        IBV_DEV_ATTR(dev, max_srq) = 0;
+        status                     = open_iface(iface_p);
+        IBV_DEV_ATTR(dev, max_srq) = max_srq;
+
+        return status;
+    }
+
+    bool device_has_srq()
+    {
+        return uct_ib_device_has_srq(
+                &uct_ib_iface_md(&rc_iface(m_e1)->super)->dev);
+    }
+
+    void check_srq_used(uct_iface_h iface)
+    {
+        uct_rc_verbs_iface_t *verbs_iface =
+                ucs_derived_of(iface, uct_rc_verbs_iface_t);
+
+        EXPECT_TRUE(verbs_iface->srq != NULL);
+        EXPECT_EQ(0, verbs_iface->rx_cq_available);
+    }
+
+    void check_no_srq_fallback()
+    {
+        uct_iface_h iface;
+
+        ASSERT_UCS_OK(open_without_srq(&iface));
+
+        EXPECT_TRUE(ucs_derived_of(iface, uct_rc_verbs_iface_t)->srq == NULL);
+        uct_iface_close(iface);
+    }
+};
+
+UCS_TEST_P(test_rc_srq_select, try_falls_back, "RC_VERBS_SRQ_ENABLE=try")
+{
+    check_no_srq_fallback();
+}
+
+UCS_TEST_P(test_rc_srq_select, uses_srq, "RC_VERBS_SRQ_ENABLE=try")
+{
+    uct_iface_h iface;
+
+    if (!device_has_srq()) {
+        UCS_TEST_SKIP_R("device does not support SRQ");
+    }
+
+    check_srq_used(m_e1->iface());
+    ASSERT_UCS_OK(
+            uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
+    ASSERT_UCS_OK(
+            uct_config_modify(m_iface_config, "RC_VERBS_RX_CQ_LEN", "0"));
+
+    ASSERT_UCS_OK(open_iface(&iface));
+
+    check_srq_used(iface);
+    uct_iface_close(iface);
+}
+
+UCS_TEST_P(test_rc_srq_select, yes_requires_srq, "RC_VERBS_SRQ_ENABLE=try")
+{
+    uct_iface_h iface = NULL;
+
+    ASSERT_UCS_OK(
+            uct_config_modify(m_iface_config, "RC_VERBS_SRQ_ENABLE", "y"));
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    EXPECT_EQ(UCS_ERR_UNSUPPORTED, open_without_srq(&iface));
+    if (iface != NULL) {
+        uct_iface_close(iface);
+    }
+
+    ASSERT_EQ(1u, m_errors.size());
+    EXPECT_NE(std::string::npos,
+              m_errors[0].find("SRQ is requested but not supported"));
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_srq_select, rc_verbs)
+
 
 class test_rc_iface_flush_remote : public uct_test {
 protected:
@@ -399,6 +1913,93 @@ UCS_TEST_SKIP_COND_P(test_rc_iface_flush_remote, put_fence_no_flush_remote,
 }
 
 UCT_INSTANTIATE_RC_DC_GGA_TEST_CASE(test_rc_iface_flush_remote)
+
+
+/*
+ * A DevX memory domain whose flush memory key failed to register has an
+ * invalid flush rkey, and rc_verbs then does not pass the atomic MR id to the
+ * peer. Give the receiver an invalid flush rkey with non-zero bits 8-15, as
+ * older versions did, and check that an atomic operation still updates the
+ * requested address.
+ */
+class test_rc_verbs_invalid_flush_rkey : public uct_test {
+public:
+    test_rc_verbs_invalid_flush_rkey() :
+        m_sender(NULL), m_receiver(NULL), m_md(NULL), m_flush_rkey(0)
+    {
+    }
+
+    void init() override
+    {
+        uct_test::init();
+
+        m_sender = uct_test::create_entity(0);
+        m_entities.push_back(m_sender);
+        m_receiver = uct_test::create_entity(0);
+        m_entities.push_back(m_receiver);
+
+        /* The skip condition needs the entities, and must be checked before
+         * the flush rkey changes: a skip from init() does not call cleanup() */
+        check_skip_test();
+
+        /* Before connecting, so that the receiver passes no atomic MR id */
+        m_md             = ucs_derived_of(m_receiver->md(), uct_ib_md_t);
+        m_flush_rkey     = m_md->flush_rkey;
+        m_md->flush_rkey = (0x5a << 8) | UCT_IB_MD_INVALID_FLUSH_RKEY;
+
+        m_sender->connect(0, *m_receiver, 0);
+        m_receiver->connect(0, *m_sender, 0);
+    }
+
+    void cleanup() override
+    {
+        /* The memory domain releases its flush memory key only when valid */
+        if (m_md != NULL) {
+            m_md->flush_rkey = m_flush_rkey;
+        }
+
+        uct_test::cleanup();
+    }
+
+protected:
+    entity      *m_sender;
+    entity      *m_receiver;
+    uct_ib_md_t *m_md;
+    uint32_t    m_flush_rkey;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_verbs_invalid_flush_rkey, atomic_add,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64))
+{
+    static const uint64_t value     = 0x5a5a5a5a5a5a5a5aul;
+    static const size_t   num_words = 512;
+    /* A misplaced update lands before the target word */
+    static const size_t   target    = 256;
+    mapped_buffer recvbuf(num_words * sizeof(uint64_t), 0ul, *m_receiver);
+
+    /* Only an indirect atomic key is created at the atomic MR offset; without
+     * DevX, the atomic key is the memory key itself */
+    uint32_t atomic_rkey = uct_ib_md_atomic_rkey(recvbuf.rkey());
+    if ((atomic_rkey == UCT_IB_INVALID_MKEY) ||
+        (atomic_rkey == uct_ib_md_direct_rkey(recvbuf.rkey()))) {
+        UCS_TEST_SKIP_R("no indirect atomic key");
+    }
+
+    recvbuf.memset(0);
+    ASSERT_UCS_OK(uct_ep_atomic64_post(m_sender->ep(0), UCT_ATOMIC_OP_ADD,
+                                       value,
+                                       recvbuf.addr() +
+                                       (target * sizeof(uint64_t)),
+                                       recvbuf.rkey()));
+    m_sender->flush();
+
+    auto words = static_cast<const uint64_t*>(recvbuf.ptr());
+    for (size_t i = 0; i < num_words; ++i) {
+        EXPECT_EQ((i == target) ? value : 0, words[i]) << "word " << i;
+    }
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_rc_verbs_invalid_flush_rkey, rc_verbs)
 
 
 class test_rc_get_limit : public test_rc {
@@ -722,6 +2323,71 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
     EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_sgl_no_comp,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    static const size_t num_iters = 64;
+    uct_iface_attr_v2_t attr_v2   = {};
+    std::vector<std::unique_ptr<mapped_buffer> > local, remote;
+    std::vector<void*> buffers;
+    std::vector<size_t> lengths;
+    std::vector<uct_mem_h> memhs;
+    std::vector<uint64_t> remote_addrs;
+    std::vector<uct_rkey_t> rkeys;
+    ucs_status_t status;
+    size_t count, length, i;
+
+    attr_v2.field_mask = UCT_IFACE_ATTR_FIELD_CAP_FLAGS |
+                         UCT_IFACE_ATTR_FIELD_MAX_GET_SGL_ZCOPY_COUNT;
+    if ((uct_iface_query_v2(m_e1->iface(), &attr_v2) != UCS_OK) ||
+        !(attr_v2.cap.flags & UCT_IFACE_FLAG_V2_GET_SGL_ZCOPY) ||
+        (attr_v2.max_get_sgl_zcopy_count == 0)) {
+        UCS_TEST_SKIP_R("get sgl zcopy is not supported");
+    }
+
+    const uct_iface_attr &attr = m_e1->iface_attr();
+    count  = ucs_min(size_t(2), attr_v2.max_get_sgl_zcopy_count);
+    length = ucs_min(ucs_max(size_t(1024), attr.cap.get.min_zcopy),
+                     attr.cap.get.max_zcopy);
+
+    ASSERT_LE(count * length, m_num_get_bytes);
+
+    for (i = 0; i < count; ++i) {
+        local.emplace_back(new mapped_buffer(length, 0ul, *m_e1));
+        remote.emplace_back(new mapped_buffer(length, 0xABCul + i, *m_e2));
+        buffers.push_back(local[i]->ptr());
+        lengths.push_back(length);
+        memhs.push_back(local[i]->memh());
+        remote_addrs.push_back(remote[i]->addr());
+        rkeys.push_back(remote[i]->rkey());
+    }
+
+    ASSERT_GT(num_iters * count * length, 2 * m_num_get_bytes);
+
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(30 * ucs::test_time_multiplier());
+    for (size_t iter = 0; iter < num_iters; ++iter) {
+        do {
+            status = uct_ep_get_sgl_zcopy(m_e1->ep(0), buffers.data(),
+                                          lengths.data(), memhs.data(),
+                                          remote_addrs.data(), rkeys.data(),
+                                          NULL, NULL, count, NULL);
+            if (status == UCS_ERR_NO_RESOURCE) {
+                progress();
+            }
+        } while ((status == UCS_ERR_NO_RESOURCE) &&
+                 (ucs_get_time() < deadline));
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+    }
+
+    flush();
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+
+    for (i = 0; i < count; ++i) {
+        local[i]->pattern_check(0xABCul + i);
+    }
+}
+
 // Check that it is not possible to send while not all pendings are dispatched
 // yet. RDMA_READ resources are released in get function completion callbacks.
 // Since in RC transports completions are handled after pending dispatch
@@ -879,16 +2545,39 @@ protected:
 
 size_t test_rc_ece::m_recv_count = 0;
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_0, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
-                     "RC_ECE=0")
+/* An explicit ECE value makes interface creation fail on devices without ECE;
+ * check the MD capability before opening the interface. */
+class test_rc_ece_supported : public test_rc_ece {
+public:
+    void init() override
+    {
+        auto md = open_md();
+
+        if (!ucs_derived_of(md.get(), uct_ib_md_t)->ece_enable) {
+            UCS_TEST_SKIP_R("device does not support ECE");
+        }
+
+        test_rc_ece::init();
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_ece_supported, ece_0,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=0")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 0);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_custom,
+UCS_TEST_SKIP_COND_P(test_rc_ece_supported, ece_custom,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=43223")
 {
     send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy, 43223);
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_ece_supported, ece_inf,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY), "RC_ECE=inf")
+{
+    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
+              UCS_ULUNITS_INF);
 }
 
 UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
@@ -898,14 +2587,8 @@ UCS_TEST_SKIP_COND_P(test_rc_ece, ece_auto,
               UCS_ULUNITS_AUTO);
 }
 
-UCS_TEST_SKIP_COND_P(test_rc_ece, ece_inf, !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
-                     "RC_ECE=inf")
-{
-    send_recv(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy,
-              UCS_ULUNITS_INF);
-}
-
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece)
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_ece_supported)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
@@ -990,12 +2673,10 @@ void test_rc_flow_control::test_pending_grant(int16_t wnd)
 
     wait_fc_hard_resend(m_e1);
 
-    /* Enable send capabilities of m_e2 and send short put message to force
-     * pending queue dispatch. Can't send AM message for that, because it may
-     * trigger reordering assert due to disable/enable entity hack. */
+    /* Enable send capabilities of m_e2 and dispatch the pending queue directly,
+     * so it does not depend on a send to generate a TX completion. */
     enable_entity(m_e2);
-    set_tx_moderation(m_e2, 0);
-    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
+    dispatch_pending(m_e2);
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);
@@ -1371,6 +3052,11 @@ public:
     virtual void enable_entity(entity *e, unsigned cq_num = 128) {
         rc_iface(e)->tx.cq_available = cq_num;
     }
+
+    virtual void inject_error(unsigned idx = 0) override
+    {
+        kill_receiver(idx);
+    }
 };
 
 /* this test is quite tricky: it emulates missing iface resources
@@ -1427,7 +3113,9 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 class test_rc_mlx5_token_query : public test_rc {
 protected:
-    static constexpr uint32_t NUM_MESSAGES = 10;
+    static constexpr uint32_t NUM_MESSAGES      = 10;
+    static constexpr size_t   NUM_SGL_ELEMENTS  = 4;
+    static constexpr size_t   SGL_BUFFER_LENGTH = 1024;
 
     static ucs_status_t am_handler(void *arg, void*, size_t, unsigned)
     {
@@ -1458,24 +3146,39 @@ protected:
         attr.rx_token   = rx_token;
         ASSERT_UCS_OK(uct_iface_query_v2(iface, &attr));
     }
+
+    size_t max_put_sgl_zcopy_count()
+    {
+        uct_iface_attr_v2_t attr = {};
+
+        attr.field_mask = UCT_IFACE_ATTR_FIELD_MAX_PUT_SGL_ZCOPY_COUNT;
+        ASSERT_UCS_OK(uct_iface_query_v2(m_e1->iface(), &attr));
+        return attr.max_put_sgl_zcopy_count;
+    }
+
+    void verify_tokens(uint32_t expected_rx_token)
+    {
+        uct_rc_mlx5_tx_token_t tx_token = {};
+        uct_rc_mlx5_rx_token_t rx_token = {};
+        uct_rc_mlx5_base_ep_t *rx_ep;
+
+        query_tx_token(m_e1->ep(0), &tx_token);
+        query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+
+        rx_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
+        EXPECT_EQ(rx_ep->tx.wq.super.qp_num, be32toh(tx_token));
+        EXPECT_EQ(expected_rx_token, be32toh(rx_token) & UCT_IB_MLX5_PSN_MASK);
+    }
 };
 
 constexpr uint32_t test_rc_mlx5_token_query::NUM_MESSAGES;
 
 UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT) ||
+                     !check_caps_v2(UCT_IFACE_FLAG_V2_QUERY_TOKEN))
 {
-    uct_rc_mlx5_tx_token_t tx_token = {};
-    uct_rc_mlx5_rx_token_t rx_token = {};
-    uint32_t rx_count               = 0;
-    uct_ib_mlx5_md_t *md            = uct_ib_mlx5_iface_md(
-            ucs_derived_of(m_e1->iface(), uct_ib_iface_t));
-    uct_rc_mlx5_base_ep_t *e2_ep;
+    uint32_t rx_count = 0;
     ucs_status_t status;
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        UCS_TEST_SKIP_R("DEVX is not supported");
-    }
 
     ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, am_handler,
                                            &rx_count, 0));
@@ -1488,12 +3191,56 @@ UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, am_short,
 
     wait_for_value(&rx_count, NUM_MESSAGES, true);
 
-    query_tx_token(m_e1->ep(0), &tx_token);
-    query_rx_token(m_e2->iface(), &tx_token, &rx_token);
+    verify_tokens(NUM_MESSAGES);
+}
 
-    e2_ep = ucs_derived_of(m_e2->ep(0), uct_rc_mlx5_base_ep_t);
-    EXPECT_EQ(e2_ep->tx.wq.super.qp_num, be32toh(tx_token));
-    EXPECT_EQ(NUM_MESSAGES, be32toh(rx_token));
+UCS_TEST_SKIP_COND_P(test_rc_mlx5_token_query, put_sgl_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY) ||
+                     !check_caps_v2(UCT_IFACE_FLAG_V2_PUT_SGL_ZCOPY |
+                                    UCT_IFACE_FLAG_V2_QUERY_TOKEN))
+{
+    if (max_put_sgl_zcopy_count() < NUM_SGL_ELEMENTS) {
+        UCS_TEST_SKIP_R("max_put_sgl_zcopy_count is too small");
+    }
+
+    uct_rc_mlx5_base_ep_t *ep  = ucs_derived_of(m_e1->ep(0),
+                                                uct_rc_mlx5_base_ep_t);
+    const uct_iface_attr &attr = m_e1->iface_attr();
+    size_t length = ucs_min(ucs_max(SGL_BUFFER_LENGTH, attr.cap.put.min_zcopy),
+                            attr.cap.put.max_zcopy);
+    mapped_buffer sendbuf(length, 0ul, *m_e1);
+    mapped_buffer recvbuf(length, 0ul, *m_e2);
+    uct_completion_t comp;
+    ucs_status_t status;
+
+    void *buffers[NUM_SGL_ELEMENTS]    = {sendbuf.ptr(), NULL,
+                                          sendbuf.ptr(), NULL};
+    size_t lengths[NUM_SGL_ELEMENTS]   = {length, 0, length, 0};
+    uct_mem_h memhs[NUM_SGL_ELEMENTS]  = {sendbuf.memh(), UCT_MEM_HANDLE_NULL,
+                                          sendbuf.memh(), UCT_MEM_HANDLE_NULL};
+    uint64_t addrs[NUM_SGL_ELEMENTS]   = {recvbuf.addr(), recvbuf.addr(),
+                                          recvbuf.addr(), recvbuf.addr()};
+    uct_rkey_t rkeys[NUM_SGL_ELEMENTS] = {recvbuf.rkey(), recvbuf.rkey(),
+                                          recvbuf.rkey(), recvbuf.rkey()};
+
+    comp.func   = [](uct_completion_t*) {};
+    comp.count  = NUM_MESSAGES;
+    comp.status = UCS_OK;
+
+    for (uint32_t i = 0; i < NUM_MESSAGES; ++i) {
+        UCT_TEST_CALL_AND_TRY_AGAIN(
+                uct_ep_put_sgl_zcopy(m_e1->ep(0), buffers, lengths, memhs,
+                                     addrs, rkeys, NULL, NULL,
+                                     NUM_SGL_ELEMENTS, &comp),
+                status);
+        ASSERT_EQ(UCS_INPROGRESS, status);
+    }
+
+    wait_for_value(&comp.count, 0, true);
+
+    verify_tokens(uct_ib_mlx5_txwq_get_next_wqe_psn(&ep->tx.wq));
+
+    flush();
 }
 
 _UCT_INSTANTIATE_TEST_CASE(test_rc_mlx5_token_query, rc_mlx5)

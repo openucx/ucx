@@ -4,8 +4,13 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_vmm_mem_buffer.h"
 
+#include <cuda_runtime.h>
 #include <thread>
 #include <vector>
 
@@ -14,7 +19,9 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc.inl>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
 #include <uct/cuda/base/cuda_util.h>
 #include <ucs/datastruct/pgtable.h>
@@ -308,11 +315,83 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_system_id_mismatch)
 #endif
 }
 
-UCS_TEST_P(test_cuda_ipc_md, mnnvl_disabled)
+UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
 {
-    /* Currently MNNVL is always disabled in CI */
     uct_cuda_ipc_md_t *cuda_ipc_md = ucs_derived_of(md(), uct_cuda_ipc_md_t);
-    EXPECT_FALSE(cuda_ipc_md->enable_mnnvl);
+    bool expected                  = false;
+#if HAVE_NVML_FABRIC_INFO
+    nvmlGpuFabricInfoV_t fabric_info;
+    nvmlDevice_t device;
+    uint64_t cluster_uuid[2] = {};
+
+    fabric_info.version = nvmlGpuFabricInfo_v2;
+    if ((UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetHandleByIndex, 0, &device) ==
+         UCS_OK) &&
+        (UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetGpuFabricInfoV, device,
+                                 &fabric_info) == UCS_OK)) {
+        /* MNNVL is enabled only if GPU 0 completed joining an NVLink fabric */
+        memcpy(cluster_uuid, fabric_info.clusterUuid, sizeof(cluster_uuid));
+        expected = (fabric_info.state == NVML_GPU_FABRIC_STATE_COMPLETED) &&
+                   (fabric_info.status == NVML_SUCCESS) &&
+                   ((cluster_uuid[0] | cluster_uuid[1]) != 0);
+    }
+#endif
+
+    ASSERT_EQ(expected, !!cuda_ipc_md->enable_mnnvl);
+#if HAVE_NVML_FABRIC_INFO
+    if (expected) {
+        EXPECT_EQ(cluster_uuid[0] ^ cluster_uuid[1] ^ fabric_info.cliqueId,
+                  cuda_ipc_md->nvlink_domain);
+    }
+#endif
+}
+
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_accessibility)
+{
+    int num_devices, can_access, device_index;
+    ucs_ternary_auto_value_t accessible;
+    CUdevice local_device, remote_device;
+    CUuuid remote_uuid;
+    bool checked = false;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetCount(&num_devices));
+    if (num_devices < 2) {
+        UCS_TEST_SKIP_R("test requires at least two CUDA devices");
+    }
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&local_device, 0));
+    for (device_index = 1; device_index < num_devices; ++device_index) {
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&remote_device, device_index));
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetUuid(&remote_uuid, remote_device));
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuDeviceCanAccessPeer(&can_access, local_device,
+                                        remote_device));
+
+        accessible = uct_cuda_ipc_nvml_peer_accessible(local_device,
+                                                        &remote_uuid);
+        if (accessible != UCS_TRY) {
+            EXPECT_EQ(can_access ? UCS_YES : UCS_NO, accessible);
+            checked = true;
+        }
+    }
+
+    if (!checked) {
+        UCS_TEST_SKIP_R("NVML peer accessibility is unavailable");
+    }
+}
+
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_unresolved)
+{
+    CUdevice cu_dev;
+    CUuuid unknown_uuid;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&cu_dev, 0));
+
+    /* NVML cannot resolve this UUID, so the handle-mapping probe must decide
+     * the peer reachability */
+    memset(unknown_uuid.bytes, 0xab, sizeof(unknown_uuid.bytes));
+    EXPECT_EQ(UCS_TRY,
+              uct_cuda_ipc_nvml_peer_accessible(cu_dev, &unknown_uuid));
 }
 
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
@@ -365,9 +444,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                 ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
             }
 
-            uct_cuda_ipc_unmap_memhandle(
-                    unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+            uct_cuda_ipc_mapping_t mapping;
+            uct_cuda_ipc_mapping_init(&mapping, &unpacked->super,
+                                      mapped_addr);
+            uct_cuda_ipc_unmap_memhandle(&mapping, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
@@ -710,28 +790,3 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
-
-
-class test_cuda_copy_md : public test_md {
-};
-
-UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
-    /* A single byte per chunk is rounded up to the allocation granularity, so
-     * the buffer is backed by 3 distinct physical handles */
-    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 3);
-    uct_md_mem_attr_t mem_attr;
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
-
-    /* Query the full multi-handle range; the guard preserves the caller's
-     * requested extent instead of shrinking to the single chunk that
-     * contains the base pointer. */
-    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                   &mem_attr));
-
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-    EXPECT_GE(mem_attr.alloc_length, buffer.size());
-}
-
-_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);

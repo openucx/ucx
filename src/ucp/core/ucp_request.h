@@ -74,6 +74,22 @@ enum {
 
 
 /**
+ * Fragment flow control state of a rndv request. Every rndv request must be
+ * initialized with ucp_proto_rndv_req_fc_init() when it is set up, since
+ * ucp_proto_rndv_mtype_fc_cancel() reads the state for any aborted or reset
+ * request.
+ */
+enum {
+    /* Not throttled */
+    UCP_REQUEST_RNDV_MTYPE_FC_NONE,
+    /* Waiting in the worker-level pending queue */
+    UCP_REQUEST_RNDV_MTYPE_FC_QUEUED,
+    /* Dequeued, a retry is scheduled from the progress loop */
+    UCP_REQUEST_RNDV_MTYPE_FC_RESCHED
+};
+
+
+/**
  * Protocols enumerator to work with send request state
  */
 enum {
@@ -142,6 +158,14 @@ typedef struct {
     /* List of memory areas to track 0-read flush operations */
     ucp_mem_area_t   *entries;
 } ucp_mem_flush_t;
+
+
+/* Remote-completion stage of an endpoint lane flush. */
+enum {
+    UCP_FLUSH_SW_STATE_NOT_STARTED,
+    UCP_FLUSH_SW_STATE_STARTED,
+    UCP_FLUSH_SW_STATE_RESTART_PENDING
+};
 
 
 /**
@@ -248,6 +272,7 @@ struct ucp_request {
                     struct {
                         const uint64_t   *remote_addrs;
                         ucp_rkey_h const *rkeys;
+                        size_t           length; /* Total length in bytes */
                     } sgl;
                 } rma;
 
@@ -313,6 +338,9 @@ struct ucp_request {
                             /* Data start offset of this request */
                             size_t offset;
 
+                            /* UCP_REQUEST_RNDV_MTYPE_FC_* state */
+                            uint8_t fc_state;
+
                             union {
                                 /* Used by rndv/put and rndv/put/frag */
                                 struct {
@@ -333,6 +361,13 @@ struct ucp_request {
                                     /* Size to send in ack message */
                                     ssize_t ack_data_size;
                                 } ppln;
+
+                                /* Used by rndv mtype requests while fc_state
+                                 * is not UCP_REQUEST_RNDV_MTYPE_FC_NONE */
+                                struct {
+                                    /* Element in worker-level pending queue */
+                                    ucs_queue_elem_t queue_elem;
+                                } fc;
 
                                 /* Used by rndv/rkey_ptr */
                                 struct {
@@ -359,22 +394,35 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    /* All lanes that are being flushed */
+                    /* Snapshot of live lanes on the endpoint */
                     ucp_lane_map_t     all_lanes;
                     /* Which lanes flush has been started on */
                     ucp_lane_map_t     started_lanes;
-                    /* Sequence number of the remote completion this request is
-                     * waiting for */
-                    uint32_t           cmpl_sn;
+                    /* Lanes targeted by this flush. Replacement lanes are
+                     * added if endpoint failover changes the live topology. */
+                    ucp_lane_map_t     lane_mask;
                     /* Flags to pass to @ref uct_ep_flush */
                     uint8_t            uct_flags;
                     /* Originally requested UCT flush flags, used to restore
                      * uct_flags on rewind after fast-forwarding */
                     uint8_t            uct_flags_orig;
-                    uint8_t            sw_started;
+                    uint8_t            sw_state;
                     uint8_t            sw_done;
-                    /* Memory specific flushes */
-                    ucp_mem_flush_t    mem;
+                    /* Snapshot used to detect same-index lane replacement */
+                    uint32_t           lane_generation;
+                    /* 'cmpl_sn' is valid only while this request is linked in
+                     * the endpoint remote-completion queue. The queue removes
+                     * the request before calling ucp_ep_flush_remote_completed(),
+                     * which may start 'mem'. A failover restart also removes a
+                     * queued request before resetting the flush state. */
+                    union {
+                        /* Sequence number of the remote completion this
+                         * request is waiting for */
+                        uint32_t        cmpl_sn;
+                        /* Used after the transport and remote-completion
+                         * stages complete */
+                        ucp_mem_flush_t mem;
+                    };
                 } flush;
 
                 struct {
@@ -417,6 +465,11 @@ struct ucp_request {
                     /* Atomic reply data */
                     ucp_atomic_reply_t data;
                 } atomic_reply;
+
+                struct {
+                    uct_ep_op_info_t *info;   /* Heap-allocated owned operation */
+                    void             *buffer; /* Payload or IOV copy */
+                } repost;
             };
 
             union {

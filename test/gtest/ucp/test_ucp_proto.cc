@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2020-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -59,11 +60,11 @@ protected:
     static size_t count_rkey_configs_with_flag(ucp_worker_h worker,
                                                 uint8_t flag)
     {
+        ucp_rkey_config_t **rkey_config_p;
         size_t count = 0;
-        ucp_rkey_config_t *rkey_config;
 
-        ucs_array_for_each(rkey_config, &worker->rkey_config) {
-            count += !!(rkey_config->key.flags & flag);
+        ucs_array_for_each(rkey_config_p, &worker->rkey_config) {
+            count += !!((*rkey_config_p)->key.flags & flag);
         }
 
         return count;
@@ -176,7 +177,7 @@ protected:
             return nullptr;
         }
         auto proto_select =
-                &ucs_array_elem(&worker()->rkey_config, rkey_cfg_index).proto_select;
+                &ucp_worker_rkey_config(worker(), rkey_cfg_index)->proto_select;
 
         ucp_proto_select_param_init(
                 &select_param, UCP_OP_ID_RNDV_RECV, 0,
@@ -244,8 +245,8 @@ protected:
             return nullptr;
         }
 
-        proto_select = &ucs_array_elem(&worker()->rkey_config,
-                                       rkey_cfg_index).proto_select;
+        proto_select =
+                &ucp_worker_rkey_config(worker(), rkey_cfg_index)->proto_select;
         ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_SEND, 0,
                                     rndv_op_flag, UCP_DATATYPE_CONTIG,
                                     &mem_info, 1);
@@ -343,7 +344,7 @@ protected:
             return nullptr;
         }
         proto_select =
-                &ucs_array_elem(&worker()->rkey_config, rkey_cfg_index).proto_select;
+                &ucp_worker_rkey_config(worker(), rkey_cfg_index)->proto_select;
         ucp_proto_select_param_init(&select_param, op_id, 0, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
         select_elem = ucp_proto_select_lookup_slow(
@@ -386,8 +387,9 @@ protected:
         }
 
         key.param    = remote_proto_config->select_param;
-        proto_select = &ucs_array_elem(&worker()->rkey_config,
-                                       remote_proto_config->rkey_cfg_index).proto_select;
+        proto_select = &ucp_worker_rkey_config(
+                                worker(), remote_proto_config->rkey_cfg_index)
+                                ->proto_select;
         EXPECT_NE(kh_end(proto_select->hash),
                   kh_get(ucp_proto_select_hash, proto_select->hash, key.u64));
     }
@@ -526,6 +528,29 @@ test_ucp_proto::create_rkey_config_key(ucp_md_map_t md_map)
     return rkey_config_key;
 }
 
+UCS_TEST_P(test_ucp_proto, rkey_config_stable_after_growth)
+{
+    ucp_rkey_config_key_t key = create_rkey_config_key(0);
+    ucp_worker_cfg_index_t first_index, cfg_index;
+    ucp_rkey_config_t **old_buffer;
+    ucp_rkey_config_t *first_config;
+
+    key.ep_cfg_index = sender().ep()->cfg_index;
+    ASSERT_UCS_OK(
+            ucp_worker_rkey_config_get(worker(), &key, NULL, &first_index));
+    first_config = ucp_worker_rkey_config(worker(), first_index);
+    old_buffer   = ucs_array_begin(&worker()->rkey_config);
+
+    /* Grow past the initial reserve using the production path only */
+    for (key.md_map = 1; key.md_map <= 64; ++key.md_map) {
+        ASSERT_UCS_OK(
+                ucp_worker_rkey_config_get(worker(), &key, NULL, &cfg_index));
+    }
+
+    ASSERT_NE(old_buffer, ucs_array_begin(&worker()->rkey_config));
+    EXPECT_EQ(first_config, ucp_worker_rkey_config(worker(), first_index));
+}
+
 UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
@@ -556,6 +581,33 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     EXPECT_NE(nullptr, select_elem);
 
     ucp_ep_print_info(sender().ep(), stdout);
+}
+
+UCS_TEST_P(test_ucp_proto, ep_config_proto_init_on_send)
+{
+    static constexpr ucp_tag_t tag = 0xdeadbeef;
+    ucp_request_param_t param      = {};
+    uint64_t send_data             = 0x0123456789abcdef;
+    uint64_t recv_data             = 0;
+    ucp_ep_config_t *ep_config;
+    void *send_req, *recv_req;
+
+    recv_req = ucp_tag_recv_nbx(receiver().worker(), &recv_data,
+                                sizeof(recv_data), tag, UINT64_MAX, &param);
+
+    ep_config = &ucs_array_elem(&worker()->ep_config, sender().ep()->cfg_index);
+    EXPECT_FALSE(ep_config->proto_init_flags &
+                 UCP_EP_PROTO_SHORT_INITIALIZED);
+
+    /* No protocol can be cached while the initialization flag is clear */
+    send_req = ucp_tag_send_nbx(sender().ep(), &send_data, sizeof(send_data),
+                                tag, &param);
+
+    /* Expect short-circuit path initialization to be done after first send */
+    EXPECT_TRUE(ep_config->proto_init_flags & UCP_EP_PROTO_SHORT_INITIALIZED);
+
+    ASSERT_UCS_OK(requests_wait({send_req, recv_req}));
+    EXPECT_EQ(send_data, recv_data);
 }
 
 UCS_TEST_P(test_ucp_proto, rkey_config) {
@@ -972,9 +1024,11 @@ UCS_TEST_P(test_ucp_proto_cuda_async_non_reg, cuda_async_registrable_filter)
     ucp_datatype_iter_mem_dereg(&dt_iter, UCP_DT_MASK_ALL);
 }
 
+/* Remove the GET zcopy protocol, which replaces GET/RNDV on registrable
+ * memory, so that GET/RNDV is always selected */
 UCS_TEST_P(test_ucp_proto_cuda_async_non_reg,
            cuda_async_rndv_get_zcopy_proto_filter, "RNDV_THRESH=0",
-           "RNDV_SCHEME=get_zcopy", "RMA_PPLN_ENABLE=y")
+           "RNDV_SCHEME=get_zcopy", "PROTOS=^get/zcopy")
 {
     /* Keep the real CUDA allocation small, but inspect a large protocol range
      * where RMA GET/RNDV is selected. */
@@ -1074,6 +1128,33 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcx,
                               "rc_x,cuda_copy")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_proto_cuda_async_non_reg, rcv,
                               "rc_v,cuda_copy")
+
+class test_ucp_proto_cpu_accessible : public test_ucp_proto {
+};
+
+/* CPU-accessible memory is packed by memcpy, so small messages have to select
+ * an eager protocol, as for host memory */
+UCS_TEST_P(test_ucp_proto_cpu_accessible, small_msg_eager)
+{
+    const ucp_proto_threshold_elem_t *thresh;
+    unsigned mem_type;
+
+    ucs_memory_type_for_each(mem_type) {
+        if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
+            !(UCS_MEMORY_TYPES_CPU_ACCESSIBLE & UCS_BIT(mem_type))) {
+            continue;
+        }
+
+        thresh = select_tag_send_protocol(
+                static_cast<ucs_memory_type_t>(mem_type), 1);
+        ASSERT_NE(nullptr, thresh);
+        EXPECT_EQ(0, strncmp("egr/", thresh->proto_config.proto->name, 4))
+                << ucs_memory_type_names[mem_type] << ": "
+                << thresh->proto_config.proto->name;
+    }
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_proto_cpu_accessible)
 
 class test_perf_node : public test_ucp_proto {
 };
@@ -1270,7 +1351,7 @@ protected:
         return make_perf_ptr(perf);
     }
 
-    static void add_funcs(perf_ptr_t perf, size_t start, size_t end,
+    static void add_funcs(const perf_ptr_t &perf, size_t start, size_t end,
                           const perf_factors_map_t &factors)
     {
         ucp_proto_perf_factors_t perf_factors =
@@ -1286,7 +1367,7 @@ protected:
                                                perf_factors, perf_node, NULL));
     }
 
-    static void add_func(perf_ptr_t perf, size_t start, size_t end,
+    static void add_func(const perf_ptr_t &perf, size_t start, size_t end,
                          ucp_proto_perf_factor_id_t factor_id,
                          ucs_linear_func_t func)
     {
@@ -1299,13 +1380,14 @@ protected:
         add_func(m_perf, start, end, factor_id, func);
     }
 
-    static ucp_proto_perf_segment_t *find_lb(perf_ptr_t perf, size_t start)
+    static ucp_proto_perf_segment_t *
+    find_lb(const perf_ptr_t &perf, size_t start)
     {
         return ucp_proto_perf_find_segment_lb(perf.get(), start);
     }
 
     static const ucp_proto_flat_perf_range_t *
-    find_lb(flat_perf_ptr_t flat_perf, size_t start)
+    find_lb(const flat_perf_ptr_t &flat_perf, size_t start)
     {
         return ucp_proto_flat_perf_find_lb(flat_perf.get(), start);
     }
@@ -1390,8 +1472,8 @@ private:
     }
 
     template<typename PerfPtrType>
-    void
-    expect_perf_empty_range(PerfPtrType perf, size_t start, size_t end) const
+    void expect_perf_empty_range(const PerfPtrType &perf, size_t start,
+                                 size_t end) const
     {
         ASSERT_NE(perf.get(), nullptr);
         auto *seg = find_lb(perf, start);
@@ -1401,8 +1483,8 @@ private:
                 << " end=" << end;
     }
 
-    void expect_flat_range(flat_perf_ptr_t flat_perf, size_t start, size_t end,
-                           ucs_linear_func_t exp_func) const
+    void expect_flat_range(const flat_perf_ptr_t &flat_perf, size_t start,
+                           size_t end, ucs_linear_func_t exp_func) const
     {
         auto *range     = find_lb(flat_perf, start);
         size_t midpoint = start + (end - start) / 2;
@@ -1661,7 +1743,7 @@ UCS_TEST_F(test_proto_perf, agg2)
              local_cpu_func);
     UCS_TEST_MESSAGE << perf2.get();
 
-    m_perf = aggregate({perf1, perf2});
+    m_perf = aggregate({std::move(perf1), std::move(perf2)});
 
     make_flat_perf();
     print_perf();
@@ -1701,7 +1783,7 @@ UCS_TEST_F(test_proto_perf, agg3)
              local_cpu_func);
     UCS_TEST_MESSAGE << perf3.get();
 
-    m_perf = aggregate({perf1, perf2, perf3});
+    m_perf = aggregate({std::move(perf1), std::move(perf2), std::move(perf3)});
 
     make_flat_perf();
     print_perf();
@@ -1864,7 +1946,7 @@ protected:
 
 private:
     // Collect points of sampling based on perf structure segments
-    static std::vector<size_t> get_sample_points(perf_ptr_t perf);
+    static std::vector<size_t> get_sample_points(const perf_ptr_t &perf);
 
     // Calculate the expected aggregation result at a given point. If the
     // expected result is undefined, return nullptr.
@@ -1874,7 +1956,7 @@ private:
 };
 
 std::vector<size_t>
-test_proto_perf_aggregate::get_sample_points(perf_ptr_t perf)
+test_proto_perf_aggregate::get_sample_points(const perf_ptr_t &perf)
 {
     std::vector<size_t> points;
 
@@ -1904,7 +1986,7 @@ test_proto_perf_aggregate::expected_aggregate_result(
         const std::vector<perf_ptr_t> &perfs, size_t point)
 {
     perf_factors_map_t agg;
-    for (auto perf : perfs) {
+    for (const auto &perf : perfs) {
         ucp_proto_perf_segment_t *seg = find_lb(perf, point);
         if ((seg == NULL) || (point < ucp_proto_perf_segment_start(seg))) {
             return nullptr; // Point not found in one of the perf objects
@@ -1924,7 +2006,8 @@ test_proto_perf_aggregate::expected_aggregate_result(
         }
     }
 
-    return std::unique_ptr<perf_factors_map_t>(new perf_factors_map_t(agg));
+    return std::unique_ptr<perf_factors_map_t>(
+            new perf_factors_map_t(std::move(agg)));
 }
 
 void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
@@ -1937,7 +2020,7 @@ void test_proto_perf_aggregate::test_random_funcs(unsigned num_perfs,
                     });
 
     std::set<size_t> sample_points;
-    for (auto perf : perfs) {
+    for (const auto &perf : perfs) {
         auto perf_points = get_sample_points(perf);
         std::copy(perf_points.begin(), perf_points.end(),
                   std::inserter(sample_points, sample_points.begin()));

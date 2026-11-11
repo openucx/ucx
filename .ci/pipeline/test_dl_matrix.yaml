@@ -1,12 +1,15 @@
 # Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
-# UCX DL Cluster (GB300/aarch64) test matrix.
+# UCX DL cluster (GB200/aarch64) test matrix: one Slurm allocation per gtest
+# shard, each running checkout, build and its share of contrib/test_jenkins.sh
+# in dl-base, built on UCX's aarch64 CUDA 13 release image.
 ---
 job: ucx-test-dl-gpu
 
 failFast: false
-timeout_minutes: 240
+# Covers the allocation wait plus the checkout and test step timeouts.
+timeout_minutes: 270
 
 registry_host: harbor.mellanox.com
 registry_auth: ucx_harbor_credentials
@@ -28,19 +31,25 @@ env:
   ASAN_CHECK: "no"
   VALGRIND_CHECK: "no"
   RUNNING_IN_AZURE: "no"
-  NWORKERS: "1"
-  WORKER: "0"
+  # Must match the number of values in the worker axis below.
+  NWORKERS: "4"
+  # common.sh sets make -j to 4 unless parallel_jobs is passed; use 32 of
+  # the node's 144 cores.
+  BUILD_JOBS: "32"
   SLURM_NODES: 1
-  SLURM_PARTITION: gb300nvl72_ci
+  # The account is tied to the partition by the cluster's cli_filter.
+  SLURM_PARTITION: gb200nvl72_ci
+  SLURM_ACCOUNT: oberon-gb-ci
   SLURM_HEAD_NODE: dlcluster.nvidia.com
   SLURM_HEAD_USER: svcnbu-swx-hpcx
-  SLURM_ACCOUNT: blackwell-ci
-  SLURM_JOB_TIMEOUT: '02:45:00'
+  # Checkout and test step timeouts plus slack.
+  SLURM_JOB_TIMEOUT: '03:20:00'
   SLURM_IMMEDIATE_TIMEOUT: 3600
   SSH_CREDENTIALS_ID: 'svcnbu-swx-hpcx_id_rsa_ssh_key'
   JOB_ID_FILE_ROOT: "/mnt/pvc/${JOB_BASE_NAME}"
-  TEST_TIMEOUT: 140
-  CI_IMAGE_TAG: "20260504-1"
+  CHECKOUT_TIMEOUT: 10
+  TEST_TIMEOUT: 180
+  CI_IMAGE_TAG: "20260906-1"
 
 pvc_volumes:
   - {claimName: nbu-swx-ucx-pvc, mountPath: /mnt/pvc, readOnly: false}
@@ -64,8 +73,9 @@ matrix:
   axes:
     arch:
       - aarch64
+    worker: [0, 1, 2, 3]
 
-taskName: '${arch}/${name}'
+taskName: '${arch}/${name}/w${worker}'
 
 steps:
   - name: Allocate
@@ -81,12 +91,31 @@ steps:
       nodes: "${SLURM_NODES}"
       jobTimeout: "${SLURM_JOB_TIMEOUT}"
       immediateTimeout: "${SLURM_IMMEDIATE_TIMEOUT}"
-      jobName: "ucx-ci-dl-${BUILD_NUMBER}"
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
+      jobName: "ucx-ci-dl-${BUILD_NUMBER}-w${worker}"
+      # Build number last: pipeline_stop finds files by job_id_*_${BUILD_NUMBER}.txt.
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
       credentialsId: "${SSH_CREDENTIALS_ID}"
       extraArgs: ["--account=${SLURM_ACCOUNT}"]
 
-  - name: Checkout & test
+  # Checkout and Test share a container name, so pyxis reuses the container
+  # and the test step finds the checkout in place.
+  - name: Checkout
+    containerSelector: "{name: 'build_helper_dl'}"
+    timeout: "${CHECKOUT_TIMEOUT}"
+    parallel: false
+    shell: action
+    module: slurmCI
+    run: run
+    args:
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      testScript: "git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1}"
+      headNode: "${SLURM_HEAD_NODE}"
+      headUser: "${SLURM_HEAD_USER}"
+      dockerImage: "${DOCKER_IMAGE}"
+      credentialsId: "${SSH_CREDENTIALS_ID}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w${worker}"
+
+  - name: Test
     containerSelector: "{name: 'build_helper_dl'}"
     timeout: "${TEST_TIMEOUT}"
     parallel: false
@@ -94,24 +123,25 @@ steps:
     module: slurmCI
     run: run
     args:
-      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_${BUILD_NUMBER}.txt"
-      # Workaround: dlcluster's UCX_NET_DEVICES preset breaks UCX loopback.
-      # memlock unlimited is required for UCX.
-      testScript: "unset UCX_NET_DEVICES && ulimit -l unlimited && git clone https://github.com/openucx/ucx.git . && git fetch --no-tags origin ${sha1} && git checkout ${sha1} && ./contrib/test_jenkins.sh"
+      jobIdFile: "${JOB_ID_FILE_ROOT}/job_id_w${worker}_${BUILD_NUMBER}.txt"
+      # dlcluster presets UCX_NET_DEVICES, which breaks loopback; UCX needs
+      # unlimited memlock.
+      testScript: "unset UCX_NET_DEVICES && ulimit -l unlimited && ./contrib/test_jenkins.sh"
       headNode: "${SLURM_HEAD_NODE}"
       headUser: "${SLURM_HEAD_USER}"
       dockerImage: "${DOCKER_IMAGE}"
       credentialsId: "${SSH_CREDENTIALS_ID}"
-      containerName: "ucx-ci-dl-${BUILD_NUMBER}"
+      containerName: "ucx-ci-dl-${BUILD_NUMBER}-w${worker}"
       slurmEnv: [
         "RUN_TESTS=${RUN_TESTS}",
         "TEST_PERF=${TEST_PERF}",
         "ASAN_CHECK=${ASAN_CHECK}",
         "VALGRIND_CHECK=${VALGRIND_CHECK}",
         "RUNNING_IN_AZURE=${RUNNING_IN_AZURE}",
-        "EXECUTOR_NUMBER=${WORKER}",
+        "parallel_jobs=${BUILD_JOBS}",
+        "EXECUTOR_NUMBER=${worker}",
         "nworkers=${NWORKERS}",
-        "worker=${WORKER}"
+        "worker=${worker}"
       ]
 
 pipeline_stop:

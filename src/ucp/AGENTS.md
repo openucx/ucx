@@ -60,6 +60,15 @@ applications. Almost every meaningful UCX feature lives here.
 - For data sent during wireup (worker addresses, capability bits, etc.),
   the pack/unpack lives in `wireup/address.c` — anything that needs to
   cross the wire at handshake time must round-trip through it.
+- Code that depends on what the peer release supports (wire formats, lane
+  selection, protocols, endpoint features) must keep the old behavior
+  with peers of older releases: gate it by a `UCP_MIN_DST_VERSION_*` constant
+  checked against `dst_version` of the peer, never by a raw release
+  number. Add the constant with a comment to the list of such constants
+  in `core/ucp_types.h`.
+- Iterate TL bitmaps with `UCP_TL_BITMAP_FOR_EACH_BIT`, not
+  `UCS_STATIC_BITMAP_FOR_EACH_BIT`, and use `ucp_tl_bitmap_ffs` over
+  `UCS_STATIC_BITMAP_FFS`.
 
 ## Pointers
 

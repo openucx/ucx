@@ -86,16 +86,7 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (iface->config.enable_ipc_handle_cache) {
-        /* Ensure component cache is initialized */
-        ret = uct_rocm_ipc_component_init_cache();
-        if (ucs_unlikely(ret != UCS_OK)) {
-            ucs_error("failed to initialize rocm_ipc component cache\n");
-            return ret;
-        }
-
-        ret = uct_rocm_ipc_cache_map_memhandle(
-                (void*)uct_rocm_ipc_component.ipc_cache, key,
-                &remote_base_addr);
+        ret = uct_rocm_ipc_cache_map_memhandle(key, &remote_base_addr, NULL);
         if (ucs_unlikely(ret != UCS_OK)) {
             ucs_error("fail to attach ipc mem %p %d\n", (void*)key->address,
                       ret);
@@ -190,7 +181,7 @@ ucs_status_t uct_rocm_ipc_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uct_completion_t *comp)
 {
     ucs_status_t ret;
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t *)rkey;
+    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
 
     ret = UCS_PROFILE_CALL_ALWAYS(uct_rocm_ipc_ep_zcopy, tl_ep, remote_addr,
                                   iov, key, comp, 1);
@@ -208,7 +199,7 @@ ucs_status_t uct_rocm_ipc_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
                                        uct_completion_t *comp)
 {
     ucs_status_t ret;
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t *)rkey;
+    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t*)rkey;
 
     ret = UCS_PROFILE_CALL_ALWAYS(uct_rocm_ipc_ep_zcopy, tl_ep, remote_addr,
                                   iov, key, comp, 0);

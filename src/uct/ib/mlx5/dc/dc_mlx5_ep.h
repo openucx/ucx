@@ -58,10 +58,14 @@ enum uct_dc_mlx5_ep_flags {
 
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(12)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(12),
 #else
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0,
 #endif
+
+    UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH         = UCS_BIT(13),
+
+    UCT_DC_MLX5_EP_FLAG_FENCE_PENDING       = UCS_BIT(14)
 };
 
 /* Address-vector for link-local scope */
@@ -83,6 +87,25 @@ struct uct_dc_mlx5_ep {
 };
 
 typedef struct {
+    uct_dc_mlx5_ep_t       super;
+    uct_rc_iface_send_op_t *fence_op;
+    uct_ib_fence_info_t    fi;
+    uint16_t               pending_fence_beat;
+} uct_dc_mlx5_fence_ep_t;
+
+typedef struct {
+    uct_dc_mlx5_fence_ep_t super;
+    struct mlx5_grh_av     grh_av;
+} uct_dc_mlx5_fence_grh_ep_t;
+
+static UCS_F_ALWAYS_INLINE uct_dc_mlx5_fence_ep_t *
+uct_dc_mlx5_ep_fence_state(uct_dc_mlx5_ep_t *ep)
+{
+    ucs_assert(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH);
+    return ucs_derived_of(ep, uct_dc_mlx5_fence_ep_t);
+}
+
+typedef struct {
     uct_dc_mlx5_ep_t                    super;
     struct mlx5_grh_av                  grh_av;
 } uct_dc_mlx5_grh_ep_t;
@@ -98,6 +121,15 @@ UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t*,
                   uint8_t, const uct_dc_mlx5_dci_config_t*);
 
 UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t*,
+                  const uct_dc_mlx5_iface_addr_t*, uct_ib_mlx5_base_av_t*,
+                  uint8_t, struct mlx5_grh_av*,
+                  const uct_dc_mlx5_dci_config_t*);
+
+UCS_CLASS_DECLARE(uct_dc_mlx5_fence_ep_t, uct_dc_mlx5_iface_t*,
+                  const uct_dc_mlx5_iface_addr_t*, uct_ib_mlx5_base_av_t*,
+                  uint8_t, const uct_dc_mlx5_dci_config_t*);
+
+UCS_CLASS_DECLARE(uct_dc_mlx5_fence_grh_ep_t, uct_dc_mlx5_iface_t*,
                   const uct_dc_mlx5_iface_addr_t*, uct_ib_mlx5_base_av_t*,
                   uint8_t, struct mlx5_grh_av*,
                   const uct_dc_mlx5_dci_config_t*);
@@ -163,6 +195,9 @@ ucs_status_t uct_dc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                            uint32_t value, uint32_t *result,
                                            uint64_t remote_addr, uct_rkey_t rkey,
                                            uct_completion_t *comp);
+
+ucs_status_t
+uct_dc_mlx5_ep_check_fence(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep);
 
 #if IBV_HW_TM
 ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
@@ -540,7 +575,9 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
 static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
+
     return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
+           !(ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_PENDING) &&
            uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
            uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
@@ -816,8 +853,15 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
 
 static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 {
-   return (ep->flags & UCT_DC_MLX5_EP_FLAG_GRH) ?
-          &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
+    if (!(ep->flags & UCT_DC_MLX5_EP_FLAG_GRH)) {
+        return NULL;
+    }
+
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH) {
+        return &ucs_derived_of(ep, uct_dc_mlx5_fence_grh_ep_t)->grh_av;
+    }
+
+    return &ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av;
 }
 
 
@@ -830,16 +874,26 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     }
 
 
+#define UCT_DC_MLX5_CHECK_FENCE_RET(_iface, _ep, _ret) \
+    if (ucs_unlikely((_ep)->flags & UCT_DC_MLX5_EP_FLAG_FENCE_FLUSH)) { \
+        ucs_status_t _status = uct_dc_mlx5_ep_check_fence(_iface, _ep); \
+        if (ucs_unlikely(_status != UCS_OK)) { \
+            return _ret; \
+        } \
+    }
+
+
 #define UCT_DC_CHECK_RES_PTR(_iface, _ep) \
     { \
         { \
-            ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
-            if (ucs_unlikely(status != UCS_OK)) { \
-                return UCS_STATUS_PTR(status); \
+            ucs_status_t _status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+            if (ucs_unlikely(_status != UCS_OK)) { \
+                return UCS_STATUS_PTR(_status); \
             } \
         } \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
+        UCT_DC_MLX5_CHECK_FENCE_RET(_iface, _ep, UCS_STATUS_PTR(_status)) \
     }
 
 
@@ -854,6 +908,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
         UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_ERR_NO_RESOURCE) \
+        UCT_DC_MLX5_CHECK_FENCE_RET(_iface, _ep, _status) \
     }
 
 

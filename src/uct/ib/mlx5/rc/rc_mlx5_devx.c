@@ -396,7 +396,7 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
                               UCT_IB_MLX5_QP_OPTPAR_RWE;
     struct mlx5_wqe_av mlx5_av;
     ucs_status_t status;
-    struct ibv_ah *ah;
+    uct_ib_ah_entry_t *ah_entry;
     void *qpc;
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
@@ -412,13 +412,14 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
     uct_ib_mlx5_devx_set_qpc_dp_ordering(md, qpc, iface);
 
     if (uct_ib_iface_is_roce(&iface->super.super)) {
-        status = uct_ib_iface_create_ah(&iface->super.super, ah_attr,
-                                        "RC DEVX QP connect", &ah);
+        status = uct_ib_iface_ah_get(&iface->super.super, ah_attr,
+                                     "RC DEVX QP connect", &ah_entry);
         if (status != UCS_OK) {
             return status;
         }
 
-        uct_ib_mlx5_get_av(ah, &mlx5_av);
+        uct_ib_mlx5_get_av(ah_entry->ah, &mlx5_av);
+        uct_ib_iface_ah_put(&iface->super.super, ah_entry);
         memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
                mlx5_av.rmac, sizeof(mlx5_av.rmac));
         memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
@@ -439,8 +440,6 @@ ucs_status_t uct_rc_mlx5_iface_common_devx_connect_qp(
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
                                                &opt_param_mask);
-
-        uct_ib_iface_release_ah(&iface->super.super, ah);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);

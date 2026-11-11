@@ -26,10 +26,12 @@ protected:
         ucs_time_t   end_time;
         ucs_time_t   d;
         ucs_time_t   total_time;
+        unsigned     count;
         twheel       *self;
     };
 
     ucs_twheel_t m_wheel;
+    hr_timer    *m_timer_to_reschedule;
 
     // @override
     virtual void init();
@@ -38,18 +40,24 @@ protected:
     virtual void cleanup();
 
     static void timer_func(ucs_wtimer_t *self);
+    static void timer_rearm_func(ucs_wtimer_t *self);
+    static void timer_reschedule_func(ucs_wtimer_t *self);
     static bool check_all_timers_triggered(std::vector<struct hr_timer> &t);
 
     void timer_expired(struct hr_timer *t);
     void add_timer(struct hr_timer *t);
-    void init_timer(struct hr_timer *t, int id);
+    void init_timer(struct hr_timer *t, int id,
+                    ucs_twheel_callback_t cb = timer_func);
     void init_timerv(struct hr_timer *v, int n);
     void set_timer_delta(struct hr_timer *t, int how);
+    void test_rearm(unsigned elapsed_ticks);
 };
 
 void twheel::init()
 {
-    ucs_twheel_init(&m_wheel, ucs_time_from_usec(32) * ucs::test_time_multiplier(),
+    m_timer_to_reschedule = NULL;
+    ucs_twheel_init(&m_wheel,
+                    ucs_time_from_usec(32) * ucs::test_time_multiplier(),
                     ucs_get_time());
 }
 
@@ -62,6 +70,29 @@ void twheel::timer_func(ucs_wtimer_t *self)
 {
     struct hr_timer *t = ucs_container_of(self, struct hr_timer, timer);
     t->self->timer_expired(t);
+}
+
+void twheel::timer_rearm_func(ucs_wtimer_t *self)
+{
+    struct hr_timer *t = ucs_container_of(self, struct hr_timer, timer);
+
+    timer_func(self);
+    EXPECT_EQ(UCS_OK, ucs_wtimer_add(&t->self->m_wheel, self, t->d));
+}
+
+void twheel::timer_reschedule_func(ucs_wtimer_t *self)
+{
+    struct hr_timer *t     = ucs_container_of(self, struct hr_timer, timer);
+    twheel *test           = t->self;
+    struct hr_timer *other = test->m_timer_to_reschedule;
+
+    timer_func(self);
+    EXPECT_TRUE(other->timer.is_active);
+    EXPECT_EQ(UCS_ERR_BUSY,
+              ucs_wtimer_add(&test->m_wheel, &other->timer, other->d));
+    ucs_wtimer_remove(&test->m_wheel, &other->timer);
+    EXPECT_EQ(UCS_OK,
+              ucs_wtimer_add(&test->m_wheel, &other->timer, other->d));
 }
 
 bool twheel::check_all_timers_triggered(std::vector<struct hr_timer> &t)
@@ -77,6 +108,7 @@ bool twheel::check_all_timers_triggered(std::vector<struct hr_timer> &t)
 
 void twheel::timer_expired(struct hr_timer *t)
 {
+    ++t->count;
     t->total_time += (m_wheel.now - t->start_time);
     t->end_time   = m_wheel.now;
 }
@@ -88,12 +120,44 @@ void twheel::add_timer(struct hr_timer *t)
     t->start_time = ucs_get_time();
 }
 
-void twheel::init_timer(struct hr_timer *t, int id)
+void twheel::init_timer(struct hr_timer *t, int id, ucs_twheel_callback_t cb)
 {
     t->tid        = id;
+    t->end_time   = 0;
     t->total_time = 0;
+    t->count      = 0;
     t->self       = this;
-    ucs_wtimer_init(&t->timer, timer_func);
+    ucs_wtimer_init(&t->timer, cb);
+}
+
+void twheel::test_rearm(unsigned elapsed_ticks)
+{
+    ucs_time_t now = m_wheel.now;
+    struct hr_timer t;
+
+    init_timer(&t, 0, timer_rearm_func);
+    t.start_time = now;
+    t.d          = m_wheel.res;
+    ASSERT_UCS_OK(ucs_wtimer_add(&m_wheel, &t.timer, t.d));
+
+    now += elapsed_ticks * m_wheel.res;
+    ucs_twheel_sweep(&m_wheel, now);
+    EXPECT_EQ(1u, t.count);
+    EXPECT_EQ(now, t.end_time);
+    EXPECT_TRUE(t.timer.is_active);
+    EXPECT_EQ(1u, m_wheel.count);
+
+    ucs_twheel_sweep(&m_wheel, now);
+    EXPECT_EQ(1u, t.count);
+    ucs_twheel_sweep(&m_wheel, now + m_wheel.res);
+    EXPECT_EQ(1u, t.count);
+    ucs_twheel_sweep(&m_wheel, now + 2 * m_wheel.res);
+    EXPECT_EQ(2u, t.count);
+    EXPECT_TRUE(t.timer.is_active);
+    EXPECT_EQ(1u, m_wheel.count);
+
+    ucs_wtimer_remove(&m_wheel, &t.timer);
+    EXPECT_TRUE(ucs_twheel_is_empty(&m_wheel));
 }
 
 void twheel::init_timerv(struct hr_timer *v, int n)
@@ -137,6 +201,49 @@ void twheel::set_timer_delta(struct hr_timer *t, int how)
 }
 
 #define N_LOOPS 20
+
+UCS_TEST_F(twheel, rearm_from_callback) {
+    for (unsigned start_slot : {0u, m_wheel.num_slots - 2}) {
+        for (unsigned elapsed_ticks : {8u, 2 * m_wheel.num_slots}) {
+            UCS_TEST_MESSAGE << "start slot " << start_slot
+                             << ", elapsed ticks " << elapsed_ticks;
+            m_wheel.current = start_slot;
+            test_rearm(elapsed_ticks);
+        }
+    }
+}
+
+UCS_TEST_F(twheel, reschedule_expired_from_callback) {
+    ucs_time_t now = m_wheel.now;
+    struct hr_timer timers[2];
+
+    init_timer(&timers[0], 0, timer_reschedule_func);
+    init_timer(&timers[1], 1);
+    for (auto &timer : timers) {
+        timer.start_time = now;
+        timer.d          = m_wheel.res;
+        ASSERT_UCS_OK(ucs_wtimer_add(&m_wheel, &timer.timer, timer.d));
+    }
+
+    m_timer_to_reschedule = &timers[1];
+    now += 8 * m_wheel.res;
+    ucs_twheel_sweep(&m_wheel, now);
+    EXPECT_EQ(1u, timers[0].count);
+    EXPECT_EQ(0u, timers[1].count);
+    EXPECT_FALSE(timers[0].timer.is_active);
+    EXPECT_TRUE(timers[1].timer.is_active);
+    EXPECT_EQ(1u, m_wheel.count);
+
+    ucs_twheel_sweep(&m_wheel, now + m_wheel.res);
+    EXPECT_EQ(0u, timers[1].count);
+    ucs_twheel_sweep(&m_wheel, now + 2 * m_wheel.res);
+    EXPECT_EQ(1u, timers[1].count);
+
+    for (auto &timer : timers) {
+        ucs_wtimer_remove(&m_wheel, &timer.timer);
+    }
+    EXPECT_TRUE(ucs_twheel_is_empty(&m_wheel));
+}
 
 UCS_TEST_SKIP_COND_F(twheel, precision_single, true) {
     // Test is broken

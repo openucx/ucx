@@ -7,12 +7,18 @@
 #ifndef UCS_NETLINK_H
 #define UCS_NETLINK_H
 
+#include <ucs/config/types.h>
 #include <ucs/type/status.h>
 
 #include <linux/netlink.h>
 #include <netinet/in.h>
 
 BEGIN_C_DECLS
+
+typedef enum {
+    UCS_NETLINK_ROUTE_CHECK_BEST,
+    UCS_NETLINK_ROUTE_CHECK_RELAXED
+} ucs_netlink_route_check_t;
 
 /**
  * Callback function for parsing individual netlink messages.
@@ -26,23 +32,46 @@ BEGIN_C_DECLS
 typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
                                                void *arg);
 
-/*
+/**
+ * Parse a received netlink datagram buffer containing one or more messages.
+ *
+ * @param [in]  msg            Pointer to the received netlink message buffer.
+ * @param [in]  msg_len        Length of the message buffer in bytes.
+ * @param [in]  parse_cb       Callback function to parse each message.
+ * @param [in]  arg            User-provided argument for the parse callback.
+ * @param [in]  err_log_level  Log level used when an NLMSG_ERROR is received.
+ * @param [out] msg_done_p     Set to 1 if NLMSG_DONE was reached, 0 otherwise.
+ *
+ * @return UCS_OK if the buffer was parsed, UCS_ERR_BUSY if a dump was
+ *         interrupted (NLM_F_DUMP_INTR), or error code otherwise.
+ */
+ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
+                                   ucs_netlink_parse_cb_t parse_cb, void *arg,
+                                   ucs_log_level_t err_log_level,
+                                   int *msg_done_p);
+
+/**
  * Send a netlink request and parse the response.
  *
  * @param [in]  protocol         Netlink protocol (e.g. NETLINK_ROUTE).
- * @param [in]  nlmsg_type       Protocol message type (e.g. NETLINK_GETROUTE).
- * @param [in]  nlmsg_flags      Flags for message header (e.g. NLM_F_ROOT).
+ * @param [in]  nlmsg_type       Protocol message type (e.g. RTM_GETROUTE).
+ * @param [in]  nlmsg_flags      Flags for message header (e.g. NLM_F_DUMP).
  * @param [in]  protocol_header  Netlink protocol header.
  * @param [in]  header_length    Netlink protocol header length.
  * @param [in]  parse_cb         Callback function to parse the response.
  * @param [in]  arg              User-provided argument for the parse callback.
+ * @param [in]  err_log_level    Log level used when an NLMSG_ERROR is received.
+ *
+ * @return UCS_OK if the request succeeded, UCS_ERR_BUSY if a dump was
+ *         interrupted (NLM_F_DUMP_INTR) and should be retried, or error code
+ *         otherwise.
  */
-ucs_status_t
-ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
-                         unsigned short nlmsg_flags,
-                         const void *protocol_header, size_t header_length,
-                         ucs_netlink_parse_cb_t parse_cb, void *arg);
-
+ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
+                                      unsigned short nlmsg_flags,
+                                      const void *protocol_header,
+                                      size_t header_length,
+                                      ucs_netlink_parse_cb_t parse_cb,
+                                      void *arg, ucs_log_level_t err_log_level);
 
 /**
  * Check whether a route exists for a given network interface and
@@ -72,16 +101,45 @@ int ucs_netlink_route_exists(int if_index, const struct sockaddr *sa_remote,
 int ucs_netlink_get_local_route_ndev_index(const struct sockaddr *sa_remote);
 
 /**
- * Check if this network interface has the best route to the destination
- * address.
+ * Check whether a destination address is assigned to the local host in the
+ * routing domain of a network interface, i.e. an interface of the same VRF (or
+ * an interface out of any VRF) has a local route to it.
  *
  * @param [in]  if_index         Network interface index.
  * @param [in]  sa_remote        Pointer to the destination address.
  *
- * @return 1 if this network interface has the best route to the destination
- *         address, or 0 otherwise.
+ * @return 1 if the destination address is local, or 0 otherwise.
  */
-int ucs_netlink_is_best_route(int if_index, const struct sockaddr *sa_remote);
+int ucs_netlink_is_local_addr(int if_index, const struct sockaddr *sa_remote);
+
+/**
+ * Check whether a route to a given destination address through a network
+ * interface matches the requested policy.
+ *
+ * @param [in]  if_index         Network interface index.
+ * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [in]  route_check      When set to UCS_NETLINK_ROUTE_CHECK_RELAXED,
+ *                               accept any non-default route, or a default
+ *                               route if nothing better exists. Otherwise,
+ *                               accept only the best route.
+ *
+ * @return 1 if the route is accepted by the requested policy, or 0 otherwise.
+ */
+int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
+                              ucs_netlink_route_check_t route_check);
+
+/**
+ * Get the VRF (L3 master) device of a network interface: the VRF device it is
+ * enslaved to, or the interface itself if it is a VRF device. Addresses of such
+ * interface can be used only by sockets bound to the VRF.
+ * VRF membership of all interfaces is read once and cached at the first call.
+ *
+ * @param [in]  if_index         Network interface index.
+ *
+ * @return Network interface index of the VRF device, or -1 if the interface
+ *         is neither a VRF device nor enslaved to one.
+ */
+int ucs_netlink_get_vrf_master_index(int if_index);
 
 END_C_DECLS
 
