@@ -19,6 +19,7 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc.inl>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
@@ -443,9 +444,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                 ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
             }
 
-            uct_cuda_ipc_unmap_memhandle(
-                    unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+            uct_cuda_ipc_mapping_t mapping;
+            uct_cuda_ipc_mapping_init(&mapping, &unpacked->super,
+                                      mapped_addr);
+            uct_cuda_ipc_unmap_memhandle(&mapping, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
