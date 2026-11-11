@@ -14,7 +14,9 @@ extern "C" {
 #include <net/if.h>
 #include <libgen.h>
 #include <limits.h>
+#include <sched.h>
 #include <linux/rtnetlink.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
 
@@ -54,6 +56,57 @@ protected:
     {
         ++(*static_cast<int*>(arg));
         return UCS_INPROGRESS;
+    }
+
+    enum {
+        CHILD_PASS = 0,
+        CHILD_FAIL = 1,
+        CHILD_SKIP = 77
+    };
+
+    /* Runs in a forked child, because the route cache is process-global and
+     * the network namespace change must not affect other tests */
+    static int ecmp_route_child()
+    {
+        static const char *cmds[] = {
+            "ip link add d0 type dummy",
+            "ip link add d1 type dummy",
+            "ip addr add 192.168.100.10/31 dev d0",
+            "ip addr add 192.168.100.12/31 dev d1",
+            "ip link set d0 up",
+            "ip link set d1 up",
+            "ip route add 192.168.100.0/24 "
+                "nexthop via 192.168.100.13 dev d1 weight 1 onlink "
+                "nexthop via 192.168.100.11 dev d0 weight 1 onlink"
+        };
+        static const char *ifaces[] = {"d0", "d1"};
+        struct sockaddr_in sa       = {};
+        int netmask_len;
+
+        if (unshare(CLONE_NEWUSER | CLONE_NEWNET) != 0) {
+            return CHILD_SKIP;
+        }
+
+        for (size_t i = 0; i < ucs_static_array_size(cmds); ++i) {
+            if (system(cmds[i]) != 0) {
+                return CHILD_SKIP;
+            }
+        }
+
+        sa.sin_family = AF_INET;
+        inet_pton(AF_INET, "192.168.100.82", &sa.sin_addr);
+
+        for (size_t i = 0; i < ucs_static_array_size(ifaces); ++i) {
+            int if_index = if_nametoindex(ifaces[i]);
+            if (!ucs_netlink_route_exists(if_index,
+                                          (const struct sockaddr*)&sa,
+                                          &netmask_len) ||
+                (netmask_len != 24)) {
+                return CHILD_FAIL;
+            }
+        }
+
+        return CHILD_PASS;
     }
 };
 
@@ -291,4 +344,21 @@ UCS_TEST_F(test_netlink, send_request) {
                                        sizeof(ifi), count_msg_cb, &count,
                                        UCS_LOG_LEVEL_DEBUG));
     EXPECT_EQ(0, count);
+}
+
+UCS_TEST_F(test_netlink, ecmp_route) {
+    pid_t pid = fork();
+    ASSERT_NE(-1, pid);
+
+    if (pid == 0) {
+        _exit(ecmp_route_child());
+    }
+
+    int wstatus;
+    ASSERT_EQ(pid, waitpid(pid, &wstatus, 0));
+    ASSERT_TRUE(WIFEXITED(wstatus));
+    if (WEXITSTATUS(wstatus) == CHILD_SKIP) {
+        UCS_TEST_SKIP_R("cannot create network namespace or routes");
+    }
+    EXPECT_EQ(CHILD_PASS, WEXITSTATUS(wstatus));
 }
