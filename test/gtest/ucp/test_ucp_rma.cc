@@ -2220,11 +2220,11 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_rma_sgl_contig, put) {
-    test_put_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
+    test_sgl({64, 256, UCS_KBYTE, 4 * UCS_KBYTE, 512});
 }
 
 UCS_TEST_P(test_ucp_rma_sgl_contig, put_with_callback) {
-    test_put_sgl(10, UCS_KBYTE, true, true);
+    test_sgl(10, UCS_KBYTE, true, true);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_sgl, all, "all")
