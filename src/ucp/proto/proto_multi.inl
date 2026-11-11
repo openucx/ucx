@@ -48,7 +48,10 @@ ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
         ucs_div_round_up(lane_weight * UCP_PROTO_MULTI_WEIGHT_MAX,
                          total_weight);
 
-    return ucs_min(weight, UCP_PROTO_MULTI_WEIGHT_MAX);
+    weight = ucs_min(weight, UCP_PROTO_MULTI_WEIGHT_MAX);
+    ucs_assertv(weight > 0, "lane_weight=%f total_weight=%f", lane_weight,
+                total_weight);
+    return weight;
 }
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -56,6 +59,27 @@ ucp_proto_multi_scaled_length(uint32_t weight, size_t length)
 {
     return ((weight * length) + UCP_PROTO_MULTI_WEIGHT_MAX - 1) >>
            UCP_PROTO_MULTI_WEIGHT_SHIFT;
+}
+
+static UCS_F_ALWAYS_INLINE const ucp_proto_multi_lane_priv_t *
+ucp_proto_rma_lane_priv(ucp_request_t *req,
+                        const ucp_proto_multi_priv_t *mpriv,
+                        const ucp_proto_multi_lane_priv_t *lpriv,
+                        ucp_proto_multi_lane_priv_t *adjusted)
+{
+    if (ucs_unlikely(req->send.ep->flags & UCP_EP_FLAG_PATH_DEGRADED)) {
+        return ucp_proto_rma_adjust_lane(req, mpriv, lpriv, adjusted);
+    }
+
+    return lpriv;
+}
+
+/* Send nothing on this lane and let the next lane continue from here */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rma_skip_lane(ucp_request_t *req, ucp_datatype_iter_t *next_iter)
+{
+    *next_iter = req->send.state.dt_iter;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE size_t
