@@ -201,6 +201,16 @@ char *ucs_strtrim(char *str);
 
 
 /**
+ * Check whether a string is empty or contains only whitespace characters, as
+ * detected by isspace(3).
+ *
+ * @param str  String to check.
+ * @return Nonzero if the string is blank, 0 otherwise.
+ */
+int ucs_string_is_blank(const char *str);
+
+
+/**
  * Get pointer to file name in path, same as basename but do not
  * modify source string.
  *
