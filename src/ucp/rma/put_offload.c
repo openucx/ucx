@@ -246,6 +246,19 @@ ucp_proto_put_offload_bcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
+static ucs_status_t ucp_proto_put_offload_bcopy_reset(ucp_request_t *req)
+{
+    if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
+        ucp_proto_rma_request_skip_sent(req);
+    } else {
+        /* PUT is idempotent and this protocol does not support resume, so a
+         * restarted request replays from the beginning */
+        ucp_datatype_iter_rewind(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+    }
+
+    return ucp_proto_request_bcopy_reset(req);
+}
+
 ucp_proto_t ucp_put_offload_bcopy_proto = {
     .name     = "put/offload/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
@@ -255,7 +268,7 @@ ucp_proto_t ucp_put_offload_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_offload_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .reset    = ucp_proto_request_bcopy_reset
+    .reset    = ucp_proto_put_offload_bcopy_reset
 };
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

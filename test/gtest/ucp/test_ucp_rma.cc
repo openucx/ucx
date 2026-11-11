@@ -15,6 +15,8 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_rkey.inl>
 #include <ucp/proto/proto_multi.h>
+#include <ucp/proto/proto_select.h>
+#include <ucp/wireup/wireup.h>
 #include <ucs/sys/sys.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -971,6 +973,107 @@ UCS_TEST_P(test_ucp_proto_emulation_enable, put_zcopy_forced_success,
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_emulation_enable, ib,
                                         "ib")
+
+
+/* Restart a partially sent PUT, as an endpoint reconfiguration does */
+class test_ucp_rma_restart : public test_ucp_rma {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "contig");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, IOV, "iov");
+    }
+
+    test_ucp_rma_restart()
+    {
+        modify_config("PROTO_REQUEST_RESET", "y");
+    }
+
+protected:
+    void test_restart()
+    {
+        /* Larger than the send queue, so it is sent partially */
+        static const size_t size  = 8 * UCS_MBYTE;
+        bool is_iov               = get_variant_value() & IOV;
+        mem_buffer sbuf(size, UCS_MEMORY_TYPE_HOST);
+        mapped_buffer rbuf(size, receiver());
+        ucp_dt_iov_t iov[]        = {{sbuf.ptr(), size / 2},
+                                     {UCS_PTR_BYTE_OFFSET(sbuf.ptr(), size / 2),
+                                      size / 2}};
+        ucp_request_param_t param = {};
+        ucs::handle<ucp_rkey_h> rkey;
+        ucs_queue_head_t pending_q;
+        ucs_status_ptr_t sptr;
+        ucp_request_t *req;
+
+        mem_buffer::pattern_fill(sbuf.ptr(), size, ucs::rand());
+        rbuf.rkey(sender(), rkey);
+
+        /* Complete the wireup, which would hold the request without sending */
+        ASSERT_UCS_OK(request_wait(ucp_put_nbx(sender().ep(), sbuf.ptr(), 1,
+                                               (uint64_t)rbuf.ptr(), rkey,
+                                               &param)));
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype     = is_iov ? ucp_dt_make_iov() : ucp_dt_make_contig(1);
+        sptr = ucp_put_nbx(sender().ep(), is_iov ? (void*)iov : sbuf.ptr(),
+                           is_iov ? ucs_static_array_size(iov) : size,
+                           (uint64_t)rbuf.ptr(), rkey, &param);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(sptr));
+        req = (ucp_request_t*)sptr - 1;
+        if (req->send.state.dt_iter.offset == 0) {
+            ASSERT_UCS_OK(request_wait(sptr));
+            UCS_TEST_SKIP_R("request was not partially sent");
+        }
+
+        UCS_ASYNC_BLOCK(&sender().worker()->async);
+        ucs_queue_head_init(&pending_q);
+        uct_ep_pending_purge(ucp_ep_get_lane(sender().ep(), req->send.lane),
+                             ucp_request_purge_enqueue_cb, &pending_q);
+        EXPECT_EQ(1, ucs_queue_length(&pending_q));
+        ucp_wireup_replay_pending_requests(sender().ep(), &pending_q);
+        UCS_ASYNC_UNBLOCK(&sender().worker()->async);
+
+        if (!is_iov) {
+            /* The sent data is skipped instead of resumed */
+            EXPECT_FALSE(req->send.proto_config->select_param.op_id_flags &
+                         UCP_PROTO_SELECT_OP_FLAG_RESUME);
+        }
+
+        ASSERT_UCS_OK(request_wait(sptr));
+        flush_ep(sender());
+        EXPECT_TRUE(mem_buffer::compare(sbuf.ptr(), rbuf.ptr(), size,
+                                        UCS_MEMORY_TYPE_HOST));
+    }
+
+private:
+    enum {
+        IOV = UCS_BIT(2)
+    };
+};
+
+UCS_TEST_P(test_ucp_rma_restart, put_offload_bcopy,
+           "PROTOS=put/offload/bcopy,reconfig")
+{
+    ucp_lane_index_t lane = ucp_ep_config(sender().ep())->key.rma_bw_lanes[0];
+
+    if ((lane == UCP_NULL_LANE) ||
+        !(ucp_ep_get_iface_attr(sender().ep(), lane)->cap.flags &
+          UCT_IFACE_FLAG_PUT_BCOPY)) {
+        UCS_TEST_SKIP_R("put bcopy is not supported");
+    }
+
+    test_restart();
+}
+
+UCS_TEST_P(test_ucp_rma_restart, put_am_bcopy, "PROTOS=put/am/bcopy,reconfig")
+{
+    test_restart();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_restart, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_restart, shm, "shm")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_rma_restart, tcp, "tcp")
 
 
 class test_ucp_rma_reg : public test_ucp_rma {

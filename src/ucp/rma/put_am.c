@@ -212,6 +212,15 @@ ucp_proto_put_am_bcopy_probe(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_probe(&params);
 }
 
+static ucs_status_t ucp_proto_put_am_bcopy_reset(ucp_request_t *req)
+{
+    if (req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG) {
+        ucp_proto_rma_request_skip_sent(req);
+    }
+
+    return ucp_proto_request_bcopy_reset(req);
+}
+
 ucp_proto_t ucp_put_am_bcopy_proto = {
     .name     = "put/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
@@ -221,7 +230,7 @@ ucp_proto_t ucp_put_am_bcopy_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_put_am_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort,
-    .reset    = ucp_proto_request_bcopy_reset
+    .reset    = ucp_proto_put_am_bcopy_reset
 };
 
 ucp_proto_t ucp_put_sgl_am_bcopy_proto = {

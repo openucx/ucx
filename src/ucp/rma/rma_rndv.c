@@ -33,6 +33,8 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
 
     if (!ucp_proto_init_check_op(init_params, UCS_BIT(op_id)) ||
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
+        (ucp_proto_select_op_flags(sel_param) &
+         UCP_PROTO_SELECT_OP_FLAG_RESUME) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (init_params->ep_config_key->dst_version <
          UCP_MIN_DST_VERSION_PROTO_RMA_RNDV) ||
