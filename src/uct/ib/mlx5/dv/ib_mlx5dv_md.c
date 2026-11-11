@@ -2457,6 +2457,10 @@ ucs_status_t uct_ib_mlx5_devx_md_open_common(const char *name, size_t size,
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dump_fill_mkey)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_DUMP_FILL_MKEY;
+    }
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
     }
