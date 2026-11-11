@@ -401,6 +401,8 @@ void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
 
+void uct_rc_iface_qp_cleanup_ready(uct_rc_iface_t *iface, uint32_t qp_num);
+
 unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
 
 /**
@@ -408,11 +410,12 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
  */
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
                                     uct_ib_qp_attr_t *attr, unsigned max_send_wr,
-                                    struct ibv_srq *srq);
+                                    unsigned max_recv_wr, struct ibv_srq *srq);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
                             uct_ib_qp_attr_t *qp_init_attr,
                             unsigned max_send_wr,
+                            unsigned max_recv_wr,
                             struct ibv_srq *srq);
 
 ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);

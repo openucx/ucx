@@ -1,5 +1,6 @@
 /**
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2021-2026. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -15,6 +16,135 @@
 #include <ucp/proto/proto_common.inl>
 #include <uct/api/v2/uct_v2.h>
 
+
+void ucp_proto_rndv_mtype_fc_leave(ucp_request_t *req)
+{
+    ucs_assert(req->send.rndv.fc_state != UCP_REQUEST_RNDV_MTYPE_FC_NONE);
+    req->send.rndv.fc_state = UCP_REQUEST_RNDV_MTYPE_FC_NONE;
+}
+
+unsigned ucp_proto_rndv_mtype_fc_reschedule_cb(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert(req->send.rndv.fc_state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    /* Keep the request in RESCHED state, so that if it is aborted before
+     * ucp_proto_rndv_mtype_request_init() retries the allocation, the wakeup
+     * is passed to the next waiter rather than dropped. */
+    ucp_request_send(req);
+    return 1;
+}
+
+int ucp_proto_rndv_mtype_fc_reschedule_filter(
+        const ucs_callbackq_elem_t *elem, void *arg)
+{
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    ucs_error("ep %p still has mtype FC reschedule callback for req %p", arg,
+              elem->arg);
+    return 1;
+}
+
+static int
+ucp_proto_rndv_mtype_fc_resched_collect(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
+{
+    ucs_queue_head_t *reqs = arg;
+    ucp_request_t *req;
+
+    if (elem->cb != ucp_proto_rndv_mtype_fc_reschedule_cb) {
+        return 0;
+    }
+
+    req = elem->arg;
+    ucs_assert(req->send.rndv.fc_state == UCP_REQUEST_RNDV_MTYPE_FC_RESCHED);
+    ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
+    return 1;
+}
+
+/* Move all throttled requests of the endpoint into @a reqs. Queued requests
+ * are removed from the worker pending queues and leave the flow-control state.
+ * Woken-up requests have their reschedule callback removed, but stay in the
+ * flow-control state, so that aborting or resetting them passes their wakeup
+ * to the next waiter. Returns nonzero if any request was found. */
+static int
+ucp_proto_rndv_mtype_fc_ep_dequeue(ucp_ep_h ep, ucs_queue_head_t *reqs)
+{
+    ucp_worker_h worker = ep->worker;
+    ucs_queue_head_t *pending_q;
+    ucs_queue_iter_t iter;
+    ucp_request_t *req;
+    unsigned q_index;
+
+    for (q_index = 0; q_index < UCP_WORKER_RNDV_FC_OP_LAST; ++q_index) {
+        pending_q = &worker->rndv_mtype_fc.pending_q[q_index];
+        ucs_queue_for_each_safe(req, iter, pending_q,
+                                send.rndv.fc.queue_elem) {
+            if (req->send.ep != ep) {
+                continue;
+            }
+
+            ucs_queue_del_iter(pending_q, iter);
+            ucp_proto_rndv_mtype_fc_leave(req);
+            ucs_queue_push(reqs, &req->send.rndv.fc.queue_elem);
+        }
+    }
+
+    ucs_callbackq_remove_oneshot(&worker->uct->progress_q, ep,
+                                 ucp_proto_rndv_mtype_fc_resched_collect,
+                                 reqs);
+    return !ucs_queue_is_empty(reqs);
+}
+
+void ucp_proto_rndv_mtype_fc_ep_purge(ucp_ep_h ep, ucs_status_t status)
+{
+    ucs_queue_head_t reqs;
+    ucp_request_t *req;
+
+    /* Aborting a woken-up request may wake up another request of this ep,
+     * which is then aborted on a later iteration */
+    ucs_queue_head_init(&reqs);
+    while (ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs)) {
+        ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+            ucp_proto_request_abort(req, status);
+        }
+    }
+}
+
+/* Reset the request, since the replay does not always restart it, and add it
+ * to the replay queue */
+static void
+ucp_proto_rndv_mtype_fc_extract_one(ucp_request_t *req,
+                                    ucs_queue_head_t *replay_queue)
+{
+    ucs_status_t status;
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED));
+    ucp_trace_req(req, "mtype_fc: extract for replay");
+
+    status = req->send.proto_config->proto->reset(req);
+    ucs_assertv_always(status == UCS_OK, "req %p, failed to reset: %s", req,
+                       ucs_status_string(status));
+    ucs_queue_push(replay_queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+}
+
+void ucp_proto_rndv_mtype_fc_ep_extract(ucp_ep_h ep,
+                                        ucs_queue_head_t *replay_queue)
+{
+    ucs_queue_head_t reqs;
+    ucp_request_t *req;
+
+    /* Resetting a woken-up request may wake up another request of this ep,
+     * which is then extracted on a later iteration */
+    ucs_queue_head_init(&reqs);
+    while (ucp_proto_rndv_mtype_fc_ep_dequeue(ep, &reqs)) {
+        ucs_queue_for_each_extract(req, &reqs, send.rndv.fc.queue_elem, 1) {
+            ucp_proto_rndv_mtype_fc_extract_one(req, replay_queue);
+        }
+    }
+}
 
 static int
 ucp_proto_rndv_ctrl_skip_inter_node_md(
@@ -220,6 +350,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     const ucp_ep_config_t *ep_config    = &ucs_array_elem(&worker->ep_config,
                                                           ep_cfg_index);
     ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    ucp_md_map_t remote_md_map, unreachable_md_map;
     ucp_proto_init_params_t remote_init_params;
     ucp_rkey_config_key_t rkey_config_key;
     ucp_worker_cfg_index_t rkey_cfg_index;
@@ -229,15 +360,24 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 
     /* Construct remote key for remote protocol lookup according to the local
      * buffer properties (since remote side is expected to access the local
-     * buffer)
+     * buffer). The peer is expected to fail unpacking the same MDs that we
+     * failed to unpack from its remote key, so mark them as unreachable.
      */
-    rkey_config_key.md_map       = ucp_proto_rndv_md_map_to_remote(params,
-                                                                   md_map);
+    remote_md_map = ucp_proto_rndv_md_map_to_remote(params, md_map);
+    if (params->super.super.rkey_config_key != NULL) {
+        unreachable_md_map =
+                remote_md_map &
+                params->super.super.rkey_config_key->unreachable_md_map;
+    } else {
+        unreachable_md_map = 0;
+    }
+
+    rkey_config_key.md_map       = remote_md_map & ~unreachable_md_map;
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.sys_dev      = params->super.reg_mem_info.sys_dev;
     rkey_config_key.mem_type     = params->super.reg_mem_info.type;
     rkey_config_key.flags        = 0;
-    rkey_config_key.unreachable_md_map = 0;
+    rkey_config_key.unreachable_md_map = unreachable_md_map;
 
     remote_init_params                 = params->super.super;
     remote_init_params.select_param    = remote_select_param;
@@ -351,34 +491,39 @@ static ucp_proto_select_param_t ucp_proto_rndv_remote_select_param_init(
 {
     const ucp_proto_init_params_t *init_params   = &params->super.super;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
+    const ucp_rkey_config_key_t *rkey_config_key = init_params->rkey_config_key;
+    ucp_context_h context                        = init_params->worker->context;
+    ucp_memory_info_t mem_info                   =
+            ucp_proto_common_select_param_mem_info(select_param);
+    ucp_dt_class_t dt_class                      = select_param->dt_class;
+    uint8_t sg_count                             = select_param->sg_count;
     ucp_proto_select_param_t remote_select_param;
-    ucp_memory_info_t mem_info;
     uint32_t op_attr_mask;
+
+    if (rkey_config_key != NULL) {
+        /* A remote key always describes a contiguous buffer */
+        dt_class = UCP_DATATYPE_CONTIG;
+        sg_count = 1;
+
+        /* Keep the local memory info if the local context cannot model the
+         * remote memory type, e.g. GPU memory of another vendor */
+        if (UCS_BIT_GET(context->supported_mem_type_mask,
+                        rkey_config_key->mem_type)) {
+            mem_info.type  = rkey_config_key->mem_type;
+            mem_info.flags = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
+            /* The local system device is a namespace-safe proxy only when the
+             * memory types match */
+            if (mem_info.type != select_param->mem_type) {
+                mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            }
+        }
+    }
 
     op_attr_mask = ucp_proto_select_op_attr_unpack(select_param->op_attr) &
                    UCP_OP_ATTR_FLAG_MULTI_SEND;
-    /* Construct select parameter for the remote protocol */
-    if (init_params->rkey_config_key == NULL) {
-        /* Remote buffer is unknown, assume same params as local */
-        mem_info.type    = select_param->mem_type;
-        mem_info.sys_dev = select_param->sys_dev;
-        mem_info.flags   = select_param->op.mem_flags;
-        ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
-                                    op_attr_mask, params->remote_op_flags,
-                                    select_param->dt_class,
-                                    &mem_info, select_param->sg_count);
-    } else {
-        mem_info.type    = init_params->rkey_config_key->mem_type;
-        /* If the local and remote memory types match, use the local system
-         * device as a namespace-safe proxy for remote protocol estimation. */
-        mem_info.sys_dev = (mem_info.type == select_param->mem_type) ?
-                                   select_param->sys_dev :
-                                   UCS_SYS_DEVICE_ID_UNKNOWN;
-        mem_info.flags   = ucp_proto_rndv_rkey_mem_flags_estimate(init_params);
-        ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
-                                    op_attr_mask, params->remote_op_flags,
-                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
-    }
+    ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
+                                op_attr_mask, params->remote_op_flags, dt_class,
+                                &mem_info, sg_count);
 
     if (ucp_proto_rndv_shm_pipeline_force(init_params) &&
         ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
@@ -687,16 +832,18 @@ void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
 
 void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
 {
+    int invalidating;
+
     ucp_am_release_user_header(req);
     ucp_request_rndv_flush_complete(req);
 
-    if (ucp_request_memh_invalidate(req, status)) {
-        ucp_proto_rndv_rts_reset(req);
-        return;
+    /* Fragments of this request may have already completed (e.g. aborted
+     * during EP purge), so ucp_proto_rndv_rts_reset() cannot be used here */
+    invalidating = ucp_request_memh_invalidate(req, status);
+    ucp_proto_request_zcopy_id_reset(req);
+    if (!invalidating) {
+        ucp_request_complete_send(req, status);
     }
-
-    ucp_proto_rndv_rts_reset(req);
-    ucp_request_complete_send(req, status);
 }
 
 ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
@@ -706,6 +853,50 @@ ucs_status_t ucp_proto_rndv_rts_reset(ucp_request_t *req)
     }
 
     return ucp_proto_request_zcopy_id_reset(req);
+}
+
+unsigned ucp_proto_rndv_frag_max_elems(ucp_context_h context,
+                                       ucs_memory_type_t frag_mem_type)
+{
+    const size_t max_mem = context->config.ext.rndv_frag_worker_max_mem;
+    size_t frag_size;
+    size_t max_frags;
+
+    if ((max_mem == UCS_MEMUNITS_INF) || (max_mem == UCS_MEMUNITS_AUTO)) {
+        return UINT_MAX;
+    }
+
+    frag_size = context->config.ext.rndv_frag_size[frag_mem_type];
+    ucs_assert_always(frag_size > 0);
+
+    /* One fragment is kept for PUT/GET and at least one is shared */
+    max_frags = max_mem / frag_size;
+    if (max_frags < 2) {
+        ucs_warn("RNDV_FRAG_WORKER_MAX_MEM %zu is smaller than two %s "
+                 "fragments (%zu each), using two fragments",
+                 max_mem, ucs_memory_type_names[frag_mem_type], frag_size);
+        return 2;
+    }
+
+    return ucs_min(max_frags, UINT_MAX);
+}
+
+unsigned ucp_proto_rndv_frag_shared_elems(ucp_context_h context,
+                                          unsigned max_elems)
+{
+    const double ratio = context->config.ext.rndv_frag_rtr_ratio;
+    unsigned shared;
+
+    if (max_elems == UINT_MAX) {
+        return max_elems;
+    }
+
+    /* Keep at least one fragment for PUT/GET and share at least one, see
+     * ucp_proto_rndv_frag_max_elems() */
+    ucs_assert(ratio < 1.0);
+    ucs_assert(max_elems >= 2);
+    shared = ucs_min((unsigned)(max_elems * ratio), max_elems - 1);
+    return ucs_max(shared, 1);
 }
 
 ucs_status_t
@@ -885,6 +1076,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_rndv_send_reply,
     /* Caching rkey_buffer pointer for later unpacking of shm keys in
      * rkey_ptr mtype ppln protocol. */
     req->send.rndv.rkey_buffer = rkey_buffer;
+    ucp_proto_rndv_req_fc_init(req);
 
     ucp_trace_req(req,
                   "%s rva 0x%" PRIx64 " length %zd rreq_id 0x%" PRIx64

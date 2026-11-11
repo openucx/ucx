@@ -20,6 +20,7 @@ extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_vmm_multi.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc.inl>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
@@ -488,6 +489,54 @@ UCS_TEST_P(test_cuda_ipc_md, vmm_multi_export_on_demand)
 #endif
 }
 
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_accessibility)
+{
+    int num_devices, can_access, device_index;
+    ucs_ternary_auto_value_t accessible;
+    CUdevice local_device, remote_device;
+    CUuuid remote_uuid;
+    bool checked = false;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetCount(&num_devices));
+    if (num_devices < 2) {
+        UCS_TEST_SKIP_R("test requires at least two CUDA devices");
+    }
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&local_device, 0));
+    for (device_index = 1; device_index < num_devices; ++device_index) {
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&remote_device, device_index));
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetUuid(&remote_uuid, remote_device));
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuDeviceCanAccessPeer(&can_access, local_device,
+                                        remote_device));
+
+        accessible = uct_cuda_ipc_nvml_peer_accessible(local_device,
+                                                        &remote_uuid);
+        if (accessible != UCS_TRY) {
+            EXPECT_EQ(can_access ? UCS_YES : UCS_NO, accessible);
+            checked = true;
+        }
+    }
+
+    if (!checked) {
+        UCS_TEST_SKIP_R("NVML peer accessibility is unavailable");
+    }
+}
+
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_unresolved)
+{
+    CUdevice cu_dev;
+    CUuuid unknown_uuid;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&cu_dev, 0));
+
+    /* NVML cannot resolve this UUID, so the handle-mapping probe must decide
+     * the peer reachability */
+    memset(unknown_uuid.bytes, 0xab, sizeof(unknown_uuid.bytes));
+    EXPECT_EQ(UCS_TRY,
+              uct_cuda_ipc_nvml_peer_accessible(cu_dev, &unknown_uuid));
+}
+
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
@@ -538,9 +587,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                 ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
             }
 
-            uct_cuda_ipc_unmap_memhandle(
-                    unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+            uct_cuda_ipc_mapping_t mapping;
+            uct_cuda_ipc_mapping_init(&mapping, &unpacked->super,
+                                      mapped_addr);
+            uct_cuda_ipc_unmap_memhandle(&mapping, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {
@@ -883,74 +933,3 @@ UCS_TEST_F(test_cuda_ipc_cache_lru, stale_destroy_while_in_use) {
     EXPECT_EQ(0UL, m_cache->total_size);
     EXPECT_TRUE(ucs_list_is_empty(&m_cache->lru_list));
 }
-
-
-class test_cuda_copy_md : public test_md {
-};
-
-UCS_TEST_P(test_cuda_copy_md, vmm_multi_handle_range) {
-    /* A single byte per chunk is rounded up to the allocation granularity, so
-     * the buffer is backed by 3 distinct physical handles */
-    cuda_vmm_mem_buffer buffer(1, UCS_MEMORY_TYPE_CUDA, 3);
-    uct_md_mem_attr_t mem_attr;
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
-
-    /* Query the full multi-handle range; the guard preserves the caller's
-     * requested extent instead of shrinking to the single chunk that
-     * contains the base pointer. */
-    ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                   &mem_attr));
-
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-    EXPECT_GE(mem_attr.alloc_length, buffer.size());
-}
-
-UCS_TEST_P(test_cuda_copy_md, vmm_locality_domain_mem_type) {
-#if HAVE_DECL_CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN
-    ASSERT_EQ(cudaSuccess, cudaSetDevice(0));
-
-    auto check_domain = [this](unsigned char domain_id,
-                               ucs_sys_device_t &sys_dev) {
-        cuda_vmm_mem_buffer buffer;
-        CUresult ret = buffer.alloc(64, 0,
-                                    CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN,
-                                    1, domain_id);
-        if (ret != CUDA_SUCCESS) {
-            return false;
-        }
-
-        uct_md_mem_attr_t mem_attr;
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-
-        ASSERT_UCS_OK(uct_md_mem_query(md(), buffer.ptr(), buffer.size(),
-                                       &mem_attr));
-        EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, mem_attr.mem_type);
-        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
-        sys_dev = mem_attr.sys_dev;
-        return true;
-    };
-
-    ucs_sys_device_t sys_dev0, sys_dev1;
-
-    /* Domain 1 is present only on a device with several locality domains, so
-     * its absence is what tells a single-domain device apart */
-    if (!check_domain(1, sys_dev1)) {
-        UCS_TEST_SKIP_R("single locality-domain device");
-    }
-
-    if (!check_domain(0, sys_dev0)) {
-        ADD_FAILURE() << "locality domain 0 allocation failed even though "
-                         "domain 1 succeeded";
-        return;
-    }
-
-    EXPECT_EQ(sys_dev0, sys_dev1);
-#else
-    UCS_TEST_SKIP_R("built without locality-domain support");
-#endif
-}
-
-_UCT_MD_INSTANTIATE_TEST_CASE(test_cuda_copy_md, cuda_cpy);

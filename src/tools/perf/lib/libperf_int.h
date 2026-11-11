@@ -166,6 +166,14 @@ typedef struct {
     size_t length;
 } ucx_perf_exported_mem_t;
 
+typedef struct {
+    void                **buffers;
+    size_t              *lengths;
+    ucp_mem_h           *memhs;
+    uint64_t            *remote_addrs;
+    ucp_rkey_h          *rkeys;
+} ucp_perf_sgl_state_t;
+
 struct ucx_perf_context {
     ucx_perf_params_t            params;
 
@@ -224,6 +232,7 @@ struct ucx_perf_context {
             ucp_perf_daemon_req_t      daemon_req;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
+            ucp_perf_sgl_state_t       sgl;
             void                       *am_hdr;
             ucp_ep_h                   self_ep;
             ucp_rkey_h                 self_send_rkey;
@@ -300,6 +309,12 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params);
  * Get the total length of the message size given by parameters
  */
 size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
+
+/**
+ * Get the size of the buffer used by a single thread: the span of the strided
+ * IOV elements if iov_stride is set, otherwise the total message size
+ */
+size_t ucx_perf_get_thread_buffer_size(const ucx_perf_params_t *params);
 
 void ucx_perf_report(ucx_perf_context_t *perf);
 

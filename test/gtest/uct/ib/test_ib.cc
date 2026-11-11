@@ -610,15 +610,11 @@ public:
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
         ucs_config_allow_list_t dummy_subnet_list;
-        ucs::handle<uct_md_h> uct_md;
         uct_ib_iface_t dummy_ib_iface;
+        auto uct_md = open_md();
         uct_ib_md_t *ib_md;
         ucs_status_t status;
         uint8_t gid_index;
-
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
-                               &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device), m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
@@ -669,13 +665,8 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
 class test_uct_ib_sl : public test_uct_ib_with_specific_port {
 public:
     void check_port_attr() {
+        auto uct_md = open_md();
         ucs_status_t status;
-        ucs::handle<uct_md_h> uct_md;
-
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
-                               &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device),
-                               m_md_config);
 
         uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
 
@@ -691,17 +682,11 @@ public:
 
     bool transport_has_ddp() const
     {
-        ucs::handle<uct_md_h> uct_md;
-
         if (!has_transport("rc_mlx5") && !has_transport("dc_mlx5")) {
             return false;
         }
 
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
-                               &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device),
-                               m_md_config);
-
+        auto uct_md             = open_md();
         uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
         int rc_has_ddp          = has_transport("rc_mlx5") &&
                                   (ib_md->dp_ordering_cap_devx.rc ==
@@ -851,22 +836,6 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     rnr_val = uct_ib_to_rnr_fabric_time(1.);
     EXPECT_EQ(0, rnr_val);
 }
-
-#ifdef HAVE_MLX5_DV
-UCS_TEST_F(test_uct_ib_utils, fw_ver_release_at_least) {
-    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.48.1000", 48, 1000));
-    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("82.48.1000", 48, 1000));
-    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("32.48.1000", 48, 1000));
-    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.49.1", 48, 1000));
-    EXPECT_TRUE(uct_ib_mlx5_fw_ver_release_at_least("40.48.1001", 48, 1000));
-    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.44.1036", 48, 1000));
-    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.48.999", 48, 1000));
-    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("40.47.1026", 48, 1000));
-    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("0.0.0.0", 48, 1000));
-    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("bogus", 48, 1000));
-    EXPECT_FALSE(uct_ib_mlx5_fw_ver_release_at_least("", 48, 1000));
-}
-#endif
 
 
 #if HAVE_DEVX

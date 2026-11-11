@@ -258,9 +258,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
     }
 }
 
-static void
-uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
-                                   const uct_ib_async_event_t *event)
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event)
 {
     ucs_spin_lock(&dev->async_event_lock);
     uct_ib_device_async_event_dispatch_nolock(dev, event);
@@ -412,6 +411,13 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_CQ_ERR:
         event.cookie = ibevent.element.cq;
         break;
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        if (ibevent.element.qp->srq == NULL) {
+            ucs_debug("%s: ignoring LAST_WQE on QP 0x%x without SRQ",
+                      uct_ib_device_name(dev), ibevent.element.qp->qp_num);
+            goto out;
+        }
+        /* Fall through */
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
     case IBV_EVENT_QP_ACCESS_ERR:
@@ -419,7 +425,6 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
-    case IBV_EVENT_QP_LAST_WQE_REACHED:
         event.qp_num = ibevent.element.qp->qp_num;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -448,6 +453,7 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     };
 
     uct_ib_handle_async_event(dev, &event);
+out:
     ibv_ack_async_event(&ibevent);
 }
 
@@ -701,10 +707,9 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
     dev->ah_cache_ttl = UCS_TIME_INFINITY;
 
-    ucs_debug("initialized device '%s' (%s) with %d ports, fw %s",
-              uct_ib_device_name(dev),
-              ibv_node_type_str(ibv_device->node_type), dev->num_ports,
-              IBV_DEV_ATTR(dev, fw_ver));
+    ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
+              ibv_node_type_str(ibv_device->node_type),
+              dev->num_ports);
     return UCS_OK;
 
 err_release_stats:
@@ -780,8 +785,12 @@ static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 static ucs_status_t
 uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
 {
+    static const ucs_config_allow_list_t subnets_allow_all = {
+        .mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL
+    };
     uct_ib_md_t *md = ucs_container_of(dev, uct_ib_md_t, dev);
     const uct_ib_device_spec_t *dev_info;
+    uct_ib_device_gid_info_t gid_info;
     uint8_t required_dev_flags;
     ucs_status_t status;
     unsigned gid_index;
@@ -804,7 +813,7 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
     }
 
     if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
-        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+        if (!uct_ib_device_has_srq(dev)) {
             ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
                       port_num);
             return UCS_ERR_UNSUPPORTED;
@@ -832,6 +841,15 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
         ucs_trace("%s:%d (%s) does not support flags 0x%x", uct_ib_device_name(dev),
                   port_num, dev_info->name, required_dev_flags);
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (uct_ib_device_is_port_roce(dev, port_num) &&
+        (md->config.gid_index == UCS_ULUNITS_AUTO)) {
+        /* Run the same selection as iface open, to avoid reporting a port
+         * which has no operational gid. The subnet filter is part of the iface
+         * configuration and is not known yet. */
+        return uct_ib_device_select_gid(dev, port_num, &subnets_allow_all,
+                                        &gid_info);
     }
 
     gid_index = uct_ib_device_get_ib_gid_index(md);
@@ -1194,9 +1212,9 @@ uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    gid_info->gid_index             = UCT_IB_DEVICE_DEFAULT_GID_INDEX;
-    gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
-    gid_info->roce_info.addr_family = AF_INET;
+    ucs_debug("%s:%d has no operational gid", uct_ib_device_name(dev),
+              port_num);
+    return UCS_ERR_NO_DEVICE;
 
 out_print:
     ucs_debug("%s:%d using gid_index=%d ver=%d addr_family=%d",
@@ -1777,7 +1795,8 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     is_smi = 0;
     status = ucs_netlink_send_request(
             NETLINK_RDMA, RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
-            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi);
+            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi,
+            UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return 0;
     }

@@ -263,27 +263,15 @@ bool test_md::check_alloc_mem_type(ucs_memory_type_t mem_type)
  * refuse it, as it does under an MPS MLOPart device */
 bool test_md::check_dmabuf_export(ucs_memory_type_t mem_type)
 {
-    uct_md_mem_attr_t mem_attr = {};
+    bool exported;
 
     if (!(m_md_attr.dmabuf_mem_types & UCS_BIT(mem_type)) ||
         !mem_buffer::is_mem_type_supported(mem_type)) {
         return false;
     }
 
-    mem_buffer buffer(ucs_get_page_size(), mem_type);
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
-    if (uct_md_mem_query(md(), buffer.ptr(), buffer.size(), &mem_attr) !=
-        UCS_OK) {
-        return false;
-    }
-
-    if (mem_attr.dmabuf_fd == UCT_DMABUF_FD_INVALID) {
-        return false;
-    }
-
-    close(mem_attr.dmabuf_fd);
-    return true;
+    return (mem_buffer::query_dmabuf_export(md(), mem_type, &exported) ==
+            UCS_OK) && exported;
 }
 
 /* Under an MPS MLOPart device the driver allocates no GDR capable memory and
@@ -321,6 +309,18 @@ void test_md::check_memory(void *address, void *expect, size_t size,
                            ucs_memory_type_t mem_type)
 {
     EXPECT_TRUE(mem_buffer::compare(expect, address, size, mem_type));
+}
+
+void test_md::check_mem_query_exact_range(void *address, size_t length)
+{
+    uct_md_mem_attr_t mem_attr;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+    ASSERT_UCS_OK(uct_md_mem_query(md(), address, length, &mem_attr));
+
+    EXPECT_EQ(address, mem_attr.base_address);
+    EXPECT_EQ(length, mem_attr.alloc_length);
 }
 
 void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
