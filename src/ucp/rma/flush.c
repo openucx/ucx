@@ -362,10 +362,11 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
                   req->send.state.uct_comp.count, req->send.lane);
 
     if (req->send.lane != UCP_NULL_LANE) {
-        /* The request was added to the pending queue of this lane, and the
-         * requests queued there before the flush may send on the remaining
-         * lanes too, so do not flush them from here. The pending callback, or
-         * the purge of that queue, continues the flush. */
+        /* After a flush error in the pending callback, both
+         * ucp_ep_flush_progress() and the pending callback schedule this
+         * callback if uct_ep_pending_add() returned UCS_ERR_BUSY. The first
+         * run may add the request to the pending queue of a lane, and then
+         * the pending callback of that lane continues the flush. */
         return 0;
     }
 
@@ -443,7 +444,11 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
         ucp_ep_flush_request_update_uct_comp(req, -1, UCS_BIT(lane));
     } else if (status == UCS_INPROGRESS) {
         ucp_ep_flush_request_update_uct_comp(req, 0, UCS_BIT(lane));
-    } else if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        /* Stay in the pending queue, and flush the other lanes after this
+         * one */
+        return UCS_ERR_NO_RESOURCE;
+    } else if (UCS_STATUS_IS_ERR(status)) {
         ucp_ep_flush_error(req, lane, status);
         /* UCT removes the pending request after a hard error. */
         req->send.lane = UCP_NULL_LANE;
@@ -455,20 +460,21 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     ucp_ep_flush_progress(req);
     completed = ucp_flush_check_completion(req);
 
-    /* If the operation has not completed, and not started on all selected lanes,
-     * add slow-path progress to resume */
-    if (!completed &&
-        (req->send.flush.all_lanes & req->send.flush.lane_mask &
-         ~req->send.flush.started_lanes)) {
-        ucp_ep_flush_request_resched(ep, req);
-    }
-
-    if (status == UCS_ERR_NO_RESOURCE) {
-        return UCS_ERR_NO_RESOURCE;
-    } else if (!UCS_STATUS_IS_ERR(status)) {
-        /* flushed callback might release the request */
-        if (!completed) {
+    /* flushed callback might release the request */
+    if (!completed) {
+        if (!UCS_STATUS_IS_ERR(status)) {
+            /* The lane is flushed, so the request leaves its pending queue */
             req->send.lane = UCP_NULL_LANE;
+        }
+
+        /* If not started on all selected lanes, add slow-path progress to
+         * resume, unless ucp_ep_flush_progress() added the request to the
+         * pending queue of another lane: the pending callback of that lane
+         * continues the flush. */
+        if ((req->send.lane == UCP_NULL_LANE) &&
+            (req->send.flush.all_lanes & req->send.flush.lane_mask &
+             ~req->send.flush.started_lanes)) {
+            ucp_ep_flush_request_resched(ep, req);
         }
     }
 
