@@ -692,8 +692,7 @@ ucs_status_t uct_ib_verbs_mem_reg(uct_md_h uct_md, void *address, size_t length,
     ucs_status_t status;
 
     status = uct_ib_memh_alloc(md, length,
-                               UCT_MD_MEM_REG_FIELD_VALUE(params, flags,
-                                                          FIELD_FLAGS, 0),
+                               uct_ib_md_memh_alloc_flags(md, params),
                                strict_order_mr, sizeof(*memh),
                                sizeof(memh->mrs[0]), &ib_memh);
     if (status != UCS_OK) {
@@ -1320,6 +1319,23 @@ void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
     ucs_debug("%s: %s GPUDirect RDMA is %sdetected by checking %s",
               uct_ib_device_name(&md->dev), ucs_memory_type_names[mem_type],
               md->reg_mem_types & UCS_BIT(mem_type) ? "" : "not ", file);
+}
+
+unsigned uct_ib_md_memh_alloc_flags(const uct_ib_md_t *md,
+                                    const uct_md_mem_reg_params_t *params)
+{
+    unsigned flags = UCT_MD_MEM_REG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+    ucs_memory_type_t mem_type;
+
+    mem_type = UCT_MD_MEM_REG_FIELD_VALUE(params, mem_type, FIELD_MEM_TYPE,
+                                          UCS_MEMORY_TYPE_HOST);
+
+    if ((mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) &&
+        (md->reg_nonblock_mem_types & UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED))) {
+        flags |= UCT_MD_MEM_FLAG_NONBLOCK;
+    }
+
+    return flags;
 }
 
 static void uct_ib_md_check_dmabuf(uct_ib_md_t *md)
