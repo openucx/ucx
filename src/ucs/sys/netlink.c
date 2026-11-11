@@ -628,8 +628,13 @@ static ucs_status_t ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
 
     status = ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, 0, &req,
                                       req_len, ucs_netlink_parse_route_cb,
-                                      &route, UCS_LOG_LEVEL_DEBUG);
-    if (status != UCS_OK) {
+                                      &route, UCS_LOG_LEVEL_TRACE);
+    if (status == UCS_ERR_UNREACHABLE) {
+        /* No route is a valid reply, which the callers report if needed */
+        return status;
+    } else if (status != UCS_OK) {
+        ucs_debug("netlink route request failed: %s",
+                  ucs_status_string(status));
         return status;
     }
 
