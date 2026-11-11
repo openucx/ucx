@@ -19,10 +19,13 @@ case "${1:-}" in
     *) echo 'Expected pci-vf or roce-ipv6' >&2; exit 2 ;;
 esac
 
+ls -l /sys/class/infiniband/ /dev/infiniband/
 vf_device=
 for candidate in /sys/class/infiniband/*; do
+    echo "Inspecting $candidate physfn=$(readlink -f "$candidate/device/physfn")"
     [[ -e "$candidate/device/physfn" ]] || continue
-    device_info=$(ibv_devinfo -d "${candidate##*/}" -i 1 2>/dev/null) || continue
+    device_info=$(ibv_devinfo -d "${candidate##*/}" -i 1 2>&1) || { printf '%s\n' "$device_info"; continue; }
+    printf '%s\n' "$device_info"
     grep -q 'PORT_ACTIVE' <<< "$device_info" || continue
     grep -Eq "link_layer:[[:space:]]+$link_layer" <<< "$device_info" || continue
     vf_device=${candidate##*/}
