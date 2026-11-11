@@ -683,6 +683,8 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
         return;
     }
 
+    /* Elements are selected again at send time, variants only model their
+     * perf */
     ucs_array_for_each(proto, &proto_init->protocols) {
         if (!(ucp_proto_id_field(proto->proto_id, flags) &
               UCP_PROTO_FLAG_INVALID)) {
