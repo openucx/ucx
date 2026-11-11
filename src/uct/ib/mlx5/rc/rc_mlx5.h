@@ -63,6 +63,7 @@ typedef struct uct_rc_mlx5_base_ep {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
     uint8_t                  err_handler_inprogress;
+    uint8_t                  ext_initialized;
 } uct_rc_mlx5_base_ep_t;
 
 typedef __be32 uct_rc_mlx5_tx_token_t;

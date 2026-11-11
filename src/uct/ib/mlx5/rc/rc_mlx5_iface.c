@@ -1009,7 +1009,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     uct_ib_iface_init_attr_t init_attr = {};
     const uct_rc_mlx5_ext_ops_t *ext_ops;
     ucs_status_t status;
-    int required;
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
     init_attr.flags                 = IBV_DEVICE_TM_FLAGS(&md->super.dev) ?
@@ -1035,39 +1034,33 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         return status;
     }
 
-    ext_ops  = uct_ib_mlx5_ext_get_rc_provider();
-    required = (ext_ops != NULL) &&
-               (ext_ops->flags & UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH);
-
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
-    self->super.ext_ops = ext_ops;
-
     status = uct_rc_init_fc_thresh(&config->super, &self->super.super);
     if (status != UCS_OK) {
-        self->super.ext_ops = NULL;
         return status;
     }
 
-    if ((self->super.ext_ops != NULL) &&
-        (self->super.ext_ops->iface_init != NULL)) {
-        status = self->super.ext_ops->iface_init(
+    ext_ops = uct_ib_mlx5_ext_get_rc_provider();
+    if ((ext_ops != NULL) && (ext_ops->iface_init != NULL)) {
+        status = ext_ops->iface_init(
                 &self->super.super.super.super.super, &self->super.ext_ctx);
         if (status != UCS_OK) {
-            self->super.ext_ops = NULL;
             self->super.ext_ctx = NULL;
-            if (required) {
+            if (ext_ops->flags & UCT_RC_MLX5_EXT_FLAG_REQUIRE_IFACE_ATTACH) {
                 return status;
             }
 
             ucs_debug("rc mlx5 provider attachment failed: %s",
                       ucs_status_string(status));
+            return UCS_OK;
         }
     }
 
+    self->super.ext_ops = ext_ops;
     return UCS_OK;
 }
 

@@ -2461,6 +2461,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
                               self->tx.wq.super.qp_num, params);
     self->err_handler_inprogress = 0;
     self->ext_ctx                = NULL;
+    self->ext_initialized        = 0;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,
@@ -2509,40 +2510,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_base_ep_t)
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_base_ep_t, uct_rc_ep_t);
 
-static void uct_rc_mlx5_ep_cleanup_qps(uct_rc_mlx5_ep_t *self)
-{
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
-            self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
-    uint16_t unreleased_cq_credits, unpolled_cqes, cq_credits;
-
-    cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
-    ucs_assert_always(cleanup_ctx != NULL);
-    cleanup_ctx->qp    = self->super.tx.wq.super;
-    cleanup_ctx->tm_qp = self->tm_qp;
-    cleanup_ctx->reg   = self->super.tx.wq.reg;
-
-#if IBV_HW_TM
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
-    }
-#endif
-
-    ucs_assert(self->mp.free == 1);
-    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super,
-                                      &self->super.tx.wq.super, IBV_QPS_ERR);
-
-    /* Keep one unreleased CQ credit per WQE for its error completion. */
-    unreleased_cq_credits = self->super.tx.wq.prev_sw_pi -
-                            self->super.tx.wq.hw_ci;
-    unpolled_cqes = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
-                                                     unreleased_cq_credits);
-    ucs_assert(unreleased_cq_credits >= unpolled_cqes);
-    cq_credits = unreleased_cq_credits - unpolled_cqes;
-
-    uct_rc_ep_cleanup_qp(&self->super.super, &cleanup_ctx->super,
-                         self->super.tx.wq.super.qp_num, cq_credits);
-}
+UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t);
 
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 {
@@ -2578,17 +2546,19 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
                 &self->super.super.super.super, iface->ext_ctx,
                 &self->super.ext_ctx);
         if (status != UCS_OK) {
-            uct_rc_mlx5_ep_cleanup_qps(self);
-            return status;
+            goto err_ext_ep_init;
         }
+        self->super.ext_initialized = 1;
     }
 
     return UCS_OK;
 
+err_ext_ep_init:
+    uct_rc_mlx5_ep_t_cleanup(self);
+    return status;
+
 err_destroy_tm_qp:
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
-    }
+    uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
 err:
     return status;
 }
@@ -2597,15 +2567,41 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
             self->super.super.super.super.iface, uct_rc_mlx5_iface_common_t);
+    uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
+    uint16_t unreleased_cq_credits, unpolled_cqes, cq_credits;
+
+    cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
+    ucs_assert_always(cleanup_ctx != NULL);
+    cleanup_ctx->qp    = self->super.tx.wq.super;
+    cleanup_ctx->tm_qp = self->tm_qp;
+    cleanup_ctx->reg   = self->super.tx.wq.reg;
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
-    if ((iface->ext_ops != NULL) && (iface->ext_ops->ep_init != NULL) &&
-        (iface->ext_ops->ep_cleanup != NULL)) {
+    if (self->super.ext_initialized && (iface->ext_ops->ep_cleanup != NULL)) {
         iface->ext_ops->ep_cleanup(self->super.ext_ctx);
-        self->super.ext_ctx = NULL;
     }
-    uct_rc_mlx5_ep_cleanup_qps(self);
+#if IBV_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
+    }
+#endif
+
+    ucs_assert(self->mp.free == 1);
+    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super,
+                                      &self->super.tx.wq.super, IBV_QPS_ERR);
+
+    /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
+       overflow. These CQ credits will be released by error CQE handler. */
+    unreleased_cq_credits = self->super.tx.wq.prev_sw_pi -
+                            self->super.tx.wq.hw_ci;
+    unpolled_cqes = uct_ib_mlx5_txwq_num_posted_wqes(&self->super.tx.wq,
+                                                     unreleased_cq_credits);
+    ucs_assert(unreleased_cq_credits >= unpolled_cqes);
+    cq_credits = unreleased_cq_credits - unpolled_cqes;
+
+    uct_rc_ep_cleanup_qp(&self->super.super, &cleanup_ctx->super,
+                         self->super.tx.wq.super.qp_num, cq_credits);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_mlx5_base_ep_t);

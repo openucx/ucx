@@ -888,14 +888,6 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
 ucs_status_t uct_base_iface_set_ep_event_handler(
         uct_iface_h iface, const uct_iface_set_ep_event_params_t *params);
 
-static inline void uct_iface_invoke_ep_event(uct_base_iface_t *iface,
-                                             uct_ep_h ep, unsigned events)
-{
-    if (iface->ep_event_cb != NULL) {
-        iface->ep_event_cb(iface->ep_event_arg, ep, events);
-    }
-}
-
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);
 

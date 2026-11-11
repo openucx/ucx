@@ -59,8 +59,6 @@ static UCS_CLASS_INIT_FUNC(uct_priv_worker_t, ucs_async_context_t *async,
 
     self->async       = async;
     self->thread_mode = thread_mode;
-    self->wakeup_cb   = NULL;
-    self->wakeup_arg  = NULL;
     ucs_list_head_init(&self->tl_data);
     return UCS_OK;
 }
@@ -74,28 +72,6 @@ UCS_CLASS_DEFINE(uct_priv_worker_t, uct_worker_t);
 UCS_CLASS_DEFINE_NAMED_NEW_FUNC(uct_worker_create, uct_priv_worker_t, uct_worker_t,
                                 ucs_async_context_t*, ucs_thread_mode_t)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(uct_worker_destroy, uct_priv_worker_t, uct_worker_t)
-
-void uct_worker_set_wakeup_cb(uct_worker_h tl_worker,
-                              void (*callback)(void *), void *arg)
-{
-    uct_priv_worker_t *worker = ucs_derived_of(tl_worker, uct_priv_worker_t);
-
-    UCS_ASYNC_BLOCK(worker->async);
-    worker->wakeup_cb  = callback;
-    worker->wakeup_arg = arg;
-    UCS_ASYNC_UNBLOCK(worker->async);
-}
-
-void uct_worker_signal(uct_worker_h tl_worker)
-{
-    uct_priv_worker_t *worker = ucs_derived_of(tl_worker, uct_priv_worker_t);
-
-    UCS_ASYNC_BLOCK(worker->async);
-    if (worker->wakeup_cb != NULL) {
-        worker->wakeup_cb(worker->wakeup_arg);
-    }
-    UCS_ASYNC_UNBLOCK(worker->async);
-}
 
 void uct_worker_progress_init(uct_worker_progress_t *prog)
 {

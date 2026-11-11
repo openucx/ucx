@@ -212,8 +212,8 @@ ucs_status_t uct_base_iface_set_ep_event_handler(
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
     iface->ep_event_cb  = params->cb;
-    iface->ep_event_arg = (params->field_mask &
-            UCT_IFACE_SET_EP_EVENT_PARAM_FIELD_ARG) ? params->arg : NULL;
+    iface->ep_event_arg = UCS_PARAM_VALUE(UCT_IFACE_SET_EP_EVENT_PARAM_FIELD,
+                                          params, arg, ARG, NULL);
     return UCS_OK;
 }
 
