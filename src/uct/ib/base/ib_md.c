@@ -2,6 +2,7 @@
  * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2026. ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+ * Copyright (C) Intel Corporation, 2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -860,6 +861,8 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     */
     if ((stat(device_path, &st) != 0) || !S_ISCHR(st.st_mode) ||
         (access(device_path, R_OK | W_OK) != 0)) {
+        ucs_debug("%s: %s is not accessible", ibv_get_device_name(device),
+                  device_path);
         return 0;
     }
 
@@ -1449,10 +1452,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         /* check if ROCM KFD driver is loaded */
         uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
 
-        /* Check if Intel Xe driver is loaded */
-        uct_ib_check_gpudirect_driver(md, "/sys/module/xe/srcversion",
-                                      UCS_MEMORY_TYPE_ZE_DEVICE);
-
         /* Check for HabanaLabs Gaudi DMABuf support */
         uct_ib_check_gpudirect_driver(md, "/dev/accel/accel0",
                                       UCS_MEMORY_TYPE_GAUDI);
@@ -1466,15 +1465,20 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         !(md->cap_flags & UCT_MD_FLAG_REG_DMABUF) &&
         (md_config->enable_gpudirect_rdma == UCS_YES)) {
         ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure "
-                  "nv_peer_mem, amdgpu plugin, or Intel Xe driver is "
-                  "installed correctly, or dmabuf is supported.",
+                  "nv_peer_mem or amdgpu plugin is installed correctly, or "
+                  "dmabuf is supported.",
                   uct_ib_device_name(&md->dev));
         status = UCS_ERR_UNSUPPORTED;
         goto err_cleanup_device;
     }
 
+    /* Limit the number of SGEs dumped by the packet tracer, so that it does not
+     * dereference non-host memory from the CPU. DMA-BUF registration makes such
+     * memory registrable without it being listed in 'reg_mem_types', so the
+     * limit also applies to host-only runs on a DMA-BUF capable device. */
     md->dev.max_zcopy_log_sge = INT_MAX;
-    if (md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+    if ((md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) ||
+        (md->cap_flags & UCT_MD_FLAG_REG_DMABUF)) {
         md->dev.max_zcopy_log_sge = 1;
     }
 
@@ -1734,6 +1738,17 @@ uct_component_t uct_ib_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
+static void uct_ib_log_mellanox_visible_devices()
+{
+    const char *value = getenv("MELLANOX_VISIBLE_DEVICES");
+
+    if (value != NULL) {
+        ucs_debug("MELLANOX_VISIBLE_DEVICES is '%s', device list may have "
+                  "been filtered by a container runtime",
+                  value);
+    }
+}
+
 void UCS_F_CTOR uct_ib_init()
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
@@ -1745,6 +1760,8 @@ void UCS_F_CTOR uct_ib_init()
     for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
         uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
     }
+
+    uct_ib_log_mellanox_visible_devices();
 
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 }

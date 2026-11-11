@@ -22,7 +22,6 @@
 
 
 #define UCP_PROTO_RMA_RNDV_RTS_NAME             "RMA_RTS"
-#define UCP_PROTO_RMA_RNDV_MIN_DST_VERSION      22
 #define UCP_PROTO_RMA_RNDV_ZERO_GET_PENALTY     1e-3
 
 
@@ -36,7 +35,7 @@ ucp_proto_rma_rndv_probe_check(const ucp_proto_init_params_t *init_params,
         ucp_proto_rndv_init_params_is_ppln_frag(init_params) ||
         (sel_param->dt_class != UCP_DATATYPE_CONTIG) ||
         (init_params->ep_config_key->dst_version <
-         UCP_PROTO_RMA_RNDV_MIN_DST_VERSION) ||
+         UCP_MIN_DST_VERSION_PROTO_RMA_RNDV) ||
         (init_params->rkey_config_key == NULL)) {
         return 0;
     }

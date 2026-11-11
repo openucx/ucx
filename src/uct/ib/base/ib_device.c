@@ -701,10 +701,9 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
     dev->ah_cache_ttl = UCS_TIME_INFINITY;
 
-    ucs_debug("initialized device '%s' (%s) with %d ports, fw %s",
-              uct_ib_device_name(dev),
-              ibv_node_type_str(ibv_device->node_type), dev->num_ports,
-              IBV_DEV_ATTR(dev, fw_ver));
+    ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
+              ibv_node_type_str(ibv_device->node_type),
+              dev->num_ports);
     return UCS_OK;
 
 err_release_stats:
@@ -1790,7 +1789,8 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     is_smi = 0;
     status = ucs_netlink_send_request(
             NETLINK_RDMA, RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
-            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi);
+            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi,
+            UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return 0;
     }

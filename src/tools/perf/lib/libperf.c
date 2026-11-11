@@ -2074,8 +2074,8 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     ucp_config_t *config;
     ucs_status_t status;
     unsigned i, thread_count;
-    size_t message_size;
-    size_t sgl_offset;
+    size_t buffer_size;
+    size_t desc_offset;
 
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
@@ -2110,7 +2110,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     }
 
     thread_count = perf->params.thread_count;
-    message_size = ucx_perf_get_message_size(&perf->params);
+    buffer_size  = ucx_perf_get_thread_buffer_size(&perf->params);
 
     status = ucp_perf_test_alloc_mem(perf);
     if (status != UCS_OK) {
@@ -2132,17 +2132,29 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         perf->ucp.tctx[i].perf             = *perf;
         /* Doctor the src and dst buffers to make them thread specific */
         perf->ucp.tctx[i].perf.send_buffer =
-                        UCS_PTR_BYTE_OFFSET(perf->send_buffer, i * message_size);
+                        UCS_PTR_BYTE_OFFSET(perf->send_buffer, i * buffer_size);
         perf->ucp.tctx[i].perf.recv_buffer =
-                        UCS_PTR_BYTE_OFFSET(perf->recv_buffer, i * message_size);
+                        UCS_PTR_BYTE_OFFSET(perf->recv_buffer, i * buffer_size);
+
+        /* Each thread has its own part of the IOV/SGL descriptors arrays */
+        desc_offset = i * perf->params.msg_size_cnt;
+
+        if (perf->ucp.send_iov != NULL) {
+            perf->ucp.tctx[i].perf.ucp.send_iov =
+                    perf->ucp.send_iov + desc_offset;
+        }
+
+        if (perf->ucp.recv_iov != NULL) {
+            perf->ucp.tctx[i].perf.ucp.recv_iov =
+                    perf->ucp.recv_iov + desc_offset;
+        }
 
         if (perf->params.ucp.send_datatype == UCP_PERF_DATATYPE_SGL) {
-            sgl_offset = i * perf->params.msg_size_cnt;
-            perf->ucp.tctx[i].perf.ucp.sgl.buffers      += sgl_offset;
-            perf->ucp.tctx[i].perf.ucp.sgl.lengths      += sgl_offset;
-            perf->ucp.tctx[i].perf.ucp.sgl.memhs        += sgl_offset;
-            perf->ucp.tctx[i].perf.ucp.sgl.remote_addrs += sgl_offset;
-            perf->ucp.tctx[i].perf.ucp.sgl.rkeys        += sgl_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.buffers      += desc_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.lengths      += desc_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.memhs        += desc_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.remote_addrs += desc_offset;
+            perf->ucp.tctx[i].perf.ucp.sgl.rkeys        += desc_offset;
         }
 
         status = ucp_worker_create(perf->ucp.context, &worker_params,
@@ -2349,6 +2361,15 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
     }
 
     return length;
+}
+
+size_t ucx_perf_get_thread_buffer_size(const ucx_perf_params_t *params)
+{
+    if (params->iov_stride) {
+        return params->msg_size_cnt * params->iov_stride;
+    }
+
+    return ucx_perf_get_message_size(params);
 }
 
 unsigned rte_peer_index(unsigned group_size, unsigned group_index)

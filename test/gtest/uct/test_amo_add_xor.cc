@@ -36,8 +36,9 @@ public:
              }
         }
 
-        run_workers(static_cast<send_func_t>(&uct_amo_test::atomic_op<T, opcode>),
-                    recvbuf, add_vec, true);
+        run_workers(static_cast<send_func_t>(
+                            &uct_amo_test::atomic_op<T, opcode>),
+                    recvbuf, std::move(add_vec), true);
 
         wait_for_remote();
         EXPECT_EQ(exp_result, *(T*)recvbuf.ptr());
@@ -60,6 +61,14 @@ UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, addr32_symmetric_rkey,
 
 UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add64,
                      !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64)) {
+    test_op<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
+}
+
+/* The mlx5 memory domain without DevX has no indirect atomic keys */
+UCS_TEST_SKIP_COND_P(uct_amo_add_xor_test, add64_no_devx,
+                     !check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64) ||
+                     !has_ib(),
+                     "IB_MLX5_DEVX?=n") {
     test_op<uint64_t, UCT_ATOMIC_OP_ADD>(add_op<uint64_t>);
 }
 

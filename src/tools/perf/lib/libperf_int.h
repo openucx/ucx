@@ -310,6 +310,12 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params);
  */
 size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
+/**
+ * Get the size of the buffer used by a single thread: the span of the strided
+ * IOV elements if iov_stride is set, otherwise the total message size
+ */
+size_t ucx_perf_get_thread_buffer_size(const ucx_perf_params_t *params);
+
 void ucx_perf_report(ucx_perf_context_t *perf);
 
 ucs_status_t ucx_perf_allocators_init_thread(ucx_perf_context_t *perf);

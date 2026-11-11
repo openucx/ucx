@@ -139,7 +139,7 @@ protected:
                                                  numa.numa_node, user_value));
             }
 
-            numa.gpus.push_back(gpu_devices);
+            numa.gpus.push_back(std::move(gpu_devices));
         }
     }
 
@@ -166,7 +166,7 @@ protected:
                                    UCS_SYS_DEVICE_USER_VALUE_EMPTY));
             }
 
-            numa.nics.push_back(nic_ports);
+            numa.nics.push_back(std::move(nic_ports));
         }
     }
 
