@@ -12,7 +12,7 @@ empty_volumes:
 runs_on_dockers:
   - name: cx8-ib-asan
     arch: x86_64
-    url: harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+    url: harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
     tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]"
     annotations: [{key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network"}]
     limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}"
