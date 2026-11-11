@@ -368,8 +368,6 @@ typedef struct uct_base_iface {
     uct_am_tracer_t          am_tracer;        /* Active message tracer */
     void                     *am_tracer_arg;   /* Tracer argument */
     uct_error_handler_t      err_handler;      /* Error handler */
-    uct_ep_event_cb_t        ep_event_cb;
-    void                    *ep_event_arg;
     void                     *err_handler_arg; /* Error handler argument */
     uint32_t                 err_handler_flags; /* Error handler callback flags */
     uct_worker_progress_t    prog;             /* Will be removed once all transports
@@ -384,6 +382,8 @@ typedef struct uct_base_iface {
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
+    uct_ep_event_cb_t        ep_event_cb;
+    void                    *ep_event_arg;
 } uct_base_iface_t;
 
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*,

@@ -2193,20 +2193,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     uint32_t flush_rkey_hi;
     ucs_status_t status;
 
-    addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
-                                  ep_addr_length, EP_ADDR_LENGTH,
-                                  sizeof(uct_rc_mlx5_ep_address_t));
-    if (addr_length < sizeof(*rc_addr)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
-    if ((addr_length > sizeof(*rc_addr)) &&
-        (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY) &&
-        (addr_length < sizeof(*ext_addr) + sizeof(uint16_t))) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     status = uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                                  ep->super.super.path_index,
                                                  &ah_attr, &path_mtu);
@@ -2247,11 +2233,15 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
             rc_addr->atomic_mr_id);
     ep->super.super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
+    addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
+                                  ep_addr_length, EP_ADDR_LENGTH,
+                                  sizeof(uct_rc_mlx5_ep_address_t));
     if (addr_length <= sizeof(uct_rc_mlx5_ep_address_t)) {
         ep->super.super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
         return UCS_OK;
     }
 
+    ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
     if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY) {
         ptr                        = ext_addr + 1;
         flush_rkey_hi              = *ucs_serialize_next(&ptr, uint16_t);
@@ -2461,7 +2451,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
                               self->tx.wq.super.qp_num, params);
     self->err_handler_inprogress = 0;
     self->ext_ctx                = NULL;
-    self->ext_initialized        = 0;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_rc_iface_qp_init(&iface->super,
@@ -2548,7 +2537,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         if (status != UCS_OK) {
             goto err_ext_ep_init;
         }
-        self->super.ext_initialized = 1;
     }
 
     return UCS_OK;
@@ -2578,7 +2566,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.super.txqp,
                                   UCS_ERR_CANCELED, self->super.tx.wq.sw_pi, 1);
-    if (self->super.ext_initialized && (iface->ext_ops->ep_cleanup != NULL)) {
+    if ((self->super.ext_ctx != NULL) && (iface->ext_ops->ep_cleanup != NULL)) {
         iface->ext_ops->ep_cleanup(self->super.ext_ctx);
     }
 #if IBV_HW_TM

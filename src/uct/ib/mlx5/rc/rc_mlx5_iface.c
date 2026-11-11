@@ -865,8 +865,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
 
-    self->ext_ops              = NULL;
-    self->ext_ctx              = NULL;
+    self->ext_ops             = NULL;
+    self->ext_ctx             = NULL;
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
     self->tx.bf_copy_mode     = mlx5_config->super.bf_copy_mode;

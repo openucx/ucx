@@ -346,8 +346,6 @@ struct uct_rc_mlx5_ext_ops;
 
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                     super;
-    const struct uct_rc_mlx5_ext_ops   *ext_ops;
-    void                              *ext_ctx;
     struct {
         ucs_mpool_t                    atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t        mmio_mode;
@@ -420,6 +418,8 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        ddp_enabled_dv;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
+    const struct uct_rc_mlx5_ext_ops   *ext_ops;
+    void                              *ext_ctx;
 } uct_rc_mlx5_iface_common_t;
 
 /**
