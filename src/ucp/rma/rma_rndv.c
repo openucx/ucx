@@ -789,14 +789,10 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
     }
 
     ucs_array_for_each(proto, &proto_init->protocols) {
-        if ((ucp_proto_id_field(proto->proto_id, flags) &
-             UCP_PROTO_FLAG_INVALID) ||
-            !(ucp_proto_id_field(proto->proto_id, proto_class) &
-              UCP_PROTO_CLASS_RMA_FALLBACK)) {
-            continue;
+        if (!(ucp_proto_id_field(proto->proto_id, flags) &
+              UCP_PROTO_FLAG_INVALID)) {
+            ucp_proto_put_sgl_contig_add_variant(init_params, proto);
         }
-
-        ucp_proto_put_sgl_contig_add_variant(init_params, proto);
     }
 }
 
