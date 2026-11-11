@@ -805,10 +805,11 @@ static int uct_ib_iface_roce_is_kernel_routable(
                                              params);
     } else if (status != UCS_OK) {
         uct_iface_fill_info_str_buf(
-                params, "no kernel route to %s via %s",
+                params, "kernel route to %s via %s: %s",
                 ucs_sockaddr_str(sa_remote, remote_str, sizeof(remote_str)),
                 ucs_ndev_index_to_ifname(ndev_index, ndev_ifname,
-                                         sizeof(ndev_ifname)));
+                                         sizeof(ndev_ifname)),
+                ucs_status_string(status));
         return 0;
     }
 
@@ -817,7 +818,9 @@ static int uct_ib_iface_roce_is_kernel_routable(
     }
 
     /* A default route is used only if the routing domain of the netdev has no
-     * more specific route */
+     * more specific route. The lookup is done without the source address,
+     * because per-source routing tables can have a default route to any
+     * destination. */
     status = ucs_netlink_route_get(
             sa_remote, NULL,
             ucs_max(ucs_netlink_get_vrf_master_index(ndev_index), 0),

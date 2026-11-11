@@ -52,7 +52,8 @@ typedef ucs_status_t (*ucs_netlink_parse_cb_t)(const struct nlmsghdr *nlh,
  * @param [out] msg_done_p     Set to 1 if NLMSG_DONE was reached, 0 otherwise.
  *
  * @return UCS_OK if the buffer was parsed, UCS_ERR_BUSY if a dump was
- *         interrupted (NLM_F_DUMP_INTR), or error code otherwise.
+ *         interrupted (NLM_F_DUMP_INTR), UCS_ERR_UNREACHABLE if the kernel
+ *         replied that it has no route, or error code otherwise.
  */
 ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
                                    ucs_netlink_parse_cb_t parse_cb, void *arg,
@@ -72,8 +73,9 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
  * @param [in]  err_log_level    Log level used when an NLMSG_ERROR is received.
  *
  * @return UCS_OK if the request succeeded, UCS_ERR_BUSY if a dump was
- *         interrupted (NLM_F_DUMP_INTR) and should be retried, or error code
- *         otherwise.
+ *         interrupted (NLM_F_DUMP_INTR) and should be retried,
+ *         UCS_ERR_UNREACHABLE if the kernel replied that it has no route, or
+ *         error code otherwise.
  */
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
                                       unsigned short nlmsg_flags,
@@ -140,13 +142,14 @@ int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
 /**
  * Get the routing table entry which the kernel selects to send to a
  * destination address, as "ip route get fibmatch" does. Unlike the cached
- * routing table, the kernel applies policy routing rules and VRF.
+ * routing table, the kernel applies policy routing rules and VRF. The result
+ * is cached, unless it is an error other than UCS_ERR_UNREACHABLE.
  *
  * @param [in]  sa_remote        Pointer to the destination address.
  * @param [in]  sa_local         Optional pointer to the source address, of the
  *                               same address family as the destination, or
  *                               NULL.
- * @param [in]  if_index         Optional output network interface index, or 0.
+ * @param [in]  if_index         Optional outgoing interface index, or 0.
  *                               When it is set, the kernel considers only
  *                               routes through this interface, or the routes
  *                               of its VRF when it is a VRF device.

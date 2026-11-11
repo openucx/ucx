@@ -220,9 +220,12 @@ UCS_TEST_F(test_netlink, route_get) {
 
     /* TEST-NET-2 address has no route through the loopback device */
     ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
-    EXPECT_EQ(UCS_ERR_UNREACHABLE,
-              ucs_netlink_route_get((struct sockaddr*)&sin, NULL, lo_index,
-                                    &route));
+    for (int i = 0; i < 2; ++i) {
+        /* The second lookup returns the cached result */
+        EXPECT_EQ(UCS_ERR_UNREACHABLE,
+                  ucs_netlink_route_get((struct sockaddr*)&sin, NULL, lo_index,
+                                        &route));
+    }
 
     ASSERT_EQ(0, getifaddrs(&ifaddrs));
 
@@ -352,6 +355,14 @@ UCS_TEST_F(test_netlink, parse_msg) {
     EXPECT_EQ(0, count);
     EXPECT_EQ(0, msg_done);
     EXPECT_TRUE(m_errors.empty());
+
+    /* A route lookup fails when the kernel has no route */
+    reply.clear();
+    nlerr.error = -EHOSTUNREACH;
+    append_nlmsg(reply, NLMSG_ERROR, &nlerr, sizeof(nlerr));
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              ucs_netlink_parse_msg(reply.data(), reply.size(), count_msg_cb,
+                                    &count, UCS_LOG_LEVEL_DEBUG, &msg_done));
 
     /* A dump which failed in the kernel ends with an error in NLMSG_DONE */
     dump.resize(done_offset);

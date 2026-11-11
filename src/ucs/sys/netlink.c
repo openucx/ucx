@@ -58,6 +58,41 @@ typedef struct {
                        RTA_SPACE(sizeof(int))];
 } ucs_netlink_route_req_t;
 
+
+typedef struct {
+    uint64_t dst[2]; /* IPv4 or IPv6 address */
+    uint64_t src[2];
+    int      if_index;
+    int      family;
+} ucs_netlink_route_key_t;
+
+
+typedef struct {
+    ucs_status_t        status;
+    ucs_netlink_route_t route;
+} ucs_netlink_route_result_t;
+
+
+static UCS_F_ALWAYS_INLINE khint32_t
+ucs_netlink_route_key_hash(ucs_netlink_route_key_t key)
+{
+    return kh_int64_hash_func(key.dst[0] ^ key.dst[1] ^ key.if_index);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucs_netlink_route_key_equal(ucs_netlink_route_key_t key1,
+                            ucs_netlink_route_key_t key2)
+{
+    return !memcmp(&key1, &key2, sizeof(key1));
+}
+
+/* Results of kernel route lookups */
+KHASH_INIT(ucs_netlink_route_cache, ucs_netlink_route_key_t,
+           ucs_netlink_route_result_t, 1, ucs_netlink_route_key_hash,
+           ucs_netlink_route_key_equal);
+static khash_t(ucs_netlink_route_cache) ucs_netlink_route_cache;
+static pthread_mutex_t ucs_netlink_route_cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
 UCS_ARRAY_DECLARE_TYPE(ucs_netlink_rt_rules_t, unsigned,
                        ucs_netlink_route_entry_t);
 
@@ -164,7 +199,10 @@ ucs_status_t ucs_netlink_parse_msg(const void *msg, size_t msg_len,
 err:
     ucs_log(err_log_level, "received error response from netlink err %d: %s",
             err, strerror(-err));
-    return UCS_ERR_IO_ERROR;
+    /* Route lookups fail with these errors when the kernel has no route */
+    return ((err == -ENETUNREACH) || (err == -EHOSTUNREACH)) ?
+                   UCS_ERR_UNREACHABLE :
+                   UCS_ERR_IO_ERROR;
 }
 
 ucs_status_t ucs_netlink_send_request(int protocol, unsigned short nlmsg_type,
@@ -593,13 +631,10 @@ ucs_netlink_route_lookup(const struct sockaddr *sa_remote,
                                        sizeof(if_index));
     }
 
-    /* The kernel replies with an error when it has no route */
     status = ucs_netlink_send_request(NETLINK_ROUTE, RTM_GETROUTE, 0, &req,
                                       req_len, ucs_netlink_parse_route_cb,
                                       &route, UCS_LOG_LEVEL_DEBUG);
-    if (status == UCS_ERR_IO_ERROR) {
-        return UCS_ERR_UNREACHABLE;
-    } else if (status != UCS_OK) {
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -653,11 +688,55 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
                                    const struct sockaddr *sa_local,
                                    int if_index, ucs_netlink_route_t *route_p)
 {
+    ucs_netlink_route_result_t *result;
+    ucs_netlink_route_key_t key;
+    ucs_status_t status;
+    size_t addr_size;
+    khiter_t iter;
+    int khret;
+
     if (!ucs_netlink_is_fib_match_supported()) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucs_netlink_route_lookup(sa_remote, sa_local, if_index, route_p);
+    status = ucs_sockaddr_inet_addr_sizeof(sa_remote, &addr_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    memset(&key, 0, sizeof(key));
+    memcpy(key.dst, ucs_sockaddr_get_inet_addr(sa_remote), addr_size);
+    if (sa_local != NULL) {
+        memcpy(key.src, ucs_sockaddr_get_inet_addr(sa_local), addr_size);
+    }
+    key.if_index = if_index;
+    key.family   = sa_remote->sa_family;
+
+    pthread_mutex_lock(&ucs_netlink_route_cache_lock);
+    iter = kh_put(ucs_netlink_route_cache, &ucs_netlink_route_cache, key,
+                  &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_unlock;
+    }
+
+    result = &kh_val(&ucs_netlink_route_cache, iter);
+    if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        result->status = ucs_netlink_route_lookup(sa_remote, sa_local, if_index,
+                                                  &result->route);
+    }
+
+    status = result->status;
+    if (status == UCS_OK) {
+        *route_p = result->route;
+    } else if (status != UCS_ERR_UNREACHABLE) {
+        /* Other errors can be transient */
+        kh_del(ucs_netlink_route_cache, &ucs_netlink_route_cache, iter);
+    }
+
+out_unlock:
+    pthread_mutex_unlock(&ucs_netlink_route_cache_lock);
+    return status;
 }
 
 static ucs_status_t
