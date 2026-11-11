@@ -1178,6 +1178,12 @@ out_unlock:
     return status;
 }
 
+ucs_topo_device_class_t ucs_topo_sys_device_get_class(ucs_sys_device_t sys_dev)
+{
+    return UCS_TOPO_SYS_DEVICE_GET_FIELD(sys_dev, device_class,
+                                         UCS_TOPO_DEVICE_CLASS_UNKNOWN);
+}
+
 ucs_status_t
 ucs_topo_sys_device_add_flags(ucs_sys_device_t sys_dev, unsigned flags)
 {
@@ -1240,12 +1246,65 @@ int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class)
     return is_incomplete;
 }
 
+/* Count the unique BDFs of the class which are smaller than max_key */
+static unsigned
+ucs_topo_device_class_count_bdfs_nolock(ucs_topo_device_class_t device_class,
+                                        ucs_bus_id_bit_rep_t max_key)
+{
+    unsigned num_bdfs = 0;
+    ucs_bus_id_bit_rep_t key;
+    unsigned d, prev_d;
+
+    for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
+        if (ucs_topo_global_ctx.devices[d].device_class != device_class) {
+            continue;
+        }
+
+        key = ucs_topo_get_bus_id_bit_repr(
+                &ucs_topo_global_ctx.devices[d].bus_id);
+        if (key >= max_key) {
+            continue;
+        }
+
+        /* Count only the first same-class record for this BDF. */
+        for (prev_d = 0; prev_d < d; ++prev_d) {
+            if ((ucs_topo_global_ctx.devices[prev_d].device_class ==
+                 device_class) &&
+                (ucs_topo_get_bus_id_bit_repr(
+                         &ucs_topo_global_ctx.devices[prev_d].bus_id) == key)) {
+                break;
+            }
+        }
+
+        if (prev_d == d) {
+            ++num_bdfs;
+        }
+    }
+
+    return num_bdfs;
+}
+
+unsigned
+ucs_topo_device_class_get_num_bdfs(ucs_topo_device_class_t device_class)
+{
+    unsigned num_bdfs;
+
+    ucs_assertv((device_class > UCS_TOPO_DEVICE_CLASS_UNKNOWN) &&
+                        (device_class < UCS_TOPO_DEVICE_CLASS_LAST),
+                "invalid device class %u", device_class);
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    num_bdfs = ucs_topo_device_class_count_bdfs_nolock(device_class, INT64_MAX);
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+
+    return num_bdfs;
+}
+
 unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 {
     ucs_topo_sys_device_info_t *device;
     ucs_topo_device_class_t device_class;
-    ucs_bus_id_bit_rep_t ref_key, key;
-    unsigned ordinal, d, prev_d;
+    unsigned ordinal;
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
     device = ucs_topo_get_sys_device_nolock(sys_dev);
@@ -1269,34 +1328,8 @@ unsigned ucs_topo_sys_device_get_bdf_class_ordinal(ucs_sys_device_t sys_dev)
 
     /* The ordinal is the rank of the device's bus id (BDF) among all unique
      * BDFs of the same class. */
-    ref_key = ucs_topo_get_bus_id_bit_repr(&device->bus_id);
-    ordinal = 0;
-    for (d = 0; d < ucs_topo_global_ctx.num_devices; ++d) {
-        if (ucs_topo_global_ctx.devices[d].device_class != device_class) {
-            continue;
-        }
-
-        key = ucs_topo_get_bus_id_bit_repr(
-                &ucs_topo_global_ctx.devices[d].bus_id);
-        if (key >= ref_key) {
-            continue;
-        }
-
-        /* Count only the first same-class record for this BDF. */
-        for (prev_d = 0; prev_d < d; ++prev_d) {
-            if ((ucs_topo_global_ctx.devices[prev_d].device_class ==
-                 device_class) &&
-                (ucs_topo_get_bus_id_bit_repr(
-                         &ucs_topo_global_ctx.devices[prev_d].bus_id) == key)) {
-                break;
-            }
-        }
-
-        if (prev_d == d) {
-            ++ordinal;
-        }
-    }
-
+    ordinal               = ucs_topo_device_class_count_bdfs_nolock(
+            device_class, ucs_topo_get_bus_id_bit_repr(&device->bus_id));
     device->class_ordinal = ordinal;
 
 out_unlock:

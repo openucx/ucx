@@ -3028,6 +3028,53 @@ ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
     return UCS_ERR_INVALID_PARAM;
 }
 
+/* Vera Rubin hosts have a Vera CPU, and Rubin GPUs that come in pairs */
+static int ucp_context_is_vera_rubin(void)
+{
+    const unsigned num_devices = ucs_topo_num_devices();
+    ucs_sys_device_t sys_dev;
+    unsigned num_gpus, i;
+
+    if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        ucs_debug("cpu model %s is not vera", ucs_cpu_model_name());
+        return 0;
+    }
+
+    if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
+        ucs_diag("gpu discovery is incomplete, cannot detect vera rubin");
+        return 0;
+    }
+
+    for (i = 0; i < num_devices; ++i) {
+        sys_dev = (ucs_sys_device_t)i;
+        if (ucs_topo_sys_device_get_class(sys_dev) !=
+            UCS_TOPO_DEVICE_CLASS_ACC) {
+            continue;
+        }
+
+        if (!(ucs_topo_sys_device_get_flags(sys_dev) &
+              UCS_TOPO_DEVICE_FLAG_RUBIN)) {
+            ucs_debug("gpu %s is not rubin",
+                      ucs_topo_sys_device_get_name(sys_dev));
+            return 0;
+        }
+    }
+
+    /* MLOPart partitions of a GPU share its BDF, and count as one GPU */
+    num_gpus = ucs_topo_device_class_get_num_bdfs(UCS_TOPO_DEVICE_CLASS_ACC);
+    if (num_gpus == 0) {
+        ucs_debug("no gpus found");
+        return 0;
+    }
+
+    if ((num_gpus % 2) != 0) {
+        ucs_debug("number of rubin gpus %u is odd", num_gpus);
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
 {
     ucp_gpu_nic_assignment_mode_t mode =
@@ -3039,11 +3086,9 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
     ucs_status_t status;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
-        /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
-        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
-            ucs_debug("gpu-nic assignment is not supported on %s "
-                      "architecture, skipping",
-                      ucs_cpu_model_name());
+        if (!ucp_context_is_vera_rubin()) {
+            ucs_debug("gpu-nic assignment is supported only on vera rubin, "
+                      "skipping");
             return UCS_OK;
         }
 

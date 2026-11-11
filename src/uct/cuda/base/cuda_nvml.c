@@ -1,5 +1,5 @@
 /**
- * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025. ALL RIGHTS RESERVED.
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2025-2026. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -93,6 +93,10 @@
         if (_status != UCS_OK) { \
             goto _out; \
         } \
+        if (UCT_CUDA_NVML_FPTR(_func) == NULL) { \
+            _status = UCS_ERR_UNSUPPORTED; \
+            goto _out; \
+        } \
         _status = UCT_CUDA_NVML_CALL_DEBUG(_func, \
                                            UCS_FUNC_PASS_ARGS(__VA_ARGS__)); \
     _out: \
@@ -166,6 +170,11 @@ static ucs_status_t uct_cuda_nvml_init()
     }
 
     UCT_CUDA_NVML_FOR_EACH_ACTION(UCT_CUDA_NVML_FPTR_LOAD, goto err_dlclose);
+
+    /* Optional, since only the gpu architecture detection depends on it */
+    UCT_CUDA_NVML_FPTR_LOAD(nvmlDeviceGetArchitecture,
+                            ucs_diag("nvmlDeviceGetArchitecture is not found, "
+                                     "gpu architecture is unknown"));
 
 #if HAVE_NVML_FABRIC_INFO
     UCT_CUDA_NVML_FPTR_LOAD(nvmlDeviceGetGpuFabricInfoV, {

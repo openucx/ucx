@@ -111,7 +111,8 @@ typedef enum {
  * Properties of a system device, set by the owning transport.
  */
 typedef enum {
-    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0) /**< DPU device (e.g. BlueField) */
+    UCS_TOPO_DEVICE_FLAG_DPU = UCS_BIT(0), /**< DPU device (e.g. BlueField) */
+    UCS_TOPO_DEVICE_FLAG_RUBIN = UCS_BIT(1) /**< NVIDIA Rubin GPU */
 } ucs_topo_device_flags_t;
 
 
@@ -483,6 +484,16 @@ ucs_topo_sys_device_set_class(ucs_sys_device_t sys_dev,
                               ucs_topo_device_class_t device_class);
 
 /**
+ * Get the device class of a given system device.
+ *
+ * @param [in]  sys_dev  System device index.
+ *
+ * @return Class of the device, or @ref UCS_TOPO_DEVICE_CLASS_UNKNOWN if the
+ *         system device is unknown or invalid.
+ */
+ucs_topo_device_class_t ucs_topo_sys_device_get_class(ucs_sys_device_t sys_dev);
+
+/**
  * Add flags to a given system device.
  *
  * @param [in]  sys_dev  System device index.
@@ -523,6 +534,22 @@ ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class);
  * @return Nonzero if the class inventory is incomplete, 0 otherwise.
  */
 int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class);
+
+/**
+ * Get the number of unique PCI bus ids (BDFs) among the system devices of a
+ * class. Multiple system device records of the class that share a BDF are
+ * counted once.
+ *
+ * If the class inventory is incomplete (see
+ * @ref ucs_topo_device_class_is_incomplete), only the registered devices are
+ * counted.
+ *
+ * @param [in]  device_class  Device class to count.
+ *
+ * @return Number of unique BDFs of the class.
+ */
+unsigned
+ucs_topo_device_class_get_num_bdfs(ucs_topo_device_class_t device_class);
 
 /**
  * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
