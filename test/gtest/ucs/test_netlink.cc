@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/sys/netlink.h>
+#include <ucs/sys/sock.h>
 }
 
 #include <arpa/inet.h>
@@ -37,10 +38,24 @@ protected:
         return basename(target);
     }
 
-    static void append_nlmsg(std::vector<uint8_t> &stream, unsigned short type,
-                             const void *hdr, size_t hdr_size)
+    static void append_rta(std::vector<uint8_t> &buf, unsigned short type,
+                           const void *data, size_t payload_len)
     {
-        size_t msg_len      = NLMSG_LENGTH(hdr_size);
+        size_t rta_len   = RTA_LENGTH(payload_len);
+        size_t offset    = buf.size();
+        struct rtattr rt = {static_cast<unsigned short>(rta_len), type};
+
+        buf.resize(offset + RTA_ALIGN(rta_len), 0);
+        memcpy(&buf[offset], &rt, sizeof(rt));
+        memcpy(&buf[offset + RTA_LENGTH(0)], data, payload_len);
+    }
+
+    static void append_nlmsg(std::vector<uint8_t> &stream, unsigned short type,
+                             const void *hdr, size_t hdr_size,
+                             const std::vector<uint8_t> &attrs = {})
+    {
+        size_t msg_len      = NLMSG_LENGTH(NLMSG_ALIGN(hdr_size) +
+                                           attrs.size());
         size_t offset       = stream.size();
         struct nlmsghdr nlh = {static_cast<uint32_t>(msg_len), type,
                                NLM_F_MULTI, 0, 0};
@@ -48,6 +63,28 @@ protected:
         stream.resize(offset + NLMSG_ALIGN(msg_len), 0);
         memcpy(&stream[offset], &nlh, sizeof(nlh));
         memcpy(&stream[offset + NLMSG_HDRLEN], hdr, hdr_size);
+        if (!attrs.empty()) {
+            memcpy(&stream[offset + NLMSG_HDRLEN + NLMSG_ALIGN(hdr_size)],
+                   attrs.data(), attrs.size());
+        }
+    }
+
+    static void append_route(std::vector<uint8_t> &dump, sa_family_t family,
+                             unsigned char type, int if_index,
+                             const struct in_addr *dst = nullptr)
+    {
+        struct rtmsg rtm = {};
+        std::vector<uint8_t> attrs;
+
+        rtm.rtm_family = family;
+        rtm.rtm_type   = type;
+        append_rta(attrs, RTA_OIF, &if_index, sizeof(if_index));
+        if (dst != nullptr) {
+            rtm.rtm_dst_len = 32;
+            append_rta(attrs, RTA_DST, dst, sizeof(*dst));
+        }
+
+        append_nlmsg(dump, RTM_NEWROUTE, &rtm, sizeof(rtm), attrs);
     }
 
     static ucs_status_t count_msg_cb(const struct nlmsghdr*, void *arg)
@@ -291,4 +328,47 @@ UCS_TEST_F(test_netlink, send_request) {
                                        sizeof(ifi), count_msg_cb, &count,
                                        UCS_LOG_LEVEL_DEBUG));
     EXPECT_EQ(0, count);
+}
+
+UCS_TEST_F(test_netlink, non_unicast_default_route) {
+    /* Interface indexes which no network device uses */
+    const int dropped_index         = INT_MAX;
+    const int cached_index          = INT_MAX - 1;
+    const int done_ok               = 0;
+    struct sockaddr_storage sa_ipv4 = {}, sa_ipv6 = {}, sa_dst = {};
+    std::vector<uint8_t> dump;
+    int netmask_len, msg_done;
+    struct in_addr dst;
+
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.18.0.1", &dst));
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr("198.18.0.1", &sa_dst));
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr("198.51.100.1", &sa_ipv4));
+    ASSERT_UCS_OK(ucs_sock_ipstr_to_sockaddr("2001:db8::1", &sa_ipv6));
+
+    for (sa_family_t family : {AF_INET, AF_INET6}) {
+        append_route(dump, family, RTN_LOCAL, dropped_index);
+        append_route(dump, family, RTN_UNREACHABLE, dropped_index);
+    }
+
+    /* The cache cannot be reset, so do not leave a local address in it */
+    append_route(dump, AF_INET, RTN_UNREACHABLE, cached_index, &dst);
+    append_route(dump, AF_INET, RTN_UNICAST, cached_index);
+    append_nlmsg(dump, NLMSG_DONE, &done_ok, sizeof(done_ok));
+    ASSERT_UCS_OK(ucs_netlink_parse_msg(dump.data(), dump.size(),
+                                        ucs_netlink_parse_rt_entry_cb, NULL,
+                                        UCS_LOG_LEVEL_ERROR, &msg_done));
+
+    EXPECT_EQ(0, ucs_netlink_route_exists(dropped_index,
+                                          (struct sockaddr*)&sa_ipv4, NULL));
+    EXPECT_EQ(0, ucs_netlink_route_exists(dropped_index,
+                                          (struct sockaddr*)&sa_ipv6, NULL));
+
+    EXPECT_EQ(1, ucs_netlink_route_exists(cached_index,
+                                          (struct sockaddr*)&sa_ipv4,
+                                          &netmask_len));
+    EXPECT_EQ(0, netmask_len);
+    EXPECT_EQ(1, ucs_netlink_route_exists(cached_index,
+                                          (struct sockaddr*)&sa_dst,
+                                          &netmask_len));
+    EXPECT_EQ(32, netmask_len);
 }
