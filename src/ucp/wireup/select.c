@@ -2011,8 +2011,8 @@ static double ucp_wireup_select_bw_lanes_pairwise(
 }
 
 static int
-ucp_wireup_has_slow_lane(const ucp_proto_select_info_array_t *sinfo_array,
-                         double min_lane_bw)
+ucp_wireup_has_low_bw_lane(const ucp_proto_select_info_array_t *sinfo_array,
+                           double min_lane_bw)
 {
     const ucp_wireup_select_info_t *sinfo;
 
@@ -2050,9 +2050,9 @@ static int ucp_wireup_add_bw_lanes_pairwise(
                                                      select_ctx,
                                                      allow_extra_path,
                                                      min_lane_bw, &sinfo_array);
-        min_lane_bw = max_bw * max_ratio;
+        min_lane_bw = ucs_max(min_lane_bw, max_bw * max_ratio);
         if (!skip_slow_lanes ||
-            !ucp_wireup_has_slow_lane(&sinfo_array, min_lane_bw)) {
+            !ucp_wireup_has_low_bw_lane(&sinfo_array, min_lane_bw)) {
             break;
         }
 
