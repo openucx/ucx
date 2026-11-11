@@ -2594,6 +2594,18 @@ protected:
 
         return result;
     }
+
+    /* A peer with the registration cache, so it prefers RC to CMA */
+    entity &create_rcache_peer()
+    {
+        modify_config("RCACHE_ENABLE", "try");
+        entity &peer = *create_entity();
+        if (peer.ucph()->rcache == NULL) {
+            UCS_TEST_SKIP_R("registration cache is not available");
+        }
+
+        return peer;
+    }
 };
 
 UCS_TEST_P(test_ucp_wireup_bw_lanes, request_address) {
@@ -2632,12 +2644,7 @@ UCS_TEST_P(test_ucp_wireup_bw_lanes, request_address) {
  * first, while the sender selects CMA first. Both must still select the same
  * RMA BW lanes, from the worker address and from the wireup request address */
 UCS_TEST_P(test_ucp_wireup_bw_lanes, rcache_peer) {
-    modify_config("RCACHE_ENABLE", "try");
-    entity &peer = *create_entity();
-    if (peer.ucph()->rcache == NULL) {
-        UCS_TEST_SKIP_R("registration cache is not available");
-    }
-
+    entity &peer = create_rcache_peer();
     unpacked_address sender_address(sender().worker());
     unpacked_address peer_address(peer.worker());
     unpacked_address request_address(sender().worker());
@@ -2657,6 +2664,19 @@ UCS_TEST_P(test_ucp_wireup_bw_lanes, rcache_peer) {
     EXPECT_EQ(rma_bw_lanes(sender(), sender_key), rma_bw_lanes(peer, peer_key));
     EXPECT_EQ(rma_bw_lanes(sender(), sender_key),
               rma_bw_lanes(peer, request_key));
+}
+
+/* The sender and the peer connect to each other, as ucx_perftest does with the
+ * registration cache only on the client, and must get the same RMA BW lanes */
+UCS_TEST_P(test_ucp_wireup_bw_lanes, rcache_peer_connect) {
+    entity &peer = create_rcache_peer();
+
+    sender().connect(&peer, get_ep_params());
+    peer.connect(&sender(), get_ep_params());
+    flush_workers();
+
+    EXPECT_EQ(rma_bw_lanes(sender(), ucp_ep_config(sender().ep())->key),
+              rma_bw_lanes(peer, ucp_ep_config(peer.ep())->key));
 }
 
 UCS_TEST_P(test_ucp_wireup_bw_lanes, older_peer) {
