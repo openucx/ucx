@@ -2068,8 +2068,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 
     ext_addr = ucs_derived_of(rc_addr, uct_rc_mlx5_ep_ext_address_t);
     if (uct_rc_iface_flush_rkey_enabled(&iface->super)) {
-        ext_addr->flags = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY |
-                          UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_PROBE;
+        ext_addr->flags = UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY;
 
         ptr                                 = ext_addr + 1;
         *ucs_serialize_next(&ptr, uint16_t) = md->flush_rkey >> 16;
@@ -2195,7 +2194,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     uint32_t flush_rkey_hi;
     ucs_status_t status;
 
-    ep->super.flush_probe = 0;
     addr_length = UCS_PARAM_VALUE(UCT_EP_CONNECT_TO_EP_PARAM_FIELD, params,
                                   ep_addr_length, EP_ADDR_LENGTH,
                                   sizeof(uct_rc_mlx5_ep_address_t));
@@ -2263,10 +2261,6 @@ uct_rc_mlx5_ep_connect_to_ep_v2(uct_ep_h tl_ep,
     } else {
         ep->super.super.flush_rkey = UCT_IB_MD_INVALID_FLUSH_RKEY;
     }
-
-    ep->super.flush_probe =
-            (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_PROBE) &&
-            uct_ib_md_is_flush_rkey_valid(ep->super.super.flush_rkey);
 
     if (ext_addr->flags & UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET) {
         /* override super.super.atomic_mr_offset that was set previously */
@@ -2467,7 +2461,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_base_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
     self->err_handler_inprogress = 0;
-    self->flush_probe            = 0;
     self->ext_ctx                = NULL;
 
     if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {

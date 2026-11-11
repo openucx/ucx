@@ -19,9 +19,6 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/ptr_arith.h>
 
-#define UCT_IB_MLX5_FLUSH_PROBE_OFFSET 65536
-#define UCT_IB_MLX5_FLUSH_PROBE_SIZE   65536
-
 struct uct_rc_mlx5_ext_ops;
 
 /* The common registry selects one RC provider for an interface lifetime. */

@@ -49,8 +49,7 @@ enum {
     /* EP address includes flush_rkey value */
     UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_RKEY       = UCS_BIT(0),
     /* atomic key has no offset */
-    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1),
-    UCT_RC_MLX5_EP_ADDR_FLAG_FLUSH_PROBE      = UCS_BIT(3)
+    UCT_RC_MLX5_EP_ADDR_FLAG_NO_ATOMIC_OFFSET = UCS_BIT(1)
 };
 
 
@@ -64,7 +63,6 @@ typedef struct uct_rc_mlx5_base_ep {
         uct_ib_mlx5_txwq_t   wq;
     } tx;
     uint8_t                  err_handler_inprogress;
-    uint8_t                  flush_probe;
 } uct_rc_mlx5_base_ep_t;
 
 typedef __be32 uct_rc_mlx5_tx_token_t;
