@@ -40,23 +40,31 @@ typedef struct {
 } ucm_rdu_find_alloc_ctx_t;
 
 
+/* Cached value of a function which the loaded runtime library does not
+ * provide */
+#define UCM_RDU_FUNC_NOT_FOUND ((void*)-1)
+
+
 /*
  * Look up a symbol of the runtime library.  The library may have been loaded
  * with RTLD_LOCAL, so its symbols are not necessarily in the global scope; open
- * it by name without loading it, and fall back to the global scope.
+ * it by name without loading it, and fall back to the global scope.  Set
+ * *lib_loaded_p if the runtime library is loaded.
  */
-static void *ucm_rdu_dlsym(const char *symbol)
+static void *ucm_rdu_dlsym(const char *symbol, int *lib_loaded_p)
 {
     void *func_ptr = NULL;
     size_t i;
     void *dl;
 
+    *lib_loaded_p = 0;
     for (i = 0;
          (i < ucs_static_array_size(ucm_rdu_devmem_libs)) && (func_ptr == NULL);
          ++i) {
         dl = dlopen(ucm_rdu_devmem_libs[i], RTLD_LAZY | RTLD_NOLOAD);
         if (dl != NULL) {
-            func_ptr = dlsym(dl, symbol);
+            *lib_loaded_p = 1;
+            func_ptr      = dlsym(dl, symbol);
             dlclose(dl);
         }
     }
@@ -69,22 +77,33 @@ static void *ucm_rdu_dlsym(const char *symbol)
 }
 
 /*
- * Return a function of the runtime library, looking it up on first use and
- * caching it once found, or NULL if the library does not provide it.
+ * Return a function of the runtime library, looking it up on first use, or
+ * NULL if the library does not provide it.  The result is cached once the
+ * function is found, or once the library is loaded without it, so a missing
+ * optional function is not looked up again on every call.
  */
 static void *ucm_rdu_get_func(const char *symbol, void **func_ptr_p)
 {
-    if (ucs_unlikely(*func_ptr_p == NULL)) {
+    void *func_ptr = *func_ptr_p;
+    int lib_loaded;
+
+    if (ucs_unlikely(func_ptr == NULL)) {
         pthread_mutex_lock(&ucm_reloc_get_orig_lock);
         ucm_reloc_get_orig_thread = pthread_self();
-        if (*func_ptr_p == NULL) {
-            *func_ptr_p = ucm_rdu_dlsym(symbol);
+        func_ptr                  = *func_ptr_p;
+        if (func_ptr == NULL) {
+            func_ptr = ucm_rdu_dlsym(symbol, &lib_loaded);
+            if (func_ptr != NULL) {
+                *func_ptr_p = func_ptr;
+            } else if (lib_loaded) {
+                *func_ptr_p = UCM_RDU_FUNC_NOT_FOUND;
+            }
         }
         ucm_reloc_get_orig_thread = (pthread_t)-1;
         pthread_mutex_unlock(&ucm_reloc_get_orig_lock);
     }
 
-    return *func_ptr_p;
+    return (func_ptr == UCM_RDU_FUNC_NOT_FOUND) ? NULL : func_ptr;
 }
 
 /*
