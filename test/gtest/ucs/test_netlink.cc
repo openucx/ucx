@@ -192,6 +192,99 @@ UCS_TEST_F(test_netlink, best_route_to_local_addr) {
     UCS_TEST_MESSAGE << num_checks << " routes from other domains checked";
 }
 
+UCS_TEST_F(test_netlink, route_get) {
+    unsigned lo_index      = if_nametoindex("lo");
+    unsigned num_addrs     = 0;
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+    ucs_netlink_route_t route;
+    int local_index, vrf_index;
+    ucs_status_t status;
+
+    ASSERT_NE(0u, lo_index);
+
+    sin.sin_family      = AF_INET;
+    sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    status = ucs_netlink_route_get((struct sockaddr*)&sin, NULL, 0, &route);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        UCS_TEST_SKIP_R("kernel does not support route lookup by fib match");
+    }
+
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(RTN_LOCAL, route.type);
+
+    ASSERT_UCS_OK(ucs_netlink_route_get((struct sockaddr*)&sin,
+                                        (struct sockaddr*)&sin, lo_index,
+                                        &route));
+    EXPECT_EQ(RTN_LOCAL, route.type);
+
+    /* TEST-NET-2 address has no route through the loopback device */
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    EXPECT_EQ(UCS_ERR_UNREACHABLE,
+              ucs_netlink_route_get((struct sockaddr*)&sin, NULL, lo_index,
+                                    &route));
+
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr == NULL) ||
+            ((ifa->ifa_addr->sa_family != AF_INET) &&
+             (ifa->ifa_addr->sa_family != AF_INET6))) {
+            continue;
+        }
+
+        /* A link-local address is ambiguous without an interface */
+        if ((ifa->ifa_addr->sa_family == AF_INET6) &&
+            IN6_IS_ADDR_LINKLOCAL(
+                    &((struct sockaddr_in6*)ifa->ifa_addr)->sin6_addr)) {
+            continue;
+        }
+
+        local_index = ucs_netlink_get_local_route_ndev_index(ifa->ifa_addr);
+        if (local_index < 0) {
+            continue;
+        }
+
+        /* The kernel selects the host route of a local address in the
+         * routing domain of the address */
+        vrf_index = ucs_netlink_get_vrf_master_index(local_index);
+        ASSERT_UCS_OK(ucs_netlink_route_get(ifa->ifa_addr, NULL,
+                                            std::max(vrf_index, 0), &route),
+                      << ifa->ifa_name);
+        EXPECT_EQ(RTN_LOCAL, route.type) << ifa->ifa_name;
+        EXPECT_EQ((ifa->ifa_addr->sa_family == AF_INET) ? 32 : 128,
+                  route.prefix_len)
+                << ifa->ifa_name;
+        ++num_addrs;
+    }
+
+    freeifaddrs(ifaddrs);
+    UCS_TEST_MESSAGE << num_addrs << " local addresses checked";
+}
+
+UCS_TEST_F(test_netlink, is_host_addr) {
+    struct sockaddr_in sin = {};
+    struct ifaddrs *ifaddrs, *ifa;
+
+    ASSERT_EQ(0, getifaddrs(&ifaddrs));
+
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((ifa->ifa_addr != NULL) &&
+            ((ifa->ifa_addr->sa_family == AF_INET) ||
+             (ifa->ifa_addr->sa_family == AF_INET6))) {
+            EXPECT_EQ(1, ucs_netlink_is_host_addr(ifa->ifa_addr))
+                    << ifa->ifa_name;
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+
+    /* TEST-NET-2 address is not assigned to any host */
+    sin.sin_family = AF_INET;
+    ASSERT_EQ(1, inet_pton(AF_INET, "198.51.100.1", &sin.sin_addr));
+    EXPECT_EQ(0, ucs_netlink_is_host_addr((struct sockaddr*)&sin));
+}
+
 UCS_TEST_F(test_netlink, parse_msg) {
     auto fail_cb = [](const struct nlmsghdr*, void *arg) -> ucs_status_t {
         ++(*static_cast<int*>(arg));

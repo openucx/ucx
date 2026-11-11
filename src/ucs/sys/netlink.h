@@ -20,6 +20,15 @@ typedef enum {
     UCS_NETLINK_ROUTE_CHECK_RELAXED
 } ucs_netlink_route_check_t;
 
+
+/**
+ * Routing table entry selected by the kernel for a destination address.
+ */
+typedef struct {
+    uint8_t type;       /**< Route type, e.g. RTN_UNICAST or RTN_LOCAL */
+    uint8_t prefix_len; /**< Destination prefix length of the entry */
+} ucs_netlink_route_t;
+
 /**
  * Callback function for parsing individual netlink messages.
  *
@@ -127,6 +136,40 @@ int ucs_netlink_is_local_addr(int if_index, const struct sockaddr *sa_remote);
  */
 int ucs_netlink_route_matches(int if_index, const struct sockaddr *sa_remote,
                               ucs_netlink_route_check_t route_check);
+
+/**
+ * Get the routing table entry which the kernel selects to send to a
+ * destination address, as "ip route get fibmatch" does. Unlike the cached
+ * routing table, the kernel applies policy routing rules and VRF.
+ *
+ * @param [in]  sa_remote        Pointer to the destination address.
+ * @param [in]  sa_local         Optional pointer to the source address, of the
+ *                               same address family as the destination, or
+ *                               NULL.
+ * @param [in]  if_index         Optional output network interface index, or 0.
+ *                               When it is set, the kernel considers only
+ *                               routes through this interface, or the routes
+ *                               of its VRF when it is a VRF device.
+ * @param [out] route_p          Filled with the selected routing table entry.
+ *
+ * @return UCS_OK if a route was found, UCS_ERR_UNREACHABLE if the kernel has
+ *         no route to the destination, UCS_ERR_UNSUPPORTED if the kernel
+ *         cannot report the selected entry, or error code otherwise.
+ */
+ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
+                                   const struct sockaddr *sa_local,
+                                   int if_index, ucs_netlink_route_t *route_p);
+
+/**
+ * Check whether an address is assigned to a network interface of the host, in
+ * any routing domain. Unlike local routes, addresses are not affected by policy
+ * routing tables. The addresses are read once and cached at the first call.
+ *
+ * @param [in]  sa               Pointer to the address.
+ *
+ * @return 1 if the address is assigned to a network interface, or 0 otherwise.
+ */
+int ucs_netlink_is_host_addr(const struct sockaddr *sa);
 
 /**
  * Get the VRF (L3 master) device of a network interface: the VRF device it is
