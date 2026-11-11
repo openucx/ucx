@@ -3025,7 +3025,7 @@ ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
     ucs_error("%s for gpu-nic assignment mode %s, set "
               "UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
               reason, ucp_gpu_nic_assignment_modes[mode]);
-    return UCS_ERR_INVALID_PARAM;
+    return UCS_ERR_UNSUPPORTED;
 }
 
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)

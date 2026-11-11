@@ -124,7 +124,7 @@ protected:
         /* Without an assignment, ucp_init() fails or succeeds regardless of
          * the conflicting configuration */
         init_context("flip", NULL, NULL, &status, &ucph);
-        if (status == UCS_ERR_INVALID_PARAM) {
+        if (status == UCS_ERR_UNSUPPORTED) {
             UCS_TEST_SKIP_R("no assignable network devices on this host");
         }
 
@@ -158,12 +158,12 @@ UCS_TEST_P(test_ucp_context_gpu_nic_assignment, auto_mode_tcp)
 
 UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_shm)
 {
-    check_no_assignable_nic("flip", "shm", UCS_ERR_INVALID_PARAM);
+    check_no_assignable_nic("flip", "shm", UCS_ERR_UNSUPPORTED);
 }
 
 UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_tcp)
 {
-    check_no_assignable_nic("flip", "tcp", UCS_ERR_INVALID_PARAM);
+    check_no_assignable_nic("flip", "tcp", UCS_ERR_UNSUPPORTED);
 }
 
 UCS_TEST_P(test_ucp_context_gpu_nic_assignment, rejects_single_net_device)
