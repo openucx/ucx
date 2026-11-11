@@ -1239,6 +1239,8 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_RMA, OP_GET, "get");
     }
 
+    /* Virtual here, the base class one is not: the failover variant overrides
+     * it and init() below must call the override */
     virtual ucp_ep_params_t get_ep_params()
     {
         return test_ucp_peer_failure::get_ep_params();
