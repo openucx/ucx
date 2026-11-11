@@ -1,0 +1,37 @@
+# Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2026. ALL RIGHTS RESERVED.
+# See file LICENSE for terms.
+---
+job: ucx-blossom-rdma-regressions
+failFast: false
+timeout_minutes: 120
+kubernetes:
+  cloud: il-ipp-blossom-prod-nbu-swx-ucx
+  namespace: nbu-swx-ucx
+empty_volumes:
+  - {mountPath: /dev/shm, memory: true}
+runs_on_dockers:
+  - name: cx8-ib-asan
+    arch: x86_64
+    url: harbor.mellanox.com/ucx/x86_64/ubuntu22.04/builder:mofed-5.7-0.2.3.0
+    tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]"
+    annotations: [{key: "k8s.v1.cni.cncf.io/networks", value: "cx8-ib-network"}]
+    limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}"
+    requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/cx8_vfs: 1}"
+    caps_add: "[ IPC_LOCK, NET_RAW ]"
+    REGRESSION_CASE: pci-vf
+  - name: cx7-roce-ipv6
+    arch: x86_64
+    url: harbor.mellanox.com/hpcx/x86_64/ubuntu24.04/builder:doca-2.9.0
+    tolerations: "[{key: 'node.kubernetes.io/unschedulable', operator: 'Exists', effect: 'NoSchedule'}]"
+    annotations: [{key: "k8s.v1.cni.cncf.io/networks", value: "sriov-cx7-p2"}]
+    limits: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}"
+    requests: "{memory: 32Gi, cpu: 10000m, nvidia.com/sriov_cx7_p2: 1}"
+    caps_add: "[ IPC_LOCK, NET_RAW ]"
+    REGRESSION_CASE: roce-ipv6
+taskName: '${name}/${arch}'
+steps:
+  - name: Exact-head RDMA regression
+    parallel: false
+    timeout: 110
+    run: |
+      bash .ci/scripts/verify_blossom_rdma.sh "${REGRESSION_CASE}"
