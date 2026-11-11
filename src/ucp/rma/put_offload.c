@@ -556,8 +556,9 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
     ucp_request_param_t param    = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                         UCP_OP_ATTR_FIELD_USER_DATA |
-                        ucp_proto_select_op_attr_unpack(
-                                req->send.proto_config->select_param.op_attr),
+                        (ucp_proto_select_op_attr_unpack(
+                                 req->send.proto_config->select_param.op_attr) &
+                         UCP_PROTO_SELECT_OP_ATTR_MASK),
         .cb.send      = ucp_proto_put_sgl_contig_elem_complete,
         .user_data    = req
     };
