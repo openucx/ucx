@@ -165,6 +165,9 @@ protected:
         std::vector<std::pair<void*, size_t> > released_ptrs;
         std::vector<mem_buffer*> allocated_buffers;
 
+        std::string skip_reason;
+        bool tested = false;
+
         /* The tests try to allocate two buffers with different memory types */
         for (auto mem_type : mem_buffer::supported_mem_types()) {
             try {
@@ -188,13 +191,16 @@ protected:
                                            &allocated_buffers);
                     }
                 }
+            } catch (const ucs::test_skip_exception &e) {
+                /* A device may limit the number of allocations; continue with
+                 * the next memory type */
+                delete_buffers(&allocated_buffers);
+                released_ptrs.clear();
+                skip_reason = e.what();
+                continue;
             } catch (...) {
-                /* Do not leak the buffers if the test is aborted or skipped,
-                 * e.g. when a device limits the number of allocations */
-                while (!allocated_buffers.empty()) {
-                    delete allocated_buffers.back();
-                    allocated_buffers.pop_back();
-                }
+                /* Do not leak the buffers if the test is aborted */
+                delete_buffers(&allocated_buffers);
                 throw;
             }
 
@@ -205,6 +211,20 @@ protected:
                 /* test released buffers */
                 test_ptrs_released(&released_ptrs);
             }
+
+            tested = true;
+        }
+
+        if (!tested) {
+            UCS_TEST_SKIP_R(skip_reason);
+        }
+    }
+
+    static void delete_buffers(std::vector<mem_buffer*> *allocated_buffers)
+    {
+        while (!allocated_buffers->empty()) {
+            delete allocated_buffers->back();
+            allocated_buffers->pop_back();
         }
     }
 
