@@ -520,20 +520,14 @@ ucp_proto_t ucp_put_sgl_offload_sw_proto = {
     .reset          = ucp_proto_offload_zcopy_reset
 };
 
-static void
-ucp_proto_put_sgl_contig_finish(ucp_request_t *req, ucs_status_t status)
-{
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
-                              UCS_BIT(UCP_DATATYPE_SGL));
-    ucp_request_complete_send(req, status);
-}
-
 static void ucp_proto_put_sgl_contig_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_proto_put_sgl_contig_finish(req, self->status);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, 0,
+                              UCS_BIT(UCP_DATATYPE_SGL));
+    ucp_request_complete_send(req, self->status);
 }
 
 static void ucp_proto_put_sgl_contig_elem_complete(void *request,
@@ -549,12 +543,15 @@ static void ucp_proto_put_sgl_contig_elem_complete(void *request,
 
 static ucs_status_t
 ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
-                                   uint32_t fence_flag)
+                                   size_t elem_offset, uint32_t fence_flag)
 {
     ucp_ep_h ep                  = req->send.ep;
     ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
-    void *buffer                 = dt_iter->type.sgl.buffers[index];
-    size_t length                = dt_iter->type.sgl.lengths[index];
+    void *buffer                 = UCS_PTR_BYTE_OFFSET(
+                                           dt_iter->type.sgl.buffers[index],
+                                           elem_offset);
+    size_t length                = dt_iter->type.sgl.lengths[index] -
+                                   elem_offset;
     ucp_rkey_h rkey              = req->send.rma.sgl.rkeys[index];
     ucp_request_param_t param    = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
@@ -573,7 +570,8 @@ ucp_proto_put_sgl_contig_send_elem(ucp_request_t *req, size_t index,
     }
 
     elem_req->send.rma.rkey        = rkey;
-    elem_req->send.rma.remote_addr = req->send.rma.sgl.remote_addrs[index];
+    elem_req->send.rma.remote_addr = req->send.rma.sgl.remote_addrs[index] +
+                                     elem_offset;
 
     if (dt_iter->type.sgl.memhs != NULL) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
@@ -600,20 +598,23 @@ static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
     size_t count                  = req->send.state.dt_iter.length;
     uint32_t fence_flag           = req->flags &
                                     UCP_REQUEST_FLAG_FENCE_REQUIRED;
-    ucs_status_t status;
+    size_t elem_offset            =
+            req->send.state.dt_iter.type.sgl.frag_offset;
+    ucs_status_t status           = UCS_OK;
     size_t index;
 
     ucp_proto_completion_init(&req->send.state.uct_comp,
                               ucp_proto_put_sgl_contig_completion);
 
-    for (index = 0; index < count; ++index) {
+    for (index = req->send.state.dt_iter.offset; index < count;
+         ++index, elem_offset = 0) {
         if (lengths[index] == 0) {
             continue;
         }
 
-        status = ucp_proto_put_sgl_contig_send_elem(req, index, fence_flag);
+        status = ucp_proto_put_sgl_contig_send_elem(req, index, elem_offset,
+                                                    fence_flag);
         if (status != UCS_OK) {
-            uct_completion_update_status(&req->send.state.uct_comp, status);
             break;
         }
 
@@ -624,7 +625,7 @@ static ucs_status_t ucp_proto_put_sgl_contig_progress(uct_pending_req_t *self)
         }
     }
 
-    ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_OK);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
     return UCS_OK;
 }
 
@@ -645,9 +646,6 @@ ucp_proto_put_sgl_contig_add_variant(
                                       (const ucp_proto_perf_t**)&proto->perf, 1,
                                       &perf);
     if (status != UCS_OK) {
-        return;
-    } else if (ucp_proto_perf_is_empty(perf)) {
-        ucp_proto_perf_destroy(perf);
         return;
     }
 
@@ -697,7 +695,7 @@ ucp_proto_put_sgl_contig_probe(const ucp_proto_init_params_t *init_params)
 
 ucp_proto_t ucp_put_sgl_contig_proto = {
     .name        = "put/sgl/contig",
-    .desc        = "sgl as put per element",
+    .desc        = "sgl per-element put",
     .flags       = 0,
     .proto_class = UCP_PROTO_CLASS_RMA_FALLBACK,
     .dt_mask     = UCS_BIT(UCP_DATATYPE_SGL),
