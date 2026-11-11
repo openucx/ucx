@@ -55,8 +55,9 @@ shim_download_helper() {
 
 cd "$UCXX_DIR"
 
-# Point every ucxx build and test at the PR's UCX instead of released ucx.
-use_pr_ucx
+# Point every ucxx test at the PR's UCX instead of released ucx, through the
+# ucxx UCXX_NO_LIBUCX switch.
+export UCXX_NO_LIBUCX=true
 
 # Tolerate missing nvidia-smi on CPU containers. Guard catches upstream rewording.
 sed -i 's#^  nvidia-smi$#  command -v nvidia-smi >/dev/null \&\& nvidia-smi || echo "(no GPU)"#' ci/test_common.sh
