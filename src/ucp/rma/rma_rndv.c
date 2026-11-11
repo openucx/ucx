@@ -738,8 +738,6 @@ ucp_proto_put_sgl_contig_add_variant(
         const ucp_proto_init_params_t *init_params,
         ucp_proto_init_elem_t *proto)
 {
-    ucp_context_h context = init_params->worker->context;
-    ucp_proto_perf_t *overhead_perf;
     UCS_STRING_BUFFER_ONSTACK(perf_name, 128);
     ucp_proto_perf_t *perf;
     ucs_status_t status;
@@ -748,16 +746,9 @@ ucp_proto_put_sgl_contig_add_variant(
                               "SGL contig" UCP_PROTO_PERF_NODE_NEW_LINE "%s",
                               ucp_proto_perf_name(proto->perf));
 
-    status = ucp_proto_rma_rndv_overhead_perf(
-            "SGL/PUT contig", context->config.ext.proto_overhead_single,
-            &overhead_perf);
-    if (status != UCS_OK) {
-        return;
-    }
-
-    status = ucp_proto_perf_aggregate2(ucs_string_buffer_cstr(&perf_name),
-                                       proto->perf, overhead_perf, &perf);
-    ucp_proto_perf_destroy(overhead_perf);
+    status = ucp_proto_perf_aggregate(ucs_string_buffer_cstr(&perf_name),
+                                      (const ucp_proto_perf_t**)&proto->perf, 1,
+                                      &perf);
     if (status != UCS_OK) {
         return;
     } else if (ucp_proto_perf_is_empty(perf)) {
