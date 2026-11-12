@@ -976,3 +976,25 @@ int ucs_netlink_get_vrf_master_index(int if_index)
     ucs_netlink_init_vrf_master_cache();
     return ucs_netlink_vrf_master_lookup(if_index);
 }
+
+void ucs_netlink_foreach_route(int if_index, ucs_netlink_route_cb_t cb,
+                               void *arg)
+{
+    ucs_netlink_rt_rules_t *iface_rules;
+    ucs_netlink_route_entry_t *entry;
+    khiter_t iter;
+
+    ucs_netlink_init_routing_table_cache();
+
+    iter = kh_get(ucs_netlink_rt_cache, &ucs_netlink_routing_table_cache,
+                  if_index);
+    if (iter == kh_end(&ucs_netlink_routing_table_cache)) {
+        return;
+    }
+
+    iface_rules = &kh_val(&ucs_netlink_routing_table_cache, iter);
+    ucs_array_for_each(entry, iface_rules) {
+        cb((const struct sockaddr*)&entry->dest, entry->subnet_prefix_len,
+           entry->route_type, arg);
+    }
+}

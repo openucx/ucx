@@ -2248,7 +2248,7 @@ static int ucs_config_parser_is_default(const char *env_prefix,
 
     ucs_snprintf_safe(var_name, sizeof(var_name) - 1, "%s%s%s", env_prefix,
                       prefix, name);
-    iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
+    iter = kh_get(ucs_config_map, &ucs_config_file_vars, var_name);
     return (iter == kh_end(&ucs_config_file_vars)) &&
            (getenv(var_name) == NULL);
 }

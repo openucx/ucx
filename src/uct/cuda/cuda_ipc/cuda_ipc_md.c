@@ -43,11 +43,8 @@ typedef struct {
 } uct_cuda_ipc_rkey_handle_t;
 
 typedef struct {
-    pid_t        pid;
-    ucs_sys_ns_t pid_ns;
-    uintptr_t    d_bptr;
-    void         *mapped_addr;
-    CUdevice     cu_dev;
+    uct_cuda_ipc_mapping_t mapping;
+    CUdevice               cu_dev;
 } uct_cuda_ipc_mem_elem_release_handle_t;
 
 static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
@@ -719,9 +716,7 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
                                                       const void *handle)
 {
     const uct_cuda_ipc_rkey_handle_t *rkey_handle = handle;
-    uct_cuda_ipc_unpacked_rkey_t *unpacked_rkey;
-    uct_cuda_ipc_extended_rkey_t *extended_rkey;
-    uct_cuda_ipc_rkey_t *rkey;
+    uct_cuda_ipc_mapping_t mapping;
 
     if ((uct_rkey == 0) || (rkey_handle == NULL)) {
         return;
@@ -732,12 +727,10 @@ static void uct_cuda_ipc_rkey_release_unmap_memhandle(uct_rkey_t uct_rkey,
         return;
     }
 
-    unpacked_rkey = (uct_cuda_ipc_unpacked_rkey_t*)uct_rkey;
-    extended_rkey = &unpacked_rkey->super;
-    rkey          = &extended_rkey->super;
-
-    uct_cuda_ipc_unmap_memhandle(rkey->pid, extended_rkey->pid_ns, rkey->d_bptr,
-                                 rkey_handle->mapped_addr, rkey_handle->cu_dev,
+    uct_cuda_ipc_mapping_init(&mapping,
+                              (uct_cuda_ipc_extended_rkey_t*)uct_rkey,
+                              rkey_handle->mapped_addr);
+    uct_cuda_ipc_unmap_memhandle(&mapping, rkey_handle->cu_dev,
                                  uct_cuda_ipc_component.enable_remote_cache &&
                                          !rkey_handle->free_unused_mapping);
 }
@@ -902,12 +895,10 @@ uct_cuda_ipc_md_mem_elem_pack(uct_md_h md, uct_mem_h memh, uct_rkey_t rkey,
     cuda_ipc_md_mem_element->mapped_offset =
             UCS_PTR_BYTE_DIFF(key->super.super.d_bptr, mapped_addr);
 
-    release_handle->pid         = key->super.super.pid;
-    release_handle->pid_ns      = key->super.pid_ns;
-    release_handle->d_bptr      = key->super.super.d_bptr;
-    release_handle->mapped_addr = mapped_addr;
-    release_handle->cu_dev      = cuda_device;
-    *release_handle_p           = release_handle;
+    uct_cuda_ipc_mapping_init(&release_handle->mapping, &key->super,
+                              mapped_addr);
+    release_handle->cu_dev = cuda_device;
+    *release_handle_p      = release_handle;
 
     return UCS_OK;
 }
@@ -916,8 +907,7 @@ static void uct_cuda_ipc_md_mem_elem_release(uct_md_h md, void *release_handle)
 {
     uct_cuda_ipc_mem_elem_release_handle_t *handle = release_handle;
 
-    uct_cuda_ipc_unmap_memhandle(handle->pid, handle->pid_ns, handle->d_bptr,
-                                 handle->mapped_addr, handle->cu_dev,
+    uct_cuda_ipc_unmap_memhandle(&handle->mapping, handle->cu_dev,
                                  uct_cuda_ipc_component.enable_remote_cache);
     ucs_free(handle);
 }
