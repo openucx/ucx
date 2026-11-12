@@ -384,25 +384,30 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
  * emulated hosts get different system UUIDs */
 UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_emulation)
 {
-    ucs::handle<uct_md_h> md_5, md_5_5, md_5_7, md_6_7;
+    ucs::handle<uct_md_h> md_5, md_5_0, md_5_5, md_5_7, md_6_7, md_max_7;
 
     ASSERT_UCS_OK(open_md("5", "try", md_5));
+    ASSERT_UCS_OK(open_md("5:0", "try", md_5_0));
     ASSERT_UCS_OK(open_md("5:5", "try", md_5_5));
     ASSERT_UCS_OK(open_md("5:7", "try", md_5_7));
     ASSERT_UCS_OK(open_md("0x6:7", "try", md_6_7));
+    ASSERT_UCS_OK(open_md("18446744073709551615:7", "try", md_max_7));
 
     EXPECT_TRUE(ipc_md(md_5)->enable_mnnvl);
     EXPECT_TRUE(ipc_md(md_5_7)->enable_mnnvl);
     EXPECT_EQ(5u, ipc_md(md_5)->nvlink_domain);
     EXPECT_EQ(5u, ipc_md(md_5_7)->nvlink_domain);
     EXPECT_EQ(6u, ipc_md(md_6_7)->nvlink_domain);
+    EXPECT_EQ(ULONG_MAX, ipc_md(md_max_7)->nvlink_domain);
 
     /* <host> defaults to <domain> */
     EXPECT_EQ(ipc_md(md_5)->system_uuid, ipc_md(md_5_5)->system_uuid);
     /* The host is independent of the domain */
     EXPECT_EQ(ipc_md(md_5_7)->system_uuid, ipc_md(md_6_7)->system_uuid);
+    EXPECT_EQ(ipc_md(md_5_7)->system_uuid, ipc_md(md_max_7)->system_uuid);
     EXPECT_NE(ipc_md(md_5)->system_uuid, ipc_md(md_5_7)->system_uuid);
     EXPECT_NE(ucs_get_system_id(), ipc_md(md_5_7)->system_uuid);
+    EXPECT_NE(ucs_get_system_id(), ipc_md(md_5_0)->system_uuid);
 }
 
 /* Requiring MNNVL does not fail when it is emulated without a GPU fabric */
@@ -429,7 +434,9 @@ UCS_TEST_P(test_cuda_ipc_md, nvlink_domain_invalid)
 {
     static const char *values[] = {"", "abc", "5:", "5:x", "5;7", "5:7:9",
                                    ":7", "-1", "5:-1", "+5", " 5", "5: 7",
-                                   "99999999999999999999"};
+                                   "99999999999999999999",
+                                   "18446744073709551615",
+                                   "5:18446744073709551615"};
     ucs::handle<uct_md_h> md_h;
 
     for (const char *value : values) {

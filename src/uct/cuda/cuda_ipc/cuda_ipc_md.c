@@ -23,10 +23,7 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/api/device/uct_device_types.h>
 
-#include <ctype.h>
-#include <errno.h>
 #include <limits.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -72,8 +69,13 @@ static ucs_config_field_t uct_cuda_ipc_md_config_table[] = {
      "                     fabric, and treat peers configured with another\n"
      "                     <host> as different hosts, also when they run on\n"
      "                     the same machine. <host> defaults to <domain>.\n"
-     "                     Intended for testing the fallback to other\n"
-     "                     transports.",
+     "                     Values are decimal, hex (0x...) or octal (0...),\n"
+     "                     and <host> must be smaller than ULONG_MAX.\n"
+     "                     Only reachability is emulated: memory handles\n"
+     "                     still use the real host, so an emulated remote\n"
+     "                     host on the same machine stays local for the\n"
+     "                     data path. Intended for testing the fallback to\n"
+     "                     other transports.",
      ucs_offsetof(uct_cuda_ipc_md_config_t, nvlink_domain),
      UCS_CONFIG_TYPE_STRING},
 
@@ -794,25 +796,6 @@ out:
     }
 }
 
-/* Parse an unsigned number, rejecting a sign or leading whitespace which
- * strtoul() accepts, and values out of range */
-static ucs_status_t
-uct_cuda_ipc_md_parse_ulong(const char *str, unsigned long *value_p,
-                            char **end_p)
-{
-    if (!isdigit((unsigned char)*str)) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    errno    = 0;
-    *value_p = strtoul(str, end_p, 0);
-    if (errno != 0) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
 /* Parse "<domain>[:<host>]", <host> defaults to <domain> */
 static ucs_status_t
 uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
@@ -820,7 +803,7 @@ uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
 {
     char *end;
 
-    if (uct_cuda_ipc_md_parse_ulong(str, domain_p, &end) != UCS_OK) {
+    if (ucs_str_to_ulong(str, 0, domain_p, &end) != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -833,12 +816,7 @@ uct_cuda_ipc_md_parse_nvlink_domain(const char *str, unsigned long *domain_p,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((uct_cuda_ipc_md_parse_ulong(end + 1, host_p, &end) != UCS_OK) ||
-        (*end != '\0')) {
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
+    return ucs_str_to_ulong(end + 1, 0, host_p, NULL);
 }
 
 /* Enable MNNVL and set the NVLink domain and host of the MD from the
@@ -852,10 +830,11 @@ uct_cuda_ipc_md_emulate_nvlink_domain(uct_cuda_ipc_md_t *md,
 
     status = uct_cuda_ipc_md_parse_nvlink_domain(nvlink_domain, &domain,
                                                  &host);
-    if (status != UCS_OK) {
+    /* Host ULONG_MAX would wrap (host + 1) in the host mix to 0 */
+    if ((status != UCS_OK) || (host == ULONG_MAX)) {
         ucs_error("invalid NVLink domain '%s', expected "
                   "\"<domain>[:<host>]\" or \"auto\"", nvlink_domain);
-        return status;
+        return UCS_ERR_INVALID_PARAM;
     }
 
     md->nvlink_domain = domain;
@@ -974,7 +953,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
 
     if (ipc_config->enable_mnnvl == UCS_NO) {
         ucs_debug("multi-node NVLINK support is disabled");
-    } else if (!strcmp(ipc_config->nvlink_domain, "auto")) {
+    } else if (!strcasecmp(ipc_config->nvlink_domain, UCS_VALUE_AUTO_STR)) {
         uct_cuda_ipc_md_init_mnnvl(md, ipc_config->enable_mnnvl);
     } else {
         status = uct_cuda_ipc_md_emulate_nvlink_domain(
