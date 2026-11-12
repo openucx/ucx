@@ -996,8 +996,9 @@ uct_ib_mlx5_devx_mem_reg(uct_md_h uct_md, void *address, size_t length,
 
     strict_order_mr =
             uct_ib_md_is_strict_order_mr_required(&md->super, params);
-    status = uct_ib_mlx5_devx_memh_alloc(md, length, flags, strict_order_mr,
-                                         sizeof(memh->mrs[0]), &memh);
+    status = uct_ib_mlx5_devx_memh_alloc(
+            md, length, uct_ib_md_memh_alloc_flags(&md->super, params),
+            strict_order_mr, sizeof(memh->mrs[0]), &memh);
     if (status != UCS_OK) {
         goto err;
     }
