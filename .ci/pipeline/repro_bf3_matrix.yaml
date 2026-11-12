@@ -64,7 +64,8 @@ steps:
           echo "BF3 protocol-v2 alignment attempt ${attempt}, CPUs ${cpu_set}"
           status=0
           output=$(taskset -c "${cpu_set}" ./test/gtest/gtest -s 0 -t 900 \
-              --gtest_filter=dcx/test_ucp_tag_match_rndv_align.recv_align/2 2>&1 | tee /dev/stderr) || status=$?
+              --gtest_filter=dcx/test_ucp_tag_match_rndv_align.recv_align/2 2>&1) || status=$?
+          printf '%s\n' "${output}"
           echo "BF3 probe exit status ${status}"
           test "${status}" -eq 0
           [[ "${output}" == *"[==========] Running 1 test"* ]]
