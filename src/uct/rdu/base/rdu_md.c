@@ -281,6 +281,21 @@ static uct_md_ops_t uct_rdu_md_ops = {
 };
 
 static ucs_status_t
+uct_rdu_query_md_resources(uct_component_t *component,
+                           uct_md_resource_desc_t **resources_p,
+                           unsigned *num_resources_p)
+{
+    /* Without the runtime there is no RDU memory to detect */
+    if (uct_rdu_devmem_get() == NULL) {
+        ucs_debug("rdu_md: rdu_devmem runtime is not available");
+        return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    return uct_md_query_single_md_resource(component, resources_p,
+                                           num_resources_p);
+}
+
+static ucs_status_t
 uct_rdu_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
@@ -465,7 +480,7 @@ UCT_TL_DEFINE(&uct_rdu_component, rdu, uct_rdu_query_devices, uct_rdu_iface_t,
               "RDU_", uct_iface_config_table, uct_iface_config_t);
 
 uct_component_t uct_rdu_component = {
-    .query_md_resources = uct_md_query_single_md_resource,
+    .query_md_resources = uct_rdu_query_md_resources,
     .md_open            = uct_rdu_md_open,
     .cm_open            = (uct_component_cm_open_func_t)
             ucs_empty_function_return_unsupported,
