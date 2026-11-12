@@ -98,6 +98,12 @@ protected:
         *status_p = ucp_init(&get_variant_ctx_params(), config.get(), ucph_p);
     }
 
+    static ucs_status_t unavailable_status()
+    {
+        return (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_NVIDIA_VERA) ?
+               UCS_ERR_INVALID_PARAM : UCS_ERR_UNSUPPORTED;
+    }
+
     void check_no_assignable_nic(const char *mode, const char *tls,
                                  ucs_status_t exp_status)
     {
@@ -158,12 +164,12 @@ UCS_TEST_P(test_ucp_context_gpu_nic_assignment, auto_mode_tcp)
 
 UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_shm)
 {
-    check_no_assignable_nic("flip", "shm", UCS_ERR_UNSUPPORTED);
+    check_no_assignable_nic("flip", "shm", unavailable_status());
 }
 
 UCS_TEST_P(test_ucp_context_gpu_nic_assignment, explicit_mode_tcp)
 {
-    check_no_assignable_nic("flip", "tcp", UCS_ERR_UNSUPPORTED);
+    check_no_assignable_nic("flip", "tcp", unavailable_status());
 }
 
 UCS_TEST_P(test_ucp_context_gpu_nic_assignment, rejects_single_net_device)

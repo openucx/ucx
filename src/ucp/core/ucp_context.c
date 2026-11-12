@@ -3014,6 +3014,7 @@ ucp_context_gpu_nic_assignment_check_config(ucp_context_h context,
 static ucs_status_t
 ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
                                            ucp_gpu_nic_assignment_mode_t mode,
+                                           ucs_status_t error_status,
                                            const char *reason)
 {
     if (context->config.ext.gpu_nic_assignment_mode ==
@@ -3025,7 +3026,7 @@ ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
     ucs_error("%s for gpu-nic assignment mode %s, set "
               "UCX_GPU_NIC_ASSIGNMENT_MODE=off to disable it",
               reason, ucp_gpu_nic_assignment_modes[mode]);
-    return UCS_ERR_UNSUPPORTED;
+    return error_status;
 }
 
 static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
@@ -3034,13 +3035,15 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
             context->config.ext.gpu_nic_assignment_mode;
     ucs_sys_device_bitmap_t net_device_filter =
             UCS_STATIC_BITMAP_ZERO_INITIALIZER;
+    const ucs_cpu_model_t cpu_model = ucs_arch_get_cpu_model();
     ucp_gpu_nic_assignment_t *assignment;
     ucs_topo_groups_t groups;
     ucs_status_t status;
+    ucs_status_t no_nic_error_status;
 
     if (mode == UCP_GPU_NIC_ASSIGNMENT_MODE_AUTO) {
         /* TODO: Improve Vera Rubin detection by checking NICs/GPUs models. */
-        if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
+        if (cpu_model != UCS_CPU_MODEL_NVIDIA_VERA) {
             ucs_debug("gpu-nic assignment is not supported on %s "
                       "architecture, skipping",
                       ucs_cpu_model_name());
@@ -3059,14 +3062,19 @@ static ucs_status_t ucp_context_gpu_nic_assignment_init(ucp_context_h context)
      * processes with different visible GPUs would not build the same groups */
     if (ucs_topo_device_class_is_incomplete(UCS_TOPO_DEVICE_CLASS_ACC)) {
         return ucp_context_gpu_nic_assignment_unavailable(
-                context, mode, "incomplete gpu discovery");
+                context, mode, UCS_ERR_INVALID_PARAM,
+                "incomplete gpu discovery");
     }
 
     ucp_context_gpu_nic_assignment_net_device_filter_init(context,
                                                           &net_device_filter);
     if (UCS_STATIC_BITMAP_IS_ZERO(net_device_filter)) {
+        no_nic_error_status = (cpu_model == UCS_CPU_MODEL_NVIDIA_VERA) ?
+                                  UCS_ERR_INVALID_PARAM :
+                                  UCS_ERR_UNSUPPORTED;
         return ucp_context_gpu_nic_assignment_unavailable(
-                context, mode, "no assignable network devices");
+                context, mode, no_nic_error_status,
+                "no assignable network devices");
     }
 
     status = ucs_topo_build_groups(&net_device_filter, &groups);
