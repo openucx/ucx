@@ -9,6 +9,7 @@
 
 #include "uct_rdu_devmem.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/init_once.h>
@@ -21,6 +22,7 @@ static ucs_init_once_t uct_rdu_devmem_init_once = UCS_INIT_ONCE_INITIALIZER;
 static uct_rdu_devmem_ops_t uct_rdu_devmem_ops;
 static int uct_rdu_devmem_available = 0;
 static int uct_rdu_devmem_dmabuf    = 0;
+static int uct_rdu_devmem_loaded    = 0;
 
 static void uct_rdu_devmem_load(void)
 {
@@ -75,9 +77,18 @@ static void uct_rdu_devmem_load(void)
 
 const uct_rdu_devmem_ops_t *uct_rdu_devmem_get(void)
 {
-    UCS_INIT_ONCE(&uct_rdu_devmem_init_once) {
-        uct_rdu_devmem_load();
+    /* Called for every memory type detection, so take the lock only until
+     * the library is loaded */
+    if (ucs_likely(uct_rdu_devmem_loaded)) {
+        ucs_memory_cpu_load_fence();
+    } else {
+        UCS_INIT_ONCE(&uct_rdu_devmem_init_once) {
+            uct_rdu_devmem_load();
+            ucs_memory_cpu_store_fence();
+            uct_rdu_devmem_loaded = 1;
+        }
     }
+
     return uct_rdu_devmem_available ? &uct_rdu_devmem_ops : NULL;
 }
 
