@@ -2018,6 +2018,81 @@ public:
         mock_cuda_ipc_remote_pid(sender().worker());
         mock_cuda_ipc_remote_pid(receiver().worker());
     }
+
+protected:
+    /* Return the memory domain index of the cuda_ipc lane, or
+     * UCP_NULL_RESOURCE if no such lane was selected. */
+    ucp_md_index_t cuda_ipc_md_index()
+    {
+        ucp_context_h context         = sender().ucph();
+        const ucp_ep_config_t *config = ucp_ep_config(sender().ep());
+
+        for (auto lane = 0; lane < config->key.num_lanes; ++lane) {
+            const ucp_rsc_index_t rsc_index = config->key.lanes[lane].rsc_index;
+            if ((rsc_index != UCP_NULL_RESOURCE) &&
+                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
+                 "cuda_ipc")) {
+                return context->tl_rscs[rsc_index].md_index;
+            }
+        }
+
+        return UCP_NULL_RESOURCE;
+    }
+
+    /* Return the protocols selected for every message size range to receive
+     * rendezvous data into a CUDA buffer from the given remote key config */
+    proto_select_data_vec_t
+    rndv_recv_select_data(ucp_worker_cfg_index_t rkey_cfg_index)
+    {
+        ucp_worker_h worker        = sender().worker();
+        ucp_memory_info_t mem_info = {UCS_MEMORY_TYPE_CUDA,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN,
+                                      UCS_MEM_FLAG_REGISTRABLE};
+        proto_select_data_vec_t data_vec;
+        ucp_proto_select_param_t select_param;
+        ucp_proto_select_elem_t *select_elem;
+        ucp_proto_query_attr_t attr;
+        size_t range_start;
+
+        ucp_proto_select_param_init(&select_param, UCP_OP_ID_RNDV_RECV, 0, 0,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
+        select_elem = ucp_proto_select_lookup_slow(
+                worker,
+                &ucp_worker_rkey_config(worker, rkey_cfg_index)->proto_select,
+                1, ep_config_index(sender()), rkey_cfg_index, &select_param);
+        if (select_elem == nullptr) {
+            ADD_FAILURE() << "rendezvous receive protocols were not selected";
+            return data_vec;
+        }
+
+        range_start = 0;
+        while (ucp_proto_select_elem_query(worker, select_elem, range_start,
+                                           &attr)) {
+            data_vec.emplace_back(range_start, attr);
+            if (attr.max_msg_length == SIZE_MAX) {
+                break;
+            }
+
+            range_start = attr.max_msg_length + 1;
+        }
+
+        if (data_vec.empty() || (data_vec.back().range_end != SIZE_MAX)) {
+            ADD_FAILURE() << "protocols are not selected for all message sizes";
+            dump_select_info(sender(), select_param, *select_elem,
+                             rkey_cfg_index);
+        }
+
+        return data_vec;
+    }
+
+    static bool uses_cuda_ipc(const proto_select_data_vec_t &data_vec)
+    {
+        return std::any_of(data_vec.begin(), data_vec.end(),
+                           [](const proto_select_data &data) {
+                               return data.config.find("cuda_ipc") !=
+                                      std::string::npos;
+                           });
+    }
 };
 
 UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, put, "ZCOPY_THRESH=1")
@@ -2032,6 +2107,44 @@ UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, get, "ZCOPY_THRESH=1")
     test_cuda_rma(UCP_OP_ID_GET, {
         {1, INF, "zero-copy", "cuda_ipc/cuda"},
     });
+}
+
+/*
+ * When cuda_ipc rkey unpack fails, the nested remote protocol estimation must
+ * not assume the peer can use cuda_ipc to access the local buffer either,
+ * including the staging buffers of rndv/rtr/mtype.
+ */
+UCS_TEST_P(test_ucp_proto_mock_cuda_ipc, rndv_recv_unreachable,
+           "ZCOPY_THRESH=1")
+{
+    ucp_worker_h worker = sender().worker();
+    ucp_worker_cfg_index_t rkey_cfg_index, unreachable_cfg_index;
+    ucp_rkey_config_key_t rkey_config_key;
+    proto_select_data_vec_t data_vec;
+    ucp_rkey_config_t *rkey_config;
+    ucp_md_index_t md_index;
+
+    md_index = cuda_ipc_md_index();
+    ASSERT_NE(UCP_NULL_RESOURCE, md_index) << "no cuda_ipc lane";
+
+    rkey_cfg_index = send_recv_rma(UCS_MBYTE, UCP_OP_ID_PUT,
+                                   UCS_MEMORY_TYPE_CUDA);
+    ASSERT_NE(UCP_WORKER_CFG_INDEX_NULL, rkey_cfg_index);
+
+    rkey_config = ucp_worker_rkey_config(worker, rkey_cfg_index);
+    ASSERT_TRUE(rkey_config->key.md_map & UCS_BIT(md_index));
+    data_vec = rndv_recv_select_data(rkey_cfg_index);
+    EXPECT_TRUE(uses_cuda_ipc(data_vec)) << ::testing::PrintToString(data_vec);
+
+    /* Same remote key, but cuda_ipc rkey unpack failed */
+    rkey_config_key                     = rkey_config->key;
+    rkey_config_key.md_map             &= ~UCS_BIT(md_index);
+    rkey_config_key.unreachable_md_map |= UCS_BIT(md_index);
+    ASSERT_UCS_OK(ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                             rkey_config->lanes_distance,
+                                             &unreachable_cfg_index));
+    data_vec = rndv_recv_select_data(unreachable_cfg_index);
+    EXPECT_FALSE(uses_cuda_ipc(data_vec)) << ::testing::PrintToString(data_vec);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto_mock_cuda_ipc,
@@ -2071,25 +2184,6 @@ public:
     }
 
 protected:
-    /* Return the memory domain index of the cuda_ipc lane, or
-     * UCP_NULL_RESOURCE if no such lane was selected. */
-    ucp_md_index_t cuda_ipc_md_index()
-    {
-        ucp_context_h context = sender().ucph();
-
-        for (auto lane = 0; lane < m_ep_config->key.num_lanes; ++lane) {
-            const ucp_rsc_index_t rsc_index =
-                    m_ep_config->key.lanes[lane].rsc_index;
-            if ((rsc_index != UCP_NULL_RESOURCE) &&
-                (std::string(context->tl_rscs[rsc_index].tl_rsc.tl_name) ==
-                 "cuda_ipc")) {
-                return context->tl_rscs[rsc_index].md_index;
-            }
-        }
-
-        return UCP_NULL_RESOURCE;
-    }
-
     /* Return the memory domains which rndv/rtr would pack into the RTR message
      * for a CUDA receive buffer with the given memory flags. */
     ucp_md_map_t rtr_md_map(uint8_t mem_flags)
@@ -3996,16 +4090,17 @@ public:
         }, key, 1);
 
         // Reduce port_speed of mock_0:1 by 50%, new EP & rkey configs are created
+        // Each new EP config adds two rkey configs: RMA and rendezvous
         set_port_speed("mock_0:1", 14e9);
         send(2);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         // Slightly change port_speed, so that quantized value remains the same
         // This shouldn't affect EP or rkey config
         set_port_speed("mock_0:1", 14.5e9);
         send(2);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 3);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
         EXPECT_EQ(worker->ep_config.length, 2);
 
         check_rkey_config(sender(), {
@@ -4015,19 +4110,19 @@ public:
         // Reduce port_speed of mock_1:1 to be equal with mock_0:1,
         // new EP & rkey configs are created
         set_port_speed("mock_1:1", 14e9);
-        send(3);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
+        send(4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 6);
         EXPECT_EQ(worker->ep_config.length, 3);
 
         check_rkey_config(sender(), {
             {0, INF,  "zero-copy", "50% on rc_mlx5/mock_1:1 and 50% on rc_mlx5/mock_0:1"},
-        }, key, 3);
+        }, key, 4);
 
         // Reset port_speeds to initial values, should switch to initial configs
         set_port_speed("mock_0:1", 28e9);
         set_port_speed("mock_1:1", 24e9);
         send(1);
-        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 4);
+        EXPECT_EQ(ucs_array_length(&worker->rkey_config), 6);
         EXPECT_EQ(worker->ep_config.length, 3);
     }
 

@@ -10,9 +10,12 @@
 
 #include "gdaki.h"
 
+#include <ucs/sys/netlink.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/sys.h>
 #include <ucs/sys/topo/base/topo.h>
 #include <ucs/time/time.h>
+#include <ucs/datastruct/array.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/algorithm/qsort_r.h>
 #include <ucs/type/init_once.h>
@@ -22,12 +25,18 @@
 #include <uct/cuda/base/cuda_util.h>
 #include <uct/cuda/base/cuda_ctx.h>
 #include <uct/cuda/base/cuda_nvml.h>
+#include <uct/cuda/cuda_copy/cuda_copy_md.h>
 
+#include <limits.h>
+#include <linux/rtnetlink.h>
 #include <string.h>
 
 #include "gpunetio/common/doca_gpunetio_verbs_def.h"
 
 #define UCT_GDAKI_MAX_CUDA_DEVICES 64
+
+/* Plane rank of a device which is not on any plane */
+#define UCT_GDAKI_PLANE_NONE UINT_MAX
 
 #define UCT_GDAKI_CQ_PAGE_OFFSET_SHIFT 6
 #define UCT_GDAKI_DEV_EP_SIZE          64
@@ -92,9 +101,8 @@ ucs_config_field_t uct_rc_gdaki_iface_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t
-uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
-                         uct_cuda_copy_alloc_handle_t *alloc_handle)
+static ucs_status_t uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
+                                             uct_cuda_mem_t *cuda_mem)
 {
     CUdevice cu_device;
     ucs_status_t status;
@@ -106,26 +114,26 @@ uct_gdaki_cuda_mem_alloc(size_t size, size_t *granularity_p,
 
     return uct_cuda_mem_alloc(UCS_LOG_LEVEL_ERROR, UCS_MEMORY_TYPE_CUDA,
                               UCS_TRY, cu_device, size, granularity_p,
-                              alloc_handle);
+                              cuda_mem);
 }
 
-static ucs_status_t
-uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
-                   uct_cuda_copy_alloc_handle_t *alloc_handle, void **buf_p)
+static ucs_status_t uct_rc_gdaki_alloc(size_t size, size_t align,
+                                       size_t *granularity_p,
+                                       uct_cuda_mem_t *cuda_mem, void **buf_p)
 {
     unsigned int flag = 1;
     ucs_status_t status;
     void *buf;
 
     status = uct_gdaki_cuda_mem_alloc(size + align - 1, granularity_p,
-                                      alloc_handle);
+                                      cuda_mem);
     if (status != UCS_OK) {
         return status;
     }
 
-    buf = (void*)ucs_align_up_pow2_ptr(alloc_handle->ptr, align);
+    buf = (void*)ucs_align_up_pow2_ptr(cuda_mem->ptr, align);
 
-    if (!alloc_handle->is_vmm) {
+    if (!cuda_mem->is_vmm) {
         status = UCT_CUDADRV_FUNC_LOG_ERR(
                 cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
                                       (CUdeviceptr)buf));
@@ -138,7 +146,7 @@ uct_rc_gdaki_alloc(size_t size, size_t align, size_t *granularity_p,
     return UCS_OK;
 
 err:
-    uct_cuda_mem_free(alloc_handle);
+    uct_cuda_mem_free(cuda_mem);
     return status;
 }
 
@@ -166,17 +174,17 @@ static int uct_gdaki_check_umem_dmabuf(const uct_ib_md_t *md)
 #if HAVE_DECL_MLX5DV_UMEM_MASK_DMABUF
     size_t granularity                 = SIZE_MAX;
     struct mlx5dv_devx_umem_in umem_in = {};
-    uct_cuda_copy_alloc_handle_t alloc_handle;
+    uct_cuda_mem_t cuda_mem;
     ucs_status_t status;
     struct mlx5dv_devx_umem *umem;
     uct_cuda_copy_md_dmabuf_t dmabuf;
 
-    status = uct_gdaki_cuda_mem_alloc(1, &granularity, &alloc_handle);
+    status = uct_gdaki_cuda_mem_alloc(1, &granularity, &cuda_mem);
     if (status != UCS_OK) {
         goto out;
     }
 
-    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)alloc_handle.ptr, 1,
+    dmabuf = uct_cuda_copy_md_get_dmabuf((void*)cuda_mem.ptr, 1,
                                          UCS_SYS_DEVICE_ID_UNKNOWN);
     if (dmabuf.fd == UCT_DMABUF_FD_INVALID) {
         goto out_free;
@@ -200,7 +208,7 @@ out_dereg:
 out_close:
     ucs_close_fd(&dmabuf.fd);
 out_free:
-    uct_cuda_mem_free(&alloc_handle);
+    uct_cuda_mem_free(&cuda_mem);
 out:
 #endif
     return ret;
@@ -442,23 +450,100 @@ uct_rc_gdaki_channel_block(uct_rc_gdaki_iface_t *iface, ucs_mpool_t *mp,
     }
 }
 
-static void uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
-                                                ucs_mpool_t *mp, void *elems,
-                                                unsigned num_elems,
-                                                unsigned end_ep,
-                                                unsigned end_ch)
+static void
+uct_rc_gdaki_channel_block_reset_qps(uct_rc_gdaki_iface_t *iface,
+                                     uct_rc_gdaki_channel_block_t *block)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_rc_gdaki_channel_t *channel;
+    ucs_status_t status;
+    unsigned i;
+
+    for (i = 0; i < iface->num_channels; i++) {
+        channel = &block->channels[i];
+
+        status = uct_ib_mlx5_modify_qp_state(ib_iface, &channel->qp.super,
+                                             IBV_QPS_RESET);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to reset gdaki qp 0x%x: %s",
+                      channel->qp.super.qp_num, ucs_status_string(status));
+        }
+
+        status = uct_ib_mlx5_devx_qp_rst2init(ib_iface, &channel->qp.super,
+                                              IBV_QPT_RC);
+        if (status != UCS_OK) {
+            ucs_fatal("failed to move gdaki qp 0x%x to init: %s",
+                      channel->qp.super.qp_num, ucs_status_string(status));
+        }
+    }
+}
+
+static int uct_rc_gdaki_devx_uar_cmp(uct_rc_gdaki_devx_uar_t *wrap,
+                                     uct_priv_worker_t *worker,
+                                     uct_ib_mlx5_md_t *md)
+{
+    return (wrap->uar->ctx == md->super.dev.ibv_context) &&
+           (wrap->uar->super.mode == UCT_IB_MLX5_MMIO_MODE_DB);
+}
+
+static void uct_rc_gdaki_devx_uar_cleanup(uct_rc_gdaki_devx_uar_t *wrap)
+{
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(
+            cuMemHostUnregister(wrap->uar->super.addr.ptr));
+    uct_worker_tl_data_put(wrap->uar, uct_ib_mlx5_devx_uar_cleanup);
+}
+
+static ucs_status_t uct_rc_gdaki_devx_uar_init(uct_rc_gdaki_devx_uar_t *wrap,
+                                               uct_priv_worker_t *worker,
+                                               uct_ib_mlx5_md_t *md)
+{
+    ucs_status_t status;
+
+    wrap->uar = uct_worker_tl_data_get(worker, UCT_IB_MLX5_DEVX_UAR_KEY,
+                                       uct_ib_mlx5_devx_uar_t,
+                                       uct_ib_mlx5_devx_uar_cmp,
+                                       uct_ib_mlx5_devx_uar_init, md,
+                                       UCT_IB_MLX5_MMIO_MODE_DB);
+    if (UCS_PTR_IS_ERR(wrap->uar)) {
+        return UCS_PTR_STATUS(wrap->uar);
+    }
+
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(
+            cuMemHostRegister(wrap->uar->super.addr.ptr,
+                              UCT_IB_MLX5_BF_REG_SIZE * 2,
+                              UCT_GDAKI_CUDA_REG_FLAGS));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuMemHostGetDevicePointer(&wrap->device_ptr,
+                                      wrap->uar->super.addr.ptr, 0));
+    if (status != UCS_OK) {
+        goto out_unreg;
+    }
+
+    return UCS_OK;
+
+out_unreg:
+    uct_rc_gdaki_devx_uar_cleanup(wrap);
+    return status;
+}
+
+static void
+uct_rc_gdaki_chunk_channels_destroy(uct_rc_gdaki_iface_t *iface,
+                                    ucs_mpool_t *mp, void *elems,
+                                    unsigned num_elems, unsigned end_ep,
+                                    unsigned end_ch)
 {
     uct_rc_gdaki_channel_block_t *channel_block;
+    uct_rc_gdaki_channel_t *channel;
     unsigned ep_index, channel_index, num_channels;
 
     for (ep_index = 0; ep_index < num_elems; ++ep_index) {
         channel_block = uct_rc_gdaki_channel_block(iface, mp, elems, ep_index);
         num_channels  = (ep_index < end_ep) ? end_ch + 1 : end_ch;
         for (channel_index = 0; channel_index < num_channels; ++channel_index) {
-            uct_ib_mlx5_devx_destroy_qp_common(
-                    &channel_block->channels[channel_index].qp.super);
-            uct_ib_mlx5_devx_destroy_cq_common(
-                    &channel_block->channels[channel_index].cq);
+            channel = &channel_block->channels[channel_index];
+            uct_ib_mlx5_devx_destroy_qp_common(&channel->qp.super);
+            uct_ib_mlx5_qp_mmio_cleanup(&channel->qp.super, channel->qp.reg);
+            uct_ib_mlx5_devx_destroy_cq_common(&channel->cq);
         }
     }
 }
@@ -483,7 +568,7 @@ uct_rc_gdaki_init_channel_chunk(uct_rc_gdaki_iface_t *iface,
     uct_ib_mlx5_cq_calc_sizes(&iface->super.super.super, UCT_IB_DIR_TX,
                               &init_attr, 0, &cq_attr);
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
+                           iface->super.super.config.tx_qp_len, 0, NULL);
 
     cq_attr.flags                           |= UCT_IB_MLX5_CQ_IGNORE_OVERRUN;
     qp_attr.mmio_mode                        = UCT_IB_MLX5_MMIO_MODE_DB;
@@ -648,7 +733,7 @@ uct_rc_gdaki_iface_init_channel_pool(uct_rc_gdaki_iface_t *iface,
     }
 
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
+                           iface->super.super.config.tx_qp_len, 0, NULL);
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
 
     priv = ucs_mpool_priv(&iface->channel_pool);
@@ -689,12 +774,14 @@ uct_rc_gdaki_ep_reset_channels(uct_rc_gdaki_ep_t *ep)
     ep->channel_block = NULL;
 }
 
-static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_ep_t *ep)
+static void uct_rc_gdaki_cleanup_channels_pooled(uct_rc_gdaki_iface_t *iface,
+                                                 uct_rc_gdaki_ep_t *ep)
 {
     if (ep->channel_block == NULL) {
         return;
     }
 
+    uct_rc_gdaki_channel_block_reset_qps(iface, ep->channel_block);
     ucs_mpool_put(ep->channel_block);
     uct_rc_gdaki_ep_reset_channels(ep);
 }
@@ -712,7 +799,7 @@ uct_rc_gdaki_ep_init_channels_direct(uct_rc_gdaki_iface_t *iface,
     ucs_status_t status;
 
     uct_rc_iface_fill_attr(&iface->super.super, &qp_attr.super,
-                           iface->super.super.config.tx_qp_len, NULL);
+                           iface->super.super.config.tx_qp_len, 0, NULL);
     uct_ib_mlx5_wq_calc_sizes(&qp_attr);
     uct_rc_gdaki_calc_dev_ep_layout(iface->num_channels, qp_attr.len,
                                     &dev_ep_size, &pgsz_bitmap);
@@ -775,7 +862,7 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
                                              uct_rc_gdaki_ep_t *ep)
 {
     if (iface->ep_alloc_mode == UCT_RC_GDAKI_EP_ALLOC_MODE_POOL) {
-        uct_rc_gdaki_cleanup_channels_pooled(ep);
+        uct_rc_gdaki_cleanup_channels_pooled(iface, ep);
         return;
     }
 
@@ -785,6 +872,7 @@ static void uct_rc_gdaki_ep_cleanup_channels(uct_rc_gdaki_iface_t *iface,
 static ucs_status_t
 uct_rc_gdaki_iface_cuda_ctx_init(uct_rc_gdaki_iface_t *iface)
 {
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
     CUcontext cuda_ctx;
     ucs_status_t status;
 
@@ -800,15 +888,31 @@ uct_rc_gdaki_iface_cuda_ctx_init(uct_rc_gdaki_iface_t *iface)
 
     status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxPushCurrent(cuda_ctx));
     if (status != UCS_OK) {
-        (void)UCT_CUDADRV_FUNC_LOG_WARN(
-                cuDevicePrimaryCtxRelease(iface->cuda.dev));
-        return status;
+        goto err_release_ctx;
+    }
+
+    /* Register the shared UAR with CUDA under the retained context */
+    iface->uar_wrap = uct_worker_tl_data_get(
+            ib_iface->super.worker, UCT_RC_GDAKI_DEVX_UAR_KEY,
+            uct_rc_gdaki_devx_uar_t, uct_rc_gdaki_devx_uar_cmp,
+            uct_rc_gdaki_devx_uar_init, ib_iface->super.worker,
+            ucs_derived_of(ib_iface->super.md, uct_ib_mlx5_md_t));
+    if (UCS_PTR_IS_ERR(iface->uar_wrap)) {
+        status          = UCS_PTR_STATUS(iface->uar_wrap);
+        iface->uar_wrap = NULL;
+        goto err_pop_ctx;
     }
 
     (void)uct_cuda_copy_set_ctx_sync_memops(UCS_LOG_LEVEL_WARN);
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
     iface->cuda.ctx = cuda_ctx;
     return UCS_OK;
+
+err_pop_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
+err_release_ctx:
+    (void)UCT_CUDADRV_FUNC_LOG_WARN(cuDevicePrimaryCtxRelease(iface->cuda.dev));
+    return status;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_ep_t, const uct_ep_params_t *params)
@@ -834,14 +938,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_ep_t)
 {
     uct_rc_gdaki_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                  uct_rc_gdaki_iface_t);
-    unsigned i;
 
-    if (self->dev_ep_init) {
-        uct_rc_gdaki_channel_t *channels = self->channel_block->channels;
-        for (i = 0; i < iface->num_channels; i++) {
-            (void)cuMemHostUnregister(channels[i].qp.reg->addr.ptr);
-        }
-    }
     uct_rc_gdaki_ep_cleanup_channels(iface, self);
 }
 
@@ -926,6 +1023,8 @@ int uct_rc_gdaki_ep_is_connected(uct_ep_h tl_ep,
     uint32_t qp_num;
     union ibv_gid *rgid;
     const uct_ib_address_t *ib_addr;
+
+    UCT_EP_IS_CONNECTED_CHECK_DEV_ADDR(params);
 
     status = uct_ib_mlx5_query_qp_peer_info(
             &iface->super.super.super, &ep->channel_block->channels[0].qp.super,
@@ -1041,20 +1140,11 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                                           iface->num_channels *
                                                   UCT_GDAKI_DEV_QP_SIZE);
 
+        sq_db = iface->uar_wrap->device_ptr;
         for (i = 0; i < iface->num_channels; ++i) {
             channel = &ep->channel_block->channels[i];
-            (void)cuMemHostRegister(channel->qp.reg->addr.ptr,
-                                    UCT_IB_MLX5_BF_REG_SIZE * 2,
-                                    UCT_GDAKI_CUDA_REG_FLAGS);
-
-            status = UCT_CUDADRV_FUNC_LOG_ERR(
-                    cuMemHostGetDevicePointer(&sq_db, channel->qp.reg->addr.ptr,
-                                              0));
-            if (status != UCS_OK) {
-                goto out_unreg;
-            }
-
-            dev_ep->qps[i].sq_db  = (uint64_t *)sq_db;
+            ucs_assert(channel->qp.reg == &iface->uar_wrap->uar->super);
+            dev_ep->qps[i].sq_db  = (uint64_t*)sq_db;
             dev_ep->qps[i].sq_num = channel->qp.super.qp_num;
             dev_ep->qps[i].qpn_ds = htonl(channel->qp.super.qp_num <<
                                           DOCA_GPUNETIO_VERBS_WQE_IDX_SHIFT);
@@ -1065,7 +1155,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
                 cuMemcpyHtoD((CUdeviceptr)ep->channel_block->gpu_ptr, dev_ep,
                              dev_ep_host_size));
         if (status != UCS_OK) {
-            goto out_unreg;
+            goto out_free;
         }
 
         ucs_free(dev_ep);
@@ -1078,12 +1168,7 @@ uct_rc_gdaki_ep_get_device_ep(uct_ep_h tl_ep, uct_device_ep_h *device_ep_p)
     pthread_mutex_unlock(&iface->ep_init_lock);
     return UCS_OK;
 
-out_unreg:
-    do {
-        (void)cuMemHostUnregister(
-                ep->channel_block->channels[i].qp.reg->addr.ptr);
-    } while (i-- > 0);
-
+out_free:
     ucs_free(dev_ep);
 out_ctx:
     (void)UCT_CUDADRV_FUNC_LOG_WARN(cuCtxPopCurrent(NULL));
@@ -1237,6 +1322,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_gdaki_iface_t, uct_md_h tl_md,
         }
     }
 
+    self->uar_wrap               = NULL;
     self->cuda.dev               = cuda_dev;
     self->cuda.ctx               = NULL;
     self->cuda.alloc_granularity = SIZE_MAX;
@@ -1261,6 +1347,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_gdaki_iface_t)
         uct_rc_gdaki_iface_cleanup_channel_pool(self);
     }
 
+    if (self->uar_wrap != NULL) {
+        uct_worker_tl_data_put(self->uar_wrap, uct_rc_gdaki_devx_uar_cleanup);
+        self->uar_wrap = NULL;
+    }
+
     if (self->cuda.ctx != NULL) {
         (void)UCT_CUDADRV_FUNC_LOG_WARN(
                 cuDevicePrimaryCtxRelease(self->cuda.dev));
@@ -1280,6 +1371,7 @@ typedef struct {
     ucs_sys_dev_distance_t dist;
     int                    usecount;
     int                    reachable;
+    unsigned               plane; /* Plane rank, or UCT_GDAKI_PLANE_NONE */
 } uct_gdaki_dev_score_t;
 
 typedef struct {
@@ -1315,6 +1407,7 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
 {
     const uct_gdaki_dev_score_t *a = pa;
     const uct_gdaki_dev_score_t *b = pb;
+    int result;
 
     /* Sort reachable devices before unreachable ones */
     if (a->reachable != b->reachable) {
@@ -1322,9 +1415,30 @@ static int uct_gdaki_dev_matrix_score(const void *pa, const void *pb, void *arg)
     }
 
     /* Prefer lower latency device, and if same latency prefer the less utilized */
-    return (ucs_fp_compare(a->dist.latency, b->dist.latency) *
-            UCT_GDAKI_MAX_CUDA_DEVICES) +
-           ucs_signum(a->usecount - b->usecount);
+    result = (ucs_fp_compare(a->dist.latency, b->dist.latency) *
+              UCT_GDAKI_MAX_CUDA_DEVICES) +
+             ucs_signum(a->usecount - b->usecount);
+    if (result != 0) {
+        return result;
+    }
+
+    /* Break the remaining ties by IB device index, so that equally close and
+     * equally used devices are picked in a deterministic order, which keeps the
+     * devices of one NIC together */
+    return ucs_signum((int64_t)a->ibdev_index - b->ibdev_index);
+}
+
+/* Assign a device to a GPU */
+static void
+uct_gdaki_dev_matrix_select(const uct_gdaki_gpu_info_t *gpu,
+                            uct_gdaki_dev_matrix_elem_t *dmat,
+                            uct_gdaki_dev_score_t *score)
+{
+    if (gpu->cuda_idx >= 0) {
+        dmat[score->ibdev_index].cuda_map |= UCS_BIT(gpu->cuda_idx);
+    }
+
+    score->usecount++;
 }
 
 static ucs_status_t
@@ -1444,20 +1558,289 @@ uct_gdaki_enum_gpus(uct_gdaki_gpu_info_t *gpus, unsigned *count_p)
     return UCS_OK;
 }
 
+/* IPv4 network which a device routes to, identifying its fabric plane. All the
+ * networks are assumed to have the same prefix length, so the address alone
+ * identifies a network. */
+typedef struct {
+    uint32_t addr; /* Network address, without the host bits, 0 for none */
+    unsigned dev;  /* Index of the active device */
+} uct_gdaki_fabric_route_t;
+
+UCS_ARRAY_DECLARE_TYPE(uct_gdaki_fabric_routes_t, unsigned,
+                       uct_gdaki_fabric_route_t);
+
+typedef struct {
+    uct_gdaki_fabric_routes_t *routes;
+    unsigned                  dev;
+    ucs_status_t              status;
+} uct_gdaki_fabric_collect_t;
+
+static int
+uct_gdaki_fabric_route_compare(const void *pa, const void *pb, void *arg)
+{
+    const uct_gdaki_fabric_route_t *a = pa;
+    const uct_gdaki_fabric_route_t *b = pb;
+
+    if (a->addr != b->addr) {
+        return ucs_signum((int64_t)a->addr - b->addr);
+    }
+
+    return ucs_signum((int64_t)a->dev - b->dev);
+}
+
+/**
+ * Group devices into fabric planes by the networks they route to.
+ *
+ * The plane of a device is named by the lowest network which it shares with
+ * enough devices to be a plane: at least one device for each GPU, but not all
+ * the devices, since a network of all of them, like a summary route, cannot
+ * tell them apart. Networks which fewer devices share are not planes.
+ * Devices of the same name are on the same plane, and devices which have no
+ * name are not on a plane. Planes are used only if there are at least two of
+ * them: with a single plane there is nothing to balance, and with none the
+ * topology is not known. In both cases the caller keeps assigning devices by
+ * PCIe distance only.
+ *
+ * Planes are ranked by their network, which is the same on all hosts of a
+ * fabric. GPUs which take the first planes in rank order therefore always have
+ * planes in common, also across hosts.
+ *
+ * @param [in,out] routes      Routes of the devices, sorted by this function.
+ * @param [in]     num_routes  Number of routes.
+ * @param [in]     num_devs    Number of active devices.
+ * @param [in]     num_gpus    Number of GPUs, including the ones not visible.
+ * @param [out]    plane       Plane rank of each device, or
+ *                             UCT_GDAKI_PLANE_NONE if it cannot be used.
+ * @param [out]    auto_k_p    Number of devices to assign to each GPU when it
+ *                             is not configured explicitly.
+ *
+ * @return Number of planes, or 0 if the devices should not be grouped, in which
+ *         case the outputs are not valid.
+ */
+static unsigned
+uct_gdaki_fabric_classify(uct_gdaki_fabric_route_t *routes,
+                          unsigned num_routes, unsigned num_devs,
+                          unsigned num_gpus, unsigned *plane,
+                          unsigned long *auto_k_p)
+{
+    const unsigned min_devs = ucs_max(num_gpus, 2u);
+    unsigned num_planes     = 0;
+    unsigned long auto_k    = 0;
+    uct_gdaki_fabric_route_t *names, *name;
+    unsigned i, j, k, num_run_devs;
+
+    ucs_assert(num_gpus > 0);
+
+    *auto_k_p = 0;
+
+    /* The name of each device, which has no network until one is found */
+    names = ucs_calloc(num_devs, sizeof(*names), "gdaki fabric names");
+    if (names == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < num_devs; ++i) {
+        names[i].dev = i;
+        plane[i]     = UCT_GDAKI_PLANE_NONE;
+    }
+
+    ucs_qsort_r(routes, num_routes, sizeof(*routes),
+                uct_gdaki_fabric_route_compare, NULL);
+
+    /* The routes of one network are adjacent and sorted by device */
+    for (i = 0; i < num_routes; i = j) {
+        num_run_devs = 1;
+        j            = i + 1;
+        while ((j < num_routes) && (routes[j].addr == routes[i].addr)) {
+            num_run_devs += (routes[j].dev != routes[j - 1].dev);
+            ++j;
+        }
+
+        if ((num_run_devs < min_devs) || (num_run_devs >= num_devs)) {
+            continue;
+        }
+
+        /* The networks come in ascending order, so the lowest one stays */
+        for (k = i; k < j; ++k) {
+            ucs_assert(routes[k].dev < num_devs);
+            name = &names[routes[k].dev];
+            if (name->addr == 0) {
+                name->addr = routes[i].addr;
+            }
+        }
+    }
+
+    /* Devices of the same name are a plane, if there is one for each GPU. The
+     * names are sorted, so the planes are ranked by their network. */
+    ucs_qsort_r(names, num_devs, sizeof(*names), uct_gdaki_fabric_route_compare,
+                NULL);
+    for (i = 0; i < num_devs; i = j) {
+        j = i + 1;
+        while ((j < num_devs) && (names[j].addr == names[i].addr)) {
+            ++j;
+        }
+
+        if ((names[i].addr == 0) || ((j - i) < num_gpus)) {
+            continue;
+        }
+
+        for (k = i; k < j; ++k) {
+            plane[names[k].dev] = num_planes;
+        }
+
+        auto_k += (j - i) / num_gpus;
+        num_planes++;
+    }
+
+    ucs_free(names);
+    if (num_planes < 2) {
+        return 0;
+    }
+
+    *auto_k_p = auto_k;
+    return num_planes;
+}
+
+/* Find out the network device of a RoCE device while its context is open.
+ * Returns 0 if the device is not a RoCE one, or its network device is not
+ * found. */
+static unsigned
+uct_gdaki_dev_ndev_index(uct_ib_device_t *dev)
+{
+    uint8_t port_num = dev->first_port;
+    char ndev_name[IFNAMSIZ];
+    unsigned gid_index, ndev_index;
+
+    if (!uct_ib_device_is_port_roce(dev, port_num)) {
+        return 0;
+    }
+
+    /* Any valid GID of the port leads to the network device it runs over */
+    for (gid_index = 0;
+         gid_index < uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
+         ++gid_index) {
+        if ((uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                              ndev_name,
+                                              sizeof(ndev_name)) == UCS_OK) &&
+            (ucs_ifname_to_ndev_index(ndev_name, &ndev_index) == UCS_OK)) {
+            return ndev_index;
+        }
+    }
+
+    return 0;
+}
+
+static void
+uct_gdaki_fabric_collect_route(const struct sockaddr *dest, unsigned prefix_len,
+                               uint8_t route_type, void *arg)
+{
+    uct_gdaki_fabric_collect_t *collect = arg;
+    uct_gdaki_fabric_route_t *route;
+    uint32_t addr;
+
+    /* Only the IPv4 routes which can tell fabrics apart are used. Not the
+     * default and host routes, which are not specific to a fabric, and not the
+     * link-local and multicast routes, which every interface has. The
+     * destination of a kernel route has no host bits, so routes to the same
+     * network have the same address. */
+    if ((route_type != RTN_UNICAST) || (dest->sa_family != AF_INET) ||
+        (prefix_len >= 32)) {
+        return;
+    }
+
+    addr = ntohl(UCS_SOCKET_INET_ADDR(dest).s_addr);
+    if ((addr == 0) || ((addr & 0xffff0000) == 0xa9fe0000) ||
+        IN_MULTICAST(addr) || IN_BADCLASS(addr)) {
+        return;
+    }
+
+    route = ucs_array_append(collect->routes,
+                             collect->status = UCS_ERR_NO_MEMORY; return);
+    route->addr = addr;
+    route->dev  = collect->dev;
+}
+
+/*
+ * Group the active devices by fabric plane, and set the plane of each score. A
+ * device which is not on a plane gets UCT_GDAKI_PLANE_NONE. The planes are
+ * found by the routes of the network devices of RoCE devices only.
+ *
+ * Returns the number of planes, or 0 if the devices are not grouped, in which
+ * case the scores are left as they are.
+ */
+static unsigned
+uct_gdaki_fabric_detect(const unsigned *ndev_indexes, unsigned num_devs,
+                        unsigned num_gpus, uct_gdaki_dev_score_t *scores,
+                        unsigned long *auto_k_p)
+{
+    uct_gdaki_fabric_collect_t collect;
+    uct_gdaki_fabric_routes_t routes;
+    unsigned num_planes = 0;
+    unsigned *plane;
+    unsigned i;
+
+    plane = ucs_calloc(num_devs, sizeof(*plane), "gdaki dev planes");
+    if (plane == NULL) {
+        return 0;
+    }
+
+    ucs_array_init_dynamic(&routes);
+    collect.routes = &routes;
+    collect.status = UCS_OK;
+
+    for (i = 0; i < num_devs; ++i) {
+        /* A device without a network device, such as an InfiniBand one, has no
+         * routes to find its plane by: keep assigning by PCIe distance only */
+        if (ndev_indexes[i] == 0) {
+            goto out;
+        }
+
+        collect.dev = i;
+        ucs_netlink_foreach_route(ndev_indexes[i],
+                                  uct_gdaki_fabric_collect_route, &collect);
+    }
+
+    if (collect.status != UCS_OK) {
+        goto out;
+    }
+
+    num_planes = uct_gdaki_fabric_classify(ucs_array_begin(&routes),
+                                           ucs_array_length(&routes), num_devs,
+                                           num_gpus, plane, auto_k_p);
+    if (num_planes == 0) {
+        goto out;
+    }
+
+    ucs_debug("detected %u fabric planes among %u active IB devices",
+              num_planes, num_devs);
+    for (i = 0; i < num_devs; ++i) {
+        scores[i].plane = plane[i];
+    }
+
+out:
+    ucs_array_cleanup_dynamic(&routes);
+    ucs_free(plane);
+    return num_planes;
+}
+
 static uct_gdaki_dev_matrix_elem_t *
 uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 {
     unsigned long ib_per_cuda         = ib_md->config.gda_max_hca_per_gpu;
     uct_gdaki_dev_matrix_elem_t *dmat = NULL;
     int num_sys_active_ibdevs         = 0;
+    unsigned long fabric_ib_per_cuda  = 0;
+    unsigned num_planes               = 0;
     uct_gdaki_gpu_info_t gpus[UCT_GDAKI_MAX_CUDA_DEVICES];
     ucs_status_t status;
     int ibdev_index, ibdev_count, score_index;
-    unsigned long num_gpu_reachable_ibdevs, num_gpu_selected_ibdevs;
-    unsigned gpu_count, gpu_index;
+    unsigned long num_gpu_reachable_ibdevs, num_plane_selected_ibdevs;
+    unsigned long plane_ib_per_cuda;
+    unsigned gpu_count, gpu_index, num_used_planes, plane;
     struct ibv_device **device_list;
     struct ibv_device *ibdev;
     uct_gdaki_dev_score_t *scores;
+    unsigned *ndev_indexes;
     uct_gdaki_dev_matrix_elem_t *ibdesc;
     struct ibv_context *context;
 
@@ -1480,6 +1863,14 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     if (scores == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto out_dmat;
+    }
+
+    /* Allocate memory for network device indexes */
+    ndev_indexes = ucs_calloc(ibdev_count, sizeof(*ndev_indexes),
+                              "dev ndev indexes");
+    if (ndev_indexes == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out_scores;
     }
 
     /* Query each IB device so its sys_dev is resolved and its port state is
@@ -1515,6 +1906,8 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
 
         ibdesc->direct_nic = uct_ib_mlx5dv_check_direct_nic(&tmp_dev, 1) !=
                              UCS_SYS_DEVICE_ID_UNKNOWN;
+        ndev_indexes[num_sys_active_ibdevs] =
+                uct_gdaki_dev_ndev_index(&tmp_dev);
         scores[num_sys_active_ibdevs++].ibdev_index = ibdev_index;
         ibv_close_device(context);
     }
@@ -1539,10 +1932,26 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         goto out;
     }
 
+    /* The fabric planes are needed to give all GPUs the same planes, even if
+     * the number of devices per GPU is configured explicitly */
+    if (ib_md->config.gda_fabric_detect) {
+        num_planes = uct_gdaki_fabric_detect(ndev_indexes,
+                                             num_sys_active_ibdevs, gpu_count,
+                                             scores, &fabric_ib_per_cuda);
+    }
+
     if (ib_per_cuda == UCS_ULUNITS_AUTO) {
-        ib_per_cuda = ucs_max(1ul,
+        ib_per_cuda = (num_planes > 0) ?
+                      fabric_ib_per_cuda :
+                      ucs_max(1ul,
                               (unsigned long)num_sys_active_ibdevs / gpu_count);
     }
+
+    /* A GPU gets the same number of devices from each of the first planes, in
+     * the rank order. Without planes there is a single one, which has all the
+     * devices. */
+    num_used_planes   = ucs_max(ucs_min(num_planes, ib_per_cuda), 1ul);
+    plane_ib_per_cuda = ib_per_cuda / num_used_planes;
 
     /* Map each GPU to the best suited IB devices */
     for (gpu_index = 0; gpu_index < gpu_count; gpu_index++) {
@@ -1551,8 +1960,11 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         for (score_index = 0; score_index < num_sys_active_ibdevs;
              score_index++) {
             ibdesc = &dmat[scores[score_index].ibdev_index];
-            scores[score_index].reachable = ucs_topo_is_reachable(
-                    ibdesc->sys_dev, gpus[gpu_index].sys_dev);
+            /* A device which is not on a plane is not used */
+            scores[score_index].reachable =
+                    (scores[score_index].plane != UCT_GDAKI_PLANE_NONE) &&
+                    ucs_topo_is_reachable(ibdesc->sys_dev,
+                                          gpus[gpu_index].sys_dev);
             if (!scores[score_index].reachable) {
                 continue;
             }
@@ -1577,25 +1989,27 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
         ucs_qsort_r(scores, num_sys_active_ibdevs, sizeof(*scores),
                     uct_gdaki_dev_matrix_score, NULL);
 
-        num_gpu_selected_ibdevs = ucs_min(ib_per_cuda,
-                                          num_gpu_reachable_ibdevs);
+        /* Direct NIC is closest and can be only one */
+        if (dmat[scores[0].ibdev_index].direct_nic) {
+            uct_gdaki_dev_matrix_select(&gpus[gpu_index], dmat, &scores[0]);
+            continue;
+        }
 
-        /* Reachable devices are sorted first, so the loop selects only
-         * devices reachable from this GPU */
-        for (score_index = 0; score_index < num_gpu_selected_ibdevs;
-             score_index++) {
-            ucs_assert(scores[score_index].reachable);
-
-            ibdesc = &dmat[scores[score_index].ibdev_index];
-            if (gpus[gpu_index].cuda_idx >= 0) {
-                ibdesc->cuda_map |= UCS_BIT(gpus[gpu_index].cuda_idx);
-            }
-            scores[score_index].usecount++;
-
-            /* Direct NIC is closest and can be only one */
-            if (ibdesc->direct_nic) {
-                ucs_assert_always(score_index == 0);
-                break;
+        /* Select the best suited devices of each used plane. Reachable
+         * devices are sorted first, so the loops select only devices
+         * reachable from this GPU */
+        for (plane = 0; plane < num_used_planes; plane++) {
+            num_plane_selected_ibdevs = 0;
+            for (score_index = 0;
+                 (score_index < num_sys_active_ibdevs) &&
+                 scores[score_index].reachable &&
+                 (num_plane_selected_ibdevs < plane_ib_per_cuda);
+                 score_index++) {
+                if (scores[score_index].plane == plane) {
+                    uct_gdaki_dev_matrix_select(&gpus[gpu_index], dmat,
+                                                &scores[score_index]);
+                    num_plane_selected_ibdevs++;
+                }
             }
         }
     }
@@ -1604,6 +2018,8 @@ uct_gdaki_dev_matrix_init(const uct_ib_md_t *ib_md, size_t *dmat_length_p)
     *dmat_length_p = ibdev_count;
 
 out:
+    ucs_free(ndev_indexes);
+out_scores:
     ucs_free(scores);
 out_dmat:
     if (status != UCS_OK) {

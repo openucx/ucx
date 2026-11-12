@@ -8,6 +8,7 @@
 #include "uct_test.h"
 
 #include <gtest/common/test_perf.h>
+#include <memory>
 extern "C" {
 #include <ucs/arch/cpu.h>
 }
@@ -31,6 +32,11 @@ void test_uct_perf::test_execute(unsigned flags = 0,
                                  UCS_MEMORY_TYPE_HOST) {
     if (has_transport("ugni_udt")) {
         UCS_TEST_SKIP;
+    }
+
+    if (has_transport("tcp") &&
+        std::unique_ptr<entity>(create_entity(0))->tcp_vrf_drops_loopback()) {
+        UCS_TEST_SKIP_R("same-host traffic in VRF is dropped");
     }
 
     /* For SandyBridge CPUs, don't check performance of far-socket devices */

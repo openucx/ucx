@@ -19,6 +19,7 @@
 extern "C" {
 #include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
 #include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc.inl>
 #include <uct/cuda/base/cuda_iface.h>
 #include <uct/cuda/base/cuda_nvml.h>
 #include <ucs/sys/uid.h>
@@ -345,6 +346,54 @@ UCS_TEST_P(test_cuda_ipc_md, mnnvl_detection)
 #endif
 }
 
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_accessibility)
+{
+    int num_devices, can_access, device_index;
+    ucs_ternary_auto_value_t accessible;
+    CUdevice local_device, remote_device;
+    CUuuid remote_uuid;
+    bool checked = false;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetCount(&num_devices));
+    if (num_devices < 2) {
+        UCS_TEST_SKIP_R("test requires at least two CUDA devices");
+    }
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&local_device, 0));
+    for (device_index = 1; device_index < num_devices; ++device_index) {
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&remote_device, device_index));
+        ASSERT_EQ(CUDA_SUCCESS, cuDeviceGetUuid(&remote_uuid, remote_device));
+        ASSERT_EQ(CUDA_SUCCESS,
+                  cuDeviceCanAccessPeer(&can_access, local_device,
+                                        remote_device));
+
+        accessible = uct_cuda_ipc_nvml_peer_accessible(local_device,
+                                                        &remote_uuid);
+        if (accessible != UCS_TRY) {
+            EXPECT_EQ(can_access ? UCS_YES : UCS_NO, accessible);
+            checked = true;
+        }
+    }
+
+    if (!checked) {
+        UCS_TEST_SKIP_R("NVML peer accessibility is unavailable");
+    }
+}
+
+UCS_TEST_P(test_cuda_ipc_md, nvml_peer_unresolved)
+{
+    CUdevice cu_dev;
+    CUuuid unknown_uuid;
+
+    ASSERT_EQ(CUDA_SUCCESS, cuDeviceGet(&cu_dev, 0));
+
+    /* NVML cannot resolve this UUID, so the handle-mapping probe must decide
+     * the peer reachability */
+    memset(unknown_uuid.bytes, 0xab, sizeof(unknown_uuid.bytes));
+    EXPECT_EQ(UCS_TRY,
+              uct_cuda_ipc_nvml_peer_accessible(cu_dev, &unknown_uuid));
+}
+
 UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
 {
 #if HAVE_DECL_SYS_PIDFD_GETFD
@@ -395,9 +444,10 @@ UCS_TEST_P(test_cuda_ipc_md, posix_fd_same_node_ipc)
                 ASSERT_EQ(0xAB, host_buf[i]) << "Data mismatch at byte " << i;
             }
 
-            uct_cuda_ipc_unmap_memhandle(
-                    unpacked->super.super.pid, unpacked->super.pid_ns,
-                    unpacked->super.super.d_bptr, mapped_addr, dev, 0);
+            uct_cuda_ipc_mapping_t mapping;
+            uct_cuda_ipc_mapping_init(&mapping, &unpacked->super,
+                                      mapped_addr);
+            uct_cuda_ipc_unmap_memhandle(&mapping, dev, 0);
             EXPECT_UCS_OK(uct_rkey_release(component, &rkey_bundle));
             EXPECT_EQ(cuCtxDestroy(ctx), CUDA_SUCCESS);
         } catch (...) {

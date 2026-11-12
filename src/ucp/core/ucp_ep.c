@@ -2463,10 +2463,11 @@ ucs_status_t ucp_ep_recovery_arm(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
 
-    if (ucp_ep_config(ep)->key.dst_version < 22) {
-        ucs_diag("ep: %p: recovery support requires UCX 1.22 or later, "
-                 "remote peer version %d is not supported",
-                 ep, ucp_ep_config(ep)->key.dst_version);
+    if (ucp_ep_config(ep)->key.dst_version < UCP_MIN_DST_VERSION_EP_RECOVERY) {
+        ucs_diag("ep: %p: recovery support requires UCX 1.%d or later, "
+                 "remote peer version %u is not supported",
+                 ep, UCP_MIN_DST_VERSION_EP_RECOVERY,
+                 ucp_ep_config(ep)->key.dst_version);
         return UCS_OK;
     }
 
@@ -2789,7 +2790,7 @@ ucp_ep_tf_lane_supported(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep)
         !ucp_ep_err_mode_eq(ep, UCP_ERR_HANDLING_MODE_FAILOVER) ||
         ucp_ep_has_cm_lane(ep) ||
         (ucp_ep_config(ep)->key.dst_version <
-         UCP_WIREUP_ADDR_TOKEN_MIN_DST_VERSION) ||
+         UCP_MIN_DST_VERSION_WIREUP_ADDR_TOKEN) ||
         (ucp_ep_get_lane(ep, lane) != uct_ep)) {
         return 0;
     }
