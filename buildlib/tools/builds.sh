@@ -269,7 +269,7 @@ build_rdu() {
 	if ! ${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rdu
 	then
 		grep 'RDU support was requested but IB support is not available' config.log
-		echo "==== Not building with RDU (no IB) ===="
+		azure_log_warning "Not building with RDU (no IB)"
 		return
 	fi
 	$MAKEP
