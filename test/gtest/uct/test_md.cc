@@ -1474,8 +1474,6 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf)
     }
 }
 
-UCT_MD_INSTANTIATE_TEST_CASE(test_md_dmabuf)
-
 /* MDs which only detect memory and export it as dma-buf for other MDs */
 UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf_export) {
     const size_t size      = 4 * ucs_get_page_size();
@@ -1521,6 +1519,8 @@ UCS_TEST_P(test_md_dmabuf, mem_query_dmabuf_export) {
         UCS_TEST_SKIP_R("MD does not export dmabuf for detected memory types");
     }
 }
+
+UCT_MD_INSTANTIATE_TEST_CASE(test_md_dmabuf)
 
 class test_rocm_copy : public test_md {
 };
