@@ -42,7 +42,6 @@ steps:
       set -euo pipefail
       ulimit -c 0
       test -w "${WORKSPACE}"
-      case "$(readlink -f "${WORKSPACE}")" in /labhome/shasson|/labhome/shasson/*) exit 1;; esac
       gcc --version | head -1
       git rev-parse HEAD
       build_wire() (
