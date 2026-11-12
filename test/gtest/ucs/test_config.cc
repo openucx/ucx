@@ -1212,6 +1212,26 @@ UCS_TEST_F(test_config, test_config_file) {
     EXPECT_EQ(std::string("Ford"), std::string(opts->brand));
 }
 
+UCS_TEST_F(test_config, test_config_file_dump_comment_default) {
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv env1("UCX_BRAND", "Ford");
+
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+    const std::string dump = opts.dump(
+            (ucs_config_print_flags_t)(UCS_CONFIG_PRINT_CONFIG |
+                                       UCS_CONFIG_PRINT_COMMENT_DEFAULT));
+
+    /* Set only in the INI file */
+    EXPECT_NE(dump.find("\nUCX_PRICE=100\n"), std::string::npos) << dump;
+
+    /* Set in the INI file and overridden by env vars */
+    EXPECT_NE(dump.find("\nUCX_BRAND=Ford\n"), std::string::npos) << dump;
+
+    /* Not set */
+    EXPECT_NE(dump.find("\n# UCX_MODEL=Corvette\n"), std::string::npos)
+            << dump;
+}
+
 UCS_TEST_F(test_config, test_config_file_parse_files) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv ucx_config_dir("UCX_CONFIG_DIR", TEST_CONFIG_DIR);
