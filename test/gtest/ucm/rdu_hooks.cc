@@ -45,11 +45,16 @@ protected:
         ucs::test::cleanup();
     }
 
+    /* Find the event of a buffer. Events of allocations which were not made
+     * through the hook report the size from the runtime, which may be rounded
+     * up, so for them the size is only a lower bound. */
     static void check_event(const mem_event_vec_t &events,
-                            const std::string &name, void *ptr, size_t size)
+                            const std::string &name, void *ptr, size_t size,
+                            bool exact_size)
     {
         for (const auto &event : events) {
-            if ((event.address == ptr) && (event.size == size)) {
+            if ((event.address == ptr) &&
+                (exact_size ? (event.size == size) : (event.size >= size))) {
                 EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, event.mem_type);
                 return;
             }
@@ -63,11 +68,11 @@ protected:
     {
         void *ptr = mem_buffer::allocate_rdu(size, kind);
 
-        check_event(m_alloc_events, "alloc", ptr, size);
+        check_event(m_alloc_events, "alloc", ptr, size, true);
         EXPECT_TRUE(m_free_events.empty());
 
         mem_buffer::release(ptr, UCS_MEMORY_TYPE_RDU);
-        check_event(m_free_events, "free", ptr, size);
+        check_event(m_free_events, "free", ptr, size, false);
     }
 
     void test_existing_alloc(size_t size, mem_buffer::rdu_mem_kind kind)
@@ -80,7 +85,7 @@ protected:
         /* The handler receives allocations made before it was registered */
         ASSERT_UCS_OK(ucm_set_event_handler(events_mask, 0, mem_event_callback,
                                             &events));
-        check_event(events, "existing alloc", ptr, size);
+        check_event(events, "existing alloc", ptr, size, false);
 
         ucm_unset_event_handler(UCM_EVENT_MEM_TYPE_ALLOC, mem_event_callback,
                                 &events);
