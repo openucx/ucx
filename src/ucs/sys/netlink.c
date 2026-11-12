@@ -33,6 +33,11 @@
 #define RTM_F_FIB_MATCH 0x2000
 #endif
 
+/* Supported by Linux 4.3 and later */
+#ifndef RTNH_F_LINKDOWN
+#define RTNH_F_LINKDOWN 16
+#endif
+
 /* 198.51.100.1, a TEST-NET-2 address which is not assigned to any host */
 #define UCS_NETLINK_TEST_NET_2_ADDR 0xc6336401
 
