@@ -227,20 +227,17 @@ build_pgi() {
 # Build debug version
 #
 build_debug() {
+	echo "==== Build with --enable-debug option ===="
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
+
 	# RDU (SambaNova) is compile-only: its runtime is loaded at run time, so the
 	# modules build without it. RDU memory is registered by the IB memory domain,
-	# so RDU needs IB verbs: check that a verbs program compiles and links, as
-	# configure does.
-	local rdu_config_args=()
-	if printf '#include <infiniband/verbs.h>\nint main() { return ibv_get_device_list(0) != 0; }\n' | \
-		${CC:-cc} -x c - -libverbs -o /dev/null >/dev/null 2>&1
+	# so enable RDU when configure found IB.
+	if grep -q '^#define HAVE_IB 1' config.h
 	then
-		rdu_config_args=(--with-rdu)
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug \
+			--enable-examples --with-rdu
 	fi
-
-	echo "==== Build with --enable-debug option ===="
-	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples \
-		"${rdu_config_args[@]}"
 	$MAKEP
 
 	# Show UCX info
