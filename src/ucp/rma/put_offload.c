@@ -638,8 +638,7 @@ ucp_proto_put_sgl_contig_add_variant(
     ucp_proto_perf_t *perf;
     ucs_status_t status;
 
-    ucs_string_buffer_appendf(&perf_name,
-                              "SGL contig" UCP_PROTO_PERF_NODE_NEW_LINE "%s",
+    ucs_string_buffer_appendf(&perf_name, "SGL contig %s",
                               ucp_proto_perf_name(proto->perf));
 
     status = ucp_proto_perf_aggregate(ucs_string_buffer_cstr(&perf_name),
