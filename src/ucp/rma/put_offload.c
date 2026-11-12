@@ -13,7 +13,6 @@
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/dt/datatype_iter.inl>
-#include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_init.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_single.inl>
