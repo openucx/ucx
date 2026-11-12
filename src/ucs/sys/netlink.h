@@ -174,7 +174,7 @@ ucs_status_t ucs_netlink_route_get(const struct sockaddr *sa_remote,
  * interface. As in @ref ucs_netlink_route_matches with
  * UCS_NETLINK_ROUTE_CHECK_RELAXED, a default route is accepted only if the
  * routing domain of the interface has no more specific route through another
- * interface.
+ * interface of that domain.
  *
  * @param [in]  if_index         Network interface index.
  * @param [in]  sa_remote        Pointer to the destination address.

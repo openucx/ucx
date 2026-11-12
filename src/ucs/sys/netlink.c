@@ -590,18 +590,25 @@ static void ucs_netlink_route_add_oif(ucs_netlink_route_t *route, int if_index)
     route->oifs[route->num_oifs++] = if_index;
 }
 
-static int
-ucs_netlink_route_has_oif(const ucs_netlink_route_t *route, int if_index)
+/* Check whether a route is not through an interface, but through another
+ * interface of the routing domain of a VRF device, or out of any VRF if -1 */
+static int ucs_netlink_route_is_via_other_oif(const ucs_netlink_route_t *route,
+                                              int if_index, int vrf_index)
 {
+    int is_via_domain_oif = 0;
     unsigned i;
 
     for (i = 0; i < route->num_oifs; ++i) {
         if (route->oifs[i] == if_index) {
-            return 1;
+            return 0;
+        }
+
+        if (ucs_netlink_get_vrf_master_index(route->oifs[i]) == vrf_index) {
+            is_via_domain_oif = 1;
         }
     }
 
-    return 0;
+    return is_via_domain_oif;
 }
 
 static ucs_status_t
@@ -796,6 +803,7 @@ ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
                                               const struct sockaddr *sa_local,
                                               uint8_t *best_prefix_len_p)
 {
+    int vrf_index = ucs_netlink_get_vrf_master_index(if_index);
     ucs_netlink_route_t route, best_route;
     ucs_status_t status;
 
@@ -807,13 +815,13 @@ ucs_status_t ucs_netlink_kernel_route_matches(int if_index,
     }
 
     /* The lookup is done without the source address, because per-source
-     * routing tables can have a default route to any destination */
-    status = ucs_netlink_route_get(
-            sa_remote, NULL,
-            ucs_max(ucs_netlink_get_vrf_master_index(if_index), 0),
-            &best_route);
+     * routing tables can have a default route to any destination. A VRF
+     * lookup falls through to the main table when the VRF table has no
+     * route, so routes through other domains are ignored. */
+    status = ucs_netlink_route_get(sa_remote, NULL, ucs_max(vrf_index, 0),
+                                   &best_route);
     if ((status == UCS_OK) && (best_route.prefix_len > 0) &&
-        !ucs_netlink_route_has_oif(&best_route, if_index)) {
+        ucs_netlink_route_is_via_other_oif(&best_route, if_index, vrf_index)) {
         *best_prefix_len_p = best_route.prefix_len;
         return UCS_ERR_UNREACHABLE;
     }
