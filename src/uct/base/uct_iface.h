@@ -383,7 +383,7 @@ typedef struct uct_base_iface {
 
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
     uct_ep_event_cb_t        ep_event_cb;
-    void                    *ep_event_arg;
+    void                     *ep_event_arg;
 } uct_base_iface_t;
 
 UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*,

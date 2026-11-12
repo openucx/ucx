@@ -75,7 +75,7 @@ uct_rc_mlx5_ep_query_tx_token(uct_rc_mlx5_base_ep_t *ep, uct_ep_attr_t *ep_attr)
 ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
 {
     UCT_RC_MLX5_BASE_EP_DECL(tl_ep, iface, ep);
-    uct_ep_attr_t   result    = *ep_attr;
+    uct_ep_attr_t   result    = {.field_mask = ep_attr->field_mask};
     uct_perf_attr_t perf_attr = {};
     uct_ib_mlx5_md_t *md;
     ucs_status_t status;
@@ -83,6 +83,10 @@ ucs_status_t uct_rc_mlx5_base_ep_query(uct_ep_h tl_ep, uct_ep_attr_t *ep_attr)
     if (ep_attr->field_mask & (UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                                UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_TX_TOKEN) {
+        result.tx_token = ep_attr->tx_token;
     }
 
     if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_BANDWIDTH) {
