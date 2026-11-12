@@ -122,10 +122,6 @@ void mem_buffer_ze_memset(void *dst, int value, size_t length);
 
 
 #if HAVE_RDU
-extern "C" {
-#include <ucm/rdu/rdumem.h>
-}
-
 namespace {
 
 using rdu_init_func_t   = int (*)(void);
@@ -151,7 +147,7 @@ rdu_free_func_t mem_buffer_rdu_free;
  */
 bool mem_buffer_rdu_do_init()
 {
-    static const char *libs[] = UCM_RDU_DEVMEM_LIBS;
+    static const char *libs[] = UCX_RDU_DEVMEM_LIBS;
     rdu_init_func_t init_func;
     void *runtime = NULL;
     void *helper;

@@ -21,7 +21,7 @@
 #include <pthread.h>
 
 
-static const char *ucm_rdu_devmem_libs[] = UCM_RDU_DEVMEM_LIBS;
+static const char *ucm_rdu_devmem_libs[] = UCX_RDU_DEVMEM_LIBS;
 
 
 typedef void *(*ucm_rdu_malloc_func_t)(uint32_t rdu_id, size_t size,

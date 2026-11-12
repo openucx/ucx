@@ -51,7 +51,11 @@ AS_IF([test "x$rdu_checked" != "xyes"],
 
          AS_IF([test "x$rdu_happy" = "xyes"],
                [AC_SUBST([RDU_LIBS], ["$RDU_LIBS"])
-                AC_DEFINE([HAVE_RDU], 1, [Enable SambaNova RDU support])],
+                AC_DEFINE([HAVE_RDU], 1, [Enable SambaNova RDU support])
+                AC_DEFINE([UCX_RDU_DEVMEM_LIBS],
+                          [{"librdu_devmem.so.1", "librdu_devmem.so"}],
+                          [Names of the SambaNova rdu_devmem runtime library,
+                           the versioned SONAME first])],
                [AC_MSG_WARN([RDU runtime not found])])
 
         ]) # "x$with_rdu" = "xno"

@@ -13,10 +13,9 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/init_once.h>
-#include <ucm/rdu/rdumem.h>
 #include <dlfcn.h>
 
-static const char *uct_rdu_devmem_libs[] = UCM_RDU_DEVMEM_LIBS;
+static const char *uct_rdu_devmem_libs[] = UCX_RDU_DEVMEM_LIBS;
 
 static ucs_init_once_t uct_rdu_devmem_init_once = UCS_INIT_ONCE_INITIALIZER;
 static uct_rdu_devmem_ops_t uct_rdu_devmem_ops;
