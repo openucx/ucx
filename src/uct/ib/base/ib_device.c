@@ -31,6 +31,18 @@
 #include <rdma/rdma_netlink.h>
 #endif
 
+#define UCT_IB_MELLANOX_PCI_VENDOR_ID 0x15b3
+
+#define UCT_IB_DEVICE_FLAGS_MLX4 \
+    (UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM)
+#define UCT_IB_DEVICE_FLAGS_MLX5 \
+    (UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM)
+#define UCT_IB_DEVICE_FLAGS_MLX5_DC_V1 \
+    (UCT_IB_DEVICE_FLAGS_MLX5 | UCT_IB_DEVICE_FLAG_DC_V1)
+#define UCT_IB_DEVICE_FLAGS_MLX5_DC_V2 \
+    (UCT_IB_DEVICE_FLAGS_MLX5 | UCT_IB_DEVICE_FLAG_DC_V2)
+#define UCT_IB_DEVICE_FLAGS_BLUEFIELD \
+    (UCT_IB_DEVICE_FLAGS_MLX5_DC_V2 | UCT_IB_DEVICE_FLAG_DPU)
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -104,86 +116,34 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 
 /* clang-format off */
 static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
-  {"ConnectX-3", {0x15b3, 4099},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
-  {"ConnectX-3 Pro", {0x15b3, 4103},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
-  {"Connect-IB", {0x15b3, 4113},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  {"ConnectX-4", {0x15b3, 4115},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  {"ConnectX-4", {0x15b3, 4116},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 29},
-  {"ConnectX-4 LX", {0x15b3, 4117},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 28},
-  {"ConnectX-4 LX VF", {0x15b3, 4118},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 28},
-  {"ConnectX-5", {0x15b3, 4119},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 38},
-  {"ConnectX-5", {0x15b3, 4121},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 40},
-  {"ConnectX-5", {0x15b3, 4120},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 39},
-  {"ConnectX-5", {0x15b3, 41682},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 37},
-  {"ConnectX-5", {0x15b3, 4122},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 36},
-  {"ConnectX-6", {0x15b3, 4123},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  {"ConnectX-6 VF", {0x15b3, 4124},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  {"ConnectX-6 DX", {0x15b3, 4125},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 60},
-  {"ConnectX-6 DX VF", {0x15b3, 4126},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 60},
-  {"ConnectX-6 LX", {0x15b3, 4127},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 45},
-  {"ConnectX-7", {0x15b3, 4129},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 70},
-  {"ConnectX-8", {0x15b3, 4131},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 80},
-  {"ConnectX-9", {0x15b3, 4133},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 90},
-  {"ConnectX-10", {0x15b3, 4135},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 100},
-  {"ConnectX-10 GRS", {0x15b3, 0x2101},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 100},
-  {"BlueField", {0x15b3, 0xa2d2},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 41},
-  {"BlueField VF", {0x15b3, 0xa2d3},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 41},
-  {"BlueField 2", {0x15b3, 0xa2d6},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 61},
-  {"BlueField 3", {0x15b3, 0xa2dc},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 61},
-  {"BlueField 4", {0x15b3, 0xa2df},
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2 | UCT_IB_DEVICE_FLAG_DPU, 61},
-  {"Generic HCA", UCS_SYS_PCI_ID_UNDEFINED, 0, 0},
+  {"ConnectX-3",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1003}, UCT_IB_DEVICE_FLAGS_MLX4,        10},
+  {"ConnectX-3 Pro",   {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1007}, UCT_IB_DEVICE_FLAGS_MLX4,        11},
+  {"Connect-IB",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1011}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V1,  20},
+  {"ConnectX-4",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1013}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V1,  30},
+  {"ConnectX-4",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1014}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V1,  29},
+  {"ConnectX-4 LX",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1015}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V1,  28},
+  {"ConnectX-4 LX VF", {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1016}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V1,  28},
+  {"ConnectX-5",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1017}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  38},
+  {"ConnectX-5",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1019}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  40},
+  {"ConnectX-5",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1018}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  39},
+  {"ConnectX-5",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d2}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  37},
+  {"ConnectX-5",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101a}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  36},
+  {"ConnectX-6",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101b}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  50},
+  {"ConnectX-6 VF",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101c}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  50},
+  {"ConnectX-6 DX",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101d}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  60},
+  {"ConnectX-6 DX VF", {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101e}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  60},
+  {"ConnectX-6 LX",    {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x101f}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  45},
+  {"ConnectX-7",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1021}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  70},
+  {"ConnectX-8",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1023}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  80},
+  {"ConnectX-9",       {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1025}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2,  90},
+  {"ConnectX-10",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x1027}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2, 100},
+  {"ConnectX-10 GRS",  {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0x2101}, UCT_IB_DEVICE_FLAGS_MLX5_DC_V2, 100},
+  {"BlueField",        {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d2}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   41},
+  {"BlueField VF",     {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d3}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   41},
+  {"BlueField 2",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2d6}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61},
+  {"BlueField 3",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2dc}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61},
+  {"BlueField 4",      {UCT_IB_MELLANOX_PCI_VENDOR_ID, 0xa2df}, UCT_IB_DEVICE_FLAGS_BLUEFIELD,   61},
+  {"Generic HCA",      UCS_SYS_PCI_ID_UNDEFINED,                0,                                0},
   {NULL}
 };
 /* clang-format on */
@@ -258,9 +218,8 @@ uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
     }
 }
 
-static void
-uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
-                                   const uct_ib_async_event_t *event)
+void uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                        const uct_ib_async_event_t *event)
 {
     ucs_spin_lock(&dev->async_event_lock);
     uct_ib_device_async_event_dispatch_nolock(dev, event);
@@ -412,6 +371,13 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_CQ_ERR:
         event.cookie = ibevent.element.cq;
         break;
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        if (ibevent.element.qp->srq == NULL) {
+            ucs_debug("%s: ignoring LAST_WQE on QP 0x%x without SRQ",
+                      uct_ib_device_name(dev), ibevent.element.qp->qp_num);
+            goto out;
+        }
+        /* Fall through */
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
     case IBV_EVENT_QP_ACCESS_ERR:
@@ -419,7 +385,6 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
-    case IBV_EVENT_QP_LAST_WQE_REACHED:
         event.qp_num = ibevent.element.qp->qp_num;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -448,6 +413,7 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     };
 
     uct_ib_handle_async_event(dev, &event);
+out:
     ibv_ack_async_event(&ibevent);
 }
 
@@ -807,7 +773,7 @@ uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num, unsigned flags)
     }
 
     if (flags & UCT_IB_DEVICE_FLAG_SRQ) {
-        if (IBV_DEV_ATTR(dev, max_srq) == 0) {
+        if (!uct_ib_device_has_srq(dev)) {
             ucs_trace("%s:%d does not support SRQ", uct_ib_device_name(dev),
                       port_num);
             return UCS_ERR_UNSUPPORTED;
@@ -1789,7 +1755,8 @@ int uct_ib_device_is_smi(struct ibv_device *ibv_device)
     is_smi = 0;
     status = ucs_netlink_send_request(
             NETLINK_RDMA, RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
-            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi);
+            0, attr, header_length, uct_ib_device_is_smi_cb, &is_smi,
+            UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         return 0;
     }

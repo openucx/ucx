@@ -18,6 +18,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/wireup/address.h>
+#include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucp/wireup/wireup_lane_info.h>
@@ -473,6 +474,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         return UCS_OK;
     }
 
+    /* The lane slot may already be the replacement. This error belongs
+     * to the transport endpoint that is still held. */
+    if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
+        ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
+        return UCS_INPROGRESS;
+    }
+
     wireup_ep = ucp_wireup_ep(ucp_ep_get_lane(ucp_ep, lane));
     if ((wireup_ep == NULL) || !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
         !ucp_ep_is_local_connected(ucp_ep)) {
@@ -481,15 +489,12 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
          * endpoint here; the transport keeps it only when this returns
          * UCS_INPROGRESS. */
         if (wireup_ep == NULL) {
-            /* This endpoint is already held. Keep it until its completion. */
-            if (ucp_ep_tf_is_held(ucp_ep, lane, uct_ep)) {
-                return UCS_INPROGRESS;
-            }
-
             if (ucp_ep_tf_hold(ucp_ep, lane, uct_ep) == UCS_OK) {
                 /* Purge after return, once the outstanding range is
-                 * recorded. */
+                 * recorded. The hold is the error this request was waiting
+                 * for. A deferred reply rebuilds the lane only after it. */
                 ucp_ep_tf_schedule_token_purge(ucp_ep, lane);
+                ucp_wireup_tf_reply_lanes_failed(ucp_ep, UCS_BIT(lane));
                 return UCS_INPROGRESS;
             }
         }
@@ -566,8 +571,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_debug("worker %p: error handler called for UCT EP %p: %s",
-              worker, uct_ep, ucs_status_string(status));
+    ucs_debug("worker %p: error handler called for UCT EP %p: %s", worker,
+              uct_ep, ucs_status_string(status));
 
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",

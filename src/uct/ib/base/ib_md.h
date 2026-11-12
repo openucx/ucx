@@ -118,6 +118,8 @@ typedef struct uct_ib_md_ext_config {
     unsigned                 smkey_block_size; /**< Mkey indexes in a symmetric block */
     int                      direct_nic; /**< Direct NIC with GPU functionality */
     unsigned long            gda_max_hca_per_gpu; /**< Threshold of IB per GPU */
+    int                      gda_fabric_detect; /**< Give all GPUs the same
+                                                     fabric planes in GDA */
     int                      gda_dmabuf_enable; /**< Enable DMA-BUF in GDA */
     /**< Retain and use an inactive CUDA primary context to query device capabilities */
     int                      gda_retain_inactive_ctx;
@@ -427,7 +429,8 @@ uct_ib_md_is_flush_rkey_valid(uint32_t flush_rkey) {
 
 static UCS_F_ALWAYS_INLINE uint8_t uct_ib_md_get_atomic_mr_id(uct_ib_md_t *md)
 {
-    return md->flush_rkey >> 8;
+    return uct_ib_md_is_flush_rkey_valid(md->flush_rkey) ?
+           (md->flush_rkey >> 8) : 0;
 }
 
 /**

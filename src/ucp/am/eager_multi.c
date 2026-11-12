@@ -363,7 +363,7 @@ static void ucp_am_eager_multi_zcopy_psn_proto_probe(
 {
     /* PSN protocol requires both sides to support it - disable if peer
      * version is too old */
-    if (init_params->ep_config_key->dst_version < 21) {
+    if (init_params->ep_config_key->dst_version < UCP_MIN_DST_VERSION_AM_PSN) {
         return;
     }
 

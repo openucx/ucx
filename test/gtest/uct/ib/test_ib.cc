@@ -606,19 +606,15 @@ public:
             UCS_TEST_SKIP_R(device_str.str() + " is not Ethernet");
         }
 
-        union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
         ucs_config_allow_list_t dummy_subnet_list = {};
-        ucs::handle<uct_md_h> uct_md;
+        auto uct_md                               = open_md();
+        union ibv_gid gid;
         uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;
         ucs_status_t status;
         uint8_t gid_index;
-
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
-                               &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device), m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
@@ -669,13 +665,8 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
 class test_uct_ib_sl : public test_uct_ib_with_specific_port {
 public:
     void check_port_attr() {
+        auto uct_md = open_md();
         ucs_status_t status;
-        ucs::handle<uct_md_h> uct_md;
-
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
-                               &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device),
-                               m_md_config);
 
         uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
 
@@ -691,17 +682,11 @@ public:
 
     bool transport_has_ddp() const
     {
-        ucs::handle<uct_md_h> uct_md;
-
         if (!has_transport("rc_mlx5") && !has_transport("dc_mlx5")) {
             return false;
         }
 
-        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_md_close, uct_md_open,
-                               &uct_ib_component,
-                               ibv_get_device_name(m_ibctx->device),
-                               m_md_config);
-
+        auto uct_md             = open_md();
         uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
         int rc_has_ddp          = has_transport("rc_mlx5") &&
                                   (ib_md->dp_ordering_cap_devx.rc ==
