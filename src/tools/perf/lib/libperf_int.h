@@ -357,11 +357,11 @@ ucx_perf_mem_alloc_name(const ucx_perf_params_t *params, int is_send)
     return ucs_memory_type_names[mem_type];
 }
 
-static inline ucs_status_t
-ucx_perf_get_device_index(const ucx_perf_context_t *perf,
-                          unsigned group_index, unsigned device_count,
-                          const char *device_type,
-                          unsigned *device_index_p)
+/*
+ * Return the device requested for this process, or UCX_PERF_MEM_DEV_DEFAULT
+ */
+static inline int
+ucx_perf_get_device_id(const ucx_perf_context_t *perf, unsigned group_index)
 {
     int device_id;
 
@@ -374,6 +374,17 @@ ucx_perf_get_device_index(const ucx_perf_context_t *perf,
         device_id = (group_index == 0) ? perf->params.recv_device_id :
                                          perf->params.send_device_id;
     }
+
+    return device_id;
+}
+
+static inline ucs_status_t
+ucx_perf_get_device_index(const ucx_perf_context_t *perf,
+                          unsigned group_index, unsigned device_count,
+                          const char *device_type,
+                          unsigned *device_index_p)
+{
+    int device_id = ucx_perf_get_device_id(perf, group_index);
 
     if (device_count == 0) {
         ucs_error("no %s devices available", device_type);

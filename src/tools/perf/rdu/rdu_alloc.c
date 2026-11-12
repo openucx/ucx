@@ -96,7 +96,6 @@ static void ucx_perf_rdu_do_init(void)
 
 static ucs_status_t ucx_perf_rdu_init(ucx_perf_context_t *perf)
 {
-    unsigned group_index;
     int device_id;
 
     pthread_once(&ucx_perf_rdu_init_once, ucx_perf_rdu_do_init);
@@ -106,16 +105,7 @@ static ucs_status_t ucx_perf_rdu_init(ucx_perf_context_t *perf)
 
     /* The runtime does not report the number of RDUs, so use the requested
      * RDU, or RDU 0 by default */
-    if (perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
-        device_id = perf->params.recv_device_id;
-        if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
-            device_id = perf->params.send_device_id;
-        }
-    } else {
-        group_index = rte_call(perf, group_index);
-        device_id   = (group_index == 0) ? perf->params.recv_device_id :
-                                             perf->params.send_device_id;
-    }
+    device_id = ucx_perf_get_device_id(perf, rte_call(perf, group_index));
 
     if (device_id == UCX_PERF_MEM_DEV_DEFAULT) {
         device_id = 0;
