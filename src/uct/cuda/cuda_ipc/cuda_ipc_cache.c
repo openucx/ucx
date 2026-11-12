@@ -785,14 +785,6 @@ uct_cuda_ipc_cache_put_region(uct_cuda_ipc_cache_t *cache,
 
     status = UCS_PROFILE_CALL(ucs_pgtable_insert,
                               &cache->pgtable, &region->super);
-    if (status == UCS_ERR_ALREADY_EXISTS) {
-        /* overlapped region means memory freed at source. remove and try insert */
-        uct_cuda_ipc_cache_invalidate_regions(cache,
-                                              (void *)region->super.start,
-                                              (void *)region->super.end);
-        status = UCS_PROFILE_CALL(ucs_pgtable_insert,
-                                  &cache->pgtable, &region->super);
-    }
     if (status != UCS_OK) {
 
         ucs_error("%s: failed to insert region:"UCS_PGT_REGION_FMT" size:%lu :%s",

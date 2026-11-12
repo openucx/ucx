@@ -1021,17 +1021,10 @@ run_mpi_tests() {
 
 				echo "==== Running CUDA IPC overlap regression ===="
 				local overlap_status=0
-				local overlap_test=./test/mpi/test_cuda_ipc_overlap
-				# Shared builds need the real binary to avoid libtool's paths;
-				# static builds place the executable directly in test/mpi.
-				if [ -x ./test/mpi/.libs/test_cuda_ipc_overlap ]; then
-					overlap_test=./test/mpi/.libs/test_cuda_ipc_overlap
-				fi
-				${MPIRUN} -np 2 \
-					env LD_LIBRARY_PATH=${ucx_inst}/lib:${ucx_inst}/lib/ucx:${LD_LIBRARY_PATH} \
-					UCX_MODULE_DIR=${ucx_inst}/lib/ucx \
-					UCX_LOG_LEVEL=warn "$overlap_test" \
-					|| overlap_status=$?
+				# MPI may prepend its own library directory when starting ranks.
+				${MPIRUN} -np 2 -x UCX_LOG_LEVEL=warn \
+					env LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH} \
+					./test/mpi/test_cuda_ipc_overlap || overlap_status=$?
 				if [ "$overlap_status" -eq 77 ]; then
 					log_warning "CUDA IPC overlap regression skipped"
 				elif [ "$overlap_status" -ne 0 ]; then

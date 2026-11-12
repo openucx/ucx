@@ -160,8 +160,11 @@ static void transfer(ipc_context_t *ipc, int rank, CUdeviceptr send,
     MPI_Bcast(&send, sizeof(send), MPI_BYTE, 0, MPI_COMM_WORLD);
     MPI_Bcast(ipc->rkey_buffer, ipc->rkey_size, MPI_BYTE, 0, MPI_COMM_WORLD);
     if (rank == 1) {
+        /* Count diagnostics only while importing the remote mapping. */
+        ucs_log_push_handler(count_errors_and_warnings);
         UCX_CHECK(uct_rkey_unpack(ipc->component, ipc->rkey_buffer, &rkey));
         UCX_CHECK(uct_rkey_ptr(ipc->component, &rkey, send, &mapped));
+        ucs_log_pop_handler();
         CUDA_CHECK(cuMemcpyDtoD(recv, (CUdeviceptr)mapped, size));
         CUDA_CHECK(cuMemcpyDtoH(host, recv, size));
         for (i = 0; i < size; ++i) {
@@ -266,8 +269,6 @@ int main(int argc, char **argv)
         goto out_free_ipc;
     }
 
-    ucs_log_push_handler(count_errors_and_warnings);
-
     for (iteration = 0; iteration < ITERATIONS; ++iteration) {
         if (rank == 0) {
             CUDA_CHECK(cuMemAlloc(&lower, BLOCK_SIZE));
@@ -293,7 +294,6 @@ int main(int argc, char **argv)
         }
     }
 
-    ucs_log_pop_handler();
     MPI_Allreduce(&overlaps, &total_overlaps, 1, MPI_UNSIGNED, MPI_SUM,
                   MPI_COMM_WORLD);
     MPI_Allreduce(&errors_and_warnings, &total_errors, 1, MPI_UNSIGNED, MPI_SUM,
