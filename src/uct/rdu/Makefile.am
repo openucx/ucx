@@ -9,9 +9,9 @@ module_LTLIBRARIES     = libuct_rdu.la
 libuct_rdu_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_rdu_la_CFLAGS   = $(BASE_CFLAGS) $(LT_CFLAGS)
 libuct_rdu_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
-                         $(top_builddir)/src/uct/libuct.la
-libuct_rdu_la_LDFLAGS  = $(RDU_LIBS) \
-                         -version-info $(SOVERSION) $(UCX_LT_RELEASE)
+                         $(top_builddir)/src/uct/libuct.la \
+                         $(RDU_LIBS)
+libuct_rdu_la_LDFLAGS  = -version-info $(SOVERSION) $(UCX_LT_RELEASE)
 
 noinst_HEADERS = \
     base/rdu_md.h \
