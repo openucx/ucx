@@ -60,6 +60,13 @@ typedef struct {
     uint8_t                 mem_flags; /**< UCS memory flags */
 } ucs_memtype_cache_entry_t;
 
+#define UCS_MEMTYPE_CACHE_ENTRY_FMT "%p [0x%lx..0x%lx] %s dev %s flags 0x%x"
+#define UCS_MEMTYPE_CACHE_ENTRY_ARG(_entry) \
+            (_entry), (_entry)->super.start, (_entry)->super.end, \
+            ucs_memory_type_names[(_entry)->mem_type], \
+            ucs_topo_sys_device_get_name((_entry)->sys_dev), \
+            (_entry)->mem_flags
+
 /* Context of a search for an entry registered with exactly the same range */
 typedef struct {
     uint64_t                  start;
@@ -395,7 +402,6 @@ ucs_memtype_cache_find_exact(uint64_t start, uint64_t end)
     return ctx.entry;
 }
 
-#if UCS_ENABLE_ASSERT
 static void ucs_memtype_cache_check_overlap_cb(ucs_interval_map_node_t *node,
                                                void *arg)
 {
@@ -403,12 +409,11 @@ static void ucs_memtype_cache_check_overlap_cb(ucs_interval_map_node_t *node,
     const ucs_memtype_cache_entry_t *entry     =
             ucs_derived_of(node, ucs_memtype_cache_entry_t);
 
-    ucs_assertv(entry->mem_type == new_entry->mem_type,
-                "overlapping registrations of %s and %s memory",
-                ucs_memory_type_names[entry->mem_type],
-                ucs_memory_type_names[new_entry->mem_type]);
+    ucs_assertv_always(entry->mem_type == new_entry->mem_type,
+                       "overlapping registrations of %s and %s memory",
+                       ucs_memory_type_names[entry->mem_type],
+                       ucs_memory_type_names[new_entry->mem_type]);
 }
-#endif
 
 void ucs_memtype_cache_register(const void *address, size_t size,
                                 ucs_memory_type_t mem_type,
@@ -417,15 +422,16 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_memtype_cache_entry_t *entry;
 
-    if (!ucs_memtype_cache_is_explicit() || (size == 0) ||
-        (size > UINTPTR_MAX - start) || (mem_type >= UCS_MEMORY_TYPE_LAST)) {
-        return;
-    }
+    ucs_assert(ucs_memtype_cache_is_explicit());
+    ucs_assertv((size > 0) && (size <= UINTPTR_MAX - start) &&
+                (mem_type < UCS_MEMORY_TYPE_LAST),
+                "address=%p size=%zu mem_type=%d", address, size, mem_type);
 
     entry = ucs_malloc(sizeof(*entry), "memtype_cache_entry");
     if (entry == NULL) {
         /* The range is not cached, so lookups of it miss */
-        ucs_warn("failed to allocate memtype cache entry");
+        ucs_warn("failed to allocate memtype cache entry for [0x%lx..0x%lx] %s",
+                 start, start + size, ucs_memory_type_names[mem_type]);
         return;
     }
 
@@ -433,19 +439,17 @@ void ucs_memtype_cache_register(const void *address, size_t size,
     entry->sys_dev   = sys_dev;
     entry->mem_flags = mem_flags;
 
-    ucs_trace("memtype_cache: register [0x%lx..0x%lx] %s dev %s flags 0x%x",
-              start, start + size, ucs_memory_type_names[mem_type],
-              ucs_topo_sys_device_get_name(sys_dev), mem_flags);
-
     ucs_spin_lock(&ucs_memtype_cache_explicit_lock);
-#if UCS_ENABLE_ASSERT
-    ucs_interval_map_foreach_overlapping(&ucs_memtype_cache_explicit_map, start,
-                                         start + size,
-                                         ucs_memtype_cache_check_overlap_cb,
-                                         entry);
-#endif
+    if (UCS_ENABLE_ASSERT) {
+        ucs_interval_map_foreach_overlapping(&ucs_memtype_cache_explicit_map,
+                                             start, start + size,
+                                             ucs_memtype_cache_check_overlap_cb,
+                                             entry);
+    }
     ucs_interval_map_insert(&ucs_memtype_cache_explicit_map, &entry->super,
                             start, start + size);
+    ucs_trace("memtype_cache: register " UCS_MEMTYPE_CACHE_ENTRY_FMT,
+              UCS_MEMTYPE_CACHE_ENTRY_ARG(entry));
     ucs_spin_unlock(&ucs_memtype_cache_explicit_lock);
 }
 
@@ -454,10 +458,9 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
     ucs_pgt_addr_t start = (uintptr_t)address;
     ucs_memtype_cache_entry_t *entry;
 
-    if (!ucs_memtype_cache_is_explicit() || (size == 0) ||
-        (size > UINTPTR_MAX - start)) {
-        return;
-    }
+    ucs_assert(ucs_memtype_cache_is_explicit());
+    ucs_assertv((size > 0) && (size <= UINTPTR_MAX - start),
+                "address=%p size=%zu", address, size);
 
     ucs_spin_lock(&ucs_memtype_cache_explicit_lock);
     entry = ucs_memtype_cache_find_exact(start, start + size);
@@ -466,8 +469,14 @@ void ucs_memtype_cache_unregister(const void *address, size_t size)
     }
     ucs_spin_unlock(&ucs_memtype_cache_explicit_lock);
 
-    ucs_trace("memtype_cache: unregister [0x%lx..0x%lx] %s", start,
-              start + size, (entry != NULL) ? "done" : "not found");
+    if (entry == NULL) {
+        ucs_trace("memtype_cache: unregister [0x%lx..0x%lx] not found", start,
+                  start + size);
+        return;
+    }
+
+    ucs_trace("memtype_cache: unregister " UCS_MEMTYPE_CACHE_ENTRY_FMT,
+              UCS_MEMTYPE_CACHE_ENTRY_ARG(entry));
     ucs_free(entry);
 }
 
@@ -486,11 +495,14 @@ ucs_memtype_cache_lookup_explicit(uint64_t start, size_t size,
     }
 
     ucs_spin_lock(&ucs_memtype_cache_explicit_lock);
+    /* Any registration containing the whole range may be returned, so with
+     * nested ones the base address and length may be of either; partial
+     * overlaps are misses */
     node = ucs_interval_map_find_containing(&ucs_memtype_cache_explicit_map,
                                             start, start + ucs_max(size, 1));
     if (node == NULL) {
-        ucs_trace("0x%lx..0x%lx not contained in a registration", start,
-                  start + size);
+        ucs_trace("memtype_cache: [0x%lx..0x%lx] not contained in a "
+                  "registration", start, start + size);
         status = UCS_ERR_UNSUPPORTED;
     } else {
         entry                  = ucs_derived_of(node,
@@ -513,8 +525,9 @@ static void ucs_memtype_cache_explicit_release_cb(ucs_interval_map_node_t *node,
     ucs_memtype_cache_entry_t *entry =
             ucs_derived_of(node, ucs_memtype_cache_entry_t);
 
-    ucs_debug("memtype_cache: leftover registration [0x%lx..0x%lx] %s",
-              node->start, node->end, ucs_memory_type_names[entry->mem_type]);
+    ucs_debug("memtype_cache: leftover registration "
+              UCS_MEMTYPE_CACHE_ENTRY_FMT,
+              UCS_MEMTYPE_CACHE_ENTRY_ARG(entry));
     ucs_list_add_tail(arg, &entry->list);
 }
 
@@ -523,11 +536,10 @@ static void ucs_memtype_cache_explicit_cleanup(void)
     ucs_memtype_cache_entry_t *entry;
     UCS_LIST_HEAD(entry_list);
 
-    if (ucs_interval_map_count(&ucs_memtype_cache_explicit_map) > 0) {
-        ucs_interval_map_foreach_overlapping(
-                &ucs_memtype_cache_explicit_map, 0, UINT64_MAX,
-                ucs_memtype_cache_explicit_release_cb, &entry_list);
-    }
+    ucs_interval_map_foreach_overlapping(&ucs_memtype_cache_explicit_map, 0,
+                                         UINT64_MAX,
+                                         ucs_memtype_cache_explicit_release_cb,
+                                         &entry_list);
 
     while (!ucs_list_is_empty(&entry_list)) {
         entry = ucs_list_extract_head(&entry_list, ucs_memtype_cache_entry_t,
@@ -549,12 +561,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     ucs_pgt_region_t *pgt_region;
     ucs_status_t status;
 
-    if (ucs_unlikely(ucs_memtype_cache_is_explicit())) {
-        return ucs_memtype_cache_lookup_explicit(start, size, mem_info);
-    }
-
     if (memtype_cache == NULL) {
-        return UCS_ERR_UNSUPPORTED;
+        /* The registry is empty unless explicit mode is enabled */
+        return ucs_memtype_cache_lookup_explicit(start, size, mem_info);
     }
 
     ucs_spin_lock(&memtype_cache->lock);

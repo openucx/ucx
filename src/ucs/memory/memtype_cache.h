@@ -117,8 +117,8 @@ int ucs_memtype_cache_is_explicit(void);
 
 
 /**
- * Register memory with a known lifetime in the explicit memtype cache. Has no
- * effect unless @ref ucs_memtype_cache_is_explicit returns 1.
+ * Register memory with a known lifetime in the explicit memtype cache. Must be
+ * called only if @ref ucs_memtype_cache_is_explicit returns 1.
  *
  * Every call adds a separate entry, so a range may be registered more than once
  * and ranges may overlap. Overlapping registrations must describe the same
@@ -140,6 +140,7 @@ void ucs_memtype_cache_register(const void *address, size_t size,
 /**
  * Remove one registration of exactly this range, which was added by
  * @ref ucs_memtype_cache_register. Ranges that are not registered are ignored.
+ * Must be called only if @ref ucs_memtype_cache_is_explicit returns 1.
  *
  * @param [in]  address         Start address passed to register.
  * @param [in]  size            Size passed to register.

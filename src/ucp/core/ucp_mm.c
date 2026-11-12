@@ -474,7 +474,10 @@ ucp_memh_memtype_cache_register(ucp_context_h context, ucp_mem_h memh)
 
 static void ucp_memh_memtype_cache_unregister(ucp_mem_h memh)
 {
-    if (!(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
+    /* Imported memhs are not registered, but their range can match a local
+     * registration, which unregister may wrongly remove */
+    if (ucs_memtype_cache_is_explicit() &&
+        !(memh->flags & UCP_MEMH_FLAG_IMPORTED)) {
         ucs_memtype_cache_unregister(ucp_memh_address(memh),
                                      ucp_memh_length(memh));
     }

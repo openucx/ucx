@@ -753,7 +753,6 @@ UCS_TEST_F(test_memtype_explicit, unregister_unknown_range) {
 
     EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
     EXPLICIT_UNREG(base, 0x4000, 0x1000);
-    EXPLICIT_UNREG(base, 0, 0);
     EXPLICIT_UNREG(base, 0, 0x800);
     EXPECT_EQ(UCS_OK, lookup(base, 0, 0x100, &info));
 
@@ -772,15 +771,6 @@ UCS_TEST_F(test_memtype_explicit, host_registration) {
 
     EXPLICIT_UNREG(base, 0, 0x1000);
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x1000, &info));
-}
-
-UCS_TEST_F(test_memtype_explicit, ignored_registrations) {
-    ucs_memory_info_t info;
-    const void *base = reinterpret_cast<void*>(0x3e000);
-
-    EXPLICIT_REG(base, 0, 0, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_LAST, 1);
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
 }
 
 /* The event-driven cache is not created in explicit mode, and a detection
@@ -825,62 +815,15 @@ UCS_TEST_F(test_memtype_explicit, unaligned_range) {
     EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 3, 1000, &info));
 }
 
-UCS_TEST_F(test_memtype_explicit, disabled_cache) {
-    ucs_memory_info_t info;
-    const void *base          = reinterpret_cast<void*>(0x50000);
-    const void *disabled_base = reinterpret_cast<void*>(0x51000);
-
-    EXPLICIT_REG(base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-    ASSERT_UCS_OK(lookup(base, 0, 0x100, &info));
+/* Explicit mode requires the cache to be enabled and UCM events to be off */
+UCS_TEST_F(test_memtype_explicit, mode_selection) {
+    EXPECT_TRUE(ucs_memtype_cache_is_explicit());
 
     modify_config("MEMTYPE_CACHE", "n");
     EXPECT_FALSE(ucs_memtype_cache_is_explicit());
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(base, 0, 0x100, &info));
-    EXPLICIT_REG(disabled_base, 0, 0x1000, UCS_MEMORY_TYPE_CUDA, 1);
-    EXPLICIT_UNREG(base, 0, 0x1000);
-
-    /* Disabled calls had no effect: the first range is still registered */
     modify_config("MEMTYPE_CACHE", "y");
-    EXPECT_EQ(UCS_OK, lookup(base, 0, 0x100, &info));
-    EXPECT_EQ(UCS_ERR_UNSUPPORTED, lookup(disabled_base, 0, 0x100, &info));
-    EXPLICIT_UNREG(base, 0, 0x1000);
-}
+    EXPECT_TRUE(ucs_memtype_cache_is_explicit());
 
-/* With UCM events the cache is event-driven and explicit registration is a
- * no-op */
-UCS_TEST_F(test_memtype_explicit, events_preferred_when_available) {
-    ucm_event_t event;
-    ucs_memory_info_t info;
-    void *base = reinterpret_cast<void*>(0x60000);
-
-    ucs_memtype_cache_cleanup();
-    ucs_memtype_cache_global_init();
     ucm_global_opts.enable_events = 1;
-    ASSERT_FALSE(ucs_memtype_cache_is_explicit());
-    {
-        scoped_log_handler slh(hide_warns_logger);
-        ucs_memtype_cache_global_create();
-    }
-    if (ucs_memtype_cache_global_instance == NULL) {
-        UCS_TEST_SKIP_R("UCM memory event handler could not be installed");
-    }
-
-    unsigned num_regions =
-        ucs_memtype_cache_global_instance->pgtable.num_regions;
-    ucs_memtype_cache_register(base, 0x1000, UCS_MEMORY_TYPE_CUDA,
-                               UCS_SYS_DEVICE_ID_UNKNOWN, 1);
-    EXPECT_EQ(num_regions,
-              ucs_memtype_cache_global_instance->pgtable.num_regions);
-
-    event.mem_type.address   = base;
-    event.mem_type.size      = 0x1000;
-    event.mem_type.mem_type  = UCS_MEMORY_TYPE_CUDA;
-    event.mem_type.sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    event.mem_type.mem_flags = 1;
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
-    ASSERT_UCS_OK(ucs_memtype_cache_lookup(base, 0x100, &info));
-    EXPECT_EQ(UCS_MEMORY_TYPE_CUDA, info.type);
-
-    ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
-    EXPECT_EQ(UCS_ERR_NO_ELEM, ucs_memtype_cache_lookup(base, 0x100, &info));
+    EXPECT_FALSE(ucs_memtype_cache_is_explicit());
 }
