@@ -229,15 +229,6 @@ build_pgi() {
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
-
-	# RDU (SambaNova) is compile-only: its runtime is loaded at run time, so the
-	# modules build without it. RDU memory is registered by the IB memory domain,
-	# so enable RDU when configure found IB.
-	if grep -q '^#define HAVE_IB 1' config.h
-	then
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug \
-			--enable-examples --with-rdu
-	fi
 	$MAKEP
 
 	# Show UCX info
@@ -265,6 +256,28 @@ build_prof() {
 	echo "==== Build configure-prof ===="
 	${WORKSPACE}/contrib/configure-prof --prefix=$ucx_inst
 	$MAKEP
+}
+
+#
+# Build RDU (SambaNova) - compile-only: the rdu_devmem runtime is loaded at run
+# time, so the modules build without it
+#
+build_rdu() {
+	echo "==== Build with enable RDU ===="
+	# RDU memory is registered by the IB memory domain, so configure rejects
+	# --with-rdu when it does not find IB
+	if ! ${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rdu
+	then
+		grep 'RDU support was requested but IB support is not available' config.log
+		echo "==== Not building with RDU (no IB) ===="
+		return
+	fi
+	$MAKEP
+
+	# Compilation check: configure must have enabled the RDU modules
+	grep '#define HAVE_RDU 1' config.h
+
+	make_clean distclean
 }
 
 #
@@ -643,6 +656,7 @@ short)
 long)
 	tests=("${base_tests[@]}" \
 			'build_ugni' \
+			'build_rdu' \
 			'check_config_h' \
 			'check_inst_headers' \
 			'build_gcc' \
