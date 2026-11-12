@@ -473,8 +473,8 @@ static ucs_status_t ucs_topo_groups_build_groups_by_pci_switch(
 {
     const size_t num_gpus = ucs_array_length(&inventory->gpus);
     const size_t num_nics = ucs_array_length(&inventory->nics);
-    unsigned *depths = NULL, *switch_depths = NULL;
-    size_t *gpu_groups = NULL;
+    unsigned *depths      = NULL, *switch_depths = NULL;
+    size_t *gpu_groups    = NULL;
     ucs_topo_group_t unmatched;
     ucs_status_t status;
 
