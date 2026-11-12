@@ -185,27 +185,23 @@ uct_cuda_gpu_bus_id_is_visible(const uct_cuda_visible_gpu_t *visible_gpus,
     return 0;
 }
 
-static unsigned uct_cuda_nvml_get_device_flags(nvmlDevice_t nvml_dev,
-                                               const ucs_sys_bus_id_t *bus_id)
+static unsigned uct_cuda_nvml_get_device_flags(nvmlDevice_t nvml_dev)
 {
-    unsigned flags = 0;
     nvmlDeviceArchitecture_t arch;
     ucs_status_t status;
 
+#ifdef NVML_DEVICE_ARCH_RUBIN
+    UCS_STATIC_ASSERT(NVML_DEVICE_ARCH_RUBIN ==
+                      UCT_CUDA_NVML_DEVICE_ARCH_RUBIN);
+#endif
+
     status = UCT_CUDA_NVML_WRAP_CALL(nvmlDeviceGetArchitecture, nvml_dev,
                                      &arch);
-    if (status != UCS_OK) {
-        ucs_debug("gpu " UCS_SYS_BUS_ID_FMT ": failed to get architecture, "
-                  "assuming not rubin",
-                  UCS_SYS_BUS_ID_ARG(bus_id));
-        return 0;
+    if ((status == UCS_OK) && (arch == UCT_CUDA_NVML_DEVICE_ARCH_RUBIN)) {
+        return UCS_TOPO_DEVICE_FLAG_RUBIN;
     }
 
-    if (arch == NVML_DEVICE_ARCH_RUBIN) {
-        flags |= UCS_TOPO_DEVICE_FLAG_RUBIN;
-    }
-
-    return flags;
+    return 0;
 }
 
 /* MLOPart partitions of a gpu share its bus id, so all of them get the flags */
@@ -310,7 +306,7 @@ uct_cuda_init_devices_nvml(const uct_cuda_visible_gpu_t *visible_gpus,
         bus_id.function = 0;
 
         bus_id_key   = ucs_topo_get_bus_id_bit_repr(&bus_id);
-        device_flags = uct_cuda_nvml_get_device_flags(nvml_dev, &bus_id);
+        device_flags = uct_cuda_nvml_get_device_flags(nvml_dev);
 
         if (uct_cuda_gpu_bus_id_is_visible(visible_gpus, num_visible_gpus,
                                            bus_id_key)) {

@@ -13,10 +13,8 @@
 #include <nvml.h>
 
 
-/* Not defined by the nvml.h of older CUDA versions */
-#ifndef NVML_DEVICE_ARCH_RUBIN
-#define NVML_DEVICE_ARCH_RUBIN 13
-#endif
+/* NVML_DEVICE_ARCH_RUBIN of NVML r610, missing in older versions of nvml.h  */
+#define UCT_CUDA_NVML_DEVICE_ARCH_RUBIN 13
 
 
 /**

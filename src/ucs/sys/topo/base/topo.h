@@ -536,22 +536,6 @@ ucs_topo_device_class_mark_incomplete(ucs_topo_device_class_t device_class);
 int ucs_topo_device_class_is_incomplete(ucs_topo_device_class_t device_class);
 
 /**
- * Get the number of unique PCI bus ids (BDFs) among the system devices of a
- * class. Multiple system device records of the class that share a BDF are
- * counted once.
- *
- * If the class inventory is incomplete (see
- * @ref ucs_topo_device_class_is_incomplete), only the registered devices are
- * counted.
- *
- * @param [in]  device_class  Device class to count.
- *
- * @return Number of unique BDFs of the class.
- */
-unsigned
-ucs_topo_device_class_get_num_bdfs(ucs_topo_device_class_t device_class);
-
-/**
  * Get the ordinal of a given system device: the rank of its PCI bus id (BDF)
  * among all unique BDFs of the same class.
  *

@@ -854,9 +854,6 @@ UCS_TEST_F(test_topo, device_bdf_ordinal_aliases) {
     bus_id.slot     = 0x1f;
     bus_id.function = 0;
 
-    EXPECT_EQ(0u,
-              ucs_topo_device_class_get_num_bdfs(UCS_TOPO_DEVICE_CLASS_ACC));
-
     /* Same BDF, different class, registered first: must not hide the ACC BDF. */
     ASSERT_UCS_OK(ucs_topo_find_device_by_bus_id_and_user_value(&bus_id,
                                                                 user_value_net,
@@ -888,10 +885,6 @@ UCS_TEST_F(test_topo, device_bdf_ordinal_aliases) {
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias2));
     EXPECT_EQ(1u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi_alias));
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(net_same_bdf));
-    EXPECT_EQ(2u,
-              ucs_topo_device_class_get_num_bdfs(UCS_TOPO_DEVICE_CLASS_ACC));
-    EXPECT_EQ(1u,
-              ucs_topo_device_class_get_num_bdfs(UCS_TOPO_DEVICE_CLASS_NET));
 
     /* Adding a BDF-only record invalidates the cached ordinal, but does not
      * add another physical device. */
@@ -906,8 +899,6 @@ UCS_TEST_F(test_topo, device_bdf_ordinal_aliases) {
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias1));
     EXPECT_EQ(0u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_lo_alias2));
     EXPECT_EQ(1u, ucs_topo_sys_device_get_bdf_class_ordinal(acc_hi_alias));
-    EXPECT_EQ(2u,
-              ucs_topo_device_class_get_num_bdfs(UCS_TOPO_DEVICE_CLASS_ACC));
 }
 
 static std::vector<ucs_numa_node_t> get_online_numa_nodes()

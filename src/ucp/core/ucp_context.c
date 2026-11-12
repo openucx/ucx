@@ -3028,12 +3028,12 @@ ucp_context_gpu_nic_assignment_unavailable(ucp_context_h context,
     return UCS_ERR_INVALID_PARAM;
 }
 
-/* Vera Rubin hosts have a Vera CPU, and Rubin GPUs that come in pairs */
 static int ucp_context_is_vera_rubin(void)
 {
     const unsigned num_devices = ucs_topo_num_devices();
+    unsigned num_gpus          = 0;
     ucs_sys_device_t sys_dev;
-    unsigned num_gpus, i;
+    unsigned i;
 
     if (ucs_arch_get_cpu_model() != UCS_CPU_MODEL_NVIDIA_VERA) {
         ucs_debug("cpu model %s is not vera", ucs_cpu_model_name());
@@ -3054,21 +3054,16 @@ static int ucp_context_is_vera_rubin(void)
 
         if (!(ucs_topo_sys_device_get_flags(sys_dev) &
               UCS_TOPO_DEVICE_FLAG_RUBIN)) {
-            ucs_debug("gpu %s is not rubin",
-                      ucs_topo_sys_device_get_name(sys_dev));
+            ucs_diag("gpu %s is not rubin",
+                     ucs_topo_sys_device_get_name(sys_dev));
             return 0;
         }
+
+        ++num_gpus;
     }
 
-    /* MLOPart partitions of a GPU share its BDF, and count as one GPU */
-    num_gpus = ucs_topo_device_class_get_num_bdfs(UCS_TOPO_DEVICE_CLASS_ACC);
     if (num_gpus == 0) {
         ucs_debug("no gpus found");
-        return 0;
-    }
-
-    if ((num_gpus % 2) != 0) {
-        ucs_debug("number of rubin gpus %u is odd", num_gpus);
         return 0;
     }
 

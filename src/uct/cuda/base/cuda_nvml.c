@@ -56,6 +56,7 @@
     _macro(nvmlDeviceGetFieldValues, _fail_action); \
     _macro(nvmlDeviceGetP2PStatus, _fail_action); \
     _macro(nvmlDeviceGetNvLinkRemotePciInfo, _fail_action); \
+    _macro(nvmlDeviceGetArchitecture, _fail_action); \
     _macro(nvmlShutdown, _fail_action)
 
 #define UCT_CUDA_NVML_FPTR_CALL(_func, ...) \
@@ -91,10 +92,6 @@
         pthread_mutex_lock(&uct_cuda_nvml_mutex); \
         _status = uct_cuda_nvml_init(); \
         if (_status != UCS_OK) { \
-            goto _out; \
-        } \
-        if (UCT_CUDA_NVML_FPTR(_func) == NULL) { \
-            _status = UCS_ERR_UNSUPPORTED; \
             goto _out; \
         } \
         _status = UCT_CUDA_NVML_CALL_DEBUG(_func, \
@@ -170,11 +167,6 @@ static ucs_status_t uct_cuda_nvml_init()
     }
 
     UCT_CUDA_NVML_FOR_EACH_ACTION(UCT_CUDA_NVML_FPTR_LOAD, goto err_dlclose);
-
-    /* Optional, since only the gpu architecture detection depends on it */
-    UCT_CUDA_NVML_FPTR_LOAD(nvmlDeviceGetArchitecture,
-                            ucs_diag("nvmlDeviceGetArchitecture is not found, "
-                                     "gpu architecture is unknown"));
 
 #if HAVE_NVML_FABRIC_INFO
     UCT_CUDA_NVML_FPTR_LOAD(nvmlDeviceGetGpuFabricInfoV, {
