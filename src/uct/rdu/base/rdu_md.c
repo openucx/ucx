@@ -167,7 +167,8 @@ uct_rdu_md_detect_memory_type(uct_md_h md, const void *address, size_t length,
  * as RDU memory by an earlier query. Memory which the cache does not know,
  * such as memory mapped by the runtime, is not added: no release event would
  * remove the entry, and later memory at that address would look like RDU
- * memory.
+ * memory. Nothing is cached until the system device of the RDU is resolved,
+ * since UCP queries the memory again only while it is cached as unknown.
  */
 static void
 uct_rdu_md_memtype_cache_update(const void *address, size_t length,
@@ -176,6 +177,10 @@ uct_rdu_md_memtype_cache_update(const void *address, size_t length,
 {
     ucs_memory_info_t mem_info;
     uintptr_t start, end;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return;
+    }
 
     /* A partial overlap is returned with a NULL base address */
     if ((ucs_memtype_cache_lookup(address, length, &mem_info) != UCS_OK) ||
