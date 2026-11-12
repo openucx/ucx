@@ -150,13 +150,11 @@ bool ucp_test::is_mem_type_copy_supported(ucs_memory_type_t mem_type)
 }
 
 /* Check if RMA operations on memory of the given type are supported: memory
- * which cannot be copied is accessed only by RDMA transports */
+ * which cannot be copied is accessed only by transports which register it */
 bool ucp_test::is_mem_type_rma_supported(ucs_memory_type_t mem_type)
 {
-    static const std::string rdma_tls[] = {"rc_v", "rc_x", "dc_x", "ib"};
-
     return is_mem_type_copy_supported(mem_type) ||
-           has_any_transport(rdma_tls, ucs_static_array_size(rdma_tls));
+           check_reg_mem_types(sender(), mem_type);
 }
 
 bool ucp_test::is_self() const {
