@@ -227,8 +227,18 @@ build_pgi() {
 # Build debug version
 #
 build_debug() {
+	# RDU (SambaNova) is compile-only: its runtime is loaded at run time, so the
+	# modules build without it. RDU memory is registered by the IB memory domain,
+	# so RDU needs IB verbs.
+	local rdu_config_args=()
+	if [ -f /usr/include/infiniband/verbs.h ]
+	then
+		rdu_config_args=(--with-rdu)
+	fi
+
 	echo "==== Build with --enable-debug option ===="
-	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples \
+		"${rdu_config_args[@]}"
 	$MAKEP
 
 	# Show UCX info
@@ -433,31 +443,6 @@ build_ze() {
 	make_clean distclean
 }
 
-# Build RDU (SambaNova) - compile-only.
-# The rdu_devmem runtime is loaded at run time, so the modules build with no RDU
-# runtime installed.
-#
-build_rdu() {
-	# RDU memory is registered by the IB memory domain, so RDU needs IB verbs
-	if [ ! -f /usr/include/infiniband/verbs.h ]
-	then
-		echo "==== Not building with rdu flags (no IB verbs) ===="
-		return
-	fi
-
-	echo "==== Build with enable rdu ===="
-	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-rdu
-	$MAKEP
-
-	# Compilation check: configure must have enabled the RDU modules.
-	grep '#define HAVE_RDU 1' config.h
-	test -f src/uct/rdu/.libs/libuct_rdu.so
-	test -f src/ucm/rdu/.libs/libucm_rdu.so
-	test -f src/tools/perf/rdu/.libs/libucx_perftest_rdu.so
-
-	make_clean distclean
-}
-
 #
 # Build with clang compiler
 #
@@ -645,7 +630,6 @@ base_tests=('build_docs' \
 			'build_prof' \
 			'build_cuda' \
 			'build_rocm' \
-			'build_rdu' \
 			'build_no_verbs' \
 			'build_release_pkg' \
 			'build_fuse')
