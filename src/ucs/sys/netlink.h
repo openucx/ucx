@@ -32,6 +32,7 @@ typedef struct {
     uint8_t type;       /**< Route type, e.g. RTN_UNICAST or RTN_LOCAL */
     uint8_t prefix_len; /**< Destination prefix length of the entry */
     uint8_t num_oifs;   /**< Number of live output interfaces */
+    uint8_t is_oifs_truncated; /**< Some output interfaces were not stored */
     int     oifs[UCS_NETLINK_ROUTE_MAX_OIFS]; /**< Output interface indexes */
 } ucs_netlink_route_t;
 

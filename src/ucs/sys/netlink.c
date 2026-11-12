@@ -584,6 +584,7 @@ static void ucs_netlink_route_add_oif(ucs_netlink_route_t *route, int if_index)
     if (route->num_oifs >= UCS_NETLINK_ROUTE_MAX_OIFS) {
         ucs_debug("route has more than %d output interfaces, ignoring %d",
                   UCS_NETLINK_ROUTE_MAX_OIFS, if_index);
+        route->is_oifs_truncated = 1;
         return;
     }
 
@@ -591,7 +592,9 @@ static void ucs_netlink_route_add_oif(ucs_netlink_route_t *route, int if_index)
 }
 
 /* Check whether a route is not through an interface, but through another
- * interface of the routing domain of a VRF device, or out of any VRF if -1 */
+ * interface of the routing domain of a VRF device, or out of any VRF if -1.
+ * When some output interfaces were not stored, the interface can be one of
+ * them, so the route is not considered to be through another interface. */
 static int ucs_netlink_route_is_via_other_oif(const ucs_netlink_route_t *route,
                                               int if_index, int vrf_index)
 {
@@ -608,7 +611,7 @@ static int ucs_netlink_route_is_via_other_oif(const ucs_netlink_route_t *route,
         }
     }
 
-    return is_via_domain_oif;
+    return is_via_domain_oif && !route->is_oifs_truncated;
 }
 
 static ucs_status_t
@@ -625,9 +628,10 @@ ucs_netlink_parse_route_cb(const struct nlmsghdr *nlh, void *arg)
         return UCS_INPROGRESS;
     }
 
-    route->type       = rt_msg->rtm_type;
-    route->prefix_len = rt_msg->rtm_dst_len;
-    route->num_oifs   = 0;
+    route->type              = rt_msg->rtm_type;
+    route->prefix_len        = rt_msg->rtm_dst_len;
+    route->num_oifs          = 0;
+    route->is_oifs_truncated = 0;
 
     for (rta = RTM_RTA(rt_msg); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == RTA_OIF) {
