@@ -243,15 +243,14 @@ static ucs_status_t ucs_topo_groups_get_or_add_group_by_numa_node(
 {
     ucs_topo_groups_numa_node_t *entry;
     ucs_topo_group_t *group;
+    size_t i;
 
     /* Check if the group already exists for the given NUMA node. */
-    if (!ucs_array_is_empty(numa_nodes)) {
-        ucs_assert(ucs_array_begin(numa_nodes) != NULL);
-        ucs_array_for_each(entry, numa_nodes) {
-            if (entry->numa_node == numa_node) {
-                *group_p = &ucs_array_elem(groups, entry->group_idx);
-                return UCS_OK;
-            }
+    for (i = 0; i < ucs_array_length(numa_nodes); ++i) {
+        entry = &ucs_array_elem(numa_nodes, i);
+        if (entry->numa_node == numa_node) {
+            *group_p = &ucs_array_elem(groups, entry->group_idx);
+            return UCS_OK;
         }
     }
 
