@@ -229,9 +229,11 @@ build_pgi() {
 build_debug() {
 	# RDU (SambaNova) is compile-only: its runtime is loaded at run time, so the
 	# modules build without it. RDU memory is registered by the IB memory domain,
-	# so RDU needs IB verbs.
+	# so RDU needs IB verbs: check that a verbs program compiles and links, as
+	# configure does.
 	local rdu_config_args=()
-	if [ -f /usr/include/infiniband/verbs.h ]
+	if printf '#include <infiniband/verbs.h>\nint main() { return ibv_get_device_list(0) != 0; }\n' | \
+		${CC:-cc} -x c - -libverbs -o /dev/null >/dev/null 2>&1
 	then
 		rdu_config_args=(--with-rdu)
 	fi
